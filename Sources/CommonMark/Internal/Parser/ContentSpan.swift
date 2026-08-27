@@ -27,19 +27,23 @@ internal struct ContentSpan: ~Escapable {
     /// Single-segment: which buffer `span` is (`true` = source, `false` = arena scratch). Multi-segment: unused.
     @usableFromInline let inSource: Bool
 
+    /// Single-segment arena content that is a constant-shift image of a source range: the delta to add to a global offset to recover its source offset (`nil` = arena content with no source mapping, the default). Lets inline stamping map an arena copy back to source. Only consulted for `!inSource` single-segment content.
+    @usableFromInline let arenaSourceDelta: Int?
+
     /// Multi-segment only: the content's segments (empty for single-segment). A copy held in stable storage for the inline loop's duration (the live `storage.segments` pool grows during parsing).
     @usableFromInline let segments: Span<Segment>
 
     /// Multi-segment only: total virtual byte length across `segments`.
     @usableFromInline let multiVirtualLength: Int
 
-    /// Single-segment initializer (zero-copy source slice or arena scratch).
+    /// Single-segment initializer (zero-copy source slice or arena scratch). `arenaSourceDelta` maps arena content back to source (see the field); leave `nil` for source-backed or unmapped arena content.
     @_lifetime(copy span)
     @inlinable
-    init(span: Span<UInt8>, base: Int, inSource: Bool) {
+    init(span: Span<UInt8>, base: Int, inSource: Bool, arenaSourceDelta: Int? = nil) {
         self.span = span
         self.base = base
         self.inSource = inSource
+        self.arenaSourceDelta = arenaSourceDelta
         self.segments = Span<Segment>()
         self.multiVirtualLength = 0
     }
@@ -51,6 +55,7 @@ internal struct ContentSpan: ~Escapable {
         self.span = source
         self.base = 0
         self.inSource = false
+        self.arenaSourceDelta = nil
         self.segments = segments
         self.multiVirtualLength = virtualLength
     }
@@ -101,7 +106,14 @@ internal struct ContentSpan: ~Escapable {
     @inlinable
     func sourceOffset(ofVirtual offset: Int) -> Int? {
         if !isMultiSegment {
-            return inSource ? offset : nil
+            if inSource {
+                return offset
+            }
+            // Constant-shift arena content (a table cell whose `\|` escapes were stripped) recovers source positions linearly. cmark maps the unescaped cell bytes back to source by a constant shift - it does NOT re-widen for the removed backslash - so a single delta reproduces its (compressed) positions exactly.
+            if let arenaSourceDelta {
+                return offset + arenaSourceDelta
+            }
+            return nil
         }
         var v = 0
         for i in 0..<segments.count {

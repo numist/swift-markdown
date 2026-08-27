@@ -246,8 +246,12 @@ extension BlockParser {
                                 scratch.append(copying: buffer)
                             }
                         }
+                        // For a source-mapped cell whose `\|` escapes forced this arena copy, hand the inline parser a linear arena→source mapping so its nodes still get positions. cellChunk.offset (arena) images cellRange.lowerBound (source, via sourceDelta); cmark stamps cell inlines by their offset in the unescaped buffer added to the cell start, ignoring the stripped backslash, so this constant delta reproduces its columns. why: replicating cmark's escape-oblivious cell positions (Hyrum's Law). A non-source-mapped table (materialized content, no source image) has no mapping - leave it unstamped as before.
+                        let arenaSourceDelta = sourceMapped
+                            ? (cellRange.lowerBound + sourceDelta) - cellChunk.offset
+                            : nil
                         try parseInline(
-                            content: ContentSpan(span: scratch.span, base: cellChunk.offset, inSource: cellChunk.inSource),
+                            content: ContentSpan(span: scratch.span, base: cellChunk.offset, inSource: cellChunk.inSource, arenaSourceDelta: arenaSourceDelta),
                             into: cellIdx,
                             delimiters: &delimiters, brackets: &brackets
                         )
