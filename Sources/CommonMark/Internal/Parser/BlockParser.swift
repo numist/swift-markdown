@@ -375,23 +375,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return prefixEnd
     }
 
-    /// The source byte offset of the line that begins just after the content ending at `contentEnd`, i.e. `contentEnd` advanced past one line terminator (`\n`, `\r`, or `\r\n`).
-    ///
-    /// If `contentEnd` is already at EOF (no terminator), returns `contentEnd` unchanged.
-    ///
-    /// Used to stamp a thematic break's end at the next line's start, matching cmark's `hr` source-position convention.
-    private func nextLineStart(after contentEnd: Int) -> Int {
-        var i = contentEnd
-        let n = sourceBytes.count
-        if i < n, sourceBytes[i] == UInt8(ascii: "\r") {
-            i += 1
-            if i < n, sourceBytes[i] == UInt8(ascii: "\n") { i += 1 }
-        } else if i < n, sourceBytes[i] == UInt8(ascii: "\n") {
-            i += 1
-        }
-        return i
-    }
-
     /// Consume `pending` and return `node`'s accumulated content, or `nil` if `node` has none (either nothing was pending, or a *different* node's leaf was - which the single-open-leaf invariant forbids).
     ///
     /// Moves the content out; the leaf is destroyed. Used by the append helpers, which always either find their own node's content or none.
@@ -1107,7 +1090,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     parent: current,
                     start: sourceOffset(firstNonSpace)
                 )
-                return try finalize(node: breakIdx, pending: pending)
+                // why: cmark leaves a thematic break open as `parser->current` and finalizes it only
+                // when a later line or EOF forces it (blocks.c:1482). Its end position is therefore
+                // finalize-timing-dependent - the previous line's length when a later line closes it,
+                // or the last processed line's content end at EOF - so we defer to the normal per-line
+                // close path rather than guessing the end on the HR's own line.
+                current = breakIdx
+                return pending
             }
 
             // List marker - opens a list (or extends an existing one) and an item. Both are containers; loop so we keep dispatching the rest of the line as content within the new item.
@@ -1417,20 +1406,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let kind = storage[node].kind
 
         if positionsEnabled {
-            // Mirror cmark's finalize end-position cases (src/blocks.c): the block ends on the CURRENT line at EOF, for the document / fenced code, or for a block that opened on this same line (e.g. a heading or thematic break finalized immediately); otherwise it ends on the PREVIOUS line (the last line that was actually part of it).
+            // Mirror cmark's finalize end-position cases (src/blocks.c): the block ends on the CURRENT line at EOF, for the document / fenced code, or for a block that opened on this same line (e.g. a heading finalized immediately); otherwise it ends on the PREVIOUS line (the last line that was actually part of it).
             let startByte = storage.sourceRanges[node].start
             let startedThisLine = startByte >= Int32(currentLineSourceRange.lowerBound)
             let isFenced: Bool
             if case .codeBlock(let info) = kind { isFenced = info.isFenced } else { isFenced = false }
-            let end: Int
-            if kind == .thematicBreak {
-                // cmark ends a thematic break at the *start of the next line* (`hr` sourcepos `N:1-(N+1):0`), unlike every other single-line block which ends at its content end - so skip past this line's terminator. At EOF (no terminator) this degrades to the content end.
-                end = nextLineStart(after: currentLineSourceRange.upperBound)
-            } else {
-                end = (atEOF || startedThisLine || kind == .document || isFenced)
-                    ? currentLineSourceRange.upperBound
-                    : lastLineSourceEnd
-            }
+            let end = (atEOF || startedThisLine || kind == .document || isFenced)
+                ? currentLineSourceRange.upperBound
+                : lastLineSourceEnd
             storage.setSourceEnd(node, end)
         }
 
