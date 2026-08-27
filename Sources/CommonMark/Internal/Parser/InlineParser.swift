@@ -952,6 +952,8 @@ extension BlockParser {
         let runRef = storage.intern(runChunk)
         let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parent, data: .literal(runRef)))
         storage.appendChild(textIdx, to: parent)
+        // Stamp the run's own source span. A delimiter that never forms emphasis stays as literal text, and this range lets it keep its columns when it consolidates with adjacent text; a matched delimiter's text node is unlinked before it can matter. The reference stamps this node at creation for the same reason.
+        stampInline(textIdx, start, runEnd, content: content)
         let prev = lastDelim
         let newIdx = delimiters.count
         delimiters.append(DelimiterRecord(

@@ -1,0 +1,4 @@
+Document @1:1-1:6
+└─ Paragraph @1:1-1:6
+   └─ Emphasis @1:1-1:6
+      └─ Text @1:2-1:5 "foo"
