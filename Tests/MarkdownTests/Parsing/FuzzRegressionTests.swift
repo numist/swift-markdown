@@ -8,8 +8,9 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
+import Foundation
 import Markdown
-import XCTest
+import Testing
 
 /// Regression coverage for divergences found by the swift-markdown-difftest differential fuzzer.
 ///
@@ -18,52 +19,70 @@ import XCTest
 ///   - `<name>.expected` — the reference (cmark-gfm) comparison surface, minted losslessly with
 ///                         `dump --ref <artifact>`. This is the oracle; the rewrite must reproduce it.
 ///
-/// The harness re-derives the fuzzer's comparison surface for the rewrite and asserts it equals the
-/// stored reference surface. The split + surface logic mirrors `DiffSupport` (the fuzzer and `dump`
-/// share it); MarkdownTests can't import that package, so the two-line equivalent is inlined here.
-class FuzzRegressionTests: XCTestCase {
+/// `@Test(arguments:)` runs one case per pair, so a failure names the exact fixture. The split +
+/// surface logic mirrors `DiffSupport` (the fuzzer and `dump` build from it); MarkdownTests can't
+/// import that package, so the two-line equivalent is inlined here.
+struct FuzzRegressionTests {
+
+    static let corpusDir: URL = {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("FuzzRegressions")
+    }()
+
+    /// Basenames of every `<name>.input` fixture, sorted. Built once from the filesystem so adding a
+    /// pair to `FuzzRegressions/` automatically adds a test case with no code change.
+    static let corpus: [String] = {
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: corpusDir, includingPropertiesForKeys: nil
+        ) else {
+            fatalError("Failed to enumerate FuzzRegressions corpus at \(corpusDir.path)")
+        }
+        return contents.filter { $0.pathExtension == "input" }
+            .map { $0.deletingPathExtension().lastPathComponent }
+            .sorted()
+    }()
 
     /// Split a raw artifact exactly as `DiffSupport.splitInput`: the last byte selects parse options
     /// (masked to the five known bits), the rest is the UTF-8 document (invalid sequences → U+FFFD).
-    private static func splitInput(_ bytes: [UInt8]) -> (markdown: String, options: ParseOptions)? {
+    static func splitInput(_ bytes: [UInt8]) -> (markdown: String, options: ParseOptions)? {
         guard let optionBits = bytes.last else { return nil }
         let markdown = String(decoding: bytes.dropLast(), as: UTF8.self)
         return (markdown, ParseOptions(rawValue: UInt(optionBits & 0b11111)))
     }
 
     /// The rewrite's comparison surface, matching `DiffSupport.newSurface`.
-    private static func surface(_ markdown: String, options: ParseOptions) -> String {
+    static func surface(_ markdown: String, options: ParseOptions) -> String {
         Document(parsing: markdown, options: options).debugDescription(options: .printSourceLocations)
     }
 
-    func testFuzzRegressions() throws {
-        let dir = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("FuzzRegressions")
+    /// A `@Test(arguments:)` over an empty collection silently runs zero cases and reports success, so
+    /// the fixture set is guarded explicitly here: a broken path or empty directory fails loudly.
+    @Test
+    func corpusIsNonEmpty() {
+        #expect(!Self.corpus.isEmpty, "no fuzz regression pairs found in \(Self.corpusDir.path)")
+    }
 
-        let inputs = try FileManager.default
-            .contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
-            .filter { $0.pathExtension == "input" }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    @Test(arguments: corpus)
+    func fuzzRegression(_ name: String) throws {
+        let bytes = [UInt8](try Data(contentsOf: Self.corpusDir.appendingPathComponent("\(name).input")))
+        let expected = try String(
+            contentsOf: Self.corpusDir.appendingPathComponent("\(name).expected"), encoding: .utf8)
 
-        // Fixture sanity: a broken path or empty directory must fail loudly, not pass vacuously.
-        XCTAssertFalse(inputs.isEmpty, "no fuzz regression pairs found in \(dir.path)")
+        let (markdown, options) = try #require(Self.splitInput(bytes), "\(name): empty artifact")
+        let actual = Self.surface(markdown, options: options)
 
-        for inputURL in inputs {
-            let name = inputURL.deletingPathExtension().lastPathComponent
-            let expectedURL = inputURL.deletingPathExtension().appendingPathExtension("expected")
+        #expect(actual == expected, """
+            surface diverges from reference for \(name)
 
-            let bytes = [UInt8](try Data(contentsOf: inputURL))
-            let expected = try String(contentsOf: expectedURL, encoding: .utf8)
+            input:    \(markdown.debugDescription) options=0x\(String(options.rawValue, radix: 16))
 
-            guard let (markdown, options) = Self.splitInput(bytes) else {
-                XCTFail("\(name): empty artifact")
-                continue
-            }
+            expected:
+            \(expected)
 
-            let actual = Self.surface(markdown, options: options)
-            XCTAssertEqual(actual, expected, "surface diverges from reference for \(name)")
-        }
+            got:
+            \(actual)
+            """)
     }
 }
