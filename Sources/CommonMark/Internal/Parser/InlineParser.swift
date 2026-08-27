@@ -937,8 +937,9 @@ extension BlockParser {
             canOpen = leftFlanking
             canClose = rightFlanking
         }
-        // Non-flanking run: leave it as part of pending text. Don't emit a text node and don't flush - important so GFM autolink scan-back can later consume these bytes (e.g. `a.b-c_d@a.b` - the `_` mustn't fragment the local-part text).
-        if !canOpen && !canClose {
+        // Non-flanking run: leave it as part of pending text. Don't emit a text node and don't flush - important so GFM autolink scan-back can later consume these bytes (e.g. `a.b-c_d@a.b` - the `_` mustn't fragment the local-part text). Strikethrough is exempt: cmark-gfm emits a text node for every `~` run it scans (`strikethrough.c` `match`), flanking or not, so a `~` isolated by whitespace still surfaces (as the zero-width node stamped below) rather than folding into surrounding text. A non-flanking `~` is always whitespace-surrounded, so it never sits inside a URL and this exemption can't disturb autolink scan-back.
+        let isStrikethrough = char == UInt8(ascii: "~")
+        if !canOpen && !canClose && !isStrikethrough {
             return runEnd
         }
         // Flush pending text up to the run start, then emit the run as text.
@@ -953,22 +954,30 @@ extension BlockParser {
         let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parent, data: .literal(runRef)))
         storage.appendChild(textIdx, to: parent)
         // Stamp the run's own source span. A delimiter that never forms emphasis stays as literal text, and this range lets it keep its columns when it consolidates with adjacent text; a matched delimiter's text node is unlinked before it can matter. The reference stamps this node at creation for the same reason.
-        stampInline(textIdx, start, runEnd, content: content)
-        let prev = lastDelim
-        let newIdx = delimiters.count
-        delimiters.append(DelimiterRecord(
-            character: char,
-            length: count,
-            canOpen: canOpen,
-            canClose: canClose,
-            inlText: textIdx,
-            previous: prev,
-            next: nil
-        ))
-        if let prev {
-            delimiters[prev].next = newIdx
+        if isStrikethrough {
+            // why: cmark-gfm's strikethrough extension (`strikethrough.c` `match`) records only the run's start column and never sets its end column, so a `~`/`~~` run that never forms a strikethrough reports a zero-width range. Consolidation takes the end from the last merged text node, so a run that abuts following text (`a~b`, `~x`) recovers a real width while a standalone run stays zero-width. Reproduce that shipped quirk; emphasis (`*`/`_`, stamped with both columns via the width-bearing path below) is unaffected.
+            stampInlineZeroWidth(textIdx, at: start, content: content)
+        } else {
+            stampInline(textIdx, start, runEnd, content: content)
         }
-        lastDelim = newIdx
+        // Push a delimiter record only when the run can open or close. A non-flanking `~` (emitted above to mirror cmark-gfm) can do neither, so it contributes no delimiter and stays literal text.
+        if canOpen || canClose {
+            let prev = lastDelim
+            let newIdx = delimiters.count
+            delimiters.append(DelimiterRecord(
+                character: char,
+                length: count,
+                canOpen: canOpen,
+                canClose: canClose,
+                inlText: textIdx,
+                previous: prev,
+                next: nil
+            ))
+            if let prev {
+                delimiters[prev].next = newIdx
+            }
+            lastDelim = newIdx
+        }
         pendingTextStart = runEnd
         return runEnd
     }
@@ -2487,6 +2496,18 @@ extension BlockParser {
         }
         storage.setSourceStart(node, s)
         storage.setSourceEnd(node, lastByte + 1)
+    }
+
+    /// Stamp `node` with a zero-width source range (`end == start`) at the source offset of virtual `start`.
+    ///
+    /// Resolves `start` through `content` like the width-bearing overload, and is a no-op when positions are off or the offset maps to synthetic/arena content.
+    @inline(__always)
+    mutating func stampInlineZeroWidth(_ node: DocumentStorage.Index, at start: Int, content: borrowing ContentSpan) {
+        guard positionsEnabled, let s = content.sourceOffset(ofVirtual: start) else {
+            return
+        }
+        storage.setSourceStart(node, s)
+        storage.setSourceEnd(node, s)
     }
 
     /// Merge runs of adjacent `.text` children into single nodes, recursing into containers.
