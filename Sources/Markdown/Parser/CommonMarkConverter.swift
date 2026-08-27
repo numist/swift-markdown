@@ -21,15 +21,18 @@ struct MarkupParser {
 
     static func parseString(_ string: String, source: URL?, options: ParseOptions) -> Document {
         // Mirror the option set the old C path always used: tables + strikethrough + tasklist
-        // extensions and table spans, smart punctuation unless disabled, source positions unless
-        // disabled. (Footnotes and GFM autolinks were never enabled here.)
+        // extensions and table spans, smart punctuation unless disabled, and source positions
+        // always. (Footnotes and GFM autolinks were never enabled here.)
         var cmOptions: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans]
         if !options.contains(.disableSmartOpts) {
             cmOptions.insert(.smart)
         }
-        if !options.contains(.disableSourcePosOpts) {
-            cmOptions.insert(.sourcePosition)
-        }
+        // cmark writes source ranges onto AST nodes regardless of `CMARK_OPT_SOURCEPOS`, and
+        // swift-markdown reads them straight off the AST, so the reference `Document` carries
+        // ranges even with `.disableSourcePosOpts` (that option only suppresses rendered
+        // `data-sourcepos` output, which this AST→Document path never emits). Always track
+        // positions here, or the rewrite drops ranges the reference reports.
+        cmOptions.insert(.sourcePosition)
 
         let raw: RawMarkup
         do {

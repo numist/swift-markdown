@@ -57,7 +57,10 @@ let package = Package(
         .testTarget(
             name: "MarkdownTests",
             dependencies: ["Markdown"],
-            resources: [.process("Visitors/Everything.md")]),
+            resources: [
+                .process("Visitors/Everything.md"),
+                .copy("FuzzRegressions"),
+            ]),
         .testTarget(
             name: "CommonMarkTests",
             dependencies: ["CommonMark"],
