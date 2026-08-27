@@ -706,10 +706,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 current = parent
                 stillOpenKind = storage[current].kind
             } else {
-                // Re-seed pending content with the stripped bytes so the heading's inline-parse pass sees only what's left after ref-defs were extracted.
-                pending = addChunk(stripped, to: para, pending: pending)
+                // Re-seed pending content with the stripped bytes so the heading's inline-parse pass sees only what's left after ref-defs were extracted. Keep source-backed content zero-copy as a `.lazy` source range (its offset/length are source offsets when `inSource`), so the heading's inlines are source-mapped and get positions exactly as paragraph / ATX-heading content does; only arena-backed content (non-contiguous or normalized lines) is copied.
+                if stripped.inSource {
+                    pending = PendingLeaf(node: para, content: .lazy(range: stripped.range))
+                } else {
+                    pending = addChunk(stripped, to: para, pending: pending)
+                }
                 storage[para].kind = .heading(level: Int(level))
-                return try finalize(node: para, pending: pending)
+                return try finalize(node: para, pending: pending, setextUnderline: true)
             }
         }
 
@@ -1401,17 +1405,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Close `node`, materialize its accumulated content, and back the parser's `current` pointer up to `node`'s parent.
-    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, atEOF: Bool = false) throws(MarkdownDocument.Error) -> PendingLeaf? {
+    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, atEOF: Bool = false, setextUnderline: Bool = false) throws(MarkdownDocument.Error) -> PendingLeaf? {
         var pending = pending
         let kind = storage[node].kind
 
         if positionsEnabled {
-            // Mirror cmark's finalize end-position cases (src/blocks.c): the block ends on the CURRENT line at EOF, for the document / fenced code, or for a block that opened on this same line (e.g. a heading finalized immediately); otherwise it ends on the PREVIOUS line (the last line that was actually part of it).
+            // Mirror cmark's finalize end-position cases (src/blocks.c): the block ends on the CURRENT line at EOF, for the document / fenced code, for a setext heading (its underline line is part of it), or for a block that opened on this same line (e.g. an ATX heading finalized immediately); otherwise it ends on the PREVIOUS line (the last line that was actually part of it).
             let startByte = storage.sourceRanges[node].start
             let startedThisLine = startByte >= Int32(currentLineSourceRange.lowerBound)
             let isFenced: Bool
             if case .codeBlock(let info) = kind { isFenced = info.isFenced } else { isFenced = false }
-            let end = (atEOF || startedThisLine || kind == .document || isFenced)
+            let end = (atEOF || startedThisLine || setextUnderline || kind == .document || isFenced)
                 ? currentLineSourceRange.upperBound
                 : lastLineSourceEnd
             storage.setSourceEnd(node, end)
