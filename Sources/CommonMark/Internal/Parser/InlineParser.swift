@@ -250,6 +250,8 @@ extension BlockParser {
                     NodeRecord(kind: .text, parent: parent, data: .literal(textRef))
                 )
                 storage.appendChild(textIdx, to: parent)
+                // An opener whose link never resolves survives as literal `[` text; stamp it so it keeps its column when it consolidates with neighbors (a matched link unlinks this node first).
+                stampInline(textIdx, cursor, cursor + 1, content: content)
                 try pushBracket(
                     kind: .link,
                     inlText: textIdx,
@@ -359,6 +361,8 @@ extension BlockParser {
                             NodeRecord(kind: .text, parent: parent, data: .literal(punctRef))
                         )
                         storage.appendChild(textIdx, to: parent)
+                        // why: the node's content is the single unescaped char (`cursor + 1`), but its source span is the 2-byte `\<punct>` escape starting at `cursor` - stamp the 2-byte source range so the run keeps the backslash's column.
+                        stampInline(textIdx, cursor, cursor + 2, content: content)
                         cursor += 2
                         pendingTextStart = cursor
                         continue
@@ -671,6 +675,7 @@ extension BlockParser {
             NodeRecord(kind: .text, parent: parent, data: .literal(chunkRef))
         )
         storage.appendChild(idx, to: parent)
+        stampInline(idx, cursor, cursor + 1, content: content)
     }
 
     /// Construct the `.link` / `.image` node, splice it in front of the opener's `[` text node, reparent every following sibling into it, and remove the opener's `[` text from the tree. Then resolve emphasis inside the link with the bracket's `delimPosition` as the floor.
@@ -1253,6 +1258,8 @@ extension BlockParser {
             NodeRecord(kind: .text, parent: parent, data: .literal(ref))
         )
         storage.appendChild(textIdx, to: parent)
+        // why: the node's content is arena-backed en/em-dash glyphs whose byte length differs from the source hyphen run; stamp the source span of the `-` run (`start..<runEnd`) so the dashes keep their source columns.
+        stampInline(textIdx, start, runEnd, content: content)
         pendingTextStart = runEnd
         return runEnd
     }
@@ -1295,6 +1302,8 @@ extension BlockParser {
             NodeRecord(kind: .text, parent: parent, data: .literal(ref))
         )
         storage.appendChild(textIdx, to: parent)
+        // why: the node's content is the arena-backed curly glyph (3 UTF-8 bytes), but its source span is the single straight-quote byte at `start`; stamp that 1-byte source range so the quote keeps its column.
+        stampInline(textIdx, start, runEnd, content: content)
         if canOpen || canClose {
             let prev = lastDelim
             let newIdx = delimiters.count
