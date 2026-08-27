@@ -2507,16 +2507,34 @@ extension BlockParser {
         storage.setSourceEnd(node, lastByte + 1)
     }
 
-    /// Stamp `node` with a zero-width source range (`end == start`) at the source offset of virtual `start`.
+    /// Stamp an unmatched strikethrough (`~`) run's source range: start at the run's own source offset, end at the START of that run's source line.
     ///
-    /// Resolves `start` through `content` like the width-bearing overload, and is a no-op when positions are off or the offset maps to synthetic/arena content.
+    /// cmark-gfm's strikethrough extension (`strikethrough.c` `match`) sets a `~` run's `start_column` but never its `end_column`, leaving `end_column == 0` - which projects to column 1 of the run's line, i.e. the line-start byte. So a `~` at column 1 gets a zero-width `[s, s]` range, while a `~` further into its line gets a start-past-end range that `sourceRange(of:)` reports as no position - reproducing cmark either way. A no-op when positions are off or `start` maps to synthetic/arena content. Relies on `lineStarts` being populated, which holds during the inline-parsing pass (it runs after every line has been read).
     @inline(__always)
     mutating func stampInlineZeroWidth(_ node: DocumentStorage.Index, at start: Int, content: borrowing ContentSpan) {
         guard positionsEnabled, let s = content.sourceOffset(ofVirtual: start) else {
             return
         }
         storage.setSourceStart(node, s)
-        storage.setSourceEnd(node, s)
+        // why: cmark-gfm's strikethrough.c leaves an unmatched `~` run's `end_column` unset (== 0), i.e. column 1 = the start of the run's line, not the run's own column. Stamp the end at that line-start byte so consolidation's last-node end and standalone rendering both reproduce cmark's zero/negative-width range.
+        storage.setSourceEnd(node, lineStartByte(ofSource: s))
+    }
+
+    /// The source byte offset of the start of the line containing source offset `s`.
+    ///
+    /// Binary-searches `storage.lineStarts` (ascending; populated by the block pass that precedes inline parsing) for the largest entry `<= s`, mirroring `StorageView.position(ofByte:)`. Returns 0 when no line starts are recorded.
+    private func lineStartByte(ofSource s: Int) -> Int {
+        var lo = 0
+        var hi = storage.lineStarts.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if storage.lineStarts[mid] <= s {
+                lo = mid + 1
+            } else {
+                hi = mid
+            }
+        }
+        return lo > 0 ? storage.lineStarts[lo - 1] : 0
     }
 
     /// Merge runs of adjacent `.text` children into single nodes, recursing into containers.
@@ -2576,9 +2594,10 @@ extension BlockParser {
             let a = storage.sourceRanges[dest]
             let b = storage.sourceRanges[source]
             if a.start >= 0, b.start >= 0 {
+                // why: cmark's `cmark_consolidate_text_nodes` (swift-cmark `src/iterator.c`) sets the merged run's range from the FIRST node's start and the LAST node's end (`cur->end_column = tmp->end_column` on every iteration; `cur`'s start is never touched) - not a min/max union. In this pairwise left-to-right merge `dest` is the running-first node and `source` the next (last-so-far) sibling, so first-start = `dest.start` and last-end = `source.end`. This differs from a union only when a non-final node ends further right than the final node (the zero-width trailing-`~` quirk), where cmark collapses the run to the final node's end.
                 storage.sourceRanges[dest] = DocumentStorage.SourceByteRange(
-                    start: min(a.start, b.start),
-                    end: max(a.end, b.end)
+                    start: a.start,
+                    end: b.end
                 )
             } else if a.start < 0 {
                 storage.sourceRanges[dest] = b
