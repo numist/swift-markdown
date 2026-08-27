@@ -81,6 +81,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Used by `addLine` to decide whether the bytes can be addressed lazily by source-range, deferring materialization until the paragraph spans multiple lines or otherwise transforms the content.
     var currentLineMapsToSource: Bool = false
 
+    /// For a tab-expanded (materialized) line, the buffer offset where `expandPrefixTabs`'s verbatim tail begins, and the corresponding original-line byte offset. Since the tail is copied byte-for-byte, every content offset in it maps back to source by the constant delta `currentLineSourceRange.lowerBound + materializedRestStart - materializedTailBufferStart`; offsets inside the expanded prefix are recovered by a column walk on the original line. Only meaningful while `!currentLineMapsToSource` and positions are on (see `sourceOffset`).
+    var materializedTailBufferStart: Int = 0
+    var materializedRestStart: Int = 0
+
     /// `true` when `.sourcePosition` tracking is on.
     ///
     /// Hoisted so the per-node stamping in `addChild` and `finalize` is a single bool test on the hot path when positions are off.
@@ -155,8 +159,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 
                 // Per-line materialized buffer used when a line's leading tabs need to be expanded into spaces so partial-tab consumption by container markers works correctly.
                 if !inFencedCode, let materialized = expandPrefixTabs(line: line) {
-                    let span = materialized.span
                     currentLineMapsToSource = false
+                    materializedTailBufferStart = materialized.tailBufferStart
+                    materializedRestStart = materialized.restStart
+                    let span = materialized.buffer.span
                     pending = try processLine(source: span, lineRange: 0..<span.count, chain: &chain, pending: pending)
                 } else {
                     currentLineMapsToSource = true
@@ -331,11 +337,42 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return idx
     }
 
-    /// The global original-source byte offset for a within-current-line offset, or `nil` if the current line was pre-expanded (tabs) and so doesn't map back to source.
+    /// The global original-source byte offset for a within-current-line offset.
     ///
-    /// When the line maps to source the passed offset is already a global source offset (the line was processed as a slice of `sourceBytes`).
+    /// When the line maps to source the passed offset is already a global source offset (the line was processed as a slice of `sourceBytes`). For a tab-expanded (materialized) line, the offset is a transient-buffer offset: `expandPrefixTabs` only rewrites the leading whitespace/marker prefix and copies the rest of the line verbatim, so a tail offset maps back by a constant delta and a prefix offset is recovered by re-walking the original line's prefix (see `originalPrefixSourceOffset`). Returns `nil` for a materialized line when positions are off, since the source-line coordinates it needs (`currentLineSourceRange`) are only tracked then.
     private func sourceOffset(_ lineOffset: Int) -> Int? {
-        currentLineMapsToSource ? lineOffset : nil
+        if currentLineMapsToSource {
+            return lineOffset
+        }
+        guard positionsEnabled else { return nil }
+        if lineOffset >= materializedTailBufferStart {
+            // Verbatim tail: a single constant delta covers every content offset.
+            return currentLineSourceRange.lowerBound + materializedRestStart + (lineOffset - materializedTailBufferStart)
+        }
+        // Inside the expanded prefix (e.g. an indented-code `bodyStart` landing mid-prefix, or a container marker): re-walk the original prefix to find the byte covering this buffer offset.
+        return originalPrefixSourceOffset(bufferOffset: lineOffset)
+    }
+
+    /// Map a buffer offset lying inside a materialized line's expanded prefix back to an original-source byte offset.
+    ///
+    /// Re-walks the original line's prefix (`[lineStart, lineStart + materializedRestStart)`) with the same tab-expansion rule `expandPrefixTabs` used, tracking each byte's span in the expanded buffer, and returns the source offset of the byte whose expansion covers `bufferOffset`. A tab covers its whole `4 - (col & 3)` run, so a buffer offset landing mid-tab resolves to that tab's byte - matching cmark, which reports the raw source byte after consumed indentation. O(prefix).
+    private func originalPrefixSourceOffset(bufferOffset: Int) -> Int {
+        let lineStart = currentLineSourceRange.lowerBound
+        let prefixEnd = lineStart + materializedRestStart
+        var col = 0
+        var buf = 0
+        var i = lineStart
+        while i < prefixEnd {
+            let width = sourceBytes[i] == UInt8(ascii: "\t") ? 4 - (col & 3) : 1
+            if bufferOffset < buf + width {
+                return i
+            }
+            buf += width
+            col += width
+            i += 1
+        }
+        // `bufferOffset` is always `< materializedTailBufferStart` here, so the walk covers it; the prefix end is a safe fallback.
+        return prefixEnd
     }
 
     /// The source byte offset of the line that begins just after the content ending at `contentEnd`, i.e. `contentEnd` advanced past one line terminator (`\n`, `\r`, or `\r\n`).
@@ -429,6 +466,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // Fast path: first content for this node and the current line maps directly into `self.source` - store the range lazily and skip the byte copy.
             if currentLineMapsToSource, nodeKind.canAccumulateText {
                 return PendingLeaf(node: node, content: .lazy(range: range))
+            }
+            // Tab-expanded line: `expandPrefixTabs` copied the verbatim tail unchanged, so text content lying entirely in that tail is byte-identical to a source range. Keep it a zero-copy source-backed `.lazy` range (mapped to source) instead of copying into the arena, so inline stamping still recovers source positions. Gated on positions (the source mapping `sourceOffset` needs is only tracked then).
+            if positionsEnabled, nodeKind.canAccumulateText, range.lowerBound >= materializedTailBufferStart,
+               let sourceLow = sourceOffset(range.lowerBound), let sourceHigh = sourceOffset(range.upperBound) {
+                return PendingLeaf(node: node, content: .lazy(range: sourceLow..<sourceHigh))
             }
             let buffer = UniqueArray(capacity: range.count) { buffer in
                 for i in range {
@@ -1605,12 +1647,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return col
     }
 
+    /// A line whose leading tabs were expanded into spaces, plus the mapping needed to recover original-source byte offsets for positions on that line (consumed by `sourceOffset`).
+    struct MaterializedLine: ~Copyable {
+        /// The expanded line: prefix tabs turned into spaces, the rest of the line copied verbatim.
+        var buffer: UniqueArray<UInt8>
+        /// Original-line byte offset where the verbatim tail begins (the prefix is `[0, restStart)`).
+        var restStart: Int
+        /// Buffer offset where the verbatim tail begins.
+        var tailBufferStart: Int
+    }
+
     /// Pre-expand tabs that appear in the line's "marker prefix" - leading whitespace plus blockquote (`>`) and list (`-`, `+`, `*`, digits + `.`/`)`) markers.
     ///
     /// We materialize the line with each prefix tab expanded to the right number of spaces. Tabs in content (after the first non-prefix byte) are preserved.
     ///
     /// Returns nil if the prefix has no tabs (most lines).
-    private func expandPrefixTabs(line: Span<UInt8>) -> UniqueArray<UInt8>? {
+    private func expandPrefixTabs(line: Span<UInt8>) -> MaterializedLine? {
         // Scan the prefix region, counting tabs, stopping at the first non-prefix byte.
         //
         // Every prefix byte (space, tab, `>`, `-`, `+`, `*`, digits, `.`, `)`) is ASCII - so a raw byte scan is correct: those bytes never appear inside a multi-byte UTF-8 sequence, and the first non-prefix (including any multi-byte lead) byte stops the scan. We must count *every* prefix tab (not just detect the first) so the materialized buffer can be sized for the worst-case expansion below.
@@ -1694,11 +1746,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
 
         // Copy the (un-expanded) remainder of the line verbatim.
+        let tailBufferStart = output.count
         for n in restStart..<count {
             output.append(bytes[n])
         }
 
-        return output
+        return MaterializedLine(buffer: output, restStart: restStart, tailBufferStart: tailBufferStart)
     }
 
     /// A superset of the first-content bytes that any block construct can start with.
