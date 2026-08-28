@@ -58,10 +58,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case segments(UniqueArray<Segment>)
     }
 
-    /// Result of `materializePendingContent`: the materialized `Chunk` plus the (now-drained) leaf.
+    /// Result of `materializePendingContent`: the materialized `Chunk` plus the (now-drained) leaf. `map` carries a content-relative arena→source run map when the content was flattened from a source-mapped segment list (empty otherwise).
     struct LeafMaterialization : ~Copyable {
         var chunk: Chunk
         var pending: PendingLeaf?
+        var map: [ArenaRun] = []
     }
 
     /// Result of `drainSegments`: the drained segment list plus the (now-cleared) leaf.
@@ -98,6 +99,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// This delay is what lets a `[foo]` shortcut reference resolve against a `[foo]: url` ref-def that appears later in the document. Each entry is a `(node, content chunk)` pair: when the parse pass finishes, `BlockParser.parse` drains this list and invokes `InlineParser.parse` on each.
     var pendingInlines: [(DocumentStorage.Index, ContentRef)] = []
+
+    /// Arena→source run maps for flattened inline content that has a source pre-image, keyed by the content's node.
+    ///
+    /// Populated only for a non-contiguous setext heading (PHASE 2c): its content is flattened into one arena `Chunk` by `flattenSegments`, which drops the per-line source mapping the segments carried. The run map (content-relative, so it survives the re-seed's arena re-copy) lets the inline pass stamp the heading's text/emphasis with real source positions instead of leaving them unstamped. Consulted in the inline pass when building an arena single-segment `ContentSpan`.
+    var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
 
     /// The deepest list that has seen a blank line since its last item boundary.
     ///
@@ -187,9 +193,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var delimiters = UniqueArray<DelimiterRecord>()
         var brackets = UniqueArray<BracketRecord>()
         
-        // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content). Both are owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
+        // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content); `runScratch` holds a stable copy of a flattened block's arena→source run map. All owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
         var scratch = UniqueArray<UInt8>()
         var segScratch = UniqueArray<Segment>()
+        var runScratch = UniqueArray<ArenaRun>()
         
         for (node, ref) in pending {
             if ref.count == 0 || ref.totalLength == 0 {
@@ -213,12 +220,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                             scratch.append(copying: buffer)
                         }
                     }
-                    try parseInline(
-                        content: ContentSpan(span: scratch.span, base: chunk.offset, inSource: false),
-                        into: node,
-                        delimiters: &delimiters,
-                        brackets: &brackets
-                    )
+                    // Flattened content (a non-contiguous setext heading) carries an arena→source run map so its inlines still get source positions; plain arena content (no map) parses unmapped as before.
+                    if let map = arenaSourceMaps[node], !map.isEmpty {
+                        runScratch.removeAll(keepingCapacity: true)
+                        for run in map {
+                            runScratch.append(run)
+                        }
+                        try parseInline(
+                            content: ContentSpan(span: scratch.span, base: chunk.offset, inSource: false, arenaRuns: runScratch.span),
+                            into: node,
+                            delimiters: &delimiters,
+                            brackets: &brackets
+                        )
+                    } else {
+                        try parseInline(
+                            content: ContentSpan(span: scratch.span, base: chunk.offset, inSource: false),
+                            into: node,
+                            delimiters: &delimiters,
+                            brackets: &brackets
+                        )
+                    }
                 }
             } else {
                 // Multi-segment content (multi-line non-contiguous paragraph/heading): copy the segment list into stable storage and parse it directly from the source - no flattening into the arena.
@@ -592,8 +613,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             return LeafMaterialization(chunk: Chunk(offset: offset, length: content.count, inSource: false), pending: nil)
         case .segments(let segs):
-            // Flatten a segment list to one arena chunk (used when a `Chunk` is required - e.g. a setext heading's paragraph re-seed, or matcher-eligible content). The common multi-line paragraph path keeps segments zero-copy via the finalize segment branch.
-            return LeafMaterialization(chunk: flattenSegments(segs), pending: nil)
+            // Flatten a segment list to one arena chunk (used when a `Chunk` is required - e.g. a setext heading's paragraph re-seed, or matcher-eligible content). The common multi-line paragraph path keeps segments zero-copy via the finalize segment branch. Capture the arena→source run map so the re-seed can carry per-line source columns onto the heading's inlines.
+            var map: [ArenaRun] = []
+            let chunk = flattenSegments(segs, map: &map)
+            return LeafMaterialization(chunk: chunk, pending: nil, map: map)
         }
     }
 
@@ -694,6 +717,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let para = current
             let materialized = materializePendingContent(para, pending: pending)
             let raw = materialized.chunk
+            // Content-relative arena→source run map for the flattened segments (empty unless the paragraph body was non-contiguous `.segments`, i.e. inside a blockquote/list). Captured before `pending` is moved out.
+            let flatMap = materialized.map
             pending = materialized.pending
             let trimmedHead = raw.trimming(using: self)
             let stripped = parseDefinitions(in: trimmedHead)
@@ -710,6 +735,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 if stripped.inSource {
                     pending = PendingLeaf(node: para, content: .lazy(range: stripped.range))
                 } else {
+                    // Arena-backed (non-contiguous) content: `addChunk` re-copies the stripped bytes into a fresh arena buffer, so a plain arena chunk would reach inline parsing unmapped and leave the heading's text/emphasis unstamped (spec #12). The flattened content's run map is content-relative, so it survives the re-copy; narrow it to the window that actually reaches inline parsing - the stripped remainder after finalize's own leading/trailing trim (mirrored here by `stripped.trimming`) - keyed from `raw`'s first content byte, and stamp it on the heading via `arenaSourceMaps`.
+                    if positionsEnabled, !flatMap.isEmpty {
+                        let finalWindow = stripped.trimming(using: self)
+                        if !finalWindow.isEmpty {
+                            arenaSourceMaps[para] = sliceRuns(flatMap, from: finalWindow.offset - raw.offset, length: finalWindow.length)
+                        }
+                    }
                     pending = addChunk(stripped, to: para, pending: pending)
                 }
                 storage[para].kind = .heading(level: Int(level))
@@ -1335,22 +1367,52 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// Used when content must be a contiguous `Chunk` - the matcher-eligible path and code/HTML-block fallback.
     private mutating func flattenSegments(_ segs: borrowing UniqueArray<Segment>) -> Chunk {
+        var ignoredMap: [ArenaRun] = []
+        return flattenSegments(segs, map: &ignoredMap)
+    }
+
+    /// Flatten a segment list into one arena chunk, recording a content-relative arena→source run map in `map` as it copies: one run per non-empty segment. A source segment images its source range (run `sourceOffset` = the segment's source offset); a non-source segment - the interned `\n` line-join, or an arena-only line with no source pre-image - becomes a synthetic gap (`sourceOffset < 0`). The map tiles the flattened content from its first byte, so it survives a later arena re-copy of the content (the byte layout is unchanged) and lets inline stamping recover per-line source columns.
+    private mutating func flattenSegments(_ segs: borrowing UniqueArray<Segment>, map: inout [ArenaRun]) -> Chunk {
         var total = 0
         for i in 0..<segs.count { total += Int(segs[i].length) }
         if total == 0 { return .empty }
         var buf = UniqueArray<UInt8>(minimumCapacity: total)
         for i in 0..<segs.count {
             let seg = segs[i]
-            let end = Int(seg.offset) + Int(seg.length)
+            let len = Int(seg.length)
+            let end = Int(seg.offset) + len
             if seg.inSource {
                 for j in Int(seg.offset)..<end { buf.append(sourceBytes[j]) }
             } else {
                 for j in Int(seg.offset)..<end { buf.append(storage.strings[j]) }
             }
+            if len > 0 {
+                map.append(ArenaRun(length: Int32(len), sourceOffset: seg.inSource ? seg.offset : -1))
+            }
         }
         let offset = storage.strings.count
         buf.span.withUnsafeBufferPointer { storage.strings.append(copying: $0) }
         return Chunk(offset: offset, length: total, inSource: false)
+    }
+
+    /// Narrow a content-relative arena→source run map to the sub-window `[start, start + length)` of the original flattened content, rebased so its first run begins at content offset 0.
+    ///
+    /// Drops runs outside the window and advances a partially-included source run's `sourceOffset` by the trimmed-off prefix; synthetic gaps stay gaps. Used when a flattened setext heading's content is re-seeded after leading/trailing whitespace trim and ref-def stripping, so the stored map matches exactly the bytes that reach inline parsing.
+    private func sliceRuns(_ runs: [ArenaRun], from start: Int, length: Int) -> [ArenaRun] {
+        let end = start + length
+        var result: [ArenaRun] = []
+        var v = 0
+        for run in runs {
+            let runStart = v
+            let runEnd = v + Int(run.length)
+            v = runEnd
+            let lo = max(runStart, start)
+            let hi = min(runEnd, end)
+            if lo >= hi { continue }
+            let sourceOffset: Int32 = run.sourceOffset < 0 ? -1 : run.sourceOffset + Int32(lo - runStart)
+            result.append(ArenaRun(length: Int32(hi - lo), sourceOffset: sourceOffset))
+        }
+        return result
     }
 
     /// Run the paragraph finalize-time matchers on a single flat content `Chunk`: footnote definition, reference-link definitions, GFM table detection, and tasklist marker - then queue the remaining content for inline parsing (or drop the node if it was entirely ref-defs).

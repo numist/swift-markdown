@@ -36,6 +36,19 @@ internal struct Segment: Equatable {
     }
 }
 
+/// One run of a single-segment arena buffer's arena→source map: `length` consecutive content bytes that image a contiguous source range beginning at `sourceOffset`.
+///
+/// A `sourceOffset < 0` marks a synthetic gap - the interned `"\n"` line-join between reconstructed lines, or an arena-only line with no source pre-image - which stays position-less (`nil`), matching cmark's position-less soft breaks. Runs are contiguous and ordered (they tile the content from its first byte), so the map walks exactly like the multi-segment `Segment` list, minus the byte reads (bytes come from the flat arena span). This lets inline stamping recover per-line source columns for content that was flattened into one arena chunk (a non-contiguous setext heading), and in the single-run case it expresses the constant shift of a `\|`-unescaped table cell.
+internal struct ArenaRun: Equatable {
+    internal var length: Int32
+    internal var sourceOffset: Int32
+
+    internal init(length: Int32, sourceOffset: Int32) {
+        self.length = length
+        self.sourceOffset = sourceOffset
+    }
+}
+
 /// A node's content, expressed as a contiguous slice `[first, first + count)` of `DocumentStorage.segments`.
 ///
 /// The overwhelmingly common case is `count == 1` (a single source range - most text runs, URLs, and labels), which costs the same as a single inline `Chunk`. `totalLength` caches the total byte length across the segments so length queries don't have to walk the pool.

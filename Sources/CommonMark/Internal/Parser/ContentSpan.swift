@@ -27,8 +27,8 @@ internal struct ContentSpan: ~Escapable {
     /// Single-segment: which buffer `span` is (`true` = source, `false` = arena scratch). Multi-segment: unused.
     @usableFromInline let inSource: Bool
 
-    /// Single-segment arena content that is a constant-shift image of a source range: the delta to add to a global offset to recover its source offset (`nil` = arena content with no source mapping, the default). Lets inline stamping map an arena copy back to source. Only consulted for `!inSource` single-segment content.
-    @usableFromInline let arenaSourceDelta: Int?
+    /// Single-segment arena content that images a source range: an arena→source run map, content-relative (keyed from the first content byte). `sourceOffset` walks it to recover per-line source columns for reconstructed content - a flattened non-contiguous setext heading, or (as a single constant-shift run) a `\|`-unescaped table cell. Empty (`count == 0`) for source-backed content or arena content with no source image (in which case `sourceOffset` returns `nil`). Only consulted for `!inSource` single-segment content.
+    @usableFromInline let arenaRuns: Span<ArenaRun>
 
     /// Multi-segment only: the content's segments (empty for single-segment). A copy held in stable storage for the inline loop's duration (the live `storage.segments` pool grows during parsing).
     @usableFromInline let segments: Span<Segment>
@@ -36,14 +36,26 @@ internal struct ContentSpan: ~Escapable {
     /// Multi-segment only: total virtual byte length across `segments`.
     @usableFromInline let multiVirtualLength: Int
 
-    /// Single-segment initializer (zero-copy source slice or arena scratch). `arenaSourceDelta` maps arena content back to source (see the field); leave `nil` for source-backed or unmapped arena content.
+    /// Single-segment initializer (zero-copy source slice or arena scratch) with no arena→source mapping. For source-backed content `sourceOffset` is the identity map; for arena content it returns `nil`.
     @_lifetime(copy span)
     @inlinable
-    init(span: Span<UInt8>, base: Int, inSource: Bool, arenaSourceDelta: Int? = nil) {
+    init(span: Span<UInt8>, base: Int, inSource: Bool) {
         self.span = span
         self.base = base
         self.inSource = inSource
-        self.arenaSourceDelta = arenaSourceDelta
+        self.arenaRuns = Span<ArenaRun>()
+        self.segments = Span<Segment>()
+        self.multiVirtualLength = 0
+    }
+
+    /// Single-segment arena initializer carrying an arena→source run map (see `arenaRuns`) so inline stamping recovers source positions for reconstructed (flattened) content.
+    @_lifetime(copy span, copy arenaRuns)
+    @inlinable
+    init(span: Span<UInt8>, base: Int, inSource: Bool, arenaRuns: Span<ArenaRun>) {
+        self.span = span
+        self.base = base
+        self.inSource = inSource
+        self.arenaRuns = arenaRuns
         self.segments = Span<Segment>()
         self.multiVirtualLength = 0
     }
@@ -55,7 +67,7 @@ internal struct ContentSpan: ~Escapable {
         self.span = source
         self.base = 0
         self.inSource = false
-        self.arenaSourceDelta = nil
+        self.arenaRuns = Span<ArenaRun>()
         self.segments = segments
         self.multiVirtualLength = virtualLength
     }
@@ -102,16 +114,30 @@ internal struct ContentSpan: ~Escapable {
         return 0
     }
 
-    /// The original-source byte offset for `offset`, or `nil` if it maps to a synthetic/arena byte. Single-segment source content maps identity (the offset already IS a source offset); single-segment arena content has no source mapping; multi-segment resolves through the segment list.
+    /// The original-source byte offset for `offset`, or `nil` if it maps to a synthetic/arena byte. Single-segment source content maps identity (the offset already IS a source offset); single-segment arena content resolves through its arena→source run map (`nil` when unmapped); multi-segment resolves through the segment list.
     @inlinable
     func sourceOffset(ofVirtual offset: Int) -> Int? {
         if !isMultiSegment {
             if inSource {
                 return offset
             }
-            // Constant-shift arena content (a table cell whose `\|` escapes were stripped) recovers source positions linearly. cmark maps the unescaped cell bytes back to source by a constant shift - it does NOT re-widen for the removed backslash - so a single delta reproduces its (compressed) positions exactly.
-            if let arenaSourceDelta {
-                return offset + arenaSourceDelta
+            // Arena content with a source pre-image carries an arena→source run map, content-relative (keyed from the first content byte). Walk it exactly like the multi-segment segment list below: a run whose `sourceOffset < 0` is a synthetic gap (the interned `\n` line-join) and yields `nil`; arena content with no map (`arenaRuns` empty) has no source image and also yields `nil`. cmark maps a `\|`-unescaped table cell's bytes back to source by a constant shift (it does NOT re-widen for the removed backslash), which the degenerate single-run case reproduces exactly.
+            let k = offset - base
+            var v = 0
+            for i in 0..<arenaRuns.count {
+                let run = arenaRuns[i]
+                let len = Int(run.length)
+                if k < v + len {
+                    return run.sourceOffset < 0 ? nil : Int(run.sourceOffset) + (k - v)
+                }
+                v += len
+            }
+            // One-past-the-end: map just past the last source run, if any.
+            if arenaRuns.count > 0 {
+                let last = arenaRuns[arenaRuns.count - 1]
+                if last.sourceOffset >= 0 {
+                    return Int(last.sourceOffset) + Int(last.length)
+                }
             }
             return nil
         }
