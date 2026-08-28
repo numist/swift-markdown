@@ -1,0 +1,7 @@
+Document @1:1-1:12
+└─ Paragraph @1:1-1:12
+   └─ Emphasis @1:1-1:12
+      ├─ Text @1:2-1:4 "a "
+      ├─ Strong @1:4-1:9
+      │  └─ Text @1:6-1:7 "b"
+      └─ Text @1:9-1:11 " c"

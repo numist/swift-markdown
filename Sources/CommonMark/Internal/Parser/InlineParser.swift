@@ -255,6 +255,7 @@ extension BlockParser {
                 try pushBracket(
                     kind: .link,
                     inlText: textIdx,
+                    virtualStart: cursor,
                     delimPosition: lastDelim ?? -1,
                     brackets: &brackets,
                     lastBracket: &lastBracket,
@@ -281,6 +282,7 @@ extension BlockParser {
                     try pushBracket(
                         kind: .image,
                         inlText: textIdx,
+                        virtualStart: cursor,
                         delimPosition: lastDelim ?? -1,
                         brackets: &brackets,
                         lastBracket: &lastBracket,
@@ -310,6 +312,7 @@ extension BlockParser {
                     try pushBracket(
                         kind: .attribute,
                         inlText: textIdx,
+                        virtualStart: cursor,
                         delimPosition: lastDelim ?? -1,
                         brackets: &brackets,
                         lastBracket: &lastBracket,
@@ -467,6 +470,7 @@ extension BlockParser {
         )
         processEmphasis(
             stackBottom: -1,
+            content: content,
             delimiters: &delimiters,
             lastDelim: &lastDelim
         )
@@ -485,6 +489,8 @@ extension BlockParser {
     internal struct BracketRecord {
         var kind: BracketKind
         var inlText: DocumentStorage.Index
+        /// Virtual content offset of the opening `[` / `![` / `^[` byte. `buildLinkOrImage` / `handleCloseBracketAttribute` derive the wrapper's start from this so the map-aware stamp resolves arena/multi-segment content (the opener text node's stored chunk offset is already a source offset and would double-map).
+        var virtualStart: Int
         /// Delimiter-stack index at time of push. Passed to `processEmphasis` as `stackBottom` after a successful link match so emphasis inside the link text gets resolved without leaking out.
         var delimPosition: Int
         /// `true` once any later bracket has been pushed on top of this one. Used to disqualify the shortcut-reference form for outer brackets that contain nested ones.
@@ -492,7 +498,7 @@ extension BlockParser {
         var previous: Int?
     }
 
-    private func pushBracket(kind: BracketKind, inlText: DocumentStorage.Index, delimPosition: Int, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?, noLinkOpeners: inout Bool) throws (MarkdownDocument.Error) {
+    private func pushBracket(kind: BracketKind, inlText: DocumentStorage.Index, virtualStart: Int, delimPosition: Int, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?, noLinkOpeners: inout Bool) throws (MarkdownDocument.Error) {
         if let lastBracket {
             brackets[lastBracket].bracketAfter = true
         }
@@ -501,6 +507,7 @@ extension BlockParser {
         brackets.append(BracketRecord(
             kind: kind,
             inlText: inlText,
+            virtualStart: virtualStart,
             delimPosition: delimPosition,
             bracketAfter: false,
             previous: prev
@@ -538,6 +545,7 @@ extension BlockParser {
                 content: content,
                 parent: parent,
                 openerInl: openerInl,
+                openerVirtualStart: brackets[openerIdx].virtualStart,
                 openerDelimPos: openerDelimPos,
                 delimiters: &delimiters,
                 lastDelim: &lastDelim,
@@ -634,9 +642,9 @@ extension BlockParser {
                 openerDelimPos: openerDelimPos,
                 url: url,
                 title: title,
-                linkStart: openerByteStart,
+                linkStart: brackets[openerIdx].virtualStart,
                 linkEnd: pos,
-                inSource: inSource,
+                content: content,
                 delimiters: &delimiters,
                 lastDelim: &lastDelim
             )
@@ -679,7 +687,7 @@ extension BlockParser {
     }
 
     /// Construct the `.link` / `.image` node, splice it in front of the opener's `[` text node, reparent every following sibling into it, and remove the opener's `[` text from the tree. Then resolve emphasis inside the link with the bracket's `delimPosition` as the floor.
-    private mutating func buildLinkOrImage(isImage: Bool, openerInl: DocumentStorage.Index, openerDelimPos: Int, url: Chunk, title: Chunk, linkStart: Int, linkEnd: Int, inSource: Bool, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) {
+    private mutating func buildLinkOrImage(isImage: Bool, openerInl: DocumentStorage.Index, openerDelimPos: Int, url: Chunk, title: Chunk, linkStart: Int, linkEnd: Int, content: borrowing ContentSpan, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) {
         let parentIdx = storage[openerInl].parent
         let kind: MarkdownNode.Kind = isImage ? .image : .link
         let urlRef = storage.intern(url)
@@ -689,8 +697,8 @@ extension BlockParser {
             parent: parentIdx,
             data: .link(url: urlRef, title: titleRef)
         ))
-        // The link/image spans from its opening `[`/`![` to just past the closing `)` or reference label.
-        stampInline(linkIdx, linkStart, linkEnd, inSource: inSource)
+        // The link/image spans from its opening `[`/`![` (virtual `linkStart`) to just past the closing `)` or reference label (virtual `linkEnd`).
+        stampInline(linkIdx, linkStart, linkEnd, content: content)
         storage.insertChildBefore(linkIdx, before: openerInl)
         var sib = storage[openerInl].next
         while let sib_ = sib {
@@ -702,6 +710,7 @@ extension BlockParser {
         storage.unlinkChild(openerInl)
         processEmphasis(
             stackBottom: openerDelimPos,
+            content: content,
             delimiters: &delimiters,
             lastDelim: &lastDelim
         )
@@ -773,7 +782,7 @@ extension BlockParser {
     /// Resolve a `]` that closes an `^[…]` attribute opener. Tries the inline form `(attrs)` first, then the reference form `[label]` whose label resolves in `storage.attributeReferenceMap`.
     ///
     /// On match emits a `.attribute` node and reparents the inner siblings into it.
-    private mutating func handleCloseBracketAttribute(cursor: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, openerInl: DocumentStorage.Index, openerDelimPos: Int, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?) -> Int {
+    private mutating func handleCloseBracketAttribute(cursor: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, openerInl: DocumentStorage.Index, openerVirtualStart: Int, openerDelimPos: Int, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?) -> Int {
         let inSource = content.inSource
         var pos = cursor + 1
         var attrs: Chunk = .empty
@@ -825,10 +834,8 @@ extension BlockParser {
             parent: parentIdx,
             data: .attribute(attrsRef)
         ))
-        // The `^[…](…)` attribute spans from its opening `^[` to just past the closing form.
-        if let openerChunk = literalChunk(of: openerInl) {
-            stampInline(attrIdx, openerChunk.offset, pos, inSource: inSource)
-        }
+        // The `^[…](…)` attribute spans from its opening `^[` (virtual `openerVirtualStart`) to just past the closing form (virtual `pos`).
+        stampInline(attrIdx, openerVirtualStart, pos, content: content)
         storage.insertChildBefore(attrIdx, before: openerInl)
         var sib = storage[openerInl].next
         while let sib_ = sib {
@@ -840,6 +847,7 @@ extension BlockParser {
         storage.unlinkChild(openerInl)
         processEmphasis(
             stackBottom: openerDelimPos,
+            content: content,
             delimiters: &delimiters,
             lastDelim: &lastDelim
         )
@@ -902,6 +910,9 @@ extension BlockParser {
         var canOpen: Bool
         var canClose: Bool
         var inlText: DocumentStorage.Index
+        /// The delimiter run's span in *virtual* content coordinates (`[virtualStart, virtualEnd)`), fixed at creation. `insertEmph` derives the emph/strong node's source range from these virtual offsets so the map-aware stamp resolves arena/multi-segment content correctly - not from the run's stored chunk offset, which is already a source offset and would double-map.
+        var virtualStart: Int
+        var virtualEnd: Int
         var previous: Int?
         var next: Int?
     }
@@ -975,6 +986,8 @@ extension BlockParser {
                 canOpen: canOpen,
                 canClose: canClose,
                 inlText: textIdx,
+                virtualStart: start,
+                virtualEnd: runEnd,
                 previous: prev,
                 next: nil
             ))
@@ -990,7 +1003,7 @@ extension BlockParser {
     /// Resolve emphasis pairs. Walks forward from the first delimiter above `stackBottom` (use `-1` to process the entire stack). For each closer, looks back for the most recent compatible opener and pairs them via `insertEmph`.
     ///
     /// `openersBottom` is the per-(length%3, char) search-floor optimization: once we fail to find an opener for a closer of a given (length%3, char), no later closer of the same shape needs to look behind that point.
-    private mutating func processEmphasis(stackBottom: Int, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) {
+    private mutating func processEmphasis(stackBottom: Int, content: borrowing ContentSpan, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) {
         let doubleTilde = storage.options.contains(.strikethroughDoubleTilde)
         // openersBottom[length % 3, char-index]: 0=`*`, 1=`_`, 2=`~`, 3=`'`, 4=`"`.
         var openersBottom = OpenersBottom(fill: stackBottom)
@@ -1056,6 +1069,7 @@ extension BlockParser {
                 closer = insertEmph(
                     opener: opener,
                     closer: c,
+                    content: content,
                     delimiters: &delimiters,
                     lastDelim: &lastDelim
                 )
@@ -1086,7 +1100,7 @@ extension BlockParser {
     }
 
     /// Pair `opener` with `closer`, build an `.emphasis` (1-char match) or `.strong` (2-char match) node, reparent the inner siblings into it, trim the matched chars off the opener's and closer's text nodes, remove freed delimiters from the stack, and return the next closer to process (which is `closer.next` if we consumed the closer's text fully, otherwise `closer` itself for another round).
-    private mutating func insertEmph(opener: Int, closer: Int, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) -> Int? {
+    private mutating func insertEmph(opener: Int, closer: Int, content: borrowing ContentSpan, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) -> Int? {
         let openerInl = delimiters[opener].inlText
         let closerInl = delimiters[closer].inlText
         let openerChar = delimiters[opener].character
@@ -1104,9 +1118,6 @@ extension BlockParser {
         }
         openerNumChars -= useDelims
         closerNumChars -= useDelims
-        // Capture the source span of the consumed delimiters BEFORE trimming the opener/closer literals: the emph/strong node spans from the first consumed opener delimiter to the last consumed closer delimiter (e.g. `*a*` → 1:1-1:3, delimiters included). The opener's delimiters sit at the END of its run; the closer's at the START of its run.
-        let openerChunk = literalChunk(of: openerInl)
-        let closerChunk = literalChunk(of: closerInl)
         // Sync the remaining length back onto the delimiter records - the rule-of-3 check in `processEmphasis` uses `delimiters[i].length`, and partial-pair matches must reflect the reduced length so a `***` opener with `**` closer leaves a `*` available for later pairing.
         delimiters[opener].length = openerNumChars
         delimiters[closer].length = closerNumChars
@@ -1124,12 +1135,10 @@ extension BlockParser {
         // Build the wrapping node and reparent siblings.
         let parentIdx = storage[openerInl].parent
         let emphIdx = storage.appendNode(NodeRecord(kind: kind, parent: parentIdx))
-        // Stamp the source range spanning the consumed delimiters on both ends.
-        if let openerChunk, let closerChunk {
-            let start = openerChunk.offset + openerChunk.length - useDelims
-            let end = closerChunk.offset + useDelims
-            stampInline(emphIdx, start, end, inSource: openerChunk.inSource)
-        }
+        // Stamp the source range spanning the consumed delimiters (e.g. `*a*` → 1:1-1:3, delimiters included). The consumed opener delimiters sit at the END of its run, just past the `openerNumChars` that survive; the consumed closer delimiters at the START, `closerNumChars` back from its run end. Expressed as VIRTUAL content offsets so the map-aware `content:` overload resolves them through the arena/segment map (identity for source-backed content).
+        let start = delimiters[opener].virtualStart + openerNumChars
+        let end = delimiters[closer].virtualEnd - closerNumChars
+        stampInline(emphIdx, start, end, content: content)
         var sibling = storage[openerInl].next
         while let sibling_ = sibling, sibling_ != closerInl {
             let nextSibling = storage[sibling_].next
@@ -1171,14 +1180,6 @@ extension BlockParser {
             return Int(ref.totalLength)
         }
         return 0
-    }
-
-    /// The single-segment `Chunk` (offset/length/inSource) backing a leaf text node, or `nil`. Used to recover a delimiter run's source span for emphasis/strong source-range stamping.
-    private func literalChunk(of nodeIdx: DocumentStorage.Index) -> Chunk? {
-        if case .literal(let ref) = storage[nodeIdx].data, ref.count >= 1 {
-            return storage.chunk(of: ref)
-        }
-        return nil
     }
 
     // MARK: - Smart punctuation
@@ -1314,6 +1315,8 @@ extension BlockParser {
                 canOpen: canOpen,
                 canClose: canClose,
                 inlText: textIdx,
+                virtualStart: start,
+                virtualEnd: runEnd,
                 previous: prev,
                 next: nil
             ))
@@ -2482,20 +2485,9 @@ extension BlockParser {
         stampInline(textIdx, start, rangeEnd ?? end, content: content)
     }
 
-    /// Stamp `node`'s source byte range.
-    ///
-    /// Gated on positions + source-backed content: when the block's inline content is source-backed, the parser's global cursor offsets ARE original-source byte offsets, so a construct bounded by `[start, end)` maps directly. Arena-backed content (multi-line joins) doesn't map to source and is left unstamped (handled separately).
-    @inline(__always)
-    mutating func stampInline(_ node: DocumentStorage.Index, _ start: Int, _ end: Int, inSource: Bool) {
-        if positionsEnabled, inSource {
-            storage.setSourceStart(node, start)
-            storage.setSourceEnd(node, end)
-        }
-    }
-
     /// Stamp `node`'s source range from *virtual* content offsets, resolving each through `content.sourceOffset(ofVirtual:)`.
     ///
-    /// This is the multi-segment-aware path: a single-segment source span maps identity (same as the `inSource:` overload), single-segment arena maps to nil (skipped), and a multi-segment span walks its segment list - so a construct inside a multi-line blockquote/list paragraph gets real source positions. `end` is *exclusive* (one past the last byte), so the last content byte `end - 1` is resolved and incremented; this also maps an `end` that lands on the synthetic line-join newline back to just past the preceding source byte.
+    /// This is the only stamping path, shared by every inline node (leaf and wrapper - matching cmark, whose `S_insert_emph` derives a wrapper's range from its child columns in the same buffer map): a single-segment source span maps identity (byte offsets pass through unchanged), single-segment arena maps to nil (skipped) unless an `arenaSourceDelta` shifts it, and a multi-segment span walks its segment list - so a construct inside a multi-line blockquote/list paragraph gets real source positions. `end` is *exclusive* (one past the last byte), so the last content byte `end - 1` is resolved and incremented; this also maps an `end` that lands on the synthetic line-join newline back to just past the preceding source byte.
     @inline(__always)
     mutating func stampInline(_ node: DocumentStorage.Index, _ start: Int, _ end: Int, content: borrowing ContentSpan) {
         guard positionsEnabled, end > start,
