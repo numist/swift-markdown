@@ -2563,12 +2563,16 @@ extension BlockParser {
     ///
     /// cmark stamps a matched close-bracket node's `end_column = subj->pos + column_offset + block_offset` (swift-cmark `src/inlines.c` `handle_close_bracket`, ~1462-1491; the attribute form at ~1251-1253) WITHOUT running `handle_newline`'s per-line reset (~1507) while scanning `(...)`. Text softbreaks, code spans and raw HTML all *do* reset, so a newline inside `(...)` advances the buffer cursor past the next line's bytes while `end_column` keeps counting flat from the `]`'s line - overshooting that line's physical width. The rewrite's byte-offset range can't encode this (no source byte projects onto the `]`'s line at that column), so store an explicit end position.
     ///
-    /// why: replicating a cmark quirk (Hyrum's Law) - its link/image/attribute end column alone skips the newline reset that every other multi-line inline construct performs.
+    /// why: the multi-line link/image/attribute end column is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). The mechanism it uses - an explicit end position (`setExplicitEnd`) that overrides the node's byte-projected end - stays unconditional; only whether this method sets one is gated.
     ///
-    /// Scoped to top-level blocks (`block_offset == 0`, so `blockStartColumn == 1`). A link nested in a blockquote/list has its `(...)` newline in `[closeBracket, linkEnd)` too, so it still takes this path and gets an explicit end - but computed *without* the container's `block_offset`, so its column is short by the container indent and stays divergent (as it already was on the byte path). Threading `block_offset` to retire nested links is the documented Stage-2 gap (`docs/inline-end-column-exploration.md` §4); nested multi-line links are not in the fuzz corpus.
+    /// Flag ON reproduces the cmark quirk (Hyrum's Law): its link/image/attribute end column alone skips the newline reset that every other multi-line inline construct performs, so store the flat close-bracket column as an explicit end.
+    ///
+    /// Flag OFF is spec-correct: take no explicit end, so the node keeps the byte-projected end from its normal `stampInline(node, linkStart, linkEnd)` stamp - i.e. just past the `)` on the `)`'s own physical line (`[a](\n/u)` -> `Link @1:1-2:4`, the `)` on line 2), like every other construct whose interior newline resets the column.
+    ///
+    /// Scoped to top-level blocks (`block_offset == 0`, so `blockStartColumn == 1`). A link nested in a blockquote/list has its `(...)` newline in `[closeBracket, linkEnd)` too, so it still takes this path (flag ON) and gets an explicit end - but computed *without* the container's `block_offset`, so its column is short by the container indent and stays divergent (as it already was on the byte path). Threading `block_offset` to retire nested links is the documented Stage-2 gap (`docs/inline-end-column-exploration.md` §4); nested multi-line links are not in the fuzz corpus.
     @inline(__always)
     mutating func stampCloseBracketEnd(_ node: DocumentStorage.Index, closeBracket: Int, linkEnd: Int, content: borrowing ContentSpan) {
-        guard positionsEnabled else { return }
+        guard positionsEnabled, storage.options.contains(.cmarkBugCompatibility) else { return }
         // Only the non-resetting case diverges: a newline between the `]` and just past the close form. Single-line forms - and newline-in-*text* links, whose newline precedes the `]` - project identically from the end byte, so leave them on the byte path (byte-identical to today).
         var crossedNewline = false
         var i = closeBracket
