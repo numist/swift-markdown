@@ -71,6 +71,11 @@ internal struct DocumentStorage: ~Copyable {
         internal var start: Int
         internal var end: Int
 
+        /// Read-time end position that overrides byte projection when present.
+        ///
+        /// A multi-line inline link/image/attribute has an end *column* that is a flat buffer coordinate cmark never resets across the newline inside `(...)` - no source byte projects to it (see `InlineParser.stampCloseBracketEnd`). Every other node leaves this `nil` and keeps the byte-projected end.
+        internal var explicitEnd: MarkdownNode.SourcePosition? = nil
+
         internal static let unset = SourceByteRange(start: -1, end: -1)
     }
 
@@ -130,6 +135,13 @@ internal struct DocumentStorage: ~Copyable {
     internal mutating func setSourceEnd(_ node: Index, _ offset: Int?) {
         if let offset, positionsEnabled {
             sourceRanges[node].end = offset
+        }
+    }
+
+    /// Record an explicit read-time end position for `node`, overriding the byte-projected end. Used only for a multi-line inline link/image/attribute, whose cmark end column is a flat buffer coordinate no source byte projects to. No-op when positions are off.
+    internal mutating func setExplicitEnd(_ node: Index, _ position: MarkdownNode.SourcePosition) {
+        if positionsEnabled {
+            sourceRanges[node].explicitEnd = position
         }
     }
 

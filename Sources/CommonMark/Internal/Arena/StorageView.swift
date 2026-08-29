@@ -63,7 +63,8 @@ internal struct StorageView: ~Escapable, Copyable {
         let r = sourceRanges[index]
         guard r.start >= 0, r.end >= 0 else { return nil }
         let start = position(ofByte: r.start)
-        let end = position(ofByte: r.end)
+        // A multi-line inline link/image/attribute carries an explicit end column - a flat buffer coordinate cmark doesn't reset across the `(...)` newline, which no source byte projects to (see `InlineParser.stampCloseBracketEnd`). Use it verbatim; every other node projects its end byte.
+        let end = r.explicitEnd ?? position(ofByte: r.end)
         guard start <= end else { return nil }
         return start..<end
     }

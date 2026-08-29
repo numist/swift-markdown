@@ -644,6 +644,7 @@ extension BlockParser {
                 title: title,
                 linkStart: brackets[openerIdx].virtualStart,
                 linkEnd: pos,
+                closeBracket: cursor,
                 content: content,
                 delimiters: &delimiters,
                 lastDelim: &lastDelim
@@ -687,7 +688,7 @@ extension BlockParser {
     }
 
     /// Construct the `.link` / `.image` node, splice it in front of the opener's `[` text node, reparent every following sibling into it, and remove the opener's `[` text from the tree. Then resolve emphasis inside the link with the bracket's `delimPosition` as the floor.
-    private mutating func buildLinkOrImage(isImage: Bool, openerInl: DocumentStorage.Index, openerDelimPos: Int, url: Chunk, title: Chunk, linkStart: Int, linkEnd: Int, content: borrowing ContentSpan, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) {
+    private mutating func buildLinkOrImage(isImage: Bool, openerInl: DocumentStorage.Index, openerDelimPos: Int, url: Chunk, title: Chunk, linkStart: Int, linkEnd: Int, closeBracket: Int, content: borrowing ContentSpan, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) {
         let parentIdx = storage[openerInl].parent
         let kind: MarkdownNode.Kind = isImage ? .image : .link
         let urlRef = storage.intern(url)
@@ -699,6 +700,7 @@ extension BlockParser {
         ))
         // The link/image spans from its opening `[`/`![` (virtual `linkStart`) to just past the closing `)` or reference label (virtual `linkEnd`).
         stampInline(linkIdx, linkStart, linkEnd, content: content)
+        stampCloseBracketEnd(linkIdx, closeBracket: closeBracket, linkEnd: linkEnd, content: content)
         storage.insertChildBefore(linkIdx, before: openerInl)
         var sib = storage[openerInl].next
         while let sib_ = sib {
@@ -836,6 +838,7 @@ extension BlockParser {
         ))
         // The `^[…](…)` attribute spans from its opening `^[` (virtual `openerVirtualStart`) to just past the closing form (virtual `pos`).
         stampInline(attrIdx, openerVirtualStart, pos, content: content)
+        stampCloseBracketEnd(attrIdx, closeBracket: cursor, linkEnd: pos, content: content)
         storage.insertChildBefore(attrIdx, before: openerInl)
         var sib = storage[openerInl].next
         while let sib_ = sib {
@@ -2499,6 +2502,49 @@ extension BlockParser {
         storage.setSourceEnd(node, lastByte + 1)
     }
 
+    /// Give a matched link/image/attribute the flat close-bracket end column cmark reports when its `(...)` (destination/title/attrs) crosses a newline.
+    ///
+    /// cmark stamps a matched close-bracket node's `end_column = subj->pos + column_offset + block_offset` (swift-cmark `src/inlines.c` `handle_close_bracket`, ~1462-1491; the attribute form at ~1251-1253) WITHOUT running `handle_newline`'s per-line reset (~1507) while scanning `(...)`. Text softbreaks, code spans and raw HTML all *do* reset, so a newline inside `(...)` advances the buffer cursor past the next line's bytes while `end_column` keeps counting flat from the `]`'s line - overshooting that line's physical width. The rewrite's byte-offset range can't encode this (no source byte projects onto the `]`'s line at that column), so store an explicit end position.
+    ///
+    /// why: replicating a cmark quirk (Hyrum's Law) - its link/image/attribute end column alone skips the newline reset that every other multi-line inline construct performs.
+    ///
+    /// Scoped to top-level blocks (`block_offset == 0`, so `blockStartColumn == 1`). A link nested in a blockquote/list has its `(...)` newline in `[closeBracket, linkEnd)` too, so it still takes this path and gets an explicit end - but computed *without* the container's `block_offset`, so its column is short by the container indent and stays divergent (as it already was on the byte path). Threading `block_offset` to retire nested links is the documented Stage-2 gap (`docs/inline-end-column-exploration.md` §4); nested multi-line links are not in the fuzz corpus.
+    @inline(__always)
+    mutating func stampCloseBracketEnd(_ node: DocumentStorage.Index, closeBracket: Int, linkEnd: Int, content: borrowing ContentSpan) {
+        guard positionsEnabled else { return }
+        // Only the non-resetting case diverges: a newline between the `]` and just past the close form. Single-line forms - and newline-in-*text* links, whose newline precedes the `]` - project identically from the end byte, so leave them on the byte path (byte-identical to today).
+        var crossedNewline = false
+        var i = closeBracket
+        while i < linkEnd {
+            if content[i] == UInt8(ascii: "\n") {
+                crossedNewline = true
+                break
+            }
+            i += 1
+        }
+        guard crossedNewline else { return }
+        // end line: the physical source line of the closing `]` (cmark's `inl->end_line = subj->line`, frozen before the `(...)` scan). Bail to the byte path if the `]` has no source image.
+        guard let closeBracketSource = content.sourceOffset(ofVirtual: closeBracket) else { return }
+        let endLine = sourceLineNumber(ofSource: closeBracketSource)
+        // end column: flat buffer column counted from the start of the `]`'s BUFFER line through just past the close form, without resetting at the interior `(...)` newline. `+ 1` is `blockStartColumn` (top-level `block_offset` 0) and cmark's converter `+1`.
+        let lineStart = bufferLineStart(ofBuffer: closeBracket, content: content)
+        let endColumn = (linkEnd - lineStart) + 1
+        storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: endLine, column: endColumn))
+    }
+
+    /// Buffer offset of the start of the content line containing buffer offset `pos`: just past the previous buffer newline, or the content start. Counts cmark's flat close-bracket end column from the `]`'s line base and resets it at a newline in the link *text* (the softbreak that precedes the `]`).
+    private func bufferLineStart(ofBuffer pos: Int, content: borrowing ContentSpan) -> Int {
+        let start = content.startOffset
+        var i = pos - 1
+        while i >= start {
+            if content[i] == UInt8(ascii: "\n") {
+                return i + 1
+            }
+            i -= 1
+        }
+        return start
+    }
+
     /// Stamp an unmatched strikethrough (`~`) run's source range: start at the run's own source offset, end at the START of that run's source line.
     ///
     /// cmark-gfm's strikethrough extension (`strikethrough.c` `match`) sets a `~` run's `start_column` but never its `end_column`, leaving `end_column == 0` - which projects to column 1 of the run's line, i.e. the line-start byte. So a `~` at column 1 gets a zero-width `[s, s]` range, while a `~` further into its line gets a start-past-end range that `sourceRange(of:)` reports as no position - reproducing cmark either way. A no-op when positions are off or `start` maps to synthetic/arena content. Relies on `lineStarts` being populated, which holds during the inline-parsing pass (it runs after every line has been read).
@@ -2516,6 +2562,17 @@ extension BlockParser {
     ///
     /// Binary-searches `storage.lineStarts` (ascending; populated by the block pass that precedes inline parsing) for the largest entry `<= s`, mirroring `StorageView.position(ofByte:)`. Returns 0 when no line starts are recorded.
     private func lineStartByte(ofSource s: Int) -> Int {
+        let lo = lineSearch(ofSource: s)
+        return lo > 0 ? storage.lineStarts[lo - 1] : 0
+    }
+
+    /// The 1-based physical line number of source offset `s`, mirroring `StorageView.position(ofByte:)`.
+    private func sourceLineNumber(ofSource s: Int) -> Int {
+        max(1, lineSearch(ofSource: s))
+    }
+
+    /// Count of recorded line starts `<= s` (binary search of ascending `storage.lineStarts`). The containing line's start byte is `lineStarts[result - 1]` and its 1-based number is `max(1, result)`.
+    private func lineSearch(ofSource s: Int) -> Int {
         var lo = 0
         var hi = storage.lineStarts.count
         while lo < hi {
@@ -2526,7 +2583,7 @@ extension BlockParser {
                 hi = mid
             }
         }
-        return lo > 0 ? storage.lineStarts[lo - 1] : 0
+        return lo
     }
 
     /// Merge runs of adjacent `.text` children into single nodes, recursing into containers.

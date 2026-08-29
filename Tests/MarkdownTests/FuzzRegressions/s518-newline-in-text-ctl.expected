@@ -1,0 +1,6 @@
+Document @1:1-2:7
+└─ Paragraph @1:1-2:7
+   └─ Link @1:1-2:7 destination: "/u"
+      ├─ Text @1:2-1:3 "a"
+      ├─ SoftBreak
+      └─ Text @2:1-2:2 "b"
