@@ -993,8 +993,13 @@ extension BlockParser {
         let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parent, data: .literal(runRef)))
         storage.appendChild(textIdx, to: parent)
         // Stamp the run's own source span. A delimiter that never forms emphasis stays as literal text, and this range lets it keep its columns when it consolidates with adjacent text; a matched delimiter's text node is unlinked before it can matter. The reference stamps this node at creation for the same reason.
-        if isStrikethrough {
-            // why: cmark-gfm's strikethrough extension (`strikethrough.c` `match`) records only the run's start column and never sets its end column, so a `~`/`~~` run that never forms a strikethrough reports a zero-width range. Consolidation takes the end from the last merged text node, so a run that abuts following text (`a~b`, `~x`) recovers a real width while a standalone run stays zero-width. Reproduce that shipped quirk; emphasis (`*`/`_`, stamped with both columns via the width-bearing path below) is unaffected.
+        //
+        // why: an unmatched `~`/`~~` run's range is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). Only the stamping differs - the run's emission (the strikethrough exemption above) and delimiter push (below) are the same either way.
+        //
+        // Flag ON reproduces cmark-gfm's strikethrough extension (`strikethrough.c` `match`), which records only the run's start column and never sets its end column, so a run that never forms a strikethrough reports a zero-width range (see `stampInlineZeroWidth`). Consolidation takes the end from the last merged text node, so a run that abuts following text (`a~b`, `~x`) recovers a real width while a standalone or trailing run stays zero-width.
+        //
+        // Flag OFF is spec-correct: the run is ordinary literal text and gets a normal, width-bearing range over its own `[start, runEnd)` span, exactly like emphasis (`*`/`_`) delimiters and every other text run stamped via `stampInline`.
+        if isStrikethrough && storage.options.contains(.cmarkBugCompatibility) {
             stampInlineZeroWidth(textIdx, at: start, content: content)
         } else {
             stampInline(textIdx, start, runEnd, content: content)
@@ -2598,6 +2603,8 @@ extension BlockParser {
     }
 
     /// Stamp an unmatched strikethrough (`~`) run's source range: start at the run's own source offset, end at the START of that run's source line.
+    ///
+    /// Gated behind `.cmarkBugCompatibility` at the call site (`handleDelimRun`): only invoked flag-ON. Flag-OFF (the shipped default) stamps the run's normal width-bearing range via `stampInline` instead, so this degenerate range is never produced spec-correct.
     ///
     /// cmark-gfm's strikethrough extension (`strikethrough.c` `match`) sets a `~` run's `start_column` but never its `end_column`, leaving `end_column == 0` - which projects to column 1 of the run's line, i.e. the line-start byte. So a `~` at column 1 gets a zero-width `[s, s]` range, while a `~` further into its line gets a start-past-end range that `sourceRange(of:)` reports as no position - reproducing cmark either way. A no-op when positions are off or `start` maps to synthetic/arena content. Relies on `lineStarts` being populated, which holds during the inline-parsing pass (it runs after every line has been read).
     ///
