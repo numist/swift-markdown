@@ -1158,9 +1158,20 @@ extension BlockParser {
         // Build the wrapping node and reparent siblings.
         let parentIdx = storage[openerInl].parent
         let emphIdx = storage.appendNode(NodeRecord(kind: kind, parent: parentIdx))
-        // why: reproduce cmark-gfm's `S_insert_emph` (inlines.c), which stamps the emph/strong node from `opener_inl->start_column` / `closer_inl->end_column` - the FULL opener and closer delimiter runs. Trimming the consumed delimiters changes only the inline text nodes' literal length, never their recorded columns, so the range spans the whole runs regardless of how many delimiters this level actually consumed. When a run is only partially paired (leftover delimiters survive), this range therefore overlaps the leftover-delimiter text nodes - e.g. `**o*` yields both `Text "*" @1:1-1:3` and `Emphasis @1:1-1:5` starting at column 1. That overlap is cmark's shipped behavior. Expressed as VIRTUAL content offsets so the map-aware `content:` overload resolves them through the arena/segment map (identity for source-backed content).
-        let start = delimiters[opener].virtualStart
-        let end = delimiters[closer].virtualEnd
+        // why: the emph/strong range is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). Both branches express VIRTUAL content offsets so the map-aware `content:` overload resolves them through the arena/segment map (identity for source-backed content).
+        //
+        // Flag ON reproduces cmark-gfm's `S_insert_emph` (inlines.c), which stamps the node from `opener_inl->start_column` / `closer_inl->end_column` - the FULL opener and closer delimiter runs. Trimming the consumed delimiters changes only the inline text nodes' literal length, never their recorded columns, so cmark's range spans the whole runs regardless of how many delimiters this level actually consumed. When a run is only partially paired (leftover delimiters survive), that range overlaps the leftover-delimiter text nodes - e.g. `**o*` yields both `Text "*" @1:1-1:3` and `Emphasis @1:1-1:5` starting at column 1. That overlap is cmark's shipped behavior.
+        //
+        // Flag OFF is spec-correct: advance the start past the opener's leftover delimiters and pull the end back before the closer's, so the range covers only the consumed delimiters plus content and never overlaps the leftover text (`**o*` → `Emphasis @1:2-1:5`). For balanced runs both counts are zero and the branches coincide.
+        let start: Int
+        let end: Int
+        if storage.options.contains(.cmarkBugCompatibility) {
+            start = delimiters[opener].virtualStart
+            end = delimiters[closer].virtualEnd
+        } else {
+            start = delimiters[opener].virtualStart + openerNumChars
+            end = delimiters[closer].virtualEnd - closerNumChars
+        }
         stampInline(emphIdx, start, end, content: content)
         var sibling = storage[openerInl].next
         while let sibling_ = sibling, sibling_ != closerInl {
