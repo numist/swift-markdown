@@ -40,16 +40,16 @@ class MultilineLinkEndColumnTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// A multi-line link whose title is on the next line ends on that physical line (byte-projected
-    /// @2:11 - short of the `)` because the trailing spaces before `)` fall outside the link node's
-    /// byte range), not at cmark's flat @1:26.
+    /// A multi-line link whose title is on the next line ends just past the `)` on that physical
+    /// line (byte-projected @2:13 - the `)` is at column 12, so the half-open end is column 13,
+    /// consistent with the paragraph's true-width end @2:13), not at cmark's flat @1:26.
     func testMultilineLinkTitleEndsOnPhysicalLine() {
         let text = "[link](   /uri\n  \"title\"  )"
 
         let expectedDump = """
         Document @1:1-2:13
         └─ Paragraph @1:1-2:13
-           └─ Link @1:1-2:11 destination: "/uri"
+           └─ Link @1:1-2:13 destination: "/uri"
               └─ Text @1:2-1:6 "link"
         """
 

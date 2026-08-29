@@ -566,9 +566,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func addLineSegment(span: Span<UInt8>, range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         guard !range.isEmpty else { return pending }
         if currentLineMapsToSource {
-            // A paragraph continuation line is re-indented: cmark strips its leading whitespace (so the bytes start at `range.lowerBound`) but reports the surviving content at the block's fixed content column - this line's start plus the leaf's `block_offset` (`currentContentIndent`) - not at its true first-non-space column. Map the segment's source there while still reading its bytes from `range`. When the line has no whitespace beyond `block_offset` the two coincide, so this is a no-op. Code/HTML block bodies preserve their own indentation and keep their true offset.
+            // why: a paragraph continuation line's surviving content is mapped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). Only the source column of the segment differs - its bytes are always read from `range` - and code/HTML block bodies are excluded either way (they preserve their own indentation and keep their true offset). When the line has no whitespace beyond `block_offset` the two coincide, so this is a no-op.
+            //
+            // Flag ON reproduces cmark-gfm's continuation re-indent: cmark fixes the paragraph's content column from the FIRST line and reports every continuation line's surviving content at that fixed column - this line's start plus the leaf's `block_offset` (`currentContentIndent`) - discarding the line's own leading whitespace. So a more-indented continuation line's text lands at the wrong (leftward) column, and its end can sit before the paragraph's end (which is computed from the true line width).
+            //
+            // Flag OFF is spec-correct: the continuation content keeps its TRUE first-non-space column (`range.lowerBound`), so its range is consistent with the block's true-width end.
             let kind = storage[node].kind
-            let reindent = positionsEnabled && !(kind.isCodeBlock || kind == .htmlBlock)
+            let reindent = positionsEnabled && storage.options.contains(.cmarkBugCompatibility) && !(kind.isCodeBlock || kind == .htmlBlock)
             let mapsAt = reindent ? currentLineSourceRange.lowerBound + currentContentIndent : range.lowerBound
             return appendSegment(Segment(offset: Int32(range.lowerBound), length: Int32(range.count), inSource: true, sourceOffset: Int32(mapsAt)), to: node, pending: pending)
         }
