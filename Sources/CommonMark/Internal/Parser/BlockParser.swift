@@ -115,6 +115,25 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// When a new item is added to that list (i.e., the blank line was between sibling items), the list gets marked loose. Cleared on each item open after the check, and stays stale (but harmless) when the list closes.
     var pendingLooseList: DocumentStorage.Index? = nil
 
+    // MARK: - Inline backslash-hard-break flat-column cursor
+
+    /// `true` while the current `parseInline` pass tracks cmark's inline line/column cursor across backslash hard breaks.
+    ///
+    /// Armed only for single-segment source-backed content (the common top-level case), where a content offset IS its source offset so the cursor math is exact. Arena/multi-segment content stays on the byte-projection path (a documented Stage-2 gap, matching `stampCloseBracketEnd`'s scoping).
+    var inlineFlatColumnTracking = false
+
+    /// `true` once a backslash hard break has occurred in the current `parseInline` pass. Every inline node stamped afterward gets explicit flat (line, column) positions - cmark's `handle_backslash` makes the LINEBREAK without resetting `subj->line` / `subj->column_offset`, so columns keep counting flat and the line does not advance.
+    var inlineSawBackslashHardBreak = false
+
+    /// Source byte offsets where each *logical* line begins for the current `parseInline` pass: index 0 is the block's content start; each later entry is the start of a physical line opened by a soft break or trailing-space hard break (the breaks whose cmark `handle_newline` resets the cursor). Backslash hard breaks add no entry. Reused scratch (cleared per pass).
+    var inlineLogicalLineStarts: [Int] = []
+
+    /// The 1-based source line of the current inline block's content start (cmark's `subj->line` at block entry).
+    var inlineBlockStartLine = 1
+
+    /// The 1-based column of the current inline block's content start (cmark's `block_offset + 1`).
+    var inlineBlockStartColumn = 1
+
     // MARK: - Init
     
     @_lifetime(copy source)

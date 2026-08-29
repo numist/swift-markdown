@@ -68,6 +68,17 @@ extension BlockParser {
         let gfmAutolinkEnabled = storage.options.contains(.gfmAutolink)
         let smartEnabled = storage.options.contains(.smart)
 
+        // Reset the backslash-hard-break flat-column cursor. Armed only for single-segment source-backed content, where a content offset IS its source offset (identity map), so the flat line/column math needs no arena/segment remapping; arena/multi-segment content stays on the byte-projection path.
+        inlineSawBackslashHardBreak = false
+        inlineFlatColumnTracking = positionsEnabled && !preserveWhitespace && content.inSource && !content.isMultiSegment
+        inlineLogicalLineStarts.removeAll(keepingCapacity: true)
+        if inlineFlatColumnTracking {
+            let blockStart = content.startOffset  // == source offset for single-segment source content
+            inlineLogicalLineStarts.append(blockStart)
+            inlineBlockStartLine = sourceLineNumber(ofSource: blockStart)
+            inlineBlockStartColumn = blockStart - lineStartByte(ofSource: blockStart) + 1
+        }
+
         while cursor < endOffset {
             let byte = content[cursor]
             switch byte {
@@ -122,12 +133,21 @@ extension BlockParser {
                     end: info.textEnd,
                     content: content,
                     into: parent,
-                    // A hard break's stripped trailing spaces / backslash still belong to the preceding text node's source range (cmark stamps it up to the newline at `cursor`).
-                    rangeEnd: info.isHard ? cursor : nil
+                    // A trailing-space hard break's stripped spaces still belong to the preceding text node's source range (cmark stamps it up to the newline at `cursor`). A backslash hard break's `\` does NOT: cmark's handle_backslash consumes the backslash into the LINEBREAK, so the preceding text ends at the content (`info.textEnd`), before the `\`.
+                    rangeEnd: (info.isHard && !info.isBackslash) ? cursor : nil
                 )
                 let kind: MarkdownNode.Kind = info.isHard ? .lineBreak : .softBreak
                 let breakIdx = storage.appendNode(NodeRecord(kind: kind, parent: parent))
                 storage.appendChild(breakIdx, to: parent)
+                if inlineFlatColumnTracking {
+                    if info.isBackslash {
+                        // why: cmark's handle_backslash (swift-cmark src/inlines.c ~848-856) makes the LINEBREAK without touching subj->line or subj->column_offset, unlike handle_newline (~1498-1508, soft/space breaks) which does `++line; column_offset = -pos`. So every inline node after this point keeps counting columns flat across the backslash-break newline and stays on the current line - add no logical-line reset, and flag stamping to emit explicit flat positions.
+                        inlineSawBackslashHardBreak = true
+                    } else {
+                        // Soft break or trailing-space hard break: cmark's handle_newline resets the inline cursor to the next line. Record the next physical line's source start as a logical-line boundary (`cursor` is the newline's source offset here, single-segment source content).
+                        inlineLogicalLineStarts.append(cursor + 1)
+                    }
+                }
                 cursor += 1
                 pendingTextStart = cursor
                 
@@ -1463,6 +1483,7 @@ extension BlockParser {
     private struct LineBreakInfo {
         var isHard: Bool
         var textEnd: Int  // exclusive end of the pending-text region (excludes the marker bytes)
+        var isBackslash: Bool = false  // hard break driven by a trailing `\` (vs 2+ trailing spaces)
     }
 
     /// Decide whether the `\n` at `newlineOffset` is a soft or hard line break. CommonMark 0.31 §6.6 / §6.7:
@@ -1475,7 +1496,7 @@ extension BlockParser {
         if newlineOffset > pendingTextStart {
             let prev = content[newlineOffset - 1]
             if prev == UInt8(ascii: "\\") {
-                return LineBreakInfo(isHard: true, textEnd: newlineOffset - 1)
+                return LineBreakInfo(isHard: true, textEnd: newlineOffset - 1, isBackslash: true)
             }
         }
         // Trailing-space hard break.
@@ -2500,6 +2521,26 @@ extension BlockParser {
         }
         storage.setSourceStart(node, s)
         storage.setSourceEnd(node, lastByte + 1)
+        // why: replicating a cmark quirk (Hyrum's Law). After a backslash hard break, cmark's inline cursor keeps counting columns flat (its `handle_backslash` never resets `subj->line` / `subj->column_offset`, unlike `handle_newline` for soft/space breaks). No source byte projects onto that flat column, so stamp explicit start/end positions from the flat cursor for every node after such a break. Nodes before the first backslash break (and everything in blocks without one) keep the byte-projection path above unchanged. Covers only `stampInline`'s node population; the strikethrough-zero-width and multi-line-link close-bracket end overrides are separate quirks not compounded here.
+        if inlineSawBackslashHardBreak {
+            storage.setExplicitStart(node, flatInlinePosition(ofSource: s))
+            var endPosition = flatInlinePosition(ofSource: lastByte)
+            endPosition.column += 1  // half-open end: one past the last content byte's column
+            storage.setExplicitEnd(node, endPosition)
+        }
+    }
+
+    /// cmark's flat inline (line, column) for source byte `off`, counting backslash-hard-break newlines as columns (cmark's inline cursor never resets there) while soft / trailing-space breaks reset it to the next line. Valid only while `inlineFlatColumnTracking` is armed and `inlineLogicalLineStarts` is seeded (see `parseInline`).
+    private func flatInlinePosition(ofSource off: Int) -> MarkdownNode.SourcePosition {
+        // Largest logical-line-start index `k` with `inlineLogicalLineStarts[k] <= off` (ascending, and [0] == block start <= any node offset). The list is one entry per soft/space break, so this walk is tiny.
+        var k = 0
+        while k + 1 < inlineLogicalLineStarts.count && inlineLogicalLineStarts[k + 1] <= off {
+            k += 1
+        }
+        return MarkdownNode.SourcePosition(
+            line: inlineBlockStartLine + k,
+            column: (off - inlineLogicalLineStarts[k]) + inlineBlockStartColumn
+        )
     }
 
     /// Give a matched link/image/attribute the flat close-bracket end column cmark reports when its `(...)` (destination/title/attrs) crosses a newline.
@@ -2643,10 +2684,12 @@ extension BlockParser {
             let a = storage.sourceRanges[dest]
             let b = storage.sourceRanges[source]
             if a.start >= 0, b.start >= 0 {
-                // why: cmark's `cmark_consolidate_text_nodes` (swift-cmark `src/iterator.c`) sets the merged run's range from the FIRST node's start and the LAST node's end (`cur->end_column = tmp->end_column` on every iteration; `cur`'s start is never touched) - not a min/max union. In this pairwise left-to-right merge `dest` is the running-first node and `source` the next (last-so-far) sibling, so first-start = `dest.start` and last-end = `source.end`. This differs from a union only when a non-final node ends further right than the final node (the zero-width trailing-`~` quirk), where cmark collapses the run to the final node's end.
+                // why: cmark's `cmark_consolidate_text_nodes` (swift-cmark `src/iterator.c`) sets the merged run's range from the FIRST node's start and the LAST node's end (`cur->end_column = tmp->end_column` on every iteration; `cur`'s start is never touched) - not a min/max union. In this pairwise left-to-right merge `dest` is the running-first node and `source` the next (last-so-far) sibling, so first-start = `dest.start` and last-end = `source.end`. This differs from a union only when a non-final node ends further right than the final node (the zero-width trailing-`~` quirk), where cmark collapses the run to the final node's end. Carry the first node's `explicitStart` and the last node's `explicitEnd` (backslash-hard-break flat columns) so a merged post-break run keeps its flat positions.
                 storage.sourceRanges[dest] = DocumentStorage.SourceByteRange(
                     start: a.start,
-                    end: b.end
+                    end: b.end,
+                    explicitStart: a.explicitStart,
+                    explicitEnd: b.explicitEnd
                 )
             } else if a.start < 0 {
                 storage.sourceRanges[dest] = b
