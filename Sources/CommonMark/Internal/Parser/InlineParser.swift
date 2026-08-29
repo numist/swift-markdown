@@ -2589,6 +2589,8 @@ extension BlockParser {
     /// Stamp an unmatched strikethrough (`~`) run's source range: start at the run's own source offset, end at the START of that run's source line.
     ///
     /// cmark-gfm's strikethrough extension (`strikethrough.c` `match`) sets a `~` run's `start_column` but never its `end_column`, leaving `end_column == 0` - which projects to column 1 of the run's line, i.e. the line-start byte. So a `~` at column 1 gets a zero-width `[s, s]` range, while a `~` further into its line gets a start-past-end range that `sourceRange(of:)` reports as no position - reproducing cmark either way. A no-op when positions are off or `start` maps to synthetic/arena content. Relies on `lineStarts` being populated, which holds during the inline-parsing pass (it runs after every line has been read).
+    ///
+    /// After a backslash hard break the run's line/column come from the flat inline cursor instead of byte projection (see the `inlineSawBackslashHardBreak` branch and `stampInline`).
     @inline(__always)
     mutating func stampInlineZeroWidth(_ node: DocumentStorage.Index, at start: Int, content: borrowing ContentSpan) {
         guard positionsEnabled, let s = content.sourceOffset(ofVirtual: start) else {
@@ -2597,6 +2599,12 @@ extension BlockParser {
         storage.setSourceStart(node, s)
         // why: cmark-gfm's strikethrough.c leaves an unmatched `~` run's `end_column` unset (== 0), i.e. column 1 = the start of the run's line, not the run's own column. Stamp the end at that line-start byte so consolidation's last-node end and standalone rendering both reproduce cmark's zero/negative-width range.
         storage.setSourceEnd(node, lineStartByte(ofSource: s))
+        // why: two cmark quirks compound here. (1) strikethrough.c's `match` sets the `~` text node's `start_line`/`end_line` to `subj->line` and its `start_column` to the inline cursor's flat column, but leaves `end_column == 0` (which the reference converter maps to column 1). (2) After a backslash hard break, cmark's `handle_backslash` never resets `subj->line` / `subj->column_offset` (unlike `handle_newline` for soft/space breaks), so `subj->line` and the flat column keep counting across the break - no source byte projects onto them. The byte path above resets at the physical newline and so mis-lines the `~`; when a backslash break precedes this run, override start/end from the same flat cursor `stampInline` uses. The start is the flat position; the end is that flat line's column 1 (the `end_column == 0` mapping), so a run past column 1 stays start > end and reports no position (matching cmark), and consolidation carries these explicit positions onto a merged post-break run. Without a preceding backslash break this branch is skipped and the byte path above is byte-identical to before.
+        if inlineSawBackslashHardBreak {
+            let flatStart = flatInlinePosition(ofSource: s)
+            storage.setExplicitStart(node, flatStart)
+            storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: flatStart.line, column: 1))
+        }
     }
 
     /// The source byte offset of the start of the line containing source offset `s`.

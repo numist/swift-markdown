@@ -1,0 +1,6 @@
+Document @1:1-2:6
+└─ Paragraph @1:1-2:6
+   ├─ Text @1:1-1:2 "a"
+   ├─ LineBreak
+   └─ Strikethrough @1:4-1:9
+      └─ Text @1:6-1:7 "b"
