@@ -1202,7 +1202,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 if !heading.contentRange.isEmpty {
                     pending = addLine(span: source, range: heading.contentRange, to: headingIdx, pending: pending)
                 }
-                return try finalize(node: headingIdx, pending: pending)
+                return try finalize(node: headingIdx, pending: pending, atxHeadingEnd: heading.end)
             }
 
             // Fenced code block.
@@ -1507,7 +1507,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Close `node`, materialize its accumulated content, and back the parser's `current` pointer up to `node`'s parent.
-    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, atEOF: Bool = false, setextUnderline: Bool = false) throws(MarkdownDocument.Error) -> PendingLeaf? {
+    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, atEOF: Bool = false, setextUnderline: Bool = false, atxHeadingEnd: Int? = nil) throws(MarkdownDocument.Error) -> PendingLeaf? {
         var pending = pending
         let kind = storage[node].kind
 
@@ -1517,9 +1517,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let startedThisLine = startByte >= Int32(currentLineSourceRange.lowerBound)
             let isFenced: Bool
             if case .codeBlock(let info) = kind { isFenced = info.isFenced } else { isFenced = false }
-            let end = (atEOF || startedThisLine || setextUnderline || kind == .document || isFenced)
-                ? currentLineSourceRange.upperBound
-                : lastLineSourceEnd
+            let end: Int
+            if let atxHeadingEnd {
+                // An ATX heading ends at its trimmed content extent, not the raw line. Map the line-offset through `sourceOffset` exactly like the heading start, so tab-expanded lines resolve correctly; fall back to the raw line end if the mapping is unavailable.
+                end = sourceOffset(atxHeadingEnd) ?? currentLineSourceRange.upperBound
+                // cmark's chop_trailing_hashtags shrinks the line chunk before `last_line_length` is recorded (src/blocks.c), so a block later attributed to this line - notably the document, whose end is stamped from the final line - inherits the trimmed extent, not the raw line end. Mirror that by shrinking the tracked current-line end to the heading's content end.
+                currentLineSourceRange = currentLineSourceRange.lowerBound..<end
+            } else {
+                end = (atEOF || startedThisLine || setextUnderline || kind == .document || isFenced)
+                    ? currentLineSourceRange.upperBound
+                    : lastLineSourceEnd
+            }
             storage.setSourceEnd(node, end)
         }
 
@@ -1892,6 +1900,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private struct ATXMatch {
         var level: UInt8
         var contentRange: Range<Int>
+        /// The heading's source end, as a line-offset in `matchATXHeading`'s coordinate space (same as `firstNonSpace`), to be mapped through `sourceOffset`. cmark ends an ATX heading at its trimmed content, not the physical line: non-empty content ends at the trimmed content; empty content whose closing `#` sequence was stripped ends just past the opening `#`s; otherwise (empty, no closing run) it ends at the raw line end.
+        var end: Int
     }
 
     private struct FenceMatch {
@@ -2629,7 +2639,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
 
-        return ATXMatch(level: UInt8(level), contentRange: contentStart..<contentEnd)
+        // cmark ends the heading at its trimmed content extent, not the raw line (src/blocks.c stamps `end_column` from the stripped content). Three cases, using the offsets already computed above:
+        //   1. non-empty content        → the content end (trailing spaces and the optional closing `#` run already excluded).
+        //   2. empty content, closing `#` run removed → the marker end `i` (just past the opening `#`s, before the space skip).
+        //   3. empty content, no closing run          → the raw line end (unchanged from prior behavior).
+        let end: Int
+        if contentStart != contentEnd {
+            end = contentEnd
+        } else if removedHashes > 0 {
+            end = i
+        } else {
+            end = range.upperBound
+        }
+
+        return ATXMatch(level: UInt8(level), contentRange: contentStart..<contentEnd, end: end)
     }
 
     /// At list finalize, decide whether the list is loose.
