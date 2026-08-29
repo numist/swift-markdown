@@ -2537,8 +2537,12 @@ extension BlockParser {
         }
         storage.setSourceStart(node, s)
         storage.setSourceEnd(node, lastByte + 1)
-        // why: replicating a cmark quirk (Hyrum's Law). After a backslash hard break, cmark's inline cursor keeps counting columns flat (its `handle_backslash` never resets `subj->line` / `subj->column_offset`, unlike `handle_newline` for soft/space breaks). No source byte projects onto that flat column, so stamp explicit start/end positions from the flat cursor for every node after such a break. Nodes before the first backslash break (and everything in blocks without one) keep the byte-projection path above unchanged. Covers only `stampInline`'s node population; the strikethrough-zero-width and multi-line-link close-bracket end overrides are separate quirks not compounded here.
-        if inlineSawBackslashHardBreak {
+        // why: an inline node's range after a backslash hard break is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). The byte-projected start/end above are the spec-correct positions; the explicit override below is the cmark quirk.
+        //
+        // Flag ON reproduces a cmark quirk (Hyrum's Law): after a backslash hard break, cmark's inline cursor keeps counting columns flat (its `handle_backslash` never resets `subj->line` / `subj->column_offset`, unlike `handle_newline` for soft/space breaks). No source byte projects onto that flat column, so stamp explicit start/end positions from the flat cursor for every node after such a break.
+        //
+        // Flag OFF is spec-correct: take no explicit positions, so the node keeps the byte-projected range above - its content projected onto its true physical line:column, which resets at the physical newline exactly like soft and trailing-space breaks do. Covers only `stampInline`'s node population; the strikethrough-zero-width and multi-line-link close-bracket end overrides are separate quirks not compounded here.
+        if inlineSawBackslashHardBreak && storage.options.contains(.cmarkBugCompatibility) {
             storage.setExplicitStart(node, flatInlinePosition(ofSource: s))
             var endPosition = flatInlinePosition(ofSource: lastByte)
             endPosition.column += 1  // half-open end: one past the last content byte's column
@@ -2612,7 +2616,7 @@ extension BlockParser {
     ///
     /// cmark-gfm's strikethrough extension (`strikethrough.c` `match`) sets a `~` run's `start_column` but never its `end_column`, leaving `end_column == 0` - which projects to column 1 of the run's line, i.e. the line-start byte. So a `~` at column 1 gets a zero-width `[s, s]` range, while a `~` further into its line gets a start-past-end range that `sourceRange(of:)` reports as no position - reproducing cmark either way. A no-op when positions are off or `start` maps to synthetic/arena content. Relies on `lineStarts` being populated, which holds during the inline-parsing pass (it runs after every line has been read).
     ///
-    /// After a backslash hard break the run's line/column come from the flat inline cursor instead of byte projection (see the `inlineSawBackslashHardBreak` branch and `stampInline`).
+    /// After a backslash hard break the run's line/column come from the flat inline cursor instead of byte projection (see the `inlineSawBackslashHardBreak` branch and `stampInline`). That branch needs no `.cmarkBugCompatibility` gate of its own: this whole method is reachable only flag-ON (call site above), and flag-OFF a post-break unmatched `~` flows through `stampInline`, whose gate - being off - leaves it the spec-correct byte-projected range.
     @inline(__always)
     mutating func stampInlineZeroWidth(_ node: DocumentStorage.Index, at start: Int, content: borrowing ContentSpan) {
         guard positionsEnabled, let s = content.sourceOffset(ofVirtual: start) else {
