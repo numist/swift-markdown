@@ -95,6 +95,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     var currentLineSourceRange: Range<Int> = 0..<0
     var lastLineSourceEnd: Int = 0
 
+    /// The open leaf's `block_offset`: the byte distance from a line's start to the block's content column, established from the leaf's FIRST line and held for the block's lifetime.
+    ///
+    /// A paragraph continuation line's inline content is re-indented to this column: cmark fixes `block_offset` at the paragraph's first-line content column (`start_column - 1`) and reports EVERY continuation line's surviving content there, discarding each line's own leading whitespace. So a continuation segment maps its source to `currentLineSourceRange.lowerBound + currentContentIndent` (the bytes are still read from their true offset). It equals a continuation line's own content column only when the first line has no indentation beyond its container marker (the common case), so this is usually a no-op. Set in `addLine` when a leaf's first line is accumulated; consumed by `addLineSegment`. Code/HTML bodies preserve their true offset instead.
+    var currentContentIndent: Int = 0
+
     /// Inline-parsing tasks deferred until after all block parsing completes.
     ///
     /// This delay is what lets a `[foo]` shortcut reference resolve against a `[foo]: url` ref-def that appears later in the document. Each entry is a `(node, content chunk)` pair: when the parse pass finishes, `BlockParser.parse` drains this list and invokes `InlineParser.parse` on each.
@@ -467,6 +472,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         switch take(pending, ifNode: node) {
         case .none:
+            // First content for this leaf: fix its `block_offset` (the content column) from this line, so any continuation line re-indents to it. `range.lowerBound` is the first-non-space byte; measure its distance from the source line start (via `sourceOffset` for a tab-expanded line).
+            if positionsEnabled, nodeKind.canAccumulateText, let s = sourceOffset(range.lowerBound) {
+                currentContentIndent = s - currentLineSourceRange.lowerBound
+            }
             // Fast path: first content for this node and the current line maps directly into `self.source` - store the range lazily and skip the byte copy.
             if currentLineMapsToSource, nodeKind.canAccumulateText {
                 return PendingLeaf(node: node, content: .lazy(range: range))
@@ -538,7 +547,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func addLineSegment(span: Span<UInt8>, range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         guard !range.isEmpty else { return pending }
         if currentLineMapsToSource {
-            return appendSegment(Segment(offset: Int32(range.lowerBound), length: Int32(range.count), inSource: true), to: node, pending: pending)
+            // A paragraph continuation line is re-indented: cmark strips its leading whitespace (so the bytes start at `range.lowerBound`) but reports the surviving content at the block's fixed content column - this line's start plus the leaf's `block_offset` (`currentContentIndent`) - not at its true first-non-space column. Map the segment's source there while still reading its bytes from `range`. When the line has no whitespace beyond `block_offset` the two coincide, so this is a no-op. Code/HTML block bodies preserve their own indentation and keep their true offset.
+            let kind = storage[node].kind
+            let reindent = positionsEnabled && !(kind.isCodeBlock || kind == .htmlBlock)
+            let mapsAt = reindent ? currentLineSourceRange.lowerBound + currentContentIndent : range.lowerBound
+            return appendSegment(Segment(offset: Int32(range.lowerBound), length: Int32(range.count), inSource: true, sourceOffset: Int32(mapsAt)), to: node, pending: pending)
         }
         let offset = storage.strings.count
         storage.strings.reserveCapacity(offset + range.count)
@@ -1318,6 +1331,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var l = 0
         while l < Int(first.length) && segmentByte(first, l).isSpaceTabOrNewline { l += 1 }
         first.offset += Int32(l)
+        // The first segment is a paragraph's opening line (never re-indented), so `sourceOffset == offset`; advance it in step to keep the source mapping aligned with the trimmed bytes.
+        first.sourceOffset += Int32(l)
         first.length -= Int32(l)
         segs[0] = first
         let li = segs.count - 1
@@ -1363,15 +1378,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return false
     }
 
-    /// Flatten a segment list into one arena chunk (built via a local buffer so `storage.strings` is never read while being appended to).
+    /// Flatten a segment list into one arena chunk, recording a content-relative arena→source run map in `map` as it copies: one run per non-empty segment. A source segment images its (re-indented) source range (run `sourceOffset` = the segment's `sourceOffset`); a non-source segment - the interned `\n` line-join, or an arena-only line with no source pre-image - becomes a synthetic gap (`sourceOffset < 0`). The map tiles the flattened content from its first byte, so it survives a later arena re-copy of the content (the byte layout is unchanged) and lets inline stamping recover per-line source columns.
     ///
     /// Used when content must be a contiguous `Chunk` - the matcher-eligible path and code/HTML-block fallback.
-    private mutating func flattenSegments(_ segs: borrowing UniqueArray<Segment>) -> Chunk {
-        var ignoredMap: [ArenaRun] = []
-        return flattenSegments(segs, map: &ignoredMap)
-    }
-
-    /// Flatten a segment list into one arena chunk, recording a content-relative arena→source run map in `map` as it copies: one run per non-empty segment. A source segment images its source range (run `sourceOffset` = the segment's source offset); a non-source segment - the interned `\n` line-join, or an arena-only line with no source pre-image - becomes a synthetic gap (`sourceOffset < 0`). The map tiles the flattened content from its first byte, so it survives a later arena re-copy of the content (the byte layout is unchanged) and lets inline stamping recover per-line source columns.
     private mutating func flattenSegments(_ segs: borrowing UniqueArray<Segment>, map: inout [ArenaRun]) -> Chunk {
         var total = 0
         for i in 0..<segs.count { total += Int(segs[i].length) }
@@ -1387,7 +1396,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 for j in Int(seg.offset)..<end { buf.append(storage.strings[j]) }
             }
             if len > 0 {
-                map.append(ArenaRun(length: Int32(len), sourceOffset: seg.inSource ? seg.offset : -1))
+                // A source segment images its (re-indented) source range - `sourceOffset` re-indents a continuation line to its block-content column; otherwise it equals `offset`. A non-source segment (the interned `\n` join, or an arena-only line) is a synthetic gap.
+                map.append(ArenaRun(length: Int32(len), sourceOffset: seg.inSource ? seg.sourceOffset : -1))
             }
         }
         let offset = storage.strings.count
@@ -1417,8 +1427,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Run the paragraph finalize-time matchers on a single flat content `Chunk`: footnote definition, reference-link definitions, GFM table detection, and tasklist marker - then queue the remaining content for inline parsing (or drop the node if it was entirely ref-defs).
     ///
-    /// Factored out so both the flat-content path and the (eligibility-gated) segment path can reuse it.
-    private mutating func runParagraphMatchers(node: DocumentStorage.Index, raw: Chunk) throws(MarkdownDocument.Error) {
+    /// Factored out so both the flat-content path and the (eligibility-gated) segment path can reuse it. `map` is the flattened content's arena→source run map (empty for the contiguous flat-content path): when the content was flattened from a non-contiguous, re-indented segment list it carries per-line source columns, and is sliced to the surviving `contentChunk` window and stamped on the node so the inline pass can stamp positions.
+    private mutating func runParagraphMatchers(node: DocumentStorage.Index, raw: Chunk, map: [ArenaRun] = []) throws(MarkdownDocument.Error) {
         var trimmed = raw.trimming(using: self)
         if trimmed.isEmpty {
             return
@@ -1463,6 +1473,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 contentChunk = mark.remaining
             }
         }
+        // Stamp the (re-indented) run map for the content that actually reaches inline parsing: narrow the flattened content's map to the surviving `contentChunk` window (after leading/trailing trim, ref-def stripping, and any tasklist marker). Only meaningful when the content was flattened from a re-indented segment list; the contiguous flat-content path passes an empty map.
+        if positionsEnabled, !map.isEmpty {
+            let slice = sliceRuns(map, from: contentChunk.offset - raw.offset, length: contentChunk.length)
+            if !slice.isEmpty {
+                arenaSourceMaps[node] = slice
+            }
+        }
         pendingInlines.append((node, storage.intern(contentChunk)))
     }
 
@@ -1496,7 +1513,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 if isBlankSegments(trimmed) {
                     // Entirely whitespace after trim - leave the paragraph empty (matches the chunk path).
                 } else if segmentsCouldMatchMatcher(trimmed) {
-                    try runParagraphMatchers(node: node, raw: flattenSegments(trimmed))
+                    // Flatten for the chunk-based matchers, capturing the arena→source run map so a re-indented continuation line's inline content is still stamped (matchers that survive re-seed the map via `runParagraphMatchers`).
+                    var map: [ArenaRun] = []
+                    let raw = flattenSegments(trimmed, map: &map)
+                    try runParagraphMatchers(node: node, raw: raw, map: map)
                 } else {
                     pendingInlines.append((node, storage.intern(trimmed)))
                 }

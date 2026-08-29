@@ -1,0 +1,9 @@
+Document @1:1-5:9
+├─ Paragraph @1:1-2:3
+│  ├─ Text @1:1-1:2 "["
+│  ├─ SoftBreak
+│  └─ Text @2:1-2:2 "]"
+└─ Paragraph @4:1-5:9
+   ├─ Text @4:1-4:2 "["
+   ├─ SoftBreak
+   └─ Text @5:1-5:8 "]: /uri"

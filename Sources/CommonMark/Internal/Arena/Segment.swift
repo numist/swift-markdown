@@ -18,16 +18,24 @@ internal struct Segment: Equatable {
     internal var length: Int32
     internal var inSource: Bool
 
-    internal init(offset: Int32, length: Int32, inSource: Bool) {
+    /// The original-source byte offset this segment's content maps to for source-position stamping, when it differs from `offset` (the byte-read offset).
+    ///
+    /// Equal to `offset` in the overwhelmingly common case - the content is stamped where its bytes physically sit. It diverges only for a re-indented paragraph continuation line: cmark strips a continuation line's leading whitespace but reports the surviving content at the block's content column (`block_offset`; column 1 at the top level), not at its true first-non-space column. Such a segment therefore reads its bytes from `offset` (past the stripped whitespace) while mapping its source positions from `sourceOffset` (the block-content column). Ignored for `inSource == false` segments (the interned `\n` join and arena-only lines carry no source image and map to `nil`).
+    internal var sourceOffset: Int32
+
+    /// `sourceOffset` defaults to `offset` (the content is stamped where it sits); pass it explicitly only to re-indent a continuation line's source mapping.
+    internal init(offset: Int32, length: Int32, inSource: Bool, sourceOffset: Int32? = nil) {
         self.offset = offset
         self.length = length
         self.inSource = inSource
+        self.sourceOffset = sourceOffset ?? offset
     }
 
     internal init(_ chunk: Chunk) {
         self.offset = Int32(chunk.offset)
         self.length = Int32(chunk.length)
         self.inSource = chunk.inSource
+        self.sourceOffset = Int32(chunk.offset)
     }
 
     /// Reconstruct a `Chunk` view of this segment. Used by internal parser code that still works in the single-buffer `Chunk` vocabulary.

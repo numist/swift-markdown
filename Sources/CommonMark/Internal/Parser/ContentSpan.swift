@@ -146,7 +146,8 @@ internal struct ContentSpan: ~Escapable {
             let seg = segments[i]
             let len = Int(seg.length)
             if offset < v + len {
-                return seg.inSource ? Int(seg.offset) + (offset - v) : nil
+                // Map through `sourceOffset` (re-indents a continuation line to its block-content column), not the byte-read `offset`; they coincide except for a re-indented continuation segment.
+                return seg.inSource ? Int(seg.sourceOffset) + (offset - v) : nil
             }
             v += len
         }
@@ -154,7 +155,7 @@ internal struct ContentSpan: ~Escapable {
         if segments.count > 0 {
             let last = segments[segments.count - 1]
             if last.inSource {
-                return Int(last.offset) + Int(last.length)
+                return Int(last.sourceOffset) + Int(last.length)
             }
         }
         return nil
