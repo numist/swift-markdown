@@ -33,6 +33,9 @@ struct MarkupParser {
         // `data-sourcepos` output, which this AST→Document path never emits). Always track
         // positions here, or the rewrite drops ranges the reference reports.
         cmOptions.insert(.sourcePosition)
+        if options.contains(.cmarkBugCompatibility) {
+            cmOptions.insert(.cmarkBugCompatibility)
+        }
 
         let raw: RawMarkup
         do {

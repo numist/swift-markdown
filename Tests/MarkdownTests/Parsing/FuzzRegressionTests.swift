@@ -9,7 +9,7 @@
 */
 
 import Foundation
-import Markdown
+@_spi(CmarkBugCompatibility) import Markdown
 import Testing
 
 /// Regression coverage for divergences found by the swift-markdown-difftest differential fuzzer.
@@ -54,7 +54,9 @@ struct FuzzRegressionTests {
 
     /// The rewrite's comparison surface, matching `DiffSupport.newSurface`.
     static func surface(_ markdown: String, options: ParseOptions) -> String {
-        Document(parsing: markdown, options: options).debugDescription(options: .printSourceLocations)
+        var options = options
+        options.insert(.cmarkBugCompatibility)          // fixed setting; not a fuzzed bit
+        return Document(parsing: markdown, options: options).debugDescription(options: .printSourceLocations)
     }
 
     /// A `@Test(arguments:)` over an empty collection silently runs zero cases and reports success, so

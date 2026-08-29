@@ -78,5 +78,8 @@ extension MarkdownDocument {
         ///
         /// A paragraph whose first line contains `|` and whose second line is a delimiter row, such as `:---`, `---:`, or `:---:`, becomes a table with aligned columns.
         public static let tables = MarkdownDocument.ParseOptions(rawValue: 1 << 25)
+
+        /// Replicate cmark-gfm's source-position bugs bit-for-bit (for differential qualification). Default off; the shipped parser is spec-correct.
+        public static let cmarkBugCompatibility = MarkdownDocument.ParseOptions(rawValue: 1 << 26)
     }
 }

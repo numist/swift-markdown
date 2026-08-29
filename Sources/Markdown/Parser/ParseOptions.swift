@@ -30,5 +30,8 @@ public struct ParseOptions: OptionSet, Sendable {
 
     /// Disable including a `data-sourcepos` attribute on all block elements during parsing.
     public static let disableSourcePosOpts = ParseOptions(rawValue: 1 << 4)
+
+    /// Replicate cmark-gfm's source-position bugs bit-for-bit (for differential qualification). Default off; the shipped parser is spec-correct.
+    @_spi(CmarkBugCompatibility) public static let cmarkBugCompatibility = ParseOptions(rawValue: 1 << 5)
 }
 
