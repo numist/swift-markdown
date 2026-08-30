@@ -2547,7 +2547,28 @@ extension BlockParser {
             var endPosition = flatInlinePosition(ofSource: lastByte)
             endPosition.column += 1  // half-open end: one past the last content byte's column
             storage.setExplicitEnd(node, endPosition)
+        } else if storage.options.contains(.cmarkBugCompatibility)
+                    && sourceLineNumber(ofSource: lastByte + 1) > sourceLineNumber(ofSource: s)
+                    && !runContainsNewline(start, end, content: content) {
+            // why: Quirk E's continuation re-indent (see `BlockParser.addLineSegment`) remaps a re-indented continuation line's surviving content to the block's fixed content column, which can push the run's mapped source offsets rightward past its own physical line's byte extent. cmark works in (line, column) space, so it keeps the run on its start line (start column + width); the rewrite's byte-offset end (`lastByte + 1`) instead projects onto a LATER physical line - e.g. `> bar\nbaz\nqux` flag-ON: `baz`'s re-indented last content byte projects to line 3's start byte, so `lastByte + 1` reports `@3:2` for cmark's `@2:6`. When the byte-projected end has crossed onto a later physical line than the start, stamp an explicit end on the start line at `startColumn + contentWidth`, reproducing cmark's flat column. This is the multi-line counterpart of `stampCloseBracketEnd`'s explicit end. The `!runContainsNewline` guard restricts this to a single-physical-line TEXT run: a re-indented continuation text run carries no interior newline (the joining soft break is a separate node). It therefore also excludes a genuinely multi-line WRAPPER node (a link/emphasis whose content spans a soft break): a top-level wrapper's byte-projected end is already correct there, while a wrapper re-indented inside a container stays on the byte path and remains divergent - the same deferred nested-container gap `stampCloseBracketEnd` documents (not in the fuzz corpus). Flag-OFF keeps the byte-projected end (spec-correct).
+            let startLine = sourceLineNumber(ofSource: s)
+            let startColumn = s - lineStartByte(ofSource: s) + 1
+            storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: startLine, column: startColumn + (end - start)))
         }
+    }
+
+    /// Whether the content run `[start, end)` contains an interior newline byte.
+    ///
+    /// Distinguishes a re-indented continuation *text* run (no interior newline - the joining soft break is a separate node) from a genuinely multi-line wrapper node (link/emphasis whose content spans a soft break). Only consulted flag-ON when a run's byte-projected end has already been found to cross a physical line, so the O(width) scan is off the common path.
+    private func runContainsNewline(_ start: Int, _ end: Int, content: borrowing ContentSpan) -> Bool {
+        var i = start
+        while i < end {
+            if content[i] == UInt8(ascii: "\n") {
+                return true
+            }
+            i += 1
+        }
+        return false
     }
 
     /// cmark's flat inline (line, column) for source byte `off`, counting backslash-hard-break newlines as columns (cmark's inline cursor never resets there) while soft / trailing-space breaks reset it to the next line. Valid only while `inlineFlatColumnTracking` is armed and `inlineLogicalLineStarts` is seeded (see `parseInline`).

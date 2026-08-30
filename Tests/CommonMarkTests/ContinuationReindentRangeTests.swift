@@ -95,4 +95,55 @@ struct ContinuationReindentRangeTests {
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 6))   // "bar" at its true column
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 9))
     }
+
+    @Test("lazy continuation into a blockquote keeps its true column, not the block content column")
+    func lazyBlockquoteContinuation() throws {
+        // "> bar" on line 1, "baz" on line 2 with NO `>` marker: a LAZY continuation absorbed into
+        // the blockquote paragraph. The paragraph's content column is 3 (from line 1's `bar`). Because
+        // line 2 has no marker or leading whitespace stripped, its content is source-contiguous with
+        // line 1, so the parser keeps the whole run zero-copy on one `.lazy` range. Spec-correct, `baz`
+        // keeps its TRUE column: line 2 starts at column 1, so `baz` is @2:1-2:4 - consistent with the
+        // paragraph/block-quote end @2:4. cmark re-indents `baz` to the fixed content column 3 and
+        // reports @2:3-2:6, an end (2:6) past the paragraph end (2:4) - the `s24-lazy-bq` fuzzer pair,
+        // flag-on. This case is the flag-off guardrail for the lazy-contiguity re-indent path.
+        let ranges = try ranges(in: "> bar\nbaz")
+        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
+        try #require(texts.count == 2)
+
+        #expect(firstRange(.blockQuote, in: ranges)?.lowerBound == Pos(line: 1, column: 1))
+        #expect(firstRange(.blockQuote, in: ranges)?.upperBound == Pos(line: 2, column: 4))
+        #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 1, column: 3))
+        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 4))
+
+        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "bar"
+        #expect(texts[0]?.upperBound == Pos(line: 1, column: 6))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "baz" at its true column
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 4))
+    }
+
+    @Test("multi-line lazy continuation keeps each line's true column")
+    func lazyMultilineContinuation() throws {
+        // "> bar" then two marker-less lazy continuation lines "baz" and "qux". The paragraph's content
+        // column is 3 (from line 1's `bar`). Spec-correct, each continuation line keeps its TRUE column:
+        // both start at column 1, so `baz` is @2:1-2:4 and `qux` is @3:1-3:4 - consistent with the
+        // paragraph/block-quote end @3:4. cmark re-indents both to the fixed content column 3, reporting
+        // `baz` @2:3-2:6 and `qux` @3:3-3:6 (the `s24-lazy-multi` fuzzer pair, flag-on). This case guards
+        // the flag-off multi-line path where a re-indented MIDDLE line's end would otherwise cross a
+        // physical line boundary flag-on.
+        let ranges = try ranges(in: "> bar\nbaz\nqux")
+        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
+        try #require(texts.count == 3)
+
+        #expect(firstRange(.blockQuote, in: ranges)?.lowerBound == Pos(line: 1, column: 1))
+        #expect(firstRange(.blockQuote, in: ranges)?.upperBound == Pos(line: 3, column: 4))
+        #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 1, column: 3))
+        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 3, column: 4))
+
+        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "bar"
+        #expect(texts[0]?.upperBound == Pos(line: 1, column: 6))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "baz" at its true column
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 4))
+        #expect(texts[2]?.lowerBound == Pos(line: 3, column: 1))   // "qux" at its true column
+        #expect(texts[2]?.upperBound == Pos(line: 3, column: 4))
+    }
 }

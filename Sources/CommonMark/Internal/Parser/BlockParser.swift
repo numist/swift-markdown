@@ -512,11 +512,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return PendingLeaf(node: node, content: .materialized(buffer))
         case .some(let existing):
             // Contiguity fast path: a `\n` separator was deferred after a `.lazy` span (`appendNewline` left it as `.lazyNewline`). If this line is also source-backed and immediately follows the previous span in the source - i.e. it starts one byte past the previous span and that byte is a single `\n` - then the join needs no synthesized separator: the embedded `\n` already lives in the source, so we keep the whole run as one zero-copy `.lazy` range. This holds for top-level paragraphs with LF line endings and no stripped container prefix; blockquote/list continuation (prefix stripped → non-adjacent range), CRLF/CR (separator isn't a lone `\n` at `prev.upperBound`), and tab-expanded lines (`!currentLineMapsToSource`) all fall through to materialization below.
+            //
+            // A LAZY continuation line into an indented container (a blockquote/list paragraph with no marker on the continuation line) IS source-contiguous, so it would collapse here and map to its true column. That equals cmark's output only at the top level, where the block-content column is 1; inside an indented container cmark re-indents every continuation line to the fixed block-content column (`currentContentIndent`) - the Quirk E re-indent. So flag-ON with a positive content indent is excluded from the collapse and falls through to the segment path below, which re-indents each continuation line via `addLineSegment` (the first line stays a plain source segment at its true column). Flag-OFF and the top-level `currentContentIndent == 0` case keep the zero-copy collapse (spec-correct there anyway).
             switch consume existing {
             case .lazyNewline(let prev) where currentLineMapsToSource
                     && range.lowerBound == prev.upperBound + 1
                     && prev.upperBound < sourceBytes.count
-                    && sourceBytes[prev.upperBound] == UInt8(ascii: "\n"):
+                    && sourceBytes[prev.upperBound] == UInt8(ascii: "\n")
+                    && !(storage.options.contains(.cmarkBugCompatibility) && currentContentIndent > 0):
                 return PendingLeaf(node: node, content: .lazy(range: prev.lowerBound..<range.upperBound))
             case .lazyNewline(let prev):
                 // Non-contiguous continuation (block-quote/list prefix stripped, CRLF, tab): switch to a source-segment list rather than copying bytes - the previous span becomes a zero-copy source segment, joined to this line by the shared interned `\n`.
