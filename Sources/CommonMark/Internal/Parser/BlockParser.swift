@@ -115,6 +115,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Populated only for a non-contiguous setext heading (PHASE 2c): its content is flattened into one arena `Chunk` by `flattenSegments`, which drops the per-line source mapping the segments carried. The run map (content-relative, so it survives the re-seed's arena re-copy) lets the inline pass stamp the heading's text/emphasis with real source positions instead of leaving them unstamped. Consulted in the inline pass when building an arena single-segment `ContentSpan`.
     var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
 
+    /// Physical-line shift (`> 0`) to apply UP to a block's inline descendants, keyed by node. Reproduces cmark's reference-definition-extraction position bug (see `runParagraphMatchers`); populated only flag-ON (`.cmarkBugCompatibility`). Consulted in the inline pass after a node's inlines are parsed.
+    var refdefLineShift: [DocumentStorage.Index: Int] = [:]
+
     /// The deepest list that has seen a blank line since its last item boundary.
     ///
     /// When a new item is added to that list (i.e., the blank line was between sibling items), the list gets marked loose. Cleared on each item open after the check, and stays stale (but harmless) when the list closes.
@@ -286,6 +289,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             
             // Coalesce adjacent text nodes so smart-punct / entity substitutions don't leave the content split across sibling text nodes.
             consolidateTextNodes(node)
+
+            // Reproduce cmark's reference-definition line-shift (flag-ON only): stamp every inline
+            // descendant N lines higher (column preserved). Recorded in `runParagraphMatchers` when
+            // leading ref-defs were stripped; applied here, after consolidation, so the final node set
+            // carries the shift. The block node's own range is untouched.
+            if let shift = refdefLineShift[node] {
+                shiftInlineDescendants(of: node, byLines: shift)
+            }
         }
 
         storage.lineCount = reader.lineNumber
@@ -385,6 +396,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         storage.appendChild(idx, to: parent)
         storage.setSourceStart(idx, start)
         return idx
+    }
+
+    /// Convert a source byte `offset` to a 1-based (line, column) position, mirroring `StorageView.position(ofByte:)`. Requires a populated `storage.lineStarts`.
+    private func sourcePosition(ofByte offset: Int) -> MarkdownNode.SourcePosition {
+        var lo = 0
+        var hi = storage.lineStarts.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if storage.lineStarts[mid] <= offset {
+                lo = mid + 1
+            } else {
+                hi = mid
+            }
+        }
+        let lineIndex = max(0, lo - 1)
+        let lineStart = storage.lineStarts.count > 0 ? storage.lineStarts[lineIndex] : 0
+        return MarkdownNode.SourcePosition(line: lineIndex + 1, column: (offset - lineStart) + 1)
     }
 
     /// The global original-source byte offset for a within-current-line offset.
@@ -1538,7 +1566,64 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 arenaSourceMaps[node] = slice
             }
         }
+        // why: cmark extracts leading link reference definitions AND `^[label]:` attribute
+        // definitions from a paragraph's content buffer (`resolve_reference_link_definitions`,
+        // swift-cmark `src/blocks.c`, which strips both forms in one loop) by DROPPING their bytes
+        // off the FRONT of the buffer, then inline-parses the remainder with the subject based at the
+        // paragraph's ORIGINAL `start_line` (`cmark_parse_inlines`, `src/inlines.c`). The dropped
+        // definition bytes carried N newlines, so the surviving content - truly N physical lines below
+        // the paragraph's start - is stamped N lines too high (column preserved, since the byte offset
+        // within its own line is unchanged). Record that shift here to reproduce it flag-ON (adopted
+        // only by the differential fuzzer); flag-OFF (the shipped default) keeps the true positions.
+        // `parseDefinitions` strips both forms above, so both drive the shift identically. N = (line of
+        // the first surviving content byte) - (paragraph's start line); it is > 0 only when leading
+        // defs were stripped across at least one newline (defs stripped without crossing a newline
+        // leave the remainder on the start line, N = 0, no shift). Only a source-backed remainder (the
+        // top-level contiguous case) is handled; a non-contiguous (blockquote/list) remainder is
+        // arena-backed and left unshifted - the same nested-container gap the inline end-column quirks
+        // document.
+        if positionsEnabled, storage.options.contains(.cmarkBugCompatibility),
+           !isFootnoteDef, contentChunk.inSource {
+            let paraStart = storage.sourceRanges[node].start
+            if paraStart >= 0 {
+                let shift = sourcePosition(ofByte: contentChunk.offset).line - sourcePosition(ofByte: Int(paraStart)).line
+                if shift > 0 {
+                    refdefLineShift[node] = shift
+                }
+            }
+        }
         pendingInlines.append((node, storage.intern(contentChunk)))
+    }
+
+    /// Shift every inline descendant of `node` UP by `lines` physical source lines (column preserved), by stamping explicit start/end positions over the byte-projected ones.
+    ///
+    /// Reproduces cmark's reference-definition line-shift (see `runParagraphMatchers`): the shift composes onto whatever position a node would otherwise report (an existing explicit position from another quirk, else the byte projection), so only the line moves. `node`'s own range is left untouched - the block-level range is correct in both cmark and the rewrite. Only ever called flag-ON.
+    private mutating func shiftInlineDescendants(of node: DocumentStorage.Index, byLines lines: Int) {
+        var child = storage[node].firstChild
+        while let current = child {
+            shiftInlineSubtree(current, byLines: lines)
+            child = storage[current].next
+        }
+    }
+
+    /// Shift `node` and its whole subtree up by `lines` lines (see `shiftInlineDescendants`). Unstamped nodes (e.g. soft/line breaks) are skipped, so they keep reporting no position.
+    private mutating func shiftInlineSubtree(_ node: DocumentStorage.Index, byLines lines: Int) {
+        let range = storage.sourceRanges[node]
+        if range.start >= 0 {
+            var start = range.explicitStart ?? sourcePosition(ofByte: range.start)
+            start.line -= lines
+            storage.setExplicitStart(node, start)
+        }
+        if range.end >= 0 {
+            var end = range.explicitEnd ?? sourcePosition(ofByte: range.end)
+            end.line -= lines
+            storage.setExplicitEnd(node, end)
+        }
+        var child = storage[node].firstChild
+        while let current = child {
+            shiftInlineSubtree(current, byLines: lines)
+            child = storage[current].next
+        }
     }
 
     /// Close `node`, materialize its accumulated content, and back the parser's `current` pointer up to `node`'s parent.
