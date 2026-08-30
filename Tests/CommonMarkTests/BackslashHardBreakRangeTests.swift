@@ -81,4 +81,52 @@ struct BackslashHardBreakRangeTests {
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "~"
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
     }
+
+    // MARK: - Multi-segment continuations (a backslash-break continuation line with a stripped
+    // prefix/indent makes the paragraph multi-segment). Flag-off, each continuation line still
+    // resets to its own TRUE physical column - the stripped whitespace shifts the column, unlike
+    // cmark's flat cursor (flag-on `bshb-ms-*` pairs), which is indent-independent.
+
+    @Test("text after a backslash break on a space-indented continuation resets to its true column")
+    func textAfterBreakOnIndentedContinuation() throws {
+        // `foo\` line 1, ` bar` line 2 (one leading space stripped from the paragraph content, making
+        // it multi-segment). Spec-correct, `bar` resets to its true physical position: line 2 starts
+        // at the space, so `b`=col 2, `a`=3, `r`=4, half-open end one past r = col 5. cmark's quirk
+        // keeps counting flat from line 1 and reports @1:6-1:9 (the `bshb-ms-text` fuzzer pair, flag-on).
+        let texts = try textRanges(in: "foo\\\n bar")
+        try #require(texts.count == 2)
+        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 1))   // "foo"
+        #expect(texts[0]?.upperBound == Pos(line: 1, column: 4))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 2))   // "bar"
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 5))
+    }
+
+    @Test("a wider continuation indent shifts the true column flag-off")
+    func textAfterBreakOnWiderIndent() throws {
+        // Same as above but five leading spaces. Spec-correct, `bar`'s true column tracks the indent:
+        // line 2 starts at the first space, so `b`=col 6, half-open end = col 9. cmark's flat cursor is
+        // indent-independent and reports @1:6-1:9 regardless of the indent width (the `bshb-ms-text-wide`
+        // pair reports the SAME @1:6-1:9 as the one-space case; here the spec-correct columns differ).
+        let texts = try textRanges(in: "foo\\\n     bar")
+        try #require(texts.count == 2)
+        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 1))   // "foo"
+        #expect(texts[0]?.upperBound == Pos(line: 1, column: 4))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 6))   // "bar"
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 9))
+    }
+
+    @Test("text after a backslash break inside a blockquote resets to its true column")
+    func textAfterBreakInBlockquote() throws {
+        // `> a\` line 1, `> b` line 2. The `> ` prefix is stripped from each line, so the paragraph
+        // content is multi-segment. Spec-correct, both texts sit at their true content column (3, after
+        // `> `): `a` @1:3-1:4 and `b` @2:3-2:4. cmark's quirk keeps counting flat across the break and
+        // reports `b` @1:6-1:7 (the `bshb-ms-blockquote` fuzzer pair, flag-on), NOT counting the
+        // stripped `> ` prefix.
+        let texts = try textRanges(in: "> a\\\n> b")
+        try #require(texts.count == 2)
+        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "a"
+        #expect(texts[0]?.upperBound == Pos(line: 1, column: 4))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 3))   // "b"
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 4))
+    }
 }

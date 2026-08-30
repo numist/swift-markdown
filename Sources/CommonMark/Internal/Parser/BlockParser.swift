@@ -119,13 +119,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// `true` while the current `parseInline` pass tracks cmark's inline line/column cursor across backslash hard breaks.
     ///
-    /// Armed only for single-segment source-backed content (the common top-level case), where a content offset IS its source offset so the cursor math is exact. Arena/multi-segment content stays on the byte-projection path (a documented Stage-2 gap, matching `stampCloseBracketEnd`'s scoping).
+    /// Armed for source-imaged content - both single-segment source (the common top-level case, where a content offset IS its source offset) and multi-segment source (continuation lines whose stripped prefixes/indents cmark's cursor never counted). The cursor math runs in CONTENT-offset space so those stripped gaps don't shift the flat column. Single-segment arena content (a flattened setext heading, a `\|`-unescaped table cell) stays on the byte-projection path: its content offsets aren't a linear source-column map.
     var inlineFlatColumnTracking = false
 
     /// `true` once a backslash hard break has occurred in the current `parseInline` pass. Every inline node stamped afterward gets explicit flat (line, column) positions - cmark's `handle_backslash` makes the LINEBREAK without resetting `subj->line` / `subj->column_offset`, so columns keep counting flat and the line does not advance.
     var inlineSawBackslashHardBreak = false
 
-    /// Source byte offsets where each *logical* line begins for the current `parseInline` pass: index 0 is the block's content start; each later entry is the start of a physical line opened by a soft break or trailing-space hard break (the breaks whose cmark `handle_newline` resets the cursor). Backslash hard breaks add no entry. Reused scratch (cleared per pass).
+    /// CONTENT offsets where each *logical* line begins for the current `parseInline` pass: index 0 is the block's content start; each later entry is the start of a line opened by a soft break or trailing-space hard break (the breaks whose cmark `handle_newline` resets the cursor). Backslash hard breaks add no entry. Content offsets (not source offsets) so a multi-segment continuation's stripped prefix doesn't shift the flat column. Reused scratch (cleared per pass).
     var inlineLogicalLineStarts: [Int] = []
 
     /// The 1-based source line of the current inline block's content start (cmark's `subj->line` at block entry).
