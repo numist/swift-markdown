@@ -784,7 +784,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     pending = addChunk(stripped, to: para, pending: pending)
                 }
                 storage[para].kind = .heading(level: Int(level))
-                return try finalize(node: para, pending: pending, setextUnderline: true)
+                // why: cmark finalizes a setext heading only when a later line or EOF closes it
+                // (blocks.c) and stamps its end from that closing line, like the document / fenced code
+                // (blocks.c:327) - not from the underline. Its content already ends at the underline (a
+                // heading can't be continued, so the next line never accumulates into it), so leave the
+                // heading open as `current` with its content pending and let the normal per-line close
+                // path stamp the end from the line that closes it. Same finalize-timing class as the
+                // deferred thematic break (FINDINGS #7).
+                return pending
             }
         }
 
@@ -1510,16 +1517,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Close `node`, materialize its accumulated content, and back the parser's `current` pointer up to `node`'s parent.
-    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, atEOF: Bool = false, setextUnderline: Bool = false, atxHeadingEnd: Int? = nil) throws(MarkdownDocument.Error) -> PendingLeaf? {
+    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, atEOF: Bool = false, atxHeadingEnd: Int? = nil) throws(MarkdownDocument.Error) -> PendingLeaf? {
         var pending = pending
         let kind = storage[node].kind
 
         if positionsEnabled {
-            // Mirror cmark's finalize end-position cases (src/blocks.c): the block ends on the CURRENT line at EOF, for the document / fenced code, for a setext heading (its underline line is part of it), or for a block that opened on this same line (e.g. an ATX heading finalized immediately); otherwise it ends on the PREVIOUS line (the last line that was actually part of it).
+            // Mirror cmark's finalize end-position cases (src/blocks.c:309-337): the block ends on the CURRENT line at EOF, for the document / fenced code, for a setext heading, or for a block that opened on this same line (e.g. an ATX heading finalized immediately); otherwise it ends on the PREVIOUS line (the last line that was actually part of it).
             let startByte = storage.sourceRanges[node].start
             let startedThisLine = startByte >= Int32(currentLineSourceRange.lowerBound)
             let isFenced: Bool
             if case .codeBlock(let info) = kind { isFenced = info.isFenced } else { isFenced = false }
+            // A `.heading` reaching finalize's else-branch is always a setext heading: an ATX heading finalizes immediately via `atxHeadingEnd` and is never open at close time.
+            let isSetextHeading: Bool
+            if case .heading = kind { isSetextHeading = true } else { isSetextHeading = false }
             let end: Int
             if let atxHeadingEnd {
                 // An ATX heading ends at its trimmed content extent, not the raw line. Map the line-offset through `sourceOffset` exactly like the heading start, so tab-expanded lines resolve correctly; fall back to the raw line end if the mapping is unavailable.
@@ -1527,7 +1537,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // cmark's chop_trailing_hashtags shrinks the line chunk before `last_line_length` is recorded (src/blocks.c), so a block later attributed to this line - notably the document, whose end is stamped from the final line - inherits the trimmed extent, not the raw line end. Mirror that by shrinking the tracked current-line end to the heading's content end.
                 currentLineSourceRange = currentLineSourceRange.lowerBound..<end
             } else {
-                end = (atEOF || startedThisLine || setextUnderline || kind == .document || isFenced)
+                // cmark finalizes a setext heading like the document / fenced code (blocks.c:327), so its end is the line that CLOSES it - the current line when this deferred finalize runs (PHASE 2c leaves it open), not the underline. Same finalize-timing class as the deferred thematic break (FINDINGS #7).
+                end = (atEOF || startedThisLine || isSetextHeading || kind == .document || isFenced)
                     ? currentLineSourceRange.upperBound
                     : lastLineSourceEnd
             }

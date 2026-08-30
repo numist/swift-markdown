@@ -1,0 +1,7 @@
+Document @1:1-4:4
+├─ Heading @1:1-3:4 level: 2
+│  └─ Text @1:1-1:4 "Foo"
+└─ Paragraph @3:1-4:4
+   ├─ Text @3:1-3:4 "bar"
+   ├─ SoftBreak
+   └─ Text @4:1-4:4 "baz"
