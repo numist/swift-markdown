@@ -133,8 +133,8 @@ extension BlockParser {
                     end: info.textEnd,
                     content: content,
                     into: parent,
-                    // A trailing-space hard break's stripped spaces still belong to the preceding text node's source range (cmark stamps it up to the newline at `cursor`). A backslash hard break's `\` does NOT: cmark's handle_backslash consumes the backslash into the LINEBREAK, so the preceding text ends at the content (`info.textEnd`), before the `\`.
-                    rangeEnd: (info.isHard && !info.isBackslash) ? cursor : nil
+                    // A soft break and a trailing-space hard break both extend the preceding text node's source range to the newline at `cursor`, owning the line's trailing whitespace (cmark stamps up to the newline for both). A backslash hard break's `\` does NOT: cmark's handle_backslash consumes the backslash into the LINEBREAK, so the preceding text ends at the content (`info.textEnd`), before the `\`.
+                    rangeEnd: info.isBackslash ? nil : cursor
                 )
                 let kind: MarkdownNode.Kind = info.isHard ? .lineBreak : .softBreak
                 let breakIdx = storage.appendNode(NodeRecord(kind: kind, parent: parent))
@@ -2511,7 +2511,7 @@ extension BlockParser {
 
     /// Emit a `.text` node spanning `start..<end` if non-empty.
     ///
-    /// `rangeEnd` defaults to `end` but may be set larger to extend the node's *source range* past its content - e.g. a hard line break's text node owns the trailing spaces/backslash that were stripped from its content (cmark stamps the text up to the newline), so the content is `[start, end)` while the range is `[start, rangeEnd)`.
+    /// `rangeEnd` defaults to `end` but may be set larger to extend the node's *source range* past its content - e.g. the text node before a soft break or a trailing-space hard break owns the trailing whitespace that was stripped from its content (cmark stamps the text up to the newline), so the content is `[start, end)` while the range is `[start, rangeEnd)`. A backslash hard break is the exception: it passes `rangeEnd: nil`, so the text ends at its content, before the `\` that cmark consumes into the LINEBREAK.
     private mutating func flushPendingText(start: Int, end: Int, content: borrowing ContentSpan, into parent: DocumentStorage.Index, rangeEnd: Int? = nil) {
         if end <= start {
             return
