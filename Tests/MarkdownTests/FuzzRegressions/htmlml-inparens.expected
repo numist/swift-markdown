@@ -1,0 +1,6 @@
+Document @1:1-2:6
+└─ Paragraph @1:1-2:6
+   ├─ Text @1:1-1:8 "[link]("
+   ├─ InlineHTML @1:8-2:4 <foo
+bar>
+   └─ Text @2:5-2:6 ")"

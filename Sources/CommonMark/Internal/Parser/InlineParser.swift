@@ -228,6 +228,7 @@ extension BlockParser {
                     )
                     storage.appendChild(nodeIdx, to: parent)
                     stampInline(nodeIdx, cursor, htmlEnd, content: content)
+                    stampInlineHTMLEnd(nodeIdx, start: cursor, htmlEnd: htmlEnd, content: content)
                     cursor = htmlEnd
                     pendingTextStart = cursor
                     continue
@@ -2620,6 +2621,31 @@ extension BlockParser {
         // end column: flat buffer column counted from the start of the `]`'s BUFFER line through just past the close form, without resetting at the interior `(...)` newline. `+ 1` is `blockStartColumn` (top-level `block_offset` 0) and cmark's converter `+1`.
         let lineStart = bufferLineStart(ofBuffer: closeBracket, content: content)
         let endColumn = (linkEnd - lineStart) + 1
+        storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: endLine, column: endColumn))
+    }
+
+    /// Give a raw inline-HTML span whose token crosses a newline the flat end column cmark reports: its LAST byte's column, one short of the half-open (last-byte + 1) that single-line spans and every other node use.
+    ///
+    /// cmark stamps a raw-HTML node's end via `make_raw_html` (swift-cmark `src/inlines.c` `handle_pointy_brace`, ~1015) then `adjust_subj_node_newlines` (~304). When the matched token contains a newline, `adjust_subj_node_newlines` OVERWRITES `end_column` with `since_newline` - a raw count of bytes since the last interior newline - WITHOUT the `+ 1 + column_offset + block_offset` that `make_literal` (~106) applies to a single-line node's end column. The result lands on the last content byte's own column (the closing `>`'s column), one short of the half-open end every other multi-line construct reports. The rewrite's byte-offset end (`lastByte + 1`) is that half-open column; drop the `+1` by stamping an explicit end at the last byte's projected line:column.
+    ///
+    /// why: the multi-line inline-HTML end column is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). The mechanism it uses - an explicit end position (`setExplicitEnd`) that overrides the node's byte-projected end - stays unconditional; only whether this method sets one is gated.
+    ///
+    /// Flag ON reproduces the cmark quirk (Hyrum's Law): a newline-crossing raw-HTML span reports its last byte's column as the end. A single-line span carries no interior newline, so `adjust_subj_node_newlines` is a no-op and the half-open end stands - this method returns early for it (byte-identical to today).
+    ///
+    /// Flag OFF is spec-correct: take no explicit end, so the node keeps the byte-projected half-open end from its normal `stampInline(node, cursor, htmlEnd)` stamp.
+    ///
+    /// Scoped to top-level blocks like `stampCloseBracketEnd`: a raw-HTML span nested in a blockquote/list still takes this path (flag ON), but its column is computed without the container's `block_offset`, so it stays short by the container indent (as it already was on the byte path) - the same documented nested-container gap. Not in the fuzz corpus.
+    ///
+    /// Does NOT compound with the backslash-hard-break quirk: when `inlineSawBackslashHardBreak` is set, `stampInline` has already stamped this node's start AND end from the flat cursor (that quirk's coordinate frame), and this method then overwrites the end with the physical byte projection - a mixed frame matching neither cmark's flat compound end nor the pre-break byte end. A multi-line raw-HTML span *after* a backslash hard break therefore stays divergent flag-ON (it already was), and reproducing it faithfully needs a flat-frame end column, not this physical one - deferred like the nested-container gap. Not in the fuzz corpus (no `htmlml-*` pair pairs a backslash break with a multi-line span).
+    @inline(__always)
+    mutating func stampInlineHTMLEnd(_ node: DocumentStorage.Index, start: Int, htmlEnd: Int, content: borrowing ContentSpan) {
+        guard positionsEnabled, storage.options.contains(.cmarkBugCompatibility) else { return }
+        // Only a span with an interior newline diverges: a single-line span's half-open end projects identically to cmark's un-adjusted end column, so leave it on the byte path (byte-identical to today).
+        guard runContainsNewline(start, htmlEnd, content: content) else { return }
+        // The last content byte (the closing `>`, or the terminator of a comment/CDATA/PI/declaration) carries cmark's end column. Bail to the byte path if it has no source image.
+        guard let lastByte = content.sourceOffset(ofVirtual: htmlEnd - 1) else { return }
+        let endLine = sourceLineNumber(ofSource: lastByte)
+        let endColumn = lastByte - lineStartByte(ofSource: lastByte) + 1
         storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: endLine, column: endColumn))
     }
 
