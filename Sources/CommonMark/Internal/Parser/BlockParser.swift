@@ -97,8 +97,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// The open leaf's `block_offset`: the byte distance from a line's start to the block's content column, established from the leaf's FIRST line and held for the block's lifetime.
     ///
-    /// A paragraph continuation line's inline content is re-indented to this column: cmark fixes `block_offset` at the paragraph's first-line content column (`start_column - 1`) and reports EVERY continuation line's surviving content there, discarding each line's own leading whitespace. So a continuation segment maps its source to `currentLineSourceRange.lowerBound + currentContentIndent` (the bytes are still read from their true offset). It equals a continuation line's own content column only when the first line has no indentation beyond its container marker (the common case), so this is usually a no-op. Set in `addLine` when a leaf's first line is accumulated; consumed by `addLineSegment`. Code/HTML bodies preserve their true offset instead.
+    /// A paragraph continuation line's inline content is re-indented to this column: cmark fixes `block_offset` at the paragraph's first-line content column (`start_column - 1`) and reports EVERY *matched* continuation line's surviving content there, discarding each line's own leading whitespace. So a matched continuation segment maps its source to `currentLineSourceRange.lowerBound + currentContentIndent` (the bytes are still read from their true offset). It equals a continuation line's own content column only when the first line has no indentation beyond its container marker (the common case), so this is usually a no-op. A *lazy* block-quote continuation is the exception - cmark keeps its leading whitespace (see `currentLineIsLazyBlockQuoteContinuation`). Set in `addLine` when a leaf's first line is accumulated; consumed by `addLineSegment`. Code/HTML bodies preserve their true offset instead.
     var currentContentIndent: Int = 0
+
+    /// `true` when the line currently being processed is a *top-level* lazy continuation of an enclosing block quote's paragraph: no `>` marker matched on this line and nothing was consumed before it (`cursor` still at the line start), so the container-prefix walk failed at a `.blockQuote` with no outer container having advanced the cursor. Reset and set per line in `walkOpenContainers`; consumed by `addLineSegment` under `.cmarkBugCompatibility`.
+    ///
+    /// cmark strips a *matched* paragraph continuation's leading whitespace - it advances the line offset past the container prefix to the first non-space before adding the line - but never advances a *lazy* continuation, so a block-quote lazy line's leading whitespace survives in the content and shifts its reported column right by that width (`true_col + block_offset`). List-item continuations that reach the open paragraph are always matched (the item prefix consumes the indent up to the content column), so among the container types only block-quote lazy lines take the preserve base `range.lowerBound + currentContentIndent`; everything else keeps the discard base `currentLineSourceRange.lowerBound + currentContentIndent`. The preserve base measures surviving whitespace from the line start, so it is only correct when nothing was consumed before the missing marker; a lazy blockquote nested under an outer container that DID consume columns on this line keeps the discard base (a separate, pre-existing divergence, out of scope here).
+    var currentLineIsLazyBlockQuoteContinuation: Bool = false
 
     /// Inline-parsing tasks deferred until after all block parsing completes.
     ///
@@ -513,7 +518,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .some(let existing):
             // Contiguity fast path: a `\n` separator was deferred after a `.lazy` span (`appendNewline` left it as `.lazyNewline`). If this line is also source-backed and immediately follows the previous span in the source - i.e. it starts one byte past the previous span and that byte is a single `\n` - then the join needs no synthesized separator: the embedded `\n` already lives in the source, so we keep the whole run as one zero-copy `.lazy` range. This holds for top-level paragraphs with LF line endings and no stripped container prefix; blockquote/list continuation (prefix stripped → non-adjacent range), CRLF/CR (separator isn't a lone `\n` at `prev.upperBound`), and tab-expanded lines (`!currentLineMapsToSource`) all fall through to materialization below.
             //
-            // A LAZY continuation line into an indented container (a blockquote/list paragraph with no marker on the continuation line) IS source-contiguous, so it would collapse here and map to its true column. That equals cmark's output only at the top level, where the block-content column is 1; inside an indented container cmark re-indents every continuation line to the fixed block-content column (`currentContentIndent`) - the Quirk E re-indent. So flag-ON with a positive content indent is excluded from the collapse and falls through to the segment path below, which re-indents each continuation line via `addLineSegment` (the first line stays a plain source segment at its true column). Flag-OFF and the top-level `currentContentIndent == 0` case keep the zero-copy collapse (spec-correct there anyway).
+            // A LAZY continuation line into an indented container (a blockquote/list paragraph with no marker on the continuation line) IS source-contiguous, so it would collapse here and map to its true column. That equals cmark's output only at the top level, where the block-content column is 1; inside an indented container cmark re-indents every continuation line relative to the fixed block-content column (`currentContentIndent`) - the Quirk E re-indent (matched continuations to that column, lazy blockquote continuations to `true_col + block_offset`; see `addLineSegment`). Either target differs from the plain true column the collapse would produce, so flag-ON with a positive content indent is excluded from the collapse and falls through to the segment path below, which re-indents each continuation line via `addLineSegment` (the first line stays a plain source segment at its true column). Flag-OFF and the top-level `currentContentIndent == 0` case keep the zero-copy collapse (spec-correct there anyway).
             switch consume existing {
             case .lazyNewline(let prev) where currentLineMapsToSource
                     && range.lowerBound == prev.upperBound + 1
@@ -571,12 +576,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if currentLineMapsToSource {
             // why: a paragraph continuation line's surviving content is mapped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). Only the source column of the segment differs - its bytes are always read from `range` - and code/HTML block bodies are excluded either way (they preserve their own indentation and keep their true offset). When the line has no whitespace beyond `block_offset` the two coincide, so this is a no-op.
             //
-            // Flag ON reproduces cmark-gfm's continuation re-indent: cmark fixes the paragraph's content column from the FIRST line and reports every continuation line's surviving content at that fixed column - this line's start plus the leaf's `block_offset` (`currentContentIndent`) - discarding the line's own leading whitespace. So a more-indented continuation line's text lands at the wrong (leftward) column, and its end can sit before the paragraph's end (which is computed from the true line width).
+            // Flag ON reproduces cmark-gfm's continuation re-indent: cmark fixes the paragraph's content column from the FIRST line and reports every continuation line's surviving content relative to that fixed column (`currentContentIndent`, the leaf's `block_offset`). The base the offset is added to is container-specific:
+            //
+            //   - A *matched* continuation (all container prefixes matched down to the paragraph, including list-item continuations whose indent the item prefix consumes) has its leading whitespace STRIPPED by cmark before the line is added, so its content lands at the fixed block-content column: base = this line's start (`currentLineSourceRange.lowerBound`).
+            //   - A *lazy block-quote* continuation (no `>` on this line, and nothing consumed before the missing marker) is never advanced past its whitespace, so cmark keeps that whitespace and the content lands at `true_col + block_offset`: base = this line's own first-non-space column (`range.lowerBound`). `currentLineIsLazyBlockQuoteContinuation` scopes this to the top-level case; a nested lazy blockquote under an outer container that consumed columns keeps the discard base (see its declaration).
+            //
+            // Either way the segment's bytes are read from `range` and code/HTML block bodies are excluded (they preserve their own indentation and keep their true offset). When the line has no whitespace beyond `block_offset` the two bases coincide, so this is a no-op.
             //
             // Flag OFF is spec-correct: the continuation content keeps its TRUE first-non-space column (`range.lowerBound`), so its range is consistent with the block's true-width end.
             let kind = storage[node].kind
             let reindent = positionsEnabled && storage.options.contains(.cmarkBugCompatibility) && !(kind.isCodeBlock || kind == .htmlBlock)
-            let mapsAt = reindent ? currentLineSourceRange.lowerBound + currentContentIndent : range.lowerBound
+            let reindentBase = currentLineIsLazyBlockQuoteContinuation ? range.lowerBound : currentLineSourceRange.lowerBound
+            let mapsAt = reindent ? reindentBase + currentContentIndent : range.lowerBound
             return appendSegment(Segment(offset: Int32(range.lowerBound), length: Int32(range.count), inSource: true, sourceOffset: Int32(mapsAt)), to: node, pending: pending)
         }
         let offset = storage.strings.count
@@ -836,6 +847,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var cursor = lineRange.lowerBound
         var deepestMatched = documentIndex
 
+        // Fresh per line: only a block quote whose `>` marker is missing on THIS line sets it (below).
+        currentLineIsLazyBlockQuoteContinuation = false
+
         // Build top-down chain via parent walk + reverse. `chain` is a caller-owned reused buffer (reset here per line) so we don't allocate/zero a fresh array each line.
         chain.removeAll(keepingCapacity: true)
         var idx: DocumentStorage.Index? = current
@@ -866,6 +880,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     cursor = advanced
                     deepestMatched = node
                 } else {
+                    // No `>` on this line: the block quote's paragraph continues lazily. Unlike a matched
+                    // continuation (whose prefix strip discards leading whitespace), a lazy continuation is
+                    // never advanced past its whitespace, so `addLineSegment` preserves it in the re-indent
+                    // column. Gate the preserve on `cursor` still being at the line start: the preserve base
+                    // measures the surviving whitespace from the line start, which is only right when nothing
+                    // was consumed before the missing marker. When an OUTER container already advanced the
+                    // cursor on this line (a nested/wrapped lazy blockquote, e.g. `> > foo` then `> baz`), the
+                    // outer prefix's own columns would be double-counted, so those lines keep the discard base
+                    // (correct when the residual after the outer prefix is empty; otherwise a pre-existing,
+                    // out-of-scope divergence untouched by this fix).
+                    currentLineIsLazyBlockQuoteContinuation = (cursor == lineRange.lowerBound)
                     return (deepestMatched, cursor, false)
                 }
             case .list:

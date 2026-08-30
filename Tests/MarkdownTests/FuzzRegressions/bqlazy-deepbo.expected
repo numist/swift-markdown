@@ -1,0 +1,6 @@
+Document @1:1-2:5
+└─ BlockQuote @1:1-2:5
+   └─ Paragraph @1:5-2:5
+      ├─ Text @1:5-1:8 "foo"
+      ├─ SoftBreak
+      └─ Text @2:6-2:9 "baz"

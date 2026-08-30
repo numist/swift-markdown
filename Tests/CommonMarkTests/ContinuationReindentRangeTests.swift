@@ -146,4 +146,29 @@ struct ContinuationReindentRangeTests {
         #expect(texts[2]?.lowerBound == Pos(line: 3, column: 1))   // "qux" at its true column
         #expect(texts[2]?.upperBound == Pos(line: 3, column: 4))
     }
+
+    @Test("lazy continuation into a blockquote with leading whitespace keeps its true column")
+    func lazyBlockquoteContinuationWithLeadingWhitespace() throws {
+        // "> foo" on line 1, "  baz" on line 2 with NO `>` marker but TWO leading spaces: a LAZY
+        // continuation absorbed into the blockquote paragraph. The paragraph's content column is 3
+        // (from line 1's `foo`). Spec-correct, `baz` keeps its TRUE column: the two spaces are cols
+        // 1-2, so `baz` is @2:3-2:6 - consistent with the paragraph/block-quote end @2:6, and the
+        // re-indent is off entirely. cmark, flag-on, does NOT strip a lazy line's leading whitespace
+        // (unlike a matched continuation), so it reports `baz` at `true_col + block_offset` = @2:5-2:8
+        // (the `bqlazy-2sp` fuzzer pair). This is the flag-off guardrail proving the flag-on
+        // preserve-leading-whitespace base is quarantined behind `.cmarkBugCompatibility`.
+        let ranges = try ranges(in: "> foo\n  baz")
+        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
+        try #require(texts.count == 2)
+
+        #expect(firstRange(.blockQuote, in: ranges)?.lowerBound == Pos(line: 1, column: 1))
+        #expect(firstRange(.blockQuote, in: ranges)?.upperBound == Pos(line: 2, column: 6))
+        #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 1, column: 3))
+        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 6))
+
+        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "foo"
+        #expect(texts[0]?.upperBound == Pos(line: 1, column: 6))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 3))   // "baz" at its true column, NOT @2:5
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 6))
+    }
 }

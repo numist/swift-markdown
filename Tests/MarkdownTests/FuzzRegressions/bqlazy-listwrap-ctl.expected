@@ -1,0 +1,8 @@
+Document @1:1-2:6
+└─ UnorderedList @1:1-2:6
+   └─ ListItem @1:1-2:6
+      └─ BlockQuote @1:3-2:6
+         └─ Paragraph @1:5-2:6
+            ├─ Text @1:5-1:8 "foo"
+            ├─ SoftBreak
+            └─ Text @2:5-2:8 "baz"
