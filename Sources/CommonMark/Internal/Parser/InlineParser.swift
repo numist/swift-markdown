@@ -111,6 +111,7 @@ extension BlockParser {
                     )
                     storage.appendChild(codeIdx, to: parent)
                     stampInline(codeIdx, cursor, span.afterClose, content: content)
+                    stampFlatRawInlineEnd(codeIdx, start: cursor, end: span.afterClose, content: content)
                     cursor = span.afterClose
                     pendingTextStart = cursor
                     continue
@@ -231,6 +232,7 @@ extension BlockParser {
                     storage.appendChild(nodeIdx, to: parent)
                     stampInline(nodeIdx, cursor, htmlEnd, content: content)
                     stampInlineHTMLEnd(nodeIdx, start: cursor, htmlEnd: htmlEnd, content: content)
+                    stampFlatRawInlineEnd(nodeIdx, start: cursor, end: htmlEnd, content: content)
                     cursor = htmlEnd
                     pendingTextStart = cursor
                     continue
@@ -2675,6 +2677,28 @@ extension BlockParser {
         let endLine = sourceLineNumber(ofSource: lastByte)
         let endColumn = lastByte - lineStartByte(ofSource: lastByte) + 1
         storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: endLine, column: endColumn))
+    }
+
+    /// Give a raw-scan inline (code span or inline HTML) whose token crosses a line break the flat end position cmark reports with `CMARK_OPT_SOURCEPOS` off: `(startLine, startColumn + tokenByteLength)`, ignoring the interior break.
+    ///
+    /// The reference (old swift-markdown, C path) sets `CMARK_OPT_SOURCEPOS` only when `disableSourcePosOpts` is unset (`CommonMarkConverter.swift`). With sourcepos OFF, cmark never runs `handle_newline`'s per-line reset while scanning a code span or raw HTML, so their `end_column` keeps counting flat from the token's start line - unlike the precise end sourcepos ON (and the rewrite) computes by advancing to the closing byte's real line. cmark's other multi-line inlines (emphasis, links, autolinks, text soft breaks) reset either way, so this flat end is scoped to exactly these two raw-scan constructs.
+    ///
+    /// why: the multi-line raw-inline end is stamped one of two ways depending on `.cmarkFlatRawInlineEnds` (forwarded only for the differential's flag-ON + `disableSourcePosOpts` combination; default off is spec-correct and tracks the precise end). The mechanism it uses - an explicit end position (`setExplicitEnd`) overriding the node's byte-projected end - is the same machinery Quirk C / G and the setext wrapper use; only whether this method sets one is gated.
+    ///
+    /// Flag ON reproduces the cmark quirk (Hyrum's Law): the token's flat byte length is added to its start column on its start line. For inline HTML this OVERRIDES Quirk G's sourcepos-ON flat-last-byte end (call the two in order; this writes last). A single-line span carries no line break, so its flat end equals its precise byte-projected end and this method returns early (byte-identical to today). Guards on the last content byte landing on a later source line than the first - which covers `\n`, `\r`, and `\r\n` breaks alike (they all advance `lineStarts`), where a `\n`-only scan would miss a bare `\r`. Bails to the byte path if either end of the token has no source image.
+    ///
+    /// Scoped to top-level blocks like its sibling helpers (`stampInlineHTMLEnd`, `stampCloseBracketEnd`): `startColumn` here counts from the token's PHYSICAL source line start (`s - lineStartByte(ofSource: s) + 1`), so a raw inline nested in a blockquote/list would include the container prefix in the column - a coordinate basis not verified against cmark's sourcepos-off nested end. Nested multi-line raw inlines are not in the fuzz corpus; a nested raw inline was already precise-vs-flat divergent on the byte path before this change (the same documented nested-container gap the siblings carry), never a wrong-line stamp and never in the deliverable (flag ON only).
+    @inline(__always)
+    mutating func stampFlatRawInlineEnd(_ node: DocumentStorage.Index, start: Int, end: Int, content: borrowing ContentSpan) {
+        guard positionsEnabled, storage.options.contains(.cmarkFlatRawInlineEnds),
+              let s = content.sourceOffset(ofVirtual: start),
+              let lastByte = content.sourceOffset(ofVirtual: end - 1),
+              sourceLineNumber(ofSource: lastByte) > sourceLineNumber(ofSource: s) else {
+            return
+        }
+        let startLine = sourceLineNumber(ofSource: s)
+        let startColumn = s - lineStartByte(ofSource: s) + 1
+        storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: startLine, column: startColumn + (end - start)))
     }
 
     /// Buffer offset of the start of the content line containing buffer offset `pos`: just past the previous buffer newline, or the content start. Counts cmark's flat close-bracket end column from the `]`'s line base and resets it at a newline in the link *text* (the softbreak that precedes the `]`).

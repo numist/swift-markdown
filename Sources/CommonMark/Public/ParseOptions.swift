@@ -81,5 +81,8 @@ extension MarkdownDocument {
 
         /// Replicate cmark-gfm's source-position bugs bit-for-bit (for differential qualification). Default off; the shipped parser is spec-correct.
         public static let cmarkBugCompatibility = MarkdownDocument.ParseOptions(rawValue: 1 << 26)
+
+        /// Flatten the end position of a multi-line raw-scan inline (code span, inline HTML) onto its start line as `(startLine, startColumn + tokenByteLength)`, reproducing cmark-gfm's `end_column` with `CMARK_OPT_SOURCEPOS` off (for differential qualification). Default off; the shipped parser tracks the precise end. The Markdown layer forwards this only alongside `.cmarkBugCompatibility` (flag on + `disableSourcePosOpts`); the parser itself honors it independently of `.cmarkBugCompatibility`.
+        public static let cmarkFlatRawInlineEnds = MarkdownDocument.ParseOptions(rawValue: 1 << 27)
     }
 }
