@@ -1117,8 +1117,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         // List markers interrupt a paragraph only if they'd start a non-empty first item (CommonMark 0.31 §5.2). The `start != 1` rule for ordered lists only applies when starting a brand-new top-level list - when we're already inside a list item, sequential numbers (2., 3., …) legitimately open new items. Empty list markers (e.g. `*` on its own line) follow the same pattern: they can't interrupt a top-level paragraph but DO close a sibling list item.
         if let marker = matchListMarker(source: source, range: range, firstNonSpace: firstNonSpace) {
-            let isEmpty = marker.consumedTo >= range.upperBound
-            if isEmpty {
+            if marker.isEmpty {
                 return insideListItem
             }
             if !insideListItem
@@ -2188,6 +2187,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var markerWidth: Int      // bytes of marker (1 for bullet, 2..10 for ordered)
         var contentColumn: Int    // column at which item content begins (after marker + space)
         var consumedTo: Int       // source offset of first byte of item content
+        var isEmpty: Bool         // marker opens an empty item (only whitespace to the line end)
     }
 
     /// Read the padding stored on an `.item` node. Returns `nil` if the node is not actually an item.
@@ -2268,10 +2268,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Marker must be followed by a space, tab, or end of line.
         var contentStart: Int
         var contentColumn: Int
+        var isEmpty = false
         if afterMarker >= range.upperBound {
             // Empty item - the line is just `- ` (or end of input after marker).
             contentStart = afterMarker
             contentColumn = markerOffset + markerWidth + 1
+            isEmpty = true
         } else {
             let next = source[afterMarker]
             if next != UInt8(ascii: " ") && next != UInt8(ascii: "\t") {
@@ -2295,6 +2297,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             // Treat a fully-blank line after the marker as an empty item (e.g. `-     \n` or `-` followed by EOF after the optional space).
             let blankAfter = k >= range.upperBound
+            // Emptiness follows the WHOLE trailing run, not the 5-column-capped `spaces` count: CommonMark §5.2 (cmark `parse_list_marker`) treats the item as empty when only spaces/tabs remain to the line end. `k` sits at the first non-whitespace byte or at the cap, and the loop already proved `[afterMarker, k)` blank, so scanning `[k, upper)` decides emptiness even past the cap (e.g. `*` + 6 spaces).
+            isEmpty = indexOfFirstNonSpace(source: source, range: k..<range.upperBound) >= range.upperBound
             if blankAfter {
                 contentStart = afterMarker + 1
                 contentColumn = markerOffset + markerWidth + 1
@@ -2315,7 +2319,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             markerOffset: markerOffset,
             markerWidth: markerWidth,
             contentColumn: contentColumn,
-            consumedTo: contentStart
+            consumedTo: contentStart,
+            isEmpty: isEmpty
         )
     }
 

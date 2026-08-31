@@ -1,0 +1,7 @@
+Document @1:1-2:4
+├─ Paragraph @1:1-1:2
+│  └─ Text @1:1-1:2 "a"
+└─ UnorderedList @2:1-2:4
+   └─ ListItem @2:1-2:4
+      └─ Paragraph @2:3-2:4
+         └─ Text @2:3-2:4 "b"

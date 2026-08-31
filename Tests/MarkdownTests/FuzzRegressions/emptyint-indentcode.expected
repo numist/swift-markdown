@@ -1,0 +1,7 @@
+Document @1:1-2:9
+├─ Paragraph @1:1-1:2
+│  └─ Text @1:1-1:2 "a"
+└─ UnorderedList @2:1-2:9
+   └─ ListItem @2:1-2:9
+      └─ CodeBlock @2:7-2:9 language: none
+          x
