@@ -3145,8 +3145,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// If `chunk` contains backslash escapes (`\<ASCII punct>`) or HTML entity references, append a clean copy to the strings arena and return a chunk pointing at the new region.
     ///
+    /// Reads via `readByte(at:in:)`, so it works for both source-backed and arena-backed (`inSource == false`) chunks - used by block-level reference definitions and by inline links whose destination lives in flattened/arena content.
+    ///
     /// Returns `chunk` untouched if no escapes are present.
-    private mutating func unescapeURLChunk(_ chunk: Chunk) -> Chunk {
+    mutating func unescapeURLChunk(_ chunk: Chunk) -> Chunk {
         guard !chunk.isEmpty else {
             return chunk
         }

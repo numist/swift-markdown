@@ -161,6 +161,40 @@ internal struct ContentSpan: ~Escapable {
         return nil
     }
 
+    /// The source offset at the START of the run/segment that contains virtual `offset` - i.e. `sourceOffset(ofVirtual:)` WITHOUT the within-run delta - or `nil` when the offset maps to synthetic/arena content.
+    ///
+    /// Where `sourceOffset(ofVirtual:)` returns `runBase + (offset - runStart)`, this returns just `runBase`. That base is the run's re-indented block-content-column byte; in the common case it sits on the run's own physical source line, so adding the within-run delta (as `sourceOffset` does) is what can push a *later* byte's mapped offset past that physical line's extent when a continuation line is re-indented (Quirk E). Inline stamping uses this base to anchor a re-indented run's end on its own physical line while taking the column from the (possibly overshooting) mapped byte, so the two stay on the same line arithmetically. If the re-indent is so large that the base itself overshoots its physical line (`currentContentIndent` exceeds the line's content width), the anchor is no longer on the run's line - the stamping caller guards against that (see `stampInline`) and falls through to the plain byte projection. See `stampInline`.
+    @inlinable
+    func sourceRunBase(ofVirtual offset: Int) -> Int? {
+        if !isMultiSegment {
+            if inSource {
+                // Identity map: every byte is its own source offset and there is no re-indent, so the "run base" is the offset itself (byte projection is already correct here).
+                return offset
+            }
+            let k = offset - base
+            var v = 0
+            for i in 0..<arenaRuns.count {
+                let run = arenaRuns[i]
+                let len = Int(run.length)
+                if k < v + len {
+                    return run.sourceOffset < 0 ? nil : Int(run.sourceOffset)
+                }
+                v += len
+            }
+            return nil
+        }
+        var v = 0
+        for i in 0..<segments.count {
+            let seg = segments[i]
+            let len = Int(seg.length)
+            if offset < v + len {
+                return seg.inSource ? Int(seg.sourceOffset) : nil
+            }
+            v += len
+        }
+        return nil
+    }
+
     /// Build a `Chunk` for a sub-range of this content. Single-segment: a direct sub-chunk. Multi-segment: valid only when the range lies within one segment (the common case - inline nodes don't straddle a line join); callers that can straddle (code spans) handle materialization themselves.
     @inlinable
     func chunk(offset: Int, length: Int) -> Chunk {

@@ -1,0 +1,6 @@
+Document @1:1-3:4
+└─ Heading @1:1-3:4 level: 1
+   └─ Emphasis @1:1-2:5
+      ├─ Text @1:2-1:5 "bar"
+      ├─ SoftBreak
+      └─ Text @2:1-2:4 "baz"
