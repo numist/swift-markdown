@@ -547,9 +547,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if currentLineMapsToSource, nodeKind.canAccumulateText {
                 return PendingLeaf(node: node, content: .lazy(range: range))
             }
-            // Tab-expanded line: `expandPrefixTabs` copied the verbatim tail unchanged, so text content lying entirely in that tail is byte-identical to a source range. Keep it a zero-copy source-backed `.lazy` range (mapped to source) instead of copying into the arena, so inline stamping still recovers source positions. Gated on positions (the source mapping `sourceOffset` needs is only tracked then).
-            if positionsEnabled, nodeKind.canAccumulateText, range.lowerBound >= materializedTailBufferStart,
-               let sourceLow = sourceOffset(range.lowerBound), let sourceHigh = sourceOffset(range.upperBound) {
+            // Tab-expanded line: `expandPrefixTabs` rewrites only the consumed indentation and copies the content verbatim, so content whose source projection has the same width as its buffer range - no expanded tab lies inside it - maps CONTIGUOUSLY and is byte-identical to a single source range. Keep such content a zero-copy source-backed `.lazy` range (mapped to source) rather than copying into the arena, so inline stamping still recovers source positions. This admits content beginning with a marker byte (`*`, `-`, `+`, `>`, digit), which `expandPrefixTabs` classifies into the expanded-prefix region but which still maps 1:1 to source (e.g. the `*` of `*5*` after `*\t`/`>\t`). Content straddling an expanded tab widens under expansion (source width < buffer width), fails the width check, and falls through to arena materialization below. Gated on positions (the source mapping `sourceOffset` needs is only tracked then).
+            if positionsEnabled, nodeKind.canAccumulateText,
+               let sourceLow = sourceOffset(range.lowerBound), let sourceHigh = sourceOffset(range.upperBound),
+               sourceHigh - sourceLow == range.count {
                 return PendingLeaf(node: node, content: .lazy(range: sourceLow..<sourceHigh))
             }
             let buffer = UniqueArray(capacity: range.count) { buffer in
