@@ -991,9 +991,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
                 let isBlank = firstNonSpace == lineRange.upperBound
                 if isBlank {
-                    // Blank inside an item that already has content keeps the item open. But a blank inside an item with NO content (the line after a `-` with nothing on it) closes the item - per CommonMark §5.2 "if container->first_child is NULL ... we are done".
+                    // Blank inside an item that already has content keeps the item open. A blank inside an item with NO content (the line after a `-` with nothing on it) normally closes the item - per CommonMark §5.2 "if container->first_child is NULL ... we are done" - UNLESS the blank line's leading whitespace still reaches the item's content column. cmark's item continuation tests `indent >= content column` BEFORE that blank/first-child check (blocks.c), so a whitespace-only line whose expanded indent covers the content column extends even a childless item onto it (e.g. a tab after a bare `-`: 4 columns >= the content column 2), exactly as a non-empty item's continuation already does below. A narrower blank line (a lone space at column 1, or a truly empty line) stays below the content column and closes the empty item.
                     if storage[node].firstChild == nil {
-                        return (deepestMatched, cursor, false)
+                        guard let padding = itemPadding(of: node),
+                              indentColumns(source: source, from: cursor, to: firstNonSpace) >= padding else {
+                            return (deepestMatched, cursor, false)
+                        }
                     }
                     deepestMatched = node
                 } else if case .item = storage[node].data,

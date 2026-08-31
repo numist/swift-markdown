@@ -102,6 +102,42 @@ struct SourcePositionTests {
         }
     }
 
+    @Test("empty list item extends into a trailing tab continuation line")
+    func emptyItemTabContinuation() throws {
+        // A bare `-` opens an empty item whose content column is 2. cmark's item-continuation
+        // rule tests `indent >= content column` before the blank/first-child check, so a
+        // following whitespace-only line whose expanded indent reaches column 2 extends the
+        // (still childless) item onto it: a tab expands to 4 columns >= 2. The end column is
+        // the raw byte offset past the tab (1 tab -> col 2), per the zero-copy source model.
+        try MarkdownDocument.withParsedDocument("-\n\t", options: .sourcePosition) { doc in
+        var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
+        dfsRanges(doc.root, into: &ranges)
+        let item = try #require(range(in: ranges) { if case .item = $0 { return true } else { return false } })
+        #expect(item.lowerBound == Pos(line: 1, column: 1))
+        #expect(item.upperBound == Pos(line: 2, column: 2))
+        }
+
+        // Two tabs push the end column one byte further: end is the raw byte offset past the
+        // whitespace, so column = tab count + 1 (@2:3), not the expanded column.
+        try MarkdownDocument.withParsedDocument("-\n\t\t", options: .sourcePosition) { doc in
+        var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
+        dfsRanges(doc.root, into: &ranges)
+        let item = try #require(range(in: ranges) { if case .item = $0 { return true } else { return false } })
+        #expect(item.lowerBound == Pos(line: 1, column: 1))
+        #expect(item.upperBound == Pos(line: 2, column: 3))
+        }
+
+        // Control: a lone trailing space is only 1 column, below the content column 2, so the
+        // empty item does NOT extend - it ends on line 1 (@1:2), as a truly blank line would.
+        try MarkdownDocument.withParsedDocument("-\n ", options: .sourcePosition) { doc in
+        var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
+        dfsRanges(doc.root, into: &ranges)
+        let item = try #require(range(in: ranges) { if case .item = $0 { return true } else { return false } })
+        #expect(item.lowerBound == Pos(line: 1, column: 1))
+        #expect(item.upperBound == Pos(line: 1, column: 2))
+        }
+    }
+
     @Test("columns are 1-based UTF-8 byte offsets (non-ASCII)")
     func byteColumns() throws {
         // "aé b": a(1 byte) é(2 bytes) space(1) b(1) = 5 bytes.
