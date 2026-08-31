@@ -72,6 +72,13 @@ extension BlockParser {
         inlineSawBackslashHardBreak = false
         inlineFlatColumnTracking = positionsEnabled && !preserveWhitespace && (content.inSource || content.isMultiSegment)
         inlineLogicalLineStarts.removeAll(keepingCapacity: true)
+        // Reset cmark's per-subject backtick-closer cache (`matchCodeSpan`, flag-ON only). Flag-OFF the cache is never consulted, so leave it untouched - inert.
+        if storage.options.contains(.cmarkBugCompatibility) {
+            codeSpanScannedForBackticks = false
+            for i in codeSpanBackticks.indices {
+                codeSpanBackticks[i] = 0
+            }
+        }
         if inlineFlatColumnTracking {
             // Logical-line boundaries are CONTENT offsets. The block's start line/column come from the SOURCE projection of the first content byte (identity for single-segment source; the first line's real source column for multi-segment, after any container prefix). Disarm if the content start has no source image (arena-only), leaving every node on the byte path.
             let blockStart = content.startOffset
@@ -1393,16 +1400,36 @@ extension BlockParser {
     }
 
     /// Match a code span starting at `start` (which must point at a backtick). Returns the resulting content chunk and the offset just past the closing backtick run, or `nil` if no closing run of equal length exists in `start..<end`.
-    private func matchCodeSpan(start: Int, end: Int, content: borrowing ContentSpan) -> CodeSpanMatch? {
+    ///
+    /// Flag-ON (`.cmarkBugCompatibility`) this reproduces cmark's per-subject backtick-closer cache (`scan_to_closing_backticks`, swift-cmark `src/inlines.c`): a stale "no closer here" record makes cmark MISS some valid later same-length spans after an unmatched longer run has scanned to the end. Flag-OFF the search is spec-correct greedy matching, unchanged - it finds every valid span.
+    private mutating func matchCodeSpan(start: Int, end: Int, content: borrowing ContentSpan) -> CodeSpanMatch? {
         let openEnd = scanBacktickRun(start: start, end: end, content: content)
         let runLength = openEnd - start
+
+        let bugCompat = storage.options.contains(.cmarkBugCompatibility)
+        if bugCompat {
+            // cmark step 1: the closer cache has no slot past MAXBACKTICKS, so a longer run is never an opener.
+            if runLength > Self.codeSpanMaxBacktickRun {
+                return nil
+            }
+            // cmark step 2 (early bail): a prior scan already reached the content end for this length, and the latest run start it recorded is at/before this opener - so there is no closer of this length at/after here. Skip the rescan (the stale-cache miss).
+            if codeSpanScannedForBackticks && codeSpanBackticks[runLength] <= openEnd {
+                return nil
+            }
+        }
+
         // Find a matching same-length backtick run after `openEnd`.
         var i = openEnd
         while i < end {
             let b = content[i]
             if b == UInt8(ascii: "`") {
                 let closeEnd = scanBacktickRun(start: i, end: end, content: content)
-                if closeEnd - i == runLength {
+                let closeLength = closeEnd - i
+                // cmark step 3: record this run's START as the latest known closer position for its length.
+                if bugCompat && closeLength <= Self.codeSpanMaxBacktickRun {
+                    codeSpanBackticks[closeLength] = i
+                }
+                if closeLength == runLength {
                     // Return RAW content; the caller normalizes newlines and applies the single-space-strip rule (in that order) since the strip needs the post-normalize bytes to compare against.
                     let contentChunk = content.chunk(
                         offset: openEnd,
@@ -1414,6 +1441,10 @@ extension BlockParser {
                 continue
             }
             i += 1
+        }
+        // cmark step 4: reached the content end without a closer. Remember it so any later open short-circuits at step 2.
+        if bugCompat {
+            codeSpanScannedForBackticks = true
         }
         return nil
     }

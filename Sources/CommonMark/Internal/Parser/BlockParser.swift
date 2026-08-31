@@ -145,6 +145,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The 1-based column of the current inline block's content start (cmark's `block_offset + 1`).
     var inlineBlockStartColumn = 1
 
+    // MARK: - Inline code-span backtick-closer cache (cmark bug-compat)
+
+    /// Longest backtick run for which the closer cache holds a slot - cmark's `MAXBACKTICKS`. A run longer than this is never a code-span opener (`matchCodeSpan` step 1) and is never recorded.
+    static let codeSpanMaxBacktickRun = 80
+
+    /// `true` once a closing-backtick scan in the current `parseInline` pass has run to the content end without finding a closer - cmark's `subject.scanned_for_backticks`. Once set, a later open of a length whose cached run-start lies at/before the open short-circuits (the stale-cache code-span miss). Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per pass.
+    var codeSpanScannedForBackticks = false
+
+    /// Per-run-length cache of the latest backtick run START offset a closing scan has passed - cmark's `subject.backticks[]`, indexed by run length (1...`codeSpanMaxBacktickRun`; index 0 unused). Combined with `codeSpanScannedForBackticks`, a stored value `<=` a new opener's post-run offset means "no closer of this length at/after here" and skips the rescan. Offsets are `ContentSpan` (content/virtual) offsets, the same space the closing scan walks. Meaningful only flag-ON; reset per pass.
+    var codeSpanBackticks = [Int](repeating: 0, count: BlockParser.codeSpanMaxBacktickRun + 1)
+
     // MARK: - Init
     
     @_lifetime(copy source)

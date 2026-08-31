@@ -79,7 +79,7 @@ extension MarkdownDocument {
         /// A paragraph whose first line contains `|` and whose second line is a delimiter row, such as `:---`, `---:`, or `:---:`, becomes a table with aligned columns.
         public static let tables = MarkdownDocument.ParseOptions(rawValue: 1 << 25)
 
-        /// Replicate cmark-gfm's source-position bugs bit-for-bit (for differential qualification). Default off; the shipped parser is spec-correct.
+        /// Replicate cmark-gfm's observable bugs bit-for-bit (for differential qualification). Covers both source-position quirks and structural ones that change the node tree (e.g. the inline code-span backtick-closer cache, which makes cmark miss some valid spans). Default off; the shipped parser is spec-correct.
         public static let cmarkBugCompatibility = MarkdownDocument.ParseOptions(rawValue: 1 << 26)
 
         /// Flatten the end position of a multi-line raw-scan inline (code span, inline HTML) onto its start line as `(startLine, startColumn + tokenByteLength)`, reproducing cmark-gfm's `end_column` with `CMARK_OPT_SOURCEPOS` off (for differential qualification). Default off; the shipped parser tracks the precise end. The Markdown layer forwards this only alongside `.cmarkBugCompatibility` (flag on + `disableSourcePosOpts`); the parser itself honors it independently of `.cmarkBugCompatibility`.

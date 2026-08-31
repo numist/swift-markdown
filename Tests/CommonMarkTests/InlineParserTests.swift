@@ -143,6 +143,29 @@ struct CodeSpanTests {
         }
     }
 
+    @Test("greedy matching finds all valid spans after an unmatched longer run")
+    func greedySpansAfterUnmatchedLongerRun() throws {
+        // Spec-correct default (no `.cmarkBugCompatibility`): the unmatched opening two-backtick run
+        // folds into leading text, then BOTH `b` and `d` form as code spans. cmark's per-subject
+        // backtick-closer cache makes it MISS the trailing `d` span after the longer run scans to the
+        // end (a stale-cache quirk reproduced only flag-ON, in `matchCodeSpan`); the deliverable finds
+        // every valid span.
+        let source = "``a`b`c`d`"
+        try MarkdownDocument.withParsedDocument(source) { doc in
+            let inlines = paragraphInlines(doc)
+            let codeSpans = inlines.filter { if case .codeInline = $0.kind { return true } else { return false } }
+            try #require(codeSpans.count == 2, "expected both `b` and `d` to form code spans, got \(inlines.map { $0.kind })")
+            #expect(codeSpans.map { $0.literal } == ["b", "d"])
+            #expect(inlines.map { $0.kind } == [
+                .text,
+                .codeInline(backtickCount: 1),
+                .text,
+                .codeInline(backtickCount: 1),
+            ])
+            #expect(inlines.map { $0.literal } == ["``a", "b", "c", "d"])
+        }
+    }
+
     @Test("code span inside a heading")
     func insideHeading() throws {
         let source = "# `foo` bar"

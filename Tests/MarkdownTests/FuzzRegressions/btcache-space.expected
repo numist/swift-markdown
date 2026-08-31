@@ -1,0 +1,5 @@
+Document @1:1-1:11
+└─ Paragraph @1:1-1:11
+   ├─ Text @1:1-1:4 "``a"
+   ├─ InlineCode @1:4-1:7 `b`
+   └─ Text @1:7-1:11 " `c`"
