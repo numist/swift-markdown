@@ -195,6 +195,29 @@ internal struct ContentSpan: ~Escapable {
         return nil
     }
 
+    /// Whether the run/segment covering virtual `offset` is *re-indented* - its source mapping (`sourceOffset`) differs from where its bytes physically sit (`offset`).
+    ///
+    /// Only a re-indented run can have its byte-projected end overshoot its own physical line (Quirk E, see `stampInline`): the re-indent shifts the mapped source offsets rightward, past the line's byte extent. A run that is NOT re-indented maps identity, so its byte projection is exact and needs no overshoot correction. This distinction matters for a **multi-line contiguous** segment - a top-level paragraph's source-adjacent lines joined into ONE segment (`a\nb`), which spans multiple physical source lines with `sourceOffset == offset`: its `sourceRunBase` (the segment's first-byte offset) sits on an *earlier* physical line than an interior-line run, which would spuriously trip the overshoot guard. Reporting such a run as not-re-indented keeps stamping on the exact byte projection.
+    ///
+    /// Single-segment source content is never re-indented (identity map). Single-segment arena content is reported as re-indented (its reconstructed bytes carry no physical-source offset to compare against `sourceOffset`), preserving the existing overshoot handling for flattened / entity-substituted content.
+    @inlinable
+    func isReindentedRun(ofVirtual offset: Int) -> Bool {
+        if !isMultiSegment {
+            // Arena content (`!inSource`) has no physical-source offset to compare; keep it on the overshoot path. Source content maps identity, so it is never re-indented.
+            return !inSource
+        }
+        var v = 0
+        for i in 0..<segments.count {
+            let seg = segments[i]
+            let len = Int(seg.length)
+            if offset < v + len {
+                return seg.inSource && seg.offset != seg.sourceOffset
+            }
+            v += len
+        }
+        return false
+    }
+
     /// Build a `Chunk` for a sub-range of this content. Single-segment: a direct sub-chunk. Multi-segment: valid only when the range lies within one segment (the common case - inline nodes don't straddle a line join); callers that can straddle (code spans) handle materialization themselves.
     @inlinable
     func chunk(offset: Int, length: Int) -> Chunk {
