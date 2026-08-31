@@ -174,4 +174,30 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(texts[0]?.lowerBound == Pos(line: 3, column: 1))   // "bar" on its true line
         #expect(texts[0]?.upperBound == Pos(line: 3, column: 4))
     }
+
+    @Test("indented remainder lines after a ref-def keep their true physical lines")
+    func indentedRemainderKeepsTrueLines() throws {
+        // "[a]:" (line 1) and "/b" (line 2) are a two-line reference definition; the INDENTED lines
+        // " c" (line 3) and " d" (line 4) are the surviving content. The leading space on each
+        // continuation line makes the surviving paragraph body non-contiguous (a source-backed segment
+        // list, not one source range) - the non-contiguous remainder the flag-on line-shift covers.
+        // Spec-correct, each surviving line keeps its TRUE physical line and column: `c` @3:2, `d` @4:2 - consistent with
+        // the paragraph end @4:3. cmark strips the two def lines and stamps the surviving content two
+        // lines up (`c` @1, `d` @2 - the `refshift-indent` fuzzer pair, flag-on), extending the
+        // reference-definition line-shift to a non-contiguous but source-backed remainder. Block-level
+        // paragraph range is @1:1-4:3 in both configurations.
+        let ranges = try ranges(in: "[a]:\n/b\n c\n d")
+        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
+        try #require(texts.count == 2)
+
+        #expect(firstRange(.document, in: ranges)?.lowerBound == Pos(line: 1, column: 1))
+        #expect(firstRange(.document, in: ranges)?.upperBound == Pos(line: 4, column: 3))
+        #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 1, column: 1))
+        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 4, column: 3))
+
+        #expect(texts[0]?.lowerBound == Pos(line: 3, column: 2))   // "c" on its true line/column
+        #expect(texts[0]?.upperBound == Pos(line: 3, column: 3))
+        #expect(texts[1]?.lowerBound == Pos(line: 4, column: 2))   // "d" on its true line/column
+        #expect(texts[1]?.upperBound == Pos(line: 4, column: 3))
+    }
 }

@@ -1689,10 +1689,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
         // Stamp the (re-indented) run map for the content that actually reaches inline parsing: narrow the flattened content's map to the surviving `contentChunk` window (after leading/trailing trim, ref-def stripping, and any tasklist marker). Only meaningful when the content was flattened from a re-indented segment list; the contiguous flat-content path passes an empty map.
+        var flattenedContentSourceStart: Int? = nil
         if positionsEnabled, !map.isEmpty {
             let slice = sliceRuns(map, from: contentChunk.offset - raw.offset, length: contentChunk.length)
             if !slice.isEmpty {
                 arenaSourceMaps[node] = slice
+                // The first run's `sourceOffset` is the original-source byte the inline pass stamps the
+                // surviving content's first byte from - the anchor the ref-def line-shift below measures
+                // against. A synthetic-gap first run (`sourceOffset < 0`) means that byte has no source
+                // pre-image, so no shift is computable (see below).
+                if slice[0].sourceOffset >= 0 {
+                    flattenedContentSourceStart = Int(slice[0].sourceOffset)
+                }
             }
         }
         // why: cmark extracts leading link reference definitions AND `^[label]:` attribute
@@ -1707,13 +1715,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // `parseDefinitions` strips both forms above, so both drive the shift identically. N = (line of
         // the first surviving content byte) - (paragraph's start line); it is > 0 only when leading
         // defs were stripped across at least one newline (defs stripped without crossing a newline
-        // leave the remainder on the start line, N = 0, no shift). Only a source-backed remainder (the
-        // top-level contiguous case) is handled; a non-contiguous (blockquote/list) remainder is
-        // arena-backed and left unshifted - the same nested-container gap the inline end-column quirks
-        // document.
-        if positionsEnabled, storage.options.contains(.cmarkBugCompatibility),
-           !isFootnoteDef, contentChunk.inSource {
-            recordRefdefLineShift(for: node, contentByteOffset: contentChunk.offset)
+        // leave the remainder on the start line, N = 0, no shift). The first surviving byte's source
+        // offset is `contentChunk.offset` when the remainder stayed a contiguous source range, or the
+        // flattened map's first source-backed run when the remainder was a non-contiguous (re-indented
+        // continuation) segment list that is still source-backed - both address that byte's physical
+        // source line, so both drive the shift. A remainder whose first surviving byte has no source
+        // pre-image (`flattenedContentSourceStart == nil`: a genuinely arena-reconstructed line with no
+        // per-byte source offset) is left unshifted. One source-backed subcase is NOT fully corrected:
+        // a nested-container LAZY continuation shorter than the block's content indent has a re-indented
+        // `sourceOffset` (Quirk E) that overshoots its own physical line, so the measured N can be too
+        // large. That is the pre-existing nested-container re-indent gap the inline end-column quirks
+        // share (it already diverges with no ref-def present); top-level remainders - all this change
+        // targets - have content indent 0 and never overshoot.
+        if positionsEnabled, storage.options.contains(.cmarkBugCompatibility), !isFootnoteDef,
+           let firstSurvivingSourceByte = contentChunk.inSource ? contentChunk.offset : flattenedContentSourceStart {
+            recordRefdefLineShift(for: node, contentByteOffset: firstSurvivingSourceByte)
         }
         pendingInlines.append((node, storage.intern(contentChunk)))
     }
