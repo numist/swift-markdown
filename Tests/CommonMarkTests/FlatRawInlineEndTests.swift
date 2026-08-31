@@ -33,6 +33,13 @@ struct FlatRawInlineEndTests {
     /// `>` on line 2); cmark's sourcepos-off flat end is @1:10 (start column 1 + the 9-byte token).
     private static let inlineHTMLSource = "<foo\nbar>"
 
+    /// `` ` `\n `x `` : a one-backtick code span opening after a leading space on line 1 and closing after
+    /// a leading space on line 2. The closing line's leading space is what distinguishes the two ends:
+    /// the precise half-open end is @2:3 (one past the closing backtick's real column on line 2), while
+    /// cmark's `adjust_subj_node_newlines` reports @2:2 - `since_newline` counts only the bytes cmark
+    /// copied into its buffer, which excludes the stripped leading space (Quirk G extended to code spans).
+    private static let leadingSpaceCodeSpanSource = " `\n `x"
+
     /// The source range of the first node whose kind satisfies `match`, parsing `src` with `options`.
     private func firstRange(
         matching match: @escaping (MarkdownNode.Kind) -> Bool,
@@ -58,6 +65,11 @@ struct FlatRawInlineEndTests {
         try firstRange(matching: { $0 == .htmlInline }, in: Self.inlineHTMLSource, options: options)
     }
 
+    private func leadingSpaceCodeSpanRange(options: MarkdownDocument.ParseOptions) throws -> Range<Pos>? {
+        try firstRange(matching: { if case .codeInline = $0 { return true } else { return false } },
+                       in: Self.leadingSpaceCodeSpanSource, options: options)
+    }
+
     @Test("a two-line code span keeps its precise end (positions on, no flat option)")
     func codeSpanPrecise() throws {
         let range = try #require(try codeSpanRange(options: [.sourcePosition]))
@@ -65,11 +77,40 @@ struct FlatRawInlineEndTests {
         #expect(range.upperBound == Pos(line: 2, column: 3))
     }
 
-    @Test("`.cmarkBugCompatibility` alone does not flatten a code span's end")
-    func codeSpanPreciseUnderBugCompatibility() throws {
+    @Test("`.cmarkBugCompatibility` alone does not flatten a no-leading-space code span's end onto its start line")
+    func codeSpanNoLeadingSpaceUnderBugCompatibility() throws {
+        // `` `a\nb` `` has no stripped leading whitespace, so cmark's `adjust_subj_node_newlines`
+        // end (`since_newline`, content-space) coincides with the precise half-open end @2:3. The
+        // divergence only appears when the closing line has leading whitespace cmark strips (see
+        // `codeSpanLeadingSpaceQuirkUnderBugCompatibility`). Either way the end is NOT the flat
+        // sourcepos-OFF @1:6 (`.cmarkFlatRawInlineEnds`, below).
         let range = try #require(try codeSpanRange(options: [.sourcePosition, .cmarkBugCompatibility]))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 2, column: 3))
+    }
+
+    @Test("a two-line leading-space code span keeps its precise end (positions on, no flat option)")
+    func codeSpanLeadingSpacePrecise() throws {
+        // Spec-correct default (deliverable): the code span's end is one past its closing backtick's
+        // real column on line 2. The closing line ` `x` puts the backtick at column 2, so the
+        // half-open end is @2:3. This is the guardrail that the shipped default is unaffected by the
+        // bug-compat quirk below.
+        let range = try #require(try leadingSpaceCodeSpanRange(options: [.sourcePosition]))
+        #expect(range.lowerBound == Pos(line: 1, column: 2))
+        #expect(range.upperBound == Pos(line: 2, column: 3))
+    }
+
+    @Test("`.cmarkBugCompatibility` gives a leading-space code span cmark's since_newline end")
+    func codeSpanLeadingSpaceQuirkUnderBugCompatibility() throws {
+        // Quirk G extended to code spans: cmark's `adjust_subj_node_newlines` sets `end_column =
+        // since_newline`, a count of the bytes cmark copied into its buffer since the last interior
+        // newline. That buffer excludes the stripped leading space of line 2 ` `x`, so the end lands
+        // at @2:2 (the closing backtick's column), one short of the precise half-open @2:3 above. The
+        // column comes from content-space arithmetic, not the physical source column (which would
+        // re-include the stripped space and overshoot to @2:3).
+        let range = try #require(try leadingSpaceCodeSpanRange(options: [.sourcePosition, .cmarkBugCompatibility]))
+        #expect(range.lowerBound == Pos(line: 1, column: 2))
+        #expect(range.upperBound == Pos(line: 2, column: 2))
     }
 
     @Test("`.cmarkBugCompatibility` alone gives inline HTML Quirk G's end, not the flat raw-inline end")

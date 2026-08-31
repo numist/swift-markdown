@@ -118,6 +118,7 @@ extension BlockParser {
                     )
                     storage.appendChild(codeIdx, to: parent)
                     stampInline(codeIdx, cursor, span.afterClose, content: content)
+                    stampCodeSpanEnd(codeIdx, start: cursor, afterClose: span.afterClose, content: content)
                     stampFlatRawInlineEnd(codeIdx, start: cursor, end: span.afterClose, content: content)
                     cursor = span.afterClose
                     pendingTextStart = cursor
@@ -2710,6 +2711,44 @@ extension BlockParser {
         guard let lastByte = content.sourceOffset(ofVirtual: htmlEnd - 1) else { return }
         let endLine = sourceLineNumber(ofSource: lastByte)
         let endColumn = lastByte - lineStartByte(ofSource: lastByte) + 1
+        storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: endLine, column: endColumn))
+    }
+
+    /// Give a code span whose matched extent crosses a newline the end position cmark reports: its end line advanced by the interior newline count, and an end column of the raw bytes since the last interior newline - the same `adjust_subj_node_newlines` mechanism as Quirk G's inline HTML (`stampInlineHTMLEnd`), applied to the other raw-scan construct.
+    ///
+    /// cmark stamps a code node's end via `make_code` (`make_literal`, swift-cmark `src/inlines.c` ~106) then `adjust_subj_node_newlines` (~304, called from `handle_backticks` ~421). When the matched span contains a newline, `adjust_subj_node_newlines` does `end_line += newlines` and OVERWRITES `end_column = since_newline` - a raw count of buffer bytes after the last interior newline (`count_newlines`, ~281), with NO `+ 1 + column_offset + block_offset` re-added. The reference converter then reports `end_column + 1 + backtick_count` (`CommonMarkConverter.range`), which reduces to `afterClose - lastInteriorNewline` measured in the rewrite's CONTENT-offset space: cmark's paragraph buffer strips each continuation line's leading whitespace (`add_line` copies from `parser->offset`), exactly as the rewrite's multi-segment content joins the stripped source lines, so the two byte counts coincide byte-for-byte.
+    ///
+    /// This is why the column must come from CONTENT-offset arithmetic, NOT `stampInlineHTMLEnd`'s physical last-byte source projection: with leading whitespace on the closing line (` `\n `x`) the physical column re-includes the stripped indent and overshoots by it (`@2:3` for cmark's `@2:2`), while the flat content count matches. For a *matched* blockquote/list continuation, cmark advances to `first_nonspace` before `add_line` (blocks.c ~1464), so its buffer strips the container prefix exactly as the rewrite's content space does - the counts coincide and there is no `block_offset` gap (unlike `stampInlineHTMLEnd`, whose physical-column basis includes it). A *lazy* continuation is the exception: cmark's `add_line` copies from `parser->offset` with no advance (blocks.c ~1408), preserving the residual leading whitespace in its buffer, while the rewrite always adds continuation content from `firstNonSpace` (stripping it from the content bytes, re-adding it only to the source column map). So a multi-line code span closing on a lazy continuation with leading whitespace is short by that residual flag-ON - the same nested-container residual gap Quirks C/E track, already divergent on the byte path and not in the fuzz corpus.
+    ///
+    /// why: the multi-line code-span end column is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). The mechanism it uses - an explicit end position (`setExplicitEnd`) that overrides the node's byte-projected end - stays unconditional; only whether this method sets one is gated. This is an extension of Quirk G (multi-line raw-inline end via `adjust_subj_node_newlines`) from inline HTML to code spans; both share the flag.
+    ///
+    /// Flag ON reproduces the cmark quirk (Hyrum's Law): a newline-crossing code span reports `(startLine + newlines, afterClose - lastNewline)`. A single-line span carries no interior newline, so `adjust_subj_node_newlines` is a no-op and the spec-correct byte-projected half-open end (from `stampInline`) stands - this method returns early for it (byte-identical to today).
+    ///
+    /// Flag OFF is spec-correct: take no explicit end, so the node keeps the precise byte-projected half-open end from its `stampInline(node, cursor, afterClose)` stamp (its closing backtick's real line:column).
+    ///
+    /// Interaction with `.cmarkFlatRawInlineEnds`: the caller invokes `stampFlatRawInlineEnd` AFTER this method, so with the flat option ON (the differential's `disableSourcePosOpts` combination) the flat sourcepos-OFF end overrides this sourcepos-ON quirk end for code spans, mirroring the inline-HTML call order.
+    ///
+    /// Does NOT compound with the backslash-hard-break quirk: when `inlineSawBackslashHardBreak` is set, `stampInline` has already stamped an explicit flat-cursor end (that quirk's frame) and this method overwrites it with the content-count end - a mixed frame. A code span after a backslash hard break therefore stays divergent flag-ON (it already was); reproducing it faithfully needs a flat-frame end, deferred like the sibling. Not in the fuzz corpus.
+    @inline(__always)
+    mutating func stampCodeSpanEnd(_ node: DocumentStorage.Index, start: Int, afterClose: Int, content: borrowing ContentSpan) {
+        guard positionsEnabled, storage.options.contains(.cmarkBugCompatibility) else { return }
+        // Count interior newlines and remember the last one's content offset. No interior newline = single-line span; leave it on the spec-correct byte path (byte-identical to today).
+        var lastNewline = -1
+        var newlines = 0
+        var i = start
+        while i < afterClose {
+            if content[i] == UInt8(ascii: "\n") {
+                lastNewline = i
+                newlines += 1
+            }
+            i += 1
+        }
+        guard newlines > 0 else { return }
+        // The start line comes from the opening backtick's source projection (cmark's `subj->line` at node creation); bail to the byte path if it has no source image (arena-only content, e.g. a flattened setext heading).
+        guard let startSource = content.sourceOffset(ofVirtual: start) else { return }
+        let endLine = sourceLineNumber(ofSource: startSource) + newlines
+        // End column = bytes since the last interior newline, in CONTENT space (== cmark's `since_newline + 1 + backtick_count`, a flat count with no `block_offset`). See the doc comment for why this must not be a physical source-column projection.
+        let endColumn = afterClose - lastNewline
         storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: endLine, column: endColumn))
     }
 
