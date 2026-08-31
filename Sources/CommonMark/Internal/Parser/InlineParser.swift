@@ -54,8 +54,6 @@ extension BlockParser {
         delimiters.removeAll(keepingCapacity: true)
         brackets.removeAll(keepingCapacity: true)
         
-        // The content region carries which buffer it came from; hoist it once for the buffer-agnostic helpers (entity matching, `Scanners`, `readByte`) that read by global offset.
-        let inSource = content.inSource
         var cursor = content.startOffset
         let endOffset = content.endOffset
         var pendingTextStart = cursor
@@ -168,12 +166,24 @@ extension BlockParser {
                 pendingTextStart = cursor
                 
             case UInt8(ascii: "&"):
-                let entity = if inSource {
-                    EntityParser.matchEntity(start: cursor, end: endOffset, source: sourceBytes)
+                // Entity matching reads a flat buffer by raw offset, so scan through a contiguous
+                // window (see `contiguousChunk`): identity for single-segment content, the single
+                // source segment's slice for multi-segment content (whose virtual offsets index no
+                // single buffer). An entity can't cross a segment boundary - the join newline
+                // terminates the name/number - so a window from `&` to the segment end is sufficient;
+                // a synthetic (interned-newline) segment yields nil and the `&` stays literal.
+                let window = content.contiguousChunk(fromVirtual: cursor, limit: endOffset)
+                // Match in an expression of its own so the borrowed `source` span (lifetime-dependent) stays scoped to the call and can't escape into the body.
+                let entity: EntityParser.EntityMatch? = if let window {
+                    if window.inSource {
+                        EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: sourceBytes)
+                    } else {
+                        EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: storage.strings.span)
+                    }
                 } else {
-                    EntityParser.matchEntity(start: cursor, end: endOffset, source: storage.strings.span)
+                    nil
                 }
-                if let entity {
+                if let entity, let window {
                     flushPendingText(
                         start: pendingTextStart,
                         end: cursor,
@@ -190,8 +200,10 @@ extension BlockParser {
                         NodeRecord(kind: .text, parent: parent, data: .literal(decodedRef))
                     )
                     storage.appendChild(textIdx, to: parent)
-                    stampInline(textIdx, cursor, entity.afterSemi, content: content)
-                    cursor = entity.afterSemi
+                    // Convert the scanner-returned buffer offset back to a virtual content offset via the window base (identity for single-segment content).
+                    let afterSemi = cursor + (entity.afterSemi - window.offset)
+                    stampInline(textIdx, cursor, afterSemi, content: content)
+                    cursor = afterSemi
                     pendingTextStart = cursor
                     continue
                 }

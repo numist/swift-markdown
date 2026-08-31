@@ -398,6 +398,33 @@ struct EntityTests {
         #expect(texts == ["& mid & end&"])
         }
     }
+
+    /// A valid entity on a paragraph's indented lazy-continuation line. The leading indent is
+    /// stripped, so the paragraph's lines aren't source-contiguous and its content is
+    /// *multi-segment* - addressed by virtual offsets that index no single buffer. The `&` scan
+    /// must read real in-bounds bytes and still decode (`&amp;` → `&`) rather than trap.
+    @Test("valid entity decodes on an indented lazy-continuation line (multi-segment)")
+    func entityDecodesOnLazyContinuation() throws {
+        let source = "k\n &amp;x"
+        try MarkdownDocument.withParsedDocument(source) { doc in
+            let inlines = paragraphInlines(doc)
+            let texts = inlines.compactMap { $0.literal }
+            #expect(texts == ["k", "&x"])
+        }
+    }
+
+    /// A non-matching `&` (no closing `;`) on the same multi-segment continuation line stays a
+    /// literal `&` followed by literal `[`. Exercises the no-entity path, which must also stay in
+    /// bounds for multi-segment content.
+    @Test("non-entity `&` on an indented lazy-continuation line stays literal (multi-segment)")
+    func nonEntityAmpersandOnLazyContinuation() throws {
+        let source = "k\n &["
+        try MarkdownDocument.withParsedDocument(source) { doc in
+            let inlines = paragraphInlines(doc)
+            let texts = inlines.compactMap { $0.literal }
+            #expect(texts == ["k", "&["])
+        }
+    }
 }
 
 @Suite("Inline parser - autolinks")

@@ -1,0 +1,5 @@
+Document @1:1-2:10
+└─ Paragraph @1:1-2:10
+   ├─ Text @1:1-1:2 "k"
+   ├─ SoftBreak
+   └─ Text @2:1-2:9 "& &["
