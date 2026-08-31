@@ -556,7 +556,6 @@ extension BlockParser {
     
     /// Process a `]` while the parent's child list contains any text/inline nodes that were emitted after the matching `[`. Returns the new cursor position.
     private mutating func handleCloseBracket(cursor: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?, noLinkOpeners: inout Bool) -> Int {
-        let inSource = content.inSource
         let initialPos = cursor + 1
         var pos = initialPos
         // No bracket open: emit `]` literal and return.
@@ -590,11 +589,8 @@ extension BlockParser {
             emitBracketLiteral(at: cursor, content: content, parent: parent)
             return pos
         }
-        // Get the byte position of the `[` (or `!` of `![`) so we can derive the shortcut-form label range later.
-        let openerByteStart: Int
-        if case .literal(let ref) = storage[openerInl].data {
-            openerByteStart = storage.chunk(of: ref).offset
-        } else {
+        // The opener `[` / `![` text node always carries literal data (set when pushed); bail defensively if it somehow doesn't. Virtual arithmetic below uses `brackets[openerIdx].virtualStart` (correct for multi-segment content), not the node's stored source offset.
+        guard case .literal = storage[openerInl].data else {
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             emitBracketLiteral(at: cursor, content: content, parent: parent)
             return pos
@@ -607,15 +603,18 @@ extension BlockParser {
            content[pos] == UInt8(ascii: "(") {
             let afterParen = pos + 1
             let afterSpaces1 = skipSpaceChars(start: afterParen, end: end, content: content)
-            if let dest = matchLinkDestination(Chunk(offset: afterSpaces1, length: end - afterSpaces1, inSource: inSource)) {
-                let afterDest = dest.afterEnd
+            // Scan the destination through a contiguous window so multi-segment content reads real bytes in bounds; `dest.afterEnd` is a buffer offset, converted back to a virtual offset via the window base.
+            if let destWindow = content.contiguousChunk(fromVirtual: afterSpaces1, limit: end),
+               let dest = matchLinkDestination(destWindow) {
+                let afterDest = afterSpaces1 + (dest.afterEnd - destWindow.offset)
                 let afterSpaces2 = skipSpaceChars(start: afterDest, end: end, content: content)
                 var titleEnd = afterDest
                 var maybeTitle: Chunk = .empty
                 if afterSpaces2 > afterDest,
-                   let t = matchLinkTitle(Chunk(offset: afterSpaces2, length: end - afterSpaces2, inSource: inSource)) {
+                   let titleWindow = content.contiguousChunk(fromVirtual: afterSpaces2, limit: end),
+                   let t = matchLinkTitle(titleWindow) {
                     maybeTitle = t.chunk
-                    titleEnd = t.afterEnd
+                    titleEnd = afterSpaces2 + (t.afterEnd - titleWindow.offset)
                 }
                 let afterTitleSpaces = skipSpaceChars(start: titleEnd, end: end, content: content)
                 if afterTitleSpaces < end,
@@ -635,23 +634,22 @@ extension BlockParser {
         if !matched {
             var labelChunk: Chunk?
             var afterRefForm = pos
-            if let lab = matchLinkLabel(Chunk(offset: pos, length: end - pos, inSource: inSource)) {
-                labelChunk = content.chunk(
-                    offset: lab.interior.offset,
-                    length: lab.interior.length
-                )
-                afterRefForm = lab.afterEnd
+            // Scan the reference label through a contiguous window (see `contiguousChunk`); `lab.interior` is already a real buffer chunk and `lab.afterEnd` a buffer offset converted back to virtual via the window base.
+            if let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
+               let lab = matchLinkLabel(labelWindow) {
+                labelChunk = lab.interior
+                afterRefForm = pos + (lab.afterEnd - labelWindow.offset)
             }
             // Collapsed `[]` or absent - fall back to shortcut form (the bracket text itself becomes the label) when no inner brackets were nested under this opener.
             let labelLen = labelChunk?.length ?? 0
             if labelLen == 0 && !openerBracketAfter {
-                let openerContentStart = openerByteStart + (isImage ? 2 : 1)
+                // Virtual offsets: the opener's `[` / `![` sits at `virtualStart`; the shortcut label runs from just past it to the `]` (`cursor`). `contiguousChunk` maps that virtual range to a real buffer chunk and, for multi-segment content, only when it lies within a single source segment - a shortcut label that straddles a line join isn't resolved here (falls through to literal text) rather than reading past the segment.
+                let openerContentStart = brackets[openerIdx].virtualStart + (isImage ? 2 : 1)
                 let shortcutLen = cursor - openerContentStart
-                if shortcutLen > 0 {
-                    labelChunk = content.chunk(
-                        offset: openerContentStart,
-                        length: shortcutLen
-                    )
+                if shortcutLen > 0,
+                   let sc = content.contiguousChunk(fromVirtual: openerContentStart, limit: cursor),
+                   sc.length == shortcutLen {
+                    labelChunk = sc
                 }
             }
             if let lc = labelChunk, lc.length > 0 {
@@ -690,7 +688,7 @@ extension BlockParser {
         if storage.options.contains(.footnotes),
            !isImage,
            let labelChunk = footnoteRefLabel(
-               openerByteStart: openerByteStart,
+               openerVirtualStart: brackets[openerIdx].virtualStart,
                closeBracket: cursor,
                content: content
            ) {
@@ -753,9 +751,9 @@ extension BlockParser {
 
     /// Match a footnote-reference label inside an unmatched `[…]`.
     ///
-    /// Returns the label chunk (excluding `[^` and `]`) if the bracket contents start with `^` and contain at least one more byte. The byte positions reference the original chunk via `inSource`.
-    private func footnoteRefLabel(openerByteStart: Int, closeBracket: Int, content: borrowing ContentSpan) -> Chunk? {
-        let interiorStart = openerByteStart + 1
+    /// Returns the label chunk (excluding `[^` and `]`) if the bracket contents start with `^` and contain at least one more byte. `openerVirtualStart` and `closeBracket` are *virtual* content offsets; the returned chunk is resolved to a real buffer chunk via `contiguousChunk`, so multi-segment content reads real bytes. A label that straddles a line join (not representable as one contiguous chunk) yields `nil` (the reference isn't recognized) rather than reading past a segment.
+    private func footnoteRefLabel(openerVirtualStart: Int, closeBracket: Int, content: borrowing ContentSpan) -> Chunk? {
+        let interiorStart = openerVirtualStart + 1
         if interiorStart >= closeBracket {
             return nil
         }
@@ -766,10 +764,11 @@ extension BlockParser {
         if labelStart >= closeBracket {
             return nil
         }
-        return content.chunk(
-            offset: labelStart,
-            length: closeBracket - labelStart
-        )
+        guard let chunk = content.contiguousChunk(fromVirtual: labelStart, limit: closeBracket),
+              chunk.length == closeBracket - labelStart else {
+            return nil
+        }
+        return chunk
     }
 
     /// Splice a `.footnoteReference` node in place of the opener `[`'s text node and any inner-content text nodes.
@@ -816,7 +815,6 @@ extension BlockParser {
     ///
     /// On match emits a `.attribute` node and reparents the inner siblings into it.
     private mutating func handleCloseBracketAttribute(cursor: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, openerInl: DocumentStorage.Index, openerVirtualStart: Int, openerDelimPos: Int, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?) -> Int {
-        let inSource = content.inSource
         var pos = cursor + 1
         var attrs: Chunk = .empty
         var matched = false
@@ -834,13 +832,11 @@ extension BlockParser {
                 }
             }
         }
-        // Try reference form `[label]` looking up in attribute refmap.
+        // Try reference form `[label]` looking up in attribute refmap. Scan through a contiguous window (see `contiguousChunk`) so multi-segment content reads real bytes; `lab.interior` is a real buffer chunk and `lab.afterEnd` a buffer offset converted back to virtual via the window base.
         if !matched,
-           let lab = matchLinkLabel(Chunk(offset: pos, length: end - pos, inSource: inSource)) {
-            let labelChunk = content.chunk(
-                offset: lab.interior.offset,
-                length: lab.interior.length
-            )
+           let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
+           let lab = matchLinkLabel(labelWindow) {
+            let labelChunk = lab.interior
             if labelChunk.length > 0 {
                 let key = normalizeLabel(
                     chunk: labelChunk
@@ -848,7 +844,7 @@ extension BlockParser {
                 if !key.isEmpty,
                    let storedAttrs = storage.attributeReferenceMap[key] {
                     attrs = storedAttrs
-                    pos = lab.afterEnd
+                    pos = pos + (lab.afterEnd - labelWindow.offset)
                     matched = true
                 }
             }
@@ -921,7 +917,14 @@ extension BlockParser {
             }
             if c == UInt8(ascii: ")") {
                 if nbParen == 0 {
-                    let chunk = content.chunk(offset: start, length: i - start)
+                    // The attribute content `[start, i)` must be representable as one contiguous buffer chunk. Single-segment content always is; multi-segment content that straddles a line join is not (the range would run past a single source segment), so treat it as no match - the `^[…]` stays literal text, mirroring how the reference-form label defers. An empty `()` is representable (zero length). Without this, `content.chunk` would build a chunk from virtual offsets whose reads index the wrong buffer / overrun a segment when the content is materialized.
+                    if i == start {
+                        return AttributeAttributesMatch(chunk: content.chunk(offset: start, length: 0), afterEnd: i)
+                    }
+                    guard let chunk = content.contiguousChunk(fromVirtual: start, limit: i),
+                          chunk.length == i - start else {
+                        return nil
+                    }
                     return AttributeAttributesMatch(chunk: chunk, afterEnd: i)
                 }
                 nbParen -= 1

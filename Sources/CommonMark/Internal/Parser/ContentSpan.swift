@@ -214,6 +214,39 @@ internal struct ContentSpan: ~Escapable {
         return .empty
     }
 
+    /// A contiguous buffer `Chunk` for forward byte scanning from virtual `offset`, bounded to one readable region and to `limit`.
+    ///
+    /// The `Scanners` (`matchLinkLabel`, `matchLinkDestination`, `matchLinkTitle`) read a `Chunk` with raw `readByte(at:in:)`, which indexes a single buffer (`sourceBytes` or the arena) by the chunk's own offsets. That is only valid when the virtual offset space coincides with a single buffer's offset space:
+    ///
+    /// - **Single-segment** content is one buffer region whose global offsets index that buffer directly, so this returns `[offset, limit)` in that buffer unchanged (`readByte` reads stay in bounds, identical to addressing the offsets directly).
+    /// - **Multi-segment** content is addressed by *virtual* offsets that don't index any single buffer, so this returns the slice of the one **source** segment containing `offset`, bounded at that segment's end (and at `limit`). Scans therefore stay within a single contiguous source region and never index the wrong buffer or run past its end. A form that would continue past the segment boundary (onto the next line) simply isn't seen, which the caller treats as "no match".
+    ///
+    /// Returns `nil` when `offset >= limit` or `offset` lands on a synthetic (interned-newline) segment, where no link/reference form can begin. Convert a buffer offset `b` returned by a scanner back to a virtual offset with `offset + (b - chunk.offset)` (the identity for single-segment). Uses `seg.offset` (the byte-read offset) to match `subscript`/`chunk(offset:length:)`.
+    @inlinable
+    func contiguousChunk(fromVirtual offset: Int, limit: Int) -> Chunk? {
+        if offset >= limit {
+            return nil
+        }
+        if !isMultiSegment {
+            return Chunk(offset: offset, length: limit - offset, inSource: inSource)
+        }
+        var v = 0
+        for i in 0..<segments.count {
+            let seg = segments[i]
+            let len = Int(seg.length)
+            if offset < v + len {
+                if !seg.inSource {
+                    return nil
+                }
+                let local = offset - v
+                let regionEnd = min(limit, v + len)
+                return Chunk(offset: Int(seg.offset) + local, length: regionEnd - offset, inSource: true)
+            }
+            v += len
+        }
+        return nil
+    }
+
     /// Global offset of the next inline-significant byte at or after `globalCursor`, or `endOffset` if none remain. Used to skip plain-text runs in the inline dispatch loop without stepping byte by byte: a `SIMD16` scan compares 16 bytes at once against the significant set, recovering the first matching lane; a sub-16 tail is scanned scalar.
     ///
     /// The significant set must be a superset of the bytes the dispatch switch acts on. `~` and the GFM autolink triggers (`:` `@` `w`/`W`) are included only when their option is on - when off, the switch's case for them is a no-op (the byte becomes plain text), so skipping over them is equivalent. The contiguous cluster `[ \ ] ^ _ \``` (91...96) is one range compare.
