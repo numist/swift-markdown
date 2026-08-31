@@ -82,7 +82,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Used by `addLine` to decide whether the bytes can be addressed lazily by source-range, deferring materialization until the paragraph spans multiple lines or otherwise transforms the content.
     var currentLineMapsToSource: Bool = false
 
-    /// For a tab-expanded (materialized) line, the buffer offset where `expandPrefixTabs`'s verbatim tail begins, and the corresponding original-line byte offset. Since the tail is copied byte-for-byte, every content offset in it maps back to source by the constant delta `currentLineSourceRange.lowerBound + materializedRestStart - materializedTailBufferStart`; offsets inside the expanded prefix are recovered by a column walk on the original line. Only meaningful while `!currentLineMapsToSource` and positions are on (see `sourceOffset`).
+    /// For a tab-expanded (materialized) line, the buffer offset where `expandPrefixTabs`'s verbatim tail begins, and the corresponding original-line byte offset. Since the tail is copied byte-for-byte, every content offset in it maps back to source by the constant delta `currentLineSourceRange.lowerBound + materializedRestStart - materializedTailBufferStart`; offsets inside the expanded prefix are recovered by a column walk on the original line. Only meaningful while `!currentLineMapsToSource` (see `sourceOffset` for the positions path and `materializedSourceStart` for the positions-independent code-content path).
     var materializedTailBufferStart: Int = 0
     var materializedRestStart: Int = 0
 
@@ -91,7 +91,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Hoisted so the per-node stamping in `addChild` and `finalize` is a single bool test on the hot path when positions are off.
     let positionsEnabled: Bool
 
-    /// Original-source byte range of the line currently being processed. Used to stamp block end positions at finalize time. `lastLineSourceEnd` keeps the previous line's content end so a block closed by a *later* line can attribute its end to the line it actually ended on.
+    /// Original-source byte range of the line currently being processed, tracked for every line (positions on or off). Used to stamp block end positions at finalize time and to recover a materialized code/HTML body line's literal source bytes. `lastLineSourceEnd` keeps the previous line's content end so a block closed by a *later* line can attribute its end to the line it actually ended on.
     var currentLineSourceRange: Range<Int> = 0..<0
     var lastLineSourceEnd: Int = 0
 
@@ -206,8 +206,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // Record this line's start (for byte→line/col conversion) and remember the previous line's content end before advancing `currentLineSourceRange`.
                     storage.lineStarts.append(lineRangeInOriginalSource.lowerBound)
                     lastLineSourceEnd = currentLineSourceRange.upperBound
-                    currentLineSourceRange = lineRangeInOriginalSource
                 }
+                // Tracked unconditionally: recovering a materialized code/HTML body line's literal source bytes (`appendMaterializedCodeContent`) needs the current line's source range even when positions are off, since code content must preserve tabs regardless of `.sourcePosition`.
+                currentLineSourceRange = lineRangeInOriginalSource
                 
                 // Per-line materialized buffer used when a line's leading tabs need to be expanded into spaces so partial-tab consumption by container markers works correctly.
                 if !inFencedCode, let materialized = expandPrefixTabs(line: line) {
@@ -631,12 +632,72 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let mapsAt = reindent ? reindentBase + currentContentIndent : range.lowerBound
             return appendSegment(Segment(offset: Int32(range.lowerBound), length: Int32(range.count), inSource: true, sourceOffset: Int32(mapsAt)), to: node, pending: pending)
         }
+        // Materialized (tab-expanded) line. `expandPrefixTabs` turned leading whitespace and container markers into spaces so column-based matching works on byte offsets, but that expansion is lossy for a code/HTML block BODY: cmark copies the body verbatim from `parser->offset` (blocks.c `add_line`), so a content tab survives literally - only the single tab that the consumed indentation splits becomes spaces. Recover the literal source bytes instead of copying the expanded buffer, so content tabs are preserved. Other leaves (a lazy/segmented paragraph continuation) keep their leading whitespace stripped, so their expanded prefix never reaches the content and a plain copy is faithful.
+        let nodeKind = storage[node].kind
+        if nodeKind.isCodeBlock || nodeKind == .htmlBlock {
+            // `appendMaterializedCodeContent` maps the content end to the source line end, so every code/HTML body add must run to the buffer's line end (`span.count`) - which all current callers do (fenced code, the one construct that trims content, never materializes).
+            assert(range.upperBound == span.count, "materialized code/HTML body must extend to the line end")
+            return appendMaterializedCodeContent(bufferStart: range.lowerBound, to: node, pending: pending)
+        }
         let offset = storage.strings.count
         storage.strings.reserveCapacity(offset + range.count)
         for i in range {
             storage.strings.append(span[i])
         }
         return appendSegment(Segment(offset: Int32(offset), length: Int32(range.count), inSource: false), to: node, pending: pending)
+    }
+
+    /// Append one body line of a materialized (tab-expanded) code/HTML block as its literal source content, preserving content tabs that `expandPrefixTabs` expanded into spaces.
+    ///
+    /// `bufferStart` is the body's start offset in the per-line materialized buffer (past the consumed indentation). The line's remaining source bytes - tabs and all - become the content, preceded by synthetic spaces for a tab that the consumed indentation split (cmark's `partially_consumed_tab`, whose split tab byte is dropped and replaced by its remaining columns in spaces). Callers always add the whole rest of the line, so the content runs to the source line end. The common no-split case stays a zero-copy `inSource` segment; a split tab copies the spaces plus the literal tail into the arena as one segment (the code/HTML segment list is one content segment per line, which the finalize normalizers rely on).
+    private mutating func appendMaterializedCodeContent(bufferStart: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
+        let lineEnd = currentLineSourceRange.upperBound
+        let (sourceStart, splitTabSpaces) = materializedSourceStart(bufferStart: bufferStart)
+
+        if splitTabSpaces == 0 {
+            return appendSegment(
+                Segment(offset: Int32(sourceStart), length: Int32(lineEnd - sourceStart), inSource: true),
+                to: node, pending: pending)
+        }
+        let offset = storage.strings.count
+        storage.strings.reserveCapacity(offset + splitTabSpaces + (lineEnd - sourceStart))
+        for _ in 0..<splitTabSpaces {
+            storage.strings.append(UInt8(ascii: " "))
+        }
+        for i in sourceStart..<lineEnd {
+            storage.strings.append(sourceBytes[i])
+        }
+        return appendSegment(
+            Segment(offset: Int32(offset), length: Int32(splitTabSpaces + (lineEnd - sourceStart)), inSource: false),
+            to: node, pending: pending)
+    }
+
+    /// Map a materialized-buffer offset back to the original source for a code/HTML body line: the source byte where the literal content begins, plus the count of synthetic spaces that must precede it.
+    ///
+    /// A non-zero space count arises only when `bufferStart` lands inside an expanded tab - the consumed indentation split that tab, so its remaining columns become spaces and the split tab byte itself is dropped (the source start advances past it), mirroring cmark's `partially_consumed_tab`. Re-walks the original prefix like `originalPrefixSourceOffset`; reads `sourceBytes` directly so it is independent of `positionsEnabled`.
+    private func materializedSourceStart(bufferStart: Int) -> (sourceStart: Int, splitTabSpaces: Int) {
+        let lineStart = currentLineSourceRange.lowerBound
+        if bufferStart >= materializedTailBufferStart {
+            // In the verbatim tail: copied byte-for-byte, so it maps by a constant delta with no split tab.
+            return (lineStart + materializedRestStart + (bufferStart - materializedTailBufferStart), 0)
+        }
+        // In the expanded prefix: re-walk the original prefix, tracking each byte's buffer-column span.
+        let prefixEnd = lineStart + materializedRestStart
+        var col = 0
+        var i = lineStart
+        while i < prefixEnd {
+            let width = sourceBytes[i] == UInt8(ascii: "\t") ? 4 - (col & 3) : 1
+            if bufferStart < col + width {
+                if bufferStart == col {
+                    return (i, 0)
+                }
+                // A tab split by the consumed indentation: emit its remaining columns as spaces, resume after it.
+                return (i + 1, (col + width) - bufferStart)
+            }
+            col += width
+            i += 1
+        }
+        return (prefixEnd, 0)
     }
 
     /// Append a single `Segment` to `node`'s pending segment list, starting one if needed; returns the updated leaf.

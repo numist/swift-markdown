@@ -149,6 +149,41 @@ struct CodeBlockSegmentTests {
         #expect(r.segmentsJoined == r.literal)
     }
 
+    @Test("content tab beyond the code indent is preserved literally")
+    func tabPreservedBeyondCodeIndent() throws {
+        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
+        // The first tab is the 4-column code indent; the second is content and must stay a literal tab, not expand to spaces. Positions are off (default), so this exercises the flag-independent content path.
+        let r = try firstBlock(\.isCodeBlock, in: "\t\tfoo\n")
+        #expect(r.literal == "\tfoo\n")
+        #expect(r.segmentsJoined == r.literal)
+    }
+
+    @Test("bullet-like content and its trailing tab stay literal in indented code")
+    func tabAfterBulletContent() throws {
+        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
+        // `\t-\t` is indented code (the leading tab is 4 columns), so the dash is content, not a list marker, and the trailing tab must remain literal.
+        let r = try firstBlock(\.isCodeBlock, in: "\t-\t\n")
+        #expect(r.literal == "-\t\n")
+        #expect(r.segmentsJoined == r.literal)
+    }
+
+    @Test("content tab is preserved on an indented-code continuation line")
+    func tabPreservedOnContinuation() throws {
+        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
+        let r = try firstBlock(\.isCodeBlock, in: "\tfoo\n\t\tbar\n")
+        #expect(r.literal == "foo\n\tbar\n")
+        #expect(r.segmentsJoined == r.literal)
+    }
+
+    @Test("a tab split by nested-container indentation becomes its remaining columns as spaces")
+    func tabSplitByContainerIndent() throws {
+        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
+        // In `>\t\tfoo` the block quote consumes `>` plus one column of the first tab, splitting it; the code body is that tab's remaining columns as spaces (cmark's partially_consumed_tab) followed by the literal remainder.
+        let r = try firstBlock(\.isCodeBlock, in: ">\t\tfoo\n")
+        #expect(r.literal == "  foo\n")
+        #expect(r.segmentsJoined == r.literal)
+    }
+
     // MARK: - CRLF
 
     @Test("CRLF fenced code normalizes line endings and round-trips")
@@ -168,6 +203,14 @@ struct CodeBlockSegmentTests {
         #expect(r.literal == "<div>\n  <p>hi</p>\n</div>\n")
         #expect(r.segmentsJoined == r.literal)
         #expect(r.segmentCount > 1)
+    }
+
+    @Test("HTML block preserves a content tab on a continuation line")
+    func tabHTMLContinuation() throws {
+        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
+        let r = try firstBlock({ $0 == .htmlBlock }, in: "<div>\n\tfoo\n")
+        #expect(r.literal == "<div>\n\tfoo\n")
+        #expect(r.segmentsJoined == r.literal)
     }
 
     @Test("single-line HTML block round-trips")
