@@ -139,7 +139,9 @@ extension BlockParser {
                     content: content,
                     into: parent,
                     // A soft break and a trailing-space hard break both extend the preceding text node's source range to the newline at `cursor`, owning the line's trailing whitespace (cmark stamps up to the newline for both). A backslash hard break's `\` does NOT: cmark's handle_backslash consumes the backslash into the LINEBREAK, so the preceding text ends at the content (`info.textEnd`), before the `\`.
-                    rangeEnd: info.isBackslash ? nil : cursor
+                    rangeEnd: info.isBackslash ? nil : cursor,
+                    // A whitespace-only run before a SOFT break survives flag-ON as an empty text node spanning the stripped whitespace (see `flushPendingText`). Scoped to soft breaks per the fuzzer's find; a hard break's empty-node quirk is not reproduced here.
+                    emitEmptyStrippedWhitespace: !info.isHard
                 )
                 let kind: MarkdownNode.Kind = info.isHard ? .lineBreak : .softBreak
                 let breakIdx = storage.appendNode(NodeRecord(kind: kind, parent: parent))
@@ -2519,8 +2521,20 @@ extension BlockParser {
     /// Emit a `.text` node spanning `start..<end` if non-empty.
     ///
     /// `rangeEnd` defaults to `end` but may be set larger to extend the node's *source range* past its content - e.g. the text node before a soft break or a trailing-space hard break owns the trailing whitespace that was stripped from its content (cmark stamps the text up to the newline), so the content is `[start, end)` while the range is `[start, rangeEnd)`. A backslash hard break is the exception: it passes `rangeEnd: nil`, so the text ends at its content, before the `\` that cmark consumes into the LINEBREAK.
-    private mutating func flushPendingText(start: Int, end: Int, content: borrowing ContentSpan, into parent: DocumentStorage.Index, rangeEnd: Int? = nil) {
+    ///
+    /// `emitEmptyStrippedWhitespace` (set only by the soft-break flush) governs the whitespace-only run, whose stripped content is empty (`end <= start`) but whose raw range `[start, rangeEnd)` still spans the trailing whitespace. Flag-OFF (spec-correct) such a run is dropped. Flag-ON reproduces a cmark quirk (Hyrum's Law): its text-flush path (swift-cmark `src/inlines.c` `parse_inline` ~1683-1694) creates a `.text` node from the run, then `cmark_chunk_rtrim` strips its content to empty at the line-end char but leaves the now-empty node in the tree carrying its pre-strip source range. So emit an empty `.text` node whose range is the raw `[start, rangeEnd)`. Only arises after a non-text inline (link/emphasis/code) - a run following text is non-empty (it absorbs the trailing whitespace, #22), so `end > start` and this branch never fires for it.
+    private mutating func flushPendingText(start: Int, end: Int, content: borrowing ContentSpan, into parent: DocumentStorage.Index, rangeEnd: Int? = nil, emitEmptyStrippedWhitespace: Bool = false) {
         if end <= start {
+            if emitEmptyStrippedWhitespace,
+               let rangeEnd, rangeEnd > start,
+               storage.options.contains(.cmarkBugCompatibility) {
+                let emptyRef = storage.intern(content.chunk(offset: start, length: 0))
+                let textIdx = storage.appendNode(
+                    NodeRecord(kind: .text, parent: parent, data: .literal(emptyRef))
+                )
+                storage.appendChild(textIdx, to: parent)
+                stampInline(textIdx, start, rangeEnd, content: content)
+            }
             return
         }
         let chunk = content.chunk(offset: start, length: end - start)

@@ -1,0 +1,6 @@
+Document @1:1-2:2
+└─ Paragraph @1:1-2:2
+   ├─ InlineCode @1:1-1:4 `c`
+   ├─ Text @1:4-1:5 ""
+   ├─ SoftBreak
+   └─ Text @2:1-2:2 "y"

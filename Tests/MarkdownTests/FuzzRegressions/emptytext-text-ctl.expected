@@ -1,0 +1,5 @@
+Document @1:1-2:4
+└─ Paragraph @1:1-2:4
+   ├─ Text @1:1-1:5 "foo"
+   ├─ SoftBreak
+   └─ Text @2:1-2:4 "bar"
