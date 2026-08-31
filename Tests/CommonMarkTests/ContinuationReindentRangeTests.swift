@@ -171,4 +171,59 @@ struct ContinuationReindentRangeTests {
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 3))   // "baz" at its true column, NOT @2:5
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 6))
     }
+
+    @Test("lazy continuation into a list item keeps its true column, not the block content column")
+    func lazyListContinuation() throws {
+        // "- foo" on line 1, " bar" on line 2 (ONE leading space): the item's content column is 2
+        // (marker `-` + one space), but line 2 is indented only 1, so the item prefix fails to match and
+        // `bar` is a LAZY continuation of the item's paragraph. The paragraph's content column is 2 (from
+        // line 1's `foo`). Spec-correct, `bar` keeps its TRUE column: the one space is col 1, so `bar`
+        // is @2:2-2:5 - consistent with the paragraph/list/item end @2:5. cmark, flag-on, does NOT strip a
+        // lazy line's leading whitespace, so it reports `bar` at `residual + block_offset` = @2:4-2:7 (the
+        // `llg-list-1sp` fuzzer pair). This is the flag-off guardrail for the generalized lazy re-indent
+        // over LIST containers.
+        let ranges = try ranges(in: "- foo\n bar")
+        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
+        try #require(texts.count == 2)
+
+        let listRange = ranges.first { if case .list = $0.kind { return true } else { return false } }?.range
+        #expect(listRange?.lowerBound == Pos(line: 1, column: 1))
+        #expect(listRange?.upperBound == Pos(line: 2, column: 5))
+        #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 1, column: 3))
+        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 5))
+
+        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "foo"
+        #expect(texts[0]?.upperBound == Pos(line: 1, column: 6))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 2))   // "bar" at its true column, NOT @2:4
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 5))
+    }
+
+    @Test("lazy continuation into a nested blockquote keeps its true column, not the block content column")
+    func lazyNestedBlockquoteContinuation() throws {
+        // "> > foo" on line 1, ">  baz" on line 2: the outer `> ` prefix matches (consuming cols 1-2) but
+        // the inner block quote has no `>`, so `baz` is a LAZY continuation of the inner paragraph. The
+        // paragraph's content column is 5 (from line 1's `foo`). Spec-correct, `baz` keeps its TRUE column:
+        // `>` is col 1, the two spaces are cols 2-3, so `baz` is @2:4-2:7 - consistent with the
+        // paragraph/block-quote end @2:7. cmark, flag-on, preserves the residual whitespace left after the
+        // matched outer prefix (one space, between the consumed `> ` and `baz`) and reports `baz` at
+        // `residual + block_offset` = @2:6-2:9 (the `llg-nest-bq` fuzzer pair). This is the flag-off
+        // guardrail for the generalized lazy re-indent when an OUTER container consumed columns first.
+        let ranges = try ranges(in: "> > foo\n>  baz")
+        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
+        let quotes = ranges.filter { $0.kind == .blockQuote }.map { $0.range }
+        try #require(texts.count == 2)
+        try #require(quotes.count == 2)
+
+        #expect(quotes[0]?.lowerBound == Pos(line: 1, column: 1))   // outer block quote
+        #expect(quotes[0]?.upperBound == Pos(line: 2, column: 7))
+        #expect(quotes[1]?.lowerBound == Pos(line: 1, column: 3))   // inner block quote
+        #expect(quotes[1]?.upperBound == Pos(line: 2, column: 7))
+        #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 1, column: 5))
+        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 7))
+
+        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 5))   // "foo"
+        #expect(texts[0]?.upperBound == Pos(line: 1, column: 8))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 4))   // "baz" at its true column, NOT @2:6
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 7))
+    }
 }
