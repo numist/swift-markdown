@@ -801,6 +801,41 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let trimmedHead = raw.trimming(using: self)
             let stripped = parseDefinitions(in: trimmedHead)
             if self.isBlank(chunk: stripped) {
+                // why: the paragraph is nothing but reference definitions, so the setext underline
+                // never forms a heading - but the two implementations then diverge in BLOCK
+                // STRUCTURE. cmark resolves (drops) the leading ref-defs from the paragraph's
+                // content buffer the moment it scans the underline (`resolve_reference_link_definitions`,
+                // blocks.c:1228-1240); finding no content left, it neither promotes to a heading nor
+                // advances the offset, and - because the setext branch matched - the thematic-break
+                // branch below it is skipped. The still-open, now-empty paragraph then absorbs the
+                // underline line as ordinary continuation text, keeping its ORIGINAL start line. The
+                // spec-correct default instead drops the empty paragraph and redispatches the underline
+                // as a fresh block (a new paragraph for `===`, a thematic break for `---`) at true
+                // positions.
+                //
+                // Reproduce cmark's structure flag-ON by keeping the paragraph open and appending this
+                // line as a normal continuation (as PHASE 2d would), restoring the accumulated content
+                // - drained by the materialize above - as a zero-copy source range so the EXISTING
+                // finalize path extracts the ref-def and the finalize line-shift (`runParagraphMatchers`)
+                // moves the surviving inlines up. Gated on `raw.inSource`: that is the validity condition
+                // for the `.lazy` reconstruction (it addresses `sourceBytes`), and is true whenever the
+                // accumulated pre-underline content is source-backed - the common single-source-line
+                // ref-def, including one inside a block quote / list item. Note the STRUCTURE match
+                // (keeping the paragraph open) is reproduced for every such case, but the line-SHIFT
+                // only fires for a remainder that stays source-contiguous through finalize (top-level,
+                // unindented, LF) - the same scope as `runParagraphMatchers`, which shifts only an
+                // `.inSource` remainder. An indented / CRLF / nested continuation re-seeds as arena-backed
+                // segments, so those keep the paragraph open but leave the surviving inlines at their
+                // (re-indented) positions unshifted - a residual position divergence in the same family
+                // as the documented continuation-reindent / ref-def-shift gaps. A ref-def whose
+                // accumulated content is not source-backed at all (a multi-line def broken across a
+                // stripped prefix, `!raw.inSource`) falls through to the spec-correct drop below.
+                if storage.options.contains(.cmarkBugCompatibility), raw.inSource {
+                    pending = PendingLeaf(node: para, content: .lazy(range: raw.range))
+                    pending = appendNewline(to: para, pending: pending)
+                    pending = addLine(span: source, range: firstNonSpace..<lineRange.upperBound, to: para, pending: pending)
+                    return pending
+                }
                 // Empty after ref-def extraction - drop the paragraph and let the underline line dispatch as a fresh block. Refresh `stillOpenKind` so PHASE 2d doesn't try to continue the (now-detached) paragraph.
                 storage.unlinkChild(para)
                 guard let parent = storage[para].parent else {
