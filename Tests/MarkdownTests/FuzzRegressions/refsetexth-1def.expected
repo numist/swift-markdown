@@ -1,0 +1,6 @@
+Document @1:1-4:6
+├─ Heading @1:1-4:6 level: 1
+│  └─ Text @1:1-1:4 "bar"
+└─ Paragraph @4:1-4:6
+   └─ Link @4:1-4:6 destination: "/url"
+      └─ Text @4:2-4:5 "foo"

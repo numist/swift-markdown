@@ -70,6 +70,25 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(texts[0]?.upperBound == Pos(line: 2, column: 4))
     }
 
+    @Test("setext heading content after a one-line ref-def keeps its true line")
+    func setextHeadingRefDef() throws {
+        // "[foo]: /url" (line 1) is a reference definition; "bar" (line 2) is the surviving content,
+        // which the "===" underline (line 3) promotes to a setext heading. Spec-correct, `bar` keeps
+        // its TRUE line @2:1-2:4. cmark strips the def and stamps the heading's `bar` one line up at
+        // @1:1-1:4 (the `refsetexth-1def` fuzzer pair, flag-on) - the same reference-definition
+        // line-shift as a plain paragraph, applied to heading content. The block-level heading range is
+        // @1:1-3:4 in both configurations; only the inline content shifts.
+        let ranges = try ranges(in: "[foo]: /url\nbar\n===")
+        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
+        try #require(texts.count == 1)
+
+        #expect(firstRange(.heading(level: 1), in: ranges)?.lowerBound == Pos(line: 1, column: 1))
+        #expect(firstRange(.heading(level: 1), in: ranges)?.upperBound == Pos(line: 3, column: 4))
+
+        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))   // "bar" on its true line
+        #expect(texts[0]?.upperBound == Pos(line: 2, column: 4))
+    }
+
     @Test("content after a multi-line-label ref-def keeps its true line")
     func multiLineLabelRefDef() throws {
         // The reference definition "[\nfoo\n]: /url" spans lines 1-3 (its label runs across two

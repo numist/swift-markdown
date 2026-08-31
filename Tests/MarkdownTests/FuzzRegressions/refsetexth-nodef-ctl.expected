@@ -1,0 +1,3 @@
+Document @1:1-2:4
+└─ Heading @1:1-2:4 level: 1
+   └─ Text @1:1-1:4 "bar"

@@ -847,6 +847,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // Re-seed pending content with the stripped bytes so the heading's inline-parse pass sees only what's left after ref-defs were extracted. Keep source-backed content zero-copy as a `.lazy` source range (its offset/length are source offsets when `inSource`), so the heading's inlines are source-mapped and get positions exactly as paragraph / ATX-heading content does; only arena-backed content (non-contiguous or normalized lines) is copied.
                 if stripped.inSource {
                     pending = PendingLeaf(node: para, content: .lazy(range: stripped.range))
+                    // why: this setext heading was promoted from a paragraph whose leading ref-def(s)
+                    // were just stripped, so cmark stamps its surviving content N lines too high - the
+                    // SAME reference-definition line-shift Quirk F records for a plain paragraph in
+                    // `runParagraphMatchers`. A paragraph promoted to a heading reaches finalize on the
+                    // `.heading` branch, which never runs `runParagraphMatchers`, so record the shift
+                    // here via the shared `recordRefdefLineShift` (consumed in the inline pass by
+                    // `shiftInlineDescendants`). The heading's finalize re-trims its content
+                    // (`raw.trimming`) before inline parsing, so the byte the position projection uses
+                    // is `stripped.trimming`'s first byte - pass that as the anchor (it equals the
+                    // def-stripped-then-trimmed content `runParagraphMatchers` measures from). Flag-ON
+                    // only; flag-OFF keeps the true positions. Only the source-backed remainder is
+                    // handled here; an arena-backed (non-contiguous) remainder is the documented
+                    // Quirk-E/F nested-container gap and is left unshifted (the `else` branch below).
+                    if positionsEnabled, storage.options.contains(.cmarkBugCompatibility) {
+                        recordRefdefLineShift(for: para, contentByteOffset: stripped.trimming(using: self).offset)
+                    }
                 } else {
                     // Arena-backed (non-contiguous) content: `addChunk` re-copies the stripped bytes into a fresh arena buffer, so a plain arena chunk would reach inline parsing unmapped and leave the heading's text/emphasis unstamped (spec #12). The flattened content's run map is content-relative, so it survives the re-copy; narrow it to the window that actually reaches inline parsing - the stripped remainder after finalize's own leading/trailing trim (mirrored here by `stripped.trimming`) - keyed from `raw`'s first content byte, and stamp it on the heading via `arenaSourceMaps`.
                     if positionsEnabled, !flatMap.isEmpty {
@@ -1619,15 +1635,29 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // document.
         if positionsEnabled, storage.options.contains(.cmarkBugCompatibility),
            !isFootnoteDef, contentChunk.inSource {
-            let paraStart = storage.sourceRanges[node].start
-            if paraStart >= 0 {
-                let shift = sourcePosition(ofByte: contentChunk.offset).line - sourcePosition(ofByte: Int(paraStart)).line
-                if shift > 0 {
-                    refdefLineShift[node] = shift
-                }
-            }
+            recordRefdefLineShift(for: node, contentByteOffset: contentChunk.offset)
         }
         pendingInlines.append((node, storage.intern(contentChunk)))
+    }
+
+    /// Record the reference-definition line-shift (Quirk F, flag-ON) for `node`: N = (source line of
+    /// `contentByteOffset`) - (`node`'s original start line), stored in `refdefLineShift` only when > 0.
+    ///
+    /// `contentByteOffset` is the source byte offset of the first surviving-content byte that reaches
+    /// inline parsing after leading ref-defs were stripped - i.e. the base the inline pass's byte
+    /// projection stamps positions from. N > 0 only when the stripped defs crossed at least one newline
+    /// (defs stripped without a newline leave the remainder on the start line, N = 0, no shift). The
+    /// recorded shift is applied in the inline pass by `shiftInlineDescendants`. Callers gate on
+    /// `positionsEnabled && .cmarkBugCompatibility` and a source-backed remainder; the two call sites
+    /// (paragraph in `runParagraphMatchers`, setext heading in the PHASE-2c promotion) differ only in
+    /// which byte offset they pass.
+    private mutating func recordRefdefLineShift(for node: DocumentStorage.Index, contentByteOffset: Int) {
+        let start = storage.sourceRanges[node].start
+        guard start >= 0 else { return }
+        let shift = sourcePosition(ofByte: contentByteOffset).line - sourcePosition(ofByte: Int(start)).line
+        if shift > 0 {
+            refdefLineShift[node] = shift
+        }
     }
 
     /// Shift every inline descendant of `node` UP by `lines` physical source lines (column preserved), by stamping explicit start/end positions over the byte-projected ones.
