@@ -1,0 +1,7 @@
+Document @1:1-4:20
+└─ Paragraph @1:1-2:3
+   ├─ Link @1:1-1:6 destination: "/url"
+   │  └─ Text @1:2-1:5 "foo"
+   ├─ Text @1:6-1:8 ""
+   ├─ LineBreak
+   └─ Text @2:1-2:3 "[]"
