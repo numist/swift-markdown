@@ -632,19 +632,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let mapsAt = reindent ? reindentBase + currentContentIndent : range.lowerBound
             return appendSegment(Segment(offset: Int32(range.lowerBound), length: Int32(range.count), inSource: true, sourceOffset: Int32(mapsAt)), to: node, pending: pending)
         }
-        // Materialized (tab-expanded) line. `expandPrefixTabs` turned leading whitespace and container markers into spaces so column-based matching works on byte offsets, but that expansion is lossy for a code/HTML block BODY: cmark copies the body verbatim from `parser->offset` (blocks.c `add_line`), so a content tab survives literally - only the single tab that the consumed indentation splits becomes spaces. Recover the literal source bytes instead of copying the expanded buffer, so content tabs are preserved. Other leaves (a lazy/segmented paragraph continuation) keep their leading whitespace stripped, so their expanded prefix never reaches the content and a plain copy is faithful.
+        // Materialized (tab-expanded) line. `expandPrefixTabs` turned leading whitespace and container markers into spaces so column-based matching works on byte offsets, but that expansion is lossy for a code/HTML block BODY: cmark copies the body verbatim from `parser->offset` (blocks.c `add_line`), so a content tab survives literally - only the single tab that the consumed indentation splits becomes spaces. Recover the literal source bytes instead of copying the expanded buffer, so content tabs are preserved.
         let nodeKind = storage[node].kind
         if nodeKind.isCodeBlock || nodeKind == .htmlBlock {
             // `appendMaterializedCodeContent` maps the content end to the source line end, so every code/HTML body add must run to the buffer's line end (`span.count`) - which all current callers do (fenced code, the one construct that trims content, never materializes).
             assert(range.upperBound == span.count, "materialized code/HTML body must extend to the line end")
             return appendMaterializedCodeContent(bufferStart: range.lowerBound, to: node, pending: pending)
         }
-        let offset = storage.strings.count
-        storage.strings.reserveCapacity(offset + range.count)
-        for i in range {
-            storage.strings.append(span[i])
-        }
-        return appendSegment(Segment(offset: Int32(offset), length: Int32(range.count), inSource: false), to: node, pending: pending)
+        // A tab-expanded paragraph continuation. Its surviving content - the first non-space byte to the line end - is byte-identical to source: `expandPrefixTabs` only rewrites the prefix and copies the tail verbatim, and the content begins at the first non-space byte, so no expanded-tab space reaches it. Map it back to a zero-copy source segment rather than copying the expanded bytes into the arena. This is required for correctness, not just to avoid a copy: a multi-segment inline `ContentSpan` resolves only source segments plus the interned `\n` (see `ContentSpan.multiByte`), so an arena content segment there reads back as `\n` per byte - dropping the text and multiplying soft breaks.
+        assert(range.upperBound == span.count, "materialized paragraph continuation must extend to the line end")
+        let (sourceStart, splitTabSpaces) = materializedSourceStart(bufferStart: range.lowerBound)
+        assert(splitTabSpaces == 0, "a paragraph continuation's content never begins inside an expanded tab")
+        let lineEnd = currentLineSourceRange.upperBound
+        // The source-position mapping mirrors the source-mapped branch above (the `.cmarkBugCompatibility` continuation re-indent). `range.lowerBound` / `currentLineContentCursor` are buffer offsets here, which equal columns for a tab-expanded line, so the residual is a column count as required; the base stays the source line start. Flag-off maps to the content's true source byte (`sourceStart`).
+        let reindent = positionsEnabled && storage.options.contains(.cmarkBugCompatibility)
+        let residual = currentLineIsLazyContinuation ? (range.lowerBound - currentLineContentCursor) : 0
+        let mapsAt = reindent ? currentLineSourceRange.lowerBound + residual + currentContentIndent : sourceStart
+        return appendSegment(Segment(offset: Int32(sourceStart), length: Int32(lineEnd - sourceStart), inSource: true, sourceOffset: Int32(mapsAt)), to: node, pending: pending)
     }
 
     /// Append one body line of a materialized (tab-expanded) code/HTML block as its literal source content, preserving content tabs that `expandPrefixTabs` expanded into spaces.
