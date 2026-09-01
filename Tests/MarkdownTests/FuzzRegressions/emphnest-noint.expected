@@ -1,0 +1,5 @@
+Document @1:1-1:10
+└─ Paragraph @1:1-1:10
+   └─ Strong @1:1-1:10
+      └─ Strong @1:1-1:10
+         └─ Text @1:5-1:6 "o"

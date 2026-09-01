@@ -1,0 +1,7 @@
+Document @1:1-1:17
+└─ Paragraph @1:1-1:17
+   └─ Strong @1:1-1:17
+      └─ Strong @1:1-1:17
+         ├─ Text @1:5-1:6 "a"
+         └─ Strong @1:6-1:17
+            └─ Text @1:8-1:11 "foo"

@@ -1182,9 +1182,17 @@ extension BlockParser {
         }
         openerNumChars -= useDelims
         closerNumChars -= useDelims
-        // Sync the remaining length back onto the delimiter records - the rule-of-3 check in `processEmphasis` uses `delimiters[i].length`, and partial-pair matches must reflect the reduced length so a `***` opener with `**` closer leaves a `*` available for later pairing.
-        delimiters[opener].length = openerNumChars
-        delimiters[closer].length = closerNumChars
+        // The delimiter records' `length` fields stay at their ORIGINAL run lengths and are never
+        // synced down to the remaining count. `processEmphasis` uses `delimiters[i].length` only for
+        // the rule-of-three modular arithmetic (`% 3`) and the `openersBottom` slot index, and the
+        // reference (cmark `S_insert_emph`) likewise reduces only the inline text literal length,
+        // never the delimiter's `length` — that field is fixed at creation (`inlines.c` line 551).
+        // Keeping it original is load-bearing: a closer whose remaining count changes its `length % 3`
+        // slot (e.g. a `****` run reduced 4→2 after one pairing) must still index its original slot, or
+        // a floor lowered by an unpairable interior run of a different original length would wrongly
+        // suppress the leftover pairing (`****a**o****` must nest as Strong>Strong>Text "a**o"). The
+        // remaining count that governs how many chars this pairing consumes is read from the inline
+        // text literal length (`literalLength` above), exactly as the reference reads it.
         // Trim `useDelims` chars off the END of the opener literal.
         storage.trimLiteral(of: openerInl, trimStart: 0, newLength: openerNumChars)
         // Trim `useDelims` chars off the START of the closer literal.

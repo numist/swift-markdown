@@ -1,0 +1,8 @@
+Document @1:1-1:12
+└─ Paragraph @1:1-1:12
+   ├─ Emphasis @1:1-1:12
+   │  └─ Strong @1:1-1:12
+   │     ├─ Emphasis @1:1-1:7
+   │     │  └─ Text @1:5-1:6 "a"
+   │     └─ Text @1:7-1:8 "o"
+   └─ Text @1:8-1:12 "*"
