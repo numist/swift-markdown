@@ -18,12 +18,14 @@ extension BlockParser {
     /// Try to transform `node` (a `.paragraph`) and its content `chunk` into a `.table`.
     /// Only supports reading from the standard source (not materialized strings).
     /// Returns `true` on success (caller should skip inline-parsing the original paragraph since the cells were already inline-parsed). Returns `false` when the chunk doesn't match the table pattern.
-    internal mutating func parseTable(node: DocumentStorage.Index, chunk inputChunk: Chunk) throws(MarkdownDocument.Error) -> Bool {
+    internal mutating func parseTable(node: DocumentStorage.Index, chunk inputChunk: Chunk, sourceMap: [ArenaRun]) throws(MarkdownDocument.Error) -> Bool {
         // The table machinery (line splitting, cell extraction, pipe-unescape) reads exclusively from `storage.strings`. Paragraph content is usually already materialized there, but the source-contiguity fast path can hand us an `inSource` chunk (a zero-copy multi-line source range). A table's header (first) line must contain an unescaped `|`, so before paying for a copy we scan the chunk's first line directly in the source: no pipe there means this paragraph can't be a table and we bail without materializing - which keeps the overwhelmingly common non-table paragraph zero-copy. Only when a pipe is present do we copy into the arena so the rest of this function can address it uniformly. Only paid when `.tables` is enabled.
         let chunk: Chunk
-        // When the content came in as a zero-copy `inSource` range, the arena copy below is a byte-for-byte image of the source, so any arena offset `A` maps back to source offset `A + sourceDelta`. That lets us stamp source positions onto rows/cells/cell-text. Content that arrived already materialized (blockquote/list/CRLF tables) has no contiguous source image, so positions are left unstamped.
-        let sourceMapped: Bool
-        let sourceDelta: Int
+        // How the flattened content maps back to source for stamping rows/cells/cell-text:
+        //   - `.contiguous`: the arena copy below is a byte-for-byte image of an `inSource` range, so arena offset `A` maps to source `A + delta`. The common no-leading-whitespace table.
+        //   - `.flattened`: a top-level row had leading whitespace, so the paragraph arrived as a non-contiguous segment list, flattened with a re-indent run map that re-bases each row's content to the table's content column (cmark's cell-column re-base; see `runParagraphMatchers`). A row nested in a block quote / list (also non-contiguous, but not enrolled here) keeps `.none`.
+        //   - `.none`: materialized content with no source image (block-quote/list/CRLF tables) - positions are left unstamped, as before.
+        let mode: TableSourceMode
         if inputChunk.inSource {
             if !sourceFirstLineHasPipe(chunk: inputChunk) {
                 return false
@@ -33,12 +35,12 @@ extension BlockParser {
                 storage.strings.append(sourceBytes[i])
             }
             chunk = Chunk(offset: offset, length: inputChunk.length, inSource: false)
-            sourceMapped = positionsEnabled
-            sourceDelta = inputChunk.offset - offset
+            mode = positionsEnabled ? .contiguous(delta: inputChunk.offset - offset) : .none
         } else {
             chunk = inputChunk
-            sourceMapped = false
-            sourceDelta = 0
+            // A run map is threaded in only for a top-level flattened table (`runParagraphMatchers` gates on the parent); a nested/materialized table gets an empty map and stays unstamped.
+            let topLevel = storage[node].parent.map { storage[$0].kind == .document } ?? false
+            mode = (positionsEnabled && topLevel && !sourceMap.isEmpty) ? .flattened(sourceMap) : .none
         }
         let lines = splitLines(chunk: chunk)
         if lines.count < 2 {
@@ -86,8 +88,8 @@ extension BlockParser {
             spansEnabled: spansEnabled,
             dittoEnabled: dittoEnabled,
             previousRows: previousRows,
-            sourceMapped: sourceMapped,
-            sourceDelta: sourceDelta
+            mode: mode,
+            chunkOffset: chunk.offset
         )
         if spansEnabled {
             previousRows.append(headerCellIndices)
@@ -103,8 +105,8 @@ extension BlockParser {
                 spansEnabled: spansEnabled,
                 dittoEnabled: dittoEnabled,
                 previousRows: previousRows,
-                sourceMapped: sourceMapped,
-                sourceDelta: sourceDelta
+                mode: mode,
+                chunkOffset: chunk.offset
             )
             if spansEnabled {
                 previousRows.append(cells)
@@ -128,8 +130,8 @@ extension BlockParser {
         spansEnabled: Bool,
         dittoEnabled: Bool,
         previousRows: [[DocumentStorage.Index]],
-        sourceMapped: Bool,
-        sourceDelta: Int
+        mode: TableSourceMode,
+        chunkOffset: Int
     ) throws(MarkdownDocument.Error) -> [DocumentStorage.Index] {
         let rowIdx = storage.appendNode(NodeRecord(
             kind: .tableRow(isHeader: isHeader),
@@ -138,13 +140,21 @@ extension BlockParser {
         ))
         storage.appendChild(rowIdx, to: parent)
         // The row spans its whole source line. cmark sets a table row's end column to the parent table's end column (`try_opening_table_row`): the full source line INCLUDING trailing whitespace. Interior rows already reach their line-terminating newline via `splitLines`, but the paragraph→table content chunk had its outermost whitespace trimmed (`runParagraphMatchers`), so the LAST line stops one or more bytes short of the source line end. Recover the untrimmed end from the table node's own end (the paragraph extent, stamped before this runs).
-        // Sentinel: only read in the cell loop below, which is itself guarded by the same `sourceMapped`, so it is only observed after being assigned here.
-        var rowEnd = -1
-        if sourceMapped {
-            storage.setSourceStart(rowIdx, line.lowerBound + sourceDelta)
+        // A row occupies a single physical source line, hence a single re-indent run, so ONE projection re-bases the whole row (start, end, and every cell). `nil` when the table isn't source-mapped, leaving the row unstamped as before.
+        let proj = rowProjection(mode: mode, rowStartArena: line.lowerBound, chunkOffset: chunkOffset)
+        // The untrimmed row-content extent as an arena offset, reused for the row end and the rightmost-no-closing-pipe cell.
+        var rowContentEndArena = line.upperBound
+        if let proj {
+            // `sourceRanges` is populated only when positions are on, which `proj != nil` guarantees (an unmapped table yields `nil`).
             let tableEnd = storage.sourceRanges[parent].end
-            rowEnd = (isLastLine && tableEnd >= 0) ? tableEnd : line.upperBound + sourceDelta
-            storage.setSourceEnd(rowIdx, rowEnd)
+            stampStart(rowIdx, arena: line.lowerBound, proj)
+            if isLastLine && tableEnd >= 0 {
+                // Last row: the paragraph→table chunk trimmed this line's trailing whitespace, so recover the untrimmed extent from the table node's physical end. The row NODE ends at that physical end; `tableEnd - physDelta` is the arena offset it maps from, which the projection re-bases exactly as it would an interior row's trailing byte (so the rightmost cell below re-bases the same extent).
+                rowContentEndArena = tableEnd - proj.physDelta
+                storage.setSourceEnd(rowIdx, tableEnd)
+            } else {
+                stampEnd(rowIdx, arena: line.upperBound, proj)
+            }
         }
         let (cells, hadClosingPipe) = splitCells(line: line)
         let columnCount = alignments.count
@@ -209,7 +219,7 @@ extension BlockParser {
         var brackets = UniqueArray<BracketRecord>()
         // Reused content scratch for all cells in this row. Owned here so its borrow stays independent of the `storage` mutations `parseInline` performs. Cell chunks are always arena-backed (`inSource == false`).
         var scratch = UniqueArray<UInt8>()
-        // Reused arena→source run map for a source-mapped, `\|`-unescaped cell (a single constant-shift run). Owned here alongside `scratch` so its borrow stays valid for the cell's `parseInline`.
+        // Reused arena→source run map for a cell whose content is parsed from an arena copy (a `\|`-unescaped or a re-based/flattened cell): a single run mapping the whole cell content to source. Owned here alongside `scratch` so its borrow stays valid for the cell's `parseInline`.
         var runScratch = UniqueArray<ArenaRun>()
         for col in 0..<columnCount {
             let alignment = alignments[col]
@@ -227,15 +237,15 @@ extension BlockParser {
                 cellIndices.append(cellIdx)
             }
             // Stamp the cell's source range: the between-pipes span. cmark's cell end offset spans the UNTRIMMED extent (`row_from_string`): a content cell ends at its last non-pipe byte, so `cr.upperBound` (already sitting just past it, at the closing pipe) is the half-open end. But a cell whose content trims to empty has cmark's end offset point AT the closing pipe itself (inclusive), so its half-open end is one byte further — past the closing pipe. A zero-width `||` cell is the same case (`cr` empty ⇒ `upperBound == lowerBound`). A whitespace-only or zero-width cell always has a closing pipe (a trailing empty cell is stripped by `splitCells` into autocompletion), so `+1` never overshoots the row.
-            if sourceMapped, col < cells.count {
+            if let proj, col < cells.count {
                 let cr = cells[col]
-                storage.setSourceStart(cellIdx, cr.lowerBound + sourceDelta)
+                stampStart(cellIdx, arena: cr.lowerBound, proj)
                 if col == cells.count - 1 && !hadClosingPipe {
                     // Rightmost cell on a row with no closing pipe: cmark's `scan_table_cell` matches through the cell's trailing whitespace to the line end (there is no pipe to stop at), so its end offset reaches the row's untrimmed end - the same extent the row spans - rather than the trimmed-content end that `splitCells` (and the last body line's trailing-trimmed chunk) leaves in `cr.upperBound`. A closing pipe, an interior cell, or content already flush with the line end all keep the trimmed end below via the else branch.
-                    storage.setSourceEnd(cellIdx, rowEnd)
+                    stampEnd(cellIdx, arena: rowContentEndArena, proj)
                 } else {
-                    let end = trimSpaceTabs(range: cr).isEmpty ? cr.upperBound + 1 : cr.upperBound
-                    storage.setSourceEnd(cellIdx, end + sourceDelta)
+                    let endArena = trimSpaceTabs(range: cr).isEmpty ? cr.upperBound + 1 : cr.upperBound
+                    stampEnd(cellIdx, arena: endArena, proj)
                 }
             }
             if col < cells.count && !(spansEnabled && skipContent[col]) {
@@ -243,9 +253,9 @@ extension BlockParser {
                 if !cellRange.isEmpty {
                     // Pre-process: replace `\|` with `|` so that whatever pipe-escaping the writer used to keep the cell intact is invisible to inline parsing - even inside a code span.
                     let cellChunk = unescapePipes(range: cellRange)
-                    // No `\|` was present iff `unescapePipes` returned the range unchanged. In that case (and when the table maps to source) the cell content is a contiguous source slice, so parse it through a source-backed `ContentSpan` and inline stamping lands real source positions on the cell's text/code/etc. Otherwise fall back to an arena copy (no inline positions - the escaped bytes don't map).
+                    // No `\|` was present iff `unescapePipes` returned the range unchanged. For a contiguous source-mapped table with no escapes, the cell content is a contiguous source slice, so parse it through a source-backed `ContentSpan` and inline stamping lands real source positions on the cell's text/code/etc. A flattened (re-based) or escaped cell instead parses from an arena copy carrying an arena→source run map; a non-source-mapped table has no map (inline positions left unstamped).
                     let noEscape = cellChunk.offset == cellRange.lowerBound && cellChunk.length == cellRange.count
-                    if sourceMapped && noEscape {
+                    if case .contiguous(let sourceDelta) = mode, noEscape {
                         let srcLo = cellRange.lowerBound + sourceDelta
                         let srcHi = cellRange.upperBound + sourceDelta
                         try parseInline(
@@ -261,10 +271,20 @@ extension BlockParser {
                                 scratch.append(copying: buffer)
                             }
                         }
-                        // For a source-mapped cell whose `\|` escapes forced this arena copy, hand the inline parser a linear arena→source mapping so its nodes still get positions. cellChunk.offset (arena) images cellRange.lowerBound (source, via sourceDelta); cmark stamps cell inlines by their offset in the unescaped buffer added to the cell start, ignoring the stripped backslash, so a single constant-shift run (covering the whole cell content) reproduces its columns. why: table-cell inline positions track the reference's escape-oblivious columns unconditionally - this is NOT enrolled in `.cmarkBugCompatibility` (there was no prior spec-correct behavior to protect: these inlines were unstamped before), so there is no flag split here; a spec-correct re-widening for the removed backslash is a possible future refinement. A non-source-mapped table (materialized content, no source image) has no mapping - leave `runScratch` empty so the cell stays unstamped as before.
+                        // Hand the inline parser a linear arena→source mapping so the cell's inlines still get positions. cellChunk.offset (arena) images cellRange.lowerBound (source); cmark stamps cell inlines by their offset in the unescaped buffer added to the cell start, ignoring any stripped `\|` backslash, so a single constant-shift run (covering the whole cell content) reproduces its columns. A `.flattened` cell re-bases via the row projection and carries the physical anchor, so an overshooting re-indent stamps on its own line (`stampInline`'s Quirk-E branch). why: table-cell inline positions track the reference's escape-oblivious / re-based columns unconditionally - this is NOT enrolled in `.cmarkBugCompatibility` (there was no prior spec-correct behavior to protect: these inlines were unstamped before), so there is no flag split here. A non-source-mapped table (materialized content, no source image) has no mapping - leave `runScratch` empty so the cell stays unstamped as before.
                         runScratch.removeAll(keepingCapacity: true)
-                        if sourceMapped {
+                        switch mode {
+                        case .contiguous(let sourceDelta):
                             runScratch.append(ArenaRun(length: Int32(cellChunk.length), sourceOffset: Int32(cellRange.lowerBound + sourceDelta)))
+                        case .flattened:
+                            if let proj {
+                                runScratch.append(ArenaRun(
+                                    length: Int32(cellChunk.length),
+                                    sourceOffset: Int32(cellRange.lowerBound + proj.rebasedDelta),
+                                    physicalOffset: Int32(cellRange.lowerBound + proj.physDelta)))
+                            }
+                        case .none:
+                            break
                         }
                         try parseInline(
                             content: ContentSpan(span: scratch.span, base: cellChunk.offset, inSource: cellChunk.inSource, arenaRuns: runScratch.span),
@@ -276,6 +296,77 @@ extension BlockParser {
             }
         }
         return cellIndices
+    }
+
+    // MARK: - Source projection
+
+    /// How a source-mapped table projects flattened-content arena offsets back to source byte offsets.
+    private enum TableSourceMode {
+        /// Not source-mapped: materialized content with no contiguous source image (block-quote/list/CRLF tables). Positions are left unstamped, as before.
+        case none
+        /// A contiguous `inSource` range copied into the arena: arena offset `A` maps to source `A + delta` (physical == re-based, so it never overshoots a physical line). The common no-leading-whitespace table.
+        case contiguous(delta: Int)
+        /// A top-level row with leading whitespace: the paragraph arrived as a non-contiguous segment list, flattened with a content-relative arena→source run map that re-bases each row's content to the table's content column (cmark's cell-column re-base). Runs carry both the re-based `sourceOffset` and the physical byte-read `physicalOffset`, so an overshooting re-indent stamps on its own line.
+        case flattened([ArenaRun])
+    }
+
+    /// A single row's constant arena→source shift plus its physical-line anchor.
+    ///
+    /// A table row occupies one physical source line, which lies within a single run, so one constant delta re-bases every offset in the row: `rebased = arena + rebasedDelta` (the re-indented source offset, whose column is cmark's) and `physical = arena + physDelta` (the byte-read source offset, always on the row's true physical line). `physLine`/`physLineStart` cache that physical line so a re-based offset that overshoots it can be stamped explicitly on the right line.
+    private struct RowProjection {
+        let rebasedDelta: Int
+        let physDelta: Int
+        let physLine: Int
+        let physLineStart: Int
+    }
+
+    /// Build the projection for the row whose first content byte is at arena offset `rowStartArena`, or `nil` when the table isn't source-mapped (or the row's content didn't image source).
+    private func rowProjection(mode: TableSourceMode, rowStartArena: Int, chunkOffset: Int) -> RowProjection? {
+        let rebasedDelta: Int
+        let physDelta: Int
+        switch mode {
+        case .none:
+            return nil
+        case .contiguous(let delta):
+            rebasedDelta = delta
+            physDelta = delta
+        case .flattened(let runs):
+            // Find the content run covering the row's first byte. A row's first content byte always lands inside a real content run (never a synthetic `\n` gap between rows), so a miss / gap means the content didn't image source - leave the row unstamped.
+            let target = rowStartArena - chunkOffset
+            var runStart = 0
+            var matched: ArenaRun? = nil
+            for run in runs {
+                if target >= runStart && target < runStart + Int(run.length) {
+                    matched = run
+                    break
+                }
+                runStart += Int(run.length)
+            }
+            guard let run = matched, run.sourceOffset >= 0, run.physicalOffset >= 0 else { return nil }
+            rebasedDelta = Int(run.sourceOffset) - runStart - chunkOffset
+            physDelta = Int(run.physicalOffset) - runStart - chunkOffset
+        }
+        let physStart = rowStartArena + physDelta
+        let pos = sourcePosition(ofByte: physStart)
+        return RowProjection(rebasedDelta: rebasedDelta, physDelta: physDelta, physLine: pos.line, physLineStart: physStart - (pos.column - 1))
+    }
+
+    /// Stamp a node's start from an arena offset, re-basing via the row projection. When the re-indented offset overshoots its own physical line (a header more indented than this row pushes the re-based column past the line's byte extent onto a later line), record an explicit (line, column) - the physical line at the re-indented column - so the node stays on its own line, matching cmark and `stampInline`'s Quirk-E branch. For a `.contiguous` row physical == re-based, so this never overshoots and stamps a plain byte offset.
+    private mutating func stampStart(_ node: DocumentStorage.Index, arena: Int, _ proj: RowProjection) {
+        let rebased = arena + proj.rebasedDelta
+        storage.setSourceStart(node, rebased)
+        if sourcePosition(ofByte: rebased).line != proj.physLine {
+            storage.setExplicitStart(node, MarkdownNode.SourcePosition(line: proj.physLine, column: rebased - proj.physLineStart + 1))
+        }
+    }
+
+    /// Stamp a node's half-open end from an arena offset, re-basing via the row projection (see `stampStart` for the overshoot handling).
+    private mutating func stampEnd(_ node: DocumentStorage.Index, arena: Int, _ proj: RowProjection) {
+        let rebased = arena + proj.rebasedDelta
+        storage.setSourceEnd(node, rebased)
+        if sourcePosition(ofByte: rebased).line != proj.physLine {
+            storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: proj.physLine, column: rebased - proj.physLineStart + 1))
+        }
     }
 
     /// Current rowspan of a `.tableCell` node (`1` if it carries no span data).

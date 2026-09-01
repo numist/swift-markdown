@@ -34,6 +34,10 @@ struct TableEmptyCellSourceRangeTests {
         let startColumn: Int
         let endColumn: Int
         let text: String
+        /// The first inline child's source range (line, column) for start and end, or `nil` if the cell
+        /// has no positioned inline. Stamped by the inline pass, a separate path from the cell node itself.
+        let textStart: (line: Int, column: Int)?
+        let textEnd: (line: Int, column: Int)?
     }
 
     private struct Row {
@@ -46,8 +50,12 @@ struct TableEmptyCellSourceRangeTests {
     /// Rows (with per-cell columns, colspan, and text) of the first table in `source`, parsed with
     /// spans + source positions. `nil` cell entries mark cells with no source range (autocompleted).
     private func tableRows(_ source: String) throws -> [Row] {
+        try tableRows(source, options: [.tables, .tableSpans, .sourcePosition])
+    }
+
+    private func tableRows(_ source: String, options: MarkdownDocument.ParseOptions) throws -> [Row] {
         try MarkdownDocument.withParsedDocument(
-            source, options: [.tables, .tableSpans, .sourcePosition]
+            source, options: options
         ) { doc -> [Row] in
             var rows: [Row] = []
             var found = false
@@ -61,14 +69,22 @@ struct TableEmptyCellSourceRangeTests {
                         guard case .tableCell(_, let columns, _) = cell.kind,
                               let range = cell.sourceRange else { return }
                         var text = ""
+                        var textStart: (line: Int, column: Int)? = nil
+                        var textEnd: (line: Int, column: Int)? = nil
                         cell.children.forEach { inline in
                             if let lit = inline.literal() { text += lit }
+                            if textStart == nil, let r = inline.sourceRange {
+                                textStart = (r.lowerBound.line, r.lowerBound.column)
+                                textEnd = (r.upperBound.line, r.upperBound.column)
+                            }
                         }
                         cells.append(Cell(
                             colspan: columns,
                             startColumn: range.lowerBound.column,
                             endColumn: range.upperBound.column,
-                            text: text
+                            text: text,
+                            textStart: textStart,
+                            textEnd: textEnd
                         ))
                     }
                     rows.append(Row(
@@ -81,6 +97,81 @@ struct TableEmptyCellSourceRangeTests {
             }
             return rows
         }
+    }
+
+    /// A body row with LEADING whitespace re-bases its cell columns to the table's content column under
+    /// `.cmarkBugCompatibility` (the differential-fuzzer surface): cmark measures cell offsets from the
+    /// row's first non-space, then adds the table start column (`row_from_string(input + first_nonspace,
+    /// …)` + `parent->start_column + cell->start_offset` in `extensions/table.c`), so the leading
+    /// whitespace is invisible. Before the fix these rows lost ALL cell/row source positions.
+    @Test("cmark-compat: a leading-whitespace row's cell columns are re-based (leading whitespace invisible)")
+    func leadingWhitespaceReBasedCells() throws {
+        let opts: MarkdownDocument.ParseOptions = [.tables, .tableSpans, .sourcePosition, .cmarkBugCompatibility]
+
+        // Body-row leading space: `x` is physically at col 2 but re-bases to col 1.
+        let body = try tableRows("a|b\n-|-\n x|y", options: opts)
+        let bodyRow = try #require(body.last, "expected a body row")
+        try #require(bodyRow.cells.count == 2, "fixture: expected two body cells, got \(bodyRow.cells.count)")
+        try #require(bodyRow.cells.allSatisfy { $0.startColumn > 0 }, "fixture: leading-space cells must be positioned, not dropped")
+        #expect((bodyRow.cells[0].startColumn, bodyRow.cells[0].endColumn, bodyRow.cells[0].text) == (1, 2, "x"))
+        #expect((bodyRow.cells[1].startColumn, bodyRow.cells[1].endColumn, bodyRow.cells[1].text) == (3, 4, "y"))
+        // Leading whitespace is invisible: the re-based columns equal an unindented row's.
+        let plain = try tableRows("a|b\n-|-\nx|y", options: opts)
+        let plainRow = try #require(plain.last, "expected a body row")
+        #expect(bodyRow.cells.map { [$0.startColumn, $0.endColumn] } == plainRow.cells.map { [$0.startColumn, $0.endColumn] })
+
+        // A leading-whitespace HEADER sets the table start column that every row re-bases to (col 2 here),
+        // shifting even the unindented body row's cells right onto it.
+        let hdr = try tableRows(" a|b\n-|-\nx|y", options: opts)
+        try #require(hdr.count == 2, "fixture: expected a header row and a body row")
+        try #require(hdr[0].cells.count == 2 && hdr[1].cells.count == 2, "fixture: two cells per row")
+        #expect((hdr[0].cells[0].startColumn, hdr[0].cells[0].endColumn, hdr[0].cells[0].text) == (2, 3, "a"))
+        #expect((hdr[0].cells[1].startColumn, hdr[0].cells[1].endColumn, hdr[0].cells[1].text) == (4, 5, "b"))
+        #expect((hdr[1].cells[0].startColumn, hdr[1].cells[0].endColumn, hdr[1].cells[0].text) == (2, 3, "x"))
+        #expect((hdr[1].cells[1].startColumn, hdr[1].cells[1].endColumn, hdr[1].cells[1].text) == (4, 5, "y"))
+    }
+
+    /// The deliverable (without `.cmarkBugCompatibility`) is spec-correct: a leading-whitespace row's
+    /// cells keep their TRUE physical columns (the leading whitespace is visible) — the cmark-compat
+    /// re-base above is quarantined to the differential. The fix's other half applies here too: the
+    /// cells are positioned, not dropped.
+    @Test("spec: a leading-whitespace row's cells keep their physical columns and are positioned")
+    func leadingWhitespacePhysicalCellsSpecCorrect() throws {
+        // Default helper: no `.cmarkBugCompatibility`.
+        let body = try tableRows("a|b\n-|-\n x|y")
+        let bodyRow = try #require(body.last, "expected a body row")
+        try #require(bodyRow.cells.count == 2, "fixture: expected two body cells, got \(bodyRow.cells.count)")
+        try #require(bodyRow.cells.allSatisfy { $0.startColumn > 0 }, "fixture: cells must be positioned, not dropped")
+        // Physical columns: `x` at col 2, `y` at col 4 (leading space visible).
+        #expect((bodyRow.cells[0].startColumn, bodyRow.cells[0].endColumn, bodyRow.cells[0].text) == (2, 3, "x"))
+        #expect((bodyRow.cells[1].startColumn, bodyRow.cells[1].endColumn, bodyRow.cells[1].text) == (4, 5, "y"))
+    }
+
+    /// A re-based cell whose column overshoots its own physical line's byte width — a header more
+    /// indented than the body row — stays on its OWN line at the re-based column, even when later lines
+    /// follow. cmark works in (line, column) space and never lets the overshoot spill onto the next line
+    /// (`cell end_column = parent->start_column + cell->end_offset`, `end_line = the row's line`). This
+    /// exercises the explicit-position path: a plain byte offset would project the re-based end onto the
+    /// following physical line (inverting the range so the cell would lose its position entirely).
+    @Test("cmark-compat: a re-based cell that overshoots its physical line stays on its own line")
+    func reBasedCellOvershootStaysOnLine() throws {
+        let opts: MarkdownDocument.ParseOptions = [.tables, .tableSpans, .sourcePosition, .cmarkBugCompatibility]
+        // ` a|b` header sets table start column 2; body `x|y` is on line 3, followed by a blank line and a
+        // paragraph so the body row is NOT the last source line. `y` re-bases to columns 4–5, whose bytes
+        // sit at/after line 3's terminating newline.
+        let rows = try tableRows(" a|b\n-|-\nx|y\n\nafter", options: opts)
+        try #require(rows.count == 2, "fixture: expected a header row and a body row")
+        let body = rows[1]
+        try #require(body.line == 3, "fixture: the body row must be on line 3")
+        try #require(body.cells.count == 2, "fixture: two positioned body cells (an overshoot would drop the cell's range)")
+        // The rightmost cell re-bases to columns 4–5 and stays on line 3 (not the following line).
+        #expect((body.cells[1].startColumn, body.cells[1].endColumn, body.cells[1].text) == (4, 5, "y"))
+        // Its inner Text node is stamped by the inline pass (a separate path that consumes the re-based
+        // run's physical anchor), and must likewise stay on line 3 at cols 4–5 rather than spill onto line 4.
+        let yStart = try #require(body.cells[1].textStart, "fixture: the `y` cell must carry a positioned Text node")
+        let yEnd = try #require(body.cells[1].textEnd, "fixture: the `y` cell must carry a positioned Text node")
+        #expect(yStart.line == 3 && yStart.column == 4)
+        #expect(yEnd.line == 3 && yEnd.column == 5)
     }
 
     /// A whitespace-only cell's end column spans past its closing pipe (untrimmed extent), while the

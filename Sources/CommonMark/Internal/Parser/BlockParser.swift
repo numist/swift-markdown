@@ -414,7 +414,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Convert a source byte `offset` to a 1-based (line, column) position, mirroring `StorageView.position(ofByte:)`. Requires a populated `storage.lineStarts`.
-    private func sourcePosition(ofByte offset: Int) -> MarkdownNode.SourcePosition {
+    func sourcePosition(ofByte offset: Int) -> MarkdownNode.SourcePosition {
         var lo = 0
         var hi = storage.lineStarts.count
         while lo < hi {
@@ -1690,9 +1690,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         var contentChunk = trimmed.trimming(using: self)
         // GFM table detection: header line + delimiter row mutates the node in place to `.table`.
-        if !isFootnoteDef && storage.options.contains(.tables),
-           try parseTable(node: node, chunk: contentChunk) {
-            return
+        if !isFootnoteDef && storage.options.contains(.tables) {
+            // A top-level row with leading whitespace makes the paragraph non-contiguous, so its content
+            // reaches here flattened from a segment list carrying a re-indent run map (Quirk E): each row's
+            // surviving content is mapped to the table's content column, exactly cmark's re-based cell
+            // columns. Narrow that map to the content window the table parser sees. The contiguous fast path
+            // passes an empty map (the table parser maps by a constant source delta instead), and a table
+            // nested in a block quote / list keeps its cells unstamped as before (see `parseTable`).
+            let tableMap = (positionsEnabled && !map.isEmpty)
+                ? sliceRuns(map, from: contentChunk.offset - raw.offset, length: contentChunk.length)
+                : []
+            if try parseTable(node: node, chunk: contentChunk, sourceMap: tableMap) {
+                return
+            }
         }
         // GFM tasklist: first paragraph of a list item starting with `[ ]`/`[x]`/`[X]` marks the item.
         if !isFootnoteDef && storage.options.contains(.tasklist) {
