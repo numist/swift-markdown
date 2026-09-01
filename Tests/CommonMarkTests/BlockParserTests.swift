@@ -1260,6 +1260,21 @@ struct HTMLBlockTests {
         }
     }
 
+    @Test("type 4: requires an uppercase ASCII letter after `<!`")
+    func type4RequiresUppercaseLetter() throws {
+        // Start condition 4 is `<!` followed by an *uppercase* ASCII letter (cmark
+        // scanners.re: `'<!' [A-Z]`). A lowercase letter does not open a type-4 block,
+        // so the line is an ordinary paragraph.
+        try MarkdownDocument.withParsedDocument("<!Baz") { doc in
+        let kinds = dfs(doc).map { $0.kind }
+        #expect(kinds == [.document, .htmlBlock])
+        }
+        try MarkdownDocument.withParsedDocument("<!baz") { doc in
+        let kinds = dfs(doc).map { $0.kind }
+        #expect(kinds == [.document, .paragraph, .text])
+        }
+    }
+
     @Test("type 5: CDATA")
     func type5CDATA() throws {
         let source = "<![CDATA[\nfoo\n]]>"

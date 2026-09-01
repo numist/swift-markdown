@@ -2441,10 +2441,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
            source[after + 7] == UInt8(ascii: "[") {
             return 5
         }
-        // Type 4: `<!` followed by ASCII letter.
+        // Type 4: `<!` followed by an uppercase ASCII letter (CommonMark start condition 4).
         if next == UInt8(ascii: "!"),
            after + 1 < range.upperBound,
-           source[after + 1].isASCIILetter {
+           source[after + 1].isUppercaseASCIILetter {
             return 4
         }
         // Type 3: `<?`
