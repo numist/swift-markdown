@@ -1277,6 +1277,9 @@ extension BlockParser {
             end = delimiters[closer].virtualEnd - closerNumChars
         }
         stampInline(emphIdx, start, end, content: content)
+        if kind == .strikethrough {
+            stampStrikethroughEnd(emphIdx, start: start, end: end, content: content)
+        }
         var sibling = storage[openerInl].next
         while let sibling_ = sibling, sibling_ != closerInl {
             let nextSibling = storage[sibling_].next
@@ -2889,6 +2892,35 @@ extension BlockParser {
         let startLine = sourceLineNumber(ofSource: s)
         let startColumn = s - lineStartByte(ofSource: s) + 1
         storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: startLine, column: startColumn + (end - start)))
+    }
+
+    /// Give a GFM strikethrough whose opener and closer sit on different physical lines the END line cmark reports: the OPENER's line, keeping the closer-derived end column.
+    ///
+    /// cmark-gfm's strikethrough `insert` (swift-cmark `extensions/strikethrough.c`) reuses the OPENER's text node AS the strikethrough node (`strikethrough = opener->inl_text`), so the node's `start_line` / `end_line` are the opener text node's - the opener's physical line. `insert` then sets `strikethrough->end_column = closer->inl_text->start_column + closer->inl_text->as.literal.len - 1` but NEVER updates `end_line`, so a strikethrough spanning a soft break keeps its end anchored on the opener's line at a closer-derived column - an internally inconsistent range whose end can precede its own later-line content. Emphasis and strong do NOT share this bug: `S_insert_emph` (`inlines.c`) builds a fresh wrapper node whose end line tracks the closer.
+    ///
+    /// why: the multi-line strikethrough end is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). The mechanism it uses - an explicit end position (`setExplicitEnd`) that overrides the node's byte-projected end - is the same machinery Quirk C / G use; only whether this method sets one is gated.
+    ///
+    /// Flag ON reproduces the cmark bug: the end stays on the opener's line. The end COLUMN is the closer run's half-open end column measured on the closer's own physical line - which equals cmark's `end_column` plus the reference converter's half-open `+ 1`, and also equals the rewrite's byte-projected end column, so only the LINE moves back to the opener's.
+    ///
+    /// Flag OFF is spec-correct: take no explicit end, so the node keeps the byte-projected end from its `stampInline` stamp - the closer's real physical line (`~~a\nb~~` -> `@1:1-2:4`). A single-line strikethrough's closer already sits on the opener's line, so its byte projection needs no correction and this method returns early (byte-identical to today).
+    ///
+    /// Scoped to top-level blocks like `stampCloseBracketEnd` / `stampInlineHTMLEnd`: a strikethrough nested in a blockquote/list still takes this path (flag ON) and correctly moves its end to the opener's line, but the column is computed without the container's `block_offset`, so it stays short by the container indent (as it already was on the byte path) - the same documented nested-container gap the siblings carry. Not in the fuzz corpus.
+    ///
+    /// Does NOT compound with the backslash-hard-break quirk (Quirk D): a strikethrough crossing a backslash hard break (`~~a\<newline>b~~`) already has `stampInline` stamp its end from the FLAT inline cursor (`inlineSawBackslashHardBreak` branch) - which for a strikethrough is cmark's actual end (cmark's `handle_backslash` never resets `subj->line`/`column_offset`, so the closer's `start_column` is a flat column on the opener's line). Overriding that with this physical projection would REGRESS the flat frame to a physical column, so the guard below excludes it and the flat-cursor end stands. Unlike a softbreak, a backslash break contributes no `inlineLogicalLineStarts` reset, so the two frames genuinely differ; deferring to Quirk D keeps that (already-correct) case unchanged. A softbreak-crossing strikethrough that itself follows an *earlier* backslash break in the same paragraph also defers to Quirk D's flat frame here - a pre-existing compound-frame case not in the fuzz corpus (the siblings carry the same gap).
+    @inline(__always)
+    mutating func stampStrikethroughEnd(_ node: DocumentStorage.Index, start: Int, end: Int, content: borrowing ContentSpan) {
+        guard positionsEnabled, storage.options.contains(.cmarkBugCompatibility),
+              !inlineSawBackslashHardBreak,
+              let openerSource = content.sourceOffset(ofVirtual: start),
+              let lastByte = content.sourceOffset(ofVirtual: end - 1) else {
+            return
+        }
+        let openerLine = sourceLineNumber(ofSource: openerSource)
+        // Only a strikethrough whose closer lands on a LATER physical line than its opener diverges: a single-line strikethrough already byte-projects onto the opener's line, so leave it on the byte path.
+        guard sourceLineNumber(ofSource: lastByte) > openerLine else { return }
+        // The closer run's half-open end column (one past its last byte) on the closer's own physical line - the same value the byte projection produced; only the line changes.
+        let endColumn = (lastByte + 1) - lineStartByte(ofSource: lastByte) + 1
+        storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: openerLine, column: endColumn))
     }
 
     /// Buffer offset of the start of the content line containing buffer offset `pos`: just past the previous buffer newline, or the content start. Counts cmark's flat close-bracket end column from the `]`'s line base and resets it at a newline in the link *text* (the softbreak that precedes the `]`).

@@ -1,0 +1,16 @@
+Document @1:1-4:9
+├─ UnorderedList @1:1-2:68
+│  ├─ ListItem @1:1-1:8
+│  │  └─ CodeBlock @1:3-2:68 language: ar
+
+│  └─ ListItem @2:1-2:68
+│     └─ UnorderedList @2:3-2:68
+│        └─ ListItem @2:3-2:68
+│           └─ CodeBlock @2:5-3:6 language: pppppppppppppppppppppppppppppppppppppppppppppppppppppppppp a
+
+└─ Paragraph @3:1-4:9
+   ├─ Strikethrough @3:1-3:8
+   │  ├─ Text @3:3-3:6 "foo"
+   │  ├─ SoftBreak
+   │  └─ Text @4:1-4:6 "~ ~ba"
+   └─ Text @4:8-4:9 "r"
