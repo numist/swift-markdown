@@ -1,0 +1,7 @@
+Document @1:1-2:4
+└─ BlockQuote @1:1-2:4
+   └─ Paragraph @1:3-2:4
+      └─ Emphasis @1:3-2:6
+         ├─ Text @1:4-1:5 "x"
+         ├─ SoftBreak
+         └─ Text @2:4-2:5 "y"
