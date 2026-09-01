@@ -1068,23 +1068,38 @@ extension BlockParser {
         }
         // Push a delimiter record only when the run can open or close. A non-flanking `~` (emitted above to mirror cmark-gfm) can do neither, so it contributes no delimiter and stays literal text.
         if canOpen || canClose {
-            let prev = lastDelim
-            let newIdx = delimiters.count
-            delimiters.append(DelimiterRecord(
-                character: char,
-                length: count,
-                canOpen: canOpen,
-                canClose: canClose,
-                inlText: textIdx,
-                virtualStart: start,
-                virtualEnd: runEnd,
-                previous: prev,
-                next: nil
-            ))
-            if let prev {
-                delimiters[prev].next = newIdx
+            // cmark-gfm's strikethrough `match` (`strikethrough.c`) pushes a `~` delimiter only for a
+            // run of exactly length 2, or length 1 when the double-tilde option is off. Longer runs
+            // (and length-1 runs under doubleTilde) still surface as literal text — emitted above —
+            // but never become delimiters, so they can't pair into a strikethrough the way cmark's
+            // generic delimiter walk would otherwise let an equal-length neighbour do. `*`/`_` runs
+            // are pushed regardless of length.
+            let pushDelim: Bool
+            if isStrikethrough {
+                let doubleTilde = storage.options.contains(.strikethroughDoubleTilde)
+                pushDelim = count == 2 || (!doubleTilde && count == 1)
+            } else {
+                pushDelim = true
             }
-            lastDelim = newIdx
+            if pushDelim {
+                let prev = lastDelim
+                let newIdx = delimiters.count
+                delimiters.append(DelimiterRecord(
+                    character: char,
+                    length: count,
+                    canOpen: canOpen,
+                    canClose: canClose,
+                    inlText: textIdx,
+                    virtualStart: start,
+                    virtualEnd: runEnd,
+                    previous: prev,
+                    next: nil
+                ))
+                if let prev {
+                    delimiters[prev].next = newIdx
+                }
+                lastDelim = newIdx
+            }
         }
         pendingTextStart = runEnd
         return runEnd
@@ -1094,7 +1109,6 @@ extension BlockParser {
     ///
     /// `openersBottom` is the per-(length%3, char) search-floor optimization: once we fail to find an opener for a closer of a given (length%3, char), no later closer of the same shape needs to look behind that point.
     private mutating func processEmphasis(stackBottom: Int, content: borrowing ContentSpan, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) {
-        let doubleTilde = storage.options.contains(.strikethroughDoubleTilde)
         // openersBottom[length % 3, char-index]: 0=`*`, 1=`_`, 2=`~`, 3=`'`, 4=`"`.
         var openersBottom = OpenersBottom(fill: stackBottom)
         // Find the earliest (smallest-index) delimiter strictly above stackBottom.
@@ -1121,18 +1135,16 @@ extension BlockParser {
                     && delimiters[o].character == closerChar {
                     let cl = delimiters[c]
                     let op = delimiters[o]
-                    if closerChar == UInt8(ascii: "~") {
-                        // Strikethrough: lengths must match exactly. With the doubleTilde option, both sides must be exactly 2.
-                        if doubleTilde {
-                            if op.length == 2 && cl.length == 2 {
-                                openerFound = true
-                                break
-                            }
-                        } else if op.length == cl.length {
-                            openerFound = true
-                            break
-                        }
-                    } else if !(cl.canOpen || op.canClose)
+                    // The rule-of-three opener-acceptance test cmark applies to EVERY delimiter in
+                    // `S_process_emphasis` — `*`/`_` and, through the generic driver, GFM `~` too. For
+                    // `~`, the run-length match is deliberately NOT checked here; `insertEmph` forms a
+                    // strikethrough only when the runs are equal-length and otherwise discards both
+                    // delimiters (its `goto done` path). Checking length here would instead let a
+                    // closer skip a mismatched-length opener and pair a farther equal-length one, which
+                    // cmark never does — it selects the nearest flanking opener, then discards it on
+                    // mismatch, so the farther opener can no longer reach this closer. That divergence
+                    // is only observable across a softbreak, where an intervening `~~` is can-open-only.
+                    if !(cl.canOpen || op.canClose)
                         || cl.length % 3 == 0
                         || (op.length + cl.length) % 3 != 0 {
                         openerFound = true
@@ -1199,7 +1211,24 @@ extension BlockParser {
         let useDelims: Int
         let kind: MarkdownNode.Kind
         if openerChar == UInt8(ascii: "~") {
-            // Strikethrough: opener and closer have equal length (enforced by processEmphasis). Consume the entire run from each side.
+            // cmark-gfm's strikethrough `insert` (`strikethrough.c`) forms a node only when the opener
+            // and closer text runs have equal length. On a mismatch it takes the `goto done` path:
+            // no node is built, but it still removes every delimiter from the closer back through the
+            // opener, so a farther equal-length opener can no longer pair with this closer. The runs
+            // survive as literal text. (`processEmphasis` selects the nearest flanking opener via the
+            // generic rule, so this is where the length constraint is actually enforced.)
+            if openerNumChars != closerNumChars {
+                let next = delimiters[closer].next
+                var d: Int? = closer
+                while let dd = d, dd != opener {
+                    let prev = delimiters[dd].previous
+                    removeDelim(dd, delimiters: &delimiters, lastDelim: &lastDelim)
+                    d = prev
+                }
+                removeDelim(opener, delimiters: &delimiters, lastDelim: &lastDelim)
+                return next
+            }
+            // Equal run lengths: consume the entire run from each side.
             useDelims = openerNumChars
             kind = .strikethrough
         } else {

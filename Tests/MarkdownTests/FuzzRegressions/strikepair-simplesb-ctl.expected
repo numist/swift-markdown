@@ -1,0 +1,6 @@
+Document @1:1-2:4
+└─ Paragraph @1:1-2:4
+   ├─ Text @1:1-1:3 "~a"
+   ├─ SoftBreak
+   └─ Strikethrough @2:1-2:4
+      └─ Text @2:2-2:3 "b"

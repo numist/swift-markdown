@@ -1,0 +1,8 @@
+Document @1:1-4:6
+├─ Paragraph @1:1-3:6
+│  ├─ Text @1:1-1:3 "1>"
+│  ├─ SoftBreak
+│  ├─ Text @2:1-2:7 "~a 2aa"
+│  ├─ SoftBreak
+│  └─ Text @3:1 "~~.c~"
+└─ CodeBlock @4:2-4:6 language: none

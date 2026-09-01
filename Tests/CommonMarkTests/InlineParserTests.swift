@@ -1455,6 +1455,91 @@ struct StrikethroughTests {
         }
     }
 
+    /// Count every `.strikethrough` node in the document (DFS).
+    private static func strikethroughCount(_ doc: borrowing MarkdownDocument) -> Int {
+        var count = 0
+        func walk(_ node: borrowing MarkdownNode) {
+            if node.kind == .strikethrough { count += 1 }
+            node.children.forEach { walk($0) }
+        }
+        doc.root.children.forEach { walk($0) }
+        return count
+    }
+
+    /// A closer must not reach past a mismatched-length intervening `~` run to pair with a farther
+    /// equal-length opener. cmark-gfm's generic delimiter walk (`S_process_emphasis`) accepts the
+    /// *nearest* flanking opener; the strikethrough `insert` callback then finds the lengths differ
+    /// and removes both delimiters (closer back through opener), so the farther opener never pairs.
+    /// The only reason the same shape on one line already matches is that the intervening `~~` there
+    /// is also can-close, which the generic flanking rule rejects as an opener; across a softbreak the
+    /// intervening `~~` is can-open-only, so cmark selects and then discards it. No strikethrough forms.
+    @Test("mismatched intervening run across a softbreak suppresses the far pairing")
+    func mismatchedInterveningAcrossSoftbreak() throws {
+        let source = "~a\n~~b~"
+        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+            #expect(Self.strikethroughCount(doc) == 0)
+            #expect(Self.firstStrikethrough(doc) == nil)
+        }
+    }
+
+    /// Fixture sanity + guard against over-suppression: the same shape on ONE line still forms a
+    /// strikethrough, pairing the outer len-1 tildes across the interior `~~` (which becomes content).
+    @Test("one-line control still pairs the outer tildes across an interior run")
+    func oneLineControlStillPairs() throws {
+        let source = "~a~~b~"
+        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+            let inner = Self.firstStrikethrough(doc)
+            let content = try #require(inner, "one-line control must form a strikethrough")
+            #expect(content == "a~~b")
+            #expect(Self.strikethroughCount(doc) == 1)
+        }
+    }
+
+    /// Guard against over-suppression: a matched-length pair that spans a softbreak DOES form a
+    /// strikethrough (opener on line 1, closer on line 2, both len 1). cmark forms this.
+    @Test("matched-length pair forms across a softbreak")
+    func matchedPairAcrossSoftbreak() throws {
+        let source = "~a\nb~"
+        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+            #expect(Self.strikethroughCount(doc) == 1)
+        }
+    }
+
+    /// The line-2 first run being len 1 (not len 2) is the single differentiator: here the `~b~` on
+    /// line 2 pairs locally and the line-1 `~` is orphaned. One strikethrough, content "b".
+    @Test("line-2 local pairing leaves the line-1 opener orphaned")
+    func lineTwoLocalPairing() throws {
+        let source = "~a\n~b~"
+        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+            let inner = Self.firstStrikethrough(doc)
+            let content = try #require(inner, "line-2 ~b~ must form a strikethrough")
+            #expect(content == "b")
+            #expect(Self.strikethroughCount(doc) == 1)
+        }
+    }
+
+    /// Mirror of the RED case with the mismatched run adjacent to the closer side rather than the
+    /// opener side: `~~b~` on line 1, `~a` on line 2. The line-1 closer `~` cannot pair with the
+    /// len-2 `~~` opener, and the line-2 `~` is an opener with no following closer. No strikethrough.
+    @Test("mismatched run near the closer side forms nothing")
+    func mismatchedRunNearCloser() throws {
+        let source = "~~b~\n~a"
+        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+            #expect(Self.strikethroughCount(doc) == 0)
+        }
+    }
+
+    /// A three-line span: the mismatched intervening `~~` still suppresses the far pairing exactly as
+    /// in the two-line case; the trailing len-1 closer on line 3 consumes the line-2 `~~` and neither
+    /// the line-1 opener nor any farther delimiter forms a strikethrough.
+    @Test("mismatched intervening run suppresses pairing across a three-line span")
+    func mismatchedInterveningThreeLines() throws {
+        let source = "~a\nx\n~~b~"
+        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+            #expect(Self.strikethroughCount(doc) == 0)
+        }
+    }
+
     @Test("strikethrough nested inside emphasis")
     func nestedInEmphasis() throws {
         let source = "*foo ~bar~ baz*"
