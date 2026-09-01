@@ -1291,6 +1291,58 @@ struct HTMLBlockTests {
         #expect(texts == ["<!-- foo -->\n"])
         }
     }
+
+    // CommonMark's HTML-tag whitespace is `spacechar = [ \t\v\f\r\n]` (cmark scanners.re), so
+    // vertical tab (0x0B) and form feed (0x0C) separate a tag name from what follows exactly like
+    // space and tab. A tag whose name is followed by VT/FF is still a valid HTML-block start.
+
+    @Test("type 1: form feed after a raw-text tag name starts an HTML block")
+    func type1FormFeedWhitespace() throws {
+        let source = "<pre\u{0C}>"
+        try MarkdownDocument.withParsedDocument(source) { doc in
+            let kinds = dfs(doc).map { $0.kind }
+            #expect(kinds == [.document, .htmlBlock])
+        }
+    }
+
+    @Test("type 6: vertical tab / form feed after a block tag name starts an HTML block")
+    func type6VerticalTabFormFeed() throws {
+        for source in ["<div\u{0C}>", "<div\u{0B}>"] {
+            try MarkdownDocument.withParsedDocument(source) { doc in
+                let kinds = dfs(doc).map { $0.kind }
+                #expect(kinds == [.document, .htmlBlock], "\(source.debugDescription) should be an HTML block")
+            }
+        }
+    }
+
+    @Test("type 7: form feed as intra-tag whitespace starts an HTML block")
+    func type7FormFeedWhitespace() throws {
+        let source = "<a\u{0C}ref=\"x\">"
+        try MarkdownDocument.withParsedDocument(source) { doc in
+            let kinds = dfs(doc).map { $0.kind }
+            #expect(kinds == [.document, .htmlBlock])
+        }
+    }
+
+    // cmark's type-7 start condition requires the rest of the line after the tag to be `[\t\n\f ]*`
+    // (scanners.re): form feed counts as trailing whitespace, but vertical tab does NOT - it isn't in
+    // that class, even though it IS a `spacechar` inside the tag. The two classes differ, so this is
+    // asserted separately from the intra-tag cases above.
+    @Test("type 7: form feed trailing the tag still starts an HTML block")
+    func type7TrailingFormFeed() throws {
+        try MarkdownDocument.withParsedDocument("<a>\u{0C}") { doc in
+            let kinds = dfs(doc).map { $0.kind }
+            #expect(kinds == [.document, .htmlBlock])
+        }
+    }
+
+    @Test("type 7: vertical tab trailing the tag does not start an HTML block")
+    func type7TrailingVerticalTabIsParagraph() throws {
+        try MarkdownDocument.withParsedDocument("<a>\u{0B}") { doc in
+            let kinds = dfs(doc).map { $0.kind }
+            #expect(kinds.contains(.paragraph) && !kinds.contains(.htmlBlock))
+        }
+    }
 }
 
 @Suite("Reference link definitions")

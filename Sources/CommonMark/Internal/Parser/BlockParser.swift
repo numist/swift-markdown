@@ -2449,10 +2449,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if !isClosing {
             for tag in Self.htmlBlockType1Tags {
                 if bytesEqualASCIICaseInsensitive(span: source, range: nameRange, target: tag) {
-                    // Must be followed by whitespace, `>`, or EOL.
+                    // Must be followed by a spacechar (`[ \t\v\f\r\n]`, cmark's `(spacechar | [>])`), `>`, or EOL.
                     if nameEnd >= range.upperBound { return 1 }
                     let follow = source[nameEnd]
-                    if follow == UInt8(ascii: " ") || follow == UInt8(ascii: "\t") || follow == UInt8(ascii: ">") {
+                    if follow.isASCIISpace || follow == UInt8(ascii: ">") {
                         return 1
                     }
                     return nil
@@ -2463,10 +2463,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Type 6: block-tag-name list.
         for tag in Self.htmlBlockType6Tags {
             if bytesEqualASCIICaseInsensitive(span: source, range: nameRange, target: tag) {
-                // Must be followed by whitespace, `>`, `/>`, or EOL.
+                // Must be followed by a spacechar (`[ \t\v\f\r\n]`), `>`, `/>`, or EOL (cmark's `(spacechar | [/]? [>])`).
                 if nameEnd >= range.upperBound { return 6 }
                 let follow = source[nameEnd]
-                if follow == UInt8(ascii: " ") || follow == UInt8(ascii: "\t") || follow == UInt8(ascii: ">") {
+                if follow.isASCIISpace || follow == UInt8(ascii: ">") {
                     return 6
                 }
                 if follow == UInt8(ascii: "/"),
@@ -2493,7 +2493,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private func matchType7Tag(span: Span<UInt8>, range: Range<Int>, nameEnd: Int, isClosing: Bool) -> Int? {
         var i = nameEnd
         if isClosing {
-            i = skipSpacesTabsRange(span: span, from: i, to: range.upperBound)
+            i = skipSpacechars(span: span, from: i, to: range.upperBound)
             if i >= range.upperBound || span[i] != UInt8(ascii: ">") {
                 return nil
             }
@@ -2503,7 +2503,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         while i < range.upperBound {
             // Attempt to consume one attribute: `spacechar+ name (= value)?`.
             let beforeAttr = i
-            i = skipSpacesTabsRange(span: span, from: i, to: range.upperBound)
+            i = skipSpacechars(span: span, from: i, to: range.upperBound)
             if i == beforeAttr {
                 break
             }
@@ -2531,10 +2531,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             // Optional value spec.
             let afterName = i
-            i = skipSpacesTabsRange(span: span, from: i, to: range.upperBound)
+            i = skipSpacechars(span: span, from: i, to: range.upperBound)
             if i < range.upperBound && span[i] == UInt8(ascii: "=") {
                 i += 1
-                i = skipSpacesTabsRange(span: span, from: i, to: range.upperBound)
+                i = skipSpacechars(span: span, from: i, to: range.upperBound)
                 if i >= range.upperBound {
                     return nil
                 }
@@ -2547,10 +2547,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     if i >= range.upperBound { return nil }
                     i += 1
                 } else {
-                    // Unquoted value.
+                    // Unquoted value: `[^ \t\r\n\v\f"'=<>` \x00]+`. Any spacechar terminates it, matching cmark's `unquotedvalue` and the inline scanner.
                     while i < range.upperBound {
                         let b = span[i]
-                        if b == UInt8(ascii: " ") || b == UInt8(ascii: "\t")
+                        if b.isASCIISpace
                             || b == UInt8(ascii: "\"") || b == UInt8(ascii: "'")
                             || b == UInt8(ascii: "=") || b == UInt8(ascii: "<")
                             || b == UInt8(ascii: ">") || b == UInt8(ascii: "`") {
@@ -2563,7 +2563,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 i = afterName
             }
         }
-        i = skipSpacesTabsRange(span: span, from: i, to: range.upperBound)
+        i = skipSpacechars(span: span, from: i, to: range.upperBound)
         if i < range.upperBound && span[i] == UInt8(ascii: "/") {
             i += 1
         }
@@ -2573,11 +2573,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return i + 1
     }
 
-    private func skipSpacesTabsRange(span: Span<UInt8>, from start: Int, to end: Int) -> Int {
+    /// Skip a run of HTML `spacechar` bytes (`[ \t\v\f\r\n]`, i.e. `UInt8.isASCIISpace`) - cmark's tag-whitespace class (scanners.re), shared with the inline HTML scanner so block and inline agree on what separates tag parts.
+    private func skipSpacechars(span: Span<UInt8>, from start: Int, to end: Int) -> Int {
         var i = start
         while i < end {
-            let b = span[i]
-            if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t") {
+            if !span[i].isASCIISpace {
                 break
             }
             i += 1
@@ -2589,8 +2589,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var i = start
         while i < end {
             let b = span[i]
+            // cmark's type-7 start allows only `[\t\n\f ]` after the tag (scanners.re): space, tab, form feed. Vertical tab is deliberately NOT here - it is a `spacechar` inside a tag but not trailing whitespace, so `<a>\u{0B}` stays a paragraph while `<a>\u{0C}` is an HTML block.
             if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t")
-                && b != UInt8(ascii: "\n") && b != UInt8(ascii: "\r") {
+                && b != UInt8(ascii: "\n") && b != UInt8(ascii: "\r")
+                && b != 0x0C {
                 return false
             }
             i += 1
