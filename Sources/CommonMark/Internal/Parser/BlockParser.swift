@@ -1409,6 +1409,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             ) {
                 pending = try openListItem(marker: marker, firstNonSpace: firstNonSpace, pending: pending)
                 cursor = marker.consumedTo
+                // GFM empty task-list item: cmark's tasklist extension consumes the checkbox when the
+                // ITEM opens (`open_tasklist_item`), so an item whose first line is nothing but a
+                // checkbox gets no paragraph child - it stays empty, exactly like a plain `- ` empty
+                // item, and a following unindented line closes it instead of lazily continuing into it.
+                // The rewrite recognizes the checkbox at finalize (`runParagraphMatchers`, #65), which
+                // is too late for an empty item (there is no paragraph to finalize), so the empty case
+                // is caught here at open time. Content-bearing task items fail the whitespace-to-line-end
+                // test and are left untouched - their checkbox is still stripped at finalize.
+                if let checked = emptyTaskItemChecked(
+                    source: source,
+                    lineStart: lineRange.lowerBound,
+                    markerStart: firstNonSpace,
+                    contentStart: cursor,
+                    lineEnd: lineRange.upperBound
+                ) {
+                    storage[current].kind = .item(checked: checked)
+                    cursor = lineRange.upperBound
+                }
                 continue
             }
 
@@ -3112,6 +3130,50 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         return (checked, chunk.extracting(Self.tasklistMarkerWidth..<chunk.length))
+    }
+
+    /// If the item content beginning at `contentStart` is a GFM task-list checkbox (`[ ]`/`[x]`/`[X]`)
+    /// followed by a separator and then only whitespace to `lineEnd`, return its checked state;
+    /// otherwise `nil`.
+    ///
+    /// cmark-gfm's tasklist extension consumes the checkbox at item-OPEN time (`open_tasklist_item`),
+    /// so an item whose first line holds nothing but a checkbox gets no paragraph child - it stays
+    /// empty, exactly like a plain `- ` empty item, and a following unindented line closes it rather
+    /// than lazily continuing into it. A task item WITH content keeps the checkbox in its first
+    /// paragraph, where finalize strips it (`runParagraphMatchers`, #65); the rewrite's finalize-time
+    /// recognition cannot reach the empty case (there is no paragraph to finalize), so it is detected
+    /// here at open time. The predicate mirrors `matchTasklistMarker` (shared `tasklistMarkerChecked`),
+    /// and the whitespace-to-`lineEnd` test confines it to the empty case - content-bearing items fail
+    /// it and are left to finalize.
+    ///
+    /// cmark's `scan_tasklist` scans the WHOLE line from offset 0 with the pattern
+    /// `spacechar* marker spacechar+ checkbox spacechar+` (`extensions/ext_scanners.re`), passed
+    /// `input->data` at block-open time (`blocks.c` open_new_blocks). A block-quote marker or an OUTER
+    /// list marker before the checkbox breaks that scan, so a checkbox is recognized only when it is
+    /// preceded on the physical line by nothing but spaces and this single list marker - i.e. only in
+    /// a top-level list item. `markerStart..<contentStart` is this marker; require `lineStart..<markerStart`
+    /// to be all whitespace to reproduce that anchoring (a block-quoted / nested item has a non-space
+    /// prefix here and is left content-bearing, matching cmark).
+    private func emptyTaskItemChecked(
+        source: Span<UInt8>, lineStart: Int, markerStart: Int, contentStart: Int, lineEnd: Int
+    ) -> Bool? {
+        guard storage.options.contains(.tasklist),
+              indexOfFirstNonSpace(source: source, range: lineStart..<markerStart) >= markerStart,
+              contentStart + Self.tasklistMarkerWidth <= lineEnd,
+              let checked = Self.tasklistMarkerChecked(
+                  source[contentStart],
+                  source[contentStart + 1],
+                  source[contentStart + 2],
+                  source[contentStart + 3]
+              ),
+              indexOfFirstNonSpace(
+                  source: source,
+                  range: (contentStart + Self.tasklistMarkerWidth)..<lineEnd
+              ) >= lineEnd
+        else {
+            return nil
+        }
+        return checked
     }
 
     /// Match a GFM footnote definition `[^label]: content` at the start of a paragraph chunk.

@@ -1,0 +1,17 @@
+Document @1:1-9:20
+├─ Paragraph @1:1-2:20
+│  ├─ Text @1:1-1:11 "bc | def |"
+│  ├─ SoftBreak
+│  └─ Text @2:1-2:20 "| —0— |foo <![-"
+├─ Paragraph @4:1-4:11
+│  └─ Text @4:1-4:11 "_*-*CD_foo"
+├─ UnorderedList @5:3-5:9
+│  └─ ListItem @5:3-5:9 checkbox: [ ]
+└─ Paragraph @6:1-9:20
+   ├─ Text @6:1-6:8 "| bar |"
+   ├─ SoftBreak
+   ├─ Text @7:1-7:24 "| bar | baz | fo| bar |"
+   ├─ SoftBreak
+   ├─ Text @8:1-8:27 "| bar |r | baz | fo| bar |"
+   ├─ SoftBreak
+   └─ Text @9:1-9:18 "| bar | baz | foo"
