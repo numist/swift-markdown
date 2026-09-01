@@ -1087,37 +1087,40 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // Lists themselves don't have a per-line continuation rule; their items do. The list as a container "matches" trivially as long as we get to one of its items.
                 deepestMatched = node
             case .item:
-                // Item continuation: line indent must be ≥ the item's content padding.
+                // Item continuation, mirroring cmark's `parse_node_item_prefix` (blocks.c): the line's
+                // indent, measured relative to the parent container's already-consumed prefix (`cursor`),
+                // is tested against the item's content column FIRST - for an empty (childless) item and a
+                // non-empty one alike. Only if that fails does a blank line inside a NON-empty item keep it
+                // open. Because `cursor` advances as each ancestor item consumes its own padding, the indent
+                // an inner item sees is relative to its OWN marker, so a nested empty item is measured against
+                // its own content column - not a shallower ancestor's.
                 let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
                 let isBlank = firstNonSpace == lineRange.upperBound
-                if isBlank {
-                    // Blank inside an item that already has content keeps the item open. A blank inside an item with NO content (the line after a `-` with nothing on it) normally closes the item - per CommonMark §5.2 "if container->first_child is NULL ... we are done" - UNLESS the blank line's leading whitespace still reaches the item's content column. cmark's item continuation tests `indent >= content column` BEFORE that blank/first-child check (blocks.c), so a whitespace-only line whose expanded indent covers the content column extends even a childless item onto it (e.g. a tab after a bare `-`: 4 columns >= the content column 2), exactly as a non-empty item's continuation already does below. A narrower blank line (a lone space at column 1, or a truly empty line) stays below the content column and closes the empty item.
-                    if storage[node].firstChild == nil {
-                        guard let padding = itemPadding(of: node),
-                              indentColumns(source: source, from: cursor, to: firstNonSpace) >= padding else {
-                            return (deepestMatched, cursor, false)
-                        }
-                    }
-                    deepestMatched = node
-                } else if case .item = storage[node].data,
-                          let padding = itemPadding(of: node) {
-                    // Compare in COLUMNS, not bytes, so a leading tab counts as up to 4 cols of indent. Then advance the byte cursor by exactly `padding` columns.
-                    let availCols = indentColumns(
+                guard let padding = itemPadding(of: node) else {
+                    return (deepestMatched, cursor, false)
+                }
+                // Compare in COLUMNS, not bytes, so a leading tab counts as up to 4 cols of indent.
+                let availCols = indentColumns(source: source, from: cursor, to: firstNonSpace)
+                if availCols >= padding {
+                    // The indent reaches the item's content column: consume exactly `padding` columns and
+                    // match. cmark tests this BEFORE the childless-blank check, so a whitespace-only line
+                    // whose expanded indent covers the content column extends even a childless item onto it
+                    // (e.g. a tab after a bare `-`: 4 columns >= the content column 2).
+                    cursor = advanceColumns(
                         source: source,
                         from: cursor,
-                        to: firstNonSpace
+                        to: lineRange.upperBound,
+                        columns: padding
                     )
-                    if availCols >= padding {
-                        cursor = advanceColumns(
-                            source: source,
-                            from: cursor,
-                            to: lineRange.upperBound,
-                            columns: padding
-                        )
-                        deepestMatched = node
-                    } else {
-                        return (deepestMatched, cursor, false)
-                    }
+                    deepestMatched = node
+                } else if isBlank, storage[node].firstChild != nil {
+                    // A blank line inside an item that already has content keeps the item open even though
+                    // the indent falls short of the content column. Advance `cursor` to first-non-space (the
+                    // line end for a blank line), mirroring cmark's `S_advance_offset(... first_nonspace ...)`,
+                    // so any deeper open item measures its indent from here rather than the shallower line
+                    // start. A childless item on such a line closes (CommonMark §5.2: `first_child == NULL`).
+                    cursor = firstNonSpace
+                    deepestMatched = node
                 } else {
                     return (deepestMatched, cursor, false)
                 }

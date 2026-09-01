@@ -38,6 +38,17 @@ struct SourcePositionTests {
         return nil
     }
 
+    /// Every `.item` node's range, in document (DFS) order. For nested lists this is
+    /// outermost-first, so `[0]` is the outer item, `[1]` the next level in, and so on.
+    private func itemRanges(
+        in ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)]
+    ) -> [Range<Pos>?] {
+        ranges.compactMap { entry in
+            if case .item = entry.kind { return entry.range }
+            return nil
+        }
+    }
+
     @Test("off by default - sourceRange is nil without .sourcePosition")
     func offByDefault() throws {
         let src = "# Hi\n\nHello\n"
@@ -135,6 +146,61 @@ struct SourcePositionTests {
         let item = try #require(range(in: ranges) { if case .item = $0 { return true } else { return false } })
         #expect(item.lowerBound == Pos(line: 1, column: 1))
         #expect(item.upperBound == Pos(line: 1, column: 2))
+        }
+    }
+
+    @Test("a nested empty list item extends onto a blank line only when the blank reaches its OWN content column")
+    func nestedEmptyItemBlankLineExtent() throws {
+        // `- -` opens an outer empty item (marker col 1, content column 3) that itself contains an
+        // inner empty item (marker col 3, content column 5). cmark's item continuation tests
+        // `indent >= marker_offset + padding` per item, measuring each item's indent relative to the
+        // prefix its ancestors already consumed - so a childless item extends onto a following blank
+        // line only when that blank reaches its OWN content column, not a shallower ancestor's.
+
+        // Blank indent 2 reaches the OUTER content column (3, i.e. 2 columns of indent past the start)
+        // but NOT the inner's (5). So the outer extends onto the blank line while the inner - childless
+        // and short of its own content column - ends on its marker line. (Regression: the rewrite used
+        // to measure the inner against the outer's content column and wrongly extend it to @2:3.)
+        try MarkdownDocument.withParsedDocument("- -\n  \n", options: .sourcePosition) { doc in
+            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
+            dfsRanges(doc.root, into: &ranges)
+            let items = itemRanges(in: ranges)
+            try #require(items.count == 2, "expected an outer + a nested inner item; got \(items.count)")
+            let outer = try #require(items[0])
+            let inner = try #require(items[1])
+            #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 2, column: 3))   // outer extends onto the blank
+            #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // inner does NOT extend
+        }
+
+        // Boundary: 4 columns of indent reach the inner content column (5) exactly, so BOTH the outer
+        // and the (childless) inner item extend onto the blank line.
+        try MarkdownDocument.withParsedDocument("- -\n    \n", options: .sourcePosition) { doc in
+            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
+            dfsRanges(doc.root, into: &ranges)
+            let items = itemRanges(in: ranges)
+            try #require(items.count == 2, "expected an outer + a nested inner item; got \(items.count)")
+            let outer = try #require(items[0])
+            let inner = try #require(items[1])
+            #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 2, column: 5))
+            #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 2, column: 5))   // inner extends: indent == its content column
+        }
+
+        // Three levels (`- + *`, distinct bullets so it is genuine nesting, not a thematic break) with
+        // a blank whose indent (5) lands BETWEEN the middle item's content column (5) and the inner's
+        // (7). The outer and middle both stay open - the middle because it still has a child (the inner
+        // list) - while the innermost, childless and short of its own content column, ends on its marker
+        // line. Pins exactly which level extends when the indent falls between two nesting levels.
+        try MarkdownDocument.withParsedDocument("- + *\n     \n", options: .sourcePosition) { doc in
+            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
+            dfsRanges(doc.root, into: &ranges)
+            let items = itemRanges(in: ranges)
+            try #require(items.count == 3, "expected three nested items; got \(items.count)")
+            let outer = try #require(items[0])
+            let middle = try #require(items[1])
+            let inner = try #require(items[2])
+            #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 2, column: 6))
+            #expect(middle == Pos(line: 1, column: 3)..<Pos(line: 2, column: 6))  // stays open: has a child
+            #expect(inner == Pos(line: 1, column: 5)..<Pos(line: 1, column: 6))   // childless, does NOT extend
         }
     }
 
