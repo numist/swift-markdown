@@ -1343,6 +1343,32 @@ struct HTMLBlockTests {
             #expect(kinds.contains(.paragraph) && !kinds.contains(.htmlBlock))
         }
     }
+
+    // cmark's type-7 tag grammar (scanners.re) defines `unquotedvalue = [^ \t\r\n\v\f"'=<>`\x00]+`: the
+    // `+` requires at least one character, so an attribute with an empty unquoted value makes the whole
+    // tag invalid and the line is NOT an HTML block. An empty *quoted* value (`""`/`''`) is still valid.
+    // This mirrors the inline HTML scanner's non-empty guard so block and inline HTML agree.
+    @Test("type 7: empty unquoted attribute value does not start an HTML block")
+    func type7EmptyUnquotedValueIsParagraph() throws {
+        for source in ["<a b=>", "<a b= >"] {
+            try MarkdownDocument.withParsedDocument(source) { doc in
+                let kinds = dfs(doc).map { $0.kind }
+                #expect(kinds.contains(.paragraph) && !kinds.contains(.htmlBlock),
+                        "\(source.debugDescription) should be a paragraph, not an HTML block")
+            }
+        }
+    }
+
+    @Test("type 7: non-empty unquoted and empty quoted attribute values start an HTML block")
+    func type7NonEmptyAndQuotedValueIsHTMLBlock() throws {
+        for source in ["<a b=c>", "<a b=\"\">"] {
+            try MarkdownDocument.withParsedDocument(source) { doc in
+                let kinds = dfs(doc).map { $0.kind }
+                #expect(kinds == [.document, .htmlBlock],
+                        "\(source.debugDescription) should be an HTML block")
+            }
+        }
+    }
 }
 
 @Suite("Reference link definitions")

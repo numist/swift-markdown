@@ -2548,6 +2548,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     i += 1
                 } else {
                     // Unquoted value: `[^ \t\r\n\v\f"'=<>` \x00]+`. Any spacechar terminates it, matching cmark's `unquotedvalue` and the inline scanner.
+                    let valueStart = i
                     while i < range.upperBound {
                         let b = span[i]
                         if b.isASCIISpace
@@ -2557,6 +2558,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                             break
                         }
                         i += 1
+                    }
+                    // The `+` requires at least one character: an empty unquoted value (`<a b=>`, `<a b= >`) is not a valid tag, so this is not a type-7 HTML block. Mirrors the inline scanner's `count == 0` guard.
+                    if i == valueStart {
+                        return nil
                     }
                 }
             } else {
