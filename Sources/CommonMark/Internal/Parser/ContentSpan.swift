@@ -195,6 +195,42 @@ internal struct ContentSpan: ~Escapable {
         return nil
     }
 
+    /// The *physical* (byte-read) source-line anchor at the START of the run/segment that contains virtual `offset` - or `nil` when the offset maps to synthetic content with no source pre-image.
+    ///
+    /// This differs from `sourceRunBase(ofVirtual:)` for exactly one shape: a **multi-segment source** segment, where it returns the segment's byte-read offset (`Segment.offset`) instead of its re-indented mapping (`Segment.sourceOffset`). The two coincide except for a re-indented continuation segment (Quirk E), where `sourceOffset = offset + shift`. Crucially, `Segment.offset` ALWAYS sits on the run's true physical source line - it is literally where the run's bytes are read from - even when the re-indent shift pushes `sourceRunBase` past that line's byte extent onto a later line. Inline stamping anchors a re-indented run's LINE on this physical base while taking the re-indented COLUMN from the mapped source offset, so a re-indent so large that `sourceRunBase` overshoots (`currentContentIndent` exceeds the line's content width) still stamps on the run's own physical line at cmark's block-content column. See `stampInline`.
+    ///
+    /// For single-segment content there is no separate physical byte to recover - source content maps identity, and arena content's bytes live in the arena with no physical-source offset - so this returns the same anchor as `sourceRunBase` (the identity offset, or the arena→source run's source offset), preserving arena/flattened stamping unchanged.
+    @inlinable
+    func physicalRunBase(ofVirtual offset: Int) -> Int? {
+        if !isMultiSegment {
+            if inSource {
+                return offset
+            }
+            // Single-segment arena: no distinct physical byte; the arena→source run's source offset is the only line anchor (identical to `sourceRunBase`).
+            let k = offset - base
+            var v = 0
+            for i in 0..<arenaRuns.count {
+                let run = arenaRuns[i]
+                let len = Int(run.length)
+                if k < v + len {
+                    return run.sourceOffset < 0 ? nil : Int(run.sourceOffset)
+                }
+                v += len
+            }
+            return nil
+        }
+        var v = 0
+        for i in 0..<segments.count {
+            let seg = segments[i]
+            let len = Int(seg.length)
+            if offset < v + len {
+                return seg.inSource ? Int(seg.offset) : nil
+            }
+            v += len
+        }
+        return nil
+    }
+
     /// Whether the run/segment covering virtual `offset` is *re-indented* - its source mapping (`sourceOffset`) differs from where its bytes physically sit (`offset`).
     ///
     /// Only a re-indented run can have its byte-projected end overshoot its own physical line (Quirk E, see `stampInline`): the re-indent shifts the mapped source offsets rightward, past the line's byte extent. A run that is NOT re-indented maps identity, so its byte projection is exact and needs no overshoot correction. This distinction matters for a **multi-line contiguous** segment - a top-level paragraph's source-adjacent lines joined into ONE segment (`a\nb`), which spans multiple physical source lines with `sourceOffset == offset`: its `sourceRunBase` (the segment's first-byte offset) sits on an *earlier* physical line than an interior-line run, which would spuriously trip the overshoot guard. Reporting such a run as not-re-indented keeps stamping on the exact byte projection.
