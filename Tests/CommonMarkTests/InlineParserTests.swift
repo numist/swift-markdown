@@ -703,6 +703,22 @@ struct InlineHTMLTests {
         #expect(inlines[3].literal == "</em>")
         }
     }
+
+    @Test("multi-line tag reconstructs its literal with the continuation's leading whitespace stripped")
+    func multiLineTagStripsContinuationIndent() throws {
+        // `<e` on line 1, ` e="">` on line 2: the whitespace inside the tag (here the soft break) is
+        // valid tag whitespace, so the tag spans both lines. A paragraph strips each continuation
+        // line's leading whitespace, so the reconstructed literal joins the two lines with a single
+        // `\n` and NO leading space - `<e\ne="">` (cmark reads the same stripped paragraph buffer).
+        // The tag's bytes straddle the soft-break segment boundary, so the literal can't be a
+        // zero-copy contiguous source slice; it must be materialized from the joined segments.
+        let source = "<e\n e=\"\">"
+        try MarkdownDocument.withParsedDocument(source) { doc in
+        let kinds = paragraphInlines(doc).map { $0.kind }
+        #expect(kinds == [.htmlInline])
+        #expect(Self.firstHTMLInline(doc) == "<e\ne=\"\">")
+        }
+    }
 }
 
 @Suite("Inline parser - emphasis / strong")

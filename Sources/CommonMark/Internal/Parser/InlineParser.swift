@@ -241,11 +241,29 @@ extension BlockParser {
                         content: content,
                         into: parent
                     )
-                    let chunk = content.chunk(
-                        offset: cursor,
-                        length: htmlEnd - cursor
-                    )
-                    let chunkRef = storage.intern(chunk)
+                    // The literal is the tag's raw bytes. When the whole `[cursor, htmlEnd)` range lies
+                    // in one contiguous buffer region - every single-segment tag, and any multi-segment
+                    // tag that stays within one source segment - `contiguousChunk` returns it zero-copy,
+                    // byte-identical to the old `content.chunk` fast path. A multi-line tag straddles a
+                    // soft-break segment boundary (the tag's whitespace spanned a newline in a
+                    // non-contiguous paragraph): its bytes live in separate source segments joined by the
+                    // interned `\n`, so no single buffer holds them and a straddling `content.chunk` would
+                    // read the wrong bytes. Materialize the joined literal into the arena through the
+                    // segment-aware subscript - continuation lines already have their leading whitespace
+                    // stripped in the segment list, matching cmark's paragraph buffer.
+                    let chunkRef: ContentRef
+                    if let contiguous = content.contiguousChunk(fromVirtual: cursor, limit: htmlEnd),
+                       contiguous.length == htmlEnd - cursor {
+                        chunkRef = storage.intern(contiguous)
+                    } else {
+                        let outOffset = storage.strings.count
+                        for i in cursor..<htmlEnd {
+                            storage.strings.append(content[i])
+                        }
+                        chunkRef = storage.intern(
+                            Chunk(offset: outOffset, length: storage.strings.count - outOffset, inSource: false)
+                        )
+                    }
                     let nodeIdx = storage.appendNode(
                         NodeRecord(kind: .htmlInline, parent: parent, data: .literal(chunkRef))
                     )
