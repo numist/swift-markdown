@@ -11,15 +11,18 @@
 import Testing
 @testable import CommonMark
 
-/// Source-range coverage for empty / whitespace-only GFM table cells, where the rewrite must reproduce
-/// cmark-gfm's offsets (a differential-qualification `[fix]`, tracked unconditionally — see FINDINGS #11).
+/// Source-range coverage for empty / whitespace-only GFM table cells, plus the rightmost content cell
+/// whose trailing whitespace runs to the line end — cases where the rewrite must reproduce cmark-gfm's
+/// offsets (a differential-qualification `[fix]`, tracked unconditionally — see FINDINGS #11).
 ///
 /// cmark computes a cell's end offset over the UNTRIMMED between-pipes extent (`row_from_string` in
 /// swift-cmark's `extensions/table.c`): a content cell ends just past its last non-pipe byte, but an
 /// empty/whitespace-only cell's end offset points AT the closing pipe (inclusive), so its half-open end
-/// lands one byte further — past the closing pipe. A zero-width `||` cell is additionally flagged
-/// `colspan: 0`, and that flag applies to the first column too (cmark's `n_columns > 0` guard is always
-/// satisfied). A table row spans its full source line including trailing whitespace.
+/// lands one byte further — past the closing pipe. When the rightmost cell has NO closing pipe,
+/// `scan_table_cell` matches through its trailing whitespace to the line end, so its end reaches the
+/// row's untrimmed end. A zero-width `||` cell is additionally flagged `colspan: 0`, and that flag
+/// applies to the first column too (cmark's `n_columns > 0` guard is always satisfied). A table row
+/// spans its full source line including trailing whitespace.
 ///
 /// Columns are 1-based; `sourceRange.upperBound.column` is half-open (one past the last byte), matching
 /// the `debugDescription` surface the differential fuzzer compares.
@@ -155,5 +158,60 @@ struct TableEmptyCellSourceRangeTests {
         try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
         #expect(body.cells[0].text == "x")
         #expect((body.cells[0].startColumn, body.cells[0].endColumn) == (2, 5))
+    }
+
+    /// The rightmost cell on a row with NO closing pipe extends through its trailing whitespace to the
+    /// row's untrimmed line end: cmark's `scan_table_cell` matches everything up to the line end when no
+    /// pipe stops it, so the cell's end offset spans the trailing whitespace `splitCells` trims off its
+    /// content. cmark counts a trailing tab as a single byte-column (no tab expansion).
+    @Test("a rightmost body cell with trailing whitespace and no closing pipe extends to the line end")
+    func rightmostBodyCellTrailingWhitespaceExtends() throws {
+        // `x|y ` (one trailing space, no closing pipe): Text `y` at cols 3–4, but the cell reaches the
+        // row's untrimmed end at col 5.
+        let rows = try tableRows("a|b\n-|-\nx|y ")
+        let body = try #require(rows.last, "expected a body row")
+        try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
+        #expect(body.cells[1].text == "y")
+        #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (3, 5))
+        // The cell reaches exactly the row's own untrimmed end.
+        #expect(body.endColumn == 5)
+    }
+
+    /// The same untrimmed-extent rule applies to the HEADER row's rightmost cell.
+    @Test("a rightmost header cell with trailing whitespace and no closing pipe extends to the line end")
+    func rightmostHeaderCellTrailingWhitespaceExtends() throws {
+        // Header `a|b  ` (two trailing spaces): Text `b` at cols 3–4, cell reaches the line end at col 6.
+        let rows = try tableRows("a|b  \n-|-\nx|y")
+        let header = try #require(rows.first, "expected a header row")
+        try #require(header.cells.count == 2, "expected two header cells, got \(header.cells.count)")
+        #expect(header.cells[1].text == "b")
+        #expect((header.cells[1].startColumn, header.cells[1].endColumn) == (3, 6))
+        #expect(header.endColumn == 6)
+    }
+
+    /// A closing pipe caps the rightmost cell AT the pipe (the pipe stops cmark's cell scan), so its end
+    /// stays below the row end even when the cell holds trailing whitespace before the pipe. This is the
+    /// discriminator the fix keys on: extend only when there is no closing pipe.
+    @Test("a rightmost cell capped by a closing pipe keeps its at-pipe end, below the row end")
+    func rightmostCellClosingPipeNotExtended() throws {
+        // `x|y |`: the cell `y ` ends at the pipe (col 5) while the row spans through it to col 6.
+        let rows = try tableRows("a|b\n-|-\nx|y |")
+        let body = try #require(rows.last, "expected a body row")
+        try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
+        #expect(body.cells[1].text == "y")
+        #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (3, 5))
+        #expect(body.endColumn == 6)
+    }
+
+    /// A rightmost cell with no trailing whitespace is not over-extended: its end sits flush with its
+    /// content, coinciding with the row end.
+    @Test("a rightmost cell with no trailing whitespace is not over-extended")
+    func rightmostCellNoTrailingWhitespaceUnchanged() throws {
+        // `x|y` (no trailing whitespace, no closing pipe): cell end sits flush with the content at col 4.
+        let rows = try tableRows("a|b\n-|-\nx|y")
+        let body = try #require(rows.last, "expected a body row")
+        try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
+        #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (3, 4))
+        #expect(body.endColumn == 4)
     }
 }

@@ -57,7 +57,7 @@ extension BlockParser {
             return false
         }
         // GFM: header column count must equal delimiter column count, else not a table - leave the paragraph alone.
-        let headerCells = splitCells(line: header)
+        let headerCells = splitCells(line: header).cells
         if headerCells.count != columnCount {
             return false
         }
@@ -138,13 +138,15 @@ extension BlockParser {
         ))
         storage.appendChild(rowIdx, to: parent)
         // The row spans its whole source line. cmark sets a table row's end column to the parent table's end column (`try_opening_table_row`): the full source line INCLUDING trailing whitespace. Interior rows already reach their line-terminating newline via `splitLines`, but the paragraph→table content chunk had its outermost whitespace trimmed (`runParagraphMatchers`), so the LAST line stops one or more bytes short of the source line end. Recover the untrimmed end from the table node's own end (the paragraph extent, stamped before this runs).
+        // Sentinel: only read in the cell loop below, which is itself guarded by the same `sourceMapped`, so it is only observed after being assigned here.
+        var rowEnd = -1
         if sourceMapped {
             storage.setSourceStart(rowIdx, line.lowerBound + sourceDelta)
             let tableEnd = storage.sourceRanges[parent].end
-            let rowEnd = (isLastLine && tableEnd >= 0) ? tableEnd : line.upperBound + sourceDelta
+            rowEnd = (isLastLine && tableEnd >= 0) ? tableEnd : line.upperBound + sourceDelta
             storage.setSourceEnd(rowIdx, rowEnd)
         }
-        let cells = splitCells(line: line)
+        let (cells, hadClosingPipe) = splitCells(line: line)
         let columnCount = alignments.count
 
         // Span bookkeeping is only allocated/computed when `.tableSpans` is on. With spans off these stay empty (the empty `Array` is a non-allocating singleton) and every per-cell read below is guarded by `spansEnabled`, so the common table path does no extra allocation or work.
@@ -228,8 +230,13 @@ extension BlockParser {
             if sourceMapped, col < cells.count {
                 let cr = cells[col]
                 storage.setSourceStart(cellIdx, cr.lowerBound + sourceDelta)
-                let end = trimSpaceTabs(range: cr).isEmpty ? cr.upperBound + 1 : cr.upperBound
-                storage.setSourceEnd(cellIdx, end + sourceDelta)
+                if col == cells.count - 1 && !hadClosingPipe {
+                    // Rightmost cell on a row with no closing pipe: cmark's `scan_table_cell` matches through the cell's trailing whitespace to the line end (there is no pipe to stop at), so its end offset reaches the row's untrimmed end - the same extent the row spans - rather than the trimmed-content end that `splitCells` (and the last body line's trailing-trimmed chunk) leaves in `cr.upperBound`. A closing pipe, an interior cell, or content already flush with the line end all keep the trimmed end below via the else branch.
+                    storage.setSourceEnd(cellIdx, rowEnd)
+                } else {
+                    let end = trimSpaceTabs(range: cr).isEmpty ? cr.upperBound + 1 : cr.upperBound
+                    storage.setSourceEnd(cellIdx, end + sourceDelta)
+                }
             }
             if col < cells.count && !(spansEnabled && skipContent[col]) {
                 let cellRange = trimSpaceTabs(range: cells[col])
@@ -405,7 +412,7 @@ extension BlockParser {
 
     /// Parse the delimiter row into per-column alignments. Returns nil if the line isn't a valid delimiter row. Each cell must match `\s*:?-+:?\s*` after pipe splitting, with at least one column.
     private func parseDelimRow(line: Range<Int>) -> [MarkdownNode.TableAlignment]? {
-        let cells = splitCells(line: line)
+        let cells = splitCells(line: line).cells
         if cells.isEmpty {
             return nil
         }
@@ -448,8 +455,8 @@ extension BlockParser {
         return alignments
     }
 
-    /// Split `line` into cells on unescaped `|`. Strips a single leading and trailing `|` if present (with optional surrounding whitespace).
-    private func splitCells(line: Range<Int>) -> [Range<Int>] {
+    /// Split `line` into cells on unescaped `|`. Strips a single leading and trailing `|` if present (with optional surrounding whitespace). `hadClosingPipe` reports whether a trailing `|` was stripped, so the caller can tell a rightmost cell capped by a pipe from one that runs to the line end.
+    private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool) {
         var s = line.lowerBound
         var e = line.upperBound
         while s < e && storage.strings[s].isSpaceOrTab {
@@ -461,10 +468,12 @@ extension BlockParser {
         if s < e && storage.strings[s] == UInt8(ascii: "|") {
             s += 1
         }
+        var hadClosingPipe = false
         if e > s && storage.strings[e - 1] == UInt8(ascii: "|") {
             // Don't strip a backslash-escaped pipe.
             if e - 2 < s || storage.strings[e - 2] != UInt8(ascii: "\\") {
                 e -= 1
+                hadClosingPipe = true
             }
         }
         var cells: [Range<Int>] = []
@@ -483,7 +492,7 @@ extension BlockParser {
             i += 1
         }
         cells.append(cellStart..<e)
-        return cells
+        return (cells, hadClosingPipe)
     }
 
     private func trimSpaceTabs(range: Range<Int>) -> Range<Int> {
