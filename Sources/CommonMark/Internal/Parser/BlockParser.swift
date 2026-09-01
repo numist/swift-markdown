@@ -1404,7 +1404,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 firstNonSpace: firstNonSpace
             ) {
                 // Decode backslash escapes and HTML entities in the info string so consumers see the canonical language tag (e.g. `foo\+bar` → `foo+bar`, `f&ouml;&ouml;` → `föö`).
-                let cleanInfo = EntityParser.unescapeURLChunk(fence.infoChunk, source: source, into: &storage)
+                // The info string lives in `expandPrefixTabs`'s verbatim tail (the fence char isn't a prefix byte), so on a tab-materialized line the matcher measured its bounds against the transient buffer. Map them back to source (the tail copies byte-for-byte, so the constant delta preserves the length) before interning, matching the source-mapped/space case's `inSource: true` chunk exactly; the mapping reads only unconditionally-tracked line state, so it is correct even when `.sourcePosition` is off. A source-mapped line already carries real source offsets.
+                let infoChunk: Chunk
+                if currentLineMapsToSource {
+                    infoChunk = fence.infoChunk
+                } else {
+                    let start = materializedSourceStart(bufferStart: fence.infoChunk.offset).sourceStart
+                    let end = materializedSourceStart(bufferStart: fence.infoChunk.range.upperBound).sourceStart
+                    infoChunk = Chunk(offset: start, length: end - start, inSource: true)
+                }
+                let cleanInfo = EntityParser.unescapeURLChunk(infoChunk, source: sourceBytes, into: &storage)
                 let infoRef = storage.intern(cleanInfo)
                 let codeIdx = addChild(
                     kind: .codeBlock(MarkdownNode.CodeBlockInfo(

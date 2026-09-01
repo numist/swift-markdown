@@ -25,6 +25,23 @@ private func visit(_ node: borrowing MarkdownNode, into out: inout [(MarkdownNod
     }
 }
 
+/// Collect `(info, literal)` for every code block in the document in DFS order, so tests can assert
+/// on code blocks nested inside containers (e.g. a fenced block inside a list item).
+internal func codeBlocks(_ doc: borrowing MarkdownDocument) -> [(info: String, literal: String)] {
+    var out: [(String, String)] = []
+    collectCodeBlocks(doc.root, into: &out)
+    return out.map { (info: $0.0, literal: $0.1) }
+}
+
+private func collectCodeBlocks(_ node: borrowing MarkdownNode, into out: inout [(String, String)]) {
+    if node.kind.isCodeBlock {
+        out.append((node.codeBlockInfoString() ?? "", node.literal() ?? ""))
+    }
+    node.children.forEach { child in
+        collectCodeBlocks(child, into: &out)
+    }
+}
+
 // Shape-assertion helpers: build the `Kind` value a freshly-parsed list / indented code block carries, so structural `kinds == [...]` arrays stay readable. (`.list`/`.codeBlock` carry associated metadata.)
 extension MarkdownNode.Kind {
     static func bulletList(
@@ -649,6 +666,43 @@ struct FencedCodeTests {
         let (literal, info, _) = Self.codeInfo(doc)
         #expect(info == "swift")
         #expect(literal == "let x = 1\n")
+        }
+    }
+
+    @Test("info string in a tab-indented list item")
+    func infoStringInTabIndentedListItem() throws {
+        // A list marker followed by a tab is tab-materialized (`*\t` expands to `*   `), so the fence
+        // matcher measures the info-string bounds against a transient per-line buffer, not the source.
+        // Those bounds must be mapped back to source or the language tag reads the wrong bytes. The
+        // trailing ``` opens a second, top-level fence (empty info) that never closes.
+        let source = "*\t```n\na\n```"
+        try MarkdownDocument.withParsedDocument(source) { doc in
+            let blocks = codeBlocks(doc)
+            #expect(blocks.map(\.info) == ["n", ""])
+        }
+    }
+
+    @Test("unclosed info string in a tab-indented list item does not crash")
+    func unclosedInfoStringInTabIndentedListItem() throws {
+        // Regression: the tab-materialized buffer is longer than the source, so the mismeasured info
+        // offset ran past the source buffer and trapped with "Index range out of bounds". The rewrite
+        // must never crash, and the language tag must still read correctly.
+        let source = "*\t```n"
+        try MarkdownDocument.withParsedDocument(source) { doc in
+            let blocks = codeBlocks(doc)
+            #expect(blocks.map(\.info) == ["n"])
+        }
+    }
+
+    @Test("escaped info string in a tab-indented list item is decoded")
+    func escapedInfoStringInTabIndentedListItem() throws {
+        // The info bounds are measured against the materialized buffer, then remapped to source and
+        // fed to the escape/entity decoder against `sourceBytes`. A backslash escape (`\+`) must
+        // decode to the canonical language tag, reading the correct source bytes throughout.
+        let source = "*\t```foo\\+bar\nx\n```"
+        try MarkdownDocument.withParsedDocument(source) { doc in
+            let blocks = codeBlocks(doc)
+            #expect(blocks.first?.info == "foo+bar")
         }
     }
 
