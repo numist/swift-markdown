@@ -82,6 +82,7 @@ extension BlockParser {
             line: header,
             alignments: alignments,
             isHeader: true,
+            isLastLine: false,
             spansEnabled: spansEnabled,
             dittoEnabled: dittoEnabled,
             previousRows: previousRows,
@@ -98,6 +99,7 @@ extension BlockParser {
                 line: lines[k],
                 alignments: alignments,
                 isHeader: false,
+                isLastLine: k == lines.count - 1,
                 spansEnabled: spansEnabled,
                 dittoEnabled: dittoEnabled,
                 previousRows: previousRows,
@@ -115,13 +117,14 @@ extension BlockParser {
 
     /// Build a `.tableRow` node + its cells under `parent`. Missing trailing cells are emitted as empty; extras beyond `columnCount` are dropped.
     ///
-    /// When `spansEnabled`, each cell carries `.tableCell` span data: an empty `||` cell becomes a colspan filler (colspan 0) and grows the preceding cell's colspan; a cell whose content is the lone rowspan marker (`^`, or `"` when `dittoEnabled`) becomes a rowspan filler (rowspan 0) and grows the matching cell in the nearest non-filler row above, with its marker text suppressed. Returns the row's cell node indices (for the next row's rowspan resolution).
+    /// When `spansEnabled`, each cell carries `.tableCell` span data: an empty `||` cell becomes a colspan filler (colspan 0) and grows the nearest preceding real cell's colspan (a leading filler has none, so it just carries colspan 0); a cell whose content is the lone rowspan marker (`^`, or `"` when `dittoEnabled`) becomes a rowspan filler (rowspan 0) and grows the matching cell in the nearest non-filler row above, with its marker text suppressed. Returns the row's cell node indices (for the next row's rowspan resolution).
     @discardableResult
     private mutating func appendRow(
         parent: DocumentStorage.Index,
         line: Range<Int>,
         alignments: [MarkdownNode.TableAlignment],
         isHeader: Bool,
+        isLastLine: Bool,
         spansEnabled: Bool,
         dittoEnabled: Bool,
         previousRows: [[DocumentStorage.Index]],
@@ -134,10 +137,12 @@ extension BlockParser {
             data: nil
         ))
         storage.appendChild(rowIdx, to: parent)
-        // The row spans its whole source line.
+        // The row spans its whole source line. cmark sets a table row's end column to the parent table's end column (`try_opening_table_row`): the full source line INCLUDING trailing whitespace. Interior rows already reach their line-terminating newline via `splitLines`, but the paragraph→table content chunk had its outermost whitespace trimmed (`runParagraphMatchers`), so the LAST line stops one or more bytes short of the source line end. Recover the untrimmed end from the table node's own end (the paragraph extent, stamped before this runs).
         if sourceMapped {
             storage.setSourceStart(rowIdx, line.lowerBound + sourceDelta)
-            storage.setSourceEnd(rowIdx, line.upperBound + sourceDelta)
+            let tableEnd = storage.sourceRanges[parent].end
+            let rowEnd = (isLastLine && tableEnd >= 0) ? tableEnd : line.upperBound + sourceDelta
+            storage.setSourceEnd(rowIdx, rowEnd)
         }
         let cells = splitCells(line: line)
         let columnCount = alignments.count
@@ -155,8 +160,8 @@ extension BlockParser {
             let markerByte = dittoEnabled ? UInt8(ascii: "\"") : UInt8(ascii: "^")
             for col in 0..<min(columnCount, cells.count) {
                 let raw = cells[col]
-                // Colspan filler: a literally empty (`||`, zero-width) cell that isn't the first column.
-                if col > 0 && raw.isEmpty {
+                // Colspan filler: a literally empty (`||`, zero-width) cell. cmark marks any zero-width cell colspan 0 (`row_from_string`: empty buf AND start_offset == end_offset), including the first column — its `n_columns > 0` guard is always satisfied because the cell was already appended. The nearest preceding real cell (if any) absorbs the span; a leading filler has none, so it just carries colspan 0.
+                if raw.isEmpty {
                     colspans[col] = 0
                     var j = col - 1
                     while j >= 0 {
@@ -219,11 +224,12 @@ extension BlockParser {
             if spansEnabled {
                 cellIndices.append(cellIdx)
             }
-            // Stamp the cell's source range: the full between-pipes span (including surrounding whitespace). cmark gives an empty `||` filler cell a 1-column-wide range, so widen a zero-width split range by one byte.
+            // Stamp the cell's source range: the between-pipes span. cmark's cell end offset spans the UNTRIMMED extent (`row_from_string`): a content cell ends at its last non-pipe byte, so `cr.upperBound` (already sitting just past it, at the closing pipe) is the half-open end. But a cell whose content trims to empty has cmark's end offset point AT the closing pipe itself (inclusive), so its half-open end is one byte further — past the closing pipe. A zero-width `||` cell is the same case (`cr` empty ⇒ `upperBound == lowerBound`). A whitespace-only or zero-width cell always has a closing pipe (a trailing empty cell is stripped by `splitCells` into autocompletion), so `+1` never overshoots the row.
             if sourceMapped, col < cells.count {
                 let cr = cells[col]
                 storage.setSourceStart(cellIdx, cr.lowerBound + sourceDelta)
-                storage.setSourceEnd(cellIdx, (cr.isEmpty ? cr.lowerBound + 1 : cr.upperBound) + sourceDelta)
+                let end = trimSpaceTabs(range: cr).isEmpty ? cr.upperBound + 1 : cr.upperBound
+                storage.setSourceEnd(cellIdx, end + sourceDelta)
             }
             if col < cells.count && !(spansEnabled && skipContent[col]) {
                 let cellRange = trimSpaceTabs(range: cells[col])
