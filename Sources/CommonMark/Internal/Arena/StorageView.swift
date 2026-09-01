@@ -62,7 +62,7 @@ internal struct StorageView: ~Escapable, Copyable {
         guard sourceRanges.count > index else { return nil }
         let r = sourceRanges[index]
         guard r.start >= 0, r.end >= 0 else { return nil }
-        // An inline node after a backslash hard break carries an explicit start - a flat column cmark doesn't reset across the backslash-break newline, which no source byte projects to (see `InlineParser.stampInline`). Use it verbatim; every other node projects its start byte.
+        // An inline node after a backslash hard break carries an explicit start - a flat column cmark doesn't reset across the backslash-break newline, which no source byte projects to; a re-indented run whose byte-projected start overshoots its own physical line carries one too (Quirk E) - both set via `InlineParser.stampInline`. Use it verbatim; every other node projects its start byte.
         let start = r.explicitStart ?? position(ofByte: r.start)
         // A multi-line inline link/image/attribute carries an explicit end column - a flat buffer coordinate cmark doesn't reset across the `(...)` newline, which no source byte projects to (see `InlineParser.stampCloseBracketEnd`). An inline node after a backslash hard break carries one too. Use it verbatim; every other node projects its end byte.
         let end = r.explicitEnd ?? position(ofByte: r.end)

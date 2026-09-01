@@ -1,0 +1,6 @@
+Document @1:1-3:5
+├─ BlockQuote @1:1-2:3
+│  └─ Paragraph @1:3-2:3
+│     ├─ InlineCode @1:3-2:2 `   `
+│     └─ Text @2:4-2:5 "o"
+└─ CodeBlock @3:1-3:5 language: none

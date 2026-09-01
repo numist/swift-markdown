@@ -150,7 +150,7 @@ internal struct DocumentStorage: ~Copyable {
         }
     }
 
-    /// Record an explicit read-time start position for `node`, overriding the byte-projected start. Used only for an inline node after a backslash hard break, whose cmark start column is a flat coordinate no source byte projects to. No-op when positions are off.
+    /// Record an explicit read-time start position for `node`, overriding the byte-projected start. Used for an inline node after a backslash hard break (whose cmark start column is a flat coordinate no source byte projects to) and for a re-indented run whose byte-projected start overshoots its own physical line (Quirk E; see `InlineParser.stampInline`). No-op when positions are off.
     internal mutating func setExplicitStart(_ node: Index, _ position: MarkdownNode.SourcePosition) {
         if positionsEnabled {
             sourceRanges[node].explicitStart = position
