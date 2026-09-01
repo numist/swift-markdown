@@ -1620,8 +1620,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 for j in Int(seg.offset)..<end { buf.append(storage.strings[j]) }
             }
             if len > 0 {
-                // A source segment images its (re-indented) source range - `sourceOffset` re-indents a continuation line to its block-content column; otherwise it equals `offset`. A non-source segment (the interned `\n` join, or an arena-only line) is a synthetic gap.
-                map.append(ArenaRun(length: Int32(len), sourceOffset: seg.inSource ? seg.sourceOffset : -1))
+                // A source segment images its (re-indented) source range - `sourceOffset` re-indents a continuation line to its block-content column; otherwise it equals `offset`. `physicalOffset` (the segment's byte-read `offset`) stays on the run's physical source line so inline stamping can anchor a re-indented run there. A non-source segment (the interned `\n` join, or an arena-only line) is a synthetic gap.
+                map.append(ArenaRun(
+                    length: Int32(len),
+                    sourceOffset: seg.inSource ? seg.sourceOffset : -1,
+                    physicalOffset: seg.inSource ? seg.offset : -1))
             }
         }
         let offset = storage.strings.count
@@ -1644,7 +1647,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let hi = min(runEnd, end)
             if lo >= hi { continue }
             let sourceOffset: Int32 = run.sourceOffset < 0 ? -1 : run.sourceOffset + Int32(lo - runStart)
-            result.append(ArenaRun(length: Int32(hi - lo), sourceOffset: sourceOffset))
+            // `physicalOffset` (the run's byte-read source line anchor) advances by the same trimmed-off prefix as `sourceOffset`; a synthetic gap stays a gap.
+            let physicalOffset: Int32 = run.physicalOffset < 0 ? -1 : run.physicalOffset + Int32(lo - runStart)
+            result.append(ArenaRun(length: Int32(hi - lo), sourceOffset: sourceOffset, physicalOffset: physicalOffset))
         }
         return result
     }

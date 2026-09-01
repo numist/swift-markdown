@@ -47,13 +47,18 @@ internal struct Segment: Equatable {
 /// One run of a single-segment arena buffer's arena→source map: `length` consecutive content bytes that image a contiguous source range beginning at `sourceOffset`.
 ///
 /// A `sourceOffset < 0` marks a synthetic gap - the interned `"\n"` line-join between reconstructed lines, or an arena-only line with no source pre-image - which stays position-less (`nil`), matching cmark's position-less soft breaks. Runs are contiguous and ordered (they tile the content from its first byte), so the map walks exactly like the multi-segment `Segment` list, minus the byte reads (bytes come from the flat arena span). This lets inline stamping recover per-line source columns for content that was flattened into one arena chunk (a non-contiguous setext heading), and in the single-run case it expresses the constant shift of a `\|`-unescaped table cell.
+///
+/// `physicalOffset` is the `Segment.offset` analog: the run's byte-read source offset, which always sits on the run's own physical source line even when `sourceOffset` re-indents a continuation line to its block-content column and thereby overshoots that line. It equals `sourceOffset` for content that images its source where its bytes sit (a top-level line, or the constant-shift table cell). Inline stamping anchors a re-indented run's physical line on it (see `ContentSpan.physicalRunBase` / `stampInline`); `< 0` marks a synthetic gap with no physical image.
 internal struct ArenaRun: Equatable {
     internal var length: Int32
     internal var sourceOffset: Int32
+    internal var physicalOffset: Int32
 
-    internal init(length: Int32, sourceOffset: Int32) {
+    /// `physicalOffset` defaults to `sourceOffset` (the run images its source where its bytes sit); pass it explicitly only when a re-indented continuation line's byte-read offset differs from its re-indented source mapping.
+    internal init(length: Int32, sourceOffset: Int32, physicalOffset: Int32? = nil) {
         self.length = length
         self.sourceOffset = sourceOffset
+        self.physicalOffset = physicalOffset ?? sourceOffset
     }
 }
 
