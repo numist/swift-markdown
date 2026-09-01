@@ -129,4 +129,21 @@ struct BackslashHardBreakRangeTests {
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 3))   // "b"
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 4))
     }
+
+    @Test("text after a backslash break on a lazy list continuation resets to its true column")
+    func textAfterBreakOnLazyListContinuation() throws {
+        // `- b` line 1 (list content column 3), ` \` line 2 (one leading space, below the item's
+        // two-space content indent, so a LAZY continuation whose residual space cmark preserves in its
+        // paragraph buffer), `c` line 3. Spec-correct, `c` resets to its own true physical position
+        // @3:1-3:2. cmark's quirk keeps counting flat across the break AND, because the residual space
+        // survives in its buffer, reports `c` one column past the residual-free position: @2:6-2:7 (the
+        // `dxe-min` fuzzer pair, flag-on). A two-space continuation is instead a MATCHED continuation
+        // whose residual is discarded, so its flat column has no such shift (@2:5-2:6, `dxe-2sp`).
+        let texts = try textRanges(in: "- b\n \\\nc")
+        try #require(texts.count == 2)
+        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "b"
+        #expect(texts[0]?.upperBound == Pos(line: 1, column: 4))
+        #expect(texts[1]?.lowerBound == Pos(line: 3, column: 1))   // "c"
+        #expect(texts[1]?.upperBound == Pos(line: 3, column: 2))
+    }
 }

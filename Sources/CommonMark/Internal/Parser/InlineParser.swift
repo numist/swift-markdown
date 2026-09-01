@@ -2623,8 +2623,8 @@ extension BlockParser {
         //
         // Flag OFF is spec-correct: take no explicit positions, so the node keeps the byte-projected range above - its content projected onto its true physical line:column, which resets at the physical newline exactly like soft and trailing-space breaks do. Covers only `stampInline`'s node population; the strikethrough-zero-width and multi-line-link close-bracket end overrides are separate quirks not compounded here.
         if inlineSawBackslashHardBreak && storage.options.contains(.cmarkBugCompatibility) {
-            storage.setExplicitStart(node, flatInlinePosition(ofContent: start))
-            var endPosition = flatInlinePosition(ofContent: end - 1)
+            storage.setExplicitStart(node, flatInlinePosition(ofContent: start, content: content))
+            var endPosition = flatInlinePosition(ofContent: end - 1, content: content)
             endPosition.column += 1  // half-open end: one past the last content byte's column
             storage.setExplicitEnd(node, endPosition)
         } else if storage.options.contains(.cmarkBugCompatibility),
@@ -2664,17 +2664,30 @@ extension BlockParser {
         return false
     }
 
-    /// cmark's flat inline (line, column) for CONTENT offset `off`, counting backslash-hard-break newlines as columns (cmark's inline cursor never resets there) while soft / trailing-space breaks reset it to the next line. Content offsets (not source offsets) are the coordinate: they exclude the stripped prefixes/indents of multi-segment continuation lines, which is exactly what cmark's flat cursor never counted. Every logical line (index 0 and each soft/space-break reset) is based at `inlineBlockStartColumn` - cmark's fixed block-content column (`block_offset + 1`), uniform across a block's lines for the containers in scope (blockquote/list/CRLF share a constant prefix). Valid only while `inlineFlatColumnTracking` is armed and `inlineLogicalLineStarts` is seeded (see `parseInline`).
-    private func flatInlinePosition(ofContent off: Int) -> MarkdownNode.SourcePosition {
+    /// cmark's flat inline (line, column) for CONTENT offset `off`, counting backslash-hard-break newlines as columns (cmark's inline cursor never resets there) while soft / trailing-space breaks reset it to the next line. Content offsets (not source offsets) are the coordinate: they exclude the stripped prefixes/indents of multi-segment continuation lines, which is exactly what cmark's flat cursor never counted. Every logical line (index 0 and each soft/space-break reset) is based at its own re-indented block-content column via `flatBaseColumn` - cmark's fixed block-content column (`block_offset + 1`) for the block's first line and every *matched* continuation, plus the preserved residual whitespace of a *lazy* continuation (which cmark keeps in its paragraph buffer and counts flat). Valid only while `inlineFlatColumnTracking` is armed and `inlineLogicalLineStarts` is seeded (see `parseInline`).
+    private func flatInlinePosition(ofContent off: Int, content: borrowing ContentSpan) -> MarkdownNode.SourcePosition {
         // Largest logical-line-start index `k` with `inlineLogicalLineStarts[k] <= off` (ascending, and [0] == block start <= any node offset). The list is one entry per soft/space break, so this walk is tiny.
         var k = 0
         while k + 1 < inlineLogicalLineStarts.count && inlineLogicalLineStarts[k + 1] <= off {
             k += 1
         }
+        let logicalLineStart = inlineLogicalLineStarts[k]
         return MarkdownNode.SourcePosition(
             line: inlineBlockStartLine + k,
-            column: (off - inlineLogicalLineStarts[k]) + inlineBlockStartColumn
+            column: (off - logicalLineStart) + flatBaseColumn(ofContent: logicalLineStart, content: content)
         )
+    }
+
+    /// The flat-cursor base column for the logical line beginning at CONTENT offset `logicalLineStart`: the column cmark's inline cursor assigns that line's first content byte.
+    ///
+    /// The block's first line and every *matched* continuation re-indent to the fixed block-content column (`inlineBlockStartColumn` = cmark's `block_offset + 1`), so this returns that. A *lazy* continuation is the exception: cmark's `add_line` copies from the offset where container-prefix matching stopped without advancing to the first non-space (blocks.c ~1408), so its preserved residual leading whitespace survives in cmark's paragraph buffer and shifts every following byte's flat column right by that residual (`- b\n \\\nc`: line 2's 1 leading space is below the list's 2-space content indent, so it stays a lazy continuation and cmark reports the post-break `c` at `@2:6`, one past the residual-free `@2:5`). The rewrite strips that residual from the CONTENT bytes (it lives only in the re-indented source mapping; see `BlockParser.addLineSegment`), so recover the residual from the line-start's own re-indented column: `sourceOffset` maps the byte to its block-content column + residual, and `physicalRunBase` anchors that column on the line's true physical source line even when a large re-indent pushes the mapped offset past the line's byte extent (the same anchor `stampInline`'s Quirk-E branch uses). Not re-indented (single-segment source, or a first line) → the block-content column.
+    private func flatBaseColumn(ofContent logicalLineStart: Int, content: borrowing ContentSpan) -> Int {
+        guard content.isReindentedRun(ofVirtual: logicalLineStart),
+              let mappedSource = content.sourceOffset(ofVirtual: logicalLineStart),
+              let physicalBase = content.physicalRunBase(ofVirtual: logicalLineStart) else {
+            return inlineBlockStartColumn
+        }
+        return mappedSource - lineStartByte(ofSource: physicalBase) + 1
     }
 
     /// Give a matched link/image/attribute the flat close-bracket end column cmark reports when its `(...)` (destination/title/attrs) crosses a newline.
@@ -2826,7 +2839,7 @@ extension BlockParser {
         storage.setSourceEnd(node, lineStartByte(ofSource: s))
         // why: two cmark quirks compound here. (1) strikethrough.c's `match` sets the `~` text node's `start_line`/`end_line` to `subj->line` and its `start_column` to the inline cursor's flat column, but leaves `end_column == 0` (which the reference converter maps to column 1). (2) After a backslash hard break, cmark's `handle_backslash` never resets `subj->line` / `subj->column_offset` (unlike `handle_newline` for soft/space breaks), so `subj->line` and the flat column keep counting across the break - no source byte projects onto them. The byte path above resets at the physical newline and so mis-lines the `~`; when a backslash break precedes this run, override start/end from the same flat cursor `stampInline` uses. The start is the flat position; the end is that flat line's column 1 (the `end_column == 0` mapping), so a run past column 1 stays start > end and reports no position (matching cmark), and consolidation carries these explicit positions onto a merged post-break run. Without a preceding backslash break this branch is skipped and the byte path above is byte-identical to before.
         if inlineSawBackslashHardBreak {
-            let flatStart = flatInlinePosition(ofContent: start)
+            let flatStart = flatInlinePosition(ofContent: start, content: content)
             storage.setExplicitStart(node, flatStart)
             storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: flatStart.line, column: 1))
         }
