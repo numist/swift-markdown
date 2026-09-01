@@ -235,12 +235,25 @@ internal struct ContentSpan: ~Escapable {
     ///
     /// Only a re-indented run can have its byte-projected end overshoot its own physical line (Quirk E, see `stampInline`): the re-indent shifts the mapped source offsets rightward, past the line's byte extent. A run that is NOT re-indented maps identity, so its byte projection is exact and needs no overshoot correction. This distinction matters for a **multi-line contiguous** segment - a top-level paragraph's source-adjacent lines joined into ONE segment (`a\nb`), which spans multiple physical source lines with `sourceOffset == offset`: its `sourceRunBase` (the segment's first-byte offset) sits on an *earlier* physical line than an interior-line run, which would spuriously trip the overshoot guard. Reporting such a run as not-re-indented keeps stamping on the exact byte projection.
     ///
-    /// Single-segment source content is never re-indented (identity map). Single-segment arena content is reported as re-indented (its reconstructed bytes carry no physical-source offset to compare against `sourceOffset`), preserving the existing overshoot handling for flattened / entity-substituted content.
+    /// Single-segment source content is never re-indented (identity map). Single-segment arena content is resolved *per run* through its arena→source map, exactly like the multi-segment segment list: a run is re-indented iff its byte-read anchor (`ArenaRun.physicalOffset`, the `Segment.offset` analog) differs from its (re-indented) `sourceOffset`. A contiguous multi-line run flattened from source-adjacent lines (`physicalOffset == sourceOffset`, e.g. `t\n|` when a `[`-led or pipe-bearing paragraph is materialized for the finalize matchers) is therefore reported not-re-indented, so an interior-line byte keeps its exact byte projection - the same distinction the multi-segment path makes for a contiguous segment. A synthetic-gap run (`sourceOffset < 0`, the interned `\n` join) maps to no source position, so the result is moot (stamping bails); report it not-re-indented.
     @inlinable
     func isReindentedRun(ofVirtual offset: Int) -> Bool {
         if !isMultiSegment {
-            // Arena content (`!inSource`) has no physical-source offset to compare; keep it on the overshoot path. Source content maps identity, so it is never re-indented.
-            return !inSource
+            // Source content maps identity, so it is never re-indented. Arena content resolves per run via its `physicalOffset` vs `sourceOffset` (populated when flattening a segment list; equal for a contiguous run, differing for a re-indented continuation line).
+            if inSource {
+                return false
+            }
+            let k = offset - base
+            var v = 0
+            for i in 0..<arenaRuns.count {
+                let run = arenaRuns[i]
+                let len = Int(run.length)
+                if k < v + len {
+                    return run.sourceOffset >= 0 && run.sourceOffset != run.physicalOffset
+                }
+                v += len
+            }
+            return false
         }
         var v = 0
         for i in 0..<segments.count {
