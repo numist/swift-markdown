@@ -1470,10 +1470,35 @@ extension BlockParser {
                 }
                 if closeLength == runLength {
                     // Return RAW content; the caller normalizes newlines and applies the single-space-strip rule (in that order) since the strip needs the post-normalize bytes to compare against.
-                    let contentChunk = content.chunk(
-                        offset: openEnd,
-                        length: i - openEnd
-                    )
+                    //
+                    // The raw content is `[openEnd, i)`. When that whole range lies in one contiguous buffer
+                    // region - every single-line span, and any multi-segment span that stays within one source
+                    // segment - `contiguousChunk` returns it zero-copy, byte-identical to the old `content.chunk`
+                    // fast path. A multi-line span straddles a soft-break segment boundary (its interior newline
+                    // joined the paragraph's non-contiguous lines): the content bytes live in separate source
+                    // segments joined by the interned `\n`, so no single buffer holds them and a straddling
+                    // `content.chunk` would read the wrong bytes - dropping the tail and keeping the continuation
+                    // line's stripped leading whitespace. Materialize the joined raw bytes into the arena through
+                    // the segment-aware subscript, then hand them to the unchanged normalizer. This is the
+                    // `ef14606` inline-HTML sibling.
+                    //
+                    // The joined bytes equal cmark's paragraph buffer for a MATCHED continuation, whose leading
+                    // whitespace the block parser strips just as cmark does (blocks.c:1465). A LAZY block-quote
+                    // continuation is a separate divergence NOT reproduced here: cmark preserves that line's
+                    // residual leading whitespace (blocks.c:1408) but the segment records bytes from the first
+                    // non-space (`Segment.offset`), so the join omits it - a block-parser issue, not a code-span
+                    // content bug (see csseg-bq).
+                    let contentChunk: Chunk
+                    if let contiguous = content.contiguousChunk(fromVirtual: openEnd, limit: i),
+                       contiguous.length == i - openEnd {
+                        contentChunk = contiguous
+                    } else {
+                        let outOffset = storage.strings.count
+                        for k in openEnd..<i {
+                            storage.strings.append(content[k])
+                        }
+                        contentChunk = Chunk(offset: outOffset, length: storage.strings.count - outOffset, inSource: false)
+                    }
                     return CodeSpanMatch(content: contentChunk, afterClose: closeEnd, backtickCount: runLength)
                 }
                 i = closeEnd

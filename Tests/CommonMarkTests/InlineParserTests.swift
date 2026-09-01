@@ -177,6 +177,24 @@ struct CodeSpanTests {
         #expect(inlines[1].literal == " bar")
         }
     }
+
+    @Test("multi-line span reconstructs its full content across a soft break")
+    func multiLineSpanAcrossSoftBreak() throws {
+        // `x` on line 1, ` y` on line 2 of one paragraph. A matched paragraph continuation strips its
+        // leading whitespace, so the paragraph's content joins the two lines as `x\ny`; the code span
+        // between the backticks normalizes the interior newline to a space, giving `x y`. The span's
+        // bytes straddle the soft-break segment boundary of the (non-contiguous) multi-segment
+        // paragraph, so the content can't be a zero-copy contiguous source slice - it must be
+        // materialized from the joined segments (cmark reads the same joined paragraph buffer). Before
+        // the fix the span read a single-segment window and truncated to `x  ` (dropping `y`, keeping
+        // the stripped continuation space).
+        let source = "`x\n y`"
+        try MarkdownDocument.withParsedDocument(source) { doc in
+        let inlines = paragraphInlines(doc)
+        #expect(inlines[0].kind == .codeInline(backtickCount: 1))
+        #expect(inlines[0].literal == "x y")
+        }
+    }
 }
 
 @Suite("Inline parser - line breaks")
