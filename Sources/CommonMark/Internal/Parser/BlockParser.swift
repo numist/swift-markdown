@@ -539,9 +539,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         switch take(pending, ifNode: node) {
         case .none:
-            // First content for this leaf: fix its `block_offset` (the content column) from this line, so any continuation line re-indents to it. `range.lowerBound` is the first-non-space byte; measure its distance from the source line start (via `sourceOffset` for a tab-expanded line).
+            // First content for this leaf: fix its `block_offset` (the content column) from this line, so any continuation line re-indents to it. `range.lowerBound` is the first-non-space byte; measure its distance from the source line start (via `sourceOffset` for a tab-expanded line). For a task-list item, add the checkbox marker width the tasklist extension consumes at finalize (see `tasklistContentIndentBump`).
             if positionsEnabled, nodeKind.canAccumulateText, let s = sourceOffset(range.lowerBound) {
                 currentContentIndent = s - currentLineSourceRange.lowerBound
+                    + tasklistContentIndentBump(node: node, span: span, range: range)
             }
             // Fast path: first content for this node and the current line maps directly into `self.source` - store the range lazily and skip the byte copy.
             if currentLineMapsToSource, nodeKind.canAccumulateText {
@@ -586,6 +587,31 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return PendingLeaf(node: node, content: .materialized(buffer))
             }
         }
+    }
+
+    /// Extra content-indent columns a task-list item contributes to a paragraph's continuation re-indent base.
+    ///
+    /// A GFM task-list item's checkbox marker (`[ ] ` / `[x] `) is stripped from the item's first paragraph at finalize (`runParagraphMatchers`), which advances the paragraph's own start past the marker but leaves the block-content column - the base every continuation line re-indents to (Quirk E, `addLineSegment`) - fixed at the *plain* item content column (where `[` sits). cmark-gfm fixes that base at the checkbox-adjusted content column instead, so a task-item continuation lands the marker's column-width further right than a plain bullet's would. Add that width here, at the point the base is first fixed, when this leaf is the first paragraph of a list item and its first line begins with a checkbox marker. Returns 0 otherwise (plain bullets, ordered lists, non-item paragraphs), so nothing else moves.
+    ///
+    /// `currentContentIndent` is a *column* count. A space-separated marker (`[ ] `) is exactly `tasklistMarkerWidth` single-byte columns, so the bump equals its byte width. A TAB-separated marker (`[ ]\t`) is still recognized by `matchTasklistMarker` but its column width is tab-stop-dependent, not its byte width, so it is left to the deferred tab class (see CLAUDE.md "tab after a list marker") rather than bumped with a wrong column count - `require`ing a space separator here keeps the arithmetic column-exact. The recognition otherwise mirrors `matchTasklistMarker` (same `tasklistMarkerChecked` predicate, same first-child-of-item condition), so in the common case - marker on the first line, no preceding ref-def / footnote / table matcher redirecting finalize - the finalize consumption and this re-indent bump agree.
+    private func tasklistContentIndentBump(node: DocumentStorage.Index, span: Span<UInt8>, range: Range<Int>) -> Int {
+        guard storage.options.contains(.tasklist),
+              storage[node].kind == .paragraph,
+              let parent = storage[node].parent,
+              case .item = storage[parent].kind,
+              storage[parent].firstChild == node,
+              range.lowerBound + Self.tasklistMarkerWidth <= range.upperBound,
+              Self.tasklistMarkerChecked(
+                span[range.lowerBound],
+                span[range.lowerBound + 1],
+                span[range.lowerBound + 2],
+                span[range.lowerBound + 3]
+              ) != nil,
+              span[range.lowerBound + 3] == UInt8(ascii: " ")   // space separator: byte width == column width
+        else {
+            return 0
+        }
+        return Self.tasklistMarkerWidth
     }
 
     /// Append a single `\n` to `pending` for `node`, returning the updated leaf.
@@ -3040,20 +3066,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         chunk.inSource ? sourceBytes[offset] : storage.strings[offset]
     }
 
-    /// Match a GFM tasklist marker at the start of a paragraph chunk: `[ ]`, `[x]`, or `[X]` followed by a space or tab.
+    /// The fixed byte width of a GFM tasklist marker: `[`, the checkbox symbol, `]`, and one whitespace separator.
+    static let tasklistMarkerWidth = 4
+
+    /// Classify the four leading bytes of a candidate GFM tasklist marker (`[`, ` `/`x`/`X`, `]`, ` `/`\t`).
     ///
-    /// Returns the `checked` state and the remaining content (after the marker + the single-byte whitespace separator), or `nil` if the chunk doesn't start with a marker. Paragraph content is always materialized so we only handle `inSource: false` here.
-    private func matchTasklistMarker(chunk: Chunk) -> (checked: Bool, remaining: Chunk)? {
-        if chunk.length < 4 {
+    /// Returns the checked state (`false` for `[ ]`, `true` for `[x]`/`[X]`), or `nil` if the bytes aren't a marker. Shared by `matchTasklistMarker` (finalize-time, over the flattened paragraph content) and the continuation re-indent base (`addLine`, over the first line's source bytes) so both agree on exactly what counts as a checkbox.
+    static func tasklistMarkerChecked(_ b0: UInt8, _ b1: UInt8, _ b2: UInt8, _ b3: UInt8) -> Bool? {
+        guard b0 == UInt8(ascii: "[") else {
             return nil
         }
-        let off = chunk.offset
-        if readByte(at: off, in: chunk) != UInt8(ascii: "[") {
-            return nil
-        }
-        let sym = readByte(at: off + 1, in: chunk)
         let checked: Bool
-        switch sym {
+        switch b1 {
         case UInt8(ascii: " "):
             checked = false
         case UInt8(ascii: "x"), UInt8(ascii: "X"):
@@ -3061,14 +3085,30 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         default:
             return nil
         }
-        if readByte(at: off + 2, in: chunk) != UInt8(ascii: "]") {
+        guard b2 == UInt8(ascii: "]"),
+              b3 == UInt8(ascii: " ") || b3 == UInt8(ascii: "\t") else {
             return nil
         }
-        let afterClose = readByte(at: off + 3, in: chunk)
-        if afterClose != UInt8(ascii: " ") && afterClose != UInt8(ascii: "\t") {
+        return checked
+    }
+
+    /// Match a GFM tasklist marker at the start of a paragraph chunk: `[ ]`, `[x]`, or `[X]` followed by a space or tab.
+    ///
+    /// Returns the `checked` state and the remaining content (after the marker + the single-byte whitespace separator), or `nil` if the chunk doesn't start with a marker. Paragraph content is always materialized so we only handle `inSource: false` here.
+    private func matchTasklistMarker(chunk: Chunk) -> (checked: Bool, remaining: Chunk)? {
+        if chunk.length < Self.tasklistMarkerWidth {
             return nil
         }
-        return (checked, chunk.extracting(4..<chunk.length))
+        let off = chunk.offset
+        guard let checked = Self.tasklistMarkerChecked(
+            readByte(at: off, in: chunk),
+            readByte(at: off + 1, in: chunk),
+            readByte(at: off + 2, in: chunk),
+            readByte(at: off + 3, in: chunk)
+        ) else {
+            return nil
+        }
+        return (checked, chunk.extracting(Self.tasklistMarkerWidth..<chunk.length))
     }
 
     /// Match a GFM footnote definition `[^label]: content` at the start of a paragraph chunk.
