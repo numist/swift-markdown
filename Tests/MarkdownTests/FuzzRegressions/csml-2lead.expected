@@ -1,4 +1,0 @@
-Document @1:1-2:5
-└─ Paragraph @1:2-2:5
-   ├─ InlineCode @1:2-2:2 ` `
-   └─ Text @2:3-2:4 "y"

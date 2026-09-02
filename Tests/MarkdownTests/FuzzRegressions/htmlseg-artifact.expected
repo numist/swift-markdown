@@ -1,7 +1,0 @@
-Document @1:1-4:4
-├─ Paragraph @1:1-2:19
-│  ├─ Text @1:1-1:31 "<sty](baz*)w.commonmark.org/he"
-│  └─ InlineHTML @1:31-2:16 <lple
-type="text/css">
-└─ Paragraph @4:1-4:4
-   └─ Text @4:1-4:4 "foo"

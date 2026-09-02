@@ -1,4 +1,0 @@
-Document @1:1-2:5
-└─ Paragraph @1:1-2:5
-   └─ InlineHTML @1:1-1:10 <foo
-bar>

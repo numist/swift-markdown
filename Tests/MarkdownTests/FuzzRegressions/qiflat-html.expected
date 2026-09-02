@@ -1,5 +1,0 @@
-Document @1:1-2:4
-└─ Paragraph @1:1-2:4
-   ├─ InlineHTML @1:1-1:6 <a
-b>
-   └─ Text @1:6-1:7 "c"

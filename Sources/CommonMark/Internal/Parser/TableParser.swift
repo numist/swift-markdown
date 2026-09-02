@@ -268,7 +268,7 @@ extension BlockParser {
                                 scratch.append(copying: buffer)
                             }
                         }
-                        // Hand the inline parser a linear arena→source mapping so the cell's inlines still get positions. cellChunk.offset (arena) images cellRange.lowerBound (source); cmark stamps cell inlines by their offset in the unescaped buffer added to the cell start, ignoring any stripped `\|` backslash, so a single constant-shift run (covering the whole cell content) reproduces its columns. A `.flattened` cell re-bases via the row projection and carries the physical anchor, so an overshooting re-indent stamps on its own line (`stampInline`'s Quirk-E branch). why: table-cell inline positions track the reference's escape-oblivious / re-based columns unconditionally - this is NOT enrolled in `.cmarkBugCompatibility` (there was no prior spec-correct behavior to protect: these inlines were unstamped before), so there is no flag split here. A non-source-mapped table (materialized content, no source image) has no mapping - leave `runScratch` empty so the cell stays unstamped as before.
+                        // Hand the inline parser a linear arena→source mapping so the cell's inlines still get positions. cellChunk.offset (arena) images cellRange.lowerBound (source); cmark stamps cell inlines by their offset in the unescaped buffer added to the cell start, ignoring any stripped `\|` backslash, so a single constant-shift run (covering the whole cell content) reproduces its columns. A `.flattened` cell re-bases via the row projection (`rebasedDelta`). why: table-cell inline positions track the reference's escape-oblivious / re-based columns unconditionally - this is NOT enrolled in `.cmarkBugCompatibility` (there was no prior spec-correct behavior to protect: these inlines were unstamped before), so there is no flag split here. A non-source-mapped table (materialized content, no source image) has no mapping - leave `runScratch` empty so the cell stays unstamped as before.
                         runScratch.removeAll(keepingCapacity: true)
                         switch mode {
                         case .contiguous(let sourceDelta):
@@ -277,8 +277,7 @@ extension BlockParser {
                             if let proj {
                                 runScratch.append(ArenaRun(
                                     length: Int32(cellChunk.length),
-                                    sourceOffset: Int32(cellRange.lowerBound + proj.rebasedDelta),
-                                    physicalOffset: Int32(cellRange.lowerBound + proj.physDelta)))
+                                    sourceOffset: Int32(cellRange.lowerBound + proj.rebasedDelta)))
                             }
                         case .none:
                             break
@@ -303,20 +302,18 @@ extension BlockParser {
     private enum TableSourceMode {
         /// Not source-mapped: materialized content with no contiguous source image (block-quote/list/CRLF tables). Positions are left unstamped, as before.
         case none
-        /// A contiguous `inSource` range copied into the arena: arena offset `A` maps to source `A + delta` (physical == re-based, so it never overshoots a physical line). The common no-leading-whitespace table.
+        /// A contiguous `inSource` range copied into the arena: arena offset `A` maps to source `A + delta` (physical == re-based). The common no-leading-whitespace table.
         case contiguous(delta: Int)
-        /// A top-level row with leading whitespace: the paragraph arrived as a non-contiguous segment list, flattened with a content-relative arena→source run map that re-bases each row's content to the table's content column (cmark's cell-column re-base). Runs carry both the re-based `sourceOffset` and the physical byte-read `physicalOffset`, so an overshooting re-indent stamps on its own line.
+        /// A top-level row with leading whitespace: the paragraph arrived as a non-contiguous segment list, flattened with a content-relative arena→source run map that re-bases each row's content to the table's content column (cmark's cell-column re-base). Runs carry both the re-based `sourceOffset` and the physical byte-read `physicalOffset` (the latter places the row's content end on its true physical line).
         case flattened([ArenaRun])
     }
 
-    /// A single row's constant arena→source shift plus its physical-line anchor.
+    /// A single row's constant arena→source shifts.
     ///
-    /// A table row occupies one physical source line, which lies within a single run, so one constant delta re-bases every offset in the row: `rebased = arena + rebasedDelta` (the re-indented source offset, whose column is cmark's) and `physical = arena + physDelta` (the byte-read source offset, always on the row's true physical line). `physLine`/`physLineStart` cache that physical line so a re-based offset that overshoots it can be stamped explicitly on the right line.
+    /// A table row occupies one physical source line, which lies within a single run, so one constant delta re-bases every offset in the row: `rebased = arena + rebasedDelta` (the re-indented source offset, whose column is cmark's escape-oblivious / re-based column) and `physical = arena + physDelta` (the byte-read source offset on the row's true physical line, used to place the row's content end).
     private struct RowProjection {
         let rebasedDelta: Int
         let physDelta: Int
-        let physLine: Int
-        let physLineStart: Int
     }
 
     /// Build the projection for the row whose first content byte is at arena offset `rowStartArena`, or `nil` when the table isn't source-mapped (or the row's content didn't image source).
@@ -345,27 +342,19 @@ extension BlockParser {
             rebasedDelta = Int(run.sourceOffset) - runStart - chunkOffset
             physDelta = Int(run.physicalOffset) - runStart - chunkOffset
         }
-        let physStart = rowStartArena + physDelta
-        let pos = sourcePosition(ofByte: physStart)
-        return RowProjection(rebasedDelta: rebasedDelta, physDelta: physDelta, physLine: pos.line, physLineStart: physStart - (pos.column - 1))
+        return RowProjection(rebasedDelta: rebasedDelta, physDelta: physDelta)
     }
 
-    /// Stamp a node's start from an arena offset, re-basing via the row projection. When the re-indented offset overshoots its own physical line (a header more indented than this row pushes the re-based column past the line's byte extent onto a later line), record an explicit (line, column) - the physical line at the re-indented column - so the node stays on its own line, matching cmark and `stampInline`'s Quirk-E branch. For a `.contiguous` row physical == re-based, so this never overshoots and stamps a plain byte offset.
+    /// Stamp a node's start from an arena offset, re-basing via the row projection (`rebased = arena + rebasedDelta`, cmark's escape-oblivious / re-based column).
     private mutating func stampStart(_ node: DocumentStorage.Index, arena: Int, _ proj: RowProjection) {
         let rebased = arena + proj.rebasedDelta
         storage.setSourceStart(node, rebased)
-        if sourcePosition(ofByte: rebased).line != proj.physLine {
-            storage.setExplicitStart(node, MarkdownNode.SourcePosition(line: proj.physLine, column: rebased - proj.physLineStart + 1))
-        }
     }
 
-    /// Stamp a node's half-open end from an arena offset, re-basing via the row projection (see `stampStart` for the overshoot handling).
+    /// Stamp a node's half-open end from an arena offset, re-basing via the row projection (see `stampStart`).
     private mutating func stampEnd(_ node: DocumentStorage.Index, arena: Int, _ proj: RowProjection) {
         let rebased = arena + proj.rebasedDelta
         storage.setSourceEnd(node, rebased)
-        if sourcePosition(ofByte: rebased).line != proj.physLine {
-            storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: proj.physLine, column: rebased - proj.physLineStart + 1))
-        }
     }
 
     /// Current rowspan of a `.tableCell` node (`1` if it carries no span data).

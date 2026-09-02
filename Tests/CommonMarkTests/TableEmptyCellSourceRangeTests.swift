@@ -147,33 +147,6 @@ struct TableEmptyCellSourceRangeTests {
         #expect((bodyRow.cells[1].startColumn, bodyRow.cells[1].endColumn, bodyRow.cells[1].text) == (4, 5, "y"))
     }
 
-    /// A re-based cell whose column overshoots its own physical line's byte width — a header more
-    /// indented than the body row — stays on its OWN line at the re-based column, even when later lines
-    /// follow. cmark works in (line, column) space and never lets the overshoot spill onto the next line
-    /// (`cell end_column = parent->start_column + cell->end_offset`, `end_line = the row's line`). This
-    /// exercises the explicit-position path: a plain byte offset would project the re-based end onto the
-    /// following physical line (inverting the range so the cell would lose its position entirely).
-    @Test("cmark-compat: a re-based cell that overshoots its physical line stays on its own line")
-    func reBasedCellOvershootStaysOnLine() throws {
-        let opts: MarkdownDocument.ParseOptions = [.tables, .tableSpans, .sourcePosition, .cmarkBugCompatibility]
-        // ` a|b` header sets table start column 2; body `x|y` is on line 3, followed by a blank line and a
-        // paragraph so the body row is NOT the last source line. `y` re-bases to columns 4–5, whose bytes
-        // sit at/after line 3's terminating newline.
-        let rows = try tableRows(" a|b\n-|-\nx|y\n\nafter", options: opts)
-        try #require(rows.count == 2, "fixture: expected a header row and a body row")
-        let body = rows[1]
-        try #require(body.line == 3, "fixture: the body row must be on line 3")
-        try #require(body.cells.count == 2, "fixture: two positioned body cells (an overshoot would drop the cell's range)")
-        // The rightmost cell re-bases to columns 4–5 and stays on line 3 (not the following line).
-        #expect((body.cells[1].startColumn, body.cells[1].endColumn, body.cells[1].text) == (4, 5, "y"))
-        // Its inner Text node is stamped by the inline pass (a separate path that consumes the re-based
-        // run's physical anchor), and must likewise stay on line 3 at cols 4–5 rather than spill onto line 4.
-        let yStart = try #require(body.cells[1].textStart, "fixture: the `y` cell must carry a positioned Text node")
-        let yEnd = try #require(body.cells[1].textEnd, "fixture: the `y` cell must carry a positioned Text node")
-        #expect(yStart.line == 3 && yStart.column == 4)
-        #expect(yEnd.line == 3 && yEnd.column == 5)
-    }
-
     /// A whitespace-only cell's end column spans past its closing pipe (untrimmed extent), while the
     /// surrounding content cells keep their trimmed-content ends.
     @Test("a whitespace-only cell ends one column past its closing pipe")

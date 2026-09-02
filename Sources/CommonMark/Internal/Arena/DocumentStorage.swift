@@ -66,20 +66,10 @@ internal struct DocumentStorage: ~Copyable {
 
     /// Half-open source byte range `[start, end)` for one node, in original-source coordinates.
     ///
-    /// `start == -1` marks an unstamped node (a node never assigned a position).
+    /// `start == -1` marks an unstamped node (a node never assigned a position). Positions are always the byte projection of `start` / `end` via `StorageView.position(ofByte:)`.
     internal struct SourceByteRange: Equatable {
         internal var start: Int
         internal var end: Int
-
-        /// Read-time start position that overrides byte projection when present.
-        ///
-        /// An inline node after a backslash hard break has a start *line/column* that no source byte projects to: cmark counts the backslash-break newline as a flat column (its inline cursor never resets there) while the byte projection resets at every newline (see `InlineParser.stampInline` / `flatInlinePosition`). Every other node leaves this `nil` and keeps the byte-projected start.
-        internal var explicitStart: MarkdownNode.SourcePosition? = nil
-
-        /// Read-time end position that overrides byte projection when present.
-        ///
-        /// A multi-line inline link/image/attribute has an end *column* that is a flat buffer coordinate cmark never resets across the newline inside `(...)` - no source byte projects to it (see `InlineParser.stampCloseBracketEnd`); an inline node after a backslash hard break likewise ends at a flat, un-reset column (see `InlineParser.stampInline`). Every other node leaves this `nil` and keeps the byte-projected end.
-        internal var explicitEnd: MarkdownNode.SourcePosition? = nil
 
         internal static let unset = SourceByteRange(start: -1, end: -1)
     }
@@ -140,20 +130,6 @@ internal struct DocumentStorage: ~Copyable {
     internal mutating func setSourceEnd(_ node: Index, _ offset: Int?) {
         if let offset, positionsEnabled {
             sourceRanges[node].end = offset
-        }
-    }
-
-    /// Record an explicit read-time end position for `node`, overriding the byte-projected end. Used for a multi-line inline link/image/attribute (whose cmark end column is a flat buffer coordinate no source byte projects to) and for an inline node after a backslash hard break (whose end column is likewise flat and un-reset). No-op when positions are off.
-    internal mutating func setExplicitEnd(_ node: Index, _ position: MarkdownNode.SourcePosition) {
-        if positionsEnabled {
-            sourceRanges[node].explicitEnd = position
-        }
-    }
-
-    /// Record an explicit read-time start position for `node`, overriding the byte-projected start. Used for an inline node after a backslash hard break (whose cmark start column is a flat coordinate no source byte projects to) and for a re-indented run whose byte-projected start overshoots its own physical line (Quirk E; see `InlineParser.stampInline`). No-op when positions are off.
-    internal mutating func setExplicitStart(_ node: Index, _ position: MarkdownNode.SourcePosition) {
-        if positionsEnabled {
-            sourceRanges[node].explicitStart = position
         }
     }
 

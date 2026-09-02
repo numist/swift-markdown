@@ -1,6 +1,0 @@
-Document @1:1-2:5
-└─ Paragraph @1:1-2:5
-   ├─ Text @1:1-1:2 "a"
-   ├─ LineBreak
-   └─ Emphasis @1:4-1:7
-      └─ Text @1:5-1:6 "b"

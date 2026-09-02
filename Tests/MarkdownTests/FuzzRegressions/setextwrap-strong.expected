@@ -1,7 +1,0 @@
-Document @1:1-3:5
-└─ Heading @1:3-3:5 level: 1
-   ├─ Text @1:3-1:7 "Foo "
-   └─ Strong @1:7-2:8
-      ├─ Text @1:9-1:12 "bar"
-      ├─ SoftBreak
-      └─ Text @2:3-2:6 "baz"

@@ -39,8 +39,6 @@ private func dfsContent(
 @Suite("Lazy-continuation residual in code-span content")
 struct LazyContinuationResidualTests {
 
-    private typealias Pos = MarkdownNode.SourcePosition
-
     private static let quirkOptions: MarkdownDocument.ParseOptions = [.sourcePosition, .cmarkBugCompatibility]
     private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition]
 
@@ -94,18 +92,5 @@ struct LazyContinuationResidualTests {
             let texts = nodes.filter { $0.kind == .text }.map { $0.literal }
             #expect(texts == ["a", "b"], "options=\(options.rawValue)")
         }
-    }
-
-    @Test("flag-ON: code-span source range spans the lazy continuation to its closing backtick")
-    func codeSpanLazyBlockquote_flagOn_sourceRange() throws {
-        // The closing backtick is on line 2; with the residual now in the content, the code span's flat
-        // end column (Quirk G, `afterClose - lastInteriorNewline`) reaches @2:4.
-        var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-        try MarkdownDocument.withParsedDocument("> `x\n y`", options: Self.quirkOptions) { doc in
-            dfsRanges(doc.root, into: &ranges)
-        }
-        let codeRange = ranges.first { if case .codeInline = $0.kind { return true } else { return false } }?.range
-        #expect(codeRange?.lowerBound == Pos(line: 1, column: 3))
-        #expect(codeRange?.upperBound == Pos(line: 2, column: 4))
     }
 }

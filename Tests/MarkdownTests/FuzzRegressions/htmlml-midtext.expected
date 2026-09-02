@@ -1,6 +1,0 @@
-Document @1:1-2:4
-└─ Paragraph @1:1-2:4
-   ├─ Text @1:1-1:2 "x"
-   ├─ InlineHTML @1:2-2:2 <a
-b>
-   └─ Text @2:3-2:4 "y"

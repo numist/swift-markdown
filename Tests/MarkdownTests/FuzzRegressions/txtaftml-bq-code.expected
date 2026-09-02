@@ -1,7 +1,0 @@
-Document @1:1-3:2
-└─ BlockQuote @1:1-3:2
-   └─ Paragraph @1:3-3:2
-      ├─ InlineCode @1:3-2:2 ` `
-      ├─ Text @2:4-2:5 "o"
-      ├─ SoftBreak
-      └─ Text @3:3-3:4 "x"

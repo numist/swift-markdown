@@ -118,9 +118,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Populated only for a non-contiguous setext heading (PHASE 2c): its content is flattened into one arena `Chunk` by `flattenSegments`, which drops the per-line source mapping the segments carried. The run map (content-relative, so it survives the re-seed's arena re-copy) lets the inline pass stamp the heading's text/emphasis with real source positions instead of leaving them unstamped. Consulted in the inline pass when building an arena single-segment `ContentSpan`.
     var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
 
-    /// Physical-line shift (`> 0`) to apply UP to a block's inline descendants, keyed by node. Reproduces cmark's reference-definition-extraction position bug (see `runParagraphMatchers`); populated only flag-ON (`.cmarkBugCompatibility`). Consulted in the inline pass after a node's inlines are parsed.
-    var refdefLineShift: [DocumentStorage.Index: Int] = [:]
-
     /// List-item nodes whose GFM task-list checkbox is eligible for recognition: the item's list marker
     /// is preceded on its own physical line by only whitespace (`taskMarkerLineAnchored`), cmark's
     /// `scan_tasklist` condition. This is a PHYSICAL-LINE property, not block-nesting depth: a
@@ -138,28 +135,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// When a new item is added to that list (i.e., the blank line was between sibling items), the list gets marked loose. Cleared on each item open after the check, and stays stale (but harmless) when the list closes.
     var pendingLooseList: DocumentStorage.Index? = nil
-
-    // MARK: - Inline backslash-hard-break flat-column cursor
-
-    /// `true` while the current `parseInline` pass tracks cmark's inline line/column cursor across backslash hard breaks.
-    ///
-    /// Armed for source-imaged content - both single-segment source (the common top-level case, where a content offset IS its source offset) and multi-segment source (continuation lines whose stripped prefixes/indents cmark's cursor never counted). The cursor math runs in CONTENT-offset space so those stripped gaps don't shift the flat column. Single-segment arena content (a flattened setext heading, a `\|`-unescaped table cell) stays on the byte-projection path: its content offsets aren't a linear source-column map.
-    var inlineFlatColumnTracking = false
-
-    /// `true` once a backslash hard break has occurred in the current `parseInline` pass. Every inline node stamped afterward gets explicit flat (line, column) positions - cmark's `handle_backslash` makes the LINEBREAK without resetting `subj->line` / `subj->column_offset`, so columns keep counting flat and the line does not advance.
-    var inlineSawBackslashHardBreak = false
-
-    /// `true` once a raw-scan inline (code span / inline HTML) whose token crosses a newline has been stamped flat in the current `parseInline` pass - i.e. under `.cmarkFlatRawInlineEnds` (the differential's flag-on + `disableSourcePosOpts` combination), where cmark leaves `CMARK_OPT_SOURCEPOS` off. With sourcepos off cmark never runs `handle_newline`'s per-line reset while scanning those two constructs, so `subj->line` / `subj->column_offset` are NOT advanced for their interior newline(s). That un-advanced cursor PERSISTS: every inline stamped afterward (and this pass's later raw inlines and soft-break line advances) counts from a base that lags the physical position by the interior newlines swallowed so far. Every node stamped afterward therefore gets explicit flat (line, column) positions from the same cursor the backslash-hard-break quirk uses (`flatInlinePosition` + `inlineLogicalLineStarts`, which never record a raw inline's interior newline). Armed only while `inlineFlatColumnTracking` holds.
-    var inlineSawFlatRawInline = false
-
-    /// CONTENT offsets where each *logical* line begins for the current `parseInline` pass: index 0 is the block's content start; each later entry is the start of a line opened by a soft break or trailing-space hard break (the breaks whose cmark `handle_newline` resets the cursor). Backslash hard breaks add no entry. Content offsets (not source offsets) so a multi-segment continuation's stripped prefix doesn't shift the flat column. Reused scratch (cleared per pass).
-    var inlineLogicalLineStarts: [Int] = []
-
-    /// The 1-based source line of the current inline block's content start (cmark's `subj->line` at block entry).
-    var inlineBlockStartLine = 1
-
-    /// The 1-based column of the current inline block's content start (cmark's `block_offset + 1`).
-    var inlineBlockStartColumn = 1
 
     // MARK: - Inline code-span backtick-closer cache (cmark bug-compat)
 
@@ -320,14 +295,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             
             // Coalesce adjacent text nodes so smart-punct / entity substitutions don't leave the content split across sibling text nodes.
             consolidateTextNodes(node)
-
-            // Reproduce cmark's reference-definition line-shift (flag-ON only): stamp every inline
-            // descendant N lines higher (column preserved). Recorded in `runParagraphMatchers` when
-            // leading ref-defs were stripped; applied here, after consolidation, so the final node set
-            // carries the shift. The block node's own range is untouched.
-            if let shift = refdefLineShift[node] {
-                shiftInlineDescendants(of: node, byLines: shift)
-            }
         }
 
         storage.lineCount = reader.lineNumber
@@ -427,23 +394,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         storage.appendChild(idx, to: parent)
         storage.setSourceStart(idx, start)
         return idx
-    }
-
-    /// Convert a source byte `offset` to a 1-based (line, column) position, mirroring `StorageView.position(ofByte:)`. Requires a populated `storage.lineStarts`.
-    func sourcePosition(ofByte offset: Int) -> MarkdownNode.SourcePosition {
-        var lo = 0
-        var hi = storage.lineStarts.count
-        while lo < hi {
-            let mid = (lo + hi) / 2
-            if storage.lineStarts[mid] <= offset {
-                lo = mid + 1
-            } else {
-                hi = mid
-            }
-        }
-        let lineIndex = max(0, lo - 1)
-        let lineStart = storage.lineStarts.count > 0 ? storage.lineStarts[lineIndex] : 0
-        return MarkdownNode.SourcePosition(line: lineIndex + 1, column: (offset - lineStart) + 1)
     }
 
     /// The global original-source byte offset for a within-current-line offset.
@@ -953,20 +903,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // Reproduce cmark's structure flag-ON by keeping the paragraph open and appending this
                 // line as a normal continuation (as PHASE 2d would), restoring the accumulated content
                 // - drained by the materialize above - as a zero-copy source range so the EXISTING
-                // finalize path extracts the ref-def and the finalize line-shift (`runParagraphMatchers`)
-                // moves the surviving inlines up. Gated on `raw.inSource`: that is the validity condition
-                // for the `.lazy` reconstruction (it addresses `sourceBytes`), and is true whenever the
-                // accumulated pre-underline content is source-backed - the common single-source-line
-                // ref-def, including one inside a block quote / list item. Note the STRUCTURE match
-                // (keeping the paragraph open) is reproduced for every such case, but the line-SHIFT
-                // only fires for a remainder that stays source-contiguous through finalize (top-level,
-                // unindented, LF) - the same scope as `runParagraphMatchers`, which shifts only an
-                // `.inSource` remainder. An indented / CRLF / nested continuation re-seeds as arena-backed
-                // segments, so those keep the paragraph open but leave the surviving inlines at their
-                // (re-indented) positions unshifted - a residual position divergence in the same family
-                // as the documented continuation-reindent / ref-def-shift gaps. A ref-def whose
-                // accumulated content is not source-backed at all (a multi-line def broken across a
-                // stripped prefix, `!raw.inSource`) falls through to the spec-correct drop below.
+                // finalize path extracts the ref-def. Gated on `raw.inSource`: that is the validity
+                // condition for the `.lazy` reconstruction (it addresses `sourceBytes`), and is true
+                // whenever the accumulated pre-underline content is source-backed - the common
+                // single-source-line ref-def, including one inside a block quote / list item. A ref-def
+                // whose accumulated content is not source-backed at all (a multi-line def broken across
+                // a stripped prefix, `!raw.inSource`) falls through to the spec-correct drop below.
                 if storage.options.contains(.cmarkBugCompatibility), raw.inSource {
                     pending = PendingLeaf(node: para, content: .lazy(range: raw.range))
                     pending = appendNewline(to: para, pending: pending)
@@ -984,22 +926,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // Re-seed pending content with the stripped bytes so the heading's inline-parse pass sees only what's left after ref-defs were extracted. Keep source-backed content zero-copy as a `.lazy` source range (its offset/length are source offsets when `inSource`), so the heading's inlines are source-mapped and get positions exactly as paragraph / ATX-heading content does; only arena-backed content (non-contiguous or normalized lines) is copied.
                 if stripped.inSource {
                     pending = PendingLeaf(node: para, content: .lazy(range: stripped.range))
-                    // why: this setext heading was promoted from a paragraph whose leading ref-def(s)
-                    // were just stripped, so cmark stamps its surviving content N lines too high - the
-                    // SAME reference-definition line-shift Quirk F records for a plain paragraph in
-                    // `runParagraphMatchers`. A paragraph promoted to a heading reaches finalize on the
-                    // `.heading` branch, which never runs `runParagraphMatchers`, so record the shift
-                    // here via the shared `recordRefdefLineShift` (consumed in the inline pass by
-                    // `shiftInlineDescendants`). The heading's finalize re-trims its content
-                    // (`raw.trimming`) before inline parsing, so the byte the position projection uses
-                    // is `stripped.trimming`'s first byte - pass that as the anchor (it equals the
-                    // def-stripped-then-trimmed content `runParagraphMatchers` measures from). Flag-ON
-                    // only; flag-OFF keeps the true positions. Only the source-backed remainder is
-                    // handled here; an arena-backed (non-contiguous) remainder is the documented
-                    // Quirk-E/F nested-container gap and is left unshifted (the `else` branch below).
-                    if positionsEnabled, storage.options.contains(.cmarkBugCompatibility) {
-                        recordRefdefLineShift(for: para, contentByteOffset: stripped.trimming(using: self).offset)
-                    }
                 } else {
                     // Arena-backed (non-contiguous) content: `addChunk` re-copies the stripped bytes into a fresh arena buffer, so a plain arena chunk would reach inline parsing unmapped and leave the heading's text/emphasis unstamped (spec #12). The flattened content's run map is content-relative, so it survives the re-copy; narrow it to the window that actually reaches inline parsing - the stripped remainder after finalize's own leading/trailing trim (mirrored here by `stripped.trimming`) - keyed from `raw`'s first content byte, and stamp it on the heading via `arenaSourceMaps`.
                     if positionsEnabled, !flatMap.isEmpty {
@@ -1824,100 +1750,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
         // Stamp the (re-indented) run map for the content that actually reaches inline parsing: narrow the flattened content's map to the surviving `contentChunk` window (after leading/trailing trim, ref-def stripping, and any tasklist marker). Only meaningful when the content was flattened from a re-indented segment list; the contiguous flat-content path passes an empty map.
-        var flattenedContentSourceStart: Int? = nil
         if positionsEnabled, !map.isEmpty {
             let slice = sliceRuns(map, from: contentChunk.offset - raw.offset, length: contentChunk.length)
             if !slice.isEmpty {
                 arenaSourceMaps[node] = slice
-                // The first run's `sourceOffset` is the original-source byte the inline pass stamps the
-                // surviving content's first byte from - the anchor the ref-def line-shift below measures
-                // against. A synthetic-gap first run (`sourceOffset < 0`) means that byte has no source
-                // pre-image, so no shift is computable (see below).
-                if slice[0].sourceOffset >= 0 {
-                    flattenedContentSourceStart = Int(slice[0].sourceOffset)
-                }
             }
         }
-        // why: cmark extracts leading link reference definitions AND `^[label]:` attribute
-        // definitions from a paragraph's content buffer (`resolve_reference_link_definitions`,
-        // swift-cmark `src/blocks.c`, which strips both forms in one loop) by DROPPING their bytes
-        // off the FRONT of the buffer, then inline-parses the remainder with the subject based at the
-        // paragraph's ORIGINAL `start_line` (`cmark_parse_inlines`, `src/inlines.c`). The dropped
-        // definition bytes carried N newlines, so the surviving content - truly N physical lines below
-        // the paragraph's start - is stamped N lines too high (column preserved, since the byte offset
-        // within its own line is unchanged). Record that shift here to reproduce it flag-ON (adopted
-        // only by the differential fuzzer); flag-OFF (the shipped default) keeps the true positions.
-        // `parseDefinitions` strips both forms above, so both drive the shift identically. N = (line of
-        // the first surviving content byte) - (paragraph's start line); it is > 0 only when leading
-        // defs were stripped across at least one newline (defs stripped without crossing a newline
-        // leave the remainder on the start line, N = 0, no shift). The first surviving byte's source
-        // offset is `contentChunk.offset` when the remainder stayed a contiguous source range, or the
-        // flattened map's first source-backed run when the remainder was a non-contiguous (re-indented
-        // continuation) segment list that is still source-backed - both address that byte's physical
-        // source line, so both drive the shift. A remainder whose first surviving byte has no source
-        // pre-image (`flattenedContentSourceStart == nil`: a genuinely arena-reconstructed line with no
-        // per-byte source offset) is left unshifted. One source-backed subcase is NOT fully corrected:
-        // a nested-container LAZY continuation shorter than the block's content indent has a re-indented
-        // `sourceOffset` (Quirk E) that overshoots its own physical line, so the measured N can be too
-        // large. That is the pre-existing nested-container re-indent gap the inline end-column quirks
-        // share (it already diverges with no ref-def present); top-level remainders - all this change
-        // targets - have content indent 0 and never overshoot.
-        if positionsEnabled, storage.options.contains(.cmarkBugCompatibility), !isFootnoteDef,
-           let firstSurvivingSourceByte = contentChunk.inSource ? contentChunk.offset : flattenedContentSourceStart {
-            recordRefdefLineShift(for: node, contentByteOffset: firstSurvivingSourceByte)
-        }
         pendingInlines.append((node, storage.intern(contentChunk)))
-    }
-
-    /// Record the reference-definition line-shift (Quirk F, flag-ON) for `node`: N = (source line of
-    /// `contentByteOffset`) - (`node`'s original start line), stored in `refdefLineShift` only when > 0.
-    ///
-    /// `contentByteOffset` is the source byte offset of the first surviving-content byte that reaches
-    /// inline parsing after leading ref-defs were stripped - i.e. the base the inline pass's byte
-    /// projection stamps positions from. N > 0 only when the stripped defs crossed at least one newline
-    /// (defs stripped without a newline leave the remainder on the start line, N = 0, no shift). The
-    /// recorded shift is applied in the inline pass by `shiftInlineDescendants`. Callers gate on
-    /// `positionsEnabled && .cmarkBugCompatibility` and a source-backed remainder; the two call sites
-    /// (paragraph in `runParagraphMatchers`, setext heading in the PHASE-2c promotion) differ only in
-    /// which byte offset they pass.
-    private mutating func recordRefdefLineShift(for node: DocumentStorage.Index, contentByteOffset: Int) {
-        let start = storage.sourceRanges[node].start
-        guard start >= 0 else { return }
-        let shift = sourcePosition(ofByte: contentByteOffset).line - sourcePosition(ofByte: Int(start)).line
-        if shift > 0 {
-            refdefLineShift[node] = shift
-        }
-    }
-
-    /// Shift every inline descendant of `node` UP by `lines` physical source lines (column preserved), by stamping explicit start/end positions over the byte-projected ones.
-    ///
-    /// Reproduces cmark's reference-definition line-shift (see `runParagraphMatchers`): the shift composes onto whatever position a node would otherwise report (an existing explicit position from another quirk, else the byte projection), so only the line moves. `node`'s own range is left untouched - the block-level range is correct in both cmark and the rewrite. Only ever called flag-ON.
-    private mutating func shiftInlineDescendants(of node: DocumentStorage.Index, byLines lines: Int) {
-        var child = storage[node].firstChild
-        while let current = child {
-            shiftInlineSubtree(current, byLines: lines)
-            child = storage[current].next
-        }
-    }
-
-    /// Shift `node` and its whole subtree up by `lines` lines (see `shiftInlineDescendants`). Unstamped nodes (e.g. soft/line breaks) are skipped, so they keep reporting no position.
-    private mutating func shiftInlineSubtree(_ node: DocumentStorage.Index, byLines lines: Int) {
-        let range = storage.sourceRanges[node]
-        if range.start >= 0 {
-            var start = range.explicitStart ?? sourcePosition(ofByte: range.start)
-            start.line -= lines
-            storage.setExplicitStart(node, start)
-        }
-        if range.end >= 0 {
-            var end = range.explicitEnd ?? sourcePosition(ofByte: range.end)
-            end.line -= lines
-            storage.setExplicitEnd(node, end)
-        }
-        var child = storage[node].firstChild
-        while let current = child {
-            shiftInlineSubtree(current, byLines: lines)
-            child = storage[current].next
-        }
     }
 
     /// Close `node`, materialize its accumulated content, and back the parser's `current` pointer up to `node`'s parent.

@@ -66,27 +66,11 @@ extension BlockParser {
         let gfmAutolinkEnabled = storage.options.contains(.gfmAutolink)
         let smartEnabled = storage.options.contains(.smart)
 
-        // Reset the backslash-hard-break flat-column cursor, tracked in CONTENT-offset space. This holds for both single-segment source content (a content offset IS its source offset, identity map) and multi-segment source content, whose continuation lines have their prefixes/indents stripped - offsets cmark's inline cursor never counted, so measuring the flat column in content offsets (not source offsets) is what reproduces cmark. Single-segment arena content (a flattened setext heading, a `\|`-unescaped table cell) stays on the byte-projection path: its content offsets don't map to source columns linearly, so it isn't armed.
-        inlineSawBackslashHardBreak = false
-        inlineSawFlatRawInline = false
-        inlineFlatColumnTracking = positionsEnabled && !preserveWhitespace && (content.inSource || content.isMultiSegment)
-        inlineLogicalLineStarts.removeAll(keepingCapacity: true)
         // Reset cmark's per-subject backtick-closer cache (`matchCodeSpan`, flag-ON only). Flag-OFF the cache is never consulted, so leave it untouched - inert.
         if storage.options.contains(.cmarkBugCompatibility) {
             codeSpanScannedForBackticks = false
             for i in codeSpanBackticks.indices {
                 codeSpanBackticks[i] = 0
-            }
-        }
-        if inlineFlatColumnTracking {
-            // Logical-line boundaries are CONTENT offsets. The block's start line/column come from the SOURCE projection of the first content byte (identity for single-segment source; the first line's real source column for multi-segment, after any container prefix). Disarm if the content start has no source image (arena-only), leaving every node on the byte path.
-            let blockStart = content.startOffset
-            if let blockStartSource = content.sourceOffset(ofVirtual: blockStart) {
-                inlineLogicalLineStarts.append(blockStart)
-                inlineBlockStartLine = sourceLineNumber(ofSource: blockStartSource)
-                inlineBlockStartColumn = blockStartSource - lineStartByte(ofSource: blockStartSource) + 1
-            } else {
-                inlineFlatColumnTracking = false
             }
         }
 
@@ -117,8 +101,6 @@ extension BlockParser {
                     )
                     storage.appendChild(codeIdx, to: parent)
                     stampInline(codeIdx, cursor, span.afterClose, content: content)
-                    stampCodeSpanEnd(codeIdx, start: cursor, afterClose: span.afterClose, content: content)
-                    stampFlatRawInlineEnd(codeIdx, start: cursor, end: span.afterClose, content: content)
                     cursor = span.afterClose
                     pendingTextStart = cursor
                     continue
@@ -154,15 +136,6 @@ extension BlockParser {
                 let kind: MarkdownNode.Kind = info.isHard ? .lineBreak : .softBreak
                 let breakIdx = storage.appendNode(NodeRecord(kind: kind, parent: parent))
                 storage.appendChild(breakIdx, to: parent)
-                if inlineFlatColumnTracking {
-                    if info.isBackslash {
-                        // why: cmark's handle_backslash (swift-cmark src/inlines.c ~848-856) makes the LINEBREAK without touching subj->line or subj->column_offset, unlike handle_newline (~1498-1508, soft/space breaks) which does `++line; column_offset = -pos`. So every inline node after this point keeps counting columns flat across the backslash-break newline and stays on the current line - add no logical-line reset, and flag stamping to emit explicit flat positions.
-                        inlineSawBackslashHardBreak = true
-                    } else {
-                        // Soft break or trailing-space hard break: cmark's handle_newline resets the inline cursor to the next line. Record the next logical line's CONTENT start as a boundary (`cursor` is the newline's content offset; `cursor + 1` is the first byte of the following line - the next source segment for multi-segment content).
-                        inlineLogicalLineStarts.append(cursor + 1)
-                    }
-                }
                 cursor += 1
                 pendingTextStart = cursor
                 // why: after a soft or trailing-space break cmark's inline `handle_newline` (inlines.c ~1499) advances past the spaces/tabs that begin the next line before resuming text, so a LAZY continuation's residual leading whitespace - which flag-ON the block parser keeps in the buffer (see `BlockParser.addLineSegment`) - never reaches a TEXT node, mirroring cmark stripping it from text flow while a code span still captures it straight from the raw buffer. Gated on `.cmarkBugCompatibility`: flag-OFF (and for every matched continuation) the block parser begins each continuation at its first non-space, so no residual follows a break and this loop finds none. A backslash hard break reaches this skip too (it is not break-kind gated): cmark's `handle_backslash` path does NOT skip the next line's leading whitespace, so a lazy continuation's residual after a backslash break stays a pre-existing mixed-frame divergence (already stripped before this change, not in the corpus) - the loop keeps the text stripped either way, so it neither introduces nor widens that gap.
@@ -278,8 +251,6 @@ extension BlockParser {
                     )
                     storage.appendChild(nodeIdx, to: parent)
                     stampInline(nodeIdx, cursor, htmlEnd, content: content)
-                    stampInlineHTMLEnd(nodeIdx, start: cursor, htmlEnd: htmlEnd, content: content)
-                    stampFlatRawInlineEnd(nodeIdx, start: cursor, end: htmlEnd, content: content)
                     cursor = htmlEnd
                     pendingTextStart = cursor
                     continue
@@ -778,7 +749,6 @@ extension BlockParser {
         ))
         // The link/image spans from its opening `[`/`![` (virtual `linkStart`) to just past the closing `)` or reference label (virtual `linkEnd`).
         stampInline(linkIdx, linkStart, linkEnd, content: content)
-        stampCloseBracketEnd(linkIdx, closeBracket: closeBracket, linkEnd: linkEnd, content: content)
         storage.insertChildBefore(linkIdx, before: openerInl)
         var sib = storage[openerInl].next
         while let sib_ = sib {
@@ -914,7 +884,6 @@ extension BlockParser {
         ))
         // The `^[…](…)` attribute spans from its opening `^[` (virtual `openerVirtualStart`) to just past the closing form (virtual `pos`).
         stampInline(attrIdx, openerVirtualStart, pos, content: content)
-        stampCloseBracketEnd(attrIdx, closeBracket: cursor, linkEnd: pos, content: content)
         storage.insertChildBefore(attrIdx, before: openerInl)
         var sib = storage[openerInl].next
         while let sib_ = sib {
@@ -1104,18 +1073,8 @@ extension BlockParser {
         let runRef = storage.intern(runChunk)
         let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parent, data: .literal(runRef)))
         storage.appendChild(textIdx, to: parent)
-        // Stamp the run's own source span. A delimiter that never forms emphasis stays as literal text, and this range lets it keep its columns when it consolidates with adjacent text; a matched delimiter's text node is unlinked before it can matter. The reference stamps this node at creation for the same reason.
-        //
-        // why: an unmatched `~`/`~~` run's range is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). Only the stamping differs - the run's emission (the strikethrough exemption above) and delimiter push (below) are the same either way.
-        //
-        // Flag ON reproduces cmark-gfm's strikethrough extension (`strikethrough.c` `match`), which records only the run's start column and never sets its end column, so a run that never forms a strikethrough reports a zero-width range (see `stampInlineZeroWidth`). Consolidation takes the end from the last merged text node, so a run that abuts following text (`a~b`, `~x`) recovers a real width while a standalone or trailing run stays zero-width.
-        //
-        // Flag OFF is spec-correct: the run is ordinary literal text and gets a normal, width-bearing range over its own `[start, runEnd)` span, exactly like emphasis (`*`/`_`) delimiters and every other text run stamped via `stampInline`.
-        if isStrikethrough && storage.options.contains(.cmarkBugCompatibility) {
-            stampInlineZeroWidth(textIdx, at: start, content: content)
-        } else {
-            stampInline(textIdx, start, runEnd, content: content)
-        }
+        // Stamp the run's own source span. A delimiter that never forms emphasis stays as literal text, and this range lets it keep its columns when it consolidates with adjacent text; a matched delimiter's text node is unlinked before it can matter. The reference stamps this node at creation for the same reason. The run is ordinary literal text and gets a normal, width-bearing range over its own `[start, runEnd)` span, exactly like emphasis (`*`/`_`) delimiters and every other text run stamped via `stampInline`.
+        stampInline(textIdx, start, runEnd, content: content)
         // Push a delimiter record only when the run can open or close. A non-flanking `~` (emitted above to mirror cmark-gfm) can do neither, so it contributes no delimiter and stays literal text.
         if canOpen || canClose {
             // cmark-gfm's strikethrough `match` (`strikethrough.c`) pushes a `~` delimiter only for a
@@ -1312,24 +1271,10 @@ extension BlockParser {
         // Build the wrapping node and reparent siblings.
         let parentIdx = storage[openerInl].parent
         let emphIdx = storage.appendNode(NodeRecord(kind: kind, parent: parentIdx))
-        // why: the emph/strong range is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). Both branches express VIRTUAL content offsets so the map-aware `content:` overload resolves them through the arena/segment map (identity for source-backed content).
-        //
-        // Flag ON reproduces cmark-gfm's `S_insert_emph` (inlines.c), which stamps the node from `opener_inl->start_column` / `closer_inl->end_column` - the FULL opener and closer delimiter runs. Trimming the consumed delimiters changes only the inline text nodes' literal length, never their recorded columns, so cmark's range spans the whole runs regardless of how many delimiters this level actually consumed. When a run is only partially paired (leftover delimiters survive), that range overlaps the leftover-delimiter text nodes - e.g. `**o*` yields both `Text "*" @1:1-1:3` and `Emphasis @1:1-1:5` starting at column 1. That overlap is cmark's shipped behavior.
-        //
-        // Flag OFF is spec-correct: advance the start past the opener's leftover delimiters and pull the end back before the closer's, so the range covers only the consumed delimiters plus content and never overlaps the leftover text (`**o*` → `Emphasis @1:2-1:5`). For balanced runs both counts are zero and the branches coincide.
-        let start: Int
-        let end: Int
-        if storage.options.contains(.cmarkBugCompatibility) {
-            start = delimiters[opener].virtualStart
-            end = delimiters[closer].virtualEnd
-        } else {
-            start = delimiters[opener].virtualStart + openerNumChars
-            end = delimiters[closer].virtualEnd - closerNumChars
-        }
+        // The emph/strong range covers only the consumed delimiters plus content and never overlaps the leftover text: advance the start past the opener's leftover delimiters and pull the end back before the closer's (`**o*` → `Emphasis @1:2-1:5`). For balanced runs both counts are zero. Both offsets are VIRTUAL content offsets so the map-aware `content:` overload resolves them through the arena/segment map (identity for source-backed content).
+        let start = delimiters[opener].virtualStart + openerNumChars
+        let end = delimiters[closer].virtualEnd - closerNumChars
         stampInline(emphIdx, start, end, content: content)
-        if kind == .strikethrough {
-            stampStrikethroughEnd(emphIdx, start: start, end: end, content: content)
-        }
         var sibling = storage[openerInl].next
         while let sibling_ = sibling, sibling_ != closerInl {
             let nextSibling = storage[sibling_].next
@@ -2745,351 +2690,6 @@ extension BlockParser {
         }
         storage.setSourceStart(node, s)
         storage.setSourceEnd(node, lastByte + 1)
-        // why: an inline node's range after a backslash hard break is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). The byte-projected start/end above are the spec-correct positions; the explicit override below is the cmark quirk.
-        //
-        // Flag ON reproduces a cmark quirk (Hyrum's Law): after a backslash hard break, cmark's inline cursor keeps counting columns flat (its `handle_backslash` never resets `subj->line` / `subj->column_offset`, unlike `handle_newline` for soft/space breaks). No source byte projects onto that flat column, so stamp explicit start/end positions from the flat cursor for every node after such a break. The flat cursor is measured in CONTENT offsets (`start` / `end - 1`), not the source offsets `s` / `lastByte`: for single-segment source content the two coincide (identity map), but for a multi-segment continuation the stripped prefix/indent means the content offset - which cmark counted - is what lands on cmark's flat column, while the source offset would double-count the gap.
-        //
-        // The SAME flat cursor reproduces the raw-inline flat-cursor quirk (`.cmarkFlatRawInlineEnds`, the differential's flag-on + `disableSourcePosOpts` combination): with `CMARK_OPT_SOURCEPOS` off cmark never resets its cursor across a code span / inline HTML interior newline, so `subj->line` PERSISTS behind the physical line for the rest of the paragraph once such a token has been swallowed (`inlineSawFlatRawInline`, armed in `stampFlatRawInlineEnd`). Every node stamped afterward - later text, later raw inlines, and soft-break line advances - counts from that lagged base. `inlineLogicalLineStarts` already records ONLY soft/space breaks (never a raw inline's interior newline), so `flatInlinePosition` naturally lags by the accumulated swallowed-newline count and both quirks share this one branch.
-        //
-        // Flag OFF is spec-correct: take no explicit positions, so the node keeps the byte-projected range above - its content projected onto its true physical line:column, which resets at the physical newline exactly like soft and trailing-space breaks do. Covers only `stampInline`'s node population; the strikethrough-zero-width and multi-line-link close-bracket end overrides are separate quirks not compounded here.
-        if (inlineSawBackslashHardBreak && storage.options.contains(.cmarkBugCompatibility))
-            || (inlineSawFlatRawInline && storage.options.contains(.cmarkFlatRawInlineEnds)) {
-            storage.setExplicitStart(node, flatInlinePosition(ofContent: start, content: content))
-            var endPosition = flatInlinePosition(ofContent: end - 1, content: content)
-            endPosition.column += 1  // half-open end: one past the last content byte's column
-            storage.setExplicitEnd(node, endPosition)
-        } else if storage.options.contains(.cmarkBugCompatibility),
-                  content.isReindentedRun(ofVirtual: end - 1),
-                  let physBase = content.physicalRunBase(ofVirtual: end - 1),
-                  sourceLineNumber(ofSource: lastByte + 1) > sourceLineNumber(ofSource: physBase),
-                  !runContainsNewline(start, end, content: content) {
-            // why: Quirk E's continuation re-indent (see `BlockParser.addLineSegment`) remaps a re-indented continuation line's surviving content to the block's fixed content column, which can push the run's mapped source offsets rightward past its own physical line's byte extent. cmark works in (line, column) space, so it keeps the run on its own physical line at its re-indented column + width; the rewrite's byte-offset end (`lastByte + 1`) instead projects onto a LATER physical line - e.g. `> bar\nbaz\nqux` flag-ON: `baz`'s re-indented last content byte projects to line 3's start byte, so `lastByte + 1` reports `@3:2` for cmark's `@2:6`. Anchor the stamp on the run's PHYSICAL base line (`physBase` = the segment's byte-read offset, via `physicalRunBase`), NOT on the re-indented base (`sourceRunBase`) or the start byte `s`: the physical base is literally where the run's bytes are read from, so it ALWAYS sits on the run's true physical source line - even when the re-indent shift EXCEEDS the continuation line's content width and pushes the re-indented base itself past that line's `\n`. `- e\nc\ng` flag-ON: the 1-char middle line `c` re-indents to content column 3 (line-2 start + the `- ` marker's 2 cols), whose byte is line 3's `g`, so BOTH the re-indented base and `lastByte + 1` land on line 3 - the earlier `sourceRunBase`-anchored guard then collapsed to false (`line(lastByte+1) == line(runBase)`) and fell through to the `@3:1` byte-projected overshoot. `physBase` stays on line 2, so the guard fires and the stamp lands there. The re-indented COLUMN comes from the mapped source offset measured against the PHYSICAL line start (`s - lineStartByte(physBase) + 1` = cmark's block content column), which is correct even when `s` itself sits past the physical line. This also handles the smart-punct / entity split (` - b\n  -- c\n  d`: `--`→`–` then ` c`) where the fragment's own start `s` maps past the line boundary; `physBase` stays on the fragment's physical line and the end lands there at `startColumn + width` (`@2:10`). The `isReindentedRun` guard restricts this correction to a genuinely re-indented run (`seg.sourceOffset != seg.offset`): a multi-line CONTIGUOUS segment (`a\nb`, `sourceOffset == offset`, from a top-level paragraph's source-adjacent lines) spans several physical lines under ONE base on its FIRST line, so an interior-line run's byte projection is already exact and reporting it not-re-indented keeps that exact projection. The `!runContainsNewline` guard restricts this to a single-physical-line TEXT run (a re-indented continuation text run carries no interior newline - the joining soft break is a separate node), so `start` and `end - 1` share one segment and one `physBase`; a genuinely multi-line WRAPPER node whose closer overshoots is handled by the next branch (which anchors on the re-indented base and stays a documented gap when it overshoots). When the re-indented offset does NOT overshoot its physical line (the common re-indented run) this is byte-identical to the byte projection. Flag-OFF keeps the byte-projected end (spec-correct).
-            let startLine = sourceLineNumber(ofSource: physBase)
-            let startColumn = s - lineStartByte(ofSource: physBase) + 1
-            // why: a MULTI-LINE inline (code span / emphasis) preceding this text run on the segment's FIRST physical line consumes that line within the same re-indented segment, so the run's START byte `s` maps past the line boundary too - it overshoots onto a LATER physical line exactly as `lastByte + 1` does (`> `\n`o\nx` flag-ON: after the multi-line `` ` ``…`` ` `` code span, `o`'s re-indented `s` projects to line 3's start byte, so the byte-projected start reports `@3:1` while cmark reports `@2:4`). Anchor the START on `physBase`'s physical line at its own re-indented column - the same flat `startColumn` the end uses - so the run stays whole on its physical line; leaving the start byte-projected while the end is corrected onto `physBase`'s line inverts the range (start `@3:1` > end `@2:5`), which renders position-less. When `s` does NOT overshoot (the common re-indented run, `s` on `physBase`'s line), this explicit start equals the byte projection (byte-identical to before). Flag-OFF keeps the byte-projected start (spec-correct).
-            storage.setExplicitStart(node, MarkdownNode.SourcePosition(line: startLine, column: startColumn))
-            storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: startLine, column: startColumn + (end - start)))
-        } else if storage.options.contains(.cmarkBugCompatibility),
-                  content.isReindentedRun(ofVirtual: end - 1),
-                  let runBase = content.sourceRunBase(ofVirtual: end - 1),
-                  sourceLineNumber(ofSource: lastByte + 1) > sourceLineNumber(ofSource: runBase),
-                  runContainsNewline(start, end, content: content) {
-            // why: a softbreak-spanning WRAPPER (emphasis/strong/link/image) whose closer sits on a re-indented continuation line has the same Quirk-E overshoot as the single-line text run above, but its start and closer are on DIFFERENT logical lines, so the start-line + width formula can't express its end. The wrapper's byte-projected end (`lastByte + 1`) projects the re-indented closer past its physical line onto a LATER one - e.g. `  Foo *bar\nbaz*\n====` flag-ON: the closer `*`'s re-indented byte lands at or past line 2's newline, so `lastByte + 1` reports `@3:2` for cmark's `@2:7` (the underline line). cmark keeps the closer on its own line at the re-indented column (`closer_inl->end_column`). Anchor the end line on the closer run's base source offset (`runBase`) and take the column arithmetically from the mapped byte (`lastByte`), which stays consistent with `runBase` even when the byte overshoots the line: `endColumn = (lastByte - lineStartByte(runBase) + 1) + 1` (column of the last content byte, then half-open). This is correct only while `runBase` itself is still on the closer's physical line, which the `lastByte + 1` vs `runBase` line comparison enforces: if a large re-indent (`currentContentIndent` exceeding the continuation line's content width) has already pushed `runBase` off its own line, the comparison collapses to false and the node falls through to the plain byte projection - the same deferred divergence the byte path already had (and the deferred nested-container gap `stampCloseBracketEnd` documents), never a wrong-line stamp or a crash. The `isReindentedRun` guard restricts the correction to a genuinely re-indented closer run (`seg.sourceOffset != seg.offset`), for the same reason as the single-line branch above: a wrapper closing inside a multi-line CONTIGUOUS segment (`*a\nb*`, `sourceOffset == offset`) has an exact byte-projected end already, and its `runBase` sits on the segment's FIRST line, so the overshoot comparison would mis-fire and collapse the closer onto line 1 - reporting it not-re-indented keeps the exact byte projection (`*a\nb*` -> `@1:1-2:3`). The `runContainsNewline` guard (evaluated last - it's O(width), off the common path) restricts this to a genuine multi-line wrapper; a single-physical-line run took the branch above. This is the multi-line counterpart of that branch and of `stampCloseBracketEnd`. Flag-OFF keeps the byte-projected end (spec-correct): with the re-indent off, the closer maps to its true byte, whose `+ 1` stays on the closer's own line.
-            let endLine = sourceLineNumber(ofSource: runBase)
-            let endColumn = (lastByte - lineStartByte(ofSource: runBase) + 1) + 1
-            storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: endLine, column: endColumn))
-        }
-    }
-
-    /// Whether the content run `[start, end)` contains an interior newline byte.
-    ///
-    /// Distinguishes a re-indented continuation *text* run (no interior newline - the joining soft break is a separate node) from a genuinely multi-line wrapper node (link/emphasis whose content spans a soft break). Only consulted flag-ON when a run's byte-projected end has already been found to cross a physical line, so the O(width) scan is off the common path.
-    private func runContainsNewline(_ start: Int, _ end: Int, content: borrowing ContentSpan) -> Bool {
-        var i = start
-        while i < end {
-            if content[i] == UInt8(ascii: "\n") {
-                return true
-            }
-            i += 1
-        }
-        return false
-    }
-
-    /// cmark's flat inline (line, column) for CONTENT offset `off`, counting backslash-hard-break newlines as columns (cmark's inline cursor never resets there) while soft / trailing-space breaks reset it to the next line. Content offsets (not source offsets) are the coordinate: they exclude the stripped prefixes/indents of multi-segment continuation lines, which is exactly what cmark's flat cursor never counted. Every logical line (index 0 and each soft/space-break reset) is based at its own re-indented block-content column via `flatBaseColumn` - cmark's fixed block-content column (`block_offset + 1`) for the block's first line and every *matched* continuation, plus the preserved residual whitespace of a *lazy* continuation (which cmark keeps in its paragraph buffer and counts flat). Valid only while `inlineFlatColumnTracking` is armed and `inlineLogicalLineStarts` is seeded (see `parseInline`).
-    private func flatInlinePosition(ofContent off: Int, content: borrowing ContentSpan) -> MarkdownNode.SourcePosition {
-        // Largest logical-line-start index `k` with `inlineLogicalLineStarts[k] <= off` (ascending, and [0] == block start <= any node offset). The list is one entry per soft/space break, so this walk is tiny.
-        var k = 0
-        while k + 1 < inlineLogicalLineStarts.count && inlineLogicalLineStarts[k + 1] <= off {
-            k += 1
-        }
-        let logicalLineStart = inlineLogicalLineStarts[k]
-        return MarkdownNode.SourcePosition(
-            line: inlineBlockStartLine + k,
-            column: (off - logicalLineStart) + flatBaseColumn(ofContent: logicalLineStart, content: content)
-        )
-    }
-
-    /// The flat-cursor base column for the logical line beginning at CONTENT offset `logicalLineStart`: the column cmark's inline cursor assigns that line's first content byte.
-    ///
-    /// The block's first line and every *matched* continuation re-indent to the fixed block-content column (`inlineBlockStartColumn` = cmark's `block_offset + 1`), so this returns that. A *lazy* continuation preserves its residual leading whitespace: cmark's `add_line` copies from the offset where container-prefix matching stopped without advancing to the first non-space (blocks.c ~1408), so the residual survives in cmark's paragraph buffer and shifts every following byte's flat column right by that residual (`- b\n \\\nc`: line 2's 1 leading space is below the list's 2-space content indent, so it stays a lazy continuation and cmark reports the post-break `c` at `@2:6`, one past the residual-free `@2:5`). Flag-ON the block parser now keeps that residual in the segment content too (`BlockParser.addLineSegment` begins the lazy segment at the prefix-match stop), so the residual is counted through the CONTENT-offset delta in `flatInlinePosition` and the logical-line-start byte is the residual itself, which maps to the block-content column - i.e. this resolves the line-start's re-indented block-content column via `sourceOffset` (anchored on the line's true physical source line by `physicalRunBase`, the same anchor `stampInline`'s Quirk-E branch uses), which for a content-carried residual coincides with `inlineBlockStartColumn`. Not re-indented (single-segment source, or a first line) → the block-content column directly.
-    private func flatBaseColumn(ofContent logicalLineStart: Int, content: borrowing ContentSpan) -> Int {
-        guard content.isReindentedRun(ofVirtual: logicalLineStart),
-              let mappedSource = content.sourceOffset(ofVirtual: logicalLineStart),
-              let physicalBase = content.physicalRunBase(ofVirtual: logicalLineStart) else {
-            return inlineBlockStartColumn
-        }
-        return mappedSource - lineStartByte(ofSource: physicalBase) + 1
-    }
-
-    /// Give a matched link/image/attribute the flat close-bracket end column cmark reports when its `(...)` (destination/title/attrs) crosses a newline.
-    ///
-    /// cmark stamps a matched close-bracket node's `end_column = subj->pos + column_offset + block_offset` (swift-cmark `src/inlines.c` `handle_close_bracket`, ~1462-1491; the attribute form at ~1251-1253) WITHOUT running `handle_newline`'s per-line reset (~1507) while scanning `(...)`. Text softbreaks, code spans and raw HTML all *do* reset, so a newline inside `(...)` advances the buffer cursor past the next line's bytes while `end_column` keeps counting flat from the `]`'s line - overshooting that line's physical width. The rewrite's byte-offset range can't encode this (no source byte projects onto the `]`'s line at that column), so store an explicit end position.
-    ///
-    /// why: the multi-line link/image/attribute end column is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). The mechanism it uses - an explicit end position (`setExplicitEnd`) that overrides the node's byte-projected end - stays unconditional; only whether this method sets one is gated.
-    ///
-    /// Flag ON reproduces the cmark quirk (Hyrum's Law): its link/image/attribute end column alone skips the newline reset that every other multi-line inline construct performs, so store the flat close-bracket column as an explicit end.
-    ///
-    /// Flag OFF is spec-correct: take no explicit end, so the node keeps the byte-projected end from its normal `stampInline(node, linkStart, linkEnd)` stamp - i.e. just past the `)` on the `)`'s own physical line (`[a](\n/u)` -> `Link @1:1-2:4`, the `)` on line 2), like every other construct whose interior newline resets the column.
-    ///
-    /// Scoped to top-level blocks (`block_offset == 0`, so `blockStartColumn == 1`). A link nested in a blockquote/list has its `(...)` newline in `[closeBracket, linkEnd)` too, so it still takes this path (flag ON) and gets an explicit end - but computed *without* the container's `block_offset`, so its column is short by the container indent and stays divergent (as it already was on the byte path). Threading `block_offset` to retire nested links is the documented Stage-2 gap (`docs/inline-end-column-exploration.md` §4); nested multi-line links are not in the fuzz corpus.
-    @inline(__always)
-    mutating func stampCloseBracketEnd(_ node: DocumentStorage.Index, closeBracket: Int, linkEnd: Int, content: borrowing ContentSpan) {
-        guard positionsEnabled, storage.options.contains(.cmarkBugCompatibility) else { return }
-        // Only the non-resetting case diverges: a newline between the `]` and just past the close form. Single-line forms - and newline-in-*text* links, whose newline precedes the `]` - project identically from the end byte, so leave them on the byte path (byte-identical to today).
-        var crossedNewline = false
-        var i = closeBracket
-        while i < linkEnd {
-            if content[i] == UInt8(ascii: "\n") {
-                crossedNewline = true
-                break
-            }
-            i += 1
-        }
-        guard crossedNewline else { return }
-        // end line: the physical source line of the closing `]` (cmark's `inl->end_line = subj->line`, frozen before the `(...)` scan). Bail to the byte path if the `]` has no source image.
-        guard let closeBracketSource = content.sourceOffset(ofVirtual: closeBracket) else { return }
-        let endLine = sourceLineNumber(ofSource: closeBracketSource)
-        // end column: flat buffer column counted from the start of the `]`'s BUFFER line through just past the close form, without resetting at the interior `(...)` newline. `+ 1` is `blockStartColumn` (top-level `block_offset` 0) and cmark's converter `+1`.
-        let lineStart = bufferLineStart(ofBuffer: closeBracket, content: content)
-        let endColumn = (linkEnd - lineStart) + 1
-        storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: endLine, column: endColumn))
-    }
-
-    /// Give a raw inline-HTML span whose token crosses a newline the flat end column cmark reports: its LAST byte's column, one short of the half-open (last-byte + 1) that single-line spans and every other node use.
-    ///
-    /// cmark stamps a raw-HTML node's end via `make_raw_html` (swift-cmark `src/inlines.c` `handle_pointy_brace`, ~1015) then `adjust_subj_node_newlines` (~304). When the matched token contains a newline, `adjust_subj_node_newlines` OVERWRITES `end_column` with `since_newline` - a raw count of bytes since the last interior newline - WITHOUT the `+ 1 + column_offset + block_offset` that `make_literal` (~106) applies to a single-line node's end column. The result lands on the last content byte's own column (the closing `>`'s column), one short of the half-open end every other multi-line construct reports. The rewrite's byte-offset end (`lastByte + 1`) is that half-open column; drop the `+1` by stamping an explicit end at the last byte's projected line:column.
-    ///
-    /// why: the multi-line inline-HTML end column is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). The mechanism it uses - an explicit end position (`setExplicitEnd`) that overrides the node's byte-projected end - stays unconditional; only whether this method sets one is gated.
-    ///
-    /// Flag ON reproduces the cmark quirk (Hyrum's Law): a newline-crossing raw-HTML span reports its last byte's column as the end. A single-line span carries no interior newline, so `adjust_subj_node_newlines` is a no-op and the half-open end stands - this method returns early for it (byte-identical to today).
-    ///
-    /// Flag OFF is spec-correct: take no explicit end, so the node keeps the byte-projected half-open end from its normal `stampInline(node, cursor, htmlEnd)` stamp.
-    ///
-    /// Scoped to top-level blocks like `stampCloseBracketEnd`: a raw-HTML span nested in a blockquote/list still takes this path (flag ON), but its column is computed without the container's `block_offset`, so it stays short by the container indent (as it already was on the byte path) - the same documented nested-container gap. Not in the fuzz corpus.
-    ///
-    /// Does NOT compound with the backslash-hard-break quirk: when `inlineSawBackslashHardBreak` is set, `stampInline` has already stamped this node's start AND end from the flat cursor (that quirk's coordinate frame), and this method then overwrites the end with the physical byte projection - a mixed frame matching neither cmark's flat compound end nor the pre-break byte end. A multi-line raw-HTML span *after* a backslash hard break therefore stays divergent flag-ON (it already was), and reproducing it faithfully needs a flat-frame end column, not this physical one - deferred like the nested-container gap. Not in the fuzz corpus (no `htmlml-*` pair pairs a backslash break with a multi-line span).
-    @inline(__always)
-    mutating func stampInlineHTMLEnd(_ node: DocumentStorage.Index, start: Int, htmlEnd: Int, content: borrowing ContentSpan) {
-        guard positionsEnabled, storage.options.contains(.cmarkBugCompatibility) else { return }
-        // Only a span with an interior newline diverges: a single-line span's half-open end projects identically to cmark's un-adjusted end column, so leave it on the byte path (byte-identical to today).
-        guard runContainsNewline(start, htmlEnd, content: content) else { return }
-        // The last content byte (the closing `>`, or the terminator of a comment/CDATA/PI/declaration) carries cmark's end column. Bail to the byte path if it has no source image.
-        guard let lastByte = content.sourceOffset(ofVirtual: htmlEnd - 1) else { return }
-        let endLine = sourceLineNumber(ofSource: lastByte)
-        let endColumn = lastByte - lineStartByte(ofSource: lastByte) + 1
-        storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: endLine, column: endColumn))
-    }
-
-    /// Give a code span whose matched extent crosses a newline the end position cmark reports: its end line advanced by the interior newline count, and an end column of the raw bytes since the last interior newline - the same `adjust_subj_node_newlines` mechanism as Quirk G's inline HTML (`stampInlineHTMLEnd`), applied to the other raw-scan construct.
-    ///
-    /// cmark stamps a code node's end via `make_code` (`make_literal`, swift-cmark `src/inlines.c` ~106) then `adjust_subj_node_newlines` (~304, called from `handle_backticks` ~421). When the matched span contains a newline, `adjust_subj_node_newlines` does `end_line += newlines` and OVERWRITES `end_column = since_newline` - a raw count of buffer bytes after the last interior newline (`count_newlines`, ~281), with NO `+ 1 + column_offset + block_offset` re-added. The reference converter then reports `end_column + 1 + backtick_count` (`CommonMarkConverter.range`), which reduces to `afterClose - lastInteriorNewline` measured in the rewrite's CONTENT-offset space: cmark's paragraph buffer holds exactly the bytes the rewrite's multi-segment content joins - a matched continuation's leading whitespace stripped on both sides (`add_line` from `first_nonspace`), a lazy continuation's residual leading whitespace kept on both sides (`add_line` from `parser->offset`; flag-ON the block parser keeps it in the segment content too) - so the two byte counts coincide byte-for-byte.
-    ///
-    /// This is why the column must come from CONTENT-offset arithmetic, NOT `stampInlineHTMLEnd`'s physical last-byte source projection: with leading whitespace on the closing line the physical column would re-include the stripped indent, while the flat content count matches cmark's buffer count directly. For a *matched* blockquote/list continuation, cmark advances to `first_nonspace` before `add_line` (blocks.c ~1464) so its buffer strips the container prefix exactly as the rewrite's content space does. For a *lazy* continuation, cmark's `add_line` copies from `parser->offset` with no advance (blocks.c ~1408), preserving the residual leading whitespace in its buffer; flag-ON the block parser now keeps that residual in the segment content (`BlockParser.addLineSegment`), so `afterClose - lastInteriorNewline` counts it on both sides and the code span's end reaches the residual-inflated column (`> `x\n y`` -> `@2:4`, the `lazyres-*` pairs). There is no `block_offset` gap either way (unlike `stampInlineHTMLEnd`, whose physical-column basis includes it).
-    ///
-    /// why: the multi-line code-span end column is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). The mechanism it uses - an explicit end position (`setExplicitEnd`) that overrides the node's byte-projected end - stays unconditional; only whether this method sets one is gated. This is an extension of Quirk G (multi-line raw-inline end via `adjust_subj_node_newlines`) from inline HTML to code spans; both share the flag.
-    ///
-    /// Flag ON reproduces the cmark quirk (Hyrum's Law): a newline-crossing code span reports `(startLine + newlines, afterClose - lastNewline)`. A single-line span carries no interior newline, so `adjust_subj_node_newlines` is a no-op and the spec-correct byte-projected half-open end (from `stampInline`) stands - this method returns early for it (byte-identical to today).
-    ///
-    /// The start LINE `adjust_subj_node_newlines` counts from is the opener's PHYSICAL line. Normally that is the physical line the opener's source projection lands on, but a code span opening on a re-indented block-quote/list LAZY continuation whose re-indent shift exceeds the opener line's content width has its mapped opener offset OVERSHOOT onto a later physical line (Quirk E, #53); this method then also stamps an explicit START on the opener's own physical line (recovered via `physicalRunBase`, whose base sits on the opener's line since a re-indented continuation is one physical line per segment) at its re-indented column, so both the start and the newline-counted end land where cmark reports them. No overshoot -> the byte-projected start (`stampInline`) stands.
-    ///
-    /// Flag OFF is spec-correct: take no explicit end, so the node keeps the precise byte-projected half-open end from its `stampInline(node, cursor, afterClose)` stamp (its closing backtick's real line:column).
-    ///
-    /// Interaction with `.cmarkFlatRawInlineEnds`: the caller invokes `stampFlatRawInlineEnd` AFTER this method, so with the flat option ON (the differential's `disableSourcePosOpts` combination) the flat sourcepos-OFF end overrides this sourcepos-ON quirk end for code spans, mirroring the inline-HTML call order.
-    ///
-    /// Does NOT compound with the backslash-hard-break quirk: when `inlineSawBackslashHardBreak` is set, `stampInline` has already stamped an explicit flat-cursor end (that quirk's frame) and this method overwrites it with the content-count end - a mixed frame. A code span after a backslash hard break therefore stays divergent flag-ON (it already was); reproducing it faithfully needs a flat-frame end, deferred like the sibling. Not in the fuzz corpus.
-    @inline(__always)
-    mutating func stampCodeSpanEnd(_ node: DocumentStorage.Index, start: Int, afterClose: Int, content: borrowing ContentSpan) {
-        guard positionsEnabled, storage.options.contains(.cmarkBugCompatibility) else { return }
-        // Count interior newlines and remember the last one's content offset. No interior newline = single-line span; leave it on the spec-correct byte path (byte-identical to today).
-        var lastNewline = -1
-        var newlines = 0
-        var i = start
-        while i < afterClose {
-            if content[i] == UInt8(ascii: "\n") {
-                lastNewline = i
-                newlines += 1
-            }
-            i += 1
-        }
-        guard newlines > 0 else { return }
-        // The start line comes from the opening backtick's source projection (cmark's `subj->line` at node creation); bail to the byte path if it has no source image (arena-only content, e.g. a flattened setext heading).
-        guard let startSource = content.sourceOffset(ofVirtual: start) else { return }
-        // why: normally the opener's start line is the physical line its source projection lands on.
-        // But when the opener sits on a RE-INDENTED block-quote/list LAZY continuation (Quirk E, see
-        // `BlockParser.addLineSegment`) whose re-indent shift EXCEEDS the opener line's content width
-        // (#53), the mapped `startSource` overshoots past the opener's own physical line onto a LATER
-        // one - e.g. `> o\n`` \n`` `` flag-ON: the lone `` ` `` on line 2 re-indents to the block
-        // content column 3, whose byte is line 3's, so `startSource` reports line 3 for a backtick
-        // physically on line 2. Both `stampInline`'s byte-projected START and this end line inherit the
-        // overshoot (start `@3:1`, end `@4:2` on a line that does not exist). cmark keeps the code span
-        // on the opener's PHYSICAL line at its re-indented column and counts interior newlines from
-        // there (`adjust_subj_node_newlines`). Recover the opener's own physical line via
-        // `physicalRunBase` (the byte-read anchor of the opener's segment/run) and stamp an explicit
-        // START there at the re-indented column - the same physical-line-anchor + re-indented-column
-        // pattern `stampInline`'s Quirk-E text-run branch uses. A re-indented continuation is a single
-        // physical line per segment/run (`addLineSegment` emits one segment per line; the only
-        // multi-line coalesced segment is a top-level CONTIGUOUS run, which is not re-indented and is
-        // excluded by `isReindentedRun`), and `physicalRunBase` resolves to the segment/run CONTAINING
-        // the opener, so its base sits on the opener's own physical line - the byte-read offset the
-        // re-indent shifts away from. When there is no overshoot (`physLine == startLine`) this is
-        // skipped and the byte projection stands (byte-identical to before). Flag-OFF: no re-indent, so
-        // nothing overshoots and this whole method is gated off anyway - the deliverable keeps the
-        // spec-correct physical positions.
-        var startLine = sourceLineNumber(ofSource: startSource)
-        if content.isReindentedRun(ofVirtual: start),
-           let physOpener = content.physicalRunBase(ofVirtual: start) {
-            let physLine = sourceLineNumber(ofSource: physOpener)
-            if physLine < startLine {
-                startLine = physLine
-                let startColumn = startSource - lineStartByte(ofSource: physOpener) + 1
-                storage.setExplicitStart(node, MarkdownNode.SourcePosition(line: physLine, column: startColumn))
-            }
-        }
-        let endLine = startLine + newlines
-        // End column = bytes since the last interior newline, in CONTENT space (== cmark's `since_newline + 1 + backtick_count`, a flat count with no `block_offset`). See the doc comment for why this must not be a physical source-column projection.
-        let endColumn = afterClose - lastNewline
-        storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: endLine, column: endColumn))
-    }
-
-    /// Give a raw-scan inline (code span or inline HTML) whose token crosses a line break the flat end position cmark reports with `CMARK_OPT_SOURCEPOS` off: `(startLine, startColumn + tokenByteLength)`, ignoring the interior break.
-    ///
-    /// The reference (old swift-markdown, C path) sets `CMARK_OPT_SOURCEPOS` only when `disableSourcePosOpts` is unset (`CommonMarkConverter.swift`). With sourcepos OFF, cmark never runs `handle_newline`'s per-line reset while scanning a code span or raw HTML, so their `end_column` keeps counting flat from the token's start line - unlike the precise end sourcepos ON (and the rewrite) computes by advancing to the closing byte's real line. cmark's other multi-line inlines (emphasis, links, autolinks, text soft breaks) reset either way, so this flat end is scoped to exactly these two raw-scan constructs.
-    ///
-    /// why: the multi-line raw-inline end is stamped one of two ways depending on `.cmarkFlatRawInlineEnds` (forwarded only for the differential's flag-ON + `disableSourcePosOpts` combination; default off is spec-correct and tracks the precise end). The mechanism it uses - an explicit end position (`setExplicitEnd`) overriding the node's byte-projected end - is the same machinery Quirk C / G and the setext wrapper use; only whether this method sets one is gated.
-    ///
-    /// Flag ON reproduces the cmark quirk (Hyrum's Law): the token's flat byte length is added to its start column on its start line. For inline HTML this OVERRIDES Quirk G's sourcepos-ON flat-last-byte end (call the two in order; this writes last). A single-line span carries no line break, so its flat end equals its precise byte-projected end and this method returns early (byte-identical to today). Guards on the last content byte landing on a later source line than the first - which covers `\n`, `\r`, and `\r\n` breaks alike (they all advance `lineStarts`), where a `\n`-only scan would miss a bare `\r`. Bails to the byte path if either end of the token has no source image.
-    ///
-    /// Persistent flat cursor: cmark's un-advanced `subj->line` PERSISTS past this token for the rest of the paragraph, so this method (a) bases its own end on the flat cursor - `flatInlinePosition(ofContent: start)` when the cursor is armed, which for the FIRST / only newline-crossing raw inline equals the physical projection but for a LATER one lags by the interior newlines already swallowed - and (b) latches `inlineSawFlatRawInline` so `stampInline` stamps every SUBSEQUENT inline (and this pass's later raw inlines and soft-break line advances) from the same flat cursor. `inlineLogicalLineStarts` records only soft/space breaks (never a raw inline's interior newline), so the lag accumulates naturally across multiple raw inlines.
-    ///
-    /// Scoped to top-level blocks like its sibling helpers (`stampInlineHTMLEnd`, `stampCloseBracketEnd`): the flat base's column resolves through `flatBaseColumn`, which measures from the run's PHYSICAL source line start (`inlineBlockStartColumn` = `blockStartSource - lineStartByte(...) + 1`), so a raw inline nested in a blockquote/list INCLUDES the container prefix in the column (i.e. `block_offset + 1`) - a coordinate basis not verified against cmark's sourcepos-off nested end. Nested multi-line raw inlines are not in the fuzz corpus; a nested raw inline was already precise-vs-flat divergent on the byte path before this change (the same documented nested-container gap the siblings carry), never a wrong-line stamp and never in the deliverable (flag ON only).
-    @inline(__always)
-    mutating func stampFlatRawInlineEnd(_ node: DocumentStorage.Index, start: Int, end: Int, content: borrowing ContentSpan) {
-        guard positionsEnabled, storage.options.contains(.cmarkFlatRawInlineEnds),
-              let s = content.sourceOffset(ofVirtual: start),
-              let lastByte = content.sourceOffset(ofVirtual: end - 1),
-              sourceLineNumber(ofSource: lastByte) > sourceLineNumber(ofSource: s) else {
-            return
-        }
-        // Base the flat end on cmark's flat inline cursor when it is armed. cmark's `subj->line` /
-        // `subj->column_offset` do NOT advance across an EARLIER raw inline's interior newline
-        // (sourcepos off), so a raw inline that itself FOLLOWS a newline-swallowing raw inline reports
-        // its own start line/column - and hence this flat end - from a base that lags the physical
-        // projection by the interior newlines swallowed so far. `flatInlinePosition` tracks exactly
-        // that lag (interior newlines are never recorded in `inlineLogicalLineStarts`). For the FIRST /
-        // only newline-crossing raw inline nothing has been swallowed yet, so the flat base equals the
-        // physical projection - byte-identical to before. Arena content (tracking disarmed) has no
-        // linear source-column map, so keep the physical projection there (the documented arena gap).
-        let base: MarkdownNode.SourcePosition
-        if inlineFlatColumnTracking {
-            base = flatInlinePosition(ofContent: start, content: content)
-        } else {
-            base = MarkdownNode.SourcePosition(
-                line: sourceLineNumber(ofSource: s),
-                column: s - lineStartByte(ofSource: s) + 1
-            )
-        }
-        storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: base.line, column: base.column + (end - start)))
-        // Latch the persistent flat cursor: once a raw inline has swallowed an interior newline, cmark's
-        // `subj->line` stays behind for the REST of the paragraph, so every subsequent inline (and this
-        // pass's later raw inlines and soft-break line advances) must stamp from the flat cursor instead
-        // of the physical byte projection. `stampInline` honors this latch through the same branch the
-        // backslash-hard-break flat cursor uses. Only meaningful while the flat cursor is armed.
-        if inlineFlatColumnTracking {
-            inlineSawFlatRawInline = true
-        }
-    }
-
-    /// Give a GFM strikethrough whose opener and closer sit on different physical lines the END line cmark reports: the OPENER's line, keeping the closer-derived end column.
-    ///
-    /// cmark-gfm's strikethrough `insert` (swift-cmark `extensions/strikethrough.c`) reuses the OPENER's text node AS the strikethrough node (`strikethrough = opener->inl_text`), so the node's `start_line` / `end_line` are the opener text node's - the opener's physical line. `insert` then sets `strikethrough->end_column = closer->inl_text->start_column + closer->inl_text->as.literal.len - 1` but NEVER updates `end_line`, so a strikethrough spanning a soft break keeps its end anchored on the opener's line at a closer-derived column - an internally inconsistent range whose end can precede its own later-line content. Emphasis and strong do NOT share this bug: `S_insert_emph` (`inlines.c`) builds a fresh wrapper node whose end line tracks the closer.
-    ///
-    /// why: the multi-line strikethrough end is stamped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). The mechanism it uses - an explicit end position (`setExplicitEnd`) that overrides the node's byte-projected end - is the same machinery Quirk C / G use; only whether this method sets one is gated.
-    ///
-    /// Flag ON reproduces the cmark bug: the end stays on the opener's line. The end COLUMN is the closer run's half-open end column measured on the closer's own physical line - which equals cmark's `end_column` plus the reference converter's half-open `+ 1`, and also equals the rewrite's byte-projected end column, so only the LINE moves back to the opener's.
-    ///
-    /// Flag OFF is spec-correct: take no explicit end, so the node keeps the byte-projected end from its `stampInline` stamp - the closer's real physical line (`~~a\nb~~` -> `@1:1-2:4`). A single-line strikethrough's closer already sits on the opener's line, so its byte projection needs no correction and this method returns early (byte-identical to today).
-    ///
-    /// Scoped to top-level blocks like `stampCloseBracketEnd` / `stampInlineHTMLEnd`: a strikethrough nested in a blockquote/list still takes this path (flag ON) and correctly moves its end to the opener's line, but the column is computed without the container's `block_offset`, so it stays short by the container indent (as it already was on the byte path) - the same documented nested-container gap the siblings carry. Not in the fuzz corpus.
-    ///
-    /// Does NOT compound with the backslash-hard-break quirk (Quirk D): a strikethrough crossing a backslash hard break (`~~a\<newline>b~~`) already has `stampInline` stamp its end from the FLAT inline cursor (`inlineSawBackslashHardBreak` branch) - which for a strikethrough is cmark's actual end (cmark's `handle_backslash` never resets `subj->line`/`column_offset`, so the closer's `start_column` is a flat column on the opener's line). Overriding that with this physical projection would REGRESS the flat frame to a physical column, so the guard below excludes it and the flat-cursor end stands. Unlike a softbreak, a backslash break contributes no `inlineLogicalLineStarts` reset, so the two frames genuinely differ; deferring to Quirk D keeps that (already-correct) case unchanged. A softbreak-crossing strikethrough that itself follows an *earlier* backslash break in the same paragraph also defers to Quirk D's flat frame here - a pre-existing compound-frame case not in the fuzz corpus (the siblings carry the same gap).
-    @inline(__always)
-    mutating func stampStrikethroughEnd(_ node: DocumentStorage.Index, start: Int, end: Int, content: borrowing ContentSpan) {
-        guard positionsEnabled, storage.options.contains(.cmarkBugCompatibility),
-              !inlineSawBackslashHardBreak,
-              let openerSource = content.sourceOffset(ofVirtual: start),
-              let lastByte = content.sourceOffset(ofVirtual: end - 1) else {
-            return
-        }
-        let openerLine = sourceLineNumber(ofSource: openerSource)
-        // Only a strikethrough whose closer lands on a LATER physical line than its opener diverges: a single-line strikethrough already byte-projects onto the opener's line, so leave it on the byte path.
-        guard sourceLineNumber(ofSource: lastByte) > openerLine else { return }
-        // The closer run's half-open end column (one past its last byte) on the closer's own physical line - the same value the byte projection produced; only the line changes.
-        let endColumn = (lastByte + 1) - lineStartByte(ofSource: lastByte) + 1
-        storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: openerLine, column: endColumn))
-    }
-
-    /// Buffer offset of the start of the content line containing buffer offset `pos`: just past the previous buffer newline, or the content start. Counts cmark's flat close-bracket end column from the `]`'s line base and resets it at a newline in the link *text* (the softbreak that precedes the `]`).
-    private func bufferLineStart(ofBuffer pos: Int, content: borrowing ContentSpan) -> Int {
-        let start = content.startOffset
-        var i = pos - 1
-        while i >= start {
-            if content[i] == UInt8(ascii: "\n") {
-                return i + 1
-            }
-            i -= 1
-        }
-        return start
-    }
-
-    /// Stamp an unmatched strikethrough (`~`) run's source range: start at the run's own source offset, end at the START of that run's source line.
-    ///
-    /// Gated behind `.cmarkBugCompatibility` at the call site (`handleDelimRun`): only invoked flag-ON. Flag-OFF (the shipped default) stamps the run's normal width-bearing range via `stampInline` instead, so this degenerate range is never produced spec-correct.
-    ///
-    /// cmark-gfm's strikethrough extension (`strikethrough.c` `match`) sets a `~` run's `start_column` but never its `end_column`, leaving `end_column == 0` - which projects to column 1 of the run's line, i.e. the line-start byte. So a `~` at column 1 gets a zero-width `[s, s]` range, while a `~` further into its line gets a start-past-end range that `sourceRange(of:)` reports as no position - reproducing cmark either way. A no-op when positions are off or `start` maps to synthetic/arena content. Relies on `lineStarts` being populated, which holds during the inline-parsing pass (it runs after every line has been read).
-    ///
-    /// After a backslash hard break the run's line/column come from the flat inline cursor instead of byte projection (see the `inlineSawBackslashHardBreak` branch and `stampInline`). That branch needs no `.cmarkBugCompatibility` gate of its own: this whole method is reachable only flag-ON (call site above), and flag-OFF a post-break unmatched `~` flows through `stampInline`, whose gate - being off - leaves it the spec-correct byte-projected range.
-    @inline(__always)
-    mutating func stampInlineZeroWidth(_ node: DocumentStorage.Index, at start: Int, content: borrowing ContentSpan) {
-        guard positionsEnabled, let s = content.sourceOffset(ofVirtual: start) else {
-            return
-        }
-        storage.setSourceStart(node, s)
-        // why: cmark-gfm's strikethrough.c leaves an unmatched `~` run's `end_column` unset (== 0), i.e. column 1 = the start of the run's line, not the run's own column. Stamp the end at that line-start byte so consolidation's last-node end and standalone rendering both reproduce cmark's zero/negative-width range.
-        storage.setSourceEnd(node, lineStartByte(ofSource: s))
-        // why: two cmark quirks compound here. (1) strikethrough.c's `match` sets the `~` text node's `start_line`/`end_line` to `subj->line` and its `start_column` to the inline cursor's flat column, but leaves `end_column == 0` (which the reference converter maps to column 1). (2) After a backslash hard break, cmark's `handle_backslash` never resets `subj->line` / `subj->column_offset` (unlike `handle_newline` for soft/space breaks), so `subj->line` and the flat column keep counting across the break - no source byte projects onto them. The byte path above resets at the physical newline and so mis-lines the `~`; when a backslash break precedes this run, override start/end from the same flat cursor `stampInline` uses. The start is the flat position; the end is that flat line's column 1 (the `end_column == 0` mapping), so a run past column 1 stays start > end and reports no position (matching cmark), and consolidation carries these explicit positions onto a merged post-break run. Without a preceding backslash break this branch is skipped and the byte path above is byte-identical to before.
-        if inlineSawBackslashHardBreak {
-            let flatStart = flatInlinePosition(ofContent: start, content: content)
-            storage.setExplicitStart(node, flatStart)
-            storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: flatStart.line, column: 1))
-        }
-    }
-
-    /// The source byte offset of the start of the line containing source offset `s`.
-    ///
-    /// Binary-searches `storage.lineStarts` (ascending; populated by the block pass that precedes inline parsing) for the largest entry `<= s`, mirroring `StorageView.position(ofByte:)`. Returns 0 when no line starts are recorded.
-    private func lineStartByte(ofSource s: Int) -> Int {
-        let lo = lineSearch(ofSource: s)
-        return lo > 0 ? storage.lineStarts[lo - 1] : 0
-    }
-
-    /// The 1-based physical line number of source offset `s`, mirroring `StorageView.position(ofByte:)`.
-    private func sourceLineNumber(ofSource s: Int) -> Int {
-        max(1, lineSearch(ofSource: s))
-    }
-
-    /// Count of recorded line starts `<= s` (binary search of ascending `storage.lineStarts`). The containing line's start byte is `lineStarts[result - 1]` and its 1-based number is `max(1, result)`.
-    private func lineSearch(ofSource s: Int) -> Int {
-        var lo = 0
-        var hi = storage.lineStarts.count
-        while lo < hi {
-            let mid = (lo + hi) / 2
-            if storage.lineStarts[mid] <= s {
-                lo = mid + 1
-            } else {
-                hi = mid
-            }
-        }
-        return lo
     }
 
     /// Merge runs of adjacent `.text` children into single nodes, recursing into containers.
@@ -3149,12 +2749,10 @@ extension BlockParser {
             let a = storage.sourceRanges[dest]
             let b = storage.sourceRanges[source]
             if a.start >= 0, b.start >= 0 {
-                // why: cmark's `cmark_consolidate_text_nodes` (swift-cmark `src/iterator.c`) sets the merged run's range from the FIRST node's start and the LAST node's end (`cur->end_column = tmp->end_column` on every iteration; `cur`'s start is never touched) - not a min/max union. In this pairwise left-to-right merge `dest` is the running-first node and `source` the next (last-so-far) sibling, so first-start = `dest.start` and last-end = `source.end`. This differs from a union only when a non-final node ends further right than the final node (the zero-width trailing-`~` quirk), where cmark collapses the run to the final node's end. Carry the first node's `explicitStart` and the last node's `explicitEnd` (backslash-hard-break flat columns) so a merged post-break run keeps its flat positions.
+                // why: cmark's `cmark_consolidate_text_nodes` (swift-cmark `src/iterator.c`) sets the merged run's range from the FIRST node's start and the LAST node's end (`cur->end_column = tmp->end_column` on every iteration; `cur`'s start is never touched) - not a min/max union. In this pairwise left-to-right merge `dest` is the running-first node and `source` the next (last-so-far) sibling, so first-start = `dest.start` and last-end = `source.end`. This differs from a union only when a non-final node ends further right than the final node, where cmark collapses the run to the final node's end.
                 storage.sourceRanges[dest] = DocumentStorage.SourceByteRange(
                     start: a.start,
-                    end: b.end,
-                    explicitStart: a.explicitStart,
-                    explicitEnd: b.explicitEnd
+                    end: b.end
                 )
             } else if a.start < 0 {
                 storage.sourceRanges[dest] = b

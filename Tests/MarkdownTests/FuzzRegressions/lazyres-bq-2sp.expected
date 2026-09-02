@@ -1,4 +1,0 @@
-Document @1:1-2:5
-└─ BlockQuote @1:1-2:5
-   └─ Paragraph @1:3-2:5
-      └─ InlineCode @1:3-2:5 `x   y`

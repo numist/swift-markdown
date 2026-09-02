@@ -35,15 +35,6 @@ struct MarkupParser {
         cmOptions.insert(.sourcePosition)
         if options.contains(.cmarkBugCompatibility) {
             cmOptions.insert(.cmarkBugCompatibility)
-            // With `.disableSourcePosOpts` the old C path leaves `CMARK_OPT_SOURCEPOS` off, and cmark
-            // then flattens the END of its two raw-scan inlines (code spans, inline HTML) onto the
-            // start line, ignoring interior line breaks. Positions are still tracked here (ranges are
-            // read off the AST regardless of the flag), so keep `.sourcePosition` and forward a
-            // separate signal that flattens only those two raw-inline ends. The deliverable stays
-            // precise; this quirk is quarantined to the differential (flag ON + disableSourcePosOpts).
-            if options.contains(.disableSourcePosOpts) {
-                cmOptions.insert(.cmarkFlatRawInlineEnds)
-            }
         }
 
         let raw: RawMarkup

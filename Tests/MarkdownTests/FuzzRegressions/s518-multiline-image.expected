@@ -1,4 +1,0 @@
-Document @1:1-2:5
-└─ Paragraph @1:1-2:5
-   └─ Image @1:1-1:13 source: "/u" title: "t"
-      └─ Text @1:3-1:4 "x"

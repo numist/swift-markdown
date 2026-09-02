@@ -11,26 +11,21 @@
 import Testing
 @testable import CommonMark
 
-/// cmark bug-compatible (flag-ON) coverage for the source-range END of an arena-backed inline text
-/// node (smart-punctuation en-dash) inside a re-indented, multi-segment paragraph continuation.
+/// Flag-ON coverage that a re-indented, multi-segment paragraph continuation whose surviving content
+/// maps *within* its own physical line keeps its byte-projected source range.
 ///
-/// Flag-ON re-indent maps a *lazy* continuation line's surviving content to `residual + block_offset`
-/// past the block's content column (`BlockParser.addLineSegment`). For ` - b\n  -- c\n  d` the line-2
-/// content `-- c` maps to source offsets that spill past line 2's newline onto line 3's bytes. Smart
-/// punctuation then SPLITS `-- c` into an arena `–` glyph node plus a following source ` c` fragment;
-/// the fragment's start already maps onto line 3, so a start-line-anchored end guard used to miss the
-/// overshoot and the fragment's byte end leaked through `consolidateTextNodes` as the merged node's
-/// end (`– c @2:6-3:3`). `InlineParser.stampInline` now anchors the end on the run's base source line
-/// (`sourceRunBase`), keeping the merged node on line 2 (`– c @2:6-2:10`) like cmark and like the
-/// un-split single-node case. Covered flag-ON by the `arenaend-*` fuzzer pairs; this suite is the
-/// focused CommonMark-level assertion.
+/// Flag-ON re-indent maps a paragraph continuation line's surviving content to the block's content
+/// column (`BlockParser.addLineSegment`). When that mapping stays within the line (the common,
+/// non-overshooting case) the content's inline nodes byte-project onto their re-indented columns, the
+/// same as any source-backed run. This is the guardrail that the re-indent mapping doesn't disturb a
+/// non-overshooting continuation run.
 @Suite("Arena text-node end in multi-segment content (cmark bug-compatible)")
 struct ArenaTextEndRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
     /// Source positions on, smart punctuation on, cmark bug-compatibility ON - the differential-fuzzer
-    /// configuration that exercises the re-indent + smart-punct split.
+    /// configuration that exercises the re-indent.
     private static let quirkOptions: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart, .cmarkBugCompatibility]
 
@@ -41,28 +36,6 @@ struct ArenaTextEndRangeTests {
             collectText(doc.root, into: &out)
         }
         return out
-    }
-
-    @Test("en-dash text node ends on its own line, not the following continuation line")
-    func enDashEndStaysOnOwnLine() throws {
-        // " - b" (list item, content column 4), "  -- c" (2-space LAZY continuation → re-indent
-        // shifts +5), "  d" (further continuation). Smart-punct rewrites `--`→`–`, splitting the
-        // line-2 run into an arena `–` glyph plus a source ` c` fragment; consolidation merges them.
-        // cmark reports the merged `– c` on line 2 at @2:6-2:10 - the end must NOT overshoot onto
-        // line 3 (`  d`, where the byte projection lands at @3:3).
-        let texts = try textNodes(in: " - b\n  -- c\n  d")
-        try #require(texts.count == 3, "expected b / – c / d text nodes")
-
-        // Fixture sanity: smart-punct actually produced the en-dash (not a literal `--`), so this
-        // exercises the arena-split path rather than a plain source run.
-        try #require(texts[1].literal == "\u{2013} c", "expected the en-dash arena run, got \(String(describing: texts[1].literal))")
-
-        #expect(texts[0].range?.lowerBound == Pos(line: 1, column: 4))   // "b"
-        #expect(texts[0].range?.upperBound == Pos(line: 1, column: 5))
-        #expect(texts[1].range?.lowerBound == Pos(line: 2, column: 6))   // "– c" re-indented start
-        #expect(texts[1].range?.upperBound == Pos(line: 2, column: 10))  // end stays on line 2
-        #expect(texts[2].range?.lowerBound == Pos(line: 3, column: 6))   // "d"
-        #expect(texts[2].range?.upperBound == Pos(line: 3, column: 7))
     }
 
     @Test("plain-text continuation is unaffected - matched continuation stays on its own line")

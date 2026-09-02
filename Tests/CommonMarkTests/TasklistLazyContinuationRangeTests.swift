@@ -113,24 +113,6 @@ struct TasklistLazyContinuationRangeTests {
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 9))
     }
 
-    @Test("multi-line task-item continuation re-bases every line to the checkbox-adjusted column")
-    func multilineContinuation() throws {
-        // "- [ ] x" then two lazy lines "y" and "z". Every continuation line re-bases to content col 7:
-        // y @2:7-2:8, z @3:7-3:8. `y` is a MIDDLE re-indented line whose shift exceeds its own width,
-        // exercising the same physical-line-anchor path #53 guards. No minted oracle for this shape;
-        // columns are reasoned from cmark's single re-indent rule, cross-checked by the oracle-backed
-        // basic case above (same content column 7).
-        let ranges = try ranges(in: "- [ ] x\ny\nz", options: Self.quirkOptions)
-        try #require(itemChecked(in: ranges) == .some(.some(false)))
-        let texts = texts(in: ranges)
-        try #require(texts.count == 3)
-
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 7))   // "y" re-based, middle line
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 8))
-        #expect(texts[2]?.lowerBound == Pos(line: 3, column: 7))   // "z" re-based, last line
-        #expect(texts[2]?.upperBound == Pos(line: 3, column: 8))
-    }
-
     @Test("deeper-indent matched task-item continuation re-bases to the checkbox-adjusted column")
     func deeperIndentContinuation() throws {
         // "- [ ] x" then "    y" (four leading spaces). Indent 4 matches the item, so cmark discards the

@@ -23,10 +23,10 @@ import Testing
 /// (no re-indent), a later leading-whitespace line carries `physicalOffset != sourceOffset` (re-indented).
 ///
 /// Stamping an interior-line run on the contiguous arena run must project onto the run's own physical line,
-/// exactly like the multi-segment-source case (`MultiLineSegmentRangeTests`). The flag-ON Quirk-E overshoot
-/// correction (`InlineParser.stampInline`) must NOT fire for it, because `ContentSpan.isReindentedRun`
-/// reports the run not-re-indented (`ArenaRun.sourceOffset == physicalOffset`) and its byte projection is
-/// already exact. (Regression for the differential-fuzzer `pipemid-*` pairs.)
+/// exactly like the multi-segment-source case (`MultiLineSegmentRangeTests`). A contiguous run maps its
+/// source where its bytes sit (`ArenaRun.sourceOffset == physicalOffset`, no re-indent), so its byte
+/// projection is already exact and lands on the run's own line. (Regression for the differential-fuzzer
+/// `pipemid-*` pairs.)
 @Suite("Materialized (arena) multi-line contiguous run - interior-line inline positions")
 struct MaterializedInteriorLineRangeTests {
 

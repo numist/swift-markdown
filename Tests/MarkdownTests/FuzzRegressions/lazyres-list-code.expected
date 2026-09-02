@@ -1,5 +1,0 @@
-Document @1:1-2:4
-└─ UnorderedList @1:1-2:4
-   └─ ListItem @1:1-2:4
-      └─ Paragraph @1:3-2:4
-         └─ InlineCode @1:3-2:4 `x  y`

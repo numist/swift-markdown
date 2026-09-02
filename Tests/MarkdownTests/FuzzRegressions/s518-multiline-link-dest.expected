@@ -1,4 +1,0 @@
-Document @1:1-2:4
-└─ Paragraph @1:1-2:4
-   └─ Link @1:1-1:9 destination: "/u"
-      └─ Text @1:2-1:3 "a"

@@ -1,5 +1,0 @@
-Document @1:1-1:6
-└─ Paragraph @1:1-1:6
-   ├─ Text @1:1-1:4 "**"
-   └─ Emphasis @1:1-1:6
-      └─ Text @1:4-1:5 "o"
