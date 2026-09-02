@@ -11,39 +11,36 @@
 import Testing
 @testable import CommonMark
 
-/// Flag-ON coverage that a re-indented, multi-segment paragraph continuation whose surviving content
-/// maps *within* its own physical line keeps its byte-projected source range.
+/// Source range for a text node on a MATCHED, multi-segment paragraph continuation line.
 ///
-/// Flag-ON re-indent maps a paragraph continuation line's surviving content to the block's content
-/// column (`BlockParser.addLineSegment`). When that mapping stays within the line (the common,
-/// non-overshooting case) the content's inline nodes byte-project onto their re-indented columns, the
-/// same as any source-backed run. This is the guardrail that the re-indent mapping doesn't disturb a
-/// non-overshooting continuation run.
-@Suite("Arena text-node end in multi-segment content (cmark bug-compatible)")
+/// A matched continuation line (indented to the block's content column) already sits at that column,
+/// so its surviving content byte-projects onto its true source column - the same as any source-backed
+/// run. This is the deliverable (spec-correct) guardrail that a matched continuation's inline nodes
+/// keep their byte-projected range; it is flag-independent (flag-ON `.cmarkBugCompatibility` produces
+/// the same range for this matched node, since the re-indent maps it to the column it already holds).
+@Suite("Arena text-node end in multi-segment content")
 struct ArenaTextEndRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// Source positions on, smart punctuation on, cmark bug-compatibility ON - the differential-fuzzer
-    /// configuration that exercises the re-indent.
-    private static let quirkOptions: MarkdownDocument.ParseOptions =
-        [.sourcePosition, .smart, .cmarkBugCompatibility]
+    /// Source positions on, smart punctuation on (the shipped default; bug-compatibility off).
+    private static let specOptions: MarkdownDocument.ParseOptions =
+        [.sourcePosition, .smart]
 
     /// DFS-collect every text node's literal and source range.
     private func textNodes(in src: String) throws -> [(literal: String?, range: Range<Pos>?)] {
         var out: [(literal: String?, range: Range<Pos>?)] = []
-        try MarkdownDocument.withParsedDocument(src, options: Self.quirkOptions) { doc in
+        try MarkdownDocument.withParsedDocument(src, options: Self.specOptions) { doc in
             collectText(doc.root, into: &out)
         }
         return out
     }
 
-    @Test("plain-text continuation is unaffected - matched continuation stays on its own line")
-    func plainTextControlUnaffected() throws {
+    @Test("a matched continuation text node keeps its byte-projected column")
+    func matchedContinuationKeepsByteProjectedColumn() throws {
         // " - b" then "   c" (3-space MATCHED continuation, no smart-punct rewrite → a single plain
-        // source text node) then "  d". The matched continuation maps within line 2 (no overshoot),
-        // so the run-base end guard never fires and `c` keeps its byte-projected @2:4-2:5. This is
-        // the guardrail that the fix touches only overshooting arena runs, not the plain path.
+        // source text node) then "  d". The matched continuation `c` sits at the block content column,
+        // so it byte-projects to its true @2:4-2:5 on its own physical line.
         let texts = try textNodes(in: " - b\n   c\n  d")
         try #require(texts.count == 3, "expected b / c / d text nodes")
         try #require(texts[1].literal == "c", "expected a plain `c` text node, got \(String(describing: texts[1].literal))")
