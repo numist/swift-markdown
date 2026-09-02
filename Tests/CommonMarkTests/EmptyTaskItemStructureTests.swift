@@ -41,8 +41,9 @@ private func firstListItem(
 /// indented to the item's content column still continues it (the item then holds a paragraph and
 /// keeps its checkbox). The rewrite recognizes the checkbox at finalize (`runParagraphMatchers`,
 /// #65), which cannot see the empty case (there is no paragraph to finalize); it is caught at
-/// item-open time instead. This is a STRUCTURAL match (which blocks form), independent of
-/// `.cmarkBugCompatibility` - the flag-off assertion is the guardrail.
+/// item-open time instead. This is a STRUCTURAL match (which blocks form): the empty-item recognition
+/// fix is unconditional - it is not gated on `.cmarkBugCompatibility` (flag-ON and flag-OFF produce an
+/// identical tree for every case here), so these assertions parse with the shipped default options.
 ///
 /// Positions are the `dump --ref` (cmark-gfm) oracle for each source.
 @Suite("Empty GFM task-list item block structure")
@@ -50,12 +51,8 @@ struct EmptyTaskItemStructureTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// The differential-fuzzer configuration: tasklist + positions + cmark bug-compatibility.
+    /// The shipped default: tasklist + positions.
     private static let options: MarkdownDocument.ParseOptions =
-        [.tasklist, .sourcePosition, .cmarkBugCompatibility]
-
-    /// The shipped default: tasklist + positions, bug-compatibility OFF.
-    private static let flagOff: MarkdownDocument.ParseOptions =
         [.tasklist, .sourcePosition]
 
     private func analyze(
@@ -168,21 +165,6 @@ struct EmptyTaskItemStructureTests {
         try #require(firstItem.checked == .some(true), "expected a CHECKED task item")
         #expect(firstItem.childCount == 0)
         #expect(itemRange(in: nodes) == Pos(line: 1, column: 1)..<Pos(line: 1, column: 7))
-        let paras = paragraphs(in: nodes)
-        try #require(paras.count == 1)
-        #expect(paras[0]?.lowerBound == Pos(line: 2, column: 1))
-        #expect(paras[0]?.upperBound == Pos(line: 2, column: 2))
-    }
-
-    @Test("flag-off: the empty-item STRUCTURE is unchanged (structural fix, not a quirk)")
-    func flagOffKeepsEmptyItemStructure() throws {
-        // The block structure - childless task item, `x` a separate paragraph - does not depend on
-        // `.cmarkBugCompatibility`: it matches cmark-gfm AND the CommonMark reading either way. Only
-        // the (already-true) positions would ever differ, and for this shape they don't.
-        let (nodes, item) = try analyze("- [ ] \nx", options: Self.flagOff)
-        let firstItem = try #require(item)
-        try #require(firstItem.checked == .some(false))   // still a task item flag-off
-        #expect(firstItem.childCount == 0)
         let paras = paragraphs(in: nodes)
         try #require(paras.count == 1)
         #expect(paras[0]?.lowerBound == Pos(line: 2, column: 1))
