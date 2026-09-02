@@ -1002,31 +1002,80 @@ extension BlockParser {
         var next: Int?
     }
 
-    /// Scan a maximal run of `c` (`*` or `_`) starting at `start`, classify its left/right-flanking + can_open/can_close per CommonMark 0.31 §6.2, emit a `.text` node for the run, and (if it can open or close) push a delimiter record onto the stack. Returns the offset just past the run.
+    /// The flanking classification of a `*`/`_`/`~`/quote delimiter run, computed against the
+    /// characters bordering the run.
+    private struct Flanking {
+        var leftFlanking: Bool
+        var rightFlanking: Bool
+        /// The (skip-adjusted) character immediately before the run, used by the quote `]`/`)` rule.
+        var beforeChar: UInt8
+        /// Whether that before/after character is ASCII punctuation, used by the `_` intraword rule.
+        var beforeIsPunct: Bool
+        var afterIsPunct: Bool
+    }
+
+    /// Classify a delimiter run's left/right flanking, matching cmark-gfm's `scan_delims`.
     ///
-    /// The start of the content (`content.startOffset`) determines whether `start - 1` is a real "before" character or implicitly a newline (start of inline content acts like a line break).
-    private mutating func handleDelimRun(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, pendingTextStart: inout Int) throws (MarkdownDocument.Error) -> Int {
+    /// cmark-gfm skips over emphasis "special" characters (`skip_chars`) when it reads the before
+    /// and after character for flanking. The only such character in this build is the GFM
+    /// strikethrough `~`: its extension declares itself an emphasis extension, which registers `~`
+    /// in `skip_chars`. The skip runs *before* cmark's per-delimiter-char branch, so it applies to
+    /// `*`/`_` runs and smart quotes (`'`/`"`) alike — but NOT to a `~` run itself, which cmark
+    /// scans through the extension's own delimiter scan that never consults `skip_chars`. With
+    /// strikethrough disabled, `~` is ordinary text and nothing is skipped, matching cmark-gfm with
+    /// the extension detached. So a `*`/`_`/quote run adjacent to a `~` is classified against the
+    /// character past the `~`, e.g. the closing `*` in `*-*~a` sees `a` (a letter) and is
+    /// left-flanking only, so it cannot close and no emphasis forms.
+    private func classifyFlanking(char: UInt8, start: Int, runEnd: Int, end: Int, content: borrowing ContentSpan) -> Flanking {
         let chunkStart = content.startOffset
-        var runEnd = start
-        while runEnd < end, content[runEnd] == char {
-            runEnd += 1
+        let tilde = UInt8(ascii: "~")
+        let skipTilde = char != tilde && storage.options.contains(.strikethrough)
+        // "Before" character - treat content boundaries as a line break; skip a leading `~` run.
+        var beforeIdx = start - 1
+        if skipTilde {
+            while beforeIdx >= chunkStart, content[beforeIdx] == tilde { beforeIdx -= 1 }
         }
-        
-        let count = runEnd - start
-        // "Before" character - treat content boundaries as a line break.
-        let beforeChar: UInt8 = if start > chunkStart { content[start - 1] } else { UInt8(ascii: "\n") }
-        // "After" character - same convention at end of content.
-        let afterChar: UInt8 = if runEnd < end { content[runEnd] } else { UInt8(ascii: "\n") }
-        
-        // NBSP detection: U+00A0 in UTF-8 is `0xC2 0xA0`. The single-byte checks above won't catch it, so peek backward from `start` and forward from `runEnd` to detect the multi-byte sequence.
-        let beforeIsNBSP = beforeChar == 0xA0 && start - 2 >= chunkStart && content[start - 2] == 0xC2
-        let afterIsNBSP = afterChar == 0xC2 && runEnd + 1 < end && content[runEnd + 1] == 0xA0
+        let beforeChar: UInt8 = beforeIdx >= chunkStart ? content[beforeIdx] : UInt8(ascii: "\n")
+        // "After" character - same convention at end of content; skip a trailing `~` run.
+        var afterIdx = runEnd
+        if skipTilde {
+            while afterIdx < end, content[afterIdx] == tilde { afterIdx += 1 }
+        }
+        let afterChar: UInt8 = afterIdx < end ? content[afterIdx] : UInt8(ascii: "\n")
+
+        // NBSP detection: U+00A0 in UTF-8 is `0xC2 0xA0`. The single-byte checks below won't catch it, so peek outward from the (skip-adjusted) neighbour index to detect the multi-byte sequence.
+        let beforeIsNBSP = beforeChar == 0xA0 && beforeIdx - 1 >= chunkStart && content[beforeIdx - 1] == 0xC2
+        let afterIsNBSP = afterChar == 0xC2 && afterIdx + 1 < end && content[afterIdx + 1] == 0xA0
         let beforeIsSpace = beforeChar.isASCIISpace || beforeIsNBSP
         let beforeIsPunct = beforeChar.isASCIIPunct
         let afterIsSpace = afterChar.isASCIISpace || afterIsNBSP
         let afterIsPunct = afterChar.isASCIIPunct
         let leftFlanking = !afterIsSpace && (!afterIsPunct || beforeIsSpace || beforeIsPunct)
         let rightFlanking = !beforeIsSpace && (!beforeIsPunct || afterIsSpace || afterIsPunct)
+        return Flanking(
+            leftFlanking: leftFlanking,
+            rightFlanking: rightFlanking,
+            beforeChar: beforeChar,
+            beforeIsPunct: beforeIsPunct,
+            afterIsPunct: afterIsPunct
+        )
+    }
+
+    /// Scan a maximal run of `c` (`*` or `_`) starting at `start`, classify its left/right-flanking + can_open/can_close per CommonMark 0.31 §6.2, emit a `.text` node for the run, and (if it can open or close) push a delimiter record onto the stack. Returns the offset just past the run.
+    ///
+    /// The start of the content (`content.startOffset`) determines whether `start - 1` is a real "before" character or implicitly a newline (start of inline content acts like a line break).
+    private mutating func handleDelimRun(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, pendingTextStart: inout Int) throws (MarkdownDocument.Error) -> Int {
+        var runEnd = start
+        while runEnd < end, content[runEnd] == char {
+            runEnd += 1
+        }
+
+        let count = runEnd - start
+        let flanking = classifyFlanking(char: char, start: start, runEnd: runEnd, end: end, content: content)
+        let leftFlanking = flanking.leftFlanking
+        let rightFlanking = flanking.rightFlanking
+        let beforeIsPunct = flanking.beforeIsPunct
+        let afterIsPunct = flanking.afterIsPunct
         
         let canOpen: Bool
         let canClose: Bool
@@ -1410,19 +1459,12 @@ extension BlockParser {
     ///
     /// Returns the offset just past the quote.
     private mutating func handleQuoteDelim(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, pendingTextStart: inout Int) throws (MarkdownDocument.Error) -> Int {
-        let chunkStart = content.startOffset
         // Quotes are limited to a single delimiter character (unlike `*`/`_`/`~` runs).
         let runEnd = start + 1
-        let beforeChar: UInt8 = if start > chunkStart { content[start - 1] } else { UInt8(ascii: "\n") }
-        let afterChar: UInt8 = if runEnd < end { content[runEnd] } else { UInt8(ascii: "\n") }
-        let beforeIsNBSP = beforeChar == 0xA0 && start - 2 >= chunkStart && content[start - 2] == 0xC2
-        let afterIsNBSP = afterChar == 0xC2 && runEnd + 1 < end && content[runEnd + 1] == 0xA0
-        let beforeIsSpace = beforeChar.isASCIISpace || beforeIsNBSP
-        let beforeIsPunct = beforeChar.isASCIIPunct
-        let afterIsSpace = afterChar.isASCIISpace || afterIsNBSP
-        let afterIsPunct = afterChar.isASCIIPunct
-        let leftFlanking = !afterIsSpace && (!afterIsPunct || beforeIsSpace || beforeIsPunct)
-        let rightFlanking = !beforeIsSpace && (!beforeIsPunct || afterIsSpace || afterIsPunct)
+        let flanking = classifyFlanking(char: char, start: start, runEnd: runEnd, end: end, content: content)
+        let leftFlanking = flanking.leftFlanking
+        let rightFlanking = flanking.rightFlanking
+        let beforeChar = flanking.beforeChar
         // Quote-specific flanking rules.
         let canOpen = leftFlanking && !rightFlanking && beforeChar != UInt8(ascii: "]") && beforeChar != UInt8(ascii: ")")
         let canClose = rightFlanking

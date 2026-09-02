@@ -10,6 +10,7 @@
 
 @testable import Markdown
 import XCTest
+import Testing
 
 /// Emphasis-resolution nesting when a run of `**` delimiters flanks an unpairable interior `**`.
 ///
@@ -97,6 +98,35 @@ class EmphasisNestingTests: XCTestCase {
 
         let document = Document(parsing: text)
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
+    }
+}
+
+/// A `*`/`_` delimiter's flanking is classified against the character *past* any adjacent GFM
+/// strikethrough `~` run. cmark-gfm's strikethrough extension declares itself an emphasis
+/// extension (`cmark_syntax_extension_set_emphasis`), which registers `~` in `skip_chars`;
+/// `scan_delims` then skips `skip_chars` when it reads the before/after character for a `*`/`_`
+/// run. So a closing `*` immediately followed by a can-open `~` (a `~` that itself is followed by
+/// a letter) sees the letter as its after-character and is left-flanking only — it cannot close,
+/// and no emphasis forms. Change any part of the trigger and emphasis forms again. `~` runs are
+/// scanned by the extension's own delimiter scan, which does not skip, so `~`-flanking is unaffected.
+@Suite struct StrikethroughFlankingEmphasisTests {
+    /// Strikethrough is enabled by default (Markdown's `CommonMarkConverter` always attaches it),
+    /// so `Document(parsing:)` exercises the `~`-skip path.
+    private func formsEmphasis(_ markdown: String) -> Bool {
+        Document(parsing: markdown).debugDescription(options: []).contains("Emphasis")
+    }
+
+    @Test func canOpenTildeAfterPunctuationCloserBlocksEmphasis() throws {
+        // Fixture sanity: the positive controls must actually form emphasis, or the negative
+        // expectations below would hold vacuously.
+        try #require(formsEmphasis("*x*~a"), "letter-content closer stays right-flanking; must form emphasis")
+        try #require(formsEmphasis("*-*"), "isolated *-* must form emphasis (closer's after-char is the line end)")
+        try #require(formsEmphasis("*-*~"), "bare trailing ~ (can-close, not can-open) must still form emphasis")
+
+        // Target: punctuation content + a can-open `~` (followed by a letter) directly after the
+        // closer. cmark-gfm reads past the `~` to the letter, so the closer is left-flanking only.
+        #expect(!formsEmphasis("*-*~a"))
+        #expect(!formsEmphasis("*.*~a"))
     }
 }
 
