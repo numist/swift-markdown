@@ -14,15 +14,14 @@ import Testing
 /// Source ranges for the inline content that REMAINS after leading link reference definitions are
 /// stripped off the front of a paragraph.
 ///
-/// The shipped (flag-off, spec-correct) parser reports the surviving content at its TRUE physical
-/// position: a paragraph whose first N lines are reference definitions still stamps the remaining
-/// text on the physical line it actually occupies. cmark-gfm instead extracts the ref-defs by
+/// The parser reports the surviving content at its TRUE physical position: a paragraph whose first
+/// N lines are reference definitions still stamps the remaining text on the physical line it
+/// actually occupies - the spec-correct behavior. (cmark-gfm instead extracts the ref-defs by
 /// dropping their bytes off the front of the paragraph's content buffer and then inline-parses the
 /// remainder with the subject based at the paragraph's ORIGINAL start line, so the surviving content
 /// is stamped N lines too HIGH (column preserved) - an internally inconsistent tree where the text
-/// node's line sits above its own paragraph's start line. That is cmark's bug: it is the
-/// `.cmarkBugCompatibility` quirk, covered flag-on by the `refdef-*` fuzzer regression pairs. This
-/// suite is the flag-off guardrail proving the default parser keeps the true positions.
+/// node's line sits above its own paragraph's start line. The rewrite does not reproduce that
+/// non-compliant position.)
 @Suite("Reference-definition remainder source ranges (spec-correct)")
 struct ReferenceDefinitionRemainderRangeTests {
 
@@ -54,9 +53,8 @@ struct ReferenceDefinitionRemainderRangeTests {
     func singleLineRefDef() throws {
         // "[foo]: /url" on line 1 is a reference definition; "bar" on line 2 is the surviving content.
         // Spec-correct, `bar` keeps its TRUE line: @2:1-2:4 - the physical line it occupies, consistent
-        // with the paragraph end @2:4. cmark strips the def and stamps `bar` one line up at @1:1-1:4
-        // (the `refdef-then-para` fuzzer pair, flag-on). The block-level paragraph range is @1:1-2:4 in
-        // both configurations - only the inline content shifts.
+        // with the paragraph end @2:4. cmark strips the def and stamps `bar` one line up at @1:1-1:4.
+        // The block-level paragraph range is @1:1-2:4 in both configurations - only the inline content shifts.
         let ranges = try ranges(in: "[foo]: /url\nbar")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 1)
@@ -75,9 +73,9 @@ struct ReferenceDefinitionRemainderRangeTests {
         // "[foo]: /url" (line 1) is a reference definition; "bar" (line 2) is the surviving content,
         // which the "===" underline (line 3) promotes to a setext heading. Spec-correct, `bar` keeps
         // its TRUE line @2:1-2:4. cmark strips the def and stamps the heading's `bar` one line up at
-        // @1:1-1:4 (the `refsetexth-1def` fuzzer pair, flag-on) - the same reference-definition
-        // line-shift as a plain paragraph, applied to heading content. The block-level heading range is
-        // @1:1-3:4 in both configurations; only the inline content shifts.
+        // @1:1-1:4 - the same reference-definition line-shift as a plain paragraph, applied to heading
+        // content. The block-level heading range is @1:1-3:4 in both configurations; only the inline
+        // content shifts.
         let ranges = try ranges(in: "[foo]: /url\nbar\n===")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 1)
@@ -94,9 +92,8 @@ struct ReferenceDefinitionRemainderRangeTests {
         // The reference definition "[\nfoo\n]: /url" spans lines 1-3 (its label runs across two
         // newlines); "bar" on line 4 is the surviving content. Spec-correct, `bar` keeps its TRUE line
         // @4:1-4:4, consistent with the paragraph end @4:4. cmark drops all three ref-def lines from
-        // the buffer and stamps `bar` three lines up at @1:1-1:4 (the `refdef-mlabel` fuzzer pair,
-        // flag-on) - a text line (1) that sits at the paragraph's own start line. Block-level paragraph
-        // range is @1:1-4:4 in both configurations.
+        // the buffer and stamps `bar` three lines up at @1:1-1:4 - a text line (1) that sits at the
+        // paragraph's own start line. Block-level paragraph range is @1:1-4:4 in both configurations.
         let ranges = try ranges(in: "[\nfoo\n]: /url\nbar")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 1)
@@ -114,9 +111,9 @@ struct ReferenceDefinitionRemainderRangeTests {
     func multipleRemainingLines() throws {
         // "[foo]: /url" on line 1 is the ref-def; "bar" (line 2) and "baz" (line 3) both survive.
         // Spec-correct, each keeps its TRUE line: `bar` @2:1-2:4, `baz` @3:1-3:4 - consistent with the
-        // paragraph end @3:4. cmark shifts BOTH up one line (`bar` @1:1, `baz` @2:1 - the
-        // `refdef-then-2line` fuzzer pair, flag-on), proving the shift is per-line, not a constant byte
-        // offset. Block-level paragraph range is @1:1-3:4 in both configurations.
+        // paragraph end @3:4. cmark shifts BOTH up one line (`bar` @1:1, `baz` @2:1), proving the shift
+        // is per-line, not a constant byte offset. Block-level paragraph range is @1:1-3:4 in both
+        // configurations.
         let ranges = try ranges(in: "[foo]: /url\nbar\nbaz")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 2)
@@ -137,9 +134,9 @@ struct ReferenceDefinitionRemainderRangeTests {
         // "[foo]: /url" (line 1) is the ref-def; "a *b* c" (line 2) is the surviving content, which
         // parses to Text "a ", an Emphasis wrapping Text "b", and Text " c". Spec-correct, EVERY node
         // of that subtree keeps its TRUE line 2, consistent with the paragraph end @2:8. cmark shifts
-        // the whole subtree up one line - Text @1:1, Emphasis @1:3, inner Text @1:4, Text @1:6 (the
-        // `refdef-then-emph` fuzzer pair, flag-on) - proving the shift applies to non-text inlines and
-        // through nesting, not just top-level text. Block-level paragraph range is @1:1-2:8 both ways.
+        // the whole subtree up one line - Text @1:1, Emphasis @1:3, inner Text @1:4, Text @1:6 - proving
+        // the shift applies to non-text inlines and through nesting, not just top-level text. Block-level
+        // paragraph range is @1:1-2:8 both ways.
         let ranges = try ranges(in: "[foo]: /url\na *b* c")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 3)
@@ -161,9 +158,8 @@ struct ReferenceDefinitionRemainderRangeTests {
     func blankSeparatorIsSeparateParagraph() throws {
         // "[foo]: /url" (line 1), a blank line (line 2), then "bar" (line 3). The blank line ends the
         // former ref-def paragraph, so `bar` is its OWN paragraph with no leading def to strip - there
-        // is nothing to shift. Both configurations report `bar` @3:1-3:4 (the `refdef-blank-ctl` fuzzer
-        // control, EQUAL flag-on). This proves the shift is scoped to content that shares a paragraph
-        // with the stripped defs.
+        // is nothing to shift. Both configurations report `bar` @3:1-3:4. This proves the shift is
+        // scoped to content that shares a paragraph with the stripped defs.
         let ranges = try ranges(in: "[foo]: /url\n\nbar")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 1)
@@ -183,9 +179,8 @@ struct ReferenceDefinitionRemainderRangeTests {
         // list, not one source range) - the non-contiguous remainder the flag-on line-shift covers.
         // Spec-correct, each surviving line keeps its TRUE physical line and column: `c` @3:2, `d` @4:2 - consistent with
         // the paragraph end @4:3. cmark strips the two def lines and stamps the surviving content two
-        // lines up (`c` @1, `d` @2 - the `refshift-indent` fuzzer pair, flag-on), extending the
-        // reference-definition line-shift to a non-contiguous but source-backed remainder. Block-level
-        // paragraph range is @1:1-4:3 in both configurations.
+        // lines up (`c` @1, `d` @2), extending the reference-definition line-shift to a non-contiguous
+        // but source-backed remainder. Block-level paragraph range is @1:1-4:3 in both configurations.
         let ranges = try ranges(in: "[a]:\n/b\n c\n d")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 2)

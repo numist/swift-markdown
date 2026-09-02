@@ -14,11 +14,10 @@ import Testing
 /// Source ranges for emphasis and strong under *partial pairing* - a delimiter run longer than the
 /// run it pairs with, so some delimiter characters survive as literal text alongside the node.
 ///
-/// The shipped (flag-off, spec-correct) parser stamps the emphasis/strong node over only the
-/// delimiters it consumed plus its content, so its range never overlaps the leftover-delimiter
-/// text. cmark's overlapping full-run range is the `.cmarkBugCompatibility` quirk, covered by the
-/// `emph-partial-*` fuzzer regression pairs (which parse flag-on); this suite is the flag-off
-/// guardrail proving the default parser is spec-correct.
+/// The parser stamps the emphasis/strong node over only the delimiters it consumed plus its
+/// content, so its range never overlaps the leftover-delimiter text - the spec-correct behavior.
+/// (cmark-gfm instead stretches the node over its whole delimiter run, overlapping the leftover
+/// text; the rewrite does not reproduce that non-compliant position.)
 @Suite("Emphasis source ranges - partial pairing (spec-correct)")
 struct PartialPairingEmphasisRangeTests {
 

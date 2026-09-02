@@ -14,12 +14,10 @@ import Testing
 /// Source ranges for an *unmatched* strikethrough (`~`/`~~`) run - a delimiter run that never
 /// pairs into a strikethrough, so it survives as literal text.
 ///
-/// The shipped (flag-off, spec-correct) parser stamps such a run with a normal, width-bearing
-/// range - its true character span - exactly like any other literal text run. cmark-gfm's
-/// degenerate zero-width range (`strikethrough.c` `match` sets only `start_column`, leaving
-/// `end_column == 0`) is the `.cmarkBugCompatibility` quirk, covered by the `strike-standalone-*`
-/// / `strike-merged-*` fuzzer regression pairs (which parse flag-on); this suite is the flag-off
-/// guardrail proving the default parser is spec-correct.
+/// The parser stamps such a run with a normal, width-bearing range - its true character span,
+/// exactly like any other literal text run - the spec-correct behavior. (cmark-gfm's
+/// `strikethrough.c` `match` sets only `start_column`, leaving `end_column == 0`, so it reports a
+/// degenerate zero-width range; the rewrite does not reproduce that non-compliant position.)
 @Suite("Unmatched strikethrough source ranges (spec-correct)")
 struct UnmatchedStrikethroughRangeTests {
 
