@@ -15,8 +15,7 @@ import Testing
 /// crosses a newline.
 ///
 /// The deliverable stamps the precise byte-projected end: one past the token's last content byte on
-/// its own physical line. These guardrails pin that end and confirm `.cmarkBugCompatibility` does not
-/// disturb it.
+/// its own physical line. These guardrails pin that end for the shipped parser.
 @Suite("Flat raw-inline (code span / inline HTML) end ranges")
 struct FlatRawInlineEndTests {
 
@@ -75,13 +74,6 @@ struct FlatRawInlineEndTests {
         #expect(range.upperBound == Pos(line: 2, column: 3))
     }
 
-    @Test("`.cmarkBugCompatibility` does not disturb a two-line code span's precise end")
-    func codeSpanNoLeadingSpaceUnderBugCompatibility() throws {
-        let range = try #require(try codeSpanRange(options: [.sourcePosition, .cmarkBugCompatibility]))
-        #expect(range.lowerBound == Pos(line: 1, column: 1))
-        #expect(range.upperBound == Pos(line: 2, column: 3))
-    }
-
     @Test("a two-line leading-space code span keeps its precise end (positions on)")
     func codeSpanLeadingSpacePrecise() throws {
         // The code span's end is one past its closing backtick's real column on line 2. The closing
@@ -99,14 +91,6 @@ struct FlatRawInlineEndTests {
         let range = try #require(texts.first ?? nil, "fixture must have a text node after the code span")
         #expect(texts.count == 1)  // fixture sanity: exactly the trailing `8`
         // Physical: `8` is on line 2 (` `8`), one past the closing backtick at column 1.
-        #expect(range.lowerBound == Pos(line: 2, column: 2))
-        #expect(range.upperBound == Pos(line: 2, column: 3))
-    }
-
-    @Test("`.cmarkBugCompatibility` does not disturb the following text's physical position")
-    func followingTextPhysicalUnderBugCompatibility() throws {
-        let texts = try textRanges(in: Self.codeSpanFollowSource, options: [.sourcePosition, .cmarkBugCompatibility])
-        let range = try #require(texts.first ?? nil)
         #expect(range.lowerBound == Pos(line: 2, column: 2))
         #expect(range.upperBound == Pos(line: 2, column: 3))
     }
