@@ -1031,7 +1031,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     firstNonSpace: firstNonSpace,
                     indent: indent,
                     currentKind: stillOpenKind,
-                    insideListItem: isInsideListItem(),
                     interruptsParagraph: interruptsParagraph
                 )
             if !canInterrupt {
@@ -1154,7 +1153,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Returns `true` if the line's content (starting at `firstNonSpace`) begins a new block that would interrupt an open paragraph.
     ///
     /// `interruptsParagraph` mirrors cmark's `interrupts_paragraph` flag: `true` when the open paragraph's OWN container matched this line's continuation prefix (so the line is genuinely interrupting THAT paragraph), `false` when only a shallower container matched (the marker is a sibling item continuing an existing list, not interrupting the paragraph).
-    private func lineStartsNewBlock(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indent: Int, currentKind: MarkdownNode.Kind, insideListItem: Bool, interruptsParagraph: Bool) -> Bool {
+    private func lineStartsNewBlock(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indent: Int, currentKind: MarkdownNode.Kind, interruptsParagraph: Bool) -> Bool {
         if matchThematicBreak(source: source, range: range, firstNonSpace: firstNonSpace) {
             return true
         }
@@ -1172,10 +1171,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
            type != 7 {
             return true
         }
-        // List markers interrupt a paragraph only if they'd start a non-empty first item (CommonMark 0.31 §5.2/§5.3). An ORDERED list can interrupt a paragraph only when its start number is 1; bullets are exempt. This is cmark's `interrupts_paragraph && start != 1` decline in `parse_list_marker` (blocks.c), and it applies at EVERY nesting level - `interruptsParagraph` is true exactly when the open paragraph's own container matched this line, so `- a\n  2. b` (the item matched → `2. b` interrupts the item's paragraph) keeps `2. b` as text, while `1. a\n2. b` (the item did NOT match → the marker sits at the list level) opens a sibling item regardless of start. Empty list markers (e.g. `*` on its own line) can't interrupt a top-level paragraph but DO close a sibling list item (FINDINGS #43).
+        // List markers interrupt a paragraph only if they'd start a non-empty first item (CommonMark 0.31 §5.2/§5.3). An ORDERED list can interrupt a paragraph only when its start number is 1; bullets are exempt. This is cmark's `interrupts_paragraph && start != 1` decline in `parse_list_marker` (blocks.c), and it applies at EVERY nesting level - `interruptsParagraph` is true exactly when the open paragraph's own container matched this line, so `- a\n  2. b` (the item matched → `2. b` interrupts the item's paragraph) keeps `2. b` as text, while `1. a\n2. b` (the item did NOT match → the marker sits at the list level) opens a sibling item regardless of start.
         if let marker = matchListMarker(source: source, range: range, firstNonSpace: firstNonSpace) {
             if marker.isEmpty {
-                return insideListItem
+                // An EMPTY marker opens a list only when it does NOT interrupt the open paragraph, exactly as cmark's `parse_list_marker` accepts an empty bullet/ordered marker iff `!interrupts_paragraph` (blocks.c). Same `interruptsParagraph` signal as the ordered rule below: `- a\n  +` (the item matched → the marker interrupts the item's paragraph) keeps `+` as text, `> a\n+` (the block quote's continuation failed → the marker doesn't interrupt that paragraph) opens a new top-level list, and `a\n+` at the top level (the document always matches the paragraph) keeps `+` as text (FINDINGS #43).
+                return !interruptsParagraph
             }
             if interruptsParagraph
                 && marker.kind == .ordered
@@ -1185,20 +1185,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return true
         }
         // Indented code does not interrupt a paragraph (CommonMark 0.31 §4.4).
-        return false
-    }
-
-    /// Walk up the chain from `current` looking for a `.item` ancestor.
-    ///
-    /// Used to disambiguate the "ordered list with start != 1 can't interrupt a paragraph" rule, which only applies at the top level.
-    private func isInsideListItem() -> Bool {
-        var idx: DocumentStorage.Index? = current
-        while let idx_ = idx {
-            if case .item = storage[idx_].kind {
-                return true
-            }
-            idx = storage[idx_].parent
-        }
         return false
     }
 
