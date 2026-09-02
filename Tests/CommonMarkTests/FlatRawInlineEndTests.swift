@@ -40,6 +40,20 @@ struct FlatRawInlineEndTests {
     /// copied into its buffer, which excludes the stripped leading space (Quirk G extended to code spans).
     private static let leadingSpaceCodeSpanSource = " `\n `x"
 
+    /// `` `\n`8 `` : a two-line code span (`` `\n` ``) FOLLOWED by text `8`. With sourcepos off cmark's
+    /// `subj->line` never advances across the code span's interior newline, so the trailing `8` is
+    /// stamped on the code span's start line (flat @1:4) instead of its physical line 2 (@2:2). This is
+    /// the persistent-flat-cursor half of the quirk: the un-advanced cursor governs every LATER inline.
+    private static let codeSpanFollowSource = "`\n`8"
+    /// `` `\n`a`\n`b `` : two two-line code spans in a row, each swallowing one interior newline, each
+    /// followed by text. The swallowed newlines ACCUMULATE, so under the flat option everything after
+    /// the first code span stays on line 1: `` ` ``@1:1-1:4, `a`@1:4-1:5, `` ` ``@1:5-1:8, `b`@1:8-1:9.
+    private static let twoRawSource = "`\n`a`\n`b"
+    /// `` `\n`8\n9 `` : a two-line code span, text `8`, a SOFT break, then text `9`. The code span
+    /// swallows one interior newline (not recorded as a logical line), so the soft break's line advance
+    /// counts from the reduced base: physical `9` on line 3 is stamped @2:1 under the flat option.
+    private static let codeSpanSoftBreakSource = "`\n`8\n9"
+
     /// The source range of the first node whose kind satisfies `match`, parsing `src` with `options`.
     private func firstRange(
         matching match: @escaping (MarkdownNode.Kind) -> Bool,
@@ -68,6 +82,25 @@ struct FlatRawInlineEndTests {
     private func leadingSpaceCodeSpanRange(options: MarkdownDocument.ParseOptions) throws -> Range<Pos>? {
         try firstRange(matching: { if case .codeInline = $0 { return true } else { return false } },
                        in: Self.leadingSpaceCodeSpanSource, options: options)
+    }
+
+    /// Every text node's range in DFS order, parsing `src` with `options`. Used to pin the position of
+    /// the inline text FOLLOWING a raw inline (the persistent-flat-cursor half of the quirk).
+    private func textRanges(in src: String, options: MarkdownDocument.ParseOptions) throws -> [Range<Pos>?] {
+        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> [Range<Pos>?] in
+            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
+            dfsRanges(doc.root, into: &ranges)
+            return ranges.filter { $0.kind == .text }.map { $0.range }
+        }
+    }
+
+    /// Every code-span node's range in DFS order.
+    private func codeInlineRanges(in src: String, options: MarkdownDocument.ParseOptions) throws -> [Range<Pos>?] {
+        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> [Range<Pos>?] in
+            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
+            dfsRanges(doc.root, into: &ranges)
+            return ranges.filter { if case .codeInline = $0.kind { return true } else { return false } }.map { $0.range }
+        }
     }
 
     @Test("a two-line code span keeps its precise end (positions on, no flat option)")
@@ -137,5 +170,76 @@ struct FlatRawInlineEndTests {
         let range = try #require(try inlineHTMLRange(options: [.sourcePosition, .cmarkFlatRawInlineEnds]))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 1, column: 10))
+    }
+
+    // MARK: - Persistent flat cursor: the text FOLLOWING a newline-crossing raw inline
+
+    @Test("text after a two-line code span keeps its physical position (positions on, no flat option)")
+    func followingTextPreciseNoQuirk() throws {
+        let texts = try textRanges(in: Self.codeSpanFollowSource, options: [.sourcePosition])
+        let range = try #require(texts.first ?? nil, "fixture must have a text node after the code span")
+        #expect(texts.count == 1)  // fixture sanity: exactly the trailing `8`
+        // Physical: `8` is on line 2 (` `8`), one past the closing backtick at column 1.
+        #expect(range.lowerBound == Pos(line: 2, column: 2))
+        #expect(range.upperBound == Pos(line: 2, column: 3))
+    }
+
+    @Test("`.cmarkBugCompatibility` alone does NOT flatten the following text (Quirk G regime is physical)")
+    func followingTextPhysicalUnderBugCompatibility() throws {
+        // Without `disableSourcePosOpts` cmark leaves `CMARK_OPT_SOURCEPOS` on, so its cursor resets at
+        // the code span's interior newline like every other construct: the trailing `8` stays physical
+        // at @2:2. The flat behavior is gated on `.cmarkFlatRawInlineEnds`, not `.cmarkBugCompatibility`.
+        let texts = try textRanges(in: Self.codeSpanFollowSource, options: [.sourcePosition, .cmarkBugCompatibility])
+        let range = try #require(texts.first ?? nil)
+        #expect(range.lowerBound == Pos(line: 2, column: 2))
+        #expect(range.upperBound == Pos(line: 2, column: 3))
+    }
+
+    @Test("`.cmarkFlatRawInlineEnds` stamps the following text from the un-advanced flat cursor")
+    func followingTextFlatUnderFlatOption() throws {
+        let texts = try textRanges(in: Self.codeSpanFollowSource, options: [.sourcePosition, .cmarkFlatRawInlineEnds])
+        let range = try #require(texts.first ?? nil)
+        // Flat: the code span's interior newline never advanced the cursor, so `8` follows the code
+        // span's flat end (@1:4) on line 1, not its physical line 2.
+        #expect(range.lowerBound == Pos(line: 1, column: 4))
+        #expect(range.upperBound == Pos(line: 1, column: 5))
+    }
+
+    @Test("two newline-crossing code spans accumulate their swallowed-newline offset")
+    func twoRawInlinesAccumulate() throws {
+        // Control (no flat option): both trailing texts stay on their physical lines 2 and 3.
+        let physicalTexts = try textRanges(in: Self.twoRawSource, options: [.sourcePosition])
+        #expect(physicalTexts.count == 2)  // fixture sanity: `a` and `b`
+        #expect(try #require(physicalTexts.first ?? nil).lowerBound == Pos(line: 2, column: 2))
+        #expect(try #require(physicalTexts.last ?? nil).lowerBound == Pos(line: 3, column: 2))
+
+        // Flat: the first code span swallows a newline, so the SECOND code span and both texts stay on
+        // line 1, its own flat end continuing from the reduced base (@1:5-1:8, not a physical line 2/3).
+        let codeSpans = try codeInlineRanges(in: Self.twoRawSource, options: [.sourcePosition, .cmarkFlatRawInlineEnds])
+        #expect(codeSpans.count == 2)  // fixture sanity: two code spans
+        let secondSpan = try #require(codeSpans.last ?? nil)
+        #expect(secondSpan.lowerBound == Pos(line: 1, column: 5))
+        #expect(secondSpan.upperBound == Pos(line: 1, column: 8))
+
+        let flatTexts = try textRanges(in: Self.twoRawSource, options: [.sourcePosition, .cmarkFlatRawInlineEnds])
+        #expect(try #require(flatTexts.first ?? nil).lowerBound == Pos(line: 1, column: 4))  // `a`
+        #expect(try #require(flatTexts.last ?? nil).lowerBound == Pos(line: 1, column: 8))   // `b`
+    }
+
+    @Test("a soft break after a newline-crossing code span advances the line from the reduced base")
+    func softBreakAdvancesFromFlatBase() throws {
+        // Control (no flat option): the trailing `9` is on its physical line 3.
+        let physicalTexts = try textRanges(in: Self.codeSpanSoftBreakSource, options: [.sourcePosition])
+        #expect(physicalTexts.count == 2)  // fixture sanity: `8` and `9`
+        #expect(try #require(physicalTexts.last ?? nil).lowerBound == Pos(line: 3, column: 1))
+
+        // Flat: the code span swallowed one interior newline that was never recorded as a logical line,
+        // so the soft break advances to line 2 (not 3) and stamps `9` @2:1 - the offset persists through
+        // the soft-break line advance.
+        let flatTexts = try textRanges(in: Self.codeSpanSoftBreakSource, options: [.sourcePosition, .cmarkFlatRawInlineEnds])
+        #expect(try #require(flatTexts.first ?? nil).lowerBound == Pos(line: 1, column: 4))  // `8`
+        let ninth = try #require(flatTexts.last ?? nil)  // `9`
+        #expect(ninth.lowerBound == Pos(line: 2, column: 1))
+        #expect(ninth.upperBound == Pos(line: 2, column: 2))
     }
 }

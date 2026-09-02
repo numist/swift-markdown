@@ -67,4 +67,23 @@ class FlatRawInlineEndTests: XCTestCase {
         let document = Document(parsing: text)
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
+
+    /// The persistent-flat-cursor half of the quirk is likewise quarantined: the text FOLLOWING a
+    /// newline-crossing code span keeps its true physical position in the deliverable, even with
+    /// `.disableSourcePosOpts`. Under `.cmarkBugCompatibility` + `.disableSourcePosOpts` (the
+    /// differential) cmark instead stamps the trailing `8` flat on line 1 - covered by the `qiflat-*`
+    /// fuzzer regression pairs. Here the shipped parser reports the physical @2:2.
+    func testTextAfterMultilineCodeSpanKeepsPhysicalLine() {
+        let text = "`\n`8"
+
+        let expectedDump = """
+        Document @1:1-2:3
+        └─ Paragraph @1:1-2:3
+           ├─ InlineCode @1:1-2:2 ` `
+           └─ Text @2:2-2:3 "8"
+        """
+
+        let document = Document(parsing: text, options: [.disableSourcePosOpts])
+        XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
+    }
 }

@@ -1,0 +1,4 @@
+Document @1:1-4:3
+└─ Paragraph @1:1-4:3
+   ├─ InlineCode @1:1-1:8 `a b`
+   └─ Text @1:8-1:9 "8"

@@ -68,6 +68,7 @@ extension BlockParser {
 
         // Reset the backslash-hard-break flat-column cursor, tracked in CONTENT-offset space. This holds for both single-segment source content (a content offset IS its source offset, identity map) and multi-segment source content, whose continuation lines have their prefixes/indents stripped - offsets cmark's inline cursor never counted, so measuring the flat column in content offsets (not source offsets) is what reproduces cmark. Single-segment arena content (a flattened setext heading, a `\|`-unescaped table cell) stays on the byte-projection path: its content offsets don't map to source columns linearly, so it isn't armed.
         inlineSawBackslashHardBreak = false
+        inlineSawFlatRawInline = false
         inlineFlatColumnTracking = positionsEnabled && !preserveWhitespace && (content.inSource || content.isMultiSegment)
         inlineLogicalLineStarts.removeAll(keepingCapacity: true)
         // Reset cmark's per-subject backtick-closer cache (`matchCodeSpan`, flag-ON only). Flag-OFF the cache is never consulted, so leave it untouched - inert.
@@ -2748,8 +2749,11 @@ extension BlockParser {
         //
         // Flag ON reproduces a cmark quirk (Hyrum's Law): after a backslash hard break, cmark's inline cursor keeps counting columns flat (its `handle_backslash` never resets `subj->line` / `subj->column_offset`, unlike `handle_newline` for soft/space breaks). No source byte projects onto that flat column, so stamp explicit start/end positions from the flat cursor for every node after such a break. The flat cursor is measured in CONTENT offsets (`start` / `end - 1`), not the source offsets `s` / `lastByte`: for single-segment source content the two coincide (identity map), but for a multi-segment continuation the stripped prefix/indent means the content offset - which cmark counted - is what lands on cmark's flat column, while the source offset would double-count the gap.
         //
+        // The SAME flat cursor reproduces the raw-inline flat-cursor quirk (`.cmarkFlatRawInlineEnds`, the differential's flag-on + `disableSourcePosOpts` combination): with `CMARK_OPT_SOURCEPOS` off cmark never resets its cursor across a code span / inline HTML interior newline, so `subj->line` PERSISTS behind the physical line for the rest of the paragraph once such a token has been swallowed (`inlineSawFlatRawInline`, armed in `stampFlatRawInlineEnd`). Every node stamped afterward - later text, later raw inlines, and soft-break line advances - counts from that lagged base. `inlineLogicalLineStarts` already records ONLY soft/space breaks (never a raw inline's interior newline), so `flatInlinePosition` naturally lags by the accumulated swallowed-newline count and both quirks share this one branch.
+        //
         // Flag OFF is spec-correct: take no explicit positions, so the node keeps the byte-projected range above - its content projected onto its true physical line:column, which resets at the physical newline exactly like soft and trailing-space breaks do. Covers only `stampInline`'s node population; the strikethrough-zero-width and multi-line-link close-bracket end overrides are separate quirks not compounded here.
-        if inlineSawBackslashHardBreak && storage.options.contains(.cmarkBugCompatibility) {
+        if (inlineSawBackslashHardBreak && storage.options.contains(.cmarkBugCompatibility))
+            || (inlineSawFlatRawInline && storage.options.contains(.cmarkFlatRawInlineEnds)) {
             storage.setExplicitStart(node, flatInlinePosition(ofContent: start, content: content))
             var endPosition = flatInlinePosition(ofContent: end - 1, content: content)
             endPosition.column += 1  // half-open end: one past the last content byte's column
@@ -2922,7 +2926,9 @@ extension BlockParser {
     ///
     /// Flag ON reproduces the cmark quirk (Hyrum's Law): the token's flat byte length is added to its start column on its start line. For inline HTML this OVERRIDES Quirk G's sourcepos-ON flat-last-byte end (call the two in order; this writes last). A single-line span carries no line break, so its flat end equals its precise byte-projected end and this method returns early (byte-identical to today). Guards on the last content byte landing on a later source line than the first - which covers `\n`, `\r`, and `\r\n` breaks alike (they all advance `lineStarts`), where a `\n`-only scan would miss a bare `\r`. Bails to the byte path if either end of the token has no source image.
     ///
-    /// Scoped to top-level blocks like its sibling helpers (`stampInlineHTMLEnd`, `stampCloseBracketEnd`): `startColumn` here counts from the token's PHYSICAL source line start (`s - lineStartByte(ofSource: s) + 1`), so a raw inline nested in a blockquote/list would include the container prefix in the column - a coordinate basis not verified against cmark's sourcepos-off nested end. Nested multi-line raw inlines are not in the fuzz corpus; a nested raw inline was already precise-vs-flat divergent on the byte path before this change (the same documented nested-container gap the siblings carry), never a wrong-line stamp and never in the deliverable (flag ON only).
+    /// Persistent flat cursor: cmark's un-advanced `subj->line` PERSISTS past this token for the rest of the paragraph, so this method (a) bases its own end on the flat cursor - `flatInlinePosition(ofContent: start)` when the cursor is armed, which for the FIRST / only newline-crossing raw inline equals the physical projection but for a LATER one lags by the interior newlines already swallowed - and (b) latches `inlineSawFlatRawInline` so `stampInline` stamps every SUBSEQUENT inline (and this pass's later raw inlines and soft-break line advances) from the same flat cursor. `inlineLogicalLineStarts` records only soft/space breaks (never a raw inline's interior newline), so the lag accumulates naturally across multiple raw inlines.
+    ///
+    /// Scoped to top-level blocks like its sibling helpers (`stampInlineHTMLEnd`, `stampCloseBracketEnd`): the flat base's column resolves through `flatBaseColumn`, which measures from the run's PHYSICAL source line start (`inlineBlockStartColumn` = `blockStartSource - lineStartByte(...) + 1`), so a raw inline nested in a blockquote/list INCLUDES the container prefix in the column (i.e. `block_offset + 1`) - a coordinate basis not verified against cmark's sourcepos-off nested end. Nested multi-line raw inlines are not in the fuzz corpus; a nested raw inline was already precise-vs-flat divergent on the byte path before this change (the same documented nested-container gap the siblings carry), never a wrong-line stamp and never in the deliverable (flag ON only).
     @inline(__always)
     mutating func stampFlatRawInlineEnd(_ node: DocumentStorage.Index, start: Int, end: Int, content: borrowing ContentSpan) {
         guard positionsEnabled, storage.options.contains(.cmarkFlatRawInlineEnds),
@@ -2931,9 +2937,33 @@ extension BlockParser {
               sourceLineNumber(ofSource: lastByte) > sourceLineNumber(ofSource: s) else {
             return
         }
-        let startLine = sourceLineNumber(ofSource: s)
-        let startColumn = s - lineStartByte(ofSource: s) + 1
-        storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: startLine, column: startColumn + (end - start)))
+        // Base the flat end on cmark's flat inline cursor when it is armed. cmark's `subj->line` /
+        // `subj->column_offset` do NOT advance across an EARLIER raw inline's interior newline
+        // (sourcepos off), so a raw inline that itself FOLLOWS a newline-swallowing raw inline reports
+        // its own start line/column - and hence this flat end - from a base that lags the physical
+        // projection by the interior newlines swallowed so far. `flatInlinePosition` tracks exactly
+        // that lag (interior newlines are never recorded in `inlineLogicalLineStarts`). For the FIRST /
+        // only newline-crossing raw inline nothing has been swallowed yet, so the flat base equals the
+        // physical projection - byte-identical to before. Arena content (tracking disarmed) has no
+        // linear source-column map, so keep the physical projection there (the documented arena gap).
+        let base: MarkdownNode.SourcePosition
+        if inlineFlatColumnTracking {
+            base = flatInlinePosition(ofContent: start, content: content)
+        } else {
+            base = MarkdownNode.SourcePosition(
+                line: sourceLineNumber(ofSource: s),
+                column: s - lineStartByte(ofSource: s) + 1
+            )
+        }
+        storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: base.line, column: base.column + (end - start)))
+        // Latch the persistent flat cursor: once a raw inline has swallowed an interior newline, cmark's
+        // `subj->line` stays behind for the REST of the paragraph, so every subsequent inline (and this
+        // pass's later raw inlines and soft-break line advances) must stamp from the flat cursor instead
+        // of the physical byte projection. `stampInline` honors this latch through the same branch the
+        // backslash-hard-break flat cursor uses. Only meaningful while the flat cursor is armed.
+        if inlineFlatColumnTracking {
+            inlineSawFlatRawInline = true
+        }
     }
 
     /// Give a GFM strikethrough whose opener and closer sit on different physical lines the END line cmark reports: the OPENER's line, keeping the closer-derived end column.
