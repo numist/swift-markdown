@@ -2890,6 +2890,8 @@ extension BlockParser {
     ///
     /// Flag ON reproduces the cmark quirk (Hyrum's Law): a newline-crossing code span reports `(startLine + newlines, afterClose - lastNewline)`. A single-line span carries no interior newline, so `adjust_subj_node_newlines` is a no-op and the spec-correct byte-projected half-open end (from `stampInline`) stands - this method returns early for it (byte-identical to today).
     ///
+    /// The start LINE `adjust_subj_node_newlines` counts from is the opener's PHYSICAL line. Normally that is the physical line the opener's source projection lands on, but a code span opening on a re-indented block-quote/list LAZY continuation whose re-indent shift exceeds the opener line's content width has its mapped opener offset OVERSHOOT onto a later physical line (Quirk E, #53); this method then also stamps an explicit START on the opener's own physical line (recovered via `physicalRunBase`, whose base sits on the opener's line since a re-indented continuation is one physical line per segment) at its re-indented column, so both the start and the newline-counted end land where cmark reports them. No overshoot -> the byte-projected start (`stampInline`) stands.
+    ///
     /// Flag OFF is spec-correct: take no explicit end, so the node keeps the precise byte-projected half-open end from its `stampInline(node, cursor, afterClose)` stamp (its closing backtick's real line:column).
     ///
     /// Interaction with `.cmarkFlatRawInlineEnds`: the caller invokes `stampFlatRawInlineEnd` AFTER this method, so with the flat option ON (the differential's `disableSourcePosOpts` combination) the flat sourcepos-OFF end overrides this sourcepos-ON quirk end for code spans, mirroring the inline-HTML call order.
@@ -2912,7 +2914,38 @@ extension BlockParser {
         guard newlines > 0 else { return }
         // The start line comes from the opening backtick's source projection (cmark's `subj->line` at node creation); bail to the byte path if it has no source image (arena-only content, e.g. a flattened setext heading).
         guard let startSource = content.sourceOffset(ofVirtual: start) else { return }
-        let endLine = sourceLineNumber(ofSource: startSource) + newlines
+        // why: normally the opener's start line is the physical line its source projection lands on.
+        // But when the opener sits on a RE-INDENTED block-quote/list LAZY continuation (Quirk E, see
+        // `BlockParser.addLineSegment`) whose re-indent shift EXCEEDS the opener line's content width
+        // (#53), the mapped `startSource` overshoots past the opener's own physical line onto a LATER
+        // one - e.g. `> o\n`` \n`` `` flag-ON: the lone `` ` `` on line 2 re-indents to the block
+        // content column 3, whose byte is line 3's, so `startSource` reports line 3 for a backtick
+        // physically on line 2. Both `stampInline`'s byte-projected START and this end line inherit the
+        // overshoot (start `@3:1`, end `@4:2` on a line that does not exist). cmark keeps the code span
+        // on the opener's PHYSICAL line at its re-indented column and counts interior newlines from
+        // there (`adjust_subj_node_newlines`). Recover the opener's own physical line via
+        // `physicalRunBase` (the byte-read anchor of the opener's segment/run) and stamp an explicit
+        // START there at the re-indented column - the same physical-line-anchor + re-indented-column
+        // pattern `stampInline`'s Quirk-E text-run branch uses. A re-indented continuation is a single
+        // physical line per segment/run (`addLineSegment` emits one segment per line; the only
+        // multi-line coalesced segment is a top-level CONTIGUOUS run, which is not re-indented and is
+        // excluded by `isReindentedRun`), and `physicalRunBase` resolves to the segment/run CONTAINING
+        // the opener, so its base sits on the opener's own physical line - the byte-read offset the
+        // re-indent shifts away from. When there is no overshoot (`physLine == startLine`) this is
+        // skipped and the byte projection stands (byte-identical to before). Flag-OFF: no re-indent, so
+        // nothing overshoots and this whole method is gated off anyway - the deliverable keeps the
+        // spec-correct physical positions.
+        var startLine = sourceLineNumber(ofSource: startSource)
+        if content.isReindentedRun(ofVirtual: start),
+           let physOpener = content.physicalRunBase(ofVirtual: start) {
+            let physLine = sourceLineNumber(ofSource: physOpener)
+            if physLine < startLine {
+                startLine = physLine
+                let startColumn = startSource - lineStartByte(ofSource: physOpener) + 1
+                storage.setExplicitStart(node, MarkdownNode.SourcePosition(line: physLine, column: startColumn))
+            }
+        }
+        let endLine = startLine + newlines
         // End column = bytes since the last interior newline, in CONTENT space (== cmark's `since_newline + 1 + backtick_count`, a flat count with no `block_offset`). See the doc comment for why this must not be a physical source-column projection.
         let endColumn = afterClose - lastNewline
         storage.setExplicitEnd(node, MarkdownNode.SourcePosition(line: endLine, column: endColumn))
