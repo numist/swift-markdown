@@ -1,0 +1,13 @@
+Document @1:1-3:76
+└─ Table @1:1-3:76 alignments: |-|-|
+   ├─ Head @1:1-1:11
+   │  ├─ Cell @1:1-1:4
+   │  │  └─ Text @1:1-1:3 "[f"
+   │  └─ Cell @1:5-1:11
+   │     └─ Text @1:6-1:11 "bar t"
+   └─ Body @3:1-3:76
+      └─ Row @3:1-3:76
+         ├─ Cell @3:2-3:7
+         │  └─ Text @3:3-3:6 "baz"
+         └─ Cell @3:8-3:76
+            └─ Text @3:9-3:76 "“f&oumlml;oo](/fö&ou/föö “f&oumlml; “föö”)"
