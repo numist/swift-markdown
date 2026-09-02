@@ -98,25 +98,6 @@ struct TableCellTextConsolidationTests {
         #expect(cell[0].range.map { $0 == (1, 1, 1, 3) } == true)
     }
 
-    /// PHASE-0: consolidation is UNCONDITIONAL — it fires identically WITH and WITHOUT
-    /// `.cmarkBugCompatibility` (there is no spec-correct behavior that over-splitting protects; adjacent
-    /// text nodes should always be one node). Parsing the same input under each flag state must yield the
-    /// same single merged node and range.
-    @Test("consolidation is identical with and without .cmarkBugCompatibility")
-    func consolidationUnconditionalAcrossCompatFlag() throws {
-        let withFlag = try tableCellChildren("[t\n|-", options: [.tables, .sourcePosition, .cmarkBugCompatibility])
-        let withoutFlag = try tableCellChildren("[t\n|-", options: Self.posOpts)
-        try #require(withFlag.first?.first != nil && withoutFlag.first?.first != nil,
-                     "fixture: expected a header cell under both flag states")
-        // Both consolidate to one `Text "[t"` at 1:1–1:3 — the flag does not gate the merge.
-        #expect(withFlag[0][0].count == 1)
-        #expect(withoutFlag[0][0].count == 1)
-        #expect(withFlag[0][0].first?.literal == "[t")
-        #expect(withoutFlag[0][0].first?.literal == "[t")
-        #expect(withFlag[0][0].first?.range.map { $0 == (1, 1, 1, 3) } == true)
-        #expect(withoutFlag[0][0].first?.range.map { $0 == (1, 1, 1, 3) } == true)
-    }
-
     /// A decoded entity merges with the surrounding text. `a&amp;t` → one `Text "a&t"` at 1:1–1:8
     /// (the entity's raw source width, 5 bytes, is preserved in the range even though it decodes to `&`).
     @Test("a decoded entity merges with surrounding text in a cell")
@@ -230,5 +211,21 @@ struct TableCellTextConsolidationTests {
         #expect(cell[0].literal == "[x")
         // Re-based onto the body row: line 3, column 1 through 3 (the leading space is invisible).
         #expect(cell[0].range.map { $0 == (3, 1, 3, 3) } == true)
+    }
+
+    /// The flag-OFF twin of `flattenedCellConsolidates`: the same flattened (leading-whitespace) cell
+    /// consolidates identically, but keeps its TRUE physical column — the leading space is visible, so
+    /// `[x` sits at cols 2–4 rather than the flag-ON re-based cols 1–3.
+    @Test("flag-OFF: a flattened (leading-whitespace) cell consolidates and keeps its physical column")
+    func flattenedCellConsolidatesSpecCorrect() throws {
+        let rows = try tableCellChildren("a|b\n-|-\n [x|y", options: Self.posOpts)
+        try #require(rows.count == 2, "fixture: expected a header row and a body row, got \(rows.count)")
+        try #require(rows[1].count == 2, "fixture: expected two body cells, got \(rows[1].count)")
+        let cell = rows[1][0]
+        try #require(cell.count == 1, "fixture: flattened cell must coalesce to one node, got \(cell.map(\.kind))")
+        #expect(cell[0].kind == .text)
+        #expect(cell[0].literal == "[x")
+        // Physical columns: line 3, cols 2–4 (the leading space is visible flag-OFF).
+        #expect(cell[0].range.map { $0 == (3, 2, 3, 4) } == true)
     }
 }
