@@ -1022,6 +1022,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // PHASE 2d: When a paragraph is open, decide whether this line starts a new block (which closes the paragraph) or is absorbed as lazy/matched continuation. This is the ONLY case where the interrupt decision matters, so the matcher ladder is run only here - every other line goes straight to dispatch, which does its own (single) classification.
         if stillOpenKind == .paragraph {
             // The matcher ladder can only return true if the first content byte is one that some block construct starts with; for ordinary prose continuation lines it isn't, so we skip the whole ladder. `mightStartBlock` is a superset of every matcher's trigger byte, so a `false` here is exactly what `lineStartsNewBlock` would have returned.
+            // `interruptsParagraph` mirrors cmark's flag (blocks.c: `check_open_blocks` backs `container` up to its parent on a failed continuation): true iff the open paragraph's OWN container matched this line, i.e. `deepestMatched` is the paragraph's parent. When a shallower container matched, the marker is a sibling item at the list level, not an interruption of this paragraph.
+            let interruptsParagraph = storage[current].parent == deepestMatched
             let canInterrupt = Self.mightStartBlock(scan.firstNonSpaceByte)
                 && lineStartsNewBlock(
                     source: source,
@@ -1029,7 +1031,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     firstNonSpace: firstNonSpace,
                     indent: indent,
                     currentKind: stillOpenKind,
-                    insideListItem: isInsideListItem()
+                    insideListItem: isInsideListItem(),
+                    interruptsParagraph: interruptsParagraph
                 )
             if !canInterrupt {
                 // Continue paragraph (matched or lazy). Don't close stale containers - the paragraph absorbs without breaking the chain.
@@ -1149,7 +1152,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Returns `true` if the line's content (starting at `firstNonSpace`) begins a new block that would interrupt an open paragraph.
-    private func lineStartsNewBlock(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indent: Int, currentKind: MarkdownNode.Kind, insideListItem: Bool) -> Bool {
+    ///
+    /// `interruptsParagraph` mirrors cmark's `interrupts_paragraph` flag: `true` when the open paragraph's OWN container matched this line's continuation prefix (so the line is genuinely interrupting THAT paragraph), `false` when only a shallower container matched (the marker is a sibling item continuing an existing list, not interrupting the paragraph).
+    private func lineStartsNewBlock(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indent: Int, currentKind: MarkdownNode.Kind, insideListItem: Bool, interruptsParagraph: Bool) -> Bool {
         if matchThematicBreak(source: source, range: range, firstNonSpace: firstNonSpace) {
             return true
         }
@@ -1167,12 +1172,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
            type != 7 {
             return true
         }
-        // List markers interrupt a paragraph only if they'd start a non-empty first item (CommonMark 0.31 §5.2). The `start != 1` rule for ordered lists only applies when starting a brand-new top-level list - when we're already inside a list item, sequential numbers (2., 3., …) legitimately open new items. Empty list markers (e.g. `*` on its own line) follow the same pattern: they can't interrupt a top-level paragraph but DO close a sibling list item.
+        // List markers interrupt a paragraph only if they'd start a non-empty first item (CommonMark 0.31 §5.2/§5.3). An ORDERED list can interrupt a paragraph only when its start number is 1; bullets are exempt. This is cmark's `interrupts_paragraph && start != 1` decline in `parse_list_marker` (blocks.c), and it applies at EVERY nesting level - `interruptsParagraph` is true exactly when the open paragraph's own container matched this line, so `- a\n  2. b` (the item matched → `2. b` interrupts the item's paragraph) keeps `2. b` as text, while `1. a\n2. b` (the item did NOT match → the marker sits at the list level) opens a sibling item regardless of start. Empty list markers (e.g. `*` on its own line) can't interrupt a top-level paragraph but DO close a sibling list item (FINDINGS #43).
         if let marker = matchListMarker(source: source, range: range, firstNonSpace: firstNonSpace) {
             if marker.isEmpty {
                 return insideListItem
             }
-            if !insideListItem
+            if interruptsParagraph
                 && marker.kind == .ordered
                 && marker.start != 1 {
                 return false
