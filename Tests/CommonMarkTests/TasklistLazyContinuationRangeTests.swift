@@ -155,4 +155,58 @@ struct TasklistLazyContinuationRangeTests {
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y" at its TRUE column
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
     }
+
+    /// The flag-OFF twin of `checkedContinuation`: the checked task item's continuation keeps its TRUE
+    /// physical column @2:1 rather than the flag-ON re-base to the checkbox-adjusted content column.
+    @Test("flag-off: checked task-item continuation keeps its TRUE physical column")
+    func flagOffCheckedKeepsTrueColumn() throws {
+        let ranges = try ranges(in: "- [x] x\ny", options: Self.specOptions)
+        try #require(itemChecked(in: ranges) == .some(.some(true)))
+        let texts = texts(in: ranges)
+        try #require(texts.count == 2)
+
+        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 7))   // "x" content after checkbox
+        #expect(texts[0]?.upperBound == Pos(line: 1, column: 8))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y" at its TRUE column
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
+    }
+
+    /// The flag-OFF twin of `oneSpaceContinuation`: the one leading space is visible, so `y` keeps its
+    /// TRUE physical column @2:2 rather than the flag-ON residual-plus-content-column re-base.
+    @Test("flag-off: one-space task-item continuation keeps its TRUE physical column")
+    func flagOffOneSpaceKeepsTrueColumn() throws {
+        let ranges = try ranges(in: "- [ ] x\n y", options: Self.specOptions)
+        try #require(itemChecked(in: ranges) == .some(.some(false)))
+        let texts = texts(in: ranges)
+        try #require(texts.count == 2)
+
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 2))   // "y" at its TRUE column (leading space visible)
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 3))
+    }
+
+    /// The flag-OFF twin of `deeperIndentContinuation`: the four leading spaces are visible, so `y` keeps
+    /// its TRUE physical column @2:5 rather than the flag-ON re-base to the content column.
+    @Test("flag-off: deeper-indent task-item continuation keeps its TRUE physical column")
+    func flagOffDeeperIndentKeepsTrueColumn() throws {
+        let ranges = try ranges(in: "- [ ] x\n    y", options: Self.specOptions)
+        try #require(itemChecked(in: ranges) == .some(.some(false)))
+        let texts = texts(in: ranges)
+        try #require(texts.count == 2)
+
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 5))   // "y" at its TRUE column (four spaces visible)
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 6))
+    }
+
+    /// The flag-OFF twin of `plainBulletUnchanged`: a plain bullet's continuation keeps its TRUE physical
+    /// column @2:1 rather than the flag-ON re-base to the plain content column.
+    @Test("flag-off: plain-bullet continuation keeps its TRUE physical column")
+    func flagOffPlainBulletKeepsTrueColumn() throws {
+        let ranges = try ranges(in: "- x\ny", options: Self.specOptions)
+        try #require(itemChecked(in: ranges) == .some(Bool?.none))   // an ordinary (non-task) item
+        let texts = texts(in: ranges)
+        try #require(texts.count == 2)
+
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y" at its TRUE column
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
+    }
 }
