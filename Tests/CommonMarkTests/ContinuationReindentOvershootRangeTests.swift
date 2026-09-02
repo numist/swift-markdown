@@ -58,4 +58,15 @@ struct ContinuationReindentOvershootRangeTests {
         try #require(texts.count == 2)
         #expect(texts[1] == Pos(line: 2, column: 3)..<Pos(line: 2, column: 4))   // "c"
     }
+
+    /// Twin of `quirkLastContinuation`: the deliverable (flag-OFF) keeps the last continuation line `c`
+    /// at its TRUE physical position `@2:1-2:2`. The flag-ON re-indent (`@2:3`) is a real active quirk
+    /// for this shape, so this twin pins the spec-correct default it diverges from.
+    @Test("flag-OFF: 1-char last continuation keeps its true column @2:1-2:2")
+    func specLastContinuation() throws {
+        let texts = try textRanges("- e\nc", options: Self.specOptions)
+        try #require(texts.count == 2)
+        #expect(texts[0] == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // "e"
+        #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 2))   // "c" true column
+    }
 }
