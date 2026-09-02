@@ -46,17 +46,15 @@ private func textLiterals(_ node: borrowing MarkdownNode, into out: inout [Strin
 /// at item-open time (`lineAnchoredTaskItems`) and gates the finalize-time recognition on it, so an
 /// item sharing its line with a `>` / outer marker keeps its `[ ]`/`[x]` as literal paragraph text.
 ///
-/// STRUCTURAL match (whether a checkbox is set and whether `[ ]` stays literal), independent of
-/// `.cmarkBugCompatibility` - the flag-off cases are the guardrail proving the fix is unconditional.
+/// STRUCTURAL match (whether a checkbox is set and whether `[ ]` stays literal): the tasklist
+/// recognition fix is unconditional - it is not gated on `.cmarkBugCompatibility` (flag-ON and
+/// flag-OFF produce an identical tree for every case here), so these assertions parse with the shipped
+/// default options.
 @Suite("Content-bearing GFM task-list item block structure")
 struct ContentTaskItemStructureTests {
 
-    /// The differential-fuzzer configuration: tasklist + positions + cmark bug-compatibility.
+    /// The shipped default: tasklist + positions.
     private static let options: MarkdownDocument.ParseOptions =
-        [.tasklist, .sourcePosition, .cmarkBugCompatibility]
-
-    /// The shipped default: tasklist + positions, bug-compatibility OFF.
-    private static let flagOff: MarkdownDocument.ParseOptions =
         [.tasklist, .sourcePosition]
 
     private func analyze(
@@ -175,22 +173,5 @@ struct ContentTaskItemStructureTests {
         #expect(checks == [nil, false])                    // `a` ordinary, `b` recognized unchecked task
         #expect(texts.contains("b"))                        // `b`'s marker stripped
         #expect(!texts.contains { $0?.contains("[ ]") == true })   // no literal `[ ]` anywhere
-    }
-
-    // MARK: - Flag-off guardrail (the fix is unconditional, not a `.cmarkBugCompatibility` quirk)
-
-    @Test("flag-off: top-level content task item is still recognized")
-    func flagOffTopLevelStillRecognized() throws {
-        let (checks, texts) = try analyze("- [ ] x", options: Self.flagOff)
-        try #require(checks.count == 1, "expected exactly one list item, got \(checks)")
-        #expect(checks[0] == .some(false))
-        #expect(texts.contains("x"))
-    }
-
-    @Test("flag-off: nested content task item is still NOT recognized")
-    func flagOffNestedStillNotRecognized() throws {
-        let (checks, texts) = try analyze("- - [ ] x", options: Self.flagOff)
-        #expect(!checks.contains { $0 != nil })
-        #expect(texts.contains("[ ] x"))
     }
 }
