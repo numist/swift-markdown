@@ -1658,9 +1658,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return true
     }
 
-    /// Cheap, over-approximate gate: could this segment content match a finalize-time matcher (ref-def / footnote / tasklist start with `[`, or a GFM table whose header line contains `|`)?
+    /// Cheap, over-approximate gate: could this segment content match a finalize-time matcher (ref-def / footnote / tasklist start with `[`, or a GFM table)?
     ///
-    /// A false positive only costs an avoidable materialization; a false negative would skip a real matcher, so the checks must cover every matcher's necessary condition. Header `|` need only be checked on the first line (segment 0) since a table header is the paragraph's first line.
+    /// A false positive only costs an avoidable materialization; a false negative would skip a real matcher, so the checks must cover every matcher's necessary condition. The table necessary condition is on the DELIMITER (second) line, not the header: a single-column table's header need not contain a pipe (`a\n|-`, `a\n:-`), so the header-`|` check that once lived here would skip such tables. The segment list is isomorphic to `\n`-separated lines, so the second line is scanned directly.
     private func segmentsCouldMatchMatcher(_ segs: borrowing UniqueArray<Segment>) -> Bool {
         // First content byte == '['  ⇒ possible ref-def / footnote def / tasklist marker.
         outer: for i in 0..<segs.count {
@@ -1672,9 +1672,37 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 break outer   // first non-whitespace byte isn't '['
             }
         }
-        if storage.options.contains(.tables), segs.count > 0 {
-            let seg = segs[0]
-            for j in 0..<Int(seg.length) where segmentByte(seg, j) == UInt8(ascii: "|") {
+        // Table: the delimiter row is the paragraph's SECOND line. It can only be a delimiter row if
+        // it holds solely `-`, `:`, `|`, and spaces/tabs with at least one `-` (a false positive only
+        // costs a materialization; `parseTable`/`parseDelimRow` apply the exact rule). Scanning the
+        // second line - not the header - is what admits pipe-less-header single-column tables.
+        if storage.options.contains(.tables) {
+            var line = 0
+            var sawDash = false
+            var secondLineClean = true
+            walk: for i in 0..<segs.count {
+                let seg = segs[i]
+                for j in 0..<Int(seg.length) {
+                    let b = segmentByte(seg, j)
+                    if b == UInt8(ascii: "\n") {
+                        if line == 1 { break walk }   // reached the end of the second line
+                        line += 1
+                        continue
+                    }
+                    if line == 1 {
+                        switch b {
+                        case UInt8(ascii: "-"):
+                            sawDash = true
+                        case UInt8(ascii: ":"), UInt8(ascii: "|"), UInt8(ascii: " "), UInt8(ascii: "\t"):
+                            break
+                        default:
+                            secondLineClean = false
+                            break walk
+                        }
+                    }
+                }
+            }
+            if secondLineClean && sawDash {
                 return true
             }
         }

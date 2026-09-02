@@ -1,0 +1,6 @@
+Document @1:1-2:4
+└─ Table @1:1-2:4 alignments: |c|
+   ├─ Head @1:1-1:2
+   │  └─ Cell @1:1-1:2
+   │     └─ Text @1:1-1:2 "a"
+   └─ Body

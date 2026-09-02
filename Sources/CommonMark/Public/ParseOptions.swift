@@ -76,7 +76,7 @@ extension MarkdownDocument {
 
         /// Enables GFM tables.
         ///
-        /// A paragraph whose first line contains `|` and whose second line is a delimiter row, such as `:---`, `---:`, or `:---:`, becomes a table with aligned columns.
+        /// A paragraph whose second line is a delimiter row, such as `---`, `:---`, `---:`, or `:---:`, becomes a table with aligned columns. Columns are separated by `|`; a single-column table has one delimiter cell and needs no `|` in its header line.
         public static let tables = MarkdownDocument.ParseOptions(rawValue: 1 << 25)
 
         /// Replicate cmark-gfm's observable bugs bit-for-bit (for differential qualification). Covers both source-position quirks and structural ones that change the node tree (e.g. the inline code-span backtick-closer cache, which makes cmark miss some valid spans). Default off; the shipped parser is spec-correct.

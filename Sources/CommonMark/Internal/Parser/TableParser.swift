@@ -19,7 +19,7 @@ extension BlockParser {
     /// Only supports reading from the standard source (not materialized strings).
     /// Returns `true` on success (caller should skip inline-parsing the original paragraph since the cells were already inline-parsed). Returns `false` when the chunk doesn't match the table pattern.
     internal mutating func parseTable(node: DocumentStorage.Index, chunk inputChunk: Chunk, sourceMap: [ArenaRun]) throws(MarkdownDocument.Error) -> Bool {
-        // The table machinery (line splitting, cell extraction, pipe-unescape) reads exclusively from `storage.strings`. Paragraph content is usually already materialized there, but the source-contiguity fast path can hand us an `inSource` chunk (a zero-copy multi-line source range). A table's header (first) line must contain an unescaped `|`, so before paying for a copy we scan the chunk's first line directly in the source: no pipe there means this paragraph can't be a table and we bail without materializing - which keeps the overwhelmingly common non-table paragraph zero-copy. Only when a pipe is present do we copy into the arena so the rest of this function can address it uniformly. Only paid when `.tables` is enabled.
+        // The table machinery (line splitting, cell extraction, pipe-unescape) reads exclusively from `storage.strings`. Paragraph content is usually already materialized there, but the source-contiguity fast path can hand us an `inSource` chunk (a zero-copy multi-line source range). A table's delimiter (second) line must be a delimiter row - only `-`, `:`, `|`, and spaces/tabs, with at least one `-` - so before paying for a copy we scan the chunk's second line directly in the source: any other character there means this paragraph can't be a table and we bail without materializing, which keeps the overwhelmingly common non-table paragraph zero-copy. (The header line need NOT contain a pipe: a single-column table like `a\n|-` or `a\n:-` has a pipe-less header. `parseDelimRow` + the column-count match below are the exact gate; this scan is only the cheap necessary condition that avoids the copy.) Only when the second line clears that gate do we copy into the arena so the rest of this function can address it uniformly. Only paid when `.tables` is enabled.
         let chunk: Chunk
         // How the flattened content maps back to source for stamping rows/cells/cell-text:
         //   - `.contiguous`: the arena copy below is a byte-for-byte image of an `inSource` range, so arena offset `A` maps to source `A + delta`. The common no-leading-whitespace table.
@@ -27,7 +27,7 @@ extension BlockParser {
         //   - `.none`: materialized content with no source image (block-quote/list/CRLF tables) - positions are left unstamped, as before.
         let mode: TableSourceMode
         if inputChunk.inSource {
-            if !sourceFirstLineHasPipe(chunk: inputChunk) {
+            if !sourceSecondLineCouldBeDelimiterRow(chunk: inputChunk) {
                 return false
             }
             let offset = storage.strings.count
@@ -48,9 +48,6 @@ extension BlockParser {
         }
         let header = lines[0]
         let delimLine = lines[1]
-        if !lineContainsPipe(line: header) {
-            return false
-        }
         guard let alignments = parseDelimRow(line: delimLine) else {
             return false
         }
@@ -444,60 +441,57 @@ extension BlockParser {
         return lines
     }
 
-    /// `true` if `line` contains a `|` that isn't backslash-escaped.
-    private func lineContainsPipe(line: Range<Int>) -> Bool {
-        var i = line.lowerBound
-        while i < line.upperBound {
-            let b = storage.strings[i]
-            if b == UInt8(ascii: "\\") && i + 1 < line.upperBound {
-                i += 2
-                continue
-            }
-            if b == UInt8(ascii: "|") {
-                return true
-            }
-            i += 1
-        }
-        return false
-    }
-
-    /// `true` if the first line of an `inSource` `chunk` contains an unescaped `|`, reading directly from `sourceBytes` without materializing. A table's header line must contain a pipe, so this is the cheap necessary-condition gate that keeps non-table paragraphs zero-copy. This runs for every paragraph (when `.tables` is on) and is roughly one linear pass over all first-line bytes, so the scan is vectorized like `LineReader`: 16 bytes per step, stopping at the first byte of interest (`|`, `\n`, or `\`). Only LF endings reach an `inSource` chunk (CRLF/CR paragraphs are materialized), so `\n` is the sole terminator to watch for.
-    private func sourceFirstLineHasPipe(chunk: Chunk) -> Bool {
+    /// `true` if the SECOND line of an `inSource` `chunk` could be a table delimiter row, reading directly from `sourceBytes` without materializing. A delimiter row consists solely of `-`, `:`, `|`, and spaces/tabs and contains at least one `-`; any other byte on the second line means the paragraph can't be a table, so this is the cheap necessary-condition gate that keeps non-table paragraphs zero-copy. (`parseDelimRow` applies the exact rule once the chunk is materialized; the header line need not contain a pipe, so a single-column table like `a\n|-` or `a\n:-` still passes here.) This runs for every paragraph (when `.tables` is on): the header line (which may be long) is skipped to its newline with a vectorized scan like `LineReader` - 16 bytes per step - and the short delimiter line is then checked byte-by-byte, bailing at the first disqualifying character (a letter, for ordinary prose). Only LF endings reach an `inSource` chunk (CRLF/CR paragraphs are materialized), so `\n` is the sole line terminator.
+    private func sourceSecondLineCouldBeDelimiterRow(chunk: Chunk) -> Bool {
         let endOff = chunk.offset + chunk.length
         return sourceBytes.withUnsafeBufferPointer { buf -> Bool in
             guard let base = buf.baseAddress else { return false }
-            let pipe = SIMD16<UInt8>(repeating: UInt8(ascii: "|"))
             let nl = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
-            let bs = SIMD16<UInt8>(repeating: UInt8(ascii: "\\"))
             let lanes = SIMD16<UInt8>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
             let noMatch = SIMD16<UInt8>(repeating: 16)
+            // Skip the header (first) line: advance to its terminating newline.
             var i = chunk.offset
+            var foundNewline = false
             while i < endOff {
-                // Vectorized skip over uninteresting bytes; stop at the first `|`, `\n`, or `\`.
+                // Vectorized skip over the header bytes; stop at the first `\n`.
                 if i + 16 <= endOff {
                     let c = UnsafeRawPointer(base + i).loadUnaligned(as: SIMD16<UInt8>.self)
-                    let matched = (c .== pipe) .| (c .== nl) .| (c .== bs)
+                    let matched = c .== nl
                     if !any(matched) {
                         i += 16
                         continue
                     }
                     i += Int(lanes.replacing(with: noMatch, where: .!matched).min())
                 }
-                // Scalar handling of the byte at `i` (a SIMD match, or the sub-16 tail).
-                let b = base[i]
-                if b == UInt8(ascii: "\n") {
-                    return false
-                }
-                if b == UInt8(ascii: "|") {
-                    return true
-                }
-                if b == UInt8(ascii: "\\") && i + 1 < endOff {
-                    i += 2
-                    continue
+                if base[i] == UInt8(ascii: "\n") {
+                    foundNewline = true
+                    break
                 }
                 i += 1
             }
-            return false
+            // A single-line paragraph has no delimiter row and is never a table.
+            if !foundNewline {
+                return false
+            }
+            i += 1
+            // Scan the delimiter (second) line: only `-`, `:`, `|`, and spaces/tabs, with at least one `-`.
+            var sawDash = false
+            while i < endOff {
+                let b = base[i]
+                if b == UInt8(ascii: "\n") {
+                    break
+                }
+                switch b {
+                case UInt8(ascii: "-"):
+                    sawDash = true
+                case UInt8(ascii: ":"), UInt8(ascii: "|"), UInt8(ascii: " "), UInt8(ascii: "\t"):
+                    break
+                default:
+                    return false
+                }
+                i += 1
+            }
+            return sawDash
         }
     }
 
