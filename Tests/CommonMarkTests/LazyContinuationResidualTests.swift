@@ -69,10 +69,28 @@ struct LazyContinuationResidualTests {
         #expect(firstCodeInline(nodes) == "x   y")
     }
 
+    @Test("flag-OFF (shipped): two residual spaces are stripped — spec-correct")
+    func codeSpanLazyBlockquote_flagOff_twoSpaces() throws {
+        // Twin of `codeSpanLazyBlockquote_flagOn_twoSpaces`. The deliverable strips the residual leading
+        // whitespace regardless of its width, so the span content is `x` + (newline→space) + `y`.
+        let nodes = try content("> `x\n  y`", Self.specOptions)
+        let literal = try #require(firstCodeInline(nodes), "fixture must contain a code span")
+        #expect(literal == "x y")
+    }
+
     @Test("flag-ON: code span across a lazy LIST continuation keeps the residual space")
     func codeSpanLazyList_flagOn_keepsResidual() throws {
         let nodes = try content("- `x\n y`", Self.quirkOptions)
         #expect(firstCodeInline(nodes) == "x  y")
+    }
+
+    @Test("flag-OFF (shipped): the lazy LIST continuation residual is stripped — spec-correct")
+    func codeSpanLazyList_flagOff_stripsResidual() throws {
+        // Twin of `codeSpanLazyList_flagOn_keepsResidual`. Same spec-correct stripping as the block-quote
+        // case, over a LIST container: `x` + (newline→space) + `y`.
+        let nodes = try content("- `x\n y`", Self.specOptions)
+        let literal = try #require(firstCodeInline(nodes), "fixture must contain a code span")
+        #expect(literal == "x y")
     }
 
     @Test("flag-OFF (shipped): the residual is stripped — spec-correct")
