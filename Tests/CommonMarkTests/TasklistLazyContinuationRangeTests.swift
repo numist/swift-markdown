@@ -22,8 +22,8 @@ import Testing
 ///
 /// This is the Quirk E continuation re-indent (`.cmarkBugCompatibility`, adopted only by the
 /// differential fuzzer). The basic/1-space cases mirror the `tasklazy-*` fuzzer oracle pairs; the
-/// multi-line and deeper-indent cases are reasoned from cmark's single re-indent rule (every
-/// continuation line lands at the fixed content column), validated by the oracle-backed cases here.
+/// deeper-indent case is reasoned from cmark's single re-indent rule (every continuation line lands
+/// at the fixed content column), validated by the oracle-backed cases here.
 /// The flag-off assertions are the guardrail proving the shipped default keeps TRUE physical columns.
 @Suite("Task-list item lazy-continuation source ranges (Quirk E)")
 struct TasklistLazyContinuationRangeTests {
@@ -127,8 +127,8 @@ struct TasklistLazyContinuationRangeTests {
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 8))
     }
 
-    @Test("plain bullet continuation is unaffected (no checkbox width added)")
-    func plainBulletUnchanged() throws {
+    @Test("plain bullet continuation re-bases to the plain content column (no checkbox width added)")
+    func plainBulletUsesPlainContentColumn() throws {
         // "- x" then "y": a plain bullet, no checkbox. The continuation re-bases to the plain content
         // column 3, NOT 7 - the fix must not add a checkbox width where there is no checkbox.
         // Oracle: `tasklazy-plain-ctl`.
@@ -197,8 +197,8 @@ struct TasklistLazyContinuationRangeTests {
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 6))
     }
 
-    /// The flag-OFF twin of `plainBulletUnchanged`: a plain bullet's continuation keeps its TRUE physical
-    /// column @2:1 rather than the flag-ON re-base to the plain content column.
+    /// The flag-OFF twin of `plainBulletUsesPlainContentColumn`: a plain bullet's continuation keeps its
+    /// TRUE physical column @2:1 rather than the flag-ON re-base to the plain content column.
     @Test("flag-off: plain-bullet continuation keeps its TRUE physical column")
     func flagOffPlainBulletKeepsTrueColumn() throws {
         let ranges = try ranges(in: "- x\ny", options: Self.specOptions)
