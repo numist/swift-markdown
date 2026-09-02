@@ -1,0 +1,6 @@
+Document @1:1-1:10
+└─ BlockQuote @1:1-1:10
+   └─ UnorderedList @1:3-1:10
+      └─ ListItem @1:3-1:10
+         └─ Paragraph @1:5-1:10
+            └─ Text @1:5-1:10 "[x] x"
