@@ -26,10 +26,6 @@ struct MultiLineStrikethroughEndTests {
     private static let specOptions: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
-    /// The flag-on (differential-fuzzer) configuration: the spec set plus `.cmarkBugCompatibility`.
-    private static let quirkOptions: MarkdownDocument.ParseOptions =
-        [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart, .cmarkBugCompatibility]
-
     /// The source range of the first `.strikethrough` node (DFS order) when `src` is parsed with
     /// `options`. Returns `nil` if no strikethrough forms, so callers can `#require` fixture sanity.
     private func strikethroughRange(in src: String, options: MarkdownDocument.ParseOptions) throws -> Range<Pos>? {
@@ -80,29 +76,23 @@ struct MultiLineStrikethroughEndTests {
         #expect(range.upperBound == Pos(line: 2, column: 3))
     }
 
-    @Test("a single-line strikethrough is unchanged either flag (opener and closer share a line)")
-    func singleLineUnchanged() throws {
+    @Test("flag-off: a single-line strikethrough spans opener through closer")
+    func singleLineSpecCorrect() throws {
         // `~~a~~`: opener and closer on line 1, so the byte-projected half-open end (@1:6) already sits
-        // on the opener's line and cmark's non-update of end_line is a no-op. Identical flag-off/flag-on
-        // (the `strikeend-1line-ctl` control pair).
-        let specRange = try #require(try strikethroughRange(in: "~~a~~", options: Self.specOptions))
-        #expect(specRange.lowerBound == Pos(line: 1, column: 1))
-        #expect(specRange.upperBound == Pos(line: 1, column: 6))
-
-        let quirkRange = try #require(try strikethroughRange(in: "~~a~~", options: Self.quirkOptions))
-        #expect(quirkRange == specRange)
+        // on the opener's line. (Single-line strikethroughs never crossed a line, so this was identical
+        // flag-on/flag-off even before the position-override machinery was removed.)
+        let range = try #require(try strikethroughRange(in: "~~a~~", options: Self.specOptions))
+        #expect(range.lowerBound == Pos(line: 1, column: 1))
+        #expect(range.upperBound == Pos(line: 1, column: 6))
     }
 
-    @Test("a strikethrough ending on its own line before a soft break keeps its real range (no cross)")
-    func closesBeforeSoftBreakUnchanged() throws {
+    @Test("flag-off: a strikethrough closing before a soft break keeps its real range (no cross)")
+    func closesBeforeSoftBreakSpecCorrect() throws {
         // `~~ab~~\ncd`: the strikethrough closes on line 1 (the soft break follows it), so it never
-        // crosses a line and is identical flag-off/flag-on: @1:1-1:7 (the `strikeend-nocross-ctl` pair).
-        let specRange = try #require(try strikethroughRange(in: "~~ab~~\ncd", options: Self.specOptions))
-        #expect(specRange.lowerBound == Pos(line: 1, column: 1))
-        #expect(specRange.upperBound == Pos(line: 1, column: 7))
-
-        let quirkRange = try #require(try strikethroughRange(in: "~~ab~~\ncd", options: Self.quirkOptions))
-        #expect(quirkRange == specRange)
+        // crosses a line: @1:1-1:7.
+        let range = try #require(try strikethroughRange(in: "~~ab~~\ncd", options: Self.specOptions))
+        #expect(range.lowerBound == Pos(line: 1, column: 1))
+        #expect(range.upperBound == Pos(line: 1, column: 7))
     }
 
     @Test("flag-off: a strikethrough nested in emphasis crossing a line ends on the closer's real line")
