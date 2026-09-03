@@ -153,7 +153,7 @@ extension BlockParser {
                 stampEnd(rowIdx, arena: line.upperBound, proj)
             }
         }
-        let (cells, hadClosingPipe) = splitCells(line: line)
+        let (cells, hadClosingPipe, hadLeadingPipe) = splitCells(line: line)
         let columnCount = alignments.count
 
         // Span bookkeeping is only allocated/computed when `.tableSpans` is on. With spans off these stay empty (the empty `Array` is a non-allocating singleton) and every per-cell read below is guarded by `spansEnabled`, so the common table path does no extra allocation or work.
@@ -241,12 +241,12 @@ extension BlockParser {
                     // Rightmost cell on a row with no closing pipe: cmark's `scan_table_cell` matches through the cell's trailing whitespace to the line end (there is no pipe to stop at), so its end offset reaches the row's untrimmed end - the same extent the row spans - rather than the trimmed-content end that `splitCells` (and the last body line's trailing-trimmed chunk) leaves in `cr.upperBound`. A closing pipe, an interior cell, or content already flush with the line end all keep the trimmed end below via the else branch.
                     stampEnd(cellIdx, arena: rowContentEndArena, proj)
                 } else {
-                    let endArena = trimSpaceTabs(range: cr).isEmpty ? cr.upperBound + 1 : cr.upperBound
+                    let endArena = trimCellContent(range: cr, stripLeadingVTFF: col > 0 || hadLeadingPipe).isEmpty ? cr.upperBound + 1 : cr.upperBound
                     stampEnd(cellIdx, arena: endArena, proj)
                 }
             }
             if col < cells.count && !(spansEnabled && skipContent[col]) {
-                let cellRange = trimSpaceTabs(range: cells[col])
+                let cellRange = trimCellContent(range: cells[col], stripLeadingVTFF: col > 0 || hadLeadingPipe)
                 if !cellRange.isEmpty {
                     // Pre-process: replace `\|` with `|` so that whatever pipe-escaping the writer used to keep the cell intact is invisible to inline parsing - even inside a code span.
                     let cellChunk = unescapePipes(range: cellRange)
@@ -543,7 +543,7 @@ extension BlockParser {
     }
 
     /// Split `line` into cells on unescaped `|`. Strips a single leading and trailing `|` if present (with optional surrounding whitespace). `hadClosingPipe` reports whether a trailing `|` was stripped, so the caller can tell a rightmost cell capped by a pipe from one that runs to the line end.
-    private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool) {
+    private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool, hadLeadingPipe: Bool) {
         var s = line.lowerBound
         var e = line.upperBound
         while s < e && storage.strings[s].isSpaceOrTab {
@@ -552,14 +552,24 @@ extension BlockParser {
         while e > s && storage.strings[e - 1].isSpaceOrTab {
             e -= 1
         }
+        var hadLeadingPipe = false
         if s < e && storage.strings[s] == UInt8(ascii: "|") {
             s += 1
+            hadLeadingPipe = true
         }
         var hadClosingPipe = false
-        if e > s && storage.strings[e - 1] == UInt8(ascii: "|") {
+        // A closing pipe may be followed by `spacechar*` (space/tab/VT/FF) per cmark's
+        // `scan_table_cell_end = [|] spacechar*`. Space/tab were trimmed above; look past any trailing
+        // VT/FF for the pipe. Consume the pipe + that padding only if a (non-escaped) pipe is actually
+        // there — otherwise trailing VT/FF is the last cell's content (`cmark_strbuf_trim` keeps VT/FF).
+        var pipeEnd = e
+        while pipeEnd > s && storage.strings[pipeEnd - 1].isTableDelimiterSpace {
+            pipeEnd -= 1
+        }
+        if pipeEnd > s && storage.strings[pipeEnd - 1] == UInt8(ascii: "|") {
             // Don't strip a backslash-escaped pipe.
-            if e - 2 < s || storage.strings[e - 2] != UInt8(ascii: "\\") {
-                e -= 1
+            if pipeEnd - 2 < s || storage.strings[pipeEnd - 2] != UInt8(ascii: "\\") {
+                e = pipeEnd - 1
                 hadClosingPipe = true
             }
         }
@@ -579,7 +589,7 @@ extension BlockParser {
             i += 1
         }
         cells.append(cellStart..<e)
-        return (cells, hadClosingPipe)
+        return (cells, hadClosingPipe, hadLeadingPipe)
     }
 
     private func trimSpaceTabs(range: Range<Int>) -> Range<Int> {
@@ -587,6 +597,31 @@ extension BlockParser {
         var e = range.upperBound
         while s < e && storage.strings[s].isSpaceOrTab {
             s += 1
+        }
+        while e > s && storage.strings[e - 1].isSpaceOrTab {
+            e -= 1
+        }
+        return s..<e
+    }
+
+    /// Trim a table cell's RANGE down to the CONTENT cmark inline-parses. A PIPE-PRECEDED cell has its
+    /// leading post-pipe `spacechar` run (space/tab/VT/FF) consumed by `scan_table_cell_end` (recorded as
+    /// the cell's `internal_offset`), so pass `stripLeadingVTFF: true`; the row's FIRST cell when there
+    /// is no leading pipe is not pipe-preceded, so its only leading trim is `cmark_strbuf_trim` (space/tab,
+    /// VT/FF NOT trimmed) — pass `false`. The trailing edge is always `cmark_strbuf_trim` (space/tab only;
+    /// a trailing VT/FF stays content). The cell NODE range is stamped from the untrimmed span (it includes
+    /// the leading whitespace, as cmark's cell start_offset does); only the inline content uses this range.
+    private func trimCellContent(range: Range<Int>, stripLeadingVTFF: Bool) -> Range<Int> {
+        var s = range.lowerBound
+        var e = range.upperBound
+        if stripLeadingVTFF {
+            while s < e && storage.strings[s].isTableDelimiterSpace {
+                s += 1
+            }
+        } else {
+            while s < e && storage.strings[s].isSpaceOrTab {
+                s += 1
+            }
         }
         while e > s && storage.strings[e - 1].isSpaceOrTab {
             e -= 1
