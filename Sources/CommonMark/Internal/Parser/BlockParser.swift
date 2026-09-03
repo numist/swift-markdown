@@ -1826,6 +1826,28 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if trimmed.isEmpty {
             return
         }
+        // GFM tasklist: cmark's tasklist extension consumes the checkbox marker at item-OPEN time
+        // (`open_tasklist_item`), so every finalize matcher below (footnote def, link ref-def, table)
+        // sees the content AFTER the checkbox. Strip it first here to match. The first paragraph of a
+        // line-anchored list item starting with `[ ]`/`[x]`/`[X]` marks the item; `lineAnchoredTaskItems`
+        // was recorded at open time, so an item sharing its line with a `>` or an outer marker is absent
+        // from it and keeps its marker as literal text (matching cmark's `scan_tasklist`).
+        if storage.options.contains(.tasklist),
+           let parent = storage[node].parent,
+           case .item = storage[parent].kind,
+           storage[parent].firstChild == node,
+           lineAnchoredTaskItems.contains(parent),
+           let mark = matchTasklistMarker(chunk: trimmed) {
+            storage[parent].kind = .item(checked: mark.checked)
+            // cmark attributes the paragraph's source range to the content after the checkbox and all the whitespace following it (the first non-space/tab). The marker+whitespace length is the offset delta between the content and the marker's remainder (buffer-agnostic), so advance the already-stamped paragraph start by that many bytes.
+            if positionsEnabled {
+                let start = storage.sourceRanges[node].start
+                if start >= 0 {
+                    storage.setSourceStart(node, Int(start) + (mark.remaining.offset - trimmed.offset))
+                }
+            }
+            trimmed = mark.remaining
+        }
         // GFM footnote definition: `[^label]: content`. Detected first because a footnote-def line shouldn't also be probed for link ref-defs or task markers.
         var isFootnoteDef = false
         if storage.options.contains(.footnotes),
@@ -1843,7 +1865,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             storage.unlinkChild(node)
             return
         }
-        var contentChunk = trimmed.trimming(using: self)
+        let contentChunk = trimmed.trimming(using: self)
         // GFM table detection: header line + delimiter row mutates the node in place to `.table`.
         // The delimiter row is the paragraph's second physical line; cmark opens a table only when that
         // line is NOT indented >= 4 columns (`try_opening_table_block`'s `!indented` gate) AND is a
@@ -1867,27 +1889,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 : []
             if try parseTable(node: node, chunk: contentChunk, sourceMap: tableMap) {
                 return
-            }
-        }
-        // GFM tasklist: first paragraph of a line-anchored list item starting with `[ ]`/`[x]`/`[X]`
-        // marks the item. `lineAnchoredTaskItems` was recorded at open time; an item sharing its line
-        // with a `>` or an outer marker is absent from it and keeps its marker as literal text (matching
-        // cmark's `scan_tasklist`).
-        if !isFootnoteDef && storage.options.contains(.tasklist) {
-            if let parent = storage[node].parent,
-               case .item = storage[parent].kind,
-               storage[parent].firstChild == node,
-               lineAnchoredTaskItems.contains(parent),
-               let mark = matchTasklistMarker(chunk: contentChunk) {
-                storage[parent].kind = .item(checked: mark.checked)
-                // cmark attributes the paragraph's source range to the content after the checkbox and all the whitespace following it (the first non-space/tab). The marker+whitespace length is the offset delta between the content and the marker's remainder (buffer-agnostic), so advance the already-stamped paragraph start by that many bytes.
-                if positionsEnabled {
-                    let start = storage.sourceRanges[node].start
-                    if start >= 0 {
-                        storage.setSourceStart(node, Int(start) + (mark.remaining.offset - contentChunk.offset))
-                    }
-                }
-                contentChunk = mark.remaining
             }
         }
         // Stamp the (re-indented) run map for the content that actually reaches inline parsing: narrow the flattened content's map to the surviving `contentChunk` window (after leading/trailing trim, ref-def stripping, and any tasklist marker). Only meaningful when the content was flattened from a re-indented segment list; the contiguous flat-content path passes an empty map.
