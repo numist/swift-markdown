@@ -158,6 +158,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// see the laziness, so it is recorded here.
     var paragraphSecondLineLazy: [DocumentStorage.Index: Bool] = [:]
 
+    /// `true` when a paragraph's first two physical lines (header + delimiter row) would open a GFM table,
+    /// keyed by the paragraph node and recorded once alongside `paragraphSecondLineIndent`.
+    ///
+    /// cmark opens a table while processing the delimiter line (`try_opening_table_block`), so by the time a
+    /// later LAZY continuation line arrives the open block is a TABLE, not a paragraph: the lazy-paragraph
+    /// branch in `add_text_to_container` cannot fire, and the table and its enclosing container close so the
+    /// line starts a fresh block at the container's ancestor. The rewrite detects tables at finalize, so
+    /// without this flag it would absorb the lazy line into the block-quote paragraph and turn it into a
+    /// body row. `processLine` consults this flag to break a table-pending paragraph's FIRST lazy
+    /// continuation (and everything after it) out of the table + container. Only populated when `.tables` is
+    /// enabled and the delimiter row was a non-indented, non-lazy continuation (the only kind that opens a
+    /// table).
+    var paragraphTablePending: [DocumentStorage.Index: Bool] = [:]
+
     /// The deepest list that has seen a blank line since its last item boundary.
     ///
     /// When a new item is added to that list (i.e., the blank line was between sibling items), the list gets marked loose. Cleared on each item open after the check, and stays stale (but harmless) when the list closes.
@@ -807,6 +821,44 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
+    /// Record whether the open paragraph `node` is "table-pending": its header line (currently the sole
+    /// accumulated content in `pending`) plus the just-arrived delimiter-candidate line `delimSpan[delimRange]`
+    /// would open a GFM table. Materializes the two lines (header + `\n` + delimiter) into a scratch region
+    /// of the string arena and runs `chunkOpensTable`, then truncates the scratch back off (nothing keeps a
+    /// reference to it - `parseTable` re-materializes at finalize). Reads `pending` through a borrow, so the
+    /// paragraph's zero-copy accumulated content is untouched. Sets `paragraphTablePending[node]` only when
+    /// the header could be read; a single first line is never a segment list, so the `.segments` case leaves
+    /// it unset. Only worth calling for a paragraph nested in a container (its parent isn't the document),
+    /// since a top-level paragraph can never take a lazy continuation and so never consults the flag.
+    private mutating func recordTablePending(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf?) {
+        let scratchStart = storage.strings.count
+        switch pending {
+        case .none:
+            return
+        case .some(let leaf):
+            switch leaf.content {
+            case .lazy(let r):
+                for i in r { storage.strings.append(sourceBytes[i]) }
+            case .lazyNewline(let r):
+                for i in r { storage.strings.append(sourceBytes[i]) }
+            case .materialized(let buffer):
+                for i in 0..<buffer.count { storage.strings.append(buffer[i]) }
+            case .segments:
+                // A single first line is never a segment list; leave table-pending unset.
+                return
+            }
+        }
+        storage.strings.append(UInt8(ascii: "\n"))
+        for i in delimRange {
+            storage.strings.append(delimSpan[i])
+        }
+        let chunk = Chunk(offset: scratchStart, length: storage.strings.count - scratchStart, inSource: false)
+        paragraphTablePending[node] = chunkOpensTable(chunk: chunk)
+        // Drop the scratch: it was needed only for the predicate above. Keeping it would leak dead bytes
+        // into the arena for the parse's lifetime.
+        storage.strings.removeLast(storage.strings.count - scratchStart)
+    }
+
     // MARK: - Per-line dispatcher
 
     /// Process a line of Markdown.
@@ -978,7 +1030,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
 
         // PHASE 2d: When a paragraph is open, decide whether this line starts a new block (which closes the paragraph) or is absorbed as lazy/matched continuation. This is the ONLY case where the interrupt decision matters, so the matcher ladder is run only here - every other line goes straight to dispatch, which does its own (single) classification.
-        if stillOpenKind == .paragraph {
+        //
+        // A GFM table opens (in cmark) while processing the delimiter line, so once a paragraph is
+        // "table-pending" (its first two lines form a header + delimiter that would open a table) its open
+        // block is a TABLE, not a paragraph. A subsequent LAZY continuation line therefore cannot be a body
+        // row: cmark closes the table and its enclosing container and starts a fresh block at the container's
+        // ancestor. Reproduce that by NOT entering the absorb path — fall through to PHASE 3, which closes the
+        // paragraph (finalizing it into the header-only table) and the container, then dispatches this line
+        // anew at the ancestor level.
+        let breaksOutOfPendingTable = currentLineIsLazyContinuation && (paragraphTablePending[current] ?? false)
+        if stillOpenKind == .paragraph && !breaksOutOfPendingTable {
             // The matcher ladder can only return true if the first content byte is one that some block construct starts with; for ordinary prose continuation lines it isn't, so we skip the whole ladder. `mightStartBlock` is a superset of every matcher's trigger byte, so a `false` here is exactly what `lineStartsNewBlock` would have returned.
             // `interruptsParagraph` mirrors cmark's flag (blocks.c: `check_open_blocks` backs `container` up to its parent on a failed continuation): true iff the open paragraph's OWN container matched this line, i.e. `deepestMatched` is the paragraph's parent. When a shallower container matched, the marker is a sibling item at the list level, not an interruption of this paragraph.
             let interruptsParagraph = storage[current].parent == deepestMatched
@@ -1003,6 +1064,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // Record whether this delimiter-row candidate is a lazy continuation: cmark won't open
                     // a table on a lazy line, so `runParagraphMatchers` must suppress the table if so.
                     paragraphSecondLineLazy[current] = currentLineIsLazyContinuation
+                    // Also record whether the header (line 1, held in `pending`) + this delimiter candidate
+                    // would open a table, so a later lazy continuation line breaks out (see
+                    // `breaksOutOfPendingTable` above). Only worth doing for a paragraph nested in a
+                    // container (parent isn't the document): a top-level paragraph never takes a lazy
+                    // continuation, so the flag would never be consulted. Only a non-indented, non-lazy
+                    // delimiter row can open a table; the cheap `couldBeDelimiterRow` gate keeps ordinary
+                    // prose paragraphs from materializing.
+                    if storage[current].parent != documentIndex, indent < 4, !currentLineIsLazyContinuation,
+                       Self.couldBeDelimiterRow(span: source, range: firstNonSpace..<lineRange.upperBound) {
+                        recordTablePending(current, delimSpan: source, delimRange: firstNonSpace..<lineRange.upperBound, pending: pending)
+                    }
                 }
                 pending = appendNewline(to: current, pending: pending)
                 pending = addLine(span: source, range: firstNonSpace..<lineRange.upperBound, to: current, pending: pending)

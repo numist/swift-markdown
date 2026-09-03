@@ -43,23 +43,11 @@ extension BlockParser {
             mode = (positionsEnabled && topLevel && !sourceMap.isEmpty) ? .flattened(sourceMap) : .none
         }
         let lines = splitLines(chunk: chunk)
-        if lines.count < 2 {
-            return false
-        }
-        let header = lines[0]
-        let delimLine = lines[1]
-        guard let alignments = parseDelimRow(line: delimLine) else {
+        guard let alignments = tableOpenAlignments(lines: lines) else {
             return false
         }
         let columnCount = alignments.count
-        if columnCount == 0 {
-            return false
-        }
-        // GFM: header column count must equal delimiter column count, else not a table - leave the paragraph alone.
-        let headerCells = splitCells(line: header).cells
-        if headerCells.count != columnCount {
-            return false
-        }
+        let header = lines[0]
         // Materialize alignments into the per-document table-alignment array.
         let alignmentsOffset = storage.tableAlignments.count
         for a in alignments {
@@ -110,6 +98,56 @@ extension BlockParser {
             }
         }
         return true
+    }
+
+    /// The per-column alignments of the delimiter row if `lines` (a materialized paragraph's physical lines,
+    /// as ranges into `storage.strings`) would open a GFM table, else `nil`. This is cmark's
+    /// `try_opening_table_block` gate: at least two lines, a valid delimiter second line, and a header (first)
+    /// line whose cell count equals the delimiter's column count. Shared by `parseTable` (which then builds
+    /// the table from the returned alignments) and `chunkOpensTable`.
+    private func tableOpenAlignments(lines: [Range<Int>]) -> [MarkdownNode.TableAlignment]? {
+        if lines.count < 2 {
+            return nil
+        }
+        guard let alignments = parseDelimRow(line: lines[1]), !alignments.isEmpty else {
+            return nil
+        }
+        // GFM: header column count must equal delimiter column count, else not a table.
+        if splitCells(line: lines[0]).cells.count != alignments.count {
+            return nil
+        }
+        return alignments
+    }
+
+    /// Whether a materialized `chunk` (an `inSource == false` region of `storage.strings` holding a
+    /// paragraph's accumulated header line + its just-arrived delimiter-candidate second line, separated by
+    /// `\n`) would open a GFM table. Used by the block parser during parsing to mark a paragraph
+    /// "table-pending" so a later LAZY continuation line breaks out of the table + its container instead of
+    /// being absorbed as a body row — matching cmark, which opens the table while processing the delimiter
+    /// line (`try_opening_table_block`) and therefore has a TABLE, not a paragraph, as the open block when
+    /// the lazy line arrives.
+    internal mutating func chunkOpensTable(chunk: Chunk) -> Bool {
+        tableOpenAlignments(lines: splitLines(chunk: chunk)) != nil
+    }
+
+    /// Whether `span[range]` consists solely of GFM delimiter-row bytes — `-`, `:`, `|`, and delimiter-marker
+    /// whitespace (space, tab, VT, FF) — and contains at least one `-`. A cheap necessary condition for a
+    /// table delimiter row (`parseDelimRow` applies the exact rule on the materialized cells); lets the
+    /// block parser's table-pending pre-check skip materializing a paragraph's two lines when the second
+    /// line obviously isn't a delimiter row (ordinary prose, which starts with a letter).
+    internal static func couldBeDelimiterRow(span: Span<UInt8>, range: Range<Int>) -> Bool {
+        var sawDash = false
+        for i in range {
+            switch span[i] {
+            case UInt8(ascii: "-"):
+                sawDash = true
+            case UInt8(ascii: ":"), UInt8(ascii: "|"), UInt8(ascii: " "), UInt8(ascii: "\t"), 0x0B, 0x0C:
+                break
+            default:
+                return false
+            }
+        }
+        return sawDash
     }
 
     // MARK: - Row construction
