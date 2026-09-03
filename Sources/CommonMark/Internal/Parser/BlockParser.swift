@@ -1221,9 +1221,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if matchBlockQuoteMarker(source: source, range: range, firstNonSpace: firstNonSpace) != nil {
             return true
         }
-        // HTML blocks of types 1–6 interrupt a paragraph (CommonMark 0.31 §4.6). Type 7 does not interrupt, so we restrict the scan to types 1–6 here.
-        if let type = matchHTMLBlockStart(source: source, range: range, firstNonSpace: firstNonSpace, allowType7: false),
-           type != 7 {
+        // HTML blocks of types 1–6 interrupt a paragraph (CommonMark 0.31 §4.6). Type 7 does NOT interrupt a
+        // paragraph in the matched container; but on a lazy continuation whose own container failed to match
+        // (`!interruptsParagraph`), cmark opens the block at the ANCESTOR that did match — where there is no
+        // open paragraph to interrupt — so type 7 is allowed there and breaks out (`>o\n<d>` closes the
+        // block-quote's paragraph and opens a top-level HTML block; a top-level `o\n<d>` keeps `<d>` as a lazy
+        // continuation). Allow type 7 exactly when it isn't interrupting a paragraph; `dispatchNewBlocks` then
+        // opens it against the ancestor (its own `allowType7` gate fires there, `current` no longer a paragraph).
+        if matchHTMLBlockStart(source: source, range: range, firstNonSpace: firstNonSpace, allowType7: !interruptsParagraph) != nil {
             return true
         }
         // List markers interrupt a paragraph only if they'd start a non-empty first item (CommonMark 0.31 §5.2/§5.3). An ORDERED list can interrupt a paragraph only when its start number is 1; bullets are exempt. This is cmark's `interrupts_paragraph && start != 1` decline in `parse_list_marker` (blocks.c), and it applies at EVERY nesting level - `interruptsParagraph` is true exactly when the open paragraph's own container matched this line, so `- a\n  2. b` (the item matched → `2. b` interrupts the item's paragraph) keeps `2. b` as text, while `1. a\n2. b` (the item did NOT match → the marker sits at the list level) opens a sibling item regardless of start.
