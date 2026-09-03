@@ -828,8 +828,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// reference to it - `parseTable` re-materializes at finalize). Reads `pending` through a borrow, so the
     /// paragraph's zero-copy accumulated content is untouched. Sets `paragraphTablePending[node]` only when
     /// the header could be read; a single first line is never a segment list, so the `.segments` case leaves
-    /// it unset. Only worth calling for a paragraph nested in a container (its parent isn't the document),
-    /// since a top-level paragraph can never take a lazy continuation and so never consults the flag.
+    /// it unset. Called for any paragraph whose second line could be a delimiter row (`couldBeDelimiterRow`
+    /// gates the cost): the flag is consulted for a lazy continuation break-out (block-quote/list only) AND,
+    /// at the TOP level too, to stop a setext underline / let a block start close the table (PHASE 2c/2d).
     private mutating func recordTablePending(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf?) {
         let scratchStart = storage.strings.count
         switch pending {
@@ -957,7 +958,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var stillOpenKind = storage[current].kind
 
         // PHASE 2c: Setext heading underline transforms an open paragraph that's a direct descendant of the deepest matched container. Special case: when we're inside a list item AND the line is a dashes-style underline that ALSO matches a thematic break, the thematic break wins (it closes the list rather than turning the item's paragraph into a heading). See spec examples 64, 69, 27, 30.
-        if stillOpenKind == .paragraph && allMatched,
+        //
+        // A table-pending paragraph (its first two lines form a header + delimiter) is NOT a setext-heading
+        // candidate: cmark opens the table while processing the delimiter line, so by the underline line the
+        // open block is a table, not a paragraph, and the `-`/`=` can't underline it (`r\n|-\n-` → Table +
+        // list; `r\n|-\n=` → Table with a `=` body row). Skip the setext transform so the line falls through
+        // to PHASE 2d, which finalizes the paragraph into a table and dispatches the underline line anew.
+        if stillOpenKind == .paragraph && allMatched && !(paragraphTablePending[current] ?? false),
            let level = matchSetextUnderline(source: source, range: cursor..<lineRange.upperBound, firstNonSpace: firstNonSpace) {
             // Strip any leading reference-link definitions from the paragraph's accumulated content first. If they consume the entire paragraph, the setext heading never forms - the underline line falls through to dispatch as plain text (per spec examples 184 / 185).
             let para = current
@@ -1042,7 +1049,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if stillOpenKind == .paragraph && !breaksOutOfPendingTable {
             // The matcher ladder can only return true if the first content byte is one that some block construct starts with; for ordinary prose continuation lines it isn't, so we skip the whole ladder. `mightStartBlock` is a superset of every matcher's trigger byte, so a `false` here is exactly what `lineStartsNewBlock` would have returned.
             // `interruptsParagraph` mirrors cmark's flag (blocks.c: `check_open_blocks` backs `container` up to its parent on a failed continuation): true iff the open paragraph's OWN container matched this line, i.e. `deepestMatched` is the paragraph's parent. When a shallower container matched, the marker is a sibling item at the list level, not an interruption of this paragraph.
-            let interruptsParagraph = storage[current].parent == deepestMatched
+            // A table-pending paragraph's "real" open block (in cmark) is a table, not a paragraph, so the
+            // paragraph-interrupt restrictions do NOT apply: a bare bullet / an ordered marker with start ≠ 1
+            // closes the table and opens a list (`r\n|-\n-` → Table + list), exactly as a block start closes
+            // a table. Model that by treating the line as NOT interrupting a paragraph (the lenient rule). A
+            // non-block-start line (e.g. `=`) still isn't a marker, so it stays absorbed as a table body row.
+            let interruptsParagraph = !(paragraphTablePending[current] ?? false)
+                && storage[current].parent == deepestMatched
             let canInterrupt = Self.mightStartBlock(scan.firstNonSpaceByte)
                 && lineStartsNewBlock(
                     source: source,
@@ -1065,13 +1078,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // a table on a lazy line, so `runParagraphMatchers` must suppress the table if so.
                     paragraphSecondLineLazy[current] = currentLineIsLazyContinuation
                     // Also record whether the header (line 1, held in `pending`) + this delimiter candidate
-                    // would open a table, so a later lazy continuation line breaks out (see
-                    // `breaksOutOfPendingTable` above). Only worth doing for a paragraph nested in a
-                    // container (parent isn't the document): a top-level paragraph never takes a lazy
-                    // continuation, so the flag would never be consulted. Only a non-indented, non-lazy
-                    // delimiter row can open a table; the cheap `couldBeDelimiterRow` gate keeps ordinary
-                    // prose paragraphs from materializing.
-                    if storage[current].parent != documentIndex, indent < 4, !currentLineIsLazyContinuation,
+                    // would open a table. Consulted two ways: a later lazy continuation line breaks out
+                    // (`breaksOutOfPendingTable` above, block-quote/list only), AND a later setext-underline
+                    // line must NOT convert the paragraph to a heading (PHASE 2c) — cmark opens the table
+                    // while processing the delimiter line, so a `-`/`=` on the next line can't underline it.
+                    // The setext case fires at the TOP level too (`r\n|-\n-`), so record regardless of the
+                    // container. Only a non-indented, non-lazy delimiter row can open a table; the cheap
+                    // `couldBeDelimiterRow` gate keeps ordinary prose paragraphs from materializing.
+                    if indent < 4, !currentLineIsLazyContinuation,
                        Self.couldBeDelimiterRow(span: source, range: firstNonSpace..<lineRange.upperBound) {
                         recordTablePending(current, delimSpan: source, delimRange: firstNonSpace..<lineRange.upperBound, pending: pending)
                     }

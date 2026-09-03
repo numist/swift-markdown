@@ -122,10 +122,10 @@ extension BlockParser {
     /// Whether a materialized `chunk` (an `inSource == false` region of `storage.strings` holding a
     /// paragraph's accumulated header line + its just-arrived delimiter-candidate second line, separated by
     /// `\n`) would open a GFM table. Used by the block parser during parsing to mark a paragraph
-    /// "table-pending" so a later LAZY continuation line breaks out of the table + its container instead of
-    /// being absorbed as a body row — matching cmark, which opens the table while processing the delimiter
-    /// line (`try_opening_table_block`) and therefore has a TABLE, not a paragraph, as the open block when
-    /// the lazy line arrives.
+    /// "table-pending", matching cmark, which opens the table while processing the delimiter line
+    /// (`try_opening_table_block`) and therefore has a TABLE, not a paragraph, as the open block for the
+    /// following line: a later lazy continuation breaks out, a setext underline is suppressed, and a block
+    /// start closes the table rather than being absorbed as a body row.
     internal mutating func chunkOpensTable(chunk: Chunk) -> Bool {
         tableOpenAlignments(lines: splitLines(chunk: chunk)) != nil
     }
