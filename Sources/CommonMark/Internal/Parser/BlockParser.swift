@@ -2205,23 +2205,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
                 col += advance
             case UInt8(ascii: "0")...UInt8(ascii: "9"):
-                // First content byte. Scan the digit run and check for an ordered-list delimiter. `i` is just past the first digit.
+                // A digit run. If it's an ordered-list marker (`.`/`)`), its trailing whitespace is prefix - a tab after it must keep expanding, exactly as after a bullet marker - so emit the marker and continue the loop. Otherwise the digit begins content. `i` is just past the first digit.
                 var j = i
                 while j < count, bytes[j].isASCIIDigit {
                     j += 1
                 }
                 if j < count, bytes[j] == UInt8(ascii: ".") || bytes[j] == UInt8(ascii: ")") {
-                    // An ordered-list marker: emit the digits and delimiter as-is, then copy whatever follows.
+                    // An ordered-list marker: emit the digits and delimiter as-is. Each is one column, so advance `col` by the marker's byte width and resume the prefix scan just past the delimiter - keeping the tab-expansion column in lockstep with the position re-walks (`originalPrefixSourceOffset`, `materializedSourceStart`), which re-derive it byte-by-byte with the same one-column-per-marker-byte rule.
                     output.append(b)
                     for m in i..<(j + 1) {
                         output.append(bytes[m])
                     }
-                    restStart = j + 1
+                    col += (j + 1) - (i - 1)
+                    i = j + 1
                 } else {
                     // Not a marker: the digit begins the content, copy it verbatim with the rest.
                     restStart = i - 1
+                    break prefix
                 }
-                break prefix
             default:
                 // A non-prefix byte begins the content; back up so it is copied verbatim.
                 restStart = i - 1
