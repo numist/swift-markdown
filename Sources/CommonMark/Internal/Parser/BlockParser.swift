@@ -1865,7 +1865,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             storage.unlinkChild(node)
             return
         }
-        let contentChunk = trimmed.trimming(using: self)
+        let contentChunk = trimmed.trimmingTrailing(using: self)
         // GFM table detection: header line + delimiter row mutates the node in place to `.table`.
         // The delimiter row is the paragraph's second physical line; cmark opens a table only when that
         // line is NOT indented >= 4 columns (`try_opening_table_block`'s `!indented` gate) AND is a
@@ -1891,7 +1891,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return
             }
         }
-        // Stamp the (re-indented) run map for the content that actually reaches inline parsing: narrow the flattened content's map to the surviving `contentChunk` window (after leading/trailing trim, ref-def stripping, and any tasklist marker). Only meaningful when the content was flattened from a re-indented segment list; the contiguous flat-content path passes an empty map.
+        // Stamp the (re-indented) run map for the content that actually reaches inline parsing: narrow the flattened content's map to the surviving `contentChunk` window (after trailing trim, ref-def stripping, and any tasklist marker; leading whitespace left by a ref-def's lazy residual is preserved, see `trimmingTrailing`). Only meaningful when the content was flattened from a re-indented segment list; the contiguous flat-content path passes an empty map.
         if positionsEnabled, !map.isEmpty {
             let slice = sliceRuns(map, from: contentChunk.offset - raw.offset, length: contentChunk.length)
             if !slice.isEmpty {
