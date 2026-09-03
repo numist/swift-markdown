@@ -1656,32 +1656,27 @@ extension BlockParser {
                 return LineBreakInfo(isHard: true, textEnd: newlineOffset - 1, isBackslash: true)
             }
         }
-        // Trailing-space hard break.
-        var i = newlineOffset
-        var spaces = 0
-        while i > pendingTextStart {
-            let prev = content[i - 1]
+        // Trailing whitespace before the newline. cmark's inline text flush rtrims the preceding text
+        // of `cmark_isspace` bytes - space and tab - regardless of the break kind (`cmark_chunk_rtrim`,
+        // src/inlines.c), so the content always ends at the first non-space/tab. VT (0x0b) / FF (0x0c)
+        // are NOT in `cmark_isspace`, so a trailing VT/FF is preserved (a\f\t  \n keeps "a\f"). The
+        // break is HARD when the two bytes immediately before the newline were both spaces (§6.7), SOFT
+        // otherwise; an intervening tab ends the "immediately before" run, so `a  \t\n` is soft.
+        var textEnd = newlineOffset
+        var leadingSpaces = 0
+        var inSpaceRun = true
+        while textEnd > pendingTextStart {
+            let prev = content[textEnd - 1]
             if prev == UInt8(ascii: " ") {
-                spaces += 1
-                i -= 1
+                if inSpaceRun { leadingSpaces += 1 }
+            } else if prev == UInt8(ascii: "\t") {
+                inSpaceRun = false
             } else {
                 break
             }
+            textEnd -= 1
         }
-        if spaces >= 2 {
-            return LineBreakInfo(isHard: true, textEnd: i)
-        }
-        // Soft break: still trim trailing spaces (and tabs) so the rendered output doesn't preserve them.
-        var softEnd = newlineOffset
-        while softEnd > pendingTextStart {
-            let prev = content[softEnd - 1]
-            if prev == UInt8(ascii: " ") || prev == UInt8(ascii: "\t") {
-                softEnd -= 1
-            } else {
-                break
-            }
-        }
-        return LineBreakInfo(isHard: false, textEnd: softEnd)
+        return LineBreakInfo(isHard: leadingSpaces >= 2, textEnd: textEnd)
     }
 
     // MARK: - Autolinks
