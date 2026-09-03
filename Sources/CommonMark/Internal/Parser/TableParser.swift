@@ -19,7 +19,7 @@ extension BlockParser {
     /// Only supports reading from the standard source (not materialized strings).
     /// Returns `true` on success (caller should skip inline-parsing the original paragraph since the cells were already inline-parsed). Returns `false` when the chunk doesn't match the table pattern.
     internal mutating func parseTable(node: DocumentStorage.Index, chunk inputChunk: Chunk, sourceMap: [ArenaRun]) throws(MarkdownDocument.Error) -> Bool {
-        // The table machinery (line splitting, cell extraction, pipe-unescape) reads exclusively from `storage.strings`. Paragraph content is usually already materialized there, but the source-contiguity fast path can hand us an `inSource` chunk (a zero-copy multi-line source range). A table's delimiter (second) line must be a delimiter row - only `-`, `:`, `|`, and spaces/tabs, with at least one `-` - so before paying for a copy we scan the chunk's second line directly in the source: any other character there means this paragraph can't be a table and we bail without materializing, which keeps the overwhelmingly common non-table paragraph zero-copy. (The header line need NOT contain a pipe: a single-column table like `a\n|-` or `a\n:-` has a pipe-less header. `parseDelimRow` + the column-count match below are the exact gate; this scan is only the cheap necessary condition that avoids the copy.) Only when the second line clears that gate do we copy into the arena so the rest of this function can address it uniformly. Only paid when `.tables` is enabled.
+        // The table machinery (line splitting, cell extraction, pipe-unescape) reads exclusively from `storage.strings`. Paragraph content is usually already materialized there, but the source-contiguity fast path can hand us an `inSource` chunk (a zero-copy multi-line source range). A table's delimiter (second) line must be a delimiter row - only `-`, `:`, `|`, and delimiter-marker whitespace (space, tab, VT, FF), with at least one `-` - so before paying for a copy we scan the chunk's second line directly in the source: any other character there means this paragraph can't be a table and we bail without materializing, which keeps the overwhelmingly common non-table paragraph zero-copy. (The header line need NOT contain a pipe: a single-column table like `a\n|-` or `a\n:-` has a pipe-less header. `parseDelimRow` + the column-count match below are the exact gate; this scan is only the cheap necessary condition that avoids the copy.) Only when the second line clears that gate do we copy into the arena so the rest of this function can address it uniformly. Only paid when `.tables` is enabled.
         let chunk: Chunk
         // How the flattened content maps back to source for stamping rows/cells/cell-text:
         //   - `.contiguous`: the arena copy below is a byte-for-byte image of an `inSource` range, so arena offset `A` maps to source `A + delta`. The common no-leading-whitespace table.
@@ -432,7 +432,7 @@ extension BlockParser {
         return lines
     }
 
-    /// `true` if the SECOND line of an `inSource` `chunk` could be a table delimiter row, reading directly from `sourceBytes` without materializing. A delimiter row consists solely of `-`, `:`, `|`, and spaces/tabs and contains at least one `-`; any other byte on the second line means the paragraph can't be a table, so this is the cheap necessary-condition gate that keeps non-table paragraphs zero-copy. (`parseDelimRow` applies the exact rule once the chunk is materialized; the header line need not contain a pipe, so a single-column table like `a\n|-` or `a\n:-` still passes here.) This runs for every paragraph (when `.tables` is on): the header line (which may be long) is skipped to its newline with a vectorized scan like `LineReader` - 16 bytes per step - and the short delimiter line is then checked byte-by-byte, bailing at the first disqualifying character (a letter, for ordinary prose). Only LF endings reach an `inSource` chunk (CRLF/CR paragraphs are materialized), so `\n` is the sole line terminator.
+    /// `true` if the SECOND line of an `inSource` `chunk` could be a table delimiter row, reading directly from `sourceBytes` without materializing. A delimiter row consists solely of `-`, `:`, `|`, and delimiter-marker whitespace (space, tab, VT, FF) and contains at least one `-`; any other byte on the second line means the paragraph can't be a table, so this is the cheap necessary-condition gate that keeps non-table paragraphs zero-copy. (`parseDelimRow` applies the exact rule once the chunk is materialized; the header line need not contain a pipe, so a single-column table like `a\n|-` or `a\n:-` still passes here.) This runs for every paragraph (when `.tables` is on): the header line (which may be long) is skipped to its newline with a vectorized scan like `LineReader` - 16 bytes per step - and the short delimiter line is then checked byte-by-byte, bailing at the first disqualifying character (a letter, for ordinary prose). Only LF endings reach an `inSource` chunk (CRLF/CR paragraphs are materialized), so `\n` is the sole line terminator.
     private func sourceSecondLineCouldBeDelimiterRow(chunk: Chunk) -> Bool {
         let endOff = chunk.offset + chunk.length
         return sourceBytes.withUnsafeBufferPointer { buf -> Bool in
@@ -475,7 +475,10 @@ extension BlockParser {
                 switch b {
                 case UInt8(ascii: "-"):
                     sawDash = true
-                case UInt8(ascii: ":"), UInt8(ascii: "|"), UInt8(ascii: " "), UInt8(ascii: "\t"):
+                // VT (0x0B) / FF (0x0C) are delimiter-marker whitespace (`scan_table_start`'s
+                // `spacechar`), so admit them alongside space/tab; `parseDelimRow` applies the exact rule.
+                case UInt8(ascii: ":"), UInt8(ascii: "|"), UInt8(ascii: " "), UInt8(ascii: "\t"),
+                     0x0B, 0x0C:
                     break
                 default:
                     return false
@@ -486,7 +489,7 @@ extension BlockParser {
         }
     }
 
-    /// Parse the delimiter row into per-column alignments. Returns nil if the line isn't a valid delimiter row. Each cell must match `\s*:?-+:?\s*` after pipe splitting, with at least one column.
+    /// Parse the delimiter row into per-column alignments. Returns nil if the line isn't a valid delimiter row. After pipe splitting, each cell must be a valid GFM delimiter marker: `:?-+:?` bracketed by delimiter-marker whitespace (space, tab, VT, FF), with at least one column. Alignment colons are read from a space/tab-trimmed cell, reproducing cmark's alignment test on the `cmark_strbuf_trim`'d buffer (whose whitespace set excludes VT/FF), so a colon hidden behind a leading/trailing VT/FF does not set the column's alignment even though the marker stays valid.
     private func parseDelimRow(line: Range<Int>) -> [MarkdownNode.TableAlignment]? {
         let cells = splitCells(line: line).cells
         if cells.isEmpty {
@@ -495,20 +498,17 @@ extension BlockParser {
         var alignments: [MarkdownNode.TableAlignment] = []
         alignments.reserveCapacity(cells.count)
         for cell in cells {
-            let trimmed = trimSpaceTabs(range: cell)
-            if trimmed.isEmpty {
-                return nil
-            }
-            var s = trimmed.lowerBound
-            var e = trimmed.upperBound
-            var leftColon = false
-            var rightColon = false
-            if storage.strings[s] == UInt8(ascii: ":") {
-                leftColon = true
+            // Validity: cmark's `scan_table_start` validates a marker as
+            // `table_marker = spacechar*[:]?[-]+[:]?spacechar*` with `spacechar = [ \t\v\f]`, so trim
+            // space/tab AND VT/FF to isolate the `:?-+:?` shape. An interior VT/FF is untouched by this
+            // edge trim, so it (correctly) fails the all-dashes check below.
+            let marker = trimTableDelimiterSpace(range: cell)
+            var s = marker.lowerBound
+            var e = marker.upperBound
+            if s < e && storage.strings[s] == UInt8(ascii: ":") {
                 s += 1
             }
             if e > s && storage.strings[e - 1] == UInt8(ascii: ":") {
-                rightColon = true
                 e -= 1
             }
             if s >= e {
@@ -519,6 +519,17 @@ extension BlockParser {
                     return nil
                 }
             }
+            // Alignment: cmark reads the colon flags from the cell buffer produced by `cmark_strbuf_trim`,
+            // whose whitespace set (`cmark_isspace`) is space/tab/CR/LF and EXCLUDES VT/FF. So a colon
+            // hidden behind a leading/trailing VT/FF is not the buffer's first/last byte and does not set
+            // the alignment - the marker stays valid but the column reports no alignment. Reading colons
+            // from a space/tab-trimmed window (`trimSpaceTabs`, not `marker`) reproduces that: a delimiter
+            // cell never contains CR/LF (`splitLines` drops the LF; a CR is resolved as a line terminator
+            // upstream), so dropping CR/LF from this trim can't differ from `cmark_strbuf_trim` here.
+            // `aligned` is non-empty because it is a superset of the non-empty `marker`.
+            let aligned = trimSpaceTabs(range: cell)
+            let leftColon = storage.strings[aligned.lowerBound] == UInt8(ascii: ":")
+            let rightColon = storage.strings[aligned.upperBound - 1] == UInt8(ascii: ":")
             let a: MarkdownNode.TableAlignment
             switch (leftColon, rightColon) {
             case (true, true): a = .center
@@ -578,6 +589,22 @@ extension BlockParser {
             s += 1
         }
         while e > s && storage.strings[e - 1].isSpaceOrTab {
+            e -= 1
+        }
+        return s..<e
+    }
+
+    /// Trim leading/trailing GFM delimiter-marker whitespace - space, tab, VT (0x0B), FF (0x0C) - from
+    /// `range` (in `storage.strings`). This is `scan_table_start`'s `spacechar = [ \t\v\f]`, the padding
+    /// around a delimiter marker (`:?-+:?`); used ONLY to validate the delimiter cell's shape, never for
+    /// cell content or alignment (which follow cmark's `cmark_strbuf_trim`, excluding VT/FF).
+    private func trimTableDelimiterSpace(range: Range<Int>) -> Range<Int> {
+        var s = range.lowerBound
+        var e = range.upperBound
+        while s < e && storage.strings[s].isTableDelimiterSpace {
+            s += 1
+        }
+        while e > s && storage.strings[e - 1].isTableDelimiterSpace {
             e -= 1
         }
         return s..<e

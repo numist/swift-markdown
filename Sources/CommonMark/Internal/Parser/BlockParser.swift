@@ -1620,9 +1620,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
         // Table: the delimiter row is the paragraph's SECOND line. It can only be a delimiter row if
-        // it holds solely `-`, `:`, `|`, and spaces/tabs with at least one `-` (a false positive only
-        // costs a materialization; `parseTable`/`parseDelimRow` apply the exact rule). Scanning the
-        // second line - not the header - is what admits pipe-less-header single-column tables.
+        // it holds solely `-`, `:`, `|`, and delimiter-marker whitespace (space, tab, VT, FF) with at
+        // least one `-` (a false positive only costs a materialization; `parseTable`/`parseDelimRow`
+        // apply the exact rule). Scanning the second line - not the header - is what admits pipe-less-header
+        // single-column tables.
         if storage.options.contains(.tables) {
             var line = 0
             var sawDash = false
@@ -1640,7 +1641,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                         switch b {
                         case UInt8(ascii: "-"):
                             sawDash = true
-                        case UInt8(ascii: ":"), UInt8(ascii: "|"), UInt8(ascii: " "), UInt8(ascii: "\t"):
+                        // VT (0x0B) / FF (0x0C) are delimiter-marker whitespace (`scan_table_start`'s
+                        // `spacechar`), so admit them here alongside space/tab; `parseDelimRow` applies
+                        // the exact rule.
+                        case UInt8(ascii: ":"), UInt8(ascii: "|"), UInt8(ascii: " "), UInt8(ascii: "\t"),
+                             0x0B, 0x0C:
                             break
                         default:
                             secondLineClean = false
