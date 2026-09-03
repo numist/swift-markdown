@@ -626,6 +626,19 @@ extension BlockParser {
             }
             i += 1
         }
+        // A lone leading pipe with only whitespace after it (`|`, or `|` + space/tab/VT/FF) is ZERO cells,
+        // not one empty cell: cmark's `row_from_string` creates cells only inside its scan loop, and the
+        // leading pipe's `scan_table_cell_end = [|] spacechar*` (spacechar = space/tab/VT/FF) consumes the
+        // pipe and any trailing whitespace before the loop, which then finds nothing. Without this, `|`
+        // counts as 1 column and a `|` header spuriously matches a 1-column delimiter (`|\n-|` → Table),
+        // where cmark sees 0 vs 1 columns and keeps a paragraph. Space/tab were already trimmed from `e`
+        // above; the `isTableDelimiterSpace` check additionally covers a trailing VT/FF (also `spacechar`,
+        // and fuzzer-reachable via FF). A leading+trailing pipe (`||`) has `hadClosingPipe`, so its one
+        // empty cell (appended below) is kept.
+        if cells.isEmpty && hadLeadingPipe && !hadClosingPipe
+            && (cellStart..<e).allSatisfy({ storage.strings[$0].isTableDelimiterSpace }) {
+            return (cells, hadClosingPipe, hadLeadingPipe)
+        }
         cells.append(cellStart..<e)
         return (cells, hadClosingPipe, hadLeadingPipe)
     }
