@@ -144,6 +144,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// materialized, or segment). Only populated when `.tables` is enabled.
     var paragraphSecondLineIndent: [DocumentStorage.Index: Int] = [:]
 
+    /// `true` when a paragraph's SECOND physical line — its first continuation line, i.e. the GFM table
+    /// delimiter-row candidate — was a LAZY continuation (an open container's prefix failed to match on
+    /// it). Keyed by the paragraph node, recorded once alongside `paragraphSecondLineIndent`.
+    ///
+    /// cmark opens a table only while processing the delimiter line as a normal (prefix-matched) line.
+    /// On a lazy line, `check_open_blocks` backs `last_matched_container` up to the failed container's
+    /// parent, so `open_new_blocks` (and thus `try_opening_table_block`) runs against that ancestor, not
+    /// the open paragraph; since `try_opening_table_block` converts only a PARAGRAPH parent into a table
+    /// (`table.c`), the table never opens and the lazy line is absorbed into the paragraph
+    /// (`add_text_to_container`'s lazy branch). So a delimiter row that arrives as a lazy continuation
+    /// (e.g. `>o\n--`, or `>o\n>|-` without the `>`) must NOT form a table; finalize-time detection can't
+    /// see the laziness, so it is recorded here.
+    var paragraphSecondLineLazy: [DocumentStorage.Index: Bool] = [:]
+
     /// The deepest list that has seen a blank line since its last item boundary.
     ///
     /// When a new item is added to that list (i.e., the blank line was between sibling items), the list gets marked loose. Cleared on each item open after the check, and stays stale (but harmless) when the list closes.
@@ -986,6 +1000,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // container prefix) for `runParagraphMatchers` to consult.
                 if storage.options.contains(.tables), paragraphSecondLineIndent[current] == nil {
                     paragraphSecondLineIndent[current] = indent
+                    // Record whether this delimiter-row candidate is a lazy continuation: cmark won't open
+                    // a table on a lazy line, so `runParagraphMatchers` must suppress the table if so.
+                    paragraphSecondLineLazy[current] = currentLineIsLazyContinuation
                 }
                 pending = appendNewline(to: current, pending: pending)
                 pending = addLine(span: source, range: firstNonSpace..<lineRange.upperBound, to: current, pending: pending)
@@ -1743,12 +1760,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var contentChunk = trimmed.trimming(using: self)
         // GFM table detection: header line + delimiter row mutates the node in place to `.table`.
         // The delimiter row is the paragraph's second physical line; cmark opens a table only when that
-        // line is NOT indented >= 4 columns (`try_opening_table_block`'s `!indented` gate). Its leading
-        // whitespace is stripped by the time content reaches here, so consult the indent recorded during
-        // block parsing (`paragraphSecondLineIndent`); an over-indented delimiter row stays a lazy
-        // paragraph continuation, as in cmark.
+        // line is NOT indented >= 4 columns (`try_opening_table_block`'s `!indented` gate) AND is a
+        // normal (prefix-matched) continuation, not a LAZY one (on a lazy line cmark opens blocks against
+        // an ancestor of the paragraph, so `try_opening_table_block` never sees a PARAGRAPH parent and the
+        // table never opens). Its leading whitespace / laziness are gone by the time content reaches here,
+        // so consult what was recorded during block parsing (`paragraphSecondLineIndent` /
+        // `paragraphSecondLineLazy`); an over-indented or lazy delimiter row stays a paragraph
+        // continuation, as in cmark.
         if !isFootnoteDef && storage.options.contains(.tables)
-            && (paragraphSecondLineIndent[node] ?? 0) < 4 {
+            && (paragraphSecondLineIndent[node] ?? 0) < 4
+            && !(paragraphSecondLineLazy[node] ?? false) {
             // A top-level row with leading whitespace makes the paragraph non-contiguous, so its content
             // reaches here flattened from a segment list carrying a re-indent run map (Quirk E): each row's
             // surviving content is mapped to the table's content column, exactly cmark's re-based cell
