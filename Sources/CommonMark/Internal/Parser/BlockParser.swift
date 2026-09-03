@@ -131,6 +131,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// content-bearing case to finalize.)
     var lineAnchoredTaskItems: Set<DocumentStorage.Index> = []
 
+    /// The indent, in columns, of each paragraph's SECOND physical line — its first continuation line —
+    /// keyed by the paragraph node and recorded the first time the paragraph is continued.
+    ///
+    /// A GFM table's delimiter row is the paragraph's second line, and cmark opens a table only when that
+    /// line is NOT indented (`try_opening_table_block`'s `!indented` gate: the 4-column indented-code
+    /// threshold, measured relative to the container content column). Table detection runs at paragraph
+    /// finalize, by which point each continuation line's leading whitespace has already been stripped, so
+    /// the delimiter row's indentation is no longer observable there. Capturing it here — where
+    /// `leadingScan` already measured it against the container prefix — lets `runParagraphMatchers` reject a
+    /// delimiter row indented >= 4 columns, matching cmark across every content representation (contiguous,
+    /// materialized, or segment). Only populated when `.tables` is enabled.
+    var paragraphSecondLineIndent: [DocumentStorage.Index: Int] = [:]
+
     /// The deepest list that has seen a blank line since its last item boundary.
     ///
     /// When a new item is added to that list (i.e., the blank line was between sibling items), the list gets marked loose. Cleared on each item open after the check, and stays stale (but harmless) when the list closes.
@@ -964,6 +977,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 )
             if !canInterrupt {
                 // Continue paragraph (matched or lazy). Don't close stale containers - the paragraph absorbs without breaking the chain.
+                // This continuation is the paragraph's second physical line the first time it runs, i.e. the
+                // GFM table delimiter-row candidate. cmark opens a table only when that line is NOT indented
+                // (`try_opening_table_block`'s `!indented` gate); finalize-time table detection can't see the
+                // stripped leading whitespace, so record the indent (`leadingScan` measured it against the
+                // container prefix) for `runParagraphMatchers` to consult.
+                if storage.options.contains(.tables), paragraphSecondLineIndent[current] == nil {
+                    paragraphSecondLineIndent[current] = indent
+                }
                 pending = appendNewline(to: current, pending: pending)
                 pending = addLine(span: source, range: firstNonSpace..<lineRange.upperBound, to: current, pending: pending)
                 return pending
@@ -1714,7 +1735,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         var contentChunk = trimmed.trimming(using: self)
         // GFM table detection: header line + delimiter row mutates the node in place to `.table`.
-        if !isFootnoteDef && storage.options.contains(.tables) {
+        // The delimiter row is the paragraph's second physical line; cmark opens a table only when that
+        // line is NOT indented >= 4 columns (`try_opening_table_block`'s `!indented` gate). Its leading
+        // whitespace is stripped by the time content reaches here, so consult the indent recorded during
+        // block parsing (`paragraphSecondLineIndent`); an over-indented delimiter row stays a lazy
+        // paragraph continuation, as in cmark.
+        if !isFootnoteDef && storage.options.contains(.tables)
+            && (paragraphSecondLineIndent[node] ?? 0) < 4 {
             // A top-level row with leading whitespace makes the paragraph non-contiguous, so its content
             // reaches here flattened from a segment list carrying a re-indent run map (Quirk E): each row's
             // surviving content is mapped to the table's content column, exactly cmark's re-based cell

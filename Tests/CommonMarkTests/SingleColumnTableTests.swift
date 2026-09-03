@@ -215,4 +215,27 @@ struct SingleColumnTableTests {
         #expect(block.headerCells == ["a", "b"])
         #expect(block.alignments == [.none, .none])
     }
+
+    @Test("a delimiter row indented 4+ columns is not a table")
+    func indentedDelimiterStaysParagraph() throws {
+        // cmark's table extension opens a table header only when the delimiter-row line is NOT
+        // indented (`try_opening_table_block`'s `!indented` gate — the same 4-column indented-code
+        // threshold setext underlines honor). A tab advances to the next 4-column tab stop, so a
+        // leading tab is 4 columns; 4+ spaces are likewise 4+ columns. Such a delimiter row is an
+        // ordinary lazy paragraph continuation, not a table.
+        #expect(try firstBlock("o\n\t-").kind == .paragraph)       // tab = 4 columns
+        #expect(try firstBlock("o\n    -").kind == .paragraph)     // 4 spaces
+        #expect(try firstBlock("o\n    |-").kind == .paragraph)    // 4 spaces + pipe delimiter
+        #expect(try firstBlock("o\n\t---").kind == .paragraph)     // tab + `---`
+        #expect(try firstBlock("o\n\t|-").kind == .paragraph)      // tab + pipe delimiter
+        #expect(try firstBlock("Foo\n    ---").kind == .paragraph) // the original fuzzer seed
+    }
+
+    @Test("a delimiter row indented fewer than 4 columns still forms a table")
+    func underIndentedDelimiterFormsTable() throws {
+        // The gate is exactly the < 4-column threshold, so 1–3 columns of indent still forms a
+        // table (guards the fix against over-correcting into rejecting all indentation).
+        #expect(try firstBlock("a\n   |-").kind == .table)   // 3 spaces
+        #expect(try firstBlock("a\n  :-:").kind == .table)   // 2 spaces
+    }
 }
