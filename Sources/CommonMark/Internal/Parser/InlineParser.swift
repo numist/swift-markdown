@@ -640,8 +640,8 @@ extension BlockParser {
                 if afterTitleSpaces < end,
                    content[afterTitleSpaces] == UInt8(ascii: ")") {
                     pos = afterTitleSpaces + 1
-                    // Read via the buffer-aware `unescapeURLChunk` (selects `sourceBytes` vs the arena per `chunk.inSource`): a link inside flattened/arena content (a non-contiguous setext heading, a `\|`-unescaped table cell) has an arena-backed destination/title, so unescaping must not index the source buffer at an arena offset.
-                    url = unescapeURLChunk(dest.chunk)
+                    // Clean the destination like cmark's `cmark_clean_url` (trim surrounding whitespace, then remove escapes / decode entities); the title uses `unescapeURLChunk` alone, since cmark's `cmark_clean_title` does not trim. Both read via the buffer-aware accessor (selects `sourceBytes` vs the arena per `chunk.inSource`): a link inside flattened/arena content (a non-contiguous setext heading, a `\|`-unescaped table cell) has an arena-backed destination/title, so reading must not index the source buffer at an arena offset.
+                    url = cleanURLChunk(dest.chunk)
                     title = unescapeURLChunk(maybeTitle)
                     matched = true
                 }

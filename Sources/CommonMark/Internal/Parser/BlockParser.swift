@@ -3307,7 +3307,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         if storage.referenceMap[key] == nil {
             storage.referenceMap[key] = ReferenceDefinition(
-                destination: unescapeURLChunk(dest.chunk),
+                destination: cleanURLChunk(dest.chunk),
                 title: unescapeURLChunk(titleChunk)
             )
         }
@@ -3428,5 +3428,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             length: storage.strings.count - outOffset,
             inSource: false
         )
+    }
+
+    /// Clean a link destination the way cmark's `cmark_clean_url` does (`src/inlines.c`): trim
+    /// surrounding whitespace, then remove backslash escapes / decode entities. Interior whitespace is
+    /// preserved. The trim is cmark's `cmark_chunk_trim` over the `cmark_isspace` set — exactly
+    /// {space, tab, `\n`, `\r`} (the `cmark_ctype_class` class-1 bytes; VT/FF are NOT whitespace) —
+    /// which is `Chunk.trimming(using:)`'s `isSpaceTabOrNewline`. Only DESTINATIONS are cleaned this
+    /// way; titles use cmark's `cmark_clean_title`, which does NOT trim, so the title path calls
+    /// `unescapeURLChunk` directly instead.
+    mutating func cleanURLChunk(_ chunk: Chunk) -> Chunk {
+        unescapeURLChunk(chunk.trimming(using: self))
     }
 }
