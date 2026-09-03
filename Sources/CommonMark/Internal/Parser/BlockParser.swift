@@ -708,16 +708,27 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 Segment(offset: Int32(sourceStart), length: Int32(lineEnd - sourceStart), inSource: true),
                 to: node, pending: pending)
         }
+        return appendSplitTabCodeContent(spaces: splitTabSpaces, sourceStart: sourceStart, lineEnd: lineEnd, to: node, pending: pending)
+    }
+
+    /// Append `spaces` synthetic leading spaces followed by the verbatim source bytes `[sourceStart, lineEnd)`
+    /// as a single arena-backed (`inSource: false`) content segment.
+    ///
+    /// Used for a code/HTML block body line whose consumed indentation split a tab: cmark drops the tab
+    /// byte and emits its leftover columns as spaces (`partially_consumed_tab`; blocks.c `add_line`), then
+    /// copies the rest of the line verbatim so any content tab stays literal. The result is one segment,
+    /// which the finalize normalizers rely on (one content segment per body line).
+    private mutating func appendSplitTabCodeContent(spaces: Int, sourceStart: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
         let offset = storage.strings.count
-        storage.strings.reserveCapacity(offset + splitTabSpaces + (lineEnd - sourceStart))
-        for _ in 0..<splitTabSpaces {
+        storage.strings.reserveCapacity(offset + spaces + (lineEnd - sourceStart))
+        for _ in 0..<spaces {
             storage.strings.append(UInt8(ascii: " "))
         }
         for i in sourceStart..<lineEnd {
             storage.strings.append(sourceBytes[i])
         }
         return appendSegment(
-            Segment(offset: Int32(offset), length: Int32(splitTabSpaces + (lineEnd - sourceStart)), inSource: false),
+            Segment(offset: Int32(offset), length: Int32(spaces + (lineEnd - sourceStart)), inSource: false),
             to: node, pending: pending)
     }
 
@@ -1300,14 +1311,30 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 pending = try finalize(node: current, pending: pending)
                 return LeafContinuation(stillOpen: true, pending: pending)
             }
-            // Continuation: strip up to `fenceOffset` columns of leading whitespace and append.
+            // Continuation: strip up to `fenceOffset` COLUMNS of leading whitespace (tab-stop-aware) and
+            // append. A tab straddling the fenceOffset boundary is split: its leftover columns become
+            // leading spaces and the rest of the line is copied verbatim (cmark's partially_consumed_tab;
+            // blocks.c `add_line`), so any content tab stays literal. `startColumn` is the column at
+            // `cursor` - 0 at the top level, the consumed container-prefix width when the fence is nested.
             pending = appendNewline(to: current, pending: pending)
-            let bodyStart = stripLeadingSpaces(
+            let startColumn = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+            let (bodyStart, leadingSpaces) = stripFenceIndent(
                 source: source,
                 range: cursor..<lineRange.upperBound,
-                maxColumns: info.fenceOffset
+                maxColumns: info.fenceOffset,
+                startColumn: startColumn
             )
-            pending = addLine(span: source, range: bodyStart..<lineRange.upperBound, to: current, pending: pending)
+            if leadingSpaces == 0 {
+                pending = addLine(span: source, range: bodyStart..<lineRange.upperBound, to: current, pending: pending)
+            } else {
+                pending = appendSplitTabCodeContent(
+                    spaces: leadingSpaces,
+                    sourceStart: bodyStart,
+                    lineEnd: lineRange.upperBound,
+                    to: current,
+                    pending: pending
+                )
+            }
             return LeafContinuation(stillOpen: true, pending: pending)
         }
         // Indented.
@@ -2929,25 +2956,55 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return true
     }
 
-    /// Return the offset within `range` that's at most `maxColumns` ASCII spaces or tabs past `range.lowerBound`.
+    /// Strip up to `maxColumns` COLUMNS of leading whitespace from a fenced-code continuation line,
+    /// tab-stop-aware, mirroring cmark's `parse_code_block_prefix` (blocks.c) which advances
+    /// `fence_offset` columns. `startColumn` is the absolute column at `range.lowerBound` (0 for a
+    /// top-level fence; the consumed container-prefix width when the fence is nested) so a tab's width is
+    /// measured from the correct tab stop.
     ///
-    /// Used to strip leading indentation from fenced-code-block continuation lines.
-    private func stripLeadingSpaces(source: Span<UInt8>, range: Range<Int>, maxColumns: Int) -> Int {
+    /// Returns the source offset where the surviving content begins and the number of leading spaces a
+    /// tab straddling the boundary contributes: cmark's `partially_consumed_tab` (blocks.c `add_line`)
+    /// drops such a tab's byte and emits its leftover columns as spaces before copying the rest of the
+    /// line verbatim. A non-straddling strip returns `leadingSpaces == 0` and stays a zero-copy slice.
+    private func stripFenceIndent(source: Span<UInt8>, range: Range<Int>, maxColumns: Int, startColumn: Int) -> (bodyStart: Int, leadingSpaces: Int) {
         var i = range.lowerBound
-        var columns = 0
-        while i < range.upperBound && columns < maxColumns {
+        var column = startColumn
+        var consumed = 0
+        while i < range.upperBound && consumed < maxColumns {
             let b = source[i]
             if b == UInt8(ascii: " ") {
-                columns += 1
+                column += 1
+                consumed += 1
                 i += 1
             } else if b == UInt8(ascii: "\t") {
-                columns += 1
-                i += 1
+                let width = 4 - (column & 3)
+                if consumed + width <= maxColumns {
+                    // The tab fits entirely within the strip; drop it whole.
+                    column += width
+                    consumed += width
+                    i += 1
+                } else {
+                    // The tab straddles the boundary: consume its share of columns and surface the
+                    // remainder as spaces, dropping the tab byte (cmark's partially_consumed_tab).
+                    return (i + 1, width - (maxColumns - consumed))
+                }
             } else {
                 break
             }
         }
-        return i
+        return (i, 0)
+    }
+
+    /// The absolute column reached after `source[from..<to]`, per cmark's tab-stop rule: a tab advances
+    /// to the next multiple of 4, every other byte counts as one column. Unlike `indentColumns` this does
+    /// NOT stop at the first non-whitespace byte - it measures the full column width of an already-consumed
+    /// prefix (container markers included), matching cmark's absolute `parser->column` after prefix matching.
+    private func columnWidth(source: Span<UInt8>, from: Int, to: Int) -> Int {
+        var column = 0
+        for i in from..<to {
+            column += source[i] == UInt8(ascii: "\t") ? 4 - (column & 3) : 1
+        }
+        return column
     }
 
     /// Try to match a setext heading underline at `firstNonSpace` within `range`. CommonMark 0.31 §4.3.
