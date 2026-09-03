@@ -573,6 +573,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// A GFM task-list item's checkbox marker (`[ ] ` / `[x] `) is stripped from the item's first paragraph at finalize (`runParagraphMatchers`), which advances the paragraph's own start past the marker but leaves the block-content column - the base every continuation line re-indents to (Quirk E, `addLineSegment`) - fixed at the *plain* item content column (where `[` sits). cmark-gfm fixes that base at the checkbox-adjusted content column instead, so a task-item continuation lands the marker's column-width further right than a plain bullet's would. Add that width here, at the point the base is first fixed, when this leaf is the first paragraph of a list item and its first line begins with a checkbox marker. Returns 0 otherwise (plain bullets, ordered lists, non-item paragraphs), so nothing else moves.
     ///
     /// `currentContentIndent` is a *column* count. A space-separated marker (`[ ] `) is exactly `tasklistMarkerWidth` single-byte columns, so the bump equals its byte width. A TAB-separated marker (`[ ]\t`) is still recognized by `matchTasklistMarker` but its column width is tab-stop-dependent, not its byte width, so it is left to the deferred tab class (see CLAUDE.md "tab after a list marker") rather than bumped with a wrong column count - `require`ing a space separator here keeps the arithmetic column-exact. The recognition otherwise mirrors `matchTasklistMarker` (same `tasklistMarkerChecked` predicate, same first-child-of-item condition, same `lineAnchoredTaskItems` gate so an item whose marker shares its line with a `>` or an outer marker - whose checkbox stays literal - re-indents like a plain bullet), so in the common case - marker on the first line, no preceding ref-def / footnote / table matcher redirecting finalize - the finalize consumption and this re-indent bump agree.
+    ///
+    /// This bump assumes a SINGLE separator space (`tasklistMarkerWidth`). `matchTasklistMarker` strips the whole post-checkbox whitespace run for the item's first-line CONTENT, so a MULTI-space marker (`[x]  a`) puts the true content column one-plus further right than this bump records - a flag-ON re-indent-base inaccuracy for a multi-space task item's continuation. It is unobservable: source positions are not part of the differential compare surface (see `DiffSupport.newSurface`) and this base is Quirk-E (`.cmarkBugCompatibility`) machinery only; the deliverable's spec-correct positions come from the true column, and no position suite exercises a multi-space task marker.
     private func tasklistContentIndentBump(node: DocumentStorage.Index, span: Span<UInt8>, range: Range<Int>) -> Int {
         guard storage.options.contains(.tasklist),
               storage[node].kind == .paragraph,
@@ -1771,7 +1773,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                lineAnchoredTaskItems.contains(parent),
                let mark = matchTasklistMarker(chunk: contentChunk) {
                 storage[parent].kind = .item(checked: mark.checked)
-                // cmark attributes the paragraph's source range to the content *after* the `[x] ` marker (and the single separating space). The marker length is the offset delta between the content and the marker's remainder (buffer-agnostic), so advance the already-stamped paragraph start by that many bytes.
+                // cmark attributes the paragraph's source range to the content after the checkbox and all the whitespace following it (the first non-space/tab). The marker+whitespace length is the offset delta between the content and the marker's remainder (buffer-agnostic), so advance the already-stamped paragraph start by that many bytes.
                 if positionsEnabled {
                     let start = storage.sourceRanges[node].start
                     if start >= 0 {
@@ -3041,7 +3043,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Match a GFM tasklist marker at the start of a paragraph chunk: `[ ]`, `[x]`, or `[X]` followed by a space or tab.
     ///
-    /// Returns the `checked` state and the remaining content (after the marker + the single-byte whitespace separator), or `nil` if the chunk doesn't start with a marker. Paragraph content is always materialized so we only handle `inSource: false` here.
+    /// Returns the `checked` state and the remaining content, or `nil` if the chunk doesn't start with a marker. cmark's tasklist extension advances past the `[x]` (3 bytes) and then the paragraph's first-non-space logic strips the following whitespace, so the content begins at the first non-space/tab after the checkbox — the ENTIRE separator run is dropped, not just the one required byte. Paragraph content is always materialized so we only handle `inSource: false` here.
     private func matchTasklistMarker(chunk: Chunk) -> (checked: Bool, remaining: Chunk)? {
         if chunk.length < Self.tasklistMarkerWidth {
             return nil
@@ -3055,7 +3057,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         ) else {
             return nil
         }
-        return (checked, chunk.extracting(Self.tasklistMarkerWidth..<chunk.length))
+        // Skip the whole `[x]`-to-content whitespace run (space/tab), starting at the required separator
+        // byte (index 3). cmark strips all of it via the paragraph's leading-whitespace handling.
+        var contentStart = 3
+        while contentStart < chunk.length {
+            let b = readByte(at: off + contentStart, in: chunk)
+            if b == UInt8(ascii: " ") || b == UInt8(ascii: "\t") {
+                contentStart += 1
+            } else {
+                break
+            }
+        }
+        return (checked, chunk.extracting(contentStart..<chunk.length))
     }
 
     /// True when the list marker at `markerStart` is preceded on its physical line (from `lineStart`)
