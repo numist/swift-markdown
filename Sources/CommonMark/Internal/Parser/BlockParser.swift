@@ -882,6 +882,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let walk = try walkOpenContainers(source: source, lineRange: lineRange, chain: &chain)
         let deepestMatched = walk.deepestMatched
         let cursor = walk.cursor
+        let prefixColumns = walk.prefixColumns
         let allMatched = walk.allMatched
 
         // A paragraph continuation on this line re-indents relative to where the container-prefix walk
@@ -899,6 +900,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 source: source,
                 lineRange: lineRange,
                 cursor: cursor,
+                prefixColumns: prefixColumns,
                 pending: pending
             )
             let stillOpen = result.stillOpen
@@ -1123,10 +1125,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Walk the open-container chain top-down, stripping each container's continuation prefix.
     ///
-    /// Returns the deepest container whose prefix matched (always a container, never a leaf), the cursor into the line after stripped prefixes, and whether every container in the chain matched.
-    private mutating func walkOpenContainers(source: Span<UInt8>, lineRange: Range<Int>, chain: inout UniqueArray<DocumentStorage.Index>) throws (MarkdownDocument.Error) -> (deepestMatched: DocumentStorage.Index, cursor: Int, allMatched: Bool) {
+    /// Returns the deepest container whose prefix matched (always a container, never a leaf), the cursor into the line after stripped prefixes, the absolute column the prefix consumption *intended* to reach, and whether every container in the chain matched.
+    ///
+    /// `prefixColumns` normally equals the column width of `[lineRange.lowerBound, cursor)`, but exceeds it when a container advance consumed *columns* into a tab it could not drop byte-wise (a list item's content indent landing mid-tab): `cursor` still sits at that tab while `prefixColumns` records the column the strip reached. The leaf continuation folds the shortfall into its own strip so the straddling tab is split there (cmark's `partially_consumed_tab`).
+    private mutating func walkOpenContainers(source: Span<UInt8>, lineRange: Range<Int>, chain: inout UniqueArray<DocumentStorage.Index>) throws (MarkdownDocument.Error) -> (deepestMatched: DocumentStorage.Index, cursor: Int, prefixColumns: Int, allMatched: Bool) {
         var cursor = lineRange.lowerBound
         var deepestMatched = documentIndex
+        var prefixColumns = 0
 
         // Build top-down chain via parent walk + reverse. `chain` is a caller-owned reused buffer (reset here per line) so we don't allocate/zero a fresh array each line.
         chain.removeAll(keepingCapacity: true)
@@ -1156,6 +1161,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     firstNonSpace: firstNonSpace
                 ) {
                     cursor = advanced
+                    prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
                     deepestMatched = node
                 } else {
                     // No `>` on this line: the block quote's paragraph continues lazily. The walk stops
@@ -1163,7 +1169,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // `processLine` turns that into `currentLineIsLazyContinuation`, and `addLineSegment`
                     // preserves the residual whitespace after `cursor` in the re-indent column - the same
                     // rule for a top-level, nested, or list-wrapped lazy block quote.
-                    return (deepestMatched, cursor, false)
+                    return (deepestMatched, cursor, prefixColumns, false)
                 }
             case .list:
                 // Lists themselves don't have a per-line continuation rule; their items do. The list as a container "matches" trivially as long as we get to one of its items.
@@ -1179,7 +1185,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
                 let isBlank = firstNonSpace == lineRange.upperBound
                 guard let padding = itemPadding(of: node) else {
-                    return (deepestMatched, cursor, false)
+                    return (deepestMatched, cursor, prefixColumns, false)
                 }
                 // Compare in COLUMNS, not bytes, so a leading tab counts as up to 4 cols of indent.
                 let availCols = indentColumns(source: source, from: cursor, to: firstNonSpace)
@@ -1194,6 +1200,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                         to: lineRange.upperBound,
                         columns: padding
                     )
+                    // The item intends to consume `padding` columns even when a straddling tab kept
+                    // `advanceColumns` from advancing `cursor` past it: record the intended column so the
+                    // leaf continuation can split that tab (cmark's `partially_consumed_tab`).
+                    prefixColumns += padding
                     deepestMatched = node
                 } else if isBlank, storage[node].firstChild != nil {
                     // A blank line inside an item that already has content keeps the item open even though
@@ -1202,18 +1212,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // so any deeper open item measures its indent from here rather than the shallower line
                     // start. A childless item on such a line closes (CommonMark §5.2: `first_child == NULL`).
                     cursor = firstNonSpace
+                    prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
                     deepestMatched = node
                 } else {
-                    return (deepestMatched, cursor, false)
+                    return (deepestMatched, cursor, prefixColumns, false)
                 }
             case .paragraph, .heading, .codeBlock, .htmlBlock, .text, .thematicBreak:
                 // Leaves; they don't have container-level prefix matching. The chain effectively ends here. Caller decides leaf-specific continuation (e.g. code-block fence detection).
-                return (deepestMatched, cursor, true)
+                return (deepestMatched, cursor, prefixColumns, true)
             default:
                 break
             }
         }
-        return (deepestMatched, cursor, true)
+        return (deepestMatched, cursor, prefixColumns, true)
     }
 
     /// Returns `true` if the line's content (starting at `firstNonSpace`) begins a new block that would interrupt an open paragraph.
@@ -1293,7 +1304,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Continue an open code block. Returns `stillOpen: true` if the block remains open after handling this line; `false` if the line closed it (or was a closing fence). When this returns `false` the caller should *not* dispatch the line content as a fresh block - the closing fence is fully consumed.
-    private mutating func handleCodeBlockContinuation(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, pending: consuming PendingLeaf?) throws(MarkdownDocument.Error) -> LeafContinuation {
+    private mutating func handleCodeBlockContinuation(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, prefixColumns: Int, pending: consuming PendingLeaf?) throws(MarkdownDocument.Error) -> LeafContinuation {
         var pending = pending
         let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
         let isBlank = firstNonSpace == lineRange.upperBound
@@ -1311,17 +1322,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 pending = try finalize(node: current, pending: pending)
                 return LeafContinuation(stillOpen: true, pending: pending)
             }
-            // Continuation: strip up to `fenceOffset` COLUMNS of leading whitespace (tab-stop-aware) and
-            // append. A tab straddling the fenceOffset boundary is split: its leftover columns become
-            // leading spaces and the rest of the line is copied verbatim (cmark's partially_consumed_tab;
-            // blocks.c `add_line`), so any content tab stays literal. `startColumn` is the column at
-            // `cursor` - 0 at the top level, the consumed container-prefix width when the fence is nested.
+            // Continuation: strip the code block's content indentation - the container prefixes'
+            // intended `prefixColumns` plus the fence's own `fenceOffset` - in COLUMNS, tab-stop-aware,
+            // then append. `startColumn` is the column physically reached at `cursor`; the bytes before
+            // `cursor` already cover `startColumn` of the indent, so `prefixColumns + fenceOffset -
+            // startColumn` columns remain to strip here. That shortfall is non-zero when a container
+            // advance (e.g. a list item's content indent) consumed columns into a tab it could not drop
+            // byte-wise, leaving `cursor` at that tab: folding those columns into this strip splits the
+            // tab here - its consumed columns dropped, its leftover columns surfaced as leading spaces
+            // with the rest of the line copied verbatim (cmark's `partially_consumed_tab`; blocks.c
+            // `add_line` + `S_advance_offset`), so any content tab stays literal.
             pending = appendNewline(to: current, pending: pending)
             let startColumn = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
             let (bodyStart, leadingSpaces) = stripFenceIndent(
                 source: source,
                 range: cursor..<lineRange.upperBound,
-                maxColumns: info.fenceOffset,
+                maxColumns: prefixColumns + info.fenceOffset - startColumn,
                 startColumn: startColumn
             )
             if leadingSpaces == 0 {
