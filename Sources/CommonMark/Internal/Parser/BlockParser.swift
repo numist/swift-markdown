@@ -891,8 +891,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         /// earlier lines can split off into a preceding paragraph. `lastNewline` is the source offset of the
         /// `\n` before the header line.
         case multiContiguous(range: Range<Int>, lastNewline: Int)
-        /// Multiple physical lines in a non-contiguous representation (materialized / segment list, e.g. a
-        /// block-quote or list continuation). Not handled by the multi-line split; left to the two-line path.
+        /// Multiple physical lines in a non-contiguous representation: a zero-copy segment list (a nested
+        /// block-quote / list continuation, or a CRLF join) or a materialized buffer. The header and the
+        /// preceding lines are reconstructed from that representation by `splitNoncontiguousPendingTable`.
         case multiOther
     }
 
@@ -934,20 +935,40 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// every earlier newline-terminated segment as a preceding-paragraph offset, so the header is always the
     /// line immediately before the delimiter.
     ///
-    /// When earlier paragraph lines precede that header (the source-contiguous multi-line case), they are
-    /// split off here into a fresh paragraph inserted before `node` (cmark's
-    /// `try_inserting_table_header_paragraph`), and `node`'s pending content is re-seeded to the header line
-    /// alone so the existing finalize-time two-line detection builds the table. The single-line case (the
-    /// header IS the paragraph) is delegated to `recordTablePending` unchanged, which also covers the
-    /// non-contiguous representations; a non-contiguous MULTI-line paragraph is left as a paragraph (the
-    /// existing behavior for nested / re-indented content).
-    private mutating func detectPendingTable(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    /// When earlier paragraph lines precede that header, they are split off here into a fresh paragraph
+    /// inserted before `node` (cmark's `try_inserting_table_header_paragraph`), and `node`'s pending content
+    /// is re-seeded to the header line alone so the existing finalize-time two-line detection builds the
+    /// table. This handles both multi-line representations: a source-contiguous range (`.multiContiguous`)
+    /// and the non-contiguous forms (`.multiOther` - a zero-copy segment list from a nested block-quote /
+    /// list continuation or a CRLF join, or a materialized buffer), reconstructing the header and preceding
+    /// lines from whichever representation `pending` holds. The single-line case (the header IS the
+    /// paragraph) is delegated to `recordTablePending` unchanged.
+    ///
+    /// After a multi-line split the delimiter row becomes the re-seeded paragraph's second physical line, so
+    /// its `delimIndent` / non-laziness are recorded as the paragraph's second-line gate metadata (see
+    /// `recordSplitDelimiterLine`): the values captured from the ORIGINAL second line may be indented or
+    /// lazy, which would wrongly veto the finalize-time table gate.
+    private mutating func detectPendingTable(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, delimIndent: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         switch pendingTableShape(pending) {
-        case .empty, .multiOther:
+        case .empty:
             return pending
         case .single:
             recordTablePending(node, delimSpan: delimSpan, delimRange: delimRange, pending: pending)
             return pending
+        case .multiOther:
+            // The header is the last accumulated physical line, held in a non-contiguous representation
+            // (segment list or materialized buffer). Classify header + delimiter through a borrow (like
+            // `recordTablePending`); only split when a table actually opens.
+            switch classifyMultiLineHeader(delimSpan: delimSpan, delimRange: delimRange, pending: pending) {
+            case .notDelimiterRow:
+                return pending
+            case .headerMismatch:
+                paragraphTablePending[node] = false
+                return pending
+            case .opens:
+                recordSplitDelimiterLine(node, delimIndent: delimIndent)
+                return splitNoncontiguousPendingTable(node, pending: pending)
+            }
         case .multiContiguous(let range, let lastNewline):
             // The header is the last physical line; everything before its `\n` is the preceding paragraph.
             let headerRange = (lastNewline + 1)..<range.upperBound
@@ -986,10 +1007,186 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 storage.setSourceEnd(preceding, precedingChunk.offset + precedingChunk.length)
                 pendingInlines.append((preceding, storage.intern(precedingChunk)))
                 storage.setSourceStart(node, headerRange.lowerBound)
+                recordSplitDelimiterLine(node, delimIndent: delimIndent)
                 paragraphTablePending[node] = true
                 return PendingLeaf(node: node, content: .lazy(range: headerRange))
             }
         }
+    }
+
+    /// After a multi-line paragraph is split so the delimiter row becomes the re-seeded paragraph's second
+    /// physical line, record the delimiter's indent and non-laziness as the paragraph's "second line" gate
+    /// metadata. `paragraphSecondLineIndent` / `paragraphSecondLineLazy` were captured from the ORIGINAL
+    /// second line (which may be indented >= 4 or a lazy continuation), but the finalize-time table gate
+    /// must see the delimiter line - which `detectPendingTable`'s caller already confirmed is non-indented
+    /// (`< 4`) and non-lazy - or it would wrongly veto the table cmark opens.
+    private mutating func recordSplitDelimiterLine(_ node: DocumentStorage.Index, delimIndent: Int) {
+        paragraphSecondLineIndent[node] = delimIndent
+        paragraphSecondLineLazy[node] = false
+    }
+
+    /// Classify whether the open paragraph's LAST accumulated line (the header) plus the just-arrived
+    /// delimiter-candidate line open a GFM table, for a NON-contiguous paragraph representation (a zero-copy
+    /// segment list, or a materialized buffer with embedded newlines). Reconstructs the header line from the
+    /// stored representation into a scratch region of the arena, appends `\n` + the delimiter, runs
+    /// `classifyTableOpen`, then truncates the scratch back off - reading `pending` through a borrow so the
+    /// paragraph's accumulated content is untouched (mirrors `recordTablePending`).
+    private mutating func classifyMultiLineHeader(delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf?) -> TableOpenClassification {
+        let scratchStart = storage.strings.count
+        switch pending {
+        case .none:
+            return .notDelimiterRow
+        case .some(let leaf):
+            switch leaf.content {
+            case .segments(let segs):
+                // Content segments (one physical line each) alternate with the shared `newlineSegment`; the
+                // header is every segment after the last line-join.
+                let nl = storage.newlineSegment
+                var lastNewlineIndex = -1
+                for i in 0..<segs.count where segs[i] == nl {
+                    lastNewlineIndex = i
+                }
+                guard lastNewlineIndex >= 0 else {
+                    return .notDelimiterRow
+                }
+                for i in (lastNewlineIndex + 1)..<segs.count {
+                    let seg = segs[i]
+                    for j in 0..<Int(seg.length) {
+                        storage.strings.append(segmentByte(seg, j))
+                    }
+                }
+            case .materialized(let buffer):
+                // The header is the bytes after the last embedded newline.
+                var lastNewline = -1
+                for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
+                    lastNewline = k
+                }
+                guard lastNewline >= 0 else {
+                    return .notDelimiterRow
+                }
+                for k in (lastNewline + 1)..<buffer.count {
+                    storage.strings.append(buffer[k])
+                }
+            case .lazy:
+                // A single source range is `.single` / `.multiContiguous`, never `.multiOther`.
+                return .notDelimiterRow
+            case .lazyNewline:
+                return .notDelimiterRow
+            }
+        }
+        storage.strings.append(UInt8(ascii: "\n"))
+        for i in delimRange {
+            storage.strings.append(delimSpan[i])
+        }
+        let scratch = Chunk(offset: scratchStart, length: storage.strings.count - scratchStart, inSource: false)
+        let classification = classifyTableOpen(chunk: scratch)
+        storage.strings.removeLast(storage.strings.count - scratchStart)
+        return classification
+    }
+
+    /// Split a non-contiguous multi-line paragraph at its last line: the earlier lines become a preceding
+    /// paragraph inserted before `node`, and `node` is re-seeded to the header line alone with
+    /// `paragraphTablePending` set, so the finalize-time two-line detection builds the table from the header
+    /// + the delimiter line the caller is about to append. The mirror of `detectPendingTable`'s
+    /// `.multiContiguous` split for the segment-list / materialized representations (cmark's
+    /// `try_inserting_table_header_paragraph`). Called only after `classifyMultiLineHeader` returns `.opens`.
+    private mutating func splitNoncontiguousPendingTable(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        guard let leaf = pending else {
+            return nil
+        }
+        switch consume leaf.content {
+        case .segments(let segs):
+            return splitSegmentHeader(node, segments: segs)
+        case .materialized(let buffer):
+            return splitMaterializedHeader(node, buffer: buffer)
+        case .lazy(let range):
+            return PendingLeaf(node: node, content: .lazy(range: range))
+        case .lazyNewline(let range):
+            return PendingLeaf(node: node, content: .lazyNewline(range: range))
+        }
+    }
+
+    /// Split a segment-list paragraph (nested block-quote / list continuation, or a CRLF join) into a
+    /// preceding paragraph plus a header-only re-seed. The header is every segment after the last line-join;
+    /// the earlier segments become the preceding paragraph, stamped with the source span of those lines.
+    private mutating func splitSegmentHeader(_ node: DocumentStorage.Index, segments: consuming UniqueArray<Segment>) -> PendingLeaf? {
+        var segs = segments
+        let nl = storage.newlineSegment
+        var lastNewlineIndex = -1
+        for i in 0..<segs.count where segs[i] == nl {
+            lastNewlineIndex = i
+        }
+        guard lastNewlineIndex >= 0 else {
+            // No line join: a single-line segment list (unreachable for `.multiOther`). Leave it whole.
+            return PendingLeaf(node: node, content: .segments(segs))
+        }
+        var header = UniqueArray<Segment>()
+        for i in (lastNewlineIndex + 1)..<segs.count {
+            header.append(segs[i])
+        }
+        segs.removeSubrange(lastNewlineIndex..<segs.count)
+        let preceding = trimSegments(segs)
+        // A blank line closes a paragraph, so the earlier lines are never blank; splitting only when they
+        // carry content avoids inserting an empty paragraph node in a degenerate case.
+        if !isBlankSegments(preceding) {
+            let precedingNode = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
+            storage.insertChildBefore(precedingNode, before: node)
+            // Stamp the preceding lines' source span, read through a borrow so `preceding` can then be
+            // consumed by `intern`.
+            if positionsEnabled, let span = segmentsSourceSpan(preceding) {
+                storage.setSourceStart(precedingNode, span.start)
+                storage.setSourceEnd(precedingNode, span.end)
+            }
+            pendingInlines.append((precedingNode, storage.intern(preceding)))
+        }
+        if positionsEnabled, let headerSpan = segmentsSourceSpan(header) {
+            storage.setSourceStart(node, headerSpan.start)
+        }
+        paragraphTablePending[node] = true
+        return PendingLeaf(node: node, content: .segments(header))
+    }
+
+    /// The source byte span of a paragraph's accumulated segment list - the first content line's start to
+    /// the last content line's end - read through a borrow so the segments can then be consumed. The first
+    /// and last entries of a paragraph segment list are content lines (source segments), so their byte-read
+    /// offsets are real source positions. `nil` for an empty list.
+    private func segmentsSourceSpan(_ segs: borrowing UniqueArray<Segment>) -> (start: Int, end: Int)? {
+        guard segs.count > 0 else {
+            return nil
+        }
+        let first = segs[0]
+        let last = segs[segs.count - 1]
+        return (Int(first.offset), Int(last.offset) + Int(last.length))
+    }
+
+    /// Split a materialized paragraph (a byte buffer with embedded newlines, produced only with source
+    /// positions OFF) into a preceding paragraph plus a header-only re-seed. The preceding bytes are copied
+    /// into the arena; no source stamping is needed (a materialized multi-line paragraph only arises with
+    /// positions off - the positions-on paths map tab-expanded lines back to source segments instead).
+    private mutating func splitMaterializedHeader(_ node: DocumentStorage.Index, buffer: consuming UniqueArray<UInt8>) -> PendingLeaf? {
+        var lastNewline = -1
+        for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
+            lastNewline = k
+        }
+        guard lastNewline >= 0 else {
+            return PendingLeaf(node: node, content: .materialized(buffer))
+        }
+        let precedingStart = storage.strings.count
+        for k in 0..<lastNewline {
+            storage.strings.append(buffer[k])
+        }
+        let precedingChunk = Chunk(offset: precedingStart, length: lastNewline, inSource: false).trimming(using: self)
+        if !precedingChunk.isEmpty {
+            let precedingNode = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
+            storage.insertChildBefore(precedingNode, before: node)
+            pendingInlines.append((precedingNode, storage.intern(precedingChunk)))
+        }
+        var header = UniqueArray<UInt8>()
+        for k in (lastNewline + 1)..<buffer.count {
+            header.append(buffer[k])
+        }
+        paragraphTablePending[node] = true
+        return PendingLeaf(node: node, content: .materialized(header))
     }
 
     // MARK: - Per-line dispatcher
@@ -1234,7 +1431,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     if paragraphTablePending[current] == nil,
                        indent < 4, !currentLineIsLazyContinuation,
                        Self.couldBeDelimiterRow(span: source, range: firstNonSpace..<lineRange.upperBound) {
-                        pending = detectPendingTable(current, delimSpan: source, delimRange: firstNonSpace..<lineRange.upperBound, pending: pending)
+                        pending = detectPendingTable(current, delimSpan: source, delimRange: firstNonSpace..<lineRange.upperBound, delimIndent: indent, pending: pending)
                     }
                 }
                 pending = appendNewline(to: current, pending: pending)
