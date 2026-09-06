@@ -150,6 +150,32 @@ extension BlockParser {
         return sawDash
     }
 
+    /// Whether `span[range]` is a lone-pipe table row — a single unescaped `|` bracketed only by
+    /// delimiter-marker whitespace (space/tab/VT/FF) — which scans to ZERO table columns. cmark's
+    /// `row_from_string` creates cells only inside its scan loop; the leading pipe's
+    /// `scan_table_cell_end = [|] spacechar*` consumes the pipe (and any trailing whitespace) before the
+    /// loop, which then finds nothing (`n_columns == 0`), so `matches` reports the line is not a table
+    /// row and the open table closes. This is the source-span twin of `splitCells`' zero-cell case, used
+    /// during parsing to break a lone-pipe line out of a pending table rather than absorb it into a
+    /// spurious one-empty-cell body row.
+    internal static func isLonePipeRow(span: Span<UInt8>, range: Range<Int>) -> Bool {
+        // cmark reads the row from the first non-space, then `cmark_strbuf_trim` (space/tab) bounds the
+        // scan — trim space/tab from both ends to isolate the pipe and its `spacechar` padding.
+        var s = range.lowerBound
+        var e = range.upperBound
+        while s < e && span[s].isSpaceOrTab { s += 1 }
+        while e > s && span[e - 1].isSpaceOrTab { e -= 1 }
+        // Must lead with a pipe (the leading pipe the scan consumes), ...
+        guard s < e && span[s] == UInt8(ascii: "|") else { return false }
+        s += 1
+        // ... with nothing but delimiter-marker whitespace after it: a second unescaped pipe or any
+        // content would make the scan loop yield at least one cell, so the row would be a real row.
+        for i in s..<e where !span[i].isTableDelimiterSpace {
+            return false
+        }
+        return true
+    }
+
     // MARK: - Row construction
 
     /// Build a `.tableRow` node + its cells under `parent`. Missing trailing cells are emitted as empty; extras beyond `columnCount` are dropped.

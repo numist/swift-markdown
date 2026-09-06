@@ -1053,12 +1053,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         //
         // A GFM table opens (in cmark) while processing the delimiter line, so once a paragraph is
         // "table-pending" (its first two lines form a header + delimiter that would open a table) its open
-        // block is a TABLE, not a paragraph. A subsequent LAZY continuation line therefore cannot be a body
-        // row: cmark closes the table and its enclosing container and starts a fresh block at the container's
-        // ancestor. Reproduce that by NOT entering the absorb path — fall through to PHASE 3, which closes the
+        // block is a TABLE, not a paragraph. A subsequent line that cannot be a table body row therefore
+        // closes the table and its enclosing container and starts a fresh block at the container's ancestor.
+        // Two kinds of line can't be a body row:
+        //   - a LAZY continuation: cmark opens blocks against an ancestor of the (now-table) block, so the
+        //     lazy-paragraph branch never fires (block-quote / list only), and
+        //   - a line that scans to ZERO table columns — a lone `|` optionally padded with delimiter-marker
+        //     whitespace. cmark's table `matches` calls `row_from_string`, which yields no columns, so the
+        //     row doesn't match. Without this the finalize-time table builder absorbs the line and
+        //     `splitCells` autocompletes it into a spurious one-empty-cell body row.
+        // Reproduce cmark by NOT entering the absorb path — fall through to PHASE 3, which closes the
         // paragraph (finalizing it into the header-only table) and the container, then dispatches this line
         // anew at the ancestor level.
-        let breaksOutOfPendingTable = currentLineIsLazyContinuation && (paragraphTablePending[current] ?? false)
+        let tablePending = paragraphTablePending[current] ?? false
+        let breaksOutOfPendingTable = tablePending
+            && (currentLineIsLazyContinuation
+                || Self.isLonePipeRow(span: source, range: firstNonSpace..<lineRange.upperBound))
         if stillOpenKind == .paragraph && !breaksOutOfPendingTable {
             // The matcher ladder can only return true if the first content byte is one that some block construct starts with; for ordinary prose continuation lines it isn't, so we skip the whole ladder. `mightStartBlock` is a superset of every matcher's trigger byte, so a `false` here is exactly what `lineStartsNewBlock` would have returned.
             // `interruptsParagraph` mirrors cmark's flag (blocks.c: `check_open_blocks` backs `container` up to its parent on a failed continuation): true iff the open paragraph's OWN container matched this line, i.e. `deepestMatched` is the paragraph's parent. When a shallower container matched, the marker is a sibling item at the list level, not an interruption of this paragraph.
