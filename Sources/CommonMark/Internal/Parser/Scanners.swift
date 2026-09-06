@@ -104,7 +104,10 @@ extension BlockParser {
         var nbParen = 0
         while i < end {
             let c = readByte(at: i, in: chunk)
-            if c == UInt8(ascii: "\\") && i + 1 < end {
+            // A backslash escapes only an ASCII-punctuation byte, so a `\` before a line ending (or any
+            // non-punctuation byte) is a literal destination character - a destination never spans a
+            // line ending. Mirrors cmark's `manual_scan_link_url_2` (`src/inlines.c`).
+            if c == UInt8(ascii: "\\") && i + 1 < end && readByte(at: i + 1, in: chunk).isASCIIPunct {
                 i += 2
                 continue
             }
