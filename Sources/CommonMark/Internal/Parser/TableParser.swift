@@ -248,12 +248,19 @@ extension BlockParser {
         var skipContent: [Bool] = []
         var cellIndices: [DocumentStorage.Index] = []
         if spansEnabled {
-            colspans = [Int](repeating: 1, count: columnCount)
+            // Colspan is accumulated over the WHOLE parsed row, not just its first `columnCount` cells:
+            // cmark's `row_from_string` grows `row->n_columns` past the table's column count, so a
+            // trailing empty cell BEYOND `columnCount` still grows the nearest preceding real cell's
+            // colspan (which cmark never caps). The emit loop below drops cells past `columnCount`, but a
+            // surviving cell keeps its accumulated colspan (possibly > `columnCount`). Size `colspans` to
+            // the full cell list so a filler / real cell beyond `columnCount` has its own slot (a real
+            // cell there shields earlier cells from further increments).
+            colspans = [Int](repeating: 1, count: max(columnCount, cells.count))
             rowspans = [Int](repeating: 1, count: columnCount)
             skipContent = [Bool](repeating: false, count: columnCount)
             cellIndices.reserveCapacity(columnCount)
             let markerByte = dittoEnabled ? UInt8(ascii: "\"") : UInt8(ascii: "^")
-            for col in 0..<min(columnCount, cells.count) {
+            for col in 0..<cells.count {
                 let raw = cells[col]
                 // Colspan filler: a literally empty (`||`, zero-width) cell. cmark marks any zero-width cell colspan 0 (`row_from_string`: empty buf AND start_offset == end_offset), including the first column — its `n_columns > 0` guard is always satisfied because the cell was already appended. The nearest preceding real cell (if any) absorbs the span; a leading filler has none, so it just carries colspan 0.
                 if raw.isEmpty {
@@ -267,10 +274,14 @@ extension BlockParser {
                         j -= 1
                     }
                 }
-                // Rowspan marker: the trimmed cell is exactly the marker byte.
-                let trimmed = trimSpaceTabs(range: raw)
-                if trimmed.count == 1 && storage.strings[trimmed.lowerBound] == markerByte {
-                    rowspans[col] = 0
+                // Rowspan marker: the trimmed cell is exactly the marker byte. cmark's rowspan pass (and
+                // the cell emit) both stop at `columnCount`, so a marker beyond it is dropped, never
+                // resolved — only track markers for cells that survive to emit.
+                if col < columnCount {
+                    let trimmed = trimSpaceTabs(range: raw)
+                    if trimmed.count == 1 && storage.strings[trimmed.lowerBound] == markerByte {
+                        rowspans[col] = 0
+                    }
                 }
             }
             // Resolve rowspan markers against the cell directly above (body rows only - the header has no row above). Scan upward past filler rows to the cell that owns the span and grow it.
