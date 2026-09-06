@@ -1199,32 +1199,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // PHASE 1: Walk the open-container chain, stripping each container's continuation prefix. `deepestMatched` is the deepest container whose continuation succeeded (always a container, never a leaf). `cursor` is the byte offset into the line after stripped prefixes.
         let walk = try walkOpenContainers(source: source, lineRange: lineRange, chain: &chain)
         let deepestMatched = walk.deepestMatched
-        var cursor = walk.cursor
+        let cursor = walk.cursor
         let prefixColumns = walk.prefixColumns
         let allMatched = walk.allMatched
-
-        // The block-quote continuation strip can partially consume a straddling tab: the marker takes
-        // `>` plus one optional COLUMN, and when that column lands on a tab the strip leaves `cursor` on
-        // the tab - immediately after the `>` byte (`source[cursor - 1] == ">"`), with `prefixColumns`
-        // one column past `>`. That state is unique to the block-quote straddle: `matchBlockQuoteMarker`
-        // always consumes a tab following `>` as its optional column, so a post-walk cursor sitting on a
-        // tab right after a matched `>` can only be this case; a list-item content-indent straddle
-        // (c98a837) reaches its tab across consumed whitespace, never a `>`, and is left untouched here.
-        // The mid-tab cursor is only meaningful to `handleCodeBlockContinuation`, which splits the tab to
-        // surface its leftover columns as code content - and that path runs only when the walk reached
-        // the leaf (`allMatched`). When a deeper container failed (`!allMatched`), the code block closes
-        // and the line is re-dispatched as a fresh block off a clean, column-aligned cursor; advance past
-        // the consumed tab so the dispatcher doesn't recount the whole tab from column 0 (which would
-        // misread the leftover as CODE_INDENT and open an indented code block where cmark - and the
-        // pre-strip cursor - re-dispatch a paragraph).
-        if !allMatched,
-           cursor < lineRange.upperBound,
-           cursor > lineRange.lowerBound,
-           source[cursor] == UInt8(ascii: "\t"),
-           source[cursor - 1] == UInt8(ascii: ">"),
-           prefixColumns == columnWidth(source: source, from: lineRange.lowerBound, to: cursor) + 1 {
-            cursor += 1
-        }
 
         // A paragraph continuation on this line re-indents relative to where the container-prefix walk
         // stopped. A *lazy* continuation (some prefix failed → `!allMatched`) preserves the residual
@@ -1473,6 +1450,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             source: source,
             lineRange: lineRange,
             startCursor: cursor,
+            startColumn: prefixColumns,
             pending: pending
         )
     }
@@ -1828,16 +1806,25 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Open new blocks at `current` based on the line's content from `startCursor`. Loops when a container (block quote, list item) opens so that `> > foo` or `- - foo` correctly opens nested containers plus a paragraph in one pass.
-    private mutating func dispatchNewBlocks(source: Span<UInt8>, lineRange: Range<Int>, startCursor: Int, pending: consuming PendingLeaf?) throws(MarkdownDocument.Error) -> PendingLeaf? {
+    ///
+    /// `startColumn` is the absolute column the surviving container prefixes intended to reach (the walk's
+    /// `prefixColumns`), which can EXCEED `startCursor`'s physical column when a prefix partially consumed a
+    /// straddling tab (a block-quote `>`'s optional column, or a list item's content-indent advance, landing
+    /// mid-tab). The re-dispatch indent is measured from that column - `firstNonSpaceColumn - column`, cmark's
+    /// `parser->indent` - so the tab's already-consumed columns are not recounted from column 0 (which would
+    /// under-count a block-quote straddle's dropped leftover, or over-count a list-item straddle's consumed
+    /// columns, flipping the indented-code / paragraph decision).
+    private mutating func dispatchNewBlocks(source: Span<UInt8>, lineRange: Range<Int>, startCursor: Int, startColumn: Int, pending: consuming PendingLeaf?) throws(MarkdownDocument.Error) -> PendingLeaf? {
         var pending = pending
         var cursor = startCursor
+        var column = startColumn
         while true {
             let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
             let isBlank = firstNonSpace == lineRange.upperBound
             if isBlank {
                 return pending
             }
-            let indent = indentColumns(source: source, from: cursor, to: firstNonSpace)
+            let indent = columnWidth(source: source, from: lineRange.lowerBound, to: firstNonSpace) - column
 
             // Block quote opens a container; loop to keep dispatching the rest.
             if let advanced = matchBlockQuoteMarker(
@@ -1856,6 +1843,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 )
                 current = quoteIdx
                 cursor = advanced
+                column = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
                 continue
             }
 
@@ -1920,6 +1908,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     storage[current].kind = .item(checked: checked)
                     cursor = lineRange.upperBound
                 }
+                column = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
                 continue
             }
 
@@ -2008,8 +1997,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
             // Indented code block (only when current container can't continue a paragraph).
             if indent >= 4 && storage[current].kind != .paragraph {
-                // The block starts where content begins *after* the 4-space code indent is consumed (cmark's convention: the extra indentation beyond 4 is preserved as content, and the start column is that post-indent position - not the first non-space char).
-                let bodyStart = advanceColumns(source: source, from: cursor, to: firstNonSpace, columns: 4)
+                // The block starts where content begins *after* the four-column code indent is consumed
+                // (cmark's convention: extra indentation beyond four is preserved as content, and the
+                // start column is that post-indent position - not the first non-space char). Strip the
+                // four columns tab-stop-aware from the current `column`: when a straddling tab crosses
+                // the boundary its consumed columns are dropped and its leftover columns surface as
+                // leading spaces (cmark's `partially_consumed_tab`; blocks.c `S_advance_offset` +
+                // `add_line`), the rest of the line copied verbatim so any content tab stays literal.
+                // A leftover only ever arises on a source-mapped line (materialized lines pre-expand
+                // their prefix tabs to spaces), where `source` is the shared source buffer and `bodyStart`
+                // a real source offset, so the arena split-tab append is well-formed.
+                let (bodyStart, leadingSpaces) = stripFenceIndent(
+                    source: source,
+                    range: cursor..<lineRange.upperBound,
+                    maxColumns: 4,
+                    startColumn: column
+                )
                 let codeIdx = addChild(
                     kind: .codeBlock(MarkdownNode.CodeBlockInfo(
                         isFenced: false,
@@ -2022,7 +2025,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     start: sourceOffset(bodyStart)
                 )
                 current = codeIdx
-                return addLine(span: source, range: bodyStart..<lineRange.upperBound, to: codeIdx, pending: pending)
+                if leadingSpaces == 0 {
+                    return addLine(span: source, range: bodyStart..<lineRange.upperBound, to: codeIdx, pending: pending)
+                }
+                return appendSplitTabCodeContent(
+                    spaces: leadingSpaces,
+                    sourceStart: bodyStart,
+                    lineEnd: lineRange.upperBound,
+                    to: codeIdx,
+                    pending: pending
+                )
             }
 
             // Paragraph fallback. By this point the list-close-if-needed step above has already ensured `current` isn't a list.
