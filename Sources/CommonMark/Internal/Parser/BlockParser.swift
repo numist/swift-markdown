@@ -2277,7 +2277,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
            storage[parent].firstChild == node,
            lineAnchoredTaskItems.contains(parent),
            let mark = matchTasklistMarker(chunk: trimmed) {
-            storage[parent].kind = .item(checked: mark.checked)
+            var checked = mark.checked
+            // why: cmark-gfm's tasklist extension (`open_tasklist_item`) sets the checked state with
+            // `strstr(input, "[x]") || strstr(input, "[X]")` over the checkbox's own line, NOT from the
+            // leading token, so any `[x]`/`[X]` substring later on that first line flips the item checked
+            // even when the leading token is `[ ]` (`- [ ] [x]` -> checked). Reproduced only under
+            // `.cmarkBugCompatibility` (adopted by the differential fuzzer); the deliverable (flag OFF)
+            // keeps the spec-correct leading-token state. `trimmed` starts at the checkbox and preserves
+            // the source line separators, so the scan is scoped to its first physical line.
+            if storage.options.contains(.cmarkBugCompatibility) {
+                checked = firstLineContainsCheckedBox(chunk: trimmed)
+            }
+            storage[parent].kind = .item(checked: checked)
             // cmark attributes the paragraph's source range to the content after the checkbox and all the whitespace following it (the first non-space/tab). The marker+whitespace length is the offset delta between the content and the marker's remainder (buffer-agnostic), so advance the already-stamped paragraph start by that many bytes.
             if positionsEnabled {
                 let start = storage.sourceRanges[node].start
@@ -3647,6 +3658,36 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
         return (checked, chunk.extracting(contentStart..<chunk.length))
+    }
+
+    /// Flag-ON (`.cmarkBugCompatibility`) reproduction of cmark-gfm's tasklist checked-state bug: does the
+    /// checkbox's own line contain the substring `[x]` or `[X]`?
+    ///
+    /// cmark's `open_tasklist_item` sets `parent->as.list.checked = (strstr(input, "[x]") ||
+    /// strstr(input, "[X]"))`, where `input` is the item content on the checkbox's physical line, scanned to
+    /// the line end. So a later `[x]`/`[X]` flips an item checked even under a `[ ]` leading token. `chunk`
+    /// begins at the checkbox and joins its lines with `\n`, so scan only its FIRST physical line (up to the
+    /// first `\n`) for the 3-byte window `[x]`/`[X]`; the checkbox token itself is included, so a `[x]`/`[X]`
+    /// leading token always self-matches (agreeing with the token result). Read straight from `chunk`'s
+    /// buffer - no copy, no whole-source pass.
+    private func firstLineContainsCheckedBox(chunk: Chunk) -> Bool {
+        var i = 0
+        // The `[x]` window needs three bytes, so the last start index is `length - 3`.
+        while i + 2 < chunk.length {
+            let b = readByte(at: chunk.offset + i, in: chunk)
+            if b == UInt8(ascii: "\n") {
+                return false
+            }
+            if b == UInt8(ascii: "["),
+               readByte(at: chunk.offset + i + 2, in: chunk) == UInt8(ascii: "]") {
+                let mid = readByte(at: chunk.offset + i + 1, in: chunk)
+                if mid == UInt8(ascii: "x") || mid == UInt8(ascii: "X") {
+                    return true
+                }
+            }
+            i += 1
+        }
+        return false
     }
 
     /// True when the list marker at `markerStart` is preceded on its physical line (from `lineStart`)
