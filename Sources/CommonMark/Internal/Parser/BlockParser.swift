@@ -1373,19 +1373,28 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // "table-pending" (its first two lines form a header + delimiter that would open a table) its open
         // block is a TABLE, not a paragraph. A subsequent line that cannot be a table body row therefore
         // closes the table and its enclosing container and starts a fresh block at the container's ancestor.
-        // Two kinds of line can't be a body row:
+        // Three kinds of line can't be a body row:
         //   - a LAZY continuation: cmark opens blocks against an ancestor of the (now-table) block, so the
-        //     lazy-paragraph branch never fires (block-quote / list only), and
+        //     lazy-paragraph branch never fires (block-quote / list only),
         //   - a line that scans to ZERO table columns — a lone `|` optionally padded with delimiter-marker
         //     whitespace. cmark's table `matches` calls `row_from_string`, which yields no columns, so the
         //     row doesn't match. Without this the finalize-time table builder absorbs the line and
-        //     `splitCells` autocompletes it into a spurious one-empty-cell body row.
+        //     `splitCells` autocompletes it into a spurious one-empty-cell body row, and
+        //   - a line indented >= 4 columns: cmark's `open_new_blocks` computes `maybe_lazy` from whether the
+        //     CURRENT block is a paragraph (blocks.c:1152). Once the table opened, the current block is a
+        //     TABLE, so `maybe_lazy` is false and the `indented && !maybe_lazy && !blank` branch
+        //     (blocks.c:1325) opens an INDENTED CODE BLOCK ahead of the table extension's block opener
+        //     (`try_opening_table_block`, `!indented`-gated at table.c:648-652, the dispatcher that would
+        //     otherwise call `try_opening_table_row`); `add_child` can't nest that code block under the
+        //     table, so the table closes. This is why an indented line breaks out of a table but a lazy
+        //     paragraph continuation (where `maybe_lazy` stays true) does not.
         // Reproduce cmark by NOT entering the absorb path — fall through to PHASE 3, which closes the
         // paragraph (finalizing it into the header-only table) and the container, then dispatches this line
         // anew at the ancestor level.
         let tablePending = paragraphTablePending[current] ?? false
         let breaksOutOfPendingTable = tablePending
             && (currentLineIsLazyContinuation
+                || indent >= 4
                 || Self.isLonePipeRow(span: source, range: firstNonSpace..<lineRange.upperBound))
         if stillOpenKind == .paragraph && !breaksOutOfPendingTable {
             // The matcher ladder can only return true if the first content byte is one that some block construct starts with; for ordinary prose continuation lines it isn't, so we skip the whole ladder. `mightStartBlock` is a superset of every matcher's trigger byte, so a `false` here is exactly what `lineStartsNewBlock` would have returned.
