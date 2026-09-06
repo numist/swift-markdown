@@ -1199,9 +1199,32 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // PHASE 1: Walk the open-container chain, stripping each container's continuation prefix. `deepestMatched` is the deepest container whose continuation succeeded (always a container, never a leaf). `cursor` is the byte offset into the line after stripped prefixes.
         let walk = try walkOpenContainers(source: source, lineRange: lineRange, chain: &chain)
         let deepestMatched = walk.deepestMatched
-        let cursor = walk.cursor
+        var cursor = walk.cursor
         let prefixColumns = walk.prefixColumns
         let allMatched = walk.allMatched
+
+        // The block-quote continuation strip can partially consume a straddling tab: the marker takes
+        // `>` plus one optional COLUMN, and when that column lands on a tab the strip leaves `cursor` on
+        // the tab - immediately after the `>` byte (`source[cursor - 1] == ">"`), with `prefixColumns`
+        // one column past `>`. That state is unique to the block-quote straddle: `matchBlockQuoteMarker`
+        // always consumes a tab following `>` as its optional column, so a post-walk cursor sitting on a
+        // tab right after a matched `>` can only be this case; a list-item content-indent straddle
+        // (c98a837) reaches its tab across consumed whitespace, never a `>`, and is left untouched here.
+        // The mid-tab cursor is only meaningful to `handleCodeBlockContinuation`, which splits the tab to
+        // surface its leftover columns as code content - and that path runs only when the walk reached
+        // the leaf (`allMatched`). When a deeper container failed (`!allMatched`), the code block closes
+        // and the line is re-dispatched as a fresh block off a clean, column-aligned cursor; advance past
+        // the consumed tab so the dispatcher doesn't recount the whole tab from column 0 (which would
+        // misread the leftover as CODE_INDENT and open an indented code block where cmark - and the
+        // pre-strip cursor - re-dispatch a paragraph).
+        if !allMatched,
+           cursor < lineRange.upperBound,
+           cursor > lineRange.lowerBound,
+           source[cursor] == UInt8(ascii: "\t"),
+           source[cursor - 1] == UInt8(ascii: ">"),
+           prefixColumns == columnWidth(source: source, from: lineRange.lowerBound, to: cursor) + 1 {
+            cursor += 1
+        }
 
         // A paragraph continuation on this line re-indents relative to where the container-prefix walk
         // stopped. A *lazy* continuation (some prefix failed → `!allMatched`) preserves the residual
@@ -1491,8 +1514,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     range: cursor..<lineRange.upperBound,
                     firstNonSpace: firstNonSpace
                 ) {
-                    cursor = advanced
-                    prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+                    // The marker consumes `>` plus one optional following space or tab COLUMN (cmark's
+                    // `parse_block_quote_prefix`). When that optional column falls on a TAB it only
+                    // PARTIALLY consumes it: leave the tab byte at `cursor` so the leaf strip can split
+                    // it, and record the intended column in `prefixColumns` (one column past `>`),
+                    // mirroring the list-item content-indent straddle. `handleCodeBlockContinuation`
+                    // folds the shortfall into `stripFenceIndent`, surfacing the tab's leftover columns
+                    // as leading spaces (cmark's `partially_consumed_tab`; blocks.c `add_line`). This
+                    // only arises on a source-mapped fenced-code body line - every other line
+                    // pre-expands its prefix tabs to spaces (`expandPrefixTabs`), so the optional
+                    // character is a space and the leaf is the fenced code block.
+                    let markerEnd = firstNonSpace + 1
+                    if advanced == markerEnd + 1, source[markerEnd] == UInt8(ascii: "\t") {
+                        cursor = markerEnd
+                        prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: markerEnd) + 1
+                    } else {
+                        cursor = advanced
+                        prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+                    }
                     deepestMatched = node
                 } else {
                     // No `>` on this line: the block quote's paragraph continues lazily. The walk stops
