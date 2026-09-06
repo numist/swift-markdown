@@ -1,0 +1,5 @@
+Document @1:1-1:10
+└─ UnorderedList @1:1-1:10
+   └─ ListItem @1:1-1:10 checkbox: [x]
+      └─ Paragraph @1:7-1:10
+         └─ Text @1:7-1:10 "[x]"
