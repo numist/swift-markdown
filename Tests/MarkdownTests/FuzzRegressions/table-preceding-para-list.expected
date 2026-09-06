@@ -1,0 +1,10 @@
+Document @1:1-3:5
+└─ UnorderedList @1:1-3:5
+   └─ ListItem @1:1-3:5
+      ├─ Paragraph @1:3-1:4
+      │  └─ Text @1:3-1:4 "x"
+      └─ Table @2:3-3:5 alignments: |-|
+         ├─ Head
+         │  └─ Cell
+         │     └─ Text "a"
+         └─ Body
