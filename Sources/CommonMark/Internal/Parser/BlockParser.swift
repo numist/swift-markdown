@@ -832,16 +832,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Record whether the open paragraph `node` is "table-pending": its header line (currently the sole
-    /// accumulated content in `pending`) plus the just-arrived delimiter-candidate line `delimSpan[delimRange]`
-    /// would open a GFM table. Materializes the two lines (header + `\n` + delimiter) into a scratch region
-    /// of the string arena and runs `chunkOpensTable`, then truncates the scratch back off (nothing keeps a
-    /// reference to it - `parseTable` re-materializes at finalize). Reads `pending` through a borrow, so the
-    /// paragraph's zero-copy accumulated content is untouched. Sets `paragraphTablePending[node]` only when
-    /// the header could be read; a single first line is never a segment list, so the `.segments` case leaves
-    /// it unset. Called for any paragraph whose second line could be a delimiter row (`couldBeDelimiterRow`
-    /// gates the cost): the flag is consulted for a lazy continuation break-out (block-quote/list only) AND,
-    /// at the TOP level too, to stop a setext underline / let a block start close the table (PHASE 2c/2d).
+    /// Record whether the open paragraph `node` is "table-pending": its header line (the sole accumulated
+    /// content in `pending`, for the two-line case this helper serves) plus the just-arrived
+    /// delimiter-candidate line `delimSpan[delimRange]` would open a GFM table. Materializes the two lines
+    /// (header + `\n` + delimiter) into a scratch region of the string arena and runs `classifyTableOpen`,
+    /// then truncates the scratch back off (nothing keeps a reference to it - `parseTable` re-materializes at
+    /// finalize). Reads `pending` through a borrow, so the paragraph's zero-copy accumulated content is
+    /// untouched. Sets `paragraphTablePending[node]` per cmark's `CMARK_NODE__TABLE_VISITED` semantics: a
+    /// header/delimiter column mismatch marks the paragraph as never-a-table (`false`), but a candidate that
+    /// isn't a valid delimiter row leaves the flag unset so a LATER line can still open a table. A single
+    /// first line is never a segment list, so the `.segments` case leaves it unset. `couldBeDelimiterRow`
+    /// gates the cost. `detectPendingTable` routes the MULTI-line (header-preceded-by-text) case elsewhere;
+    /// this handles only the case where `pending` is a single line (the header itself).
     private mutating func recordTablePending(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf?) {
         let scratchStart = storage.strings.count
         switch pending {
@@ -865,10 +867,129 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             storage.strings.append(delimSpan[i])
         }
         let chunk = Chunk(offset: scratchStart, length: storage.strings.count - scratchStart, inSource: false)
-        paragraphTablePending[node] = chunkOpensTable(chunk: chunk)
+        switch classifyTableOpen(chunk: chunk) {
+        case .opens:
+            paragraphTablePending[node] = true
+        case .headerMismatch:
+            paragraphTablePending[node] = false
+        case .notDelimiterRow:
+            break   // leave unset: cmark's scan_table_start failed, so no header check ran and a later line can still open a table
+        }
         // Drop the scratch: it was needed only for the predicate above. Keeping it would leak dead bytes
         // into the arena for the parse's lifetime.
         storage.strings.removeLast(storage.strings.count - scratchStart)
+    }
+
+    /// Shape of an open paragraph's accumulated content, as it bears on GFM table detection when a
+    /// delimiter-candidate continuation line arrives.
+    private enum PendingTableShape {
+        /// No accumulated content.
+        case empty
+        /// A single physical line (no embedded `\n`): the header is the whole pending, the two-line case.
+        case single
+        /// Multiple physical lines held as a zero-copy source range: the header is the last line, and the
+        /// earlier lines can split off into a preceding paragraph. `lastNewline` is the source offset of the
+        /// `\n` before the header line.
+        case multiContiguous(range: Range<Int>, lastNewline: Int)
+        /// Multiple physical lines in a non-contiguous representation (materialized / segment list, e.g. a
+        /// block-quote or list continuation). Not handled by the multi-line split; left to the two-line path.
+        case multiOther
+    }
+
+    /// Classify `pending`'s content for table detection without consuming it.
+    private func pendingTableShape(_ pending: borrowing PendingLeaf?) -> PendingTableShape {
+        /// The offset of the last `\n` in the source range, or `nil` if the range is a single line.
+        func lastNewline(in r: Range<Int>) -> Int? {
+            var i = r.upperBound - 1
+            while i >= r.lowerBound {
+                if sourceBytes[i] == UInt8(ascii: "\n") { return i }
+                i -= 1
+            }
+            return nil
+        }
+        switch pending {
+        case .none:
+            return .empty
+        case .some(let leaf):
+            switch leaf.content {
+            case .lazy(let r):
+                return lastNewline(in: r).map { .multiContiguous(range: r, lastNewline: $0) } ?? .single
+            case .lazyNewline(let r):
+                return lastNewline(in: r).map { .multiContiguous(range: r, lastNewline: $0) } ?? .single
+            case .materialized(let buffer):
+                for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
+                    return .multiOther
+                }
+                return .single
+            case .segments:
+                return .multiOther
+            }
+        }
+    }
+
+    /// Decide whether the just-arrived delimiter-candidate line `delimSpan[delimRange]` opens a GFM table
+    /// with the open paragraph's LAST accumulated line as the header, and set `paragraphTablePending`
+    /// accordingly. This mirrors cmark, which opens the table while processing the delimiter line
+    /// (`try_opening_table_header`): its `row_from_string` reads the entire accumulated paragraph and treats
+    /// every earlier newline-terminated segment as a preceding-paragraph offset, so the header is always the
+    /// line immediately before the delimiter.
+    ///
+    /// When earlier paragraph lines precede that header (the source-contiguous multi-line case), they are
+    /// split off here into a fresh paragraph inserted before `node` (cmark's
+    /// `try_inserting_table_header_paragraph`), and `node`'s pending content is re-seeded to the header line
+    /// alone so the existing finalize-time two-line detection builds the table. The single-line case (the
+    /// header IS the paragraph) is delegated to `recordTablePending` unchanged, which also covers the
+    /// non-contiguous representations; a non-contiguous MULTI-line paragraph is left as a paragraph (the
+    /// existing behavior for nested / re-indented content).
+    private mutating func detectPendingTable(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        switch pendingTableShape(pending) {
+        case .empty, .multiOther:
+            return pending
+        case .single:
+            recordTablePending(node, delimSpan: delimSpan, delimRange: delimRange, pending: pending)
+            return pending
+        case .multiContiguous(let range, let lastNewline):
+            // The header is the last physical line; everything before its `\n` is the preceding paragraph.
+            let headerRange = (lastNewline + 1)..<range.upperBound
+            // Classify the header + delimiter exactly as the two-line path does: materialize both into a
+            // scratch region, run `classifyTableOpen`, then truncate it back off.
+            let scratchStart = storage.strings.count
+            for i in headerRange { storage.strings.append(sourceBytes[i]) }
+            storage.strings.append(UInt8(ascii: "\n"))
+            for i in delimRange { storage.strings.append(delimSpan[i]) }
+            let scratch = Chunk(offset: scratchStart, length: storage.strings.count - scratchStart, inSource: false)
+            let classification = classifyTableOpen(chunk: scratch)
+            storage.strings.removeLast(storage.strings.count - scratchStart)
+            switch classification {
+            case .notDelimiterRow:
+                // cmark's scan_table_start failed on this line: no header check ran, so leave the flag unset
+                // and let a later delimiter line still open a table.
+                return pending
+            case .headerMismatch:
+                // cmark marks the paragraph TABLE_VISITED here — it never becomes a table.
+                paragraphTablePending[node] = false
+                return pending
+            case .opens:
+                // Split the earlier lines off into a preceding paragraph, then re-seed `node` to the header
+                // line so the two-line finalize detection builds the table from `header` + delimiter (+ body).
+                // The preceding lines are non-blank paragraph content (a blank line would have closed the
+                // paragraph), so they never trim to empty; guarding on it only avoids dropping content in a
+                // degenerate case rather than silently losing the earlier lines.
+                let precedingChunk = Chunk(offset: range.lowerBound, length: lastNewline - range.lowerBound, inSource: true)
+                    .trimming(using: self)
+                guard !precedingChunk.isEmpty else {
+                    return pending
+                }
+                let preceding = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
+                storage.insertChildBefore(preceding, before: node)
+                storage.setSourceStart(preceding, precedingChunk.offset)
+                storage.setSourceEnd(preceding, precedingChunk.offset + precedingChunk.length)
+                pendingInlines.append((preceding, storage.intern(precedingChunk)))
+                storage.setSourceStart(node, headerRange.lowerBound)
+                paragraphTablePending[node] = true
+                return PendingLeaf(node: node, content: .lazy(range: headerRange))
+            }
+        }
     }
 
     // MARK: - Per-line dispatcher
@@ -1090,27 +1211,30 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 )
             if !canInterrupt {
                 // Continue paragraph (matched or lazy). Don't close stale containers - the paragraph absorbs without breaking the chain.
-                // This continuation is the paragraph's second physical line the first time it runs, i.e. the
-                // GFM table delimiter-row candidate. cmark opens a table only when that line is NOT indented
-                // (`try_opening_table_block`'s `!indented` gate); finalize-time table detection can't see the
-                // stripped leading whitespace, so record the indent (`leadingScan` measured it against the
-                // container prefix) for `runParagraphMatchers` to consult.
-                if storage.options.contains(.tables), paragraphSecondLineIndent[current] == nil {
-                    paragraphSecondLineIndent[current] = indent
-                    // Record whether this delimiter-row candidate is a lazy continuation: cmark won't open
-                    // a table on a lazy line, so `runParagraphMatchers` must suppress the table if so.
-                    paragraphSecondLineLazy[current] = currentLineIsLazyContinuation
-                    // Also record whether the header (line 1, held in `pending`) + this delimiter candidate
-                    // would open a table. Consulted two ways: a later lazy continuation line breaks out
-                    // (`breaksOutOfPendingTable` above, block-quote/list only), AND a later setext-underline
-                    // line must NOT convert the paragraph to a heading (PHASE 2c) — cmark opens the table
-                    // while processing the delimiter line, so a `-`/`=` on the next line can't underline it.
-                    // The setext case fires at the TOP level too (`r\n|-\n-`), so record regardless of the
-                    // container. Only a non-indented, non-lazy delimiter row can open a table; the cheap
-                    // `couldBeDelimiterRow` gate keeps ordinary prose paragraphs from materializing.
-                    if indent < 4, !currentLineIsLazyContinuation,
+                if storage.options.contains(.tables) {
+                    // The FIRST continuation line is the paragraph's second physical line — the two-line GFM
+                    // table delimiter-row candidate. cmark opens a table only when that line is NOT indented
+                    // (`try_opening_table_block`'s `!indented` gate) and is a matched (non-lazy) continuation;
+                    // finalize-time table detection can't see the stripped leading whitespace or the laziness,
+                    // so record both (`leadingScan` measured the indent against the container prefix) for
+                    // `runParagraphMatchers` to consult.
+                    if paragraphSecondLineIndent[current] == nil {
+                        paragraphSecondLineIndent[current] = indent
+                        paragraphSecondLineLazy[current] = currentLineIsLazyContinuation
+                    }
+                    // Detect whether this line opens a table with the paragraph's LAST accumulated line as the
+                    // header (cmark opens the table while processing the delimiter line, `try_opening_table_header`).
+                    // Fires on the FIRST delimiter-shaped, non-indented, non-lazy continuation line and, once it
+                    // resolves the paragraph's table fate, sets `paragraphTablePending` so it isn't re-evaluated
+                    // (cmark's `CMARK_NODE__TABLE_VISITED`); a candidate that isn't a valid delimiter row leaves the
+                    // flag unset so a later line can still open a table. The flag is consulted for a lazy /
+                    // lone-pipe break-out (`breaksOutOfPendingTable` above) AND to stop a setext underline / let a
+                    // block start close the table (PHASE 2c/2d). When earlier lines precede the header, the split
+                    // off happens here. `couldBeDelimiterRow` keeps ordinary prose paragraphs from materializing.
+                    if paragraphTablePending[current] == nil,
+                       indent < 4, !currentLineIsLazyContinuation,
                        Self.couldBeDelimiterRow(span: source, range: firstNonSpace..<lineRange.upperBound) {
-                        recordTablePending(current, delimSpan: source, delimRange: firstNonSpace..<lineRange.upperBound, pending: pending)
+                        pending = detectPendingTable(current, delimSpan: source, delimRange: firstNonSpace..<lineRange.upperBound, pending: pending)
                     }
                 }
                 pending = appendNewline(to: current, pending: pending)

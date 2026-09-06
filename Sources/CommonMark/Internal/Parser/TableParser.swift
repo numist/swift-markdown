@@ -104,7 +104,7 @@ extension BlockParser {
     /// as ranges into `storage.strings`) would open a GFM table, else `nil`. This is cmark's
     /// `try_opening_table_block` gate: at least two lines, a valid delimiter second line, and a header (first)
     /// line whose cell count equals the delimiter's column count. Shared by `parseTable` (which then builds
-    /// the table from the returned alignments) and `chunkOpensTable`.
+    /// the table from the returned alignments) and `classifyTableOpen`.
     private func tableOpenAlignments(lines: [Range<Int>]) -> [MarkdownNode.TableAlignment]? {
         if lines.count < 2 {
             return nil
@@ -119,15 +119,37 @@ extension BlockParser {
         return alignments
     }
 
-    /// Whether a materialized `chunk` (an `inSource == false` region of `storage.strings` holding a
-    /// paragraph's accumulated header line + its just-arrived delimiter-candidate second line, separated by
-    /// `\n`) would open a GFM table. Used by the block parser during parsing to mark a paragraph
+    /// The outcome of testing whether a header line + a just-arrived delimiter-candidate line open a GFM
+    /// table, distinguishing the two failure modes cmark treats differently (see `classifyTableOpen`).
+    internal enum TableOpenClassification {
+        /// The candidate line is a valid delimiter row and the header's cell count matches — a table opens.
+        case opens
+        /// The candidate line is a valid delimiter row but the header's cell count differs. cmark marks the
+        /// paragraph `TABLE_VISITED` here, so it never becomes a table even if a later line would match.
+        case headerMismatch
+        /// The candidate line is not a valid delimiter row. cmark's `scan_table_start` fails, so it runs no
+        /// header check and sets no flag — a LATER line can still open a table.
+        case notDelimiterRow
+    }
+
+    /// Classify a materialized `chunk` (an `inSource == false` region of `storage.strings` holding a header
+    /// line + its just-arrived delimiter-candidate line, separated by `\n`) against cmark's
+    /// `try_opening_table_header`. Used by the block parser during parsing to mark a paragraph
     /// "table-pending", matching cmark, which opens the table while processing the delimiter line
     /// (`try_opening_table_block`) and therefore has a TABLE, not a paragraph, as the open block for the
     /// following line: a later lazy continuation breaks out, a setext underline is suppressed, and a block
-    /// start closes the table rather than being absorbed as a body row.
-    internal mutating func chunkOpensTable(chunk: Chunk) -> Bool {
-        tableOpenAlignments(lines: splitLines(chunk: chunk)) != nil
+    /// start closes the table rather than being absorbed as a body row. The three-way result mirrors cmark's
+    /// `CMARK_NODE__TABLE_VISITED` semantics: a column mismatch poisons the paragraph, but a candidate that
+    /// isn't a delimiter row at all leaves it open to a later delimiter.
+    internal mutating func classifyTableOpen(chunk: Chunk) -> TableOpenClassification {
+        let lines = splitLines(chunk: chunk)
+        if lines.count < 2 {
+            return .notDelimiterRow
+        }
+        guard let alignments = parseDelimRow(line: lines[1]), !alignments.isEmpty else {
+            return .notDelimiterRow
+        }
+        return splitCells(line: lines[0]).cells.count == alignments.count ? .opens : .headerMismatch
     }
 
     /// Whether `span[range]` consists solely of GFM delimiter-row bytes — `-`, `:`, `|`, and delimiter-marker
