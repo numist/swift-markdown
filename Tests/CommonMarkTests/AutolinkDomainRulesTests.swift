@@ -233,4 +233,68 @@ struct AutolinkDomainRulesTests {
         #expect(ns.map(\.text) == [nil, nil, nil, "a@b.c"])
         #expect(ns.compactMap(\.url) == ["mailto:a@b.c"])
     }
+
+    // MARK: - Divergence 5: an email domain's LAST label may contain an underscore
+
+    // cmark's email autolink (`postprocess_text`, `extensions/autolink.c`) does NOT apply the URL
+    // `check_domain` underscore restriction: its forward domain scan treats `_` exactly like `-`
+    // (`c != '-' && c != '_'` never breaks), and it never calls `check_domain`. So `_` is accepted
+    // anywhere in the domain, including the last label - the only gates are the letter-or-dot
+    // pre-trim check and the trailing-alphanumeric check. The `://`-scheme form (Divergence 1's
+    // `schemeURLDomainAccepted`) keeps the underscore-in-last-two-labels rejection; email must not.
+
+    @Test("email whose last domain label contains an underscore autolinks")
+    func emailLastLabelUnderscoreAutolinks() throws {
+        // `a@b.c_d` - last label `c_d` has an `_`; it ends in the letter `d`, so cmark links it.
+        let ns = try nodes(in: "a@b.c_d", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "a@b.c_d"])
+        #expect(ns.compactMap(\.url) == ["mailto:a@b.c_d"])
+    }
+
+    @Test("email with an empty first label and an underscore last label autolinks")
+    func emailEmptyFirstLabelUnderscoreLastAutolinks() throws {
+        // `a@.b_o` - empty first label (leading `.`), last label `b_o` has an `_` and ends in `o`.
+        let ns = try nodes(in: "a@.b_o", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "a@.b_o"])
+        #expect(ns.compactMap(\.url) == ["mailto:a@.b_o"])
+    }
+
+    @Test("email with a hyphen local part and an underscore last label autolinks")
+    func emailHyphenLocalUnderscoreLastAutolinks() throws {
+        // `-@.b_o` - local part is a lone `-` (a valid GFM local-part char), domain `.b_o`.
+        let ns = try nodes(in: "-@.b_o", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "-@.b_o"])
+        #expect(ns.compactMap(\.url) == ["mailto:-@.b_o"])
+    }
+
+    @Test("guard: email with an underscore in a non-last label autolinks")
+    func emailNonLastLabelUnderscoreAutolinks() throws {
+        // `a@b_c.d` - `_` in the first label, proper last label `d`; linked before and after this fix.
+        let ns = try nodes(in: "a@b_c.d", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "a@b_c.d"])
+        #expect(ns.compactMap(\.url) == ["mailto:a@b_c.d"])
+    }
+
+    @Test("guard: email with a hyphen local part and a plain domain autolinks")
+    func emailHyphenLocalPlainDomainAutolinks() throws {
+        let ns = try nodes(in: "-@b.c", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "-@b.c"])
+        #expect(ns.compactMap(\.url) == ["mailto:-@b.c"])
+    }
+
+    @Test("guard: the scheme-URL underscore-in-last-two-labels rejection is unchanged")
+    func schemeURLUnderscoreLastTwoLabelsStillRejected() throws {
+        // `http://a_b.c_d` - both of the domain's last two labels (`a_b`, `c_d`) contain `_`, so
+        // cmark's `check_domain` rejects the whole URL. Removing the EMAIL last-label rule must not
+        // touch this: the scheme URL stays plain text.
+        let ns = try nodes(in: "http://a_b.c_d", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "http://a_b.c_d"])
+        #expect(ns.compactMap(\.url) == [])
+    }
 }

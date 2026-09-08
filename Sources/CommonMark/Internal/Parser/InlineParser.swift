@@ -2470,20 +2470,12 @@ extension BlockParser {
         if !lastIsAlnum {
             return nil
         }
-        // GFM rule: the last domain label must not contain `_` (#631 case 4). Walk back from `trimmedEnd` to find the start of the last label.
-        var labelScan = trimmedEnd
-        while labelScan > domainStart {
-            let prev = content[labelScan - 1]
-            if prev == UInt8(ascii: ".") {
-                break
-            }
-            labelScan -= 1
-        }
-        for k in labelScan..<trimmedEnd {
-            if content[k] == UInt8(ascii: "_") {
-                return nil
-            }
-        }
+        // why: unlike the `://`-scheme URL form (`schemeURLDomainAccepted`, cmark's `check_domain`), the
+        // email path does NOT reject an underscore in the domain's last (or any) label. cmark's
+        // `postprocess_text` (`extensions/autolink.c`) accepts `_` anywhere in the domain - its forward scan
+        // treats `_` like `-` (`c != '-' && c != '_'` never breaks) and it never calls `check_domain`. So
+        // `a@b.c_d`, `a@.b_o`, and `-@.b_o` all link, gated only by the letter-or-dot pre-trim check and the
+        // trailing-alnum check above.
         return GFMAutolinkMatch(urlStart: localStart, urlEnd: trimmedEnd, form: .email)
     }
 
