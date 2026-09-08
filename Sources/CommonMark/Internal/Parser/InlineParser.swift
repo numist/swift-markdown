@@ -2364,19 +2364,21 @@ extension BlockParser {
         )
     }
 
-    /// Find the start position of `http`, `https`, or `ftp` ending just before `colon`. Returns the scheme's first-byte offset, or nil.
+    /// Find the start position of `http`, `https`, or `ftp` (matched case-insensitively, per cmark's
+    /// `strncasecmp` in `sd_autolink_issafe`) ending just before `colon`. Returns the scheme's first-byte
+    /// offset, or nil.
     private func matchSchemeBackward(colon: Int, content: borrowing ContentSpan) -> Int? {
         let chunkStart = content.startOffset
         if colon - 5 >= chunkStart,
-           bytesEqual(at: colon - 5, target: "https", content: content) {
+           bytesEqual(at: colon - 5, target: "https", content: content, ignoringASCIICase: true) {
             return colon - 5
         }
         if colon - 4 >= chunkStart,
-           bytesEqual(at: colon - 4, target: "http", content: content) {
+           bytesEqual(at: colon - 4, target: "http", content: content, ignoringASCIICase: true) {
             return colon - 4
         }
         if colon - 3 >= chunkStart,
-           bytesEqual(at: colon - 3, target: "ftp", content: content) {
+           bytesEqual(at: colon - 3, target: "ftp", content: content, ignoringASCIICase: true) {
             return colon - 3
         }
         return nil
@@ -2784,11 +2786,17 @@ extension BlockParser {
     }
 
     /// Compare bytes at `start..(start+target.utf8CodeUnitCount)` against the static-string target.
-    private func bytesEqual(at start: Int, target: StaticString, content: borrowing ContentSpan) -> Bool {
+    /// `ignoringASCIICase` folds ASCII case on both sides (`| 0x20`) so a comparison mirrors cmark's
+    /// `strncasecmp` — used for the `://`-scheme literals, which cmark validates case-insensitively
+    /// (`sd_autolink_issafe`, `extensions/autolink.c`). The `www.` form stays exact (`memcmp` in cmark's
+    /// `www_match`). Case-folding never touches the source bytes: only this comparison folds, so the
+    /// matched destination/text keep the source case.
+    private func bytesEqual(at start: Int, target: StaticString, content: borrowing ContentSpan, ignoringASCIICase: Bool = false) -> Bool {
         let len = target.utf8CodeUnitCount
         let ptr = target.utf8Start
+        let mask: UInt8 = ignoringASCIICase ? 0x20 : 0
         for k in 0..<len {
-            if content[start + k] != ptr[k] {
+            if (content[start + k] | mask) != (ptr[k] | mask) {
                 return false
             }
         }
