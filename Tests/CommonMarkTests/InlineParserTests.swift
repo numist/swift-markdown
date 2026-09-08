@@ -1752,12 +1752,14 @@ struct GFMAutolinkTests {
         }
     }
 
-    @Test("URL must contain a dot in the host")
-    func mustContainDot() throws {
+    @Test("scheme URL host needs no dot (cmark's url_match)")
+    func schemeHostNeedsNoDot() throws {
+        // cmark's `url_match` accepts a dotless scheme-URL host (`check_domain(..., allow_short: 1)`), so
+        // `http://localhost` autolinks - unlike the `www.` form, which requires a dot in the host.
         let source = "look at http://localhost"
         try MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         let info = Self.firstLink(doc)
-        #expect(info.url == nil)
+        #expect(info.url == "http://localhost")
         }
     }
 

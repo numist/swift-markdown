@@ -2345,7 +2345,7 @@ extension BlockParser {
         if trimmedEnd <= colon + 3 {
             return nil
         }
-        if !chunkContainsDot(start: colon + 3, end: trimmedEnd, content: content) {
+        if !schemeURLDomainAccepted(afterSlashes: colon + 3, end: end, content: content) {
             return nil
         }
         return GFMAutolinkMatch(
@@ -2425,16 +2425,21 @@ extension BlockParser {
         // validity check. So a leading `<` (that already failed as an angle autolink / inline HTML) doesn't
         // block the email - `<o@.e` -> Text "<" + Link(mailto:o@.e). Applying a preceding-char restriction
         // here would reject those, so the email form has none.
-        // Domain: 1+ labels separated by `.`.
+        // Domain: cmark's `postprocess_text` requires the domain's dot count `np >= 1`, but a dot counts
+        // toward `np` only when it is immediately followed by an alphanumeric. A trailing dot yields an
+        // empty last label and does not count, so `o@b.` is not a valid domain (whereas `o@b.c` and the
+        // empty-FIRST-label `o@.e` are - their dot is followed by an alphanumeric).
         var i = at + 1
         let domainStart = i
-        var hasDot = false
+        var hasDotFollowedByAlnum = false
         while i < end {
             let b = content[i]
             if b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-") || b == UInt8(ascii: "_") {
                 i += 1
             } else if b == UInt8(ascii: ".") {
-                hasDot = true
+                if i + 1 < end, content[i + 1].isASCIILetter || content[i + 1].isASCIIDigit {
+                    hasDotFollowedByAlnum = true
+                }
                 i += 1
             } else {
                 break
@@ -2450,7 +2455,7 @@ extension BlockParser {
             return nil
         }
         let trimmedEnd = trimTrailingPunctuation(urlStart: localStart, urlEnd: i, content: content)
-        if !hasDot || domainStart == i || trimmedEnd <= at + 1 {
+        if !hasDotFollowedByAlnum || domainStart == i || trimmedEnd <= at + 1 {
             return nil
         }
         let last = content[trimmedEnd - 1]
@@ -2642,15 +2647,59 @@ extension BlockParser {
         return i
     }
 
-    private func chunkContainsDot(start: Int, end: Int, content: borrowing ContentSpan) -> Bool {
-        var i = start
-        while i < end {
-            if content[i] == UInt8(ascii: ".") {
-                return true
+    /// cmark-gfm's `://`-scheme domain acceptance (`sd_autolink_issafe` + `check_domain(..., allow_short: 1)`,
+    /// `extensions/autolink.c`). Unlike the `www.` / email forms, a scheme URL does NOT require a dot: any
+    /// non-empty domain whose first character is a valid host char is accepted, EXCEPT one bearing an
+    /// underscore in either of its last two `.`-separated labels (a host-name restriction - `www.xxx.yyy._zzz`
+    /// is not a host - waived only once the domain has more than ten labels, to bound cost). `afterSlashes` is
+    /// the first byte after `://`; `end` is the inline-content boundary (cmark scans `check_domain` to the
+    /// chunk end, not to the trimmed URL).
+    private func schemeURLDomainAccepted(afterSlashes: Int, end: Int, content: borrowing ContentSpan) -> Bool {
+        // `sd_autolink_issafe`: the char immediately after `://` must be a valid host char.
+        if !isValidGFMHostByte(content[afterSlashes]) {
+            return false
+        }
+        // `check_domain`: reject an underscore in either of the last two labels. The scan starts at the second
+        // domain char and never examines the final content byte (`i < size - 1`), so a trailing `_` is left to
+        // the trailing-punctuation trim instead of failing the whole domain.
+        let size = end - afterSlashes
+        var dotCount = 0
+        var underscoresInPrevLabel = 0
+        var underscoresInLastLabel = 0
+        var i = 1
+        while i < size - 1 {
+            var b = content[afterSlashes + i]
+            if b == UInt8(ascii: "\\"), i < size - 2 {
+                i += 1
+                b = content[afterSlashes + i]
+            }
+            if b == UInt8(ascii: "_") {
+                underscoresInLastLabel += 1
+            } else if b == UInt8(ascii: ".") {
+                underscoresInPrevLabel = underscoresInLastLabel
+                underscoresInLastLabel = 0
+                dotCount += 1
+            } else if !isValidGFMHostByte(b) && b != UInt8(ascii: "-") {
+                break
             }
             i += 1
         }
-        return false
+        if (underscoresInPrevLabel > 0 || underscoresInLastLabel > 0) && dotCount <= 10 {
+            return false
+        }
+        return true
+    }
+
+    /// Approximates cmark-gfm's `is_valid_hostchar` (`extensions/autolink.c`) for a single byte: a host char
+    /// is neither whitespace nor punctuation (`cmark_utf8proc_is_space` / `cmark_utf8proc_is_punctuation`,
+    /// `src/utf8.c`). For ASCII, `is_punctuation` routes through cmark's ctype table, so `isASCIIPunct` mirrors
+    /// it exactly; `isASCIISpace` mirrors `is_space` for every byte the harness admits (the two differ only on
+    /// VT (0x0B), which the harness filters and which `scanGFMURLBody` also treats as a boundary). The
+    /// predicate thus admits ASCII alphanumerics - and, matching cmark, non-whitespace control bytes; a
+    /// non-ASCII byte (part of a multibyte UTF-8 codepoint) is treated as valid, mirroring cmark iterating the
+    /// whole codepoint.
+    private func isValidGFMHostByte(_ b: UInt8) -> Bool {
+        !b.isASCIISpace && !b.isASCIIPunct
     }
 
     /// Allowlist of characters that may directly precede a GFM `www.` or `://`-scheme autolink.

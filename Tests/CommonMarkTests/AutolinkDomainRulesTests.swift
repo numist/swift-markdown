@@ -1,0 +1,143 @@
+/*
+ This source file is part of the Swift.org open source project
+
+ Copyright (c) 2026 Apple Inc. and the Swift project authors
+ Licensed under Apache License v2.0 with Runtime Library Exception
+
+ See https://swift.org/LICENSE.txt for license information
+ See https://swift.org/CONTRIBUTORS.txt for Swift project authors
+*/
+
+import Testing
+@testable import CommonMark
+
+// DFS-collect each node's kind, text literal, and (for links) destination URL. File-scope +
+// `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (see
+// AutolinkEmailPrecedingCharTests.dfsAutolinkNodes).
+private func dfsAutolinkNodes(
+    _ node: borrowing MarkdownNode,
+    into out: inout [(kind: MarkdownNode.Kind, text: String?, url: String?)]
+) {
+    out.append((node.kind, node.literal(), node.url()))
+    node.children.forEach { child in
+        dfsAutolinkNodes(child, into: &out)
+    }
+}
+
+/// GFM autolink domain-acceptance rules that differ between the `://`-scheme URL form and the email form.
+///
+/// cmark-gfm's `://`-scheme autolink (`url_match`, `extensions/autolink.c`) accepts any non-empty domain
+/// whose first character is a valid host character (non-space, non-punctuation) - it does NOT require a
+/// dot (`check_domain` is called with `allow_short = 1`). Its email autolink (`postprocess_text`), by
+/// contrast, requires the domain to contain a dot that is immediately followed by an alphanumeric (its
+/// `np` counter): a trailing dot yields an empty last label and does not count, so `o@b.` is not linked.
+@Suite("GFM autolink domain rules")
+struct AutolinkDomainRulesTests {
+
+    /// The differential-fuzzer configuration: GFM autolink on, cmark bug-compatibility on.
+    private static let flagOn: MarkdownDocument.ParseOptions = [.gfmAutolink, .cmarkBugCompatibility]
+
+    /// The shipped configuration: GFM autolink on, bug-compatibility deliberately off.
+    private static let flagOff: MarkdownDocument.ParseOptions = [.gfmAutolink]
+
+    private func nodes(
+        in src: String, options: MarkdownDocument.ParseOptions
+    ) throws -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
+        try MarkdownDocument.withParsedDocument(src, options: options) {
+            doc -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] in
+            var out: [(kind: MarkdownNode.Kind, text: String?, url: String?)] = []
+            dfsAutolinkNodes(doc.root, into: &out)
+            return out
+        }
+    }
+
+    // MARK: - Divergence 1: a `://`-scheme URL needs no dot in the domain
+
+    @Test("scheme URL with a dotless domain autolinks (flag-OFF)")
+    func schemeURLNoDotAutolinksFlagOff() throws {
+        // `http://e` - `url_match` calls `check_domain(..., allow_short = 1)`, which accepts a domain with
+        // no dot. The single valid host char `e` after `://` is enough.
+        let ns = try nodes(in: "http://e", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "http://e"])
+        #expect(ns.compactMap(\.url) == ["http://e"])
+    }
+
+    @Test("scheme URL with a dotless domain keeps Quirk M's empty leading sibling (flag-ON)")
+    func schemeURLNoDotAutolinksFlagOn() throws {
+        // Same match; flag-ON reproduces cmark's empty `before` node left by `cmark_node_unput` rewinding
+        // the scheme letters out of the (scheme-only) preceding text node.
+        let ns = try nodes(in: "http://e", options: Self.flagOn)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "", nil, "http://e"])
+        #expect(ns.compactMap(\.url) == ["http://e"])
+    }
+
+    @Test("guard: scheme URL with a dot still autolinks")
+    func schemeURLWithDotAutolinks() throws {
+        let ns = try nodes(in: "http://x.io", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "http://x.io"])
+        #expect(ns.compactMap(\.url) == ["http://x.io"])
+    }
+
+    @Test("guard: scheme with nothing after `://` stays plain text")
+    func schemeURLEmptyDomainUnchanged() throws {
+        let ns = try nodes(in: "http://", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "http://"])
+        #expect(ns.compactMap(\.url) == [])
+    }
+
+    // MARK: - Divergence 1 faithfulness: relaxing the dot must not accept a punctuation-first domain
+
+    @Test("guard: scheme URL whose domain starts with punctuation does not autolink")
+    func schemeURLPunctuationFirstCharNoAutolink() throws {
+        // `http://-x` - cmark's `sd_autolink_issafe` runs `is_valid_hostchar` on the first char after
+        // `://`; `-` is punctuation, so the match is rejected. Removing only the dot requirement (without
+        // this host-char gate) would wrongly link it.
+        let ns = try nodes(in: "http://-x", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "http://-x"])
+        #expect(ns.compactMap(\.url) == [])
+    }
+
+    @Test("guard: scheme URL with a trailing underscore links the trimmed host")
+    func schemeURLTrailingUnderscoreTrims() throws {
+        // `http://a_` - the first char `a` is a valid host char (no dot required), and the trailing `_`
+        // is peeled by the autolink trim rules, leaving `http://a`.
+        let ns = try nodes(in: "http://a_", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "http://a", "_"])
+        #expect(ns.compactMap(\.url) == ["http://a"])
+    }
+
+    // MARK: - Divergence 2: an email domain's last label must be non-empty (no trailing dot)
+
+    @Test("email with a trailing-dot domain does not autolink")
+    func emailTrailingDotNoAutolink() throws {
+        // `o@b.` - the domain `b.` has an empty last label. cmark's `postprocess_text` only counts a dot
+        // toward its required-dot (`np`) when the dot is immediately followed by an alphanumeric; a
+        // trailing dot does not, so `np == 0` and the match is rejected.
+        let ns = try nodes(in: "o@b.", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "o@b."])
+        #expect(ns.compactMap(\.url) == [])
+    }
+
+    @Test("guard: email with a non-empty last label autolinks")
+    func emailWithLastLabelAutolinks() throws {
+        let ns = try nodes(in: "o@b.c", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "o@b.c"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@b.c"])
+    }
+
+    @Test("guard: email with an underscore label plus a proper last label autolinks")
+    func emailUnderscoreLabelAutolinks() throws {
+        let ns = try nodes(in: "o@b_c.d", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "o@b_c.d"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@b_c.d"])
+    }
+}
