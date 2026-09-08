@@ -21,9 +21,13 @@ struct MarkupParser {
 
     static func parseString(_ string: String, source: URL?, options: ParseOptions) -> Document {
         // Mirror the option set the old C path always used: tables + strikethrough + tasklist
-        // + GFM autolink extensions and table spans, smart punctuation unless disabled, and source
-        // positions always. (Footnotes and inline attributes are still not enabled here.)
-        var cmOptions: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .gfmAutolink]
+        // extensions and table spans, smart punctuation unless disabled, and source positions
+        // always. GFM autolink is enabled only under the `.gfmAutolink` SPI option (fuzzer-driven;
+        // the shipped default surface is unchanged). (Footnotes and inline attributes are still not enabled here.)
+        var cmOptions: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans]
+        if options.contains(.gfmAutolink) {
+            cmOptions.insert(.gfmAutolink)
+        }
         if !options.contains(.disableSmartOpts) {
             cmOptions.insert(.smart)
         }

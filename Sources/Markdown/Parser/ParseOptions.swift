@@ -33,5 +33,8 @@ public struct ParseOptions: OptionSet, Sendable {
 
     /// Replicate cmark-gfm's source-position bugs bit-for-bit (for differential qualification). Default off; the shipped parser is spec-correct.
     @_spi(CmarkBugCompatibility) public static let cmarkBugCompatibility = ParseOptions(rawValue: 1 << 5)
+
+    /// Enable GFM extended autolinks in the comparison config (for differential qualification). Default off; SPI-only so the shipped parser's default surface is unchanged. Fuzzer-driven via the option byte.
+    @_spi(Autolinking) public static let gfmAutolink = ParseOptions(rawValue: 1 << 6)
 }
 

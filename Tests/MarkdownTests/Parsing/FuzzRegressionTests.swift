@@ -45,11 +45,12 @@ struct FuzzRegressionTests {
     }()
 
     /// Split a raw artifact exactly as `DiffSupport.splitInput`: the last byte selects parse options
-    /// (masked to the five known bits), the rest is the UTF-8 document (invalid sequences → U+FFFD).
+    /// (mask `0b1011111`: bits 0-4 plus bit 6 = `gfmAutolink`; bit 5 = `cmarkBugCompatibility` is
+    /// inserted by `surface()`, not fuzzed), the rest is the UTF-8 document (invalid sequences → U+FFFD).
     static func splitInput(_ bytes: [UInt8]) -> (markdown: String, options: ParseOptions)? {
         guard let optionBits = bytes.last else { return nil }
         let markdown = String(decoding: bytes.dropLast(), as: UTF8.self)
-        return (markdown, ParseOptions(rawValue: UInt(optionBits & 0b11111)))
+        return (markdown, ParseOptions(rawValue: UInt(optionBits & 0b1011111)))
     }
 
     /// The rewrite's comparison surface, matching `DiffSupport.newSurface`.
