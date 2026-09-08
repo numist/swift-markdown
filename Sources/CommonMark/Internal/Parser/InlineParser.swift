@@ -431,17 +431,27 @@ extension BlockParser {
                     end: endOffset,
                     content: content
                    ) {
+                    let emptyBefore = pendingTextStart == auto.urlStart
                     flushPendingText(
                         start: pendingTextStart,
                         end: auto.urlStart,
                         content: content,
                         into: parent
                     )
+                    // why: cmark-gfm's autolink extension splits the text flow into `[before, link, after]` and leaves an EMPTY text node where the rewrite emits none. Flag-ON (`.cmarkBugCompatibility`) reproduce those empties; flag-OFF the tree stays clean (spec-correct deliverable). An EMAIL match (`postprocess_text`, `extensions/autolink.c`) always bounds the link with a `before` and `after` node, keeping each when empty; a `://`-scheme URL (`url_match` + `cmark_node_unput`) leaves an empty `before` only when the scheme-only preceding text node is fully rewound, and never an `after`; a `www.` match rewinds nothing and its trigger fires before any text is emitted, so it gets neither. `consolidateTextNodes` later folds an empty node into an adjacent real text run (mirroring cmark's `cmark_consolidate_text_nodes`), leaving it standalone only where cmark does.
+                    if storage.options.contains(.cmarkBugCompatibility),
+                       emptyBefore, auto.form != .www {
+                        emitEmptyText(at: auto.urlStart, content: content, into: parent)
+                    }
                     emitGFMAutolink(
                         auto: auto,
                         content: content,
                         into: parent
                     )
+                    if storage.options.contains(.cmarkBugCompatibility),
+                       auto.form == .email {
+                        emitEmptyText(at: auto.urlEnd, content: content, into: parent)
+                    }
                     cursor = auto.urlEnd
                     pendingTextStart = cursor
                     continue
@@ -2440,6 +2450,17 @@ extension BlockParser {
             }
         }
         return GFMAutolinkMatch(urlStart: localStart, urlEnd: trimmedEnd, form: .email)
+    }
+
+    /// Emit a zero-length `.text` node at virtual offset `offset` as a child of `parent`.
+    ///
+    /// Used flag-ON to reproduce the empty `before`/`after` siblings cmark-gfm's autolink extension leaves around a GFM autolink. The node carries no source range (its content is empty, so `stampInline` is a no-op) and positions are not part of the differential compare surface.
+    private mutating func emitEmptyText(at offset: Int, content: borrowing ContentSpan, into parent: DocumentStorage.Index) {
+        let emptyRef = storage.intern(content.chunk(offset: offset, length: 0))
+        let textIdx = storage.appendNode(
+            NodeRecord(kind: .text, parent: parent, data: .literal(emptyRef))
+        )
+        storage.appendChild(textIdx, to: parent)
     }
 
     /// Emit a `.link` node + a single `.text` child for a GFM autolink match. `www.` and email forms get a synthetic scheme prefix (`http://` or `mailto:`) materialized into the string arena.
