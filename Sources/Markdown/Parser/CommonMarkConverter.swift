@@ -21,9 +21,9 @@ struct MarkupParser {
 
     static func parseString(_ string: String, source: URL?, options: ParseOptions) -> Document {
         // Mirror the option set the old C path always used: tables + strikethrough + tasklist
-        // extensions and table spans, smart punctuation unless disabled, and source positions
-        // always. (Footnotes and GFM autolinks were never enabled here.)
-        var cmOptions: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans]
+        // + GFM autolink extensions and table spans, smart punctuation unless disabled, and source
+        // positions always. (Footnotes and inline attributes are still not enabled here.)
+        var cmOptions: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .gfmAutolink]
         if !options.contains(.disableSmartOpts) {
             cmOptions.insert(.smart)
         }
