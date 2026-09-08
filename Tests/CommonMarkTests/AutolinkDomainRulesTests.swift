@@ -140,4 +140,46 @@ struct AutolinkDomainRulesTests {
         #expect(ns.map(\.text) == [nil, nil, nil, "o@b_c.d"])
         #expect(ns.compactMap(\.url) == ["mailto:o@b_c.d"])
     }
+
+    // MARK: - Divergence 3: an email domain's pre-trim last char must be a letter or dot (not a digit)
+
+    @Test("email whose domain ends in a digit does not autolink")
+    func emailDomainEndingInDigitNoAutolink() throws {
+        // `f@.0` - cmark's `postprocess_text` gates on the domain's last scanned char (before any
+        // trailing-punctuation trim) being `cmark_isalpha(c) || c == '.'`. A digit fails that gate, so the
+        // match is rejected. The empty first label (`.0`) is otherwise a valid domain shape.
+        let ns = try nodes(in: "f@.0", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "f@.0"])
+        #expect(ns.compactMap(\.url) == [])
+    }
+
+    @Test("guard: email with a digit-only last label does not autolink")
+    func emailDigitLastLabelNoAutolink() throws {
+        // `a@1.2` - both labels end in a digit; the final scanned char `2` is not a letter or `.`.
+        let ns = try nodes(in: "a@1.2", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@1.2"])
+        #expect(ns.compactMap(\.url) == [])
+    }
+
+    @Test("guard: email whose last label ends in a digit does not autolink")
+    func emailLastLabelTrailingDigitNoAutolink() throws {
+        // `a@b.c9` - the last label `c9` starts with a letter but ends in a digit; the final scanned char
+        // `9` fails the letter-or-dot gate.
+        let ns = try nodes(in: "a@b.c9", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@b.c9"])
+        #expect(ns.compactMap(\.url) == [])
+    }
+
+    @Test("guard: email with an interior digit but a letter-ending domain autolinks")
+    func emailInteriorDigitLetterLastAutolinks() throws {
+        // `o@b2.co` - digits are allowed inside the domain; only the final scanned char must be a letter or
+        // `.`. Here it is `o`, so the email links.
+        let ns = try nodes(in: "o@b2.co", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "o@b2.co"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@b2.co"])
+    }
 }

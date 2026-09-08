@@ -2445,13 +2445,16 @@ extension BlockParser {
                 break
             }
         }
-        // Before any trailing-punct trim, the last char of the scanned domain must be alphanumeric or `.`. This is what rejects `a.b-c_d@a.b_` - the trailing `_` is not alpha/`.`, so the whole match dies before we could trim it off.
+        // Before any trailing-punct trim, the last char of the scanned domain must be a LETTER or `.`
+        // (cmark's `postprocess_text` gate: `cmark_isalpha(c) || c == '.'`). A digit there fails, so `f@.0`
+        // / `a@b.c9` are rejected even though digits are allowed in the domain interior. This also rejects
+        // `a.b-c_d@a.b_` - the trailing `_` is neither a letter nor `.`.
         if i <= at + 1 {
             return nil
         }
         let preTrimLast = content[i - 1]
-        let preTrimAlnumOrDot = preTrimLast.isASCIILetter || preTrimLast.isASCIIDigit || preTrimLast == UInt8(ascii: ".")
-        if !preTrimAlnumOrDot {
+        let preTrimAlphaOrDot = preTrimLast.isASCIILetter || preTrimLast == UInt8(ascii: ".")
+        if !preTrimAlphaOrDot {
             return nil
         }
         let trimmedEnd = trimTrailingPunctuation(urlStart: localStart, urlEnd: i, content: content)
