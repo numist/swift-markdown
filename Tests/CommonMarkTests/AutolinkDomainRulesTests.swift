@@ -182,4 +182,55 @@ struct AutolinkDomainRulesTests {
         #expect(ns.map(\.text) == [nil, nil, nil, "o@b2.co"])
         #expect(ns.compactMap(\.url) == ["mailto:o@b2.co"])
     }
+
+    // MARK: - Divergence 4: the domain scan ends at a dot not immediately followed by an alphanumeric
+
+    @Test("email whose domain ends at a trailing dot after a digit does not autolink")
+    func emailDomainDotBoundaryDigitLastNoAutolink() throws {
+        // `a@.0.` - cmark's `postprocess_text` domain scan advances past a `.` only when the next char is an
+        // alphanumeric. The final `.` is not, so the scan stops there, leaving the domain as `.0`; its last
+        // scanned char `0` is a digit, which fails the letter-or-dot gate, so the match is rejected.
+        let ns = try nodes(in: "a@.0.", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@.0."])
+        #expect(ns.compactMap(\.url) == [])
+    }
+
+    @Test("email whose domain ends at a trailing dot after a digit label does not autolink")
+    func emailDomainDotBoundaryDigitLabelNoAutolink() throws {
+        // `a@b.c9.` - the scan stops at the trailing `.` (not followed by an alphanumeric); the domain
+        // `b.c9` ends in the digit `9`, which fails the letter-or-dot gate.
+        let ns = try nodes(in: "a@b.c9.", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@b.c9."])
+        #expect(ns.compactMap(\.url) == [])
+    }
+
+    @Test("email links only the prefix when a dot precedes a non-alphanumeric")
+    func emailDomainDotBoundaryLinksPrefix() throws {
+        // `a@x.y.-5` - the scan stops at the `.` before `-` (not an alphanumeric), so the domain is `x.y`,
+        // ending in the letter `y` (valid). The link is `mailto:a@x.y`; the remaining `.-5` is after-text.
+        let ns = try nodes(in: "a@x.y.-5", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "a@x.y", ".-5"])
+        #expect(ns.compactMap(\.url) == ["mailto:a@x.y"])
+    }
+
+    @Test("guard: multi-label email with every dot followed by a letter autolinks")
+    func emailMultiDotDomainAutolinks() throws {
+        // `a@b.c.d` - every `.` is immediately followed by an alphanumeric, so the scan consumes the whole
+        // domain; its last char `d` is a letter.
+        let ns = try nodes(in: "a@b.c.d", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "a@b.c.d"])
+        #expect(ns.compactMap(\.url) == ["mailto:a@b.c.d"])
+    }
+
+    @Test("guard: simple two-label email still autolinks")
+    func emailSimpleTwoLabelAutolinks() throws {
+        let ns = try nodes(in: "a@b.c", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "a@b.c"])
+        #expect(ns.compactMap(\.url) == ["mailto:a@b.c"])
+    }
 }

@@ -2428,7 +2428,9 @@ extension BlockParser {
         // Domain: cmark's `postprocess_text` requires the domain's dot count `np >= 1`, but a dot counts
         // toward `np` only when it is immediately followed by an alphanumeric. A trailing dot yields an
         // empty last label and does not count, so `o@b.` is not a valid domain (whereas `o@b.c` and the
-        // empty-FIRST-label `o@.e` are - their dot is followed by an alphanumeric).
+        // empty-FIRST-label `o@.e` are - their dot is followed by an alphanumeric). The scan itself also
+        // ENDS at a `.` not immediately followed by an alphanumeric (cmark breaks the domain there rather
+        // than consuming the dot): `a@x.y.-5` scans the domain as `x.y` and leaves `.-5` as after-text.
         var i = at + 1
         let domainStart = i
         var hasDotFollowedByAlnum = false
@@ -2439,8 +2441,10 @@ extension BlockParser {
             } else if b == UInt8(ascii: ".") {
                 if i + 1 < end, content[i + 1].isASCIILetter || content[i + 1].isASCIIDigit {
                     hasDotFollowedByAlnum = true
+                    i += 1
+                } else {
+                    break
                 }
-                i += 1
             } else {
                 break
             }
