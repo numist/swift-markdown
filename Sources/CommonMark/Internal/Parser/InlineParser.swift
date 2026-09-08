@@ -2295,10 +2295,15 @@ extension BlockParser {
     }
 
     /// Result of a GFM bare-URL / email match. Carries the visible text range (used for the link's child `.text` node) plus the form so the emit step knows whether to synthesize a scheme prefix.
+    ///
+    /// `emailSchemeFolded` is set only for the email form when a recognized `mailto:`/`xmpp:` scheme was
+    /// absorbed into `[urlStart, urlEnd)` (cmark's `validate_protocol`). In that case the destination is
+    /// the folded run itself - no synthetic `mailto:` prefix - so `xmpp:` keeps its own scheme.
     private struct GFMAutolinkMatch {
         var urlStart: Int
         var urlEnd: Int
         var form: GFMAutolinkForm
+        var emailSchemeFolded: Bool = false
     }
 
     /// Dispatch a GFM bare-URL autolink trial based on the trigger byte. Returns nil if no autolink starts at / contains `cursor`. The `@`-triggered email form is handled separately in `gfmEmailAutolinkPass`, not here.
@@ -2396,6 +2401,34 @@ extension BlockParser {
         return GFMAutolinkMatch(urlStart: start, urlEnd: trimmedEnd, form: .www)
     }
 
+    /// One arm of cmark-gfm's `validate_protocol` (`extensions/autolink.c`): decide whether the `:` at
+    /// `colon` completes the given lowercase scheme literal (`mailto:` / `xmpp:`, `:` included) sitting at
+    /// a boundary, so the scheme should be folded into an email autolink. Returns the scheme's byte length,
+    /// or nil.
+    ///
+    /// A scheme qualifies when its bytes lie fully within the scan window `[localBound, colon]`, match the
+    /// literal case-sensitively (cmark uses `memcmp`, so `MAILTO:` does NOT match), and either begin exactly
+    /// at `localBound` or are preceded by a non-alphanumeric byte (`amailto:` - preceded by `a` - fails).
+    private func matchEmailScheme(_ scheme: StaticString, colon: Int, localBound: Int, content: borrowing ContentSpan) -> Int? {
+        let len = scheme.utf8CodeUnitCount
+        let schemeStart = colon + 1 - len
+        if schemeStart < localBound {
+            return nil
+        }
+        let ptr = scheme.utf8Start
+        for k in 0..<len where content[schemeStart + k] != ptr[k] {
+            return nil
+        }
+        if schemeStart == localBound {
+            return len
+        }
+        let prev = content[schemeStart - 1]
+        if prev.isASCIILetter || prev.isASCIIDigit {
+            return nil
+        }
+        return len
+    }
+
     /// `@`-triggered: scans backward (bounded by `localBound`) for the email local part and forward for the domain.
     ///
     /// `localBound` is the earliest offset the backward local-part scan may reach - the content start for a
@@ -2404,18 +2437,38 @@ extension BlockParser {
     /// local-part char, the scan stops at any preceding `@` regardless, so the two agree.
     private func matchGFMEmailAutolink(at: Int, localBound: Int, end: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         var localStart = at
+        var schemeFolded = false
+        var isXmpp = false
         // Local part: cmark-gfm's `postprocess_text` backward scan (`extensions/autolink.c`) accepts a
         // NARROWER set than the CommonMark §6.4 angle-email form - only alnum + `.+-_` - and STOPS at any
         // other char (`isGFMEmailLocalChar`, not `isEmailLocalChar`). Using the broad §6.4 set here would
         // swallow chars cmark stops at (e.g. `x!@.e` -> cmark rejects; the broad set would link `mailto:x!@.e`).
+        // A `:` that completes a recognized lowercase `mailto:`/`xmpp:` scheme at a boundary is FOLDED into
+        // the link rather than stopping the scan (cmark's `validate_protocol`): the scheme becomes part of
+        // the link text and destination, and for `xmpp:` the destination keeps that scheme (see below).
         while localStart > localBound {
             let b = content[localStart - 1]
             if isGFMEmailLocalChar(b) {
                 localStart -= 1
-            } else {
-                break
+                continue
             }
+            if b == UInt8(ascii: ":") {
+                if let len = matchEmailScheme("mailto:", colon: localStart - 1, localBound: localBound, content: content) {
+                    schemeFolded = true
+                    localStart -= len
+                    continue
+                }
+                if let len = matchEmailScheme("xmpp:", colon: localStart - 1, localBound: localBound, content: content) {
+                    schemeFolded = true
+                    isXmpp = true
+                    localStart -= len
+                    continue
+                }
+            }
+            break
         }
+        // No local part AND no folded scheme (cmark's `rewind == 0`): not an email. A folded scheme moves
+        // `localStart` back even when the local part is empty, so `mailto:@a.b` is accepted here.
         if localStart == at {
             return nil
         }
@@ -2446,6 +2499,10 @@ extension BlockParser {
                 } else {
                     break
                 }
+            } else if b == UInt8(ascii: "/"), isXmpp {
+                // why: cmark's `postprocess_text` forward domain scan admits `/` only for a folded `xmpp:`
+                // (`c == '/' && is_xmpp`); for every other form a `/` ends the domain.
+                i += 1
             } else {
                 break
             }
@@ -2477,7 +2534,7 @@ extension BlockParser {
         // treats `_` like `-` (`c != '-' && c != '_'` never breaks) and it never calls `check_domain`. So
         // `a@b.c_d`, `a@.b_o`, and `-@.b_o` all link, gated only by the letter-or-dot pre-trim check and the
         // trailing-alnum check above.
-        return GFMAutolinkMatch(urlStart: localStart, urlEnd: trimmedEnd, form: .email)
+        return GFMAutolinkMatch(urlStart: localStart, urlEnd: trimmedEnd, form: .email, emailSchemeFolded: schemeFolded)
     }
 
     /// Emit a zero-length `.text` node at virtual offset `offset` as a child of `parent`.
@@ -2937,7 +2994,10 @@ extension BlockParser {
 
             // The link node and its single text child (the visible email address).
             let emailRef = subContentRef(of: ref, from: auto.urlStart, to: auto.urlEnd)
-            let urlRef = materializeMailtoURL(for: emailRef)
+            // A folded `mailto:`/`xmpp:` scheme means the destination IS the visible run (cmark suppresses
+            // the synthetic `mailto:` and keeps `xmpp:`), so reuse the source-backed ref for the URL. A
+            // plain email still gets `mailto:` synthesized into the arena.
+            let urlRef = auto.emailSchemeFolded ? emailRef : materializeMailtoURL(for: emailRef)
             let linkIdx = storage.appendNode(NodeRecord(
                 kind: .link, parent: parent, data: .link(url: urlRef, title: .empty)))
             let childIdx = storage.appendNode(NodeRecord(

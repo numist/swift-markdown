@@ -171,3 +171,144 @@ struct AutolinkEmailPostPassTests {
         #expect(ns.compactMap(\.url) == ["mailto:a@b.c", "mailto:x@y.z"])
     }
 }
+
+/// A recognized `mailto:` / `xmpp:` scheme immediately before an email is FOLDED into the autolink.
+///
+/// cmark-gfm's `postprocess_text` backward scan (`extensions/autolink.c`) calls `validate_protocol` when
+/// it meets a `:` while walking back from the `@`: if the bytes ending at that `:` are the lowercase
+/// literal `mailto:` or `xmpp:` and sit at a boundary (the start of the scan window, or preceded by a
+/// non-alphanumeric byte), the scheme is absorbed into the link. The link's destination and visible text
+/// then both become the whole `scheme:local@domain` run - the synthetic `mailto:` prefix is suppressed
+/// (`auto_mailto = false`), so `xmpp:` keeps its own scheme instead of getting the wrong `mailto:`
+/// destination. With a scheme present an EMPTY local part is allowed (the scheme itself makes the
+/// backward rewind non-zero, so `mailto:@a.b` links where a bare `@a.b` would not). `xmpp:` additionally
+/// permits `/` in the domain (`c == '/' && is_xmpp`).
+///
+/// The recognition is strict: only the lowercase literals match (`MAILTO:` does not), and the scheme
+/// must begin at a boundary (`amailto:` - preceded by an alphanumeric - does not fold). A non-recognized
+/// scheme (`foo:`) is left as ordinary before-text and only the address links.
+@Suite("GFM email autolink protocol-prefix folding (mailto:/xmpp:)")
+struct AutolinkProtocolPrefixTests {
+
+    /// The differential-fuzzer configuration: GFM autolink on, cmark bug-compatibility on.
+    private static let flagOn: MarkdownDocument.ParseOptions = [.gfmAutolink, .cmarkBugCompatibility]
+
+    /// The shipped configuration: GFM autolink on, bug-compatibility deliberately off.
+    private static let flagOff: MarkdownDocument.ParseOptions = [.gfmAutolink]
+
+    private func nodes(
+        in src: String, options: MarkdownDocument.ParseOptions
+    ) throws -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
+        try MarkdownDocument.withParsedDocument(src, options: options) {
+            doc -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] in
+            var out: [(kind: MarkdownNode.Kind, text: String?, url: String?)] = []
+            dfsAutolinkNodes(doc.root, into: &out)
+            return out
+        }
+    }
+
+    // MARK: - The scheme folds into destination AND visible text
+
+    @Test("`mailto:x@a.b`: scheme folds into dest and text; before-text empty")
+    func mailtoFoldsFlagOff() throws {
+        let ns = try nodes(in: "mailto:x@a.b", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "mailto:x@a.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:x@a.b"])
+    }
+
+    @Test("`mailto:x@a.b` flag-ON: empty before/after siblings bound the folded link")
+    func mailtoFoldsFlagOn() throws {
+        let ns = try nodes(in: "mailto:x@a.b", options: Self.flagOn)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
+        #expect(ns.map(\.text) == [nil, nil, "", nil, "mailto:x@a.b", ""])
+        #expect(ns.compactMap(\.url) == ["mailto:x@a.b"])
+    }
+
+    @Test("`xmpp:x@a.b`: scheme folds; destination keeps `xmpp:`, not `mailto:`")
+    func xmppFoldsFlagOff() throws {
+        let ns = try nodes(in: "xmpp:x@a.b", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "xmpp:x@a.b"])
+        #expect(ns.compactMap(\.url) == ["xmpp:x@a.b"])
+    }
+
+    @Test("`xmpp:x@a.b/c`: `/` is allowed in the xmpp domain")
+    func xmppSlashInDomainFlagOff() throws {
+        // `postprocess_text`'s forward domain scan admits `/` only when `is_xmpp` (from a folded `xmpp:`).
+        let ns = try nodes(in: "xmpp:x@a.b/c", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "xmpp:x@a.b/c"])
+        #expect(ns.compactMap(\.url) == ["xmpp:x@a.b/c"])
+    }
+
+    @Test("`mailto:@a.b`: a scheme lets the local part be empty")
+    func mailtoEmptyLocalFlagOff() throws {
+        // A bare `@a.b` has an empty local part and does NOT link; the folded scheme makes the backward
+        // rewind non-zero, so the email is accepted with the scheme absorbed.
+        let ns = try nodes(in: "mailto:@a.b", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "mailto:@a.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:@a.b"])
+    }
+
+    @Test("`x mailto:a@b.c`: the scheme folds; `x ` stays real before-text")
+    func schemeAfterTextFlagOff() throws {
+        let ns = try nodes(in: "x mailto:a@b.c", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "x ", nil, "mailto:a@b.c"])
+        #expect(ns.compactMap(\.url) == ["mailto:a@b.c"])
+    }
+
+    @Test("`x mailto:a@b.c` flag-ON: real before-text `x `, empty after")
+    func schemeAfterTextFlagOn() throws {
+        let ns = try nodes(in: "x mailto:a@b.c", options: Self.flagOn)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
+        #expect(ns.map(\.text) == [nil, nil, "x ", nil, "mailto:a@b.c", ""])
+        #expect(ns.compactMap(\.url) == ["mailto:a@b.c"])
+    }
+
+    @Test("`.mailto:x@a.b`: a local-part char before the scheme is absorbed too")
+    func localCharBeforeSchemeFlagOff() throws {
+        // After folding the scheme, cmark's backward scan keeps going: the leading `.` is a local-part
+        // char (`.+-_`), so it is pulled into the link. Dest and text are the whole `.mailto:x@a.b`.
+        let ns = try nodes(in: ".mailto:x@a.b", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, ".mailto:x@a.b"])
+        #expect(ns.compactMap(\.url) == [".mailto:x@a.b"])
+    }
+
+    // MARK: - Guards: schemes that must NOT fold (only the address links)
+
+    @Test("`MAILTO:x@a.b`: uppercase is not recognized (case-sensitive)")
+    func uppercaseNotFoldedFlagOff() throws {
+        let ns = try nodes(in: "MAILTO:x@a.b", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "MAILTO:", nil, "x@a.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:x@a.b"])
+    }
+
+    @Test("`foo:x@a.b`: an unrecognized scheme is not folded")
+    func unknownSchemeNotFoldedFlagOff() throws {
+        let ns = try nodes(in: "foo:x@a.b", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "foo:", nil, "x@a.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:x@a.b"])
+    }
+
+    @Test("`amailto:x@a.b`: a scheme preceded by an alphanumeric is not at a boundary")
+    func schemeNotAtBoundaryNotFoldedFlagOff() throws {
+        let ns = try nodes(in: "amailto:x@a.b", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "amailto:", nil, "x@a.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:x@a.b"])
+    }
+
+    @Test("`a@b.c`: a plain email with no scheme still links with a synthetic `mailto:`")
+    func plainEmailUnchangedFlagOff() throws {
+        let ns = try nodes(in: "a@b.c", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "a@b.c"])
+        #expect(ns.compactMap(\.url) == ["mailto:a@b.c"])
+    }
+}
