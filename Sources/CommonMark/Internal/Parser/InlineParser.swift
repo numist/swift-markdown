@@ -1824,6 +1824,24 @@ extension BlockParser {
         }
     }
 
+    /// Local-part char for a GFM *extended* email autolink (the `@`-triggered form).
+    ///
+    /// cmark-gfm's `postprocess_text` backward scan (`extensions/autolink.c`) accepts only alnum and
+    /// `.+-_`; it breaks at anything else. This is narrower than `isEmailLocalChar` (the CommonMark §6.4
+    /// angle-`<...>` email set, which also admits `!#$%&'*/=?^\`{|}~`). The `mailto:`/`xmpp:` protocol
+    /// prefixes cmark additionally recognizes via `validate_protocol` are a separate concern not handled here.
+    private func isGFMEmailLocalChar(_ b: UInt8) -> Bool {
+        if b.isASCIILetter || b.isASCIIDigit {
+            return true
+        }
+        switch b {
+        case UInt8(ascii: "."), UInt8(ascii: "+"), UInt8(ascii: "-"), UInt8(ascii: "_"):
+            return true
+        default:
+            return false
+        }
+    }
+
     private func validateEmailDomain(range: Range<Int>, content: borrowing ContentSpan) -> Bool {
         if range.isEmpty {
             return false
@@ -2385,9 +2403,13 @@ extension BlockParser {
     private func matchGFMEmailAutolink(at: Int, end: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         let chunkStart = content.startOffset
         var localStart = at
+        // Local part: cmark-gfm's `postprocess_text` backward scan (`extensions/autolink.c`) accepts a
+        // NARROWER set than the CommonMark §6.4 angle-email form - only alnum + `.+-_` - and STOPS at any
+        // other char (`isGFMEmailLocalChar`, not `isEmailLocalChar`). Using the broad §6.4 set here would
+        // swallow chars cmark stops at (e.g. `x!@.e` -> cmark rejects; the broad set would link `mailto:x!@.e`).
         while localStart > chunkStart {
             let b = content[localStart - 1]
-            if isEmailLocalChar(b) {
+            if isGFMEmailLocalChar(b) {
                 localStart -= 1
             } else {
                 break
@@ -2396,12 +2418,13 @@ extension BlockParser {
         if localStart == at {
             return nil
         }
-        if localStart > chunkStart {
-            let pre = content[localStart - 1]
-            if !isValidGFMPreceding(pre) {
-                return nil
-            }
-        }
+        // why: unlike the `www.`/`://`-scheme forms (`www_match`/`url_match`, which restrict the char
+        // before the match), cmark-gfm's email detection runs in `postprocess_text` (`extensions/autolink.c`)
+        // as a pass over the finished text node: it scans backward from `@` over local-part chars and simply
+        // STOPS at the first non-local char, leaving whatever precedes as ordinary "before" text with no
+        // validity check. So a leading `<` (that already failed as an angle autolink / inline HTML) doesn't
+        // block the email - `<o@.e` -> Text "<" + Link(mailto:o@.e). Applying a preceding-char restriction
+        // here would reject those, so the email form has none.
         // Domain: 1+ labels separated by `.`.
         var i = at + 1
         let domainStart = i
@@ -2630,9 +2653,12 @@ extension BlockParser {
         return false
     }
 
-    /// Allowlist of characters that may directly precede a GFM autolink trigger (`http://`, `www.`, `local@host`).
+    /// Allowlist of characters that may directly precede a GFM `www.` or `://`-scheme autolink.
     ///
-    /// Only whitespace, `*`, `_`, `~`, `(` count as valid boundaries; everything else (including `<`) disqualifies the autolink so it can't trigger inside an angle-bracket autolink that failed validation.
+    /// Only whitespace, `*`, `_`, `~`, `(` count as valid boundaries; everything else (including `<`)
+    /// disqualifies the autolink, mirroring `www_match`/`url_match` in `extensions/autolink.c`. The
+    /// `@`-triggered email form does NOT use this - cmark's `postprocess_text` imposes no such restriction
+    /// on the char before an email (see `matchGFMEmailAutolink`).
     private func isValidGFMPreceding(_ b: UInt8) -> Bool {
         switch b {
         case UInt8(ascii: " "), UInt8(ascii: "\t"), UInt8(ascii: "\n"), UInt8(ascii: "\r"),
