@@ -69,6 +69,27 @@ extension UInt8 {
         }
     }
 
+    /// Inline delimiter-run flanking whitespace: space, tab, line feed, carriage return, or form
+    /// feed (0x0C).
+    ///
+    /// This is the ASCII subset of cmark's `cmark_utf8proc_is_space` (`src/utf8.c`, "anything in the
+    /// Zs class, plus LF, CR, TAB, FF"), the predicate `scan_delims` uses to classify the characters
+    /// bordering an emphasis / strikethrough / smart-quote run. It deliberately differs from
+    /// `isASCIISpace` (cmark's HTML `spacechar = [ \t\v\f\r\n]`) by EXCLUDING vertical tab (0x0B):
+    /// cmark counts VT as a non-space for flanking, so `~<VT>~` flanks and pairs into a strikethrough
+    /// while `~<FF>~` (FF is a flanking space) leaves the tildes non-flanking and literal. Non-ASCII
+    /// whitespace (NBSP and the other Zs code points) is multi-byte and classified at the call site.
+    @inline(__always)
+    var isFlankingSpace: Bool {
+        switch self {
+        case UInt8(ascii: " "), UInt8(ascii: "\t"), UInt8(ascii: "\n"),
+             UInt8(ascii: "\r"), 0x0C:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// ASCII punctuation: the 32 ASCII punctuation marks per CommonMark §2.1.
     @inline(__always)
     var isASCIIPunct: Bool {

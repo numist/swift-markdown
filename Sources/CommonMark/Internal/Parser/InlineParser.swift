@@ -1016,9 +1016,9 @@ extension BlockParser {
         // NBSP detection: U+00A0 in UTF-8 is `0xC2 0xA0`. The single-byte checks below won't catch it, so peek outward from the (skip-adjusted) neighbour index to detect the multi-byte sequence.
         let beforeIsNBSP = beforeChar == 0xA0 && beforeIdx - 1 >= chunkStart && content[beforeIdx - 1] == 0xC2
         let afterIsNBSP = afterChar == 0xC2 && afterIdx + 1 < end && content[afterIdx + 1] == 0xA0
-        let beforeIsSpace = beforeChar.isASCIISpace || beforeIsNBSP
+        let beforeIsSpace = beforeChar.isFlankingSpace || beforeIsNBSP
         let beforeIsPunct = beforeChar.isASCIIPunct
-        let afterIsSpace = afterChar.isASCIISpace || afterIsNBSP
+        let afterIsSpace = afterChar.isFlankingSpace || afterIsNBSP
         let afterIsPunct = afterChar.isASCIIPunct
         let leftFlanking = !afterIsSpace && (!afterIsPunct || beforeIsSpace || beforeIsPunct)
         let rightFlanking = !beforeIsSpace && (!beforeIsPunct || afterIsSpace || afterIsPunct)

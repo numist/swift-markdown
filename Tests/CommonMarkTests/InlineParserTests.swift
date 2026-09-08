@@ -1561,6 +1561,89 @@ struct StrikethroughTests {
         #expect(foundNested)
         }
     }
+
+    /// The first paragraph's direct inline children as `(kind, literal)` pairs. A container inline
+    /// (e.g. `.strikethrough`) reports a `nil` literal; read its inner text via `firstStrikethrough`.
+    private static func paragraphInlines(_ doc: borrowing MarkdownDocument) -> [(kind: MarkdownNode.Kind, literal: String?)] {
+        var inlines: [(kind: MarkdownNode.Kind, literal: String?)] = []
+        var seenParagraph = false
+        doc.root.children.forEach { block in
+            guard block.kind == .paragraph, !seenParagraph else { return }
+            seenParagraph = true
+            block.children.forEach { inline in
+                inlines.append((inline.kind, inline.literal()))
+            }
+        }
+        return inlines
+    }
+
+    // cmark scans emphasis/strikethrough delimiter flanking with `cmark_utf8proc_is_space`
+    // (`src/utf8.c`), whose ASCII members are space, tab, LF, CR, and FF (0x0C) - but NOT vertical
+    // tab (0x0B). So a VT between tildes is a non-space neighbour: each `~` is left/right-flanking
+    // against it and the pair forms a strikethrough. The strikethrough's content is the VT byte
+    // itself, which the debug surface renders invisibly (appearing as an "empty" strikethrough).
+    @Test("VT between tildes pairs into a strikethrough")
+    func verticalTabPairs() throws {
+        try MarkdownDocument.withParsedDocument("~\u{0B}~", options: .strikethrough) { doc in
+            #expect(Self.strikethroughCount(doc) == 1)
+            #expect(Self.firstStrikethrough(doc) == "\u{0B}")
+        }
+    }
+
+    @Test("VT between tildes pairs with surrounding text")
+    func verticalTabPairsWithSurroundingText() throws {
+        try MarkdownDocument.withParsedDocument("a~\u{0B}~b", options: .strikethrough) { doc in
+            let inlines = Self.paragraphInlines(doc)
+            try #require(inlines.count == 3)
+            #expect(inlines[0].kind == .text)
+            #expect(inlines[0].literal == "a")
+            #expect(inlines[1].kind == .strikethrough)
+            #expect(inlines[2].kind == .text)
+            #expect(inlines[2].literal == "b")
+            #expect(Self.firstStrikethrough(doc) == "\u{0B}")
+        }
+    }
+
+    @Test("VT between double tildes pairs into a strikethrough")
+    func verticalTabDoubleTildePairs() throws {
+        try MarkdownDocument.withParsedDocument("~~\u{0B}~~", options: .strikethrough) { doc in
+            #expect(Self.strikethroughCount(doc) == 1)
+            #expect(Self.firstStrikethrough(doc) == "\u{0B}")
+        }
+    }
+
+    // Guards for the flanking whitespace boundary the VT fix must NOT disturb. FF (0x0C), space, and
+    // tab are all flanking spaces in `cmark_utf8proc_is_space`, so tildes around them are non-flanking
+    // and stay literal - no strikethrough forms.
+    @Test("FF between tildes stays literal")
+    func formFeedStaysLiteral() throws {
+        try MarkdownDocument.withParsedDocument("~\u{0C}~", options: .strikethrough) { doc in
+            #expect(Self.strikethroughCount(doc) == 0)
+        }
+    }
+
+    @Test("space between tildes stays literal")
+    func spaceStaysLiteral() throws {
+        try MarkdownDocument.withParsedDocument("~ ~", options: .strikethrough) { doc in
+            #expect(Self.strikethroughCount(doc) == 0)
+        }
+    }
+
+    @Test("tab between tildes stays literal")
+    func tabStaysLiteral() throws {
+        try MarkdownDocument.withParsedDocument("~\t~", options: .strikethrough) { doc in
+            #expect(Self.strikethroughCount(doc) == 0)
+        }
+    }
+
+    // Fixture sanity: ordinary non-space content between tildes pairs into a strikethrough as always.
+    @Test("non-space content between tildes still pairs")
+    func contentBetweenTildesPairs() throws {
+        try MarkdownDocument.withParsedDocument("~x~", options: .strikethrough) { doc in
+            #expect(Self.strikethroughCount(doc) == 1)
+            #expect(Self.firstStrikethrough(doc) == "x")
+        }
+    }
 }
 
 @Suite("GFM extensions - extended autolinks")
