@@ -215,7 +215,7 @@ internal struct ContentSpan: ~Escapable {
 
     /// Global offset of the next inline-significant byte at or after `globalCursor`, or `endOffset` if none remain. Used to skip plain-text runs in the inline dispatch loop without stepping byte by byte: a `SIMD16` scan compares 16 bytes at once against the significant set, recovering the first matching lane; a sub-16 tail is scanned scalar.
     ///
-    /// The significant set must be a superset of the bytes the dispatch switch acts on. `~` and the GFM autolink triggers (`:` `@` `w`/`W`) are included only when their option is on - when off, the switch's case for them is a no-op (the byte becomes plain text), so skipping over them is equivalent. The contiguous cluster `[ \ ] ^ _ \``` (91...96) is one range compare.
+    /// The significant set must be a superset of the bytes the dispatch switch acts on. `~` and the GFM bare-URL autolink triggers (`:` `w`/`W`) are included only when their option is on - when off, the switch's case for them is a no-op (the byte becomes plain text), so skipping over them is equivalent. `@` is NOT in the set: the GFM email autolink form is detected in a post-pass (`gfmEmailAutolinkPass`), not the forward inline dispatch, so an `@` is always plain text here. The contiguous cluster `[ \ ] ^ _ \``` (91...96) is one range compare.
     func nextSignificant(from globalCursor: Int, strikethrough: Bool, gfmAutolink: Bool, smart: Bool) -> Int {
         if isMultiSegment {
             return multiNextSignificant(from: globalCursor, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
@@ -290,7 +290,6 @@ internal struct ContentSpan: ~Escapable {
         let lt = SIMD16<UInt8>(repeating: UInt8(ascii: "<"))
         let tilde = SIMD16<UInt8>(repeating: UInt8(ascii: "~"))
         let colon = SIMD16<UInt8>(repeating: UInt8(ascii: ":"))
-        let at = SIMD16<UInt8>(repeating: UInt8(ascii: "@"))
         let wCanon = SIMD16<UInt8>(repeating: UInt8(ascii: "w"))   // 'w'|0x20 == 'W'|0x20 == 'w'
         let lowerBit = SIMD16<UInt8>(repeating: 0x20)
         // Smart-punctuation triggers: straight quotes (`'` `"`), `-` (dashes), `.` (ellipsis).
@@ -310,7 +309,7 @@ internal struct ContentSpan: ~Escapable {
                 m = m .| (v .== tilde)
             }
             if gfmAutolink {
-                m = m .| (v .== colon) .| (v .== at) .| ((v | lowerBit) .== wCanon)
+                m = m .| (v .== colon) .| ((v | lowerBit) .== wCanon)
             }
             if smart {
                 m = m .| (v .== squote) .| (v .== dquote) .| (v .== hyphen) .| (v .== period)
@@ -327,7 +326,7 @@ internal struct ContentSpan: ~Escapable {
                 || b == UInt8(ascii: "\n") || b == UInt8(ascii: "!") || b == UInt8(ascii: "&")
                 || b == UInt8(ascii: "*") || b == UInt8(ascii: "<")
                 || (strikethrough && b == UInt8(ascii: "~"))
-                || (gfmAutolink && (b == UInt8(ascii: ":") || b == UInt8(ascii: "@") || (b | 0x20) == UInt8(ascii: "w")))
+                || (gfmAutolink && (b == UInt8(ascii: ":") || (b | 0x20) == UInt8(ascii: "w")))
                 || (smart && (b == UInt8(ascii: "'") || b == UInt8(ascii: "\"") || b == UInt8(ascii: "-") || b == UInt8(ascii: ".")))
             if significant {
                 return i

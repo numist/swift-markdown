@@ -336,6 +336,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             
             // Coalesce adjacent text nodes so smart-punct / entity substitutions don't leave the content split across sibling text nodes.
             consolidateTextNodes(node)
+            // GFM email autolinks are detected here, over the finalized+consolidated inline tree, matching
+            // cmark's autolink `postprocess` (which runs after emphasis + `cmark_consolidate_text_nodes`).
+            if storage.options.contains(.gfmAutolink) {
+                gfmEmailAutolinkPass(node)
+            }
         }
 
         storage.lineCount = reader.lineNumber
@@ -435,6 +440,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 delimiters: &delimiters,
                 brackets: &brackets
             )
+        }
+        // GFM email autolinks run after consolidation, matching cmark's autolink `postprocess`. Gated on
+        // the option so it never perturbs the plain inline-only tree (which does not consolidate).
+        if storage.options.contains(.gfmAutolink) {
+            consolidateTextNodes(paragraph)
+            gfmEmailAutolinkPass(paragraph)
         }
     }
 

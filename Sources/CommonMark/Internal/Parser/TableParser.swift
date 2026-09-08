@@ -387,6 +387,11 @@ extension BlockParser {
                     }
                     // Coalesce adjacent `.text` children so bracket-literal / entity / smart-punct substitutions don't leave the cell content split across sibling text nodes. cmark runs `cmark_consolidate_text_nodes` over every node's inlines uniformly; the paragraph path does the same after its `parseInline` (see `BlockParser`), but a cell is inline-parsed here on the table path, so consolidate it here too.
                     consolidateTextNodes(cellIdx)
+                    // GFM email autolinks: detected over the consolidated cell inlines, matching cmark's
+                    // autolink `postprocess` (run tree-wide after consolidation). See `BlockParser`.
+                    if storage.options.contains(.gfmAutolink) {
+                        gfmEmailAutolinkPass(cellIdx)
+                    }
                 }
             }
         }

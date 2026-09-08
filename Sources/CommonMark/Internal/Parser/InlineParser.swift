@@ -423,7 +423,13 @@ extension BlockParser {
                 }
                 cursor += 1
                 
-            case UInt8(ascii: ":"), UInt8(ascii: "w"), UInt8(ascii: "W"), UInt8(ascii: "@"):
+            case UInt8(ascii: ":"), UInt8(ascii: "w"), UInt8(ascii: "W"):
+                // Bare-URL autolinks (`://`-scheme and `www.`) are detected here, in the forward pass.
+                // The `@`-triggered EMAIL form is NOT: cmark-gfm detects it in a post-pass over the
+                // finished text nodes, AFTER emphasis resolution and `cmark_consolidate_text_nodes`
+                // (`postprocess`, `extensions/autolink.c`). The rewrite mirrors that in
+                // `gfmEmailAutolinkPass`, run after `consolidateTextNodes`, so a flanking `_`/`*` next to
+                // an email is resolved as emphasis (or not) before the email boundaries are decided.
                 if storage.options.contains(.gfmAutolink),
                    let auto = matchGFMAutolink(
                     trigger: byte,
@@ -438,7 +444,7 @@ extension BlockParser {
                         content: content,
                         into: parent
                     )
-                    // why: cmark-gfm's autolink extension splits the text flow into `[before, link, after]` and leaves an EMPTY text node where the rewrite emits none. Flag-ON (`.cmarkBugCompatibility`) reproduce those empties; flag-OFF the tree stays clean (spec-correct deliverable). An EMAIL match (`postprocess_text`, `extensions/autolink.c`) always bounds the link with a `before` and `after` node, keeping each when empty; a `://`-scheme URL (`url_match` + `cmark_node_unput`) leaves an empty `before` only when the scheme-only preceding text node is fully rewound, and never an `after`; a `www.` match rewinds nothing and its trigger fires before any text is emitted, so it gets neither. `consolidateTextNodes` later folds an empty node into an adjacent real text run (mirroring cmark's `cmark_consolidate_text_nodes`), leaving it standalone only where cmark does.
+                    // why: cmark-gfm's autolink extension splits the text flow into `[before, link, after]` and leaves an EMPTY text node where the rewrite emits none. Flag-ON (`.cmarkBugCompatibility`) reproduce those empties; flag-OFF the tree stays clean (spec-correct deliverable). A `://`-scheme URL (`url_match` + `cmark_node_unput`) leaves an empty `before` only when the scheme-only preceding text node is fully rewound, and never an `after`; a `www.` match rewinds nothing and its trigger fires before any text is emitted, so it gets neither. (The EMAIL form's empty siblings are handled in `gfmEmailAutolinkPass`, not here.) `consolidateTextNodes` later folds an empty node into an adjacent real text run (mirroring cmark's `cmark_consolidate_text_nodes`), leaving it standalone only where cmark does.
                     if storage.options.contains(.cmarkBugCompatibility),
                        emptyBefore, auto.form != .www {
                         emitEmptyText(at: auto.urlStart, content: content, into: parent)
@@ -448,10 +454,6 @@ extension BlockParser {
                         content: content,
                         into: parent
                     )
-                    if storage.options.contains(.cmarkBugCompatibility),
-                       auto.form == .email {
-                        emitEmptyText(at: auto.urlEnd, content: content, into: parent)
-                    }
                     cursor = auto.urlEnd
                     pendingTextStart = cursor
                     continue
@@ -2299,7 +2301,7 @@ extension BlockParser {
         var form: GFMAutolinkForm
     }
 
-    /// Dispatch a GFM autolink trial based on the trigger byte. Returns nil if no autolink starts at / contains `cursor`.
+    /// Dispatch a GFM bare-URL autolink trial based on the trigger byte. Returns nil if no autolink starts at / contains `cursor`. The `@`-triggered email form is handled separately in `gfmEmailAutolinkPass`, not here.
     private func matchGFMAutolink(trigger: UInt8, cursor: Int, end: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         switch trigger {
         case UInt8(ascii: ":"):
@@ -2310,11 +2312,6 @@ extension BlockParser {
         case UInt8(ascii: "w"), UInt8(ascii: "W"):
             return matchGFMWWWAutolink(
                 start: cursor, end: end,
-                content: content
-            )
-        case UInt8(ascii: "@"):
-            return matchGFMEmailAutolink(
-                at: cursor, end: end,
                 content: content
             )
         default:
@@ -2399,15 +2396,19 @@ extension BlockParser {
         return GFMAutolinkMatch(urlStart: start, urlEnd: trimmedEnd, form: .www)
     }
 
-    /// `@`-triggered: scans backward for the email local part and forward for the domain.
-    private func matchGFMEmailAutolink(at: Int, end: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
-        let chunkStart = content.startOffset
+    /// `@`-triggered: scans backward (bounded by `localBound`) for the email local part and forward for the domain.
+    ///
+    /// `localBound` is the earliest offset the backward local-part scan may reach - the content start for a
+    /// fresh scan, or the end of the previous email when scanning a text node with several `@`s. It matches
+    /// cmark's `max_rewind` bound (`postprocess_text`, `extensions/autolink.c`): since `@` is never a
+    /// local-part char, the scan stops at any preceding `@` regardless, so the two agree.
+    private func matchGFMEmailAutolink(at: Int, localBound: Int, end: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         var localStart = at
         // Local part: cmark-gfm's `postprocess_text` backward scan (`extensions/autolink.c`) accepts a
         // NARROWER set than the CommonMark §6.4 angle-email form - only alnum + `.+-_` - and STOPS at any
         // other char (`isGFMEmailLocalChar`, not `isEmailLocalChar`). Using the broad §6.4 set here would
         // swallow chars cmark stops at (e.g. `x!@.e` -> cmark rejects; the broad set would link `mailto:x!@.e`).
-        while localStart > chunkStart {
+        while localStart > localBound {
             let b = content[localStart - 1]
             if isGFMEmailLocalChar(b) {
                 localStart -= 1
@@ -2850,5 +2851,230 @@ extension BlockParser {
         }
         storage.unlinkChild(source)
         return true
+    }
+
+    // MARK: - GFM email autolink post-pass
+
+    /// Detect GFM `@`-triggered email autolinks in a post-pass over the consolidated inline tree.
+    ///
+    /// cmark-gfm runs autolink detection in `postprocess` (`extensions/autolink.c`) AFTER emphasis
+    /// resolution and `cmark_consolidate_text_nodes`: it walks the finished tree and, for every text node
+    /// that is not inside a link, splits it into `[before, link, after]` at each email match. The rewrite
+    /// mirrors that here (run from the block/table/inline-only paths right after `consolidateTextNodes`),
+    /// so a flanking `_`/`*` next to an email is already resolved as emphasis - or left as literal text
+    /// folded into the local part - before the email boundaries are decided.
+    ///
+    /// Link subtrees are skipped (cmark's `in_link`): the link text of an existing link - including a bare
+    /// URL / email link just emitted - must not be re-scanned. Every other container (emphasis, strong,
+    /// image, …) is recursed into, matching cmark iterating the whole tree.
+    mutating func gfmEmailAutolinkPass(_ parent: DocumentStorage.Index) {
+        var child = storage[parent].firstChild
+        while let current = child {
+            // Capture the next sibling BEFORE splitting: `splitEmailsInTextNode` inserts the link/after
+            // nodes between `current` and this sibling (and may unlink `current`), and resuming here skips
+            // over everything it produced.
+            let next = storage[current].next
+            switch storage[current].kind {
+            case .text:
+                splitEmailsInTextNode(current, parent: parent)
+            case .link:
+                break
+            default:
+                gfmEmailAutolinkPass(current)
+            }
+            child = next
+        }
+    }
+
+    /// Split one text node into `[before, link, after]` at each GFM email autolink it contains.
+    ///
+    /// Reuses `matchGFMEmailAutolink` (the locked matcher) so the match/reject decisions are identical to
+    /// the former inline path; only the emission moves to insertion-in-place. The node content is
+    /// materialized into a scratch buffer ONCE and scanned left-to-right in a single pass (each backward
+    /// local-part scan is bounded by the previous match's end), so cost is O(content length) - matching
+    /// cmark's `postprocess_text`, not the quadratic re-scan its authors guard against. `before`/`after`/
+    /// link-text are carved zero-copy from the node's existing segments (`subContentRef`); only the
+    /// `mailto:` URL is materialized into the arena. Under `.cmarkBugCompatibility` an empty `before`/`after`
+    /// is kept as an empty `Text` sibling (Quirk M); flag-OFF drops it for the spec-correct clean tree.
+    private mutating func splitEmailsInTextNode(_ node: DocumentStorage.Index, parent: DocumentStorage.Index) {
+        guard case .literal(let ref) = storage[node].data else {
+            return
+        }
+        // Cheap early-out: a text node with no `@` is left exactly as it was (no allocation), matching
+        // cmark returning it untouched. This is the overwhelmingly common case.
+        if !contentRefContains(ref, byte: UInt8(ascii: "@")) {
+            return
+        }
+        let keepEmpties = storage.options.contains(.cmarkBugCompatibility)
+        var scratch = UniqueArray<UInt8>()
+        materialize(ref, into: &scratch)
+        let total = scratch.count
+        // `content` addresses the whole node content by logical offset (0-based); it borrows `scratch`
+        // only - storage mutations below don't touch it.
+        let content = ContentSpan(span: scratch.span, base: 0, inSource: false)
+
+        // `current` is the text node we are filling as the running `before`/`between` run; `segStart` is
+        // where its text begins (in logical content offsets). `cursor` is the scan position and also the
+        // floor for the next backward local-part scan (so a later `@` can't reach into a prior email).
+        var current = node
+        var segStart = 0
+        var cursor = 0
+        var didSplit = false
+        var i = 0
+        while i < total {
+            guard scratch[i] == UInt8(ascii: "@"),
+                  let auto = matchGFMEmailAutolink(at: i, localBound: cursor, end: total, content: content) else {
+                i += 1
+                continue
+            }
+            // `current` becomes the text run before this email.
+            let beforeRef = subContentRef(of: ref, from: segStart, to: auto.urlStart)
+            storage[current].data = .literal(beforeRef)
+            if positionsEnabled {
+                storage.sourceRanges[current] = .unset
+            }
+            stampFromContentRef(current, beforeRef)
+
+            // The link node and its single text child (the visible email address).
+            let emailRef = subContentRef(of: ref, from: auto.urlStart, to: auto.urlEnd)
+            let urlRef = materializeMailtoURL(for: emailRef)
+            let linkIdx = storage.appendNode(NodeRecord(
+                kind: .link, parent: parent, data: .link(url: urlRef, title: .empty)))
+            let childIdx = storage.appendNode(NodeRecord(
+                kind: .text, parent: linkIdx, data: .literal(emailRef)))
+            storage.appendChild(childIdx, to: linkIdx)
+            storage.insertChildAfter(linkIdx, after: current)
+
+            // A fresh text node spanning the remaining tail; it becomes the running run and is trimmed to
+            // the next `between` segment on a further match, or kept as the final `after` run.
+            let tailRef = subContentRef(of: ref, from: auto.urlEnd, to: total)
+            let tailIdx = storage.appendNode(NodeRecord(
+                kind: .text, parent: parent, data: .literal(tailRef)))
+            storage.insertChildAfter(tailIdx, after: linkIdx)
+            stampFromContentRef(tailIdx, tailRef)
+
+            // Flag-OFF: an empty `before` / `between` run is not a real text node, so drop it.
+            if beforeRef.totalLength == 0, !keepEmpties {
+                storage.unlinkChild(current)
+            }
+            current = tailIdx
+            segStart = auto.urlEnd
+            cursor = auto.urlEnd
+            i = auto.urlEnd
+            didSplit = true
+        }
+        // Flag-OFF: drop the final tail run if the split left it empty. Only ever a residual this pass
+        // produced (`didSplit`), never a pre-existing `@`-free node.
+        if didSplit, !keepEmpties, case .literal(let last) = storage[current].data, last.totalLength == 0 {
+            storage.unlinkChild(current)
+        }
+    }
+
+    /// `true` if any byte of `ref`'s content equals `target`. Reads the source / arena buffers directly (no copy).
+    private func contentRefContains(_ ref: ContentRef, byte target: UInt8) -> Bool {
+        for s in 0..<Int(ref.count) {
+            let seg = storage.segments[Int(ref.first) + s]
+            let base = Int(seg.offset)
+            let end = base + Int(seg.length)
+            if seg.inSource {
+                for k in base..<end where sourceBytes[k] == target { return true }
+            } else {
+                for k in base..<end where storage.strings[k] == target { return true }
+            }
+        }
+        return false
+    }
+
+    /// Copy `ref`'s content bytes (across all its segments) into `out`. Reads the source / arena buffers.
+    private func materialize(_ ref: ContentRef, into out: inout UniqueArray<UInt8>) {
+        for s in 0..<Int(ref.count) {
+            let seg = storage.segments[Int(ref.first) + s]
+            let base = Int(seg.offset)
+            let end = base + Int(seg.length)
+            if seg.inSource {
+                for k in base..<end { out.append(sourceBytes[k]) }
+            } else {
+                for k in base..<end { out.append(storage.strings[k]) }
+            }
+        }
+    }
+
+    /// Carve the logical sub-range `[lo, hi)` of `ref`'s content into a fresh `ContentRef`.
+    ///
+    /// Zero-copy: the carved segments still point into the same source / arena bytes (with `offset` and
+    /// `sourceOffset` shifted for a partial leading segment); only new `Segment` entries are appended.
+    private mutating func subContentRef(of ref: ContentRef, from lo: Int, to hi: Int) -> ContentRef {
+        if hi <= lo {
+            return .empty
+        }
+        let refFirst = Int(ref.first)
+        let refCount = Int(ref.count)
+        let newFirst = Int32(storage.segments.count)
+        var count: Int32 = 0
+        var total: Int32 = 0
+        var v = 0
+        for s in 0..<refCount {
+            // Read the source segment into a local before appending, so the read ends before the append (no
+            // aliasing of the growing pool). Original segments keep their indices; appends only grow the end.
+            let seg = storage.segments[refFirst + s]
+            let segLen = Int(seg.length)
+            let segStart = v
+            v += segLen
+            let pieceLo = max(lo, segStart)
+            let pieceHi = min(hi, v)
+            if pieceHi <= pieceLo {
+                continue
+            }
+            let localOffset = Int32(pieceLo - segStart)
+            let pieceLen = Int32(pieceHi - pieceLo)
+            storage.segments.append(Segment(
+                offset: seg.offset + localOffset,
+                length: pieceLen,
+                inSource: seg.inSource,
+                sourceOffset: seg.sourceOffset + localOffset
+            ))
+            count += 1
+            total += pieceLen
+        }
+        if count == 0 {
+            return .empty
+        }
+        return ContentRef(first: newFirst, count: count, totalLength: total)
+    }
+
+    /// Materialize `"mailto:"` + the content bytes of `emailRef` into the string arena and intern them.
+    ///
+    /// The email bytes are copied into an independent local buffer first (they may live in the arena, and
+    /// reading the arena while appending to it would alias the growing buffer), then flushed to the arena.
+    private mutating func materializeMailtoURL(for emailRef: ContentRef) -> ContentRef {
+        var buf = UniqueArray<UInt8>()
+        let prefix: StaticString = "mailto:"
+        let prefixPtr = prefix.utf8Start
+        for k in 0..<prefix.utf8CodeUnitCount {
+            buf.append(prefixPtr[k])
+        }
+        materialize(emailRef, into: &buf)
+        let offset = storage.strings.count
+        for k in 0..<buf.count {
+            storage.strings.append(buf[k])
+        }
+        return storage.intern(Chunk(offset: offset, length: buf.count, inSource: false))
+    }
+
+    /// Stamp `node`'s source range from a source-backed `ContentRef`, mirroring `stampInline`.
+    ///
+    /// Stamps only when both the first and last content bytes map to source (the carved segments are
+    /// `inSource`); an empty or arena-backed piece is left position-less, exactly as `stampInline` would.
+    private mutating func stampFromContentRef(_ node: DocumentStorage.Index, _ ref: ContentRef) {
+        guard positionsEnabled, ref.count > 0 else {
+            return
+        }
+        let firstSeg = storage.segments[Int(ref.first)]
+        let lastSeg = storage.segments[Int(ref.first) + Int(ref.count) - 1]
+        guard firstSeg.inSource, lastSeg.inSource else {
+            return
+        }
+        storage.setSourceStart(node, Int(firstSeg.sourceOffset))
+        storage.setSourceEnd(node, Int(lastSeg.sourceOffset) + Int(lastSeg.length))
     }
 }
