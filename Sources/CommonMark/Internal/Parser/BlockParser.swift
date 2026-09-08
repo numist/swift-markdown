@@ -385,7 +385,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         var delimiters = UniqueArray<DelimiterRecord>()
         var brackets = UniqueArray<BracketRecord>()
-        if !hasCR {
+        // A NUL forces the arena-copy path below (CommonMark §2.3: NUL -> U+FFFD); scanned here so a
+        // NUL-free, LF-only document stays zero-copy.
+        var hasNUL = false
+        for k in start..<count where sourceBytes[k] == 0 {
+            hasNUL = true
+            break
+        }
+        if !hasCR && !hasNUL {
             // Zero-copy: the paragraph content is a source slice; emitted text references the source in place.
             let content = ContentSpan(span: sourceBytes.extracting(start..<count), base: start, inSource: true)
             try parseInline(
@@ -396,7 +403,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 brackets: &brackets
             )
         } else {
-            // Normalize `\r\n` and lone `\r` to `\n` into the string arena, then read from an independent scratch copy (the inline parser appends to `storage.strings` as it runs).
+            // Normalize `\r\n` and lone `\r` to `\n` and each NUL to U+FFFD into the string arena, then read from an independent scratch copy (the inline parser appends to `storage.strings` as it runs).
             let arenaStart = storage.strings.count
             var j = start
             while j < count {
@@ -406,6 +413,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     if j + 1 < count, sourceBytes[j + 1] == UInt8(ascii: "\n") {
                         j += 1
                     }
+                } else if byte == 0 {
+                    storage.strings.append(0xEF)
+                    storage.strings.append(0xBF)
+                    storage.strings.append(0xBD)
                 } else {
                     storage.strings.append(byte)
                 }
@@ -760,6 +771,64 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return (prefixEnd, 0)
     }
 
+    // MARK: - NUL -> U+FFFD replacement (CommonMark §2.3)
+
+    /// `true` if `chunk`'s bytes contain a NUL (`U+0000`).
+    private func containsNUL(_ chunk: Chunk) -> Bool {
+        for i in chunk.range where readByte(at: i, in: chunk) == 0 {
+            return true
+        }
+        return false
+    }
+
+    /// `true` if any segment's bytes contain a NUL (`U+0000`).
+    private func segmentsContainNUL(_ segs: borrowing UniqueArray<Segment>) -> Bool {
+        for i in 0..<segs.count where containsNUL(segs[i].chunk) {
+            return true
+        }
+        return false
+    }
+
+    /// CommonMark §2.3: replace every NUL (`U+0000`) in `chunk` with U+FFFD (the three bytes `EF BF BD`).
+    ///
+    /// Returns `chunk` unchanged - so NUL-free content stays a zero-copy slice - when it has no NUL.
+    /// Otherwise materializes a copy into the additions arena, expanding each 1-byte NUL to the 3-byte
+    /// replacement character (exactly the arena materialization tab expansion uses for a byte that
+    /// widens; see `appendSplitTabCodeContent`), and returns a `Chunk` addressing that arena copy. cmark
+    /// does this at feed time, before parsing, so this replacement is unconditional (independent of any
+    /// parse option).
+    private mutating func replacingNUL(_ chunk: Chunk) -> Chunk {
+        guard containsNUL(chunk) else { return chunk }
+        let offset = storage.strings.count
+        for i in chunk.range {
+            let b = readByte(at: i, in: chunk)
+            if b == 0 {
+                storage.strings.append(0xEF)
+                storage.strings.append(0xBF)
+                storage.strings.append(0xBD)
+            } else {
+                storage.strings.append(b)
+            }
+        }
+        return Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
+    }
+
+    /// Replace NUL with U+FFFD in a code/HTML block body's segment list, in place.
+    ///
+    /// A body segment carrying a NUL is re-materialized into the arena via `replacingNUL`; NUL-free
+    /// segments and the interned newline separators stay zero-copy. Safe for code/HTML bodies because
+    /// they are read through `StorageView`'s buffer-aware accessors, which resolve an arena segment
+    /// correctly - unlike inline multi-segment content, which must flatten instead (see
+    /// `flattenSegments`).
+    private mutating func replacingNULInSegments(_ segs: inout UniqueArray<Segment>) {
+        for i in 0..<segs.count {
+            let chunk = segs[i].chunk
+            if containsNUL(chunk) {
+                segs[i] = Segment(replacingNUL(chunk))
+            }
+        }
+    }
+
     /// Append a single `Segment` to `node`'s pending segment list, starting one if needed; returns the updated leaf.
     ///
     /// The existing list is *moved* out of `pending` and extended in place.
@@ -1005,7 +1074,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 storage.insertChildBefore(preceding, before: node)
                 storage.setSourceStart(preceding, precedingChunk.offset)
                 storage.setSourceEnd(preceding, precedingChunk.offset + precedingChunk.length)
-                pendingInlines.append((preceding, storage.intern(precedingChunk)))
+                pendingInlines.append((preceding, storage.intern(replacingNUL(precedingChunk))))
                 storage.setSourceStart(node, headerRange.lowerBound)
                 recordSplitDelimiterLine(node, delimIndent: delimIndent)
                 paragraphTablePending[node] = true
@@ -1137,7 +1206,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 storage.setSourceStart(precedingNode, span.start)
                 storage.setSourceEnd(precedingNode, span.end)
             }
-            pendingInlines.append((precedingNode, storage.intern(preceding)))
+            // A NUL in the split-off preceding lines forces a flatten into one normalized arena chunk
+            // (U+FFFD substituted): this content bypasses `drainLeaf`, so it is normalized here at its own
+            // intern (see `ContentSpan.multiByte` for why a segment list can't carry the replacement).
+            if segmentsContainNUL(preceding) {
+                var map: [ArenaRun] = []
+                let flat = flattenSegments(preceding, map: &map)
+                pendingInlines.append((precedingNode, storage.intern(replacingNUL(flat))))
+            } else {
+                pendingInlines.append((precedingNode, storage.intern(preceding)))
+            }
         }
         if positionsEnabled, let headerSpan = segmentsSourceSpan(header) {
             storage.setSourceStart(node, headerSpan.start)
@@ -1179,7 +1257,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if !precedingChunk.isEmpty {
             let precedingNode = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
             storage.insertChildBefore(precedingNode, before: node)
-            pendingInlines.append((precedingNode, storage.intern(precedingChunk)))
+            pendingInlines.append((precedingNode, storage.intern(replacingNUL(precedingChunk))))
         }
         var header = UniqueArray<UInt8>()
         for k in (lastNewline + 1)..<buffer.count {
@@ -1961,7 +2039,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     infoChunk = Chunk(offset: start, length: end - start, inSource: true)
                 }
                 let cleanInfo = EntityParser.unescapeURLChunk(infoChunk, source: sourceBytes, into: &storage)
-                let infoRef = storage.intern(cleanInfo)
+                let infoRef = storage.intern(replacingNUL(cleanInfo))
                 let codeIdx = addChild(
                     kind: .codeBlock(MarkdownNode.CodeBlockInfo(
                         isFenced: true,
@@ -2087,24 +2165,33 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             switch consume leaf.content {
             case .segments(let segs):
+                // A NUL anywhere in the body forces a flatten into one normalized arena chunk (U+FFFD
+                // substituted): inline multi-segment content can't carry an arena content segment
+                // (`ContentSpan.multiByte` resolves only source segments + the interned newline), so the
+                // segment representation can't hold the replacement. NUL-free bodies stay zero-copy segments.
+                if segmentsContainNUL(segs) {
+                    var map: [ArenaRun] = []
+                    let flat = flattenSegments(segs, map: &map)
+                    return LeafDrainResult(content: .chunk(replacingNUL(flat)), pending: nil)
+                }
                 return LeafDrainResult(content: .segments(segs), pending: nil)
             case .lazy(let range):
                 if range.isEmpty {
                     return LeafDrainResult(content: .chunk(.empty), pending: nil)
                 }
-                return LeafDrainResult(content: .chunk(Chunk(offset: range.lowerBound, length: range.count, inSource: true)), pending: nil)
+                return LeafDrainResult(content: .chunk(replacingNUL(Chunk(offset: range.lowerBound, length: range.count, inSource: true))), pending: nil)
             case .lazyNewline(let range):
                 let offset = storage.strings.count
                 for i in range { storage.strings.append(sourceBytes[i]) }
                 storage.strings.append(UInt8(ascii: "\n"))
-                return LeafDrainResult(content: .chunk(Chunk(offset: offset, length: range.count + 1, inSource: false)), pending: nil)
+                return LeafDrainResult(content: .chunk(replacingNUL(Chunk(offset: offset, length: range.count + 1, inSource: false))), pending: nil)
             case .materialized(let content):
                 if content.isEmpty {
                     return LeafDrainResult(content: .chunk(.empty), pending: nil)
                 }
                 let offset = storage.strings.count
                 content.span.withUnsafeBufferPointer { storage.strings.append(copying: $0) }
-                return LeafDrainResult(content: .chunk(Chunk(offset: offset, length: content.count, inSource: false)), pending: nil)
+                return LeafDrainResult(content: .chunk(replacingNUL(Chunk(offset: offset, length: content.count, inSource: false))), pending: nil)
             }
         }
     }
@@ -2428,6 +2515,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 isFenced = false
             }
             normalizeCodeBlockSegments(&segs, isFenced: isFenced)
+            replacingNULInSegments(&segs)
             let literalRef = storage.intern(segs)
             if case .codeBlock(let info, _) = storage[node].data {
                 storage[node].data = .codeBlock(info: info, literal: literalRef)
@@ -2438,6 +2526,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             var segs = drained.segments
             pending = drained.pending
             normalizeHTMLBlockSegments(&segs)
+            replacingNULInSegments(&segs)
             let literalRef = storage.intern(segs)
             if case .htmlBlock(let type, _) = storage[node].data {
                 storage[node].data = .htmlBlock(type: type, literal: literalRef)
@@ -3925,9 +4014,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         if storage.referenceMap[key] == nil {
+            // CommonMark §2.3: a NUL in the destination/title becomes U+FFFD. Ref-defs are parsed
+            // straight from the (possibly still source-backed) paragraph content on both the normal
+            // (`runParagraphMatchers`) and the setext-underline (`processLine`) paths, so normalize here -
+            // the single point every stored definition passes through.
+            let destination = replacingNUL(cleanURLChunk(dest.chunk))
+            let title = replacingNUL(unescapeURLChunk(titleChunk))
             storage.referenceMap[key] = ReferenceDefinition(
-                destination: cleanURLChunk(dest.chunk),
-                title: unescapeURLChunk(titleChunk)
+                destination: destination,
+                title: title
             )
         }
         return afterAll
@@ -3977,11 +4072,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         if storage.attributeReferenceMap[key] == nil {
-            storage.attributeReferenceMap[key] = Chunk(
+            // CommonMark §2.3: a NUL in the stored attributes becomes U+FFFD, symmetric with the link
+            // ref-def store above. Parsed straight from the (possibly source-backed) content, so normalize
+            // here.
+            let attrs = replacingNUL(Chunk(
                 offset: attrsStart,
                 length: attrsLen,
                 inSource: inSource
-            )
+            ))
+            storage.attributeReferenceMap[key] = attrs
         }
         return afterAll
     }
