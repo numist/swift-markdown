@@ -2337,8 +2337,15 @@ extension BlockParser {
             return nil
         }
         if schemeStart > chunkStart {
+            // why: cmark's `url_match` (`extensions/autolink.c`) rewinds over the maximal ASCII-alpha run
+            // before `://` and then validates that run as a safe scheme (`sd_autolink_issafe`), so the scheme
+            // is simply delimited by the first non-alpha byte. The char before the scheme may therefore be
+            // ANY non-alpha byte (a digit, punctuation, or a byte of a non-ASCII character), or the content
+            // start; only an ASCII letter blocks the match, because it would extend the rewind into an unsafe
+            // scheme. This is looser than the `www.` form's `isValidGFMPreceding` allowlist - `www_match` DOES
+            // restrict its preceding char, `url_match` does not.
             let pre = content[schemeStart - 1]
-            if !isValidGFMPreceding(pre) {
+            if pre.isASCIILetter {
                 return nil
             }
         }
@@ -2759,12 +2766,13 @@ extension BlockParser {
         !b.isASCIISpace && !b.isASCIIPunct
     }
 
-    /// Allowlist of characters that may directly precede a GFM `www.` or `://`-scheme autolink.
+    /// Allowlist of characters that may directly precede a GFM `www.` autolink.
     ///
     /// Only whitespace, `*`, `_`, `~`, `(` count as valid boundaries; everything else (including `<`)
-    /// disqualifies the autolink, mirroring `www_match`/`url_match` in `extensions/autolink.c`. The
-    /// `@`-triggered email form does NOT use this - cmark's `postprocess_text` imposes no such restriction
-    /// on the char before an email (see `matchGFMEmailAutolink`).
+    /// disqualifies the autolink, mirroring `www_match` in `extensions/autolink.c`. The `://`-scheme form
+    /// (`url_match`) uses a looser rule - any non-ASCII-alpha preceding byte is fine (see
+    /// `matchGFMSchemeAutolink`) - and the `@`-triggered email form imposes no such restriction at all
+    /// (cmark's `postprocess_text`; see `matchGFMEmailAutolink`).
     private func isValidGFMPreceding(_ b: UInt8) -> Bool {
         switch b {
         case UInt8(ascii: " "), UInt8(ascii: "\t"), UInt8(ascii: "\n"), UInt8(ascii: "\r"),
