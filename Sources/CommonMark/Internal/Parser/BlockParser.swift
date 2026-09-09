@@ -118,17 +118,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Populated only for a non-contiguous setext heading (PHASE 2c): its content is flattened into one arena `Chunk` by `flattenSegments`, which drops the per-line source mapping the segments carried. The run map (content-relative, so it survives the re-seed's arena re-copy) lets the inline pass stamp the heading's text/emphasis with real source positions instead of leaving them unstamped. Consulted in the inline pass when building an arena single-segment `ContentSpan`.
     var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
 
-    /// List-item nodes whose GFM task-list checkbox is eligible for recognition: the item's list marker
-    /// is preceded on its own physical line by only whitespace (`taskMarkerLineAnchored`), cmark's
-    /// `scan_tasklist` condition. This is a PHYSICAL-LINE property, not block-nesting depth: a
-    /// block-nested item that sits alone on its own (indented) line still qualifies, while an item whose
-    /// line carries a block-quote `>` or an outer list marker before this marker does not. Recorded at
-    /// item-open time, where the marker's line context is available, and consulted by the two
+    /// List-item nodes whose GFM task-list checkbox is eligible for recognition. cmark's
+    /// `open_tasklist_item` runs only as the item opens and scans that OPENING line from column 0
+    /// (`scan_tasklist`: `spacechar* marker spacechar+ checkbox spacechar+`), so an item qualifies only
+    /// when both halves of that scan hold on the marker's own physical line: the marker is preceded by
+    /// only whitespace (`taskMarkerLineAnchored`) AND a checkbox directly follows the marker + separator
+    /// (`openingLineCheckbox`). Both are PHYSICAL-LINE properties of the opening line, not block-nesting
+    /// depth: a block-nested item alone on its own (indented) line qualifies, while an item whose line
+    /// carries a block-quote `>` or an outer list marker before this marker does not, and an item whose
+    /// opening line is blank after the marker - the checkbox first appearing on a continuation line -
+    /// does not. Recorded at item-open time, where the opening line is available, and consulted by the two
     /// finalize-time consumers - the checkbox strip in `runParagraphMatchers` and the continuation
-    /// re-indent bump in `tasklistContentIndentBump` - so an item sharing its line with a `>` or an outer
-    /// marker keeps its `[ ]`/`[x]` as literal paragraph text and re-indents like a plain bullet. (Empty
-    /// task items are consumed at open time in `emptyTaskItemChecked`; this set carries the
-    /// content-bearing case to finalize.)
+    /// re-indent bump in `tasklistContentIndentBump`, neither of which can tell an opening line from a
+    /// continuation line - so an ineligible item keeps its `[ ]`/`[x]` as literal paragraph text and
+    /// re-indents like a plain bullet. (Empty task items are consumed at open time in
+    /// `emptyTaskItemChecked`; this set carries the content-bearing case to finalize.)
     var lineAnchoredTaskItems: Set<DocumentStorage.Index> = []
 
     /// The indent, in columns, of each paragraph's SECOND physical line — its first continuation line —
@@ -1973,19 +1977,27 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             ) {
                 pending = try openListItem(marker: marker, firstNonSpace: firstNonSpace, pending: pending)
                 cursor = marker.consumedTo
-                // Record whether this item's marker is line-anchored (preceded on its own physical line
-                // by only whitespace) so the finalize-time checkbox recognition and continuation
-                // re-indent bump fire only for such items, matching cmark's `scan_tasklist` (a marker
-                // sharing its line with a block-quote `>` or an outer list marker has a non-space prefix
-                // and keeps `[ ]` literal). `firstNonSpace` is the marker column; `lineRange.lowerBound`
-                // is the physical line start (unchanged by any block-quote prefix already consumed this
-                // line).
+                // Mark this item eligible for finalize-time checkbox recognition only when cmark's
+                // open-time `scan_tasklist` would match on THIS opening line: the marker is preceded by
+                // only whitespace (`taskMarkerLineAnchored`) AND a checkbox directly follows the marker
+                // (`openingLineCheckbox`). cmark scans only the opening line as the item opens, so a
+                // checkbox that first appears on a later continuation line is never recognized - gating
+                // both halves here keeps the finalize consumers (which see flattened content and cannot
+                // tell an opening line from a continuation line) from over-recognizing it. `firstNonSpace`
+                // is the marker column; `cursor` is the opening line's first content byte
+                // (`marker.consumedTo`); `lineRange.lowerBound` is the physical line start (unchanged by
+                // any block-quote prefix already consumed this line).
                 if storage.options.contains(.tasklist),
                    taskMarkerLineAnchored(
                        source: source,
                        lineStart: lineRange.lowerBound,
                        markerStart: firstNonSpace
-                   ) {
+                   ),
+                   openingLineCheckbox(
+                       source: source,
+                       contentStart: cursor,
+                       lineEnd: lineRange.upperBound
+                   ) != nil {
                     lineAnchoredTaskItems.insert(current)
                 }
                 // GFM empty task-list item: cmark's tasklist extension consumes the checkbox when the
@@ -3807,6 +3819,29 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         indexOfFirstNonSpace(source: source, range: lineStart..<markerStart) >= markerStart
     }
 
+    /// The checked state of a GFM task-list checkbox that begins at `contentStart` (the item's opening-line
+    /// first content byte, `marker.consumedTo`) and fits before `lineEnd`, or `nil` if no checkbox begins
+    /// there.
+    ///
+    /// Wraps `tasklistMarkerChecked` with the bounds check so the two open-time task paths agree on what
+    /// counts as a checkbox on the OPENING line - the eligibility gate for `lineAnchoredTaskItems`
+    /// (checkbox present, any trailing content) and the empty-item consumer (`emptyTaskItemChecked`, which
+    /// additionally requires only whitespace to `lineEnd`). This is the checkbox half of cmark's
+    /// `scan_tasklist`, anchored to the opening line where `open_tasklist_item` runs; an item whose opening
+    /// line is blank after the marker has `contentStart == lineEnd`, so no checkbox fits and the item is
+    /// not recognized from a later continuation line.
+    private func openingLineCheckbox(source: Span<UInt8>, contentStart: Int, lineEnd: Int) -> Bool? {
+        guard contentStart + Self.tasklistMarkerWidth <= lineEnd else {
+            return nil
+        }
+        return Self.tasklistMarkerChecked(
+            source[contentStart],
+            source[contentStart + 1],
+            source[contentStart + 2],
+            source[contentStart + 3]
+        )
+    }
+
     /// If the item content beginning at `contentStart` is a GFM task-list checkbox (`[ ]`/`[x]`/`[X]`)
     /// followed by a separator and then only whitespace to `lineEnd`, return its checked state;
     /// otherwise `nil`.
@@ -3817,23 +3852,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// than lazily continuing into it. A task item WITH content keeps the checkbox in its first
     /// paragraph, where finalize strips it (`runParagraphMatchers`, #65); the rewrite's finalize-time
     /// recognition cannot reach the empty case (there is no paragraph to finalize), so it is detected
-    /// here at open time. The predicate mirrors `matchTasklistMarker` (shared `tasklistMarkerChecked`),
-    /// and the whitespace-to-`lineEnd` test confines it to the empty case - content-bearing items fail
-    /// it and are left to finalize. The line-anchoring requirement (`taskMarkerLineAnchored`) is shared
-    /// with the content-bearing path: an item whose marker shares its line with a `>` or an outer marker
-    /// is left untouched here.
+    /// here at open time. The checkbox itself is classified by `openingLineCheckbox` (shared with the
+    /// `lineAnchoredTaskItems` eligibility gate), and the whitespace-to-`lineEnd` test confines it to the
+    /// empty case - content-bearing items fail it and are left to finalize. The line-anchoring requirement
+    /// (`taskMarkerLineAnchored`) is shared with the content-bearing path: an item whose marker shares its
+    /// line with a `>` or an outer marker is left untouched here.
     private func emptyTaskItemChecked(
         source: Span<UInt8>, lineStart: Int, markerStart: Int, contentStart: Int, lineEnd: Int
     ) -> Bool? {
         guard storage.options.contains(.tasklist),
               taskMarkerLineAnchored(source: source, lineStart: lineStart, markerStart: markerStart),
-              contentStart + Self.tasklistMarkerWidth <= lineEnd,
-              let checked = Self.tasklistMarkerChecked(
-                  source[contentStart],
-                  source[contentStart + 1],
-                  source[contentStart + 2],
-                  source[contentStart + 3]
-              ),
+              let checked = openingLineCheckbox(source: source, contentStart: contentStart, lineEnd: lineEnd),
               indexOfFirstNonSpace(
                   source: source,
                   range: (contentStart + Self.tasklistMarkerWidth)..<lineEnd
