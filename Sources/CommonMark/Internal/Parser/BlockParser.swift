@@ -3116,7 +3116,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return true
     }
 
-    /// Try to match the start of an HTML block at `firstNonSpace` and return the type number (1–7), or `nil` if no HTML block starts here. Type 7 is not yet implemented and returns `nil`.
+    /// Try to match the start of an HTML block at `firstNonSpace` and return the type number (1–7), or `nil` if no HTML block starts here. Type 7 is matched only when `allowType7` is set (it cannot interrupt a paragraph).
     ///
     /// CommonMark 0.31 §4.6.
     private func matchHTMLBlockStart(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, allowType7: Bool) -> UInt8? {
@@ -3206,7 +3206,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     if follow.isASCIISpace || follow == UInt8(ascii: ">") {
                         return 1
                     }
-                    return nil
+                    // A disqualifying follow char (e.g. `/` in `<script/>`) means this is not a type-1
+                    // start, but cmark's scanner backtracks and still tries type 6/7 - the tag may be a
+                    // complete open tag followed only by EOL (type 7). Fall through rather than aborting.
+                    break
                 }
             }
         }
