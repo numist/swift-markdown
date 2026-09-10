@@ -97,7 +97,19 @@ extension BlockParser {
             }
             return nil
         }
-        if first.isASCIISpace {
+        // why: cmark's bare-destination scan (`manual_scan_link_url_2`, `src/inlines.c`) ends a
+        // destination only on `cmark_isspace` = {space, tab, `\n`, `\r`} (the `cmark_ctype_class`
+        // class-1 bytes), so vertical tab (0x0B) and form feed (0x0C) are NOT terminators and cmark
+        // keeps them as literal destination content. CommonMark §6.5 excludes ASCII control characters
+        // (which VT/FF are) from a bare destination, so terminating there is spec-correct - the shipped
+        // deliverable does so (`isASCIISpace`). Under `.cmarkBugCompatibility` (adopted only by the
+        // differential fuzzer) we reproduce cmark's bug and stop only on {space, tab, `\n`, `\r`}.
+        // The two predicates differ by exactly VT/FF; other bytes are unaffected.
+        let bugCompat = storage.options.contains(.cmarkBugCompatibility)
+        func terminatesDestination(_ b: UInt8) -> Bool {
+            bugCompat ? b.isSpaceTabOrNewline : b.isASCIISpace
+        }
+        if terminatesDestination(first) {
             return nil
         }
         var i = start
@@ -127,7 +139,7 @@ extension BlockParser {
                 i += 1
                 continue
             }
-            if c.isASCIISpace {
+            if terminatesDestination(c) {
                 if i == start {
                     return nil
                 }
