@@ -2482,112 +2482,155 @@ extension BlockParser {
         return len
     }
 
-    /// `@`-triggered: scans backward (bounded by `localBound`) for the email local part and forward for the domain.
+    /// `@`-triggered: scans backward (bounded by `localBound`) for the email local part and forward for the
+    /// domain, restarting from a second `@` met mid-domain the way cmark's `goto found_at` does (see the loop).
     ///
     /// `localBound` is the earliest offset the backward local-part scan may reach - the content start for a
     /// fresh scan, or the end of the previous email when scanning a text node with several `@`s. It matches
     /// cmark's `max_rewind` bound (`postprocess_text`, `extensions/autolink.c`): since `@` is never a
     /// local-part char, the scan stops at any preceding `@` regardless, so the two agree.
-    private func matchGFMEmailAutolink(at: Int, localBound: Int, end: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
-        var localStart = at
+    ///
+    /// On a non-match the function returns nil and sets `resumeAt` to the offset just past everything it
+    /// scanned (`> at` always). Every `@` in `[at, resumeAt)` was examined - the trial `@` plus any `@`s the
+    /// restart walked over - and provably cannot start an email (a restart that reaches those `@`s fresh
+    /// carries no MORE dots than this scan did, so it fails identically), so the caller skips straight to
+    /// `resumeAt`. This mirrors cmark advancing its `offset` past the failed region rather than re-examining
+    /// it, keeping the whole pass O(content length) even on adversarial `@`-dense input (the anti-quadratic
+    /// guard cmark maintains; see `check_domain`'s GHSA note).
+    private func matchGFMEmailAutolink(at: Int, localBound: Int, end: Int, content: borrowing ContentSpan, resumeAt: inout Int) -> GFMAutolinkMatch? {
+        // `atSign` is the `@` currently under trial. cmark's `postprocess_text` (`extensions/autolink.c`)
+        // RESTARTS the match from a SECOND `@` met during the forward domain scan (`goto found_at`): it
+        // abandons the current `local@domain` candidate - never emitting it - and re-scans from that second
+        // `@` (the run between the two `@`s becomes the new local part). The `goto` jumps past the
+        // initializers of the state below, so these values CARRY across the restart while `localStart` and
+        // the domain cursor are recomputed from `atSign`.
+        var atSign = at
         var schemeFolded = false
         var isXmpp = false
-        // Local part: cmark-gfm's `postprocess_text` backward scan (`extensions/autolink.c`) accepts a
-        // NARROWER set than the CommonMark §6.4 angle-email form - only alnum + `.+-_` - and STOPS at any
-        // other char (`isGFMEmailLocalChar`, not `isEmailLocalChar`). Using the broad §6.4 set here would
-        // swallow chars cmark stops at (e.g. `x!@.e` -> cmark rejects; the broad set would link `mailto:x!@.e`).
-        // A `:` that completes a recognized lowercase `mailto:`/`xmpp:` scheme at a boundary is FOLDED into
-        // the link rather than stopping the scan (cmark's `validate_protocol`): the scheme becomes part of
-        // the link text and destination, and for `xmpp:` the destination keeps that scheme (see below).
-        while localStart > localBound {
-            let b = content[localStart - 1]
-            if isGFMEmailLocalChar(b) {
-                localStart -= 1
-                continue
-            }
-            if b == UInt8(ascii: ":") {
-                if let len = matchEmailScheme("mailto:", colon: localStart - 1, localBound: localBound, content: content) {
-                    schemeFolded = true
-                    localStart -= len
-                    continue
-                }
-                if let len = matchEmailScheme("xmpp:", colon: localStart - 1, localBound: localBound, content: content) {
-                    schemeFolded = true
-                    isXmpp = true
-                    localStart -= len
-                    continue
-                }
-            }
-            break
-        }
-        // No local part AND no folded scheme (cmark's `rewind == 0`): not an email. A folded scheme moves
-        // `localStart` back even when the local part is empty, so `mailto:@a.b` is accepted here.
-        if localStart == at {
-            return nil
-        }
-        // why: unlike the `www.`/`://`-scheme forms (`www_match`/`url_match`, which restrict the char
-        // before the match), cmark-gfm's email detection runs in `postprocess_text` (`extensions/autolink.c`)
-        // as a pass over the finished text node: it scans backward from `@` over local-part chars and simply
-        // STOPS at the first non-local char, leaving whatever precedes as ordinary "before" text with no
-        // validity check. So a leading `<` (that already failed as an angle autolink / inline HTML) doesn't
-        // block the email - `<o@.e` -> Text "<" + Link(mailto:o@.e). Applying a preceding-char restriction
-        // here would reject those, so the email form has none.
-        // Domain: cmark's `postprocess_text` requires the domain's dot count `np >= 1`, but a dot counts
-        // toward `np` only when it is immediately followed by an alphanumeric. A trailing dot yields an
-        // empty last label and does not count, so `o@b.` is not a valid domain (whereas `o@b.c` and the
-        // empty-FIRST-label `o@.e` are - their dot is followed by an alphanumeric). The scan itself also
-        // ENDS at a `.` not immediately followed by an alphanumeric (cmark breaks the domain there rather
-        // than consuming the dot): `a@x.y.-5` scans the domain as `x.y` and leaves `.-5` as after-text.
-        var i = at + 1
-        let domainStart = i
+        // cmark's `np`: the count of domain dots each immediately followed by an alphanumeric, gating "the
+        // domain must contain a dot". It carries across the restart (declared before the loop), so a dot
+        // counted while scanning the first candidate's domain still satisfies the gate for the restarted
+        // email - `o@.e@b` links `.e@b` (the dot in `.e` was counted) though standalone `.e@b` does not (its
+        // only dot is in the local part). Likewise `a@b.c@d` links `b.c@d` off the dot counted in `b.c`.
         var hasDotFollowedByAlnum = false
-        while i < end {
-            let b = content[i]
-            if b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-") || b == UInt8(ascii: "_") {
-                i += 1
-            } else if b == UInt8(ascii: ".") {
-                if i + 1 < end, content[i + 1].isASCIILetter || content[i + 1].isASCIIDigit {
-                    hasDotFollowedByAlnum = true
+        while true {
+            // Local part: cmark-gfm's `postprocess_text` backward scan (`extensions/autolink.c`) accepts a
+            // NARROWER set than the CommonMark §6.4 angle-email form - only alnum + `.+-_` - and STOPS at any
+            // other char (`isGFMEmailLocalChar`, not `isEmailLocalChar`). Using the broad §6.4 set here would
+            // swallow chars cmark stops at (e.g. `x!@.e` -> cmark rejects; the broad set would link `mailto:x!@.e`).
+            // A `:` that completes a recognized lowercase `mailto:`/`xmpp:` scheme at a boundary is FOLDED into
+            // the link rather than stopping the scan (cmark's `validate_protocol`): the scheme becomes part of
+            // the link text and destination, and for `xmpp:` the destination keeps that scheme (see below).
+            var localStart = atSign
+            while localStart > localBound {
+                let b = content[localStart - 1]
+                if isGFMEmailLocalChar(b) {
+                    localStart -= 1
+                    continue
+                }
+                if b == UInt8(ascii: ":") {
+                    if let len = matchEmailScheme("mailto:", colon: localStart - 1, localBound: localBound, content: content) {
+                        schemeFolded = true
+                        localStart -= len
+                        continue
+                    }
+                    if let len = matchEmailScheme("xmpp:", colon: localStart - 1, localBound: localBound, content: content) {
+                        schemeFolded = true
+                        isXmpp = true
+                        localStart -= len
+                        continue
+                    }
+                }
+                break
+            }
+            // No local part AND no folded scheme (cmark's `rewind == 0`): not an email at this `@`. Resume
+            // just past it and return nil - matching cmark, which on `rewind == 0` advances its offset past
+            // the `@` (`offset += max_rewind + 1`) rather than emitting anything or re-examining it. A folded
+            // scheme moves `localStart` back even when the local part is empty, so `mailto:@a.b` is accepted
+            // here.
+            if localStart == atSign {
+                resumeAt = atSign + 1
+                return nil
+            }
+            // why: unlike the `www.`/`://`-scheme forms (`www_match`/`url_match`, which restrict the char
+            // before the match), cmark-gfm's email detection runs in `postprocess_text` (`extensions/autolink.c`)
+            // as a pass over the finished text node: it scans backward from `@` over local-part chars and simply
+            // STOPS at the first non-local char, leaving whatever precedes as ordinary "before" text with no
+            // validity check. So a leading `<` (that already failed as an angle autolink / inline HTML) doesn't
+            // block the email - `<o@.e` -> Text "<" + Link(mailto:o@.e). Applying a preceding-char restriction
+            // here would reject those, so the email form has none.
+            // Domain: cmark's `postprocess_text` requires the domain's dot count `np >= 1`, but a dot counts
+            // toward `np` only when it is immediately followed by an alphanumeric. A trailing dot yields an
+            // empty last label and does not count, so `o@b.` is not a valid domain (whereas `o@b.c` and the
+            // empty-FIRST-label `o@.e` are - their dot is followed by an alphanumeric). The scan itself also
+            // ENDS at a `.` not immediately followed by an alphanumeric (cmark breaks the domain there rather
+            // than consuming the dot): `a@x.y.-5` scans the domain as `x.y` and leaves `.-5` as after-text.
+            var i = atSign + 1
+            let domainStart = i
+            var sawSecondAt = false
+            while i < end {
+                let b = content[i]
+                if b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-") || b == UInt8(ascii: "_") {
                     i += 1
+                } else if b == UInt8(ascii: ".") {
+                    if i + 1 < end, content[i + 1].isASCIILetter || content[i + 1].isASCIIDigit {
+                        hasDotFollowedByAlnum = true
+                        i += 1
+                    } else {
+                        break
+                    }
+                } else if b == UInt8(ascii: "/"), isXmpp {
+                    // why: cmark's `postprocess_text` forward domain scan admits `/` only for a folded `xmpp:`
+                    // (`c == '/' && is_xmpp`); for every other form a `/` ends the domain.
+                    i += 1
+                } else if b == UInt8(ascii: "@") {
+                    // why: cmark's forward domain scan does `goto found_at` on a second `@` - it does NOT emit
+                    // the current pre-`@` candidate; it restarts the match from this `@`. Restart the loop with
+                    // `atSign` at this `@`, carrying `hasDotFollowedByAlnum` / `schemeFolded` / `isXmpp` (which
+                    // cmark's `goto` preserves), so the restarted email is gated exactly as cmark gates it.
+                    sawSecondAt = true
+                    break
                 } else {
                     break
                 }
-            } else if b == UInt8(ascii: "/"), isXmpp {
-                // why: cmark's `postprocess_text` forward domain scan admits `/` only for a folded `xmpp:`
-                // (`c == '/' && is_xmpp`); for every other form a `/` ends the domain.
-                i += 1
-            } else {
-                break
             }
+            if sawSecondAt {
+                atSign = i
+                continue
+            }
+            // The domain scan settled at `i` (a non-`@` terminator or `end`): every gate failure below is a
+            // non-match for the whole `[at, i)` region, so resume there and skip the interior `@`s already
+            // walked. (On the success path this is overwritten by the caller's use of `urlEnd`.)
+            resumeAt = i
+            // Before any trailing-punct trim, the last char of the scanned domain must be a LETTER or `.`
+            // (cmark's `postprocess_text` gate: `cmark_isalpha(c) || c == '.'`). A digit there fails, so `f@.0`
+            // / `a@b.c9` are rejected even though digits are allowed in the domain interior. This also rejects
+            // `a.b-c_d@a.b_` - the trailing `_` is neither a letter nor `.`.
+            if i <= atSign + 1 {
+                return nil
+            }
+            let preTrimLast = content[i - 1]
+            let preTrimAlphaOrDot = preTrimLast.isASCIILetter || preTrimLast == UInt8(ascii: ".")
+            if !preTrimAlphaOrDot {
+                return nil
+            }
+            let trimmedEnd = trimTrailingPunctuation(urlStart: localStart, urlEnd: i, content: content)
+            if !hasDotFollowedByAlnum || domainStart == i || trimmedEnd <= atSign + 1 {
+                return nil
+            }
+            let last = content[trimmedEnd - 1]
+            let lastIsAlnum = last.isASCIILetter || last.isASCIIDigit
+            if !lastIsAlnum {
+                return nil
+            }
+            // why: unlike the `://`-scheme URL form (`schemeURLDomainAccepted`, cmark's `check_domain`), the
+            // email path does NOT reject an underscore in the domain's last (or any) label. cmark's
+            // `postprocess_text` (`extensions/autolink.c`) accepts `_` anywhere in the domain - its forward scan
+            // treats `_` like `-` (`c != '-' && c != '_'` never breaks) and it never calls `check_domain`. So
+            // `a@b.c_d`, `a@.b_o`, and `-@.b_o` all link, gated only by the letter-or-dot pre-trim check and the
+            // trailing-alnum check above.
+            return GFMAutolinkMatch(urlStart: localStart, urlEnd: trimmedEnd, form: .email, emailSchemeFolded: schemeFolded)
         }
-        // Before any trailing-punct trim, the last char of the scanned domain must be a LETTER or `.`
-        // (cmark's `postprocess_text` gate: `cmark_isalpha(c) || c == '.'`). A digit there fails, so `f@.0`
-        // / `a@b.c9` are rejected even though digits are allowed in the domain interior. This also rejects
-        // `a.b-c_d@a.b_` - the trailing `_` is neither a letter nor `.`.
-        if i <= at + 1 {
-            return nil
-        }
-        let preTrimLast = content[i - 1]
-        let preTrimAlphaOrDot = preTrimLast.isASCIILetter || preTrimLast == UInt8(ascii: ".")
-        if !preTrimAlphaOrDot {
-            return nil
-        }
-        let trimmedEnd = trimTrailingPunctuation(urlStart: localStart, urlEnd: i, content: content)
-        if !hasDotFollowedByAlnum || domainStart == i || trimmedEnd <= at + 1 {
-            return nil
-        }
-        let last = content[trimmedEnd - 1]
-        let lastIsAlnum = last.isASCIILetter || last.isASCIIDigit
-        if !lastIsAlnum {
-            return nil
-        }
-        // why: unlike the `://`-scheme URL form (`schemeURLDomainAccepted`, cmark's `check_domain`), the
-        // email path does NOT reject an underscore in the domain's last (or any) label. cmark's
-        // `postprocess_text` (`extensions/autolink.c`) accepts `_` anywhere in the domain - its forward scan
-        // treats `_` like `-` (`c != '-' && c != '_'` never breaks) and it never calls `check_domain`. So
-        // `a@b.c_d`, `a@.b_o`, and `-@.b_o` all link, gated only by the letter-or-dot pre-trim check and the
-        // trailing-alnum check above.
-        return GFMAutolinkMatch(urlStart: localStart, urlEnd: trimmedEnd, form: .email, emailSchemeFolded: schemeFolded)
     }
 
     /// Emit a zero-length `.text` node at virtual offset `offset` as a child of `parent`.
@@ -3038,10 +3081,18 @@ extension BlockParser {
         var cursor = 0
         var didSplit = false
         var i = 0
+        var resumeAt = 0
         while i < total {
-            guard scratch[i] == UInt8(ascii: "@"),
-                  let auto = matchGFMEmailAutolink(at: i, localBound: cursor, end: total, content: content) else {
+            guard scratch[i] == UInt8(ascii: "@") else {
                 i += 1
+                continue
+            }
+            guard let auto = matchGFMEmailAutolink(
+                at: i, localBound: cursor, end: total, content: content, resumeAt: &resumeAt
+            ) else {
+                // `matchGFMEmailAutolink` guarantees `resumeAt > i`, so this always advances (and skips any
+                // `@`s the restart already settled - see its doc). O(content length) overall.
+                i = resumeAt
                 continue
             }
             // `current` becomes the text run before this email.
