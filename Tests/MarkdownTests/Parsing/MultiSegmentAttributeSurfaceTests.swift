@@ -11,17 +11,18 @@
 @_spi(CmarkBugCompatibility) import Markdown
 import Testing
 
-/// Never-crash coverage for the `^[…](attrs)` extended-attribute inline form scanned over
-/// multi-segment content, exercised through the exact comparison surface the differential fuzzer
-/// uses (`Document.debugDescription(options: .printSourceLocations)` with `.cmarkBugCompatibility`).
+/// Coverage for the `^[…](attrs)` extended-attribute inline form scanned over multi-segment content,
+/// exercised through the exact comparison surface the differential fuzzer uses
+/// (`Document.debugDescription(options: .printSourceLocations)` with `.cmarkBugCompatibility`).
 ///
-/// The attribute scanner used to build a single `Chunk` from *virtual* offsets; for content that
-/// straddles a line join (a block-quote / list body where the `(attrs)` spans lines) that chunk
-/// indexed the wrong buffer / ran past a source segment and trapped when the surface materialized
-/// the attribute string. The fix defers such an unrepresentable attribute to the no-match path
-/// (the `^[…]` stays literal text), so the surface is produced without crashing. The exact deferred
-/// surface is the rewrite's (a cross-line attribute isn't reconstructed); this only pins no-crash.
-@Suite("Multi-segment attribute surface (never-crash)")
+/// A block-quote / list body whose `(attrs)` spans lines is parsed as multi-segment content: the
+/// interior straddles the interned-newline segment joining the two source lines. cmark reads its
+/// flattened paragraph buffer, so the interior newline is ordinary attribute content and the form
+/// resolves to an `InlineAttributes` node whose attribute string carries that newline
+/// (`manual_scan_attribute_attributes`, swift-cmark `src/inlines.c`). The scanner materializes the
+/// straddling interior into the arena (the code-span / tab-expansion pattern) to reproduce it - the
+/// attribute forms, matching the reference, without indexing the wrong buffer or running past a segment.
+@Suite("Multi-segment attribute surface")
 struct MultiSegmentAttributeSurfaceTests {
 
     private static func surface(_ markdown: String) -> String {
@@ -30,14 +31,17 @@ struct MultiSegmentAttributeSurfaceTests {
     }
 
     @Test(arguments: [
-        "> ^[a](\n> b)",
-        "> ^[hi](\n> x)",
-        "- ^[a](\n  b)",
-        ">^[a](b\n>c)",
+        ("> ^[a](\n> b)", "\nb"),
+        ("> ^[hi](\n> x)", "\nx"),
+        ("- ^[a](\n  b)", "\nb"),
+        (">^[a](b\n>c)", "b\nc"),
     ])
-    func crossLineAttributeSurfaceDoesNotCrash(_ markdown: String) {
+    func crossLineAttributeForms(_ markdown: String, _ expectedAttributes: String) {
         let rendered = Self.surface(markdown)
         #expect(!rendered.isEmpty)
-        #expect(!rendered.contains("Attribute"))
+        // The `(attrs)` interior spans the line join; the form still resolves to an attribute whose
+        // string carries the interior newline (reading it forces the arena materialization).
+        #expect(rendered.contains("InlineAttributes"))
+        #expect(rendered.contains("attributes: `\(expectedAttributes)`"))
     }
 }

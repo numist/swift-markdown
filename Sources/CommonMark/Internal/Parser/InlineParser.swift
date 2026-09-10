@@ -875,10 +875,19 @@ extension BlockParser {
                 }
             }
         }
-        // Try reference form `[label]` looking up in attribute refmap. Scan through a contiguous window (see `contiguousChunk`) so multi-segment content reads real bytes; `lab.interior` is a real buffer chunk and `lab.afterEnd` a buffer offset converted back to virtual via the window base.
-        if !matched,
-           let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
+        // Try reference form `[label]` looking up in attribute refmap. cmark's
+        // `handle_close_bracket_attribute` (swift-cmark `src/inlines.c`) calls `link_label`
+        // unconditionally: it ADVANCES past a well-formed following `[…]` - even an empty `[]`, or one
+        // whose label resolves to no attribute reference - and only rewinds when no closing `]` is found.
+        // A resolved reference supplies the attributes; an unresolved one is still consumed. Unlike the
+        // link path, the failure branch does NOT rewind (`handle_close_bracket` resets
+        // `subj->pos = initial_pos`; the attribute path never does), so the consumed `[…]` does not
+        // re-parse - `^[][]` drops the trailing `[]`, leaving literal `^[]`. Scan through a contiguous
+        // window (see `contiguousChunk`) so multi-segment content reads real bytes; `lab.interior` is a
+        // real buffer chunk and `lab.afterEnd` a buffer offset converted back to virtual via the window base.
+        if let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
            let lab = matchLinkLabel(labelWindow) {
+            pos = pos + (lab.afterEnd - labelWindow.offset)
             let labelChunk = lab.interior
             if labelChunk.length > 0 {
                 let key = normalizeLabel(
@@ -887,16 +896,16 @@ extension BlockParser {
                 if !key.isEmpty,
                    let storedAttrs = storage.attributeReferenceMap[key] {
                     attrs = storedAttrs
-                    pos = pos + (lab.afterEnd - labelWindow.offset)
                     matched = true
                 }
             }
         }
         if !matched {
-            // Fail: pop bracket, emit `]` text. The `^[` text node stays as regular text in the tree, which matches the C behavior.
+            // Fail: pop bracket, emit a single `]` text at the (possibly label-advanced) close position
+            // and resume there. The `^[` text node stays as regular text in the tree, matching cmark.
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
-            emitBracketLiteral(at: cursor, content: content, parent: parent)
-            return cursor + 1
+            emitBracketLiteral(at: pos - 1, content: content, parent: parent)
+            return pos
         }
         // Match: build attribute node, reparent siblings, drop opener `^[`.
         let parentIdx = storage[openerInl].parent
@@ -935,7 +944,7 @@ extension BlockParser {
     /// Scan the inside of an attribute form's `(…)`.
     ///
     /// Allows whitespace and nested balanced parens up to depth 32. Backslash before ASCII punctuation is treated as an escape (and consumed as a 2-byte unit). Differs from a link-URL scan in that whitespace is not a terminator.
-    private func matchAttributeAttributes(start: Int, end: Int, content: borrowing ContentSpan) -> AttributeAttributesMatch? {
+    private mutating func matchAttributeAttributes(start: Int, end: Int, content: borrowing ContentSpan) -> AttributeAttributesMatch? {
         var i = start
         var nbParen = 0
         while i < end {
@@ -959,15 +968,7 @@ extension BlockParser {
             }
             if c == UInt8(ascii: ")") {
                 if nbParen == 0 {
-                    // The attribute content `[start, i)` must be representable as one contiguous buffer chunk. Single-segment content always is; multi-segment content that straddles a line join is not (the range would run past a single source segment), so treat it as no match - the `^[…]` stays literal text, mirroring how the reference-form label defers. An empty `()` is representable (zero length). Without this, `content.chunk` would build a chunk from virtual offsets whose reads index the wrong buffer / overrun a segment when the content is materialized.
-                    if i == start {
-                        return AttributeAttributesMatch(chunk: content.chunk(offset: start, length: 0), afterEnd: i)
-                    }
-                    guard let chunk = content.contiguousChunk(fromVirtual: start, limit: i),
-                          chunk.length == i - start else {
-                        return nil
-                    }
-                    return AttributeAttributesMatch(chunk: chunk, afterEnd: i)
+                    return AttributeAttributesMatch(chunk: attributeContentChunk(start: start, end: i, content: content), afterEnd: i)
                 }
                 nbParen -= 1
                 i += 1
@@ -976,6 +977,33 @@ extension BlockParser {
             i += 1
         }
         return nil
+    }
+
+    /// The attribute interior `[start, end)` as a single readable chunk.
+    ///
+    /// Zero-copy when the range lies in one contiguous buffer region - every single-line attribute, and
+    /// any multi-segment one that stays within a single source segment. A multi-line attribute straddles
+    /// a soft-break segment boundary: its `(…)` content spans a paragraph line join (e.g. ` ^[](\n)`,
+    /// which the block parser keeps as non-contiguous segments once a positive content indent suppresses
+    /// the source-contiguity collapse), so the interior bytes live in separate source segments joined by
+    /// the interned `\n` and no single buffer holds them. Materialize the joined bytes into the arena
+    /// through the segment-aware subscript - the code-span / tab-expansion pattern - and hand back an
+    /// arena chunk. cmark reads its flattened paragraph buffer, so the interior newline is ordinary
+    /// attribute content (`manual_scan_attribute_attributes`, swift-cmark `src/inlines.c`). An empty `()`
+    /// is a zero-length chunk.
+    private mutating func attributeContentChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
+        if start == end {
+            return content.chunk(offset: start, length: 0)
+        }
+        if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end),
+           contiguous.length == end - start {
+            return contiguous
+        }
+        let outOffset = storage.strings.count
+        for k in start..<end {
+            storage.strings.append(content[k])
+        }
+        return Chunk(offset: outOffset, length: storage.strings.count - outOffset, inSource: false)
     }
 
     // MARK: - Emphasis / strong (delimiter stack)

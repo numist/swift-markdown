@@ -126,13 +126,13 @@ struct MultiSegmentLinkLabelTests {
     }
 
     /// The `^[…](attrs)` extended-attribute inline form scanned over multi-segment content. Its
-    /// `(attrs)` scanner used to build a single `Chunk` from virtual offsets, which for content that
-    /// straddles a line join indexed the wrong buffer / ran past a segment and trapped. The fix
-    /// defers a cross-line attribute (not representable as one contiguous chunk) to the no-match
-    /// path, so the `^[…]` stays literal text. These pin the never-crash invariant; the exact
-    /// deferred surface is the rewrite's (a cross-line attribute isn't reconstructed).
-    @Test("cross-line attribute form does not crash (block quote)")
-    func crossLineAttributeBlockQuoteNoCrash() throws {
+    /// `(attrs)` interior straddles the interned-newline segment joining the two source lines. cmark
+    /// reads its flattened paragraph buffer, so the interior newline is ordinary attribute content and
+    /// the form resolves to an attribute whose string carries it. The scanner materializes the
+    /// straddling interior into the arena (reading `attributes()` forces that materialization), so the
+    /// attribute is reconstructed - matching the reference - rather than deferred to literal text.
+    @Test("cross-line attribute form reconstructs the attribute (block quote)")
+    func crossLineAttributeBlockQuote() throws {
         try MarkdownDocument.withParsedDocument("> ^[a](\n> b)") { doc in
             var isBlockQuote = false
             doc.root.children.forEach { block in
@@ -140,15 +140,17 @@ struct MultiSegmentLinkLabelTests {
             }
             #expect(isBlockQuote)
             let inlines = Self.firstParagraphInlines(doc)
-            #expect(!inlines.kinds.contains(.attribute))
+            #expect(inlines.kinds == [.attribute])
+            #expect(inlines.attributeStrings == ["\nb"])
         }
     }
 
-    @Test("cross-line attribute form does not crash (list item)")
-    func crossLineAttributeListItemNoCrash() throws {
+    @Test("cross-line attribute form reconstructs the attribute (list item)")
+    func crossLineAttributeListItem() throws {
         try MarkdownDocument.withParsedDocument("- ^[a](\n  b)") { doc in
             let inlines = Self.firstParagraphInlines(doc)
-            #expect(!inlines.kinds.contains(.attribute))
+            #expect(inlines.kinds == [.attribute])
+            #expect(inlines.attributeStrings == ["\nb"])
         }
     }
 }
