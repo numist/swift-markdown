@@ -1753,6 +1753,13 @@ extension BlockParser {
         }
         i += 1
         // Scan body until `>`.
+        // why: cmark's `_scan_autolink_uri` (swift-cmark `src/scanners.re`) matches the URI body with the
+        // class `[^\x00-\x20<>]*`, which excludes 0x00–0x20 and `<`/`>` but NOT DEL (0x7F). DEL is an ASCII
+        // control character, so the spec excludes it and the deliverable (flag OFF) rejects it; cmark
+        // wrongly admits it. Under `.cmarkBugCompatibility` (adopted only by the differential fuzzer) admit
+        // DEL to match cmark. The email form's explicit char classes never include 0x7F, so only this URI
+        // form diverges.
+        let admitDEL = storage.options.contains(.cmarkBugCompatibility)
         let bodyStart = start + 1
         while i < end {
             let b = content[i]
@@ -1764,7 +1771,8 @@ extension BlockParser {
                 )
             }
             if b == UInt8(ascii: "<") || b == UInt8(ascii: " ") || b == UInt8(ascii: "\t")
-                || b == UInt8(ascii: "\n") || b == UInt8(ascii: "\r") || b < 0x20 || b == 0x7F {
+                || b == UInt8(ascii: "\n") || b == UInt8(ascii: "\r") || b < 0x20
+                || (b == 0x7F && !admitDEL) {
                 return nil
             }
             i += 1
