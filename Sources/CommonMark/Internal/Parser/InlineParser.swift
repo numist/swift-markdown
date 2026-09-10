@@ -2556,6 +2556,16 @@ extension BlockParser {
                 // why: cmark's `postprocess_text` forward domain scan admits `/` only for a folded `xmpp:`
                 // (`c == '/' && is_xmpp`); for every other form a `/` ends the domain.
                 i += 1
+            } else if b == UInt8(ascii: "@") {
+                // why: cmark-gfm's `postprocess_text` forward domain scan (`extensions/autolink.c`) does
+                // `goto found_at` when it meets a second `@`: it ABANDONS this `local@domain` candidate and
+                // restarts the match from the second `@` (the run between the two `@`s becomes the new local
+                // part), never emitting the pre-`@` candidate. Returning nil reproduces that restart: the
+                // post-pass loop (`splitEmailsInTextNode`) retries from the next `@`, and that retry's
+                // backward local-part scan stops at this `@` regardless (it is not a local-part char), so the
+                // new local part is exactly cmark's. Without this arm a domain abutting `@` (`o@.e@`,
+                // `a@b.c@d`) would wrongly link its prefix.
+                return nil
             } else {
                 break
             }
