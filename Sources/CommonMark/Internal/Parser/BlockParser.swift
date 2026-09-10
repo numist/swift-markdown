@@ -276,10 +276,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var delimiters = UniqueArray<DelimiterRecord>()
         var brackets = UniqueArray<BracketRecord>()
         
-        // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content); `runScratch` holds a stable copy of a flattened block's arena→source run map. All owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
+        // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content); `runScratch` holds a stable copy of a flattened block's arena→source run map; `arenaScratch` holds a stable snapshot of `storage.strings` backing a multi-segment content's synthetic arena segment (a split-tab residual). All owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
         var scratch = UniqueArray<UInt8>()
         var segScratch = UniqueArray<Segment>()
         var runScratch = UniqueArray<ArenaRun>()
+        var arenaScratch = UniqueArray<UInt8>()
         
         for (node, ref) in pending {
             if ref.count == 0 || ref.totalLength == 0 {
@@ -330,12 +331,37 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 for i in 0..<Int(ref.count) {
                     segScratch.append(storage.segments[Int(ref.first) + i])
                 }
-                try parseInline(
-                    content: ContentSpan(source: sourceBytes, segments: segScratch.span, virtualLength: Int(ref.totalLength)),
-                    into: node,
-                    delimiters: &delimiters,
-                    brackets: &brackets
-                )
+                // A synthetic arena-backed segment (a lazy-continuation split-tab residual, `addLineSegment`)
+                // lives at a NON-zero arena offset; the interned newline join sits at offset 0 and is read as
+                // `\n` without touching the arena. When one is present, snapshot the arena prefix that backs it
+                // into a stable buffer (the inline pass appends to `storage.strings`, which may reallocate) and
+                // hand it to the span. The common multi-line paragraph has no such segment and stays zero-copy.
+                var arenaExtent = 0
+                for i in 0..<segScratch.count {
+                    let seg = segScratch[i]
+                    if !seg.inSource && seg.offset != DocumentStorage.newlineOffset {
+                        arenaExtent = max(arenaExtent, Int(seg.offset) + Int(seg.length))
+                    }
+                }
+                if arenaExtent > 0 {
+                    arenaScratch.removeAll(keepingCapacity: true)
+                    storage.strings.span.extracting(0..<arenaExtent).withUnsafeBufferPointer { buffer in
+                        arenaScratch.append(copying: buffer)
+                    }
+                    try parseInline(
+                        content: ContentSpan(source: sourceBytes, segments: segScratch.span, virtualLength: Int(ref.totalLength), arena: arenaScratch.span),
+                        into: node,
+                        delimiters: &delimiters,
+                        brackets: &brackets
+                    )
+                } else {
+                    try parseInline(
+                        content: ContentSpan(source: sourceBytes, segments: segScratch.span, virtualLength: Int(ref.totalLength)),
+                        into: node,
+                        delimiters: &delimiters,
+                        brackets: &brackets
+                    )
+                }
             }
             
             // Coalesce adjacent text nodes so smart-punct / entity substitutions don't leave the content split across sibling text nodes.
@@ -708,7 +734,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             assert(range.upperBound == span.count, "materialized code/HTML body must extend to the line end")
             return appendMaterializedCodeContent(bufferStart: range.lowerBound, to: node, pending: pending)
         }
-        // A tab-expanded paragraph continuation. Its surviving content - the first non-space byte to the line end - is byte-identical to source: `expandPrefixTabs` only rewrites the prefix and copies the tail verbatim, and the content begins at the first non-space byte, so no expanded-tab space reaches it. Map it back to a zero-copy source segment rather than copying the expanded bytes into the arena. This is required for correctness, not just to avoid a copy: a multi-segment inline `ContentSpan` resolves only source segments plus the interned `\n` (see `ContentSpan.multiByte`), so an arena content segment there reads back as `\n` per byte - dropping the text and multiplying soft breaks.
+        // A tab-expanded paragraph continuation. Its surviving content - the first non-space byte to the line end - is byte-identical to source: `expandPrefixTabs` only rewrites the prefix and copies the tail verbatim, and the content begins at the first non-space byte, so no expanded-tab space reaches it. Map it back to a zero-copy source segment rather than copying the expanded bytes into the arena. Keeping the content in-source also keeps it readable: a multi-segment inline `ContentSpan` resolves source segments plus the interned `\n` directly, and reads a synthetic arena segment only through the arena snapshot it is handed for exactly the split-tab residual below (see `ContentSpan.multiByte`).
         assert(range.upperBound == span.count, "materialized paragraph continuation must extend to the line end")
         let (sourceStart, splitTabSpaces) = materializedSourceStart(bufferStart: range.lowerBound)
         assert(splitTabSpaces == 0, "a paragraph continuation's content never begins inside an expanded tab")
@@ -716,12 +742,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let reindent = positionsEnabled && storage.options.contains(.cmarkBugCompatibility)
         // `range.lowerBound` / `currentLineContentCursor` are buffer (column) offsets here, so `residual` is the count of expanded-tab columns of leading whitespace a lazy continuation preserves.
         let residual = currentLineIsLazyContinuation ? (range.lowerBound - currentLineContentCursor) : 0
-        // Flag ON, a LAZY continuation carries that residual into the CONTENT (Quirk E), exactly as the source-mapped branch above does. Here the residual is a run of LITERAL source bytes - a leading tab is one source byte that expands to several columns - so it stays a zero-copy `inSource` slice: extend the segment start back to the source projection of the prefix-match stop (`currentLineContentCursor`). A code span / raw-HTML inline then captures the tab out of the buffer, while the inline whitespace-skip (gated on the same flag) strips it from TEXT flow. cmark keeps this same literal tab: on a lazy line its `add_line` copies from `parser->offset` without advancing to the first non-space and with no `partially_consumed_tab` (blocks.c:244).
+        // Flag ON, a LAZY continuation carries that residual into the CONTENT (Quirk E), exactly as the source-mapped branch above does. `materializedSourceStart(currentLineContentCursor)` reports HOW the prefix-match stop sits relative to the tab expansion:
         //
-        // `materializedSourceStart` reports a non-zero split-space count only when the prefix stop lands INSIDE an expanded tab: an OUTER container that DID match consumed part of a tab (cmark's `partially_consumed_tab`), leaving the lazy stop mid-tab (e.g. `> > \`x` then `>\ty\``). There cmark drops the split tab byte and emits its leftover columns as synthetic spaces (blocks.c `add_line`), so the residual has no literal source byte to slice - and an arena segment is unusable in multi-segment inline content (see above). This branch leaves that (reachable, pre-existing) case's residual stripped; carrying it would need multi-segment arena support the representation deliberately lacks. The clean-boundary case these findings target - a top-level lazy block quote whose failing prefix consumed nothing, so the stop is the line start - has `splitTabSpaces == 0` and carries the literal tab.
+        //   - `splitTabSpaces == 0`: the stop lands on a clean byte boundary, so the residual is a run of LITERAL source bytes (a leading tab is one source byte that expands to several columns). Carry it as a zero-copy `inSource` slice: extend the segment start back to the source projection of the stop (`residualMap.sourceStart`). A code span / raw-HTML inline then captures the tab out of the buffer, while the inline whitespace-skip (gated on the same flag) strips it from TEXT flow. cmark keeps this literal tab: on such a line its `add_line` copies from `parser->offset` with no `partially_consumed_tab` (blocks.c:244).
+        //   - `splitTabSpaces > 0`: the stop lands INSIDE an expanded tab, because an OUTER container that DID match consumed PART of that tab (cmark's `partially_consumed_tab`), leaving the stop mid-tab (e.g. `> > \`x` then `>\ty\``). cmark drops the split tab byte and emits its leftover columns as SYNTHETIC spaces (blocks.c `add_line`), then copies the rest of the line verbatim - so the residual has no source byte to slice. Materialize just those spaces into the arena as one non-source segment and follow it with the zero-copy source segment starting past the split tab (`residualMap.sourceStart`, which preserves any following LITERAL tab). The multi-segment span is handed an arena snapshot so the synthetic segment reads back as spaces (see the inline pass in `parse()` and `ContentSpan.multiByte`). This is the split-tab sibling of the literal-tab carry above.
+        //
+        // The clean-boundary case earlier findings targeted - a top-level lazy block quote whose failing prefix consumed nothing, so the stop is the line start - has `splitTabSpaces == 0` and carries the literal tab.
         let keepResidual = residual > 0 && storage.options.contains(.cmarkBugCompatibility)
         let residualMap = keepResidual ? materializedSourceStart(bufferStart: currentLineContentCursor) : (sourceStart: sourceStart, splitTabSpaces: 0)
-        let carryResidual = keepResidual && residualMap.splitTabSpaces == 0
+        if keepResidual && residualMap.splitTabSpaces > 0 {
+            // Split-tab residual: emit the leftover columns as synthetic arena spaces, then the literal content from just past the split tab. The synthetic spaces are position-less (like the newline join); the literal content maps to its own source bytes (the exact flag-ON column is unobservable - positions are off on the fuzzer surface and the flag-ON positions path is not unit-gated).
+            let afterSpaces = appendSyntheticResidualSpaces(residualMap.splitTabSpaces, to: node, pending: pending)
+            return appendSegment(
+                Segment(offset: Int32(residualMap.sourceStart), length: Int32(lineEnd - residualMap.sourceStart), inSource: true),
+                to: node, pending: afterSpaces)
+        }
+        let carryResidual = keepResidual   // `splitTabSpaces == 0` here (the `> 0` case returned above)
         let segStart = carryResidual ? residualMap.sourceStart : sourceStart
         // The source-position mapping mirrors the source-mapped branch: the first non-space keeps its re-indented column (`mapsAt`), and the leading residual bytes take the columns before it. Back the projection up by the residual's BYTE width when carrying it - one byte for a tab, so the carried tab stamps at `mapsAt - 1` rather than across its full expanded column span. That is a flag-ON position approximation only: positions are off on the fuzzer surface and the flag-ON positions path is not unit-gated, so this keeps the mapping coherent (first non-space at `mapsAt`, offset in-source) without needing the exact spec column. Flag-off maps to the content's true source byte (`sourceStart`).
         let mapsAt = reindent ? currentLineSourceRange.lowerBound + residual + currentContentIndent : sourceStart
@@ -762,6 +798,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         return appendSegment(
             Segment(offset: Int32(offset), length: Int32(spaces + (lineEnd - sourceStart)), inSource: false),
+            to: node, pending: pending)
+    }
+
+    /// Append `count` synthetic space bytes to the arena as one non-source `Segment`, returning the updated leaf.
+    ///
+    /// Used for a paragraph's LAZY continuation line whose outer container prefix PARTIALLY consumed a tab
+    /// (cmark's `partially_consumed_tab`): the tab's leftover columns become spaces with no source byte to
+    /// slice (`add_line`, blocks.c:236). Unlike `appendSplitTabCodeContent` (code/HTML bodies, one segment
+    /// per line), the paragraph's literal content is a *separate* source segment, so this appends only the
+    /// spaces - the caller follows it with the zero-copy source segment. A multi-segment inline `ContentSpan`
+    /// reads this arena segment through its arena snapshot (`ContentSpan.multiByte`); the synthetic spaces are
+    /// position-less like the interned newline join.
+    private mutating func appendSyntheticResidualSpaces(_ count: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
+        let offset = storage.strings.count
+        storage.strings.reserveCapacity(offset + count)
+        for _ in 0..<count {
+            storage.strings.append(UInt8(ascii: " "))
+        }
+        return appendSegment(
+            Segment(offset: Int32(offset), length: Int32(count), inSource: false),
             to: node, pending: pending)
     }
 

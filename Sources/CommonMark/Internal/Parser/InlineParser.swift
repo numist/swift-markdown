@@ -1679,34 +1679,25 @@ extension BlockParser {
                     //
                     // The raw content is `[openEnd, i)`. When that whole range lies in one contiguous buffer
                     // region - every single-line span, and any multi-segment span that stays within one source
-                    // segment - `contiguousChunk` returns it zero-copy, byte-identical to the old `content.chunk`
-                    // fast path. A multi-line span straddles a soft-break segment boundary (its interior newline
-                    // joined the paragraph's non-contiguous lines): the content bytes live in separate source
-                    // segments joined by the interned `\n`, so no single buffer holds them and a straddling
-                    // `content.chunk` would read the wrong bytes - dropping the tail and keeping the continuation
-                    // line's stripped leading whitespace. Materialize the joined raw bytes into the arena through
-                    // the segment-aware subscript, then hand them to the unchanged normalizer. This is the
-                    // `ef14606` inline-HTML sibling.
+                    // segment - it is returned zero-copy, byte-identical to the old `content.chunk` fast path. A
+                    // multi-line span straddles a soft-break segment boundary (its interior newline joined the
+                    // paragraph's non-contiguous lines): the content bytes live in separate source segments joined
+                    // by the interned `\n` (and, flag-ON, a synthetic split-tab residual segment), so no single
+                    // buffer holds them and a straddling `content.chunk` would read the wrong bytes - dropping the
+                    // tail and keeping the continuation line's stripped leading whitespace. `materializedChunk`
+                    // joins them through the segment-aware subscript, then hands them to the unchanged normalizer.
+                    // This is the `ef14606` inline-HTML sibling.
                     //
                     // The joined bytes equal cmark's paragraph buffer for a MATCHED continuation, whose leading
                     // whitespace the block parser strips just as cmark does (blocks.c:1465). A LAZY continuation
                     // (block quote / list) is the case cmark treats differently: it preserves that line's residual
                     // leading whitespace (blocks.c:1408), and flag-ON the block parser now keeps that residual in
                     // the segment content too (`BlockParser.addLineSegment` begins the lazy segment at the
-                    // prefix-match stop), so the join here captures it and the code-span literal reproduces cmark
-                    // (`> `x\n y`` -> `x  y`; the `lazyres-*` pairs). Flag-OFF the block parser begins every
-                    // continuation at its first non-space, so the residual never enters the join - spec-correct.
-                    let contentChunk: Chunk
-                    if let contiguous = content.contiguousChunk(fromVirtual: openEnd, limit: i),
-                       contiguous.length == i - openEnd {
-                        contentChunk = contiguous
-                    } else {
-                        let outOffset = storage.strings.count
-                        for k in openEnd..<i {
-                            storage.strings.append(content[k])
-                        }
-                        contentChunk = Chunk(offset: outOffset, length: storage.strings.count - outOffset, inSource: false)
-                    }
+                    // prefix-match stop, or emits a synthetic-space segment for a split tab), so the join here
+                    // captures it and the code-span literal reproduces cmark (`> `x\n y`` -> `x  y`; the
+                    // `lazyres-*` pairs). Flag-OFF the block parser begins every continuation at its first
+                    // non-space, so the residual never enters the join - spec-correct.
+                    let contentChunk = materializedChunk(start: openEnd, end: i, content: content)
                     return CodeSpanMatch(content: contentChunk, afterClose: closeEnd, backtickCount: runLength)
                 }
                 i = closeEnd
@@ -3127,13 +3118,35 @@ extension BlockParser {
             }
             return
         }
-        let chunk = content.chunk(offset: start, length: end - start)
+        // A text run can straddle a segment boundary when a lazy split-tab residual keeps a synthetic
+        // arena segment in text flow (flag-ON, after a backslash hard break where the residual-skip does
+        // not fire): `[start, end)` then spans the synthetic spaces and the following source line, which no
+        // single buffer holds. Materialize such a run into the arena; a run within one segment stays
+        // zero-copy. (An ordinary run never straddles - soft/hard breaks bound text at the newline.)
+        let chunk = materializedChunk(start: start, end: end, content: content)
         let chunkRef = storage.intern(chunk)
         let textIdx = storage.appendNode(
             NodeRecord(kind: .text, parent: parent, data: .literal(chunkRef))
         )
         storage.appendChild(textIdx, to: parent)
         stampInline(textIdx, start, rangeEnd ?? end, content: content)
+    }
+
+    /// Build a `Chunk` for the virtual range `[start, end)`, materializing into the arena ONLY when the
+    /// range straddles a segment boundary (multi-segment content whose bytes don't lie in one contiguous
+    /// buffer region). Single-segment content and any range confined to one segment stay zero-copy - the
+    /// contiguous slice is returned unchanged. This is the shared form of the join used by code spans and
+    /// straddling text runs.
+    private mutating func materializedChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
+        if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end),
+           contiguous.length == end - start {
+            return contiguous
+        }
+        let outOffset = storage.strings.count
+        for k in start..<end {
+            storage.strings.append(content[k])
+        }
+        return Chunk(offset: outOffset, length: storage.strings.count - outOffset, inSource: false)
     }
 
     /// Stamp `node`'s source range from *virtual* content offsets, resolving each through `content.sourceOffset(ofVirtual:)`.
