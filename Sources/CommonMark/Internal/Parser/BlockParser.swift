@@ -804,6 +804,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return false
     }
 
+    /// `true` if any segment's bytes contain a `\|` (backslash immediately followed by a pipe).
+    ///
+    /// A `\|` never straddles two content segments: a paragraph's physical lines are joined by the interned
+    /// newline segment, so a backslash ending one line and a pipe starting the next have a `\n` between them
+    /// - which cmark's `unescape_pipes` sees, so it isn't a `\|`. A per-segment scan is therefore exact.
+    private func segmentsContainEscapedPipe(_ segs: borrowing UniqueArray<Segment>) -> Bool {
+        for i in 0..<segs.count {
+            let seg = segs[i]
+            let len = Int(seg.length)
+            var j = 0
+            while j + 1 < len {
+                if segmentByte(seg, j) == UInt8(ascii: "\\") && segmentByte(seg, j + 1) == UInt8(ascii: "|") {
+                    return true
+                }
+                j += 1
+            }
+        }
+        return false
+    }
+
     /// CommonMark §2.3: replace every NUL (`U+0000`) in `chunk` with U+FFFD (the three bytes `EF BF BD`).
     ///
     /// Returns `chunk` unchanged - so NUL-free content stays a zero-copy slice - when it has no NUL.
@@ -824,6 +844,46 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             } else {
                 storage.strings.append(b)
             }
+        }
+        return Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
+    }
+
+    /// cmark's table `unescape_pipes` (`extensions/table.c`): replace each `\|` with `|`.
+    ///
+    /// cmark runs this over a table's raw text before inline parsing, including the text it splits off into
+    /// the table's preceding paragraph (`try_inserting_table_header_paragraph`). Because the substitution is
+    /// on the raw bytes, a `\|` there - even inside a code span, which normally keeps backslash escapes
+    /// literal - unescapes to `|`. The row/cell path applies the same rule in `TableParser.unescapePipes`;
+    /// this is its preceding-paragraph twin, used when a paragraph is split ahead of a table it opens.
+    ///
+    /// Returns `chunk` unchanged - so escape-free content stays a zero-copy slice - when it has no `\|`.
+    /// Otherwise materializes a copy into the additions arena with each `\|` collapsed to `|` (the
+    /// arena-materialization pattern: only the affected content is copied, the single backslash dropped) and
+    /// returns a `Chunk` addressing that copy.
+    private mutating func unescapingPipes(_ chunk: Chunk) -> Chunk {
+        let end = chunk.offset + chunk.length
+        var hasEscape = false
+        var i = chunk.offset
+        while i + 1 < end {
+            if readByte(at: i, in: chunk) == UInt8(ascii: "\\")
+                && readByte(at: i + 1, in: chunk) == UInt8(ascii: "|") {
+                hasEscape = true
+                break
+            }
+            i += 1
+        }
+        guard hasEscape else { return chunk }
+        let offset = storage.strings.count
+        var j = chunk.offset
+        while j < end {
+            let b = readByte(at: j, in: chunk)
+            if b == UInt8(ascii: "\\"), j + 1 < end, readByte(at: j + 1, in: chunk) == UInt8(ascii: "|") {
+                storage.strings.append(UInt8(ascii: "|"))
+                j += 2
+                continue
+            }
+            storage.strings.append(b)
+            j += 1
         }
         return Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
     }
@@ -1089,7 +1149,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 storage.insertChildBefore(preceding, before: node)
                 storage.setSourceStart(preceding, precedingChunk.offset)
                 storage.setSourceEnd(preceding, precedingChunk.offset + precedingChunk.length)
-                pendingInlines.append((preceding, storage.intern(replacingNUL(precedingChunk))))
+                // cmark's table `unescape_pipes` runs over the preceding-paragraph text (after feed-time
+                // NUL→U+FFFD), so a `\|` there - even inside a code span - unescapes to `|`. When the
+                // source-backed text is materialized only for that unescape (no NUL), map the arena copy back
+                // to source by one constant shift so the paragraph's inlines keep positions: cmark stamps them
+                // by their offset in the unescaped buffer added to the paragraph start, ignoring the stripped
+                // backslash (its escape-oblivious column), which a single whole-content run reproduces exactly
+                // (the same treatment as the cell path). A NUL forces an arena copy with no source image, so
+                // its inlines stay unstamped, as before.
+                let nulReplaced = replacingNUL(precedingChunk)
+                let precedingContent = unescapingPipes(nulReplaced)
+                if positionsEnabled, nulReplaced.inSource, !precedingContent.inSource {
+                    arenaSourceMaps[preceding] = [ArenaRun(length: Int32(precedingContent.length), sourceOffset: Int32(nulReplaced.offset))]
+                }
+                pendingInlines.append((preceding, storage.intern(precedingContent)))
                 storage.setSourceStart(node, headerRange.lowerBound)
                 recordSplitDelimiterLine(node, delimIndent: delimIndent)
                 paragraphTablePending[node] = true
@@ -1221,13 +1294,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 storage.setSourceStart(precedingNode, span.start)
                 storage.setSourceEnd(precedingNode, span.end)
             }
-            // A NUL in the split-off preceding lines forces a flatten into one normalized arena chunk
-            // (U+FFFD substituted): this content bypasses `drainLeaf`, so it is normalized here at its own
-            // intern (see `ContentSpan.multiByte` for why a segment list can't carry the replacement).
-            if segmentsContainNUL(preceding) {
+            // A NUL (feed-time U+FFFD) or a `\|` (cmark's table `unescape_pipes`) in the split-off preceding
+            // lines forces a flatten into one normalized arena chunk with both substitutions applied: this
+            // content bypasses `drainLeaf`, so it is normalized here at its own intern (see `ContentSpan`
+            // for why a segment list can't carry the replacement). The map `flattenSegments` builds is
+            // discarded and no `arenaSourceMaps` entry is registered, so a nested table's preceding-paragraph
+            // inlines stay unstamped - as the pre-existing NUL branch already did.
+            if segmentsContainNUL(preceding) || segmentsContainEscapedPipe(preceding) {
                 var map: [ArenaRun] = []
                 let flat = flattenSegments(preceding, map: &map)
-                pendingInlines.append((precedingNode, storage.intern(replacingNUL(flat))))
+                pendingInlines.append((precedingNode, storage.intern(unescapingPipes(replacingNUL(flat)))))
             } else {
                 pendingInlines.append((precedingNode, storage.intern(preceding)))
             }
@@ -1272,7 +1348,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if !precedingChunk.isEmpty {
             let precedingNode = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
             storage.insertChildBefore(precedingNode, before: node)
-            pendingInlines.append((precedingNode, storage.intern(replacingNUL(precedingChunk))))
+            // Apply cmark's table `unescape_pipes` (`\|`→`|`) after NUL→U+FFFD, matching the source-backed
+            // preceding-paragraph split. Materialized content only arises with positions off, so no source
+            // map is threaded.
+            pendingInlines.append((precedingNode, storage.intern(unescapingPipes(replacingNUL(precedingChunk)))))
         }
         var header = UniqueArray<UInt8>()
         for k in (lastNewline + 1)..<buffer.count {
