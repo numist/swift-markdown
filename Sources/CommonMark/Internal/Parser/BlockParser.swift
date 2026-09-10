@@ -1435,18 +1435,25 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 current = parent
                 stillOpenKind = storage[current].kind
             } else {
-                // Re-seed pending content with the stripped bytes so the heading's inline-parse pass sees only what's left after ref-defs were extracted. Keep source-backed content zero-copy as a `.lazy` source range (its offset/length are source offsets when `inSource`), so the heading's inlines are source-mapped and get positions exactly as paragraph / ATX-heading content does; only arena-backed content (non-contiguous or normalized lines) is copied.
-                if stripped.inSource {
-                    pending = PendingLeaf(node: para, content: .lazy(range: stripped.range))
+                // cmark consumes a GFM task-list checkbox as the ITEM opens (`open_tasklist_item`),
+                // before the leaf's kind is known, so a setext heading formed from a line-anchored task
+                // item's opening line must strip the checkbox and set the item's checked state just like
+                // the paragraph path does (`runParagraphMatchers`). The ref-def strip already ran above;
+                // the checkbox is the leading token of what remains, so consume it here from the same
+                // flattened content before it is re-seeded as the heading body.
+                let headingContent = stripTasklistCheckbox(node: para, content: stripped)
+                // Re-seed pending content with the stripped bytes so the heading's inline-parse pass sees only what's left after ref-defs (and any task checkbox) were extracted. Keep source-backed content zero-copy as a `.lazy` source range (its offset/length are source offsets when `inSource`), so the heading's inlines are source-mapped and get positions exactly as paragraph / ATX-heading content does; only arena-backed content (non-contiguous or normalized lines) is copied.
+                if headingContent.inSource {
+                    pending = PendingLeaf(node: para, content: .lazy(range: headingContent.range))
                 } else {
-                    // Arena-backed (non-contiguous) content: `addChunk` re-copies the stripped bytes into a fresh arena buffer, so a plain arena chunk would reach inline parsing unmapped and leave the heading's text/emphasis unstamped (spec #12). The flattened content's run map is content-relative, so it survives the re-copy; narrow it to the window that actually reaches inline parsing - the stripped remainder after finalize's own leading/trailing trim (mirrored here by `stripped.trimming`) - keyed from `raw`'s first content byte, and stamp it on the heading via `arenaSourceMaps`.
+                    // Arena-backed (non-contiguous) content: `addChunk` re-copies the stripped bytes into a fresh arena buffer, so a plain arena chunk would reach inline parsing unmapped and leave the heading's text/emphasis unstamped (spec #12). The flattened content's run map is content-relative, so it survives the re-copy; narrow it to the window that actually reaches inline parsing - the stripped remainder after finalize's own leading/trailing trim (mirrored here by `headingContent.trimming`) - keyed from `raw`'s first content byte, and stamp it on the heading via `arenaSourceMaps`.
                     if positionsEnabled, !flatMap.isEmpty {
-                        let finalWindow = stripped.trimming(using: self)
+                        let finalWindow = headingContent.trimming(using: self)
                         if !finalWindow.isEmpty {
                             arenaSourceMaps[para] = sliceRuns(flatMap, from: finalWindow.offset - raw.offset, length: finalWindow.length)
                         }
                     }
-                    pending = addChunk(stripped, to: para, pending: pending)
+                    pending = addChunk(headingContent, to: para, pending: pending)
                 }
                 storage[para].kind = .heading(level: Int(level))
                 // why: cmark finalizes a setext heading only when a later line or EOF closes it
@@ -2377,37 +2384,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         // GFM tasklist: cmark's tasklist extension consumes the checkbox marker at item-OPEN time
         // (`open_tasklist_item`), so every finalize matcher below (footnote def, link ref-def, table)
-        // sees the content AFTER the checkbox. Strip it first here to match. The first paragraph of a
-        // line-anchored list item starting with `[ ]`/`[x]`/`[X]` marks the item; `lineAnchoredTaskItems`
-        // was recorded at open time, so an item sharing its line with a `>` or an outer marker is absent
-        // from it and keeps its marker as literal text (matching cmark's `scan_tasklist`).
-        if storage.options.contains(.tasklist),
-           let parent = storage[node].parent,
-           case .item = storage[parent].kind,
-           storage[parent].firstChild == node,
-           lineAnchoredTaskItems.contains(parent),
-           let mark = matchTasklistMarker(chunk: trimmed) {
-            var checked = mark.checked
-            // why: cmark-gfm's tasklist extension (`open_tasklist_item`) sets the checked state with
-            // `strstr(input, "[x]") || strstr(input, "[X]")` over the checkbox's own line, NOT from the
-            // leading token, so any `[x]`/`[X]` substring later on that first line flips the item checked
-            // even when the leading token is `[ ]` (`- [ ] [x]` -> checked). Reproduced only under
-            // `.cmarkBugCompatibility` (adopted by the differential fuzzer); the deliverable (flag OFF)
-            // keeps the spec-correct leading-token state. `trimmed` starts at the checkbox and preserves
-            // the source line separators, so the scan is scoped to its first physical line.
-            if storage.options.contains(.cmarkBugCompatibility) {
-                checked = firstLineContainsCheckedBox(chunk: trimmed)
-            }
-            storage[parent].kind = .item(checked: checked)
-            // cmark attributes the paragraph's source range to the content after the checkbox and all the whitespace following it (the first non-space/tab). The marker+whitespace length is the offset delta between the content and the marker's remainder (buffer-agnostic), so advance the already-stamped paragraph start by that many bytes.
-            if positionsEnabled {
-                let start = storage.sourceRanges[node].start
-                if start >= 0 {
-                    storage.setSourceStart(node, Int(start) + (mark.remaining.offset - trimmed.offset))
-                }
-            }
-            trimmed = mark.remaining
-        }
+        // sees the content AFTER the checkbox. Strip it first here to match.
+        trimmed = stripTasklistCheckbox(node: node, content: trimmed)
         // GFM footnote definition: `[^label]: content`. Detected first because a footnote-def line shouldn't also be probed for link ref-defs or task markers.
         var isFootnoteDef = false
         if storage.options.contains(.footnotes),
@@ -3770,6 +3748,50 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
         return (checked, chunk.extracting(contentStart..<chunk.length))
+    }
+
+    /// Consume a GFM task-list checkbox from `content` - the trimmed first-leaf content of a list item -
+    /// setting the item's `.item(checked:)` state and returning the content past the marker + separator.
+    /// Returns `content` unchanged when the item is not an eligible task item (or the content doesn't
+    /// begin with a checkbox).
+    ///
+    /// cmark-gfm consumes the checkbox in `open_tasklist_item` (`extensions/tasklist.c`) as the ITEM
+    /// opens, regardless of what that content later becomes - a paragraph, a setext heading, etc. The
+    /// rewrite defers that consumption to finalize, so this must be called on BOTH finalize paths a task
+    /// item's first leaf can take: a paragraph (`runParagraphMatchers`) and a setext heading transformed
+    /// from that paragraph (`processLine` PHASE 2c). Eligibility was decided at open time
+    /// (`lineAnchoredTaskItems`: the marker is preceded on its own physical line by only whitespace AND a
+    /// checkbox directly follows it), so an item sharing its line with a `>` or an outer marker is absent
+    /// from the set and keeps its `[ ]`/`[x]` as literal text (matching cmark's `scan_tasklist`).
+    private mutating func stripTasklistCheckbox(node: DocumentStorage.Index, content: Chunk) -> Chunk {
+        guard storage.options.contains(.tasklist),
+              let parent = storage[node].parent,
+              case .item = storage[parent].kind,
+              storage[parent].firstChild == node,
+              lineAnchoredTaskItems.contains(parent),
+              let mark = matchTasklistMarker(chunk: content) else {
+            return content
+        }
+        var checked = mark.checked
+        // why: cmark-gfm's tasklist extension (`open_tasklist_item`) sets the checked state with
+        // `strstr(input, "[x]") || strstr(input, "[X]")` over the checkbox's own line, NOT from the
+        // leading token, so any `[x]`/`[X]` substring later on that first line flips the item checked
+        // even when the leading token is `[ ]` (`- [ ] [x]` -> checked). Reproduced only under
+        // `.cmarkBugCompatibility` (adopted by the differential fuzzer); the deliverable (flag OFF)
+        // keeps the spec-correct leading-token state. `content` starts at the checkbox and preserves
+        // the source line separators, so the scan is scoped to its first physical line.
+        if storage.options.contains(.cmarkBugCompatibility) {
+            checked = firstLineContainsCheckedBox(chunk: content)
+        }
+        storage[parent].kind = .item(checked: checked)
+        // cmark attributes the leaf's source range to the content after the checkbox and all the whitespace following it (the first non-space/tab). The marker+whitespace length is the offset delta between the content and the marker's remainder (buffer-agnostic), so advance the already-stamped leaf start by that many bytes.
+        if positionsEnabled {
+            let start = storage.sourceRanges[node].start
+            if start >= 0 {
+                storage.setSourceStart(node, Int(start) + (mark.remaining.offset - content.offset))
+            }
+        }
+        return mark.remaining
     }
 
     /// Flag-ON (`.cmarkBugCompatibility`) reproduction of cmark-gfm's tasklist checked-state bug: does the
