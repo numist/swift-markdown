@@ -2050,7 +2050,7 @@ extension BlockParser {
         return matchHTMLDeclaration(start: start, end: end, content: content)
     }
 
-    /// Match `<!--…-->`. Accepts the empty forms `<!-->` and `<!--->` per HTML5, then scans for the first `-->` terminator (rejecting NUL bytes in the body).
+    /// Match `<!--…-->`. Accepts the empty forms `<!-->` and `<!--->` per HTML5, then scans for the first `-->` terminator (rejecting NUL bytes in the body). Under `.cmarkBugCompatibility` the body+closer is matched by cmark-gfm's stricter grammar instead (`matchHTMLCommentBodyStrict`), which rejects some forms the first-`-->` rule accepts (e.g. `<!----->`).
     private func matchHTMLComment(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         // Need at least `<!--`.
         if start + 4 > end {
@@ -2068,6 +2068,14 @@ extension BlockParser {
         if bodyStart + 1 < end, content[bodyStart] == UInt8(ascii: "-"), content[bodyStart + 1] == UInt8(ascii: ">") {
             return bodyStart + 2
         }
+        // why: cmark-gfm scans comment bodies with the stricter grammar in swift-cmark `src/scanners.re`
+        // (`htmlcomment`, via `_scan_html_comment`), which rejects forms the CommonMark 0.31 first-`-->`
+        // rule accepts (e.g. `<!----->`). Flag-ON (`.cmarkBugCompatibility`, adopted only by the
+        // differential fuzzer) reproduces that rejection; flag-OFF the deliverable stays spec-correct
+        // (0.31), matching the first `-->` below.
+        if storage.options.contains(.cmarkBugCompatibility) {
+            return matchHTMLCommentBodyStrict(bodyStart: bodyStart, end: end, content: content)
+        }
         var i = bodyStart
         while i + 3 <= end {
             let b0 = content[i]
@@ -2076,6 +2084,30 @@ extension BlockParser {
             }
             if b0 == UInt8(ascii: "-") && content[i + 1] == UInt8(ascii: "-") && content[i + 2] == UInt8(ascii: ">") {
                 return i + 3
+            }
+            i += 1
+        }
+        return nil
+    }
+
+    /// Match a comment body + `-->` closer under cmark-gfm's stricter grammar (swift-cmark `src/scanners.re`: `([^\x00-]+ | "-" [^\x00-] | "--" [^\x00>])* "-->"`, scanned by `_scan_html_comment` after the `<!--` opener). Returns the offset just past `-->`, or `nil` if no closer is reachable. Dashes are admitted only in runs of one or two before a non-dash / non-`>` char, so a body element can never leave a lone `-->` closer — which is why `<!----->` is rejected (its three interior dashes are absorbed as `--` + `-`, then `>` no longer follows a `--`). A NUL byte, or reaching `end` without a closer, fails.
+    private func matchHTMLCommentBodyStrict(bodyStart: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+        // Unabsorbed dashes since the last body char, capped at two (cmark DFA states yy226/yy228/yy236);
+        // a third dash is the `[^\x00>]` completing a `--` run, so the run resets.
+        var pendingDashes = 0
+        var i = bodyStart
+        while i < end {
+            let b = content[i]
+            if b == 0 {
+                return nil
+            }
+            if b == UInt8(ascii: "-") {
+                pendingDashes = pendingDashes == 2 ? 0 : pendingDashes + 1
+            } else if b == UInt8(ascii: ">"), pendingDashes == 2 {
+                return i + 1
+            } else {
+                // Any other char (including `>` after fewer than two dashes) absorbs the pending run.
+                pendingDashes = 0
             }
             i += 1
         }
