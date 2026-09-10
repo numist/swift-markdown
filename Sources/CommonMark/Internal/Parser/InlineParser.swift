@@ -158,9 +158,9 @@ extension BlockParser {
                 // Match in an expression of its own so the borrowed `source` span (lifetime-dependent) stays scoped to the call and can't escape into the body.
                 let entity: EntityParser.EntityMatch? = if let window {
                     if window.inSource {
-                        EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: sourceBytes)
+                        EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: sourceBytes, bugCompat: storage.options.contains(.cmarkBugCompatibility))
                     } else {
-                        EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: storage.strings.span)
+                        EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: storage.strings.span, bugCompat: storage.options.contains(.cmarkBugCompatibility))
                     }
                 } else {
                     nil

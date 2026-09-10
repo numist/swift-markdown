@@ -4203,9 +4203,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             if b == UInt8(ascii: "&") {
                 let entity = if chunk.inSource {
-                    EntityParser.matchEntity(start: j, end: endOff, source: sourceBytes)
+                    EntityParser.matchEntity(start: j, end: endOff, source: sourceBytes, bugCompat: storage.options.contains(.cmarkBugCompatibility))
                 } else {
-                    EntityParser.matchEntity(start: j, end: endOff, source: storage.strings.span)
+                    EntityParser.matchEntity(start: j, end: endOff, source: storage.strings.span, bugCompat: storage.options.contains(.cmarkBugCompatibility))
                 }
                 if let entity {
                     for k in 0..<entity.count {

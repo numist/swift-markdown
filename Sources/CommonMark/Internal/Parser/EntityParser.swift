@@ -35,20 +35,26 @@ internal enum EntityParser {
     /// Try to match an HTML entity beginning at `start` (which points at `&`).
     ///
     /// Returns the decoded codepoints and the offset just past the trailing `;`. CommonMark 0.31 §6.5.
-    internal static func matchEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
+    ///
+    /// `bugCompat` selects cmark-gfm's looser numeric digit limits (see `matchNumericEntity`); it is
+    /// threaded from `MarkdownDocument.ParseOptions.cmarkBugCompatibility` at the call sites.
+    internal static func matchEntity(start: Int, end: Int, source: Span<UInt8>, bugCompat: Bool) -> EntityMatch? {
         let after = start + 1
         if after >= end {
             return nil
         }
         let next = source[after]
         if next == UInt8(ascii: "#") {
-            return matchNumericEntity(start: start, end: end, source: source)
+            return matchNumericEntity(start: start, end: end, source: source, bugCompat: bugCompat)
         }
         return matchNamedEntity(start: start, end: end, source: source)
     }
 
-    /// Match `&#NNN;` (decimal, 1–7 digits) or `&#xHHH;` / `&#XHHH;` (hex, 1–6 digits).
-    private static func matchNumericEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
+    /// Match `&#NNN;` (decimal) or `&#xHHH;` / `&#XHHH;` (hex).
+    ///
+    /// The spec-correct digit limits are 1–7 decimal / 1–6 hex (CommonMark §6.5). When `bugCompat` is
+    /// set, both branches accept up to 8 digits instead, matching cmark-gfm (see below).
+    private static func matchNumericEntity(start: Int, end: Int, source: Span<UInt8>, bugCompat: Bool) -> EntityMatch? {
         var i = start + 2 // past `&#`
         if i >= end {
             return nil
@@ -61,7 +67,14 @@ internal enum EntityParser {
         }
         var n: UInt32 = 0
         var digits = 0
-        let maxDigits = hex ? 6 : 7
+        // why: cmark-gfm decodes inline numeric refs with `houdini_unescape_ent` (swift-cmark
+        // src/houdini_html_u.c), which `handle_entity` (src/inlines.c) calls directly — never the
+        // stricter `_scan_entity` grammar (src/scanners.re). That decoder's shared gate is
+        // `num_digits >= 1 && num_digits <= 8` for BOTH the decimal and hex branches, so cmark accepts
+        // up to 8 digits either way — looser than CommonMark §6.5's 7-decimal / 6-hex limits. Flag-ON
+        // (`.cmarkBugCompatibility`, adopted only by the differential fuzzer) match that 8-digit cap;
+        // flag-OFF stays spec-correct so an 8+-digit decimal / 7+-digit hex ref remains literal.
+        let maxDigits = bugCompat ? 8 : (hex ? 6 : 7)
         while i < end {
             let b = source[i]
             let value: UInt32
@@ -75,6 +88,14 @@ internal enum EntityParser {
                 break
             }
             n = n * (hex ? 16 : 10) + value
+            // Mirror cmark's overflow guard (`if (codepoint >= 0x110000) codepoint = 0x110000;`): clamp
+            // once out of Unicode range so the next digit's multiply can't overflow `UInt32` (reachable
+            // flag-ON, where a 9th hex digit is accumulated before the digit-count check rejects it).
+            // The final validation below maps anything `> 0x10FFFF` to U+FFFD, so the clamp value is
+            // observationally identical to the unclamped value — it only bounds the arithmetic.
+            if n >= 0x110000 {
+                n = 0x110000
+            }
             digits += 1
             if digits > maxDigits {
                 return nil
@@ -242,7 +263,8 @@ internal enum EntityParser {
                let entity = matchEntity(
                    start: i,
                    end: endOff,
-                   source: source
+                   source: source,
+                   bugCompat: storage.options.contains(.cmarkBugCompatibility)
                ) {
                 for k in 0..<entity.count {
                     storage.strings.append(entity.bytes[k])
