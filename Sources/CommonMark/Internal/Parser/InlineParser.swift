@@ -2712,7 +2712,13 @@ extension BlockParser {
         )
     }
 
-    /// Walk forward accepting non-whitespace, non-`<`, non-`>` bytes.
+    /// Walk forward until a URL boundary: cmark whitespace (`cmark_isspace` - space, tab, LF, CR) or `<`.
+    ///
+    /// Mirrors cmark-gfm's URL body scan in `url_match` / `www_match` (`extensions/autolink.c`):
+    /// `while (link_end < size && !cmark_isspace(data[link_end]) && data[link_end] != '<')`. `>` is NOT a
+    /// boundary - it is an ordinary URL byte - and VT/FF are not `cmark_isspace` (they are HTML `spacechar`
+    /// but class-0 here), so both stay in the URL. Hence `isSpaceTabOrNewline` (exactly `cmark_isspace`),
+    /// not `isASCIISpace` (which also matches VT/FF).
     private func scanGFMURLBody(
         start: Int,
         end: Int,
@@ -2721,7 +2727,7 @@ extension BlockParser {
         var i = start
         while i < end {
             let b = content[i]
-            if b.isASCIISpace || b == UInt8(ascii: "<") || b == UInt8(ascii: ">") {
+            if b.isSpaceTabOrNewline || b == UInt8(ascii: "<") {
                 break
             }
             i += 1
@@ -2729,80 +2735,59 @@ extension BlockParser {
         return i
     }
 
-    /// Peel trailing `.,?:!*_~` and unmatched trailing `)` per the GFM autolink trim rules.
+    /// Trailing-boundary trim for a GFM autolink URL, mirroring cmark-gfm's `autolink_delim`
+    /// (`extensions/autolink.c`) as a single pass from the end of the `[urlStart, urlEnd)` run that
+    /// `scanGFMURLBody` (or the email domain scan) produced:
+    ///
+    /// - a trailing `? ! . , : * _ ~ ' "` is peeled, one character at a time;
+    /// - a trailing `)` is peeled only when the run holds more `)` than `(`, so balanced parentheses
+    ///   (`…/Pikachu_(Electric)`) are kept while a stray closing paren is dropped. The `(`/`)` totals are
+    ///   counted once over the whole run; `closing` is decremented as each unbalanced `)` is removed;
+    /// - a trailing `;` peels a whole `&…;` entity tail when one precedes it (`&`, then one or more ASCII
+    ///   letters - `cmark_isalpha`, which excludes digits - then `;`), otherwise it peels just the `;`.
+    ///
+    /// These `)`, punctuation, and `;` cases are interleaved in one loop (as cmark does), so a mixed tail
+    /// like `');` peels right-to-left correctly. A `<` never appears in the run (`scanGFMURLBody` and the
+    /// email domain scan both stop at it), so cmark's `<`-truncation pass is a no-op and is omitted.
     private func trimTrailingPunctuation(urlStart: Int, urlEnd: Int, content: borrowing ContentSpan) -> Int {
+        var opening = 0
+        var closing = 0
+        for j in urlStart..<urlEnd {
+            switch content[j] {
+            case UInt8(ascii: "("): opening += 1
+            case UInt8(ascii: ")"): closing += 1
+            default: break
+            }
+        }
+
         var i = urlEnd
-        var changed = true
-        while changed && i > urlStart {
-            changed = false
-            while i > urlStart {
-                let b = content[i - 1]
-                switch b {
-                case UInt8(ascii: "."), UInt8(ascii: ","), UInt8(ascii: "?"),
-                     UInt8(ascii: ":"), UInt8(ascii: "!"), UInt8(ascii: "*"),
-                     UInt8(ascii: "_"), UInt8(ascii: "~"):
-                    i -= 1
-                    changed = true
-                default:
-                    break
+        trim: while i > urlStart {
+            switch content[i - 1] {
+            case UInt8(ascii: ")"):
+                if closing <= opening {
+                    break trim
                 }
-                let stopHere: Bool
-                if i <= urlStart {
-                    stopHere = true
+                closing -= 1
+                i -= 1
+            case UInt8(ascii: "?"), UInt8(ascii: "!"), UInt8(ascii: "."), UInt8(ascii: ","),
+                 UInt8(ascii: ":"), UInt8(ascii: "*"), UInt8(ascii: "_"), UInt8(ascii: "~"),
+                 UInt8(ascii: "'"), UInt8(ascii: "\""):
+                i -= 1
+            case UInt8(ascii: ";"):
+                // Scan ASCII letters back from the char before the `;`; an entity tail is `&` + those
+                // letters + `;`. Requiring at least one letter (`entityStart < i - 2`) matches cmark's
+                // `new_end < link_end - 2` guard, so `&;` and a bare `;` peel only the `;`.
+                var entityStart = i - 2
+                while entityStart > urlStart, content[entityStart].isASCIILetter {
+                    entityStart -= 1
+                }
+                if entityStart < i - 2, content[entityStart] == UInt8(ascii: "&") {
+                    i = entityStart
                 } else {
-                    let again = content[i - 1]
-                    switch again {
-                    case UInt8(ascii: "."), UInt8(ascii: ","), UInt8(ascii: "?"),
-                         UInt8(ascii: ":"), UInt8(ascii: "!"), UInt8(ascii: "*"),
-                         UInt8(ascii: "_"), UInt8(ascii: "~"):
-                        stopHere = false
-                    default:
-                        stopHere = true
-                    }
-                }
-                if stopHere {
-                    break
-                }
-            }
-            var open = 0
-            var close = 0
-            for j in urlStart..<i {
-                let b = content[j]
-                if b == UInt8(ascii: "(") { open += 1 }
-                else if b == UInt8(ascii: ")") { close += 1 }
-            }
-            while close > open && i > urlStart {
-                let b = content[i - 1]
-                if b == UInt8(ascii: ")") {
                     i -= 1
-                    close -= 1
-                    changed = true
-                } else {
-                    break
                 }
-            }
-            // GFM rule: a trailing `&entity;`-like sequence is treated as separate text. If the URL ends with `;`, scan back for an `&` that delimits an entity candidate (only ASCII letters/digits between them).
-            if i > urlStart, content[i - 1] == UInt8(ascii: ";") {
-                var k = i - 2
-                var ok = true
-                while k >= urlStart {
-                    let b = content[k]
-                    if b == UInt8(ascii: "&") {
-                        break
-                    }
-                    let isAlnum = b.isASCIILetter
-                        || b.isASCIIDigit
-                    if !isAlnum {
-                        ok = false
-                        break
-                    }
-                    k -= 1
-                }
-                if ok && k >= urlStart,
-                   content[k] == UInt8(ascii: "&") {
-                    i = k
-                    changed = true
-                }
+            default:
+                break trim
             }
         }
         return i
