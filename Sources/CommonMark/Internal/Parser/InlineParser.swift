@@ -3312,6 +3312,17 @@ extension BlockParser {
             ) else {
                 // `matchGFMEmailAutolink` guarantees `resumeAt > i`, so this always advances (and skips any
                 // `@`s the restart already settled - see its doc). O(content length) overall.
+                //
+                // why: cmark's `postprocess_text` (`extensions/autolink.c`) runs a single monotonic cursor
+                // `start + offset`; a failed candidate advances it past the region scanned (`offset +=
+                // max_rewind + link_end`), so the NEXT `@`'s backward local-part scan is bounded there
+                // (`max_rewind = at - (data + start + offset)`) and cannot rewind into the abandoned
+                // candidate. The rewrite splits that cursor into the forward scan `i` and the backward-scan
+                // floor `cursor`; advancing both on failure preserves the bound. Otherwise a char the forward
+                // domain scan breaks on but the backward scan accepts as a local-part char - `+`, or a `.`
+                // not immediately followed by an alnum - is rewound through, pulling preceding text into the
+                // next email's local part.
+                cursor = resumeAt
                 i = resumeAt
                 continue
             }
