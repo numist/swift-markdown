@@ -167,36 +167,61 @@ extension BlockParser {
         }
         let opener = readByte(at: start, in: chunk)
         let closer: UInt8
-        let parens: Bool
         switch opener {
         case UInt8(ascii: "\""):
             closer = UInt8(ascii: "\"")
-            parens = false
         case UInt8(ascii: "'"):
             closer = UInt8(ascii: "'")
-            parens = false
         case UInt8(ascii: "("):
             closer = UInt8(ascii: ")")
-            parens = true
         default:
             return nil
         }
+        // cmark's `scan_link_title` (re2c: `['] (escaped_char|[^'\x00])* [']` and the `"…"` / `(…)`
+        // forms in `src/scanners.re`, where `escaped_char = [\\]<ascii-punct>`) is a *longest-match*
+        // scan. Because `[^'\x00]` also matches `\`, a backslash inside the body admits two readings at
+        // once — the start of an `escaped_char`, or an ordinary content byte — and the scanner returns
+        // the FURTHEST reachable closing delimiter. A left-to-right "always escape `\X`" scan diverges
+        // when a `\` precedes the closer with no later closer to escape onto (`'\')` → title `\`): the
+        // eager scan consumes the closer as the escaped byte and never matches, while cmark reads the
+        // `\` as content and closes on the following delimiter. We simulate the two DFA threads:
+        //   - `inBody`: inside the body, able to consume a content byte, begin an escaped_char, or
+        //     close on the delimiter;
+        //   - `afterBackslash`: just consumed a `\` that begins an escaped_char and needs an ASCII
+        //     punctuation byte to complete it.
+        // The furthest position at which the body closed is the match. A content byte is any byte other
+        // than the opening/closing delimiters (for quote forms `opener == closer`; the `(…)` form
+        // excludes both, matching re2c's `[^()\x00]`).
+        var inBody = true
+        var afterBackslash = false
+        var closeAfterEnd: Int? = nil
         var i = start + 1
-        while i < end {
+        while i < end, inBody || afterBackslash {
             let c = readByte(at: i, in: chunk)
-            if c == UInt8(ascii: "\\") {
-                i += 2
-                continue
+            var nextInBody = false
+            var nextAfterBackslash = false
+            if inBody {
+                if c == closer {
+                    closeAfterEnd = i + 1
+                }
+                if c != opener && c != closer {
+                    nextInBody = true
+                }
+                if c == UInt8(ascii: "\\") {
+                    nextAfterBackslash = true
+                }
             }
-            if c == closer {
-                return LinkTitleMatch(chunk: chunk.extracting(1..<(i - start)), afterEnd: i + 1)
+            if afterBackslash && c.isASCIIPunct {
+                nextInBody = true
             }
-            if parens && c == UInt8(ascii: "(") {
-                return nil
-            }
+            inBody = nextInBody
+            afterBackslash = nextAfterBackslash
             i += 1
         }
-        return nil
+        guard let closeAfterEnd else {
+            return nil
+        }
+        return LinkTitleMatch(chunk: chunk.extracting(1..<(closeAfterEnd - 1 - start)), afterEnd: closeAfterEnd)
     }
 
     // MARK: - Whitespace
