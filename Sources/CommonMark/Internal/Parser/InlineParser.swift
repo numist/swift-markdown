@@ -2316,7 +2316,15 @@ extension BlockParser {
     }
 
     /// Match `<?…?>`. Body may be empty; scans for the first `?>` terminator rejecting NUL bytes.
+    ///
+    /// Flag-OFF (the spec-correct deliverable, CommonMark 0.31 §6.6) the body is any string of
+    /// characters not including `?>`, so this stops at the FIRST `?>`. Under `.cmarkBugCompatibility`
+    /// the scan follows cmark-gfm's inline PI grammar instead (`matchHTMLProcessingInstructionCmark`),
+    /// which over-consumes and rejects some PIs the spec accepts (e.g. `<???>`).
     private func matchHTMLProcessingInstruction(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+        if storage.options.contains(.cmarkBugCompatibility) {
+            return matchHTMLProcessingInstructionCmark(start: start, end: end, content: content)
+        }
         var i = start + 2
         while i + 2 <= end {
             let b0 = content[i]
@@ -2330,6 +2338,58 @@ extension BlockParser {
             i += 1
         }
         return nil
+    }
+
+    /// Match `<?…?>` under cmark-gfm's inline processing-instruction grammar (swift-cmark
+    /// `src/inlines.c` `handle_pointy_brace` + `src/scanners.re` `_scan_html_pi`), reproduced only
+    /// under `.cmarkBugCompatibility`.
+    ///
+    /// cmark scans the body with `processinginstruction = ([^?>\x00]+ | [?][^>\x00] | [>])+` starting
+    /// at the byte AFTER the opening `?` (`start + 2` here, since `start` is `<`), then frames the
+    /// match with `<?`…`?>` (`matchlen += 3`) and rejects the PI when that framing overruns the input
+    /// (`subj->pos + matchlen > input.len`). The regex never verifies a real `?>` follows; it just
+    /// requires two bytes of room for it. Because the regex admits a lone `>` and pairs each `?` with
+    /// its FOLLOWING byte, a body beginning with `?` can swallow the closing `?>` — for `<???>` the
+    /// scan of `??>` eats `??` (a `[?][^>\x00]` pair) then `>` (a lone `[>]`), consuming through the
+    /// input with no room left for the closer, so cmark rejects it. `<?x?>` matches only `x`, stops
+    /// before `?>`, and is accepted. The body ends at the first NUL, the first `?` immediately before
+    /// `>` (or at input end), whichever comes first.
+    private func matchHTMLProcessingInstructionCmark(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+        var i = start + 2
+        while i < end {
+            let b = content[i]
+            if b == 0 {
+                // NUL is excluded from every alternative of `processinginstruction`.
+                break
+            }
+            if b == UInt8(ascii: ">") {
+                // `[>]`: a lone `>` is consumed into the body.
+                i += 1
+                continue
+            }
+            if b == UInt8(ascii: "?") {
+                // `[?][^>\x00]`: a `?` is consumed only when paired with a following non-`>`,
+                // non-NUL byte. A `?` at input end, or immediately before `>` or NUL, cannot be
+                // consumed and ends the body — this is where cmark stops before a real `?>`.
+                if i + 1 < end {
+                    let next = content[i + 1]
+                    if next != UInt8(ascii: ">") && next != 0 {
+                        i += 2
+                        continue
+                    }
+                }
+                break
+            }
+            // `[^?>\x00]`: any other byte is consumed.
+            i += 1
+        }
+        // cmark: matchlen = (body length) + 3, reject when subj->pos (start + 1) + matchlen > end.
+        // Body length = i - (start + 2), so the offset just past the framed `?>` is i + 2.
+        let piEnd = i + 2
+        if piEnd > end {
+            return nil
+        }
+        return piEnd
     }
 
     /// Scan `[A-Za-z][A-Za-z0-9-]*`. Returns the offset just past the last tag-name byte, or `nil` if the first byte isn't a letter.
