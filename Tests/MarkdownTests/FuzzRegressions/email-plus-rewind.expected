@@ -1,0 +1,6 @@
+Document @1:1-1:8
+└─ Paragraph @1:1-1:8
+   ├─ Text @1:1-1:4 "l@o"
+   ├─ Link destination: "mailto:+@.b"
+   │  └─ Text "+@.b"
+   └─ Text ""
