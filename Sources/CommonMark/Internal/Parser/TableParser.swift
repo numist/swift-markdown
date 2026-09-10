@@ -679,12 +679,13 @@ extension BlockParser {
         var cellStart = s
         var i = s
         while i < e {
-            let b = storage.strings[i]
-            if b == UInt8(ascii: "\\") && i + 1 < e {
-                i += 2
-                continue
-            }
-            if b == UInt8(ascii: "|") {
+            // A `|` is a cell delimiter unless the byte directly before it is a backslash, which escapes it.
+            // cmark's re2c cell scanner `table_cell = (escaped_char | [^|\r\n])+` takes the LONGEST match
+            // (`ext_scanners.re`), so a backslash immediately before a `|` always pulls the pipe into the cell
+            // as an escaped pipe — the backslashes ahead of that last one are always consumable, so parity
+            // doesn't matter. `unescapePipes` later drops the one backslash sitting directly before the pipe.
+            if storage.strings[i] == UInt8(ascii: "|")
+                && (i == s || storage.strings[i - 1] != UInt8(ascii: "\\")) {
                 cells.append(cellStart..<i)
                 cellStart = i + 1
             }
