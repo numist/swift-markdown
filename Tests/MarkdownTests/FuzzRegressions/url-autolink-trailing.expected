@@ -1,0 +1,5 @@
+Document @1:1-1:10
+└─ Paragraph @1:1-1:10
+   ├─ Text ""
+   └─ Link destination: "http://l>"
+      └─ Text "http://l>"
