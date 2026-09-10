@@ -1,0 +1,4 @@
+Document @1:1-2:3
+└─ Paragraph @1:2-2:2
+   └─ InlineAttributes @1:2-2:3 attributes: `
+`
