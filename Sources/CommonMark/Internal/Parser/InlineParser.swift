@@ -430,7 +430,14 @@ extension BlockParser {
                 // (`postprocess`, `extensions/autolink.c`). The rewrite mirrors that in
                 // `gfmEmailAutolinkPass`, run after `consolidateTextNodes`, so a flanking `_`/`*` next to
                 // an email is resolved as emphasis (or not) before the email boundaries are decided.
+                // why: cmark's autolink extension declines to match a bare-URL autolink while an unclosed
+                // `[`/`![` (LINK/IMAGE) opener is on the bracket stack - `match` (`extensions/autolink.c`)
+                // bails when `cmark_inline_parser_in_bracket` reports LINK or IMAGE - so e.g. `[http://t`
+                // stays plain text. An `^[` (ATTRIBUTE-only) opener does not suppress. The email post-pass
+                // is unaffected: it runs after brackets have collapsed to literal text.
+                let insideLinkOrImageBracket = lastBracket.map { brackets[$0].insideLinkOrImage } ?? false
                 if storage.options.contains(.gfmAutolink),
+                   !insideLinkOrImageBracket,
                    let auto = matchGFMAutolink(
                     trigger: byte,
                     cursor: cursor,
@@ -557,6 +564,8 @@ extension BlockParser {
         var delimPosition: Int
         /// `true` once any later bracket has been pushed on top of this one. Used to disqualify the shortcut-reference form for outer brackets that contain nested ones.
         var bracketAfter: Bool
+        /// `true` when this bracket, or any bracket enclosing it, is a `.link` or `.image` opener - the cumulative union cmark keeps in `bracket.in_bracket[LINK|IMAGE]` (see `push_bracket` in `src/inlines.c`). GFM bare-URL autolinks (`://`-scheme, `www.`) are suppressed while such a bracket is open, matching `match` in `extensions/autolink.c` (`cmark_inline_parser_in_bracket`). An `.attribute`-only chain does not suppress them.
+        var insideLinkOrImage: Bool
         var previous: Int?
     }
 
@@ -566,12 +575,15 @@ extension BlockParser {
         }
         let prev = lastBracket
         let newIdx = brackets.count
+        let insideLinkOrImage = (prev.map { brackets[$0].insideLinkOrImage } ?? false)
+            || kind == .link || kind == .image
         brackets.append(BracketRecord(
             kind: kind,
             inlText: inlText,
             virtualStart: virtualStart,
             delimPosition: delimPosition,
             bracketAfter: false,
+            insideLinkOrImage: insideLinkOrImage,
             previous: prev
         ))
         lastBracket = newIdx
