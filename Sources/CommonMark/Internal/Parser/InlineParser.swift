@@ -1213,8 +1213,21 @@ extension BlockParser {
     ///
     /// The start of the content (`content.startOffset`) determines whether `start - 1` is a real "before" character or implicitly a newline (start of inline content acts like a line break).
     private mutating func handleDelimRun(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, pendingTextStart: inout Int) throws (MarkdownDocument.Error) -> Int {
+        // why: cmark-gfm's strikethrough `match` (`extensions/strikethrough.c`) scans a `~` run into a
+        // fixed `char buffer[101]` via `cmark_inline_parser_scan_delimiters(inline_parser,
+        // sizeof(buffer) - 1, '~', …)`, so it reads at most 100 consecutive `~` per delimiter token. A
+        // longer run is thereby chunked into 100-length tokens (never a valid strikethrough delimiter -
+        // only lengths 1 and 2 are - so each stays literal text) plus a final `N mod 100` token that can
+        // pair. Cap the scan at 100 under `.cmarkBugCompatibility`; the outer loop re-enters here for the
+        // next chunk, reproducing the chunking. Flag-OFF stays spec-correct (a run of length ≥ 3 is
+        // simply not a valid delimiter), and `*`/`_` are never capped - cmark's own `scan_delims`
+        // (`src/inlines.c`) has no such fixed buffer, only the strikethrough extension does.
+        let scanLimit =
+            char == UInt8(ascii: "~") && storage.options.contains(.cmarkBugCompatibility)
+            ? min(end, start + 100)
+            : end
         var runEnd = start
-        while runEnd < end, content[runEnd] == char {
+        while runEnd < scanLimit, content[runEnd] == char {
             runEnd += 1
         }
 
