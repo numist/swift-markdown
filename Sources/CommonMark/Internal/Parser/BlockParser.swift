@@ -3063,17 +3063,32 @@ internal struct BlockParser : ~Copyable, ~Escapable {
            source[after + 2] == UInt8(ascii: "-") {
             return 2
         }
-        // Type 5: `<![CDATA[`
+        // Type 5: `<![CDATA[`. The two brackets are literal; the letters `CDATA` are matched
+        // case-SENSITIVELY per CommonMark start condition 5 (spec-correct, flag OFF). Under
+        // `.cmarkBugCompatibility` they are matched case-INSENSITIVELY to reproduce cmark-gfm.
+        // why: cmark-gfm's `_scan_html_block_start` scans the opener from the single-quoted re2c pattern
+        // `'<![CDATA['` (swift-cmark `src/scanners.re`), and re2c compiles a single-quoted string to a
+        // case-INSENSITIVE matcher - the generated `scanners.c` accepts either case at every letter state
+        // (state `yy318` onward: `if (yych=='C') ... if (yych=='c')`, and likewise D/A/T/A). So cmark opens
+        // a type-5 HTML block for `<![cdata[`, `<![CDAtA[`, ... The trailing `[` is a literal bracket (only
+        // `[` reaches `return 5`; anything else backtracks to `return 0`), so `<![CDATAx` stays a paragraph
+        // under both, and type 4 (`<!` + [A-Z], a case-sensitive class) is left unchanged either way.
         if next == UInt8(ascii: "!"),
            after + 7 < range.upperBound,
            source[after + 1] == UInt8(ascii: "["),
-           source[after + 2] == UInt8(ascii: "C"),
-           source[after + 3] == UInt8(ascii: "D"),
-           source[after + 4] == UInt8(ascii: "A"),
-           source[after + 5] == UInt8(ascii: "T"),
-           source[after + 6] == UInt8(ascii: "A"),
            source[after + 7] == UInt8(ascii: "[") {
-            return 5
+            let letters = (after + 2)..<(after + 7)
+            let matched =
+                storage.options.contains(.cmarkBugCompatibility)
+                ? bytesEqualASCIICaseInsensitive(span: source, range: letters, target: "CDATA")
+                : source[after + 2] == UInt8(ascii: "C")
+                    && source[after + 3] == UInt8(ascii: "D")
+                    && source[after + 4] == UInt8(ascii: "A")
+                    && source[after + 5] == UInt8(ascii: "T")
+                    && source[after + 6] == UInt8(ascii: "A")
+            if matched {
+                return 5
+            }
         }
         // Type 4: `<!` followed by an uppercase ASCII letter (CommonMark start condition 4).
         if next == UInt8(ascii: "!"),
