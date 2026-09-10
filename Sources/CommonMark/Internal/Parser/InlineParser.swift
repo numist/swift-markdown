@@ -1035,15 +1035,25 @@ extension BlockParser {
         if skipTilde {
             while afterIdx < end, content[afterIdx] == tilde { afterIdx += 1 }
         }
-        let afterChar: UInt8 = afterIdx < end ? content[afterIdx] : UInt8(ascii: "\n")
-
-        // NBSP detection: U+00A0 in UTF-8 is `0xC2 0xA0`. The single-byte checks below won't catch it, so peek outward from the (skip-adjusted) neighbour index to detect the multi-byte sequence.
-        let beforeIsNBSP = beforeChar == 0xA0 && beforeIdx - 1 >= chunkStart && content[beforeIdx - 1] == 0xC2
-        let afterIsNBSP = afterChar == 0xC2 && afterIdx + 1 < end && content[afterIdx + 1] == 0xA0
-        let beforeIsSpace = beforeChar.isFlankingSpace || beforeIsNBSP
-        let beforeIsPunct = beforeChar.isASCIIPunct
-        let afterIsSpace = afterChar.isFlankingSpace || afterIsNBSP
-        let afterIsPunct = afterChar.isASCIIPunct
+        // Classify the full Unicode scalar bordering the run, as cmark's `scan_delims` does via
+        // `cmark_utf8proc_is_space` / `cmark_utf8proc_is_punctuation` over the decoded codepoint (not the
+        // raw byte): a non-ASCII Unicode whitespace or punctuation neighbour (e.g. U+00A0 NBSP, the
+        // U+055E Armenian question mark, the U+2014 em dash) must count as such for flanking. The
+        // (skip-adjusted) neighbour byte is the LAST byte of the before scalar and the FIRST byte of the
+        // after scalar; an ASCII byte is its own scalar (the common fast path), otherwise the multi-byte
+        // scalar is decoded - the before scalar by walking back over continuation bytes to its lead.
+        // `beforeChar` keeps the raw byte for the quote `]`/`)` rule below (a multi-byte before scalar
+        // never equals those ASCII bytes), so only the space/punct classification changes here.
+        let beforeScalar: Int32 = beforeIdx >= chunkStart
+            ? Self.flankingScalarBefore(endingAt: beforeIdx, lowerBound: chunkStart, content: content)
+            : 0x0A
+        let afterScalar: Int32 = afterIdx < end
+            ? Self.flankingScalarAfter(startingAt: afterIdx, upperBound: end, content: content)
+            : 0x0A
+        let beforeIsSpace = Self.isFlankingWhitespace(beforeScalar)
+        let beforeIsPunct = Self.isFlankingPunctuation(beforeScalar)
+        let afterIsSpace = Self.isFlankingWhitespace(afterScalar)
+        let afterIsPunct = Self.isFlankingPunctuation(afterScalar)
         let leftFlanking = !afterIsSpace && (!afterIsPunct || beforeIsSpace || beforeIsPunct)
         let rightFlanking = !beforeIsSpace && (!beforeIsPunct || afterIsSpace || afterIsPunct)
         return Flanking(
@@ -1053,6 +1063,122 @@ extension BlockParser {
             beforeIsPunct: beforeIsPunct,
             afterIsPunct: afterIsPunct
         )
+    }
+
+    /// The Unicode scalar just before a delimiter run, whose last byte is at `endIdx`. An ASCII byte is
+    /// its own scalar (the common fast path); otherwise walk back over UTF-8 continuation bytes (not past
+    /// `lowerBound`) to the lead byte and decode. A malformed sequence reads as U+000A, matching cmark's
+    /// `scan_delims` (a `cmark_utf8proc_iterate` failure leaves `before_char` at the newline sentinel 10).
+    @inline(__always)
+    private static func flankingScalarBefore(endingAt endIdx: Int, lowerBound: Int, content: borrowing ContentSpan) -> Int32 {
+        let last = content[endIdx]
+        if last < 0x80 { return Int32(last) }
+        var lead = endIdx
+        while lead > lowerBound, content[lead] & 0xC0 == 0x80 { lead -= 1 }
+        return decodeUTF8Scalar(at: lead, upperBound: endIdx + 1, content: content) ?? 0x0A
+    }
+
+    /// The Unicode scalar just after a delimiter run, beginning at `idx`. A malformed sequence reads as
+    /// U+000A, matching cmark's `scan_delims` (see `flankingScalarBefore`).
+    @inline(__always)
+    private static func flankingScalarAfter(startingAt idx: Int, upperBound: Int, content: borrowing ContentSpan) -> Int32 {
+        let first = content[idx]
+        if first < 0x80 { return Int32(first) }
+        return decodeUTF8Scalar(at: idx, upperBound: upperBound, content: content) ?? 0x0A
+    }
+
+    /// Decode the UTF-8 scalar beginning at `idx` (its lead byte), reading no further than `upperBound`.
+    /// Returns `nil` for a malformed, truncated, overlong, surrogate, or out-of-range sequence, mirroring
+    /// `cmark_utf8proc_iterate` (`src/utf8.c`) returning -1.
+    private static func decodeUTF8Scalar(at idx: Int, upperBound: Int, content: borrowing ContentSpan) -> Int32? {
+        let b0 = content[idx]
+        if b0 < 0x80 { return Int32(b0) }
+        let length: Int
+        if b0 & 0xE0 == 0xC0 {
+            length = 2
+        } else if b0 & 0xF0 == 0xE0 {
+            length = 3
+        } else if b0 & 0xF8 == 0xF0 {
+            length = 4
+        } else {
+            return nil
+        }
+        guard idx + length <= upperBound else { return nil }
+        switch length {
+        case 2:
+            let b1 = content[idx + 1]
+            guard b1 & 0xC0 == 0x80 else { return nil }
+            let uc = (Int32(b0 & 0x1F) << 6) | Int32(b1 & 0x3F)
+            return uc < 0x80 ? nil : uc
+        case 3:
+            let b1 = content[idx + 1]
+            let b2 = content[idx + 2]
+            guard b1 & 0xC0 == 0x80, b2 & 0xC0 == 0x80 else { return nil }
+            let uc = (Int32(b0 & 0x0F) << 12) | (Int32(b1 & 0x3F) << 6) | Int32(b2 & 0x3F)
+            return (uc < 0x800 || (uc >= 0xD800 && uc < 0xE000)) ? nil : uc
+        default:
+            let b1 = content[idx + 1]
+            let b2 = content[idx + 2]
+            let b3 = content[idx + 3]
+            guard b1 & 0xC0 == 0x80, b2 & 0xC0 == 0x80, b3 & 0xC0 == 0x80 else { return nil }
+            let uc = (Int32(b0 & 0x07) << 18) | (Int32(b1 & 0x3F) << 12) | (Int32(b2 & 0x3F) << 6) | Int32(b3 & 0x3F)
+            return (uc < 0x10000 || uc >= 0x110000) ? nil : uc
+        }
+    }
+
+    /// Whether `uc` is "Unicode whitespace" for flanking - cmark's `cmark_utf8proc_is_space` (`src/utf8.c`):
+    /// the Zs general category plus TAB/LF/FF/CR. The ASCII subset ({9,10,12,13,32}) routes through the
+    /// `isFlankingSpace` byte predicate.
+    @inline(__always)
+    private static func isFlankingWhitespace(_ uc: Int32) -> Bool {
+        if uc < 0x80 { return UInt8(uc).isFlankingSpace }
+        switch uc {
+        case 160, 5760, 8192...8202, 8239, 8287, 12288:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Whether `uc` is a "Unicode punctuation character" for flanking - cmark's
+    /// `cmark_utf8proc_is_punctuation` (`src/utf8.c`): the P[cdefios] general categories. The ASCII subset
+    /// routes through the `isASCIIPunct` byte predicate (which mirrors cmark's `cmark_ispunct` ctype table).
+    @inline(__always)
+    private static func isFlankingPunctuation(_ uc: Int32) -> Bool {
+        if uc < 0x80 { return UInt8(uc).isASCIIPunct }
+        switch uc {
+        case 161, 167, 171, 182, 183, 187, 191, 894, 903,
+            1370...1375, 1417, 1418, 1470, 1472, 1475, 1478, 1523, 1524,
+            1545, 1546, 1548, 1549, 1563, 1566, 1567, 1642...1645, 1748,
+            1792...1805, 2039...2041, 2096...2110, 2142, 2404, 2405, 2416,
+            2800, 3572, 3663, 3674, 3675, 3844...3858, 3860, 3898...3901,
+            3973, 4048...4052, 4057, 4058, 4170...4175, 4347, 4960...4968,
+            5120, 5741, 5742, 5787, 5788, 5867...5869, 5941, 5942,
+            6100...6102, 6104...6106, 6144...6154, 6468, 6469, 6686, 6687,
+            6816...6822, 6824...6829, 7002...7008, 7164...7167, 7227...7231,
+            7294, 7295, 7360...7367, 7379, 8208...8231, 8240...8259,
+            8261...8273, 8275...8286, 8317, 8318, 8333, 8334, 8968...8971,
+            9001, 9002, 10088...10101, 10181, 10182, 10214...10223,
+            10627...10648, 10712...10715, 10748, 10749, 11513...11516,
+            11518, 11519, 11632, 11776...11822, 11824...11842, 12289...12291,
+            12296...12305, 12308...12319, 12336, 12349, 12448, 12539,
+            42238, 42239, 42509...42511, 42611, 42622, 42738...42743,
+            43124...43127, 43214, 43215, 43256...43258, 43310, 43311,
+            43359, 43457...43469, 43486, 43487, 43612...43615, 43742, 43743,
+            43760, 43761, 44011, 64830, 64831, 65040...65049, 65072...65106,
+            65108...65121, 65123, 65128, 65130, 65131, 65281...65283,
+            65285...65290, 65292...65295, 65306, 65307, 65311, 65312,
+            65339...65341, 65343, 65371, 65373, 65375...65381, 65792...65794,
+            66463, 66512, 66927, 67671, 67871, 67903, 68176...68184, 68223,
+            68336...68342, 68409...68415, 68505...68508, 69703...69709,
+            69819, 69820, 69822...69825, 69952...69955, 70004, 70005,
+            70085...70088, 70093, 70200...70205, 70854, 71105...71113,
+            71233...71235, 74864...74868, 92782, 92783, 92917, 92983...92987,
+            92996, 113823:
+            return true
+        default:
+            return false
+        }
     }
 
     /// Scan a maximal run of `c` (`*` or `_`) starting at `start`, classify its left/right-flanking + can_open/can_close per CommonMark 0.31 §6.2, emit a `.text` node for the run, and (if it can open or close) push a delimiter record onto the stack. Returns the offset just past the run.
