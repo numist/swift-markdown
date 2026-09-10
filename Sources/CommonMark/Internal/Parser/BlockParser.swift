@@ -2473,6 +2473,39 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             trimmed = fn.content
             isFootnoteDef = true
         }
+        // GFM table detection: header line + delimiter row mutates the node in place to `.table`.
+        // This runs BEFORE reference-link-definition extraction because cmark opens a table while
+        // processing the delimiter row (`try_opening_table_block`), converting the still-open paragraph to
+        // a table before it is ever finalized — and `resolve_reference_link_definitions` runs only at
+        // PARAGRAPH finalize (`src/blocks.c`). A paragraph that became a table is never probed for ref-defs,
+        // so a paragraph whose second line is a delimiter row is a table even when it reads as a multi-line
+        // ref-def (`[\n|-\n]:/`), matching cmark. The delimiter row is the paragraph's second physical line;
+        // cmark opens a table only when that line is NOT indented >= 4 columns (`try_opening_table_block`'s
+        // `!indented` gate) AND is a normal (prefix-matched) continuation, not a LAZY one (on a lazy line
+        // cmark opens blocks against an ancestor of the paragraph, so `try_opening_table_block` never sees a
+        // PARAGRAPH parent and the table never opens). Its leading whitespace / laziness are gone by the time
+        // content reaches here, so consult what was recorded during block parsing (`paragraphSecondLineIndent`
+        // / `paragraphSecondLineLazy`); an over-indented or lazy delimiter row stays a paragraph continuation,
+        // as in cmark.
+        if !isFootnoteDef && storage.options.contains(.tables)
+            && (paragraphSecondLineIndent[node] ?? 0) < 4
+            && !(paragraphSecondLineLazy[node] ?? false) {
+            // cmark's header is the raw paragraph content (never ref-def-stripped), so the table parser sees
+            // `trimmed` before `parseDefinitions` touches it.
+            let tableContent = trimmed.trimmingTrailing(using: self)
+            // A top-level row with leading whitespace makes the paragraph non-contiguous, so its content
+            // reaches here flattened from a segment list carrying a re-indent run map (Quirk E): each row's
+            // surviving content is mapped to the table's content column, exactly cmark's re-based cell
+            // columns. Narrow that map to the content window the table parser sees. The contiguous fast path
+            // passes an empty map (the table parser maps by a constant source delta instead), and a table
+            // nested in a block quote / list keeps its cells unstamped as before (see `parseTable`).
+            let tableMap = (positionsEnabled && !map.isEmpty)
+                ? sliceRuns(map, from: tableContent.offset - raw.offset, length: tableContent.length)
+                : []
+            if try parseTable(node: node, chunk: tableContent, sourceMap: tableMap) {
+                return
+            }
+        }
         // Reference link definitions stack at the start of a paragraph; any that match are stripped and registered.
         if !isFootnoteDef {
             trimmed = parseDefinitions(in: trimmed)
@@ -2483,31 +2516,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return
         }
         let contentChunk = trimmed.trimmingTrailing(using: self)
-        // GFM table detection: header line + delimiter row mutates the node in place to `.table`.
-        // The delimiter row is the paragraph's second physical line; cmark opens a table only when that
-        // line is NOT indented >= 4 columns (`try_opening_table_block`'s `!indented` gate) AND is a
-        // normal (prefix-matched) continuation, not a LAZY one (on a lazy line cmark opens blocks against
-        // an ancestor of the paragraph, so `try_opening_table_block` never sees a PARAGRAPH parent and the
-        // table never opens). Its leading whitespace / laziness are gone by the time content reaches here,
-        // so consult what was recorded during block parsing (`paragraphSecondLineIndent` /
-        // `paragraphSecondLineLazy`); an over-indented or lazy delimiter row stays a paragraph
-        // continuation, as in cmark.
-        if !isFootnoteDef && storage.options.contains(.tables)
-            && (paragraphSecondLineIndent[node] ?? 0) < 4
-            && !(paragraphSecondLineLazy[node] ?? false) {
-            // A top-level row with leading whitespace makes the paragraph non-contiguous, so its content
-            // reaches here flattened from a segment list carrying a re-indent run map (Quirk E): each row's
-            // surviving content is mapped to the table's content column, exactly cmark's re-based cell
-            // columns. Narrow that map to the content window the table parser sees. The contiguous fast path
-            // passes an empty map (the table parser maps by a constant source delta instead), and a table
-            // nested in a block quote / list keeps its cells unstamped as before (see `parseTable`).
-            let tableMap = (positionsEnabled && !map.isEmpty)
-                ? sliceRuns(map, from: contentChunk.offset - raw.offset, length: contentChunk.length)
-                : []
-            if try parseTable(node: node, chunk: contentChunk, sourceMap: tableMap) {
-                return
-            }
-        }
         // Stamp the (re-indented) run map for the content that actually reaches inline parsing: narrow the flattened content's map to the surviving `contentChunk` window (after trailing trim, ref-def stripping, and any tasklist marker; leading whitespace left by a ref-def's lazy residual is preserved, see `trimmingTrailing`). Only meaningful when the content was flattened from a re-indented segment list; the contiguous flat-content path passes an empty map.
         if positionsEnabled, !map.isEmpty {
             let slice = sliceRuns(map, from: contentChunk.offset - raw.offset, length: contentChunk.length)
