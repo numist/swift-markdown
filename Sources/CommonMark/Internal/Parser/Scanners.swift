@@ -8,6 +8,8 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
+internal import BasicContainers
+
 /// Byte-level scanners for link labels, destinations, titles, and the whitespace constructs that separate them.
 ///
 /// They sit alongside the other parsing helpers and read `storage`/`sourceBytes` directly instead of taking them as parameters. They're used by both block-level reference-definition parsing (`BlockParser`) and inline link parsing (the InlineParser extensions).
@@ -292,6 +294,21 @@ extension BlockParser {
         }
 
         return Self.normalizeLabel(span)
+    }
+
+    /// §4.7 normalization for a shortcut/collapsed reference label whose bytes span a virtual `range`
+    /// of multi-segment `content` — i.e. the label straddles a soft-break join (`[foo\nbar]` used as a
+    /// reference). Reading through `content` resolves the interned newline join to `\n`, which the
+    /// normalizer collapses into the interior exactly as a contiguous label's newline would be. Used
+    /// when `contiguousChunk` can't image the whole label within one source segment; a contiguous
+    /// label goes through `normalizeLabel(chunk:)`.
+    internal func normalizeLabel(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> String {
+        var bytes = UniqueArray<UInt8>()
+        bytes.reserveCapacity(range.count)
+        for i in range {
+            bytes.append(content[i])
+        }
+        return Self.normalizeLabel(bytes.span)
     }
 
     /// CommonMark §4.7 normalization over an already-resolved span. The byte-level worker behind `normalizeLabel(chunk:)`; `static` because it touches no parser state.

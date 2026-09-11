@@ -685,27 +685,34 @@ extension BlockParser {
                 afterRefForm = pos + (lab.afterEnd - labelWindow.offset)
             }
             // Collapsed `[]` or absent - fall back to shortcut form (the bracket text itself becomes the label) when no inner brackets were nested under this opener.
+            var shortcutRange: Range<Int>?
             let labelLen = labelChunk?.length ?? 0
             if labelLen == 0 && !openerBracketAfter {
-                // Virtual offsets: the opener's `[` / `![` sits at `virtualStart`; the shortcut label runs from just past it to the `]` (`cursor`). `contiguousChunk` maps that virtual range to a real buffer chunk and, for multi-segment content, only when it lies within a single source segment - a shortcut label that straddles a line join isn't resolved here (falls through to literal text) rather than reading past the segment.
+                // Virtual offsets: the opener's `[` / `![` sits at `virtualStart`; the shortcut label runs from just past it to the `]` (`cursor`). `contiguousChunk` maps that virtual range to a real buffer chunk only when it lies within a single source segment. When it does, resolve from that chunk. When it straddles a multi-segment join (a soft break inside the label, `[foo\nbar]`), `contiguousChunk` can't image the whole label, so carry the virtual range and normalize across the join instead — cmark resolves such a multi-line label, so giving up here would leave the reference literal.
                 let openerContentStart = brackets[openerIdx].virtualStart + (isImage ? 2 : 1)
                 let shortcutLen = cursor - openerContentStart
-                if shortcutLen > 0,
-                   let sc = content.contiguousChunk(fromVirtual: openerContentStart, limit: cursor),
-                   sc.length == shortcutLen {
-                    labelChunk = sc
+                if shortcutLen > 0 {
+                    if let sc = content.contiguousChunk(fromVirtual: openerContentStart, limit: cursor),
+                       sc.length == shortcutLen {
+                        labelChunk = sc
+                    } else {
+                        shortcutRange = openerContentStart..<cursor
+                    }
                 }
             }
+            let key: String?
             if let lc = labelChunk, lc.length > 0 {
-                let key = normalizeLabel(
-                    chunk: lc
-                )
-                if !key.isEmpty, let ref = storage.referenceMap[key] {
-                    url = ref.destination
-                    title = ref.title
-                    pos = afterRefForm
-                    matched = true
-                }
+                key = normalizeLabel(chunk: lc)
+            } else if let sr = shortcutRange {
+                key = normalizeLabel(virtualRange: sr, in: content)
+            } else {
+                key = nil
+            }
+            if let key, !key.isEmpty, let ref = storage.referenceMap[key] {
+                url = ref.destination
+                title = ref.title
+                pos = afterRefForm
+                matched = true
             }
         }
         if matched {
