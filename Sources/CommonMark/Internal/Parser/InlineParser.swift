@@ -34,6 +34,18 @@ internal struct OpenersBottom {
     }
 }
 
+/// Per-text-run record of which inline raw-HTML scan kinds have overrun to end-of-input and must not be
+/// re-attempted for the rest of the run - cmark's per-subject `FLAG_SKIP_HTML_*` bits (`src/inlines.c`
+/// `handle_pointy_brace`). Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per `parseInline` pass.
+internal struct HTMLScanSkip: OptionSet {
+    let rawValue: UInt8
+
+    static let comment = HTMLScanSkip(rawValue: 1 << 0)
+    static let cdata = HTMLScanSkip(rawValue: 1 << 1)
+    static let declaration = HTMLScanSkip(rawValue: 1 << 2)
+    static let processingInstruction = HTMLScanSkip(rawValue: 1 << 3)
+}
+
 /// Inline-level Markdown parsing functions.
 extension BlockParser {
 
@@ -72,6 +84,8 @@ extension BlockParser {
             for i in codeSpanBackticks.indices {
                 codeSpanBackticks[i] = 0
             }
+            // cmark's per-subject `FLAG_SKIP_HTML_*` bits start clear for each new inline subject.
+            htmlScanSkip = []
         }
 
         while cursor < endOffset {
@@ -2126,7 +2140,7 @@ extension BlockParser {
     /// - CDATA section: `<![CDATA[…]]>`
     ///
     /// CommonMark 0.31 §6.6.
-    private func matchInlineHTML(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+    private mutating func matchInlineHTML(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         let after = start + 1
         if after >= end {
             return nil
@@ -2207,8 +2221,15 @@ extension BlockParser {
     }
 
     /// Dispatch `<!`-prefixed HTML forms: comment, CDATA, declaration.
-    private func matchHTMLBangForm(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+    private mutating func matchHTMLBangForm(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         // start[0] == '<', start[1] == '!' guaranteed by caller.
+        // why: cmark-gfm guards the ENTIRE `<!` dispatch on the comment skip flag
+        // (`src/inlines.c` `handle_pointy_brace`: `if (c == '!' && (subj->flags & FLAG_SKIP_HTML_COMMENT) == 0)`),
+        // so once a comment scan has overrun to end-of-input in this run, later CDATA and declaration
+        // matches are suppressed too. Flag-ON only; flag-OFF each bang form is attempted independently.
+        if storage.options.contains(.cmarkBugCompatibility), htmlScanSkip.contains(.comment) {
+            return nil
+        }
         let i = start + 2
         if i >= end {
             return nil
@@ -2224,7 +2245,7 @@ extension BlockParser {
     }
 
     /// Match `<!--…-->`. Accepts the empty forms `<!-->` and `<!--->` per HTML5, then scans for the first `-->` terminator (rejecting NUL bytes in the body). Under `.cmarkBugCompatibility` the body+closer is matched by cmark-gfm's stricter grammar instead (`matchHTMLCommentBodyStrict`), which rejects some forms the first-`-->` rule accepts (e.g. `<!----->`).
-    private func matchHTMLComment(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+    private mutating func matchHTMLComment(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         // Need at least `<!--`.
         if start + 4 > end {
             return nil
@@ -2247,7 +2268,15 @@ extension BlockParser {
         // differential fuzzer) reproduces that rejection; flag-OFF the deliverable stays spec-correct
         // (0.31), matching the first `-->` below.
         if storage.options.contains(.cmarkBugCompatibility) {
-            return matchHTMLCommentBodyStrict(bodyStart: bodyStart, end: end, content: content)
+            if let match = matchHTMLCommentBodyStrict(bodyStart: bodyStart, end: end, content: content) {
+                return match
+            }
+            // why: `scan_html_comment` returning 0 (no closer reachable) is exactly where cmark sets
+            // `subj->flags |= FLAG_SKIP_HTML_COMMENT` (`src/inlines.c` `handle_pointy_brace`), so no later
+            // `<!` form is reparsed in this run. The empty forms above match before this, mirroring cmark's
+            // `matchlen = 4/5` shortcuts, so they never set the flag.
+            htmlScanSkip.insert(.comment)
+            return nil
         }
         var i = bodyStart
         while i + 3 <= end {
@@ -2288,7 +2317,13 @@ extension BlockParser {
     }
 
     /// Match `<![CDATA[…]]>`.
-    private func matchHTMLCDATA(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+    private mutating func matchHTMLCDATA(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+        // why: cmark checks (and, on overrun, sets) `FLAG_SKIP_HTML_CDATA` around the CDATA scan
+        // (`src/inlines.c` `handle_pointy_brace`). Flag-ON only.
+        let bugCompat = storage.options.contains(.cmarkBugCompatibility)
+        if bugCompat, htmlScanSkip.contains(.cdata) {
+            return nil
+        }
         // Need `<![CDATA[`.
         let prefixLen = 9
         if start + prefixLen > end {
@@ -2314,11 +2349,22 @@ extension BlockParser {
             }
             i += 1
         }
+        // No `]]>` through end-of-input: cmark's framed match overruns (`subj->pos + matchlen > input.len`),
+        // which sets `FLAG_SKIP_HTML_CDATA`.
+        if bugCompat {
+            htmlScanSkip.insert(.cdata)
+        }
         return nil
     }
 
     /// Match `<!NAME …>` where NAME is `[A-Z]+`, followed by at least one spacechar, any non-`>` non-NUL chars, then `>`.
-    private func matchHTMLDeclaration(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+    private mutating func matchHTMLDeclaration(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+        // why: cmark checks (and, on overrun, sets) `FLAG_SKIP_HTML_DECLARATION` around the declaration
+        // scan (`src/inlines.c` `handle_pointy_brace`). Flag-ON only.
+        let bugCompat = storage.options.contains(.cmarkBugCompatibility)
+        if bugCompat, htmlScanSkip.contains(.declaration) {
+            return nil
+        }
         var i = start + 2
         var nameLen = 0
         while i < end {
@@ -2351,6 +2397,11 @@ extension BlockParser {
             }
             i += 1
         }
+        // Matched name + spaces but no closing `>` through end-of-input: cmark's framed match overruns
+        // (`subj->pos + matchlen > input.len`), which sets `FLAG_SKIP_HTML_DECLARATION`.
+        if bugCompat {
+            htmlScanSkip.insert(.declaration)
+        }
         return nil
     }
 
@@ -2360,7 +2411,7 @@ extension BlockParser {
     /// characters not including `?>`, so this stops at the FIRST `?>`. Under `.cmarkBugCompatibility`
     /// the scan follows cmark-gfm's inline PI grammar instead (`matchHTMLProcessingInstructionCmark`),
     /// which over-consumes and rejects some PIs the spec accepts (e.g. `<???>`).
-    private func matchHTMLProcessingInstruction(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+    private mutating func matchHTMLProcessingInstruction(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         if storage.options.contains(.cmarkBugCompatibility) {
             return matchHTMLProcessingInstructionCmark(start: start, end: end, content: content)
         }
@@ -2393,7 +2444,12 @@ extension BlockParser {
     /// input with no room left for the closer, so cmark rejects it. `<?x?>` matches only `x`, stops
     /// before `?>`, and is accepted. The body ends at the first NUL, the first `?` immediately before
     /// `>` (or at input end), whichever comes first.
-    private func matchHTMLProcessingInstructionCmark(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+    private mutating func matchHTMLProcessingInstructionCmark(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+        // why: cmark checks `FLAG_SKIP_HTML_PI` before attempting the PI (`src/inlines.c`
+        // `handle_pointy_brace`); once set, the `<` stays literal. Reached only flag-ON.
+        if htmlScanSkip.contains(.processingInstruction) {
+            return nil
+        }
         var i = start + 2
         while i < end {
             let b = content[i]
@@ -2426,6 +2482,9 @@ extension BlockParser {
         // Body length = i - (start + 2), so the offset just past the framed `?>` is i + 2.
         let piEnd = i + 2
         if piEnd > end {
+            // Framing overruns the input: cmark sets `FLAG_SKIP_HTML_PI`, so no later `<?` is reparsed
+            // in this run.
+            htmlScanSkip.insert(.processingInstruction)
             return nil
         }
         return piEnd

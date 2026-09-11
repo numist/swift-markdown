@@ -192,6 +192,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Per-run-length cache of the latest backtick run START offset a closing scan has passed - cmark's `subject.backticks[]`, indexed by run length (1...`codeSpanMaxBacktickRun`; index 0 unused). Combined with `codeSpanScannedForBackticks`, a stored value `<=` a new opener's post-run offset means "no closer of this length at/after here" and skips the rescan. Offsets are `ContentSpan` (content/virtual) offsets, the same space the closing scan walks. Meaningful only flag-ON; reset per pass.
     var codeSpanBackticks = [Int](repeating: 0, count: BlockParser.codeSpanMaxBacktickRun + 1)
 
+    // MARK: - Inline raw-HTML overrun skip flags (cmark bug-compat)
+
+    /// Which inline raw-HTML scan kinds have overrun to end-of-input in the current `parseInline` pass and must not be re-attempted - cmark's per-subject `subject.flags` bits `FLAG_SKIP_HTML_{COMMENT,CDATA,DECLARATION,PI}` (`src/inlines.c` `handle_pointy_brace`). The `.comment` bit gates the ENTIRE `<!` dispatch, so it also suppresses later CDATA and declaration matches. Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per pass.
+    var htmlScanSkip: HTMLScanSkip = []
+
     // MARK: - Init
     
     @_lifetime(copy source)
