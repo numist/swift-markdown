@@ -33,6 +33,8 @@ struct TableVsReferenceDefinitionTests {
         var alignments: [MarkdownNode.TableAlignment] = []
         var headerCells: [String] = []
         var bodyRows: [[String]] = []
+        /// The concatenated literal text of the block's direct-child inlines (paragraph / heading; empty for a table / other).
+        var text: String = ""
     }
 
     /// Extract a `.table` node's header-cell texts, per-column alignments, and body-row cell texts.
@@ -74,8 +76,14 @@ struct TableVsReferenceDefinitionTests {
                 switch child.kind {
                 case .paragraph:
                     block.kind = .paragraph
+                    child.children.forEach { inline in
+                        if let lit = inline.literal() { block.text += lit }
+                    }
                 case .heading:
                     block.kind = .heading
+                    child.children.forEach { inline in
+                        if let lit = inline.literal() { block.text += lit }
+                    }
                 case .table:
                     block = self.tableBlock(from: child)
                 default:
@@ -155,6 +163,74 @@ struct TableVsReferenceDefinitionTests {
         try #require(doc.count == 1, "expected the ref-def to be consumed, leaving one block; got \(doc.count)")
         #expect(doc[0].kind == .paragraph, "expected a paragraph, got \(doc[0].kind)")
         let url = try #require(try firstLinkURL("[a\nb]: /u\n\n[a b]"), "expected `[a b]` to resolve to a link")
+        #expect(url == "/u")
+    }
+
+    // MARK: - Bare (pipe-less) delimiter row after a complete ref-def (regression: refines #134)
+    //
+    // #134 made table detection run before ref-def extraction unconditionally. That was too coarse: a BARE
+    // `-`/`=` delimiter row can never open a table in cmark. cmark's `open_new_blocks` tries the
+    // setext-heading-underline branch (`scan_setext_heading_line`, which matches a pipe-less run of `-` or
+    // `=`) BEFORE the GFM table extension (`try_opening_table_block`, the last-resort block opener). The
+    // setext branch resolves reference-link definitions on the open paragraph; when the whole paragraph is a
+    // complete ref-def, no header content remains, so no heading forms and the bare `-` becomes a fresh
+    // paragraph line — the table extension is never reached. A PIPE-containing delimiter row (`|-`) does NOT
+    // match the setext scanner, so the table extension runs and a table opens over the would-be ref-def.
+    // These run under `.cmarkBugCompatibility` (the fuzzer's fixed option) because only there does cmark keep
+    // the emptied paragraph open and absorb the `-` (spec-correct default drops it and re-dispatches `-`).
+
+    @Test("a bare `-` delimiter row after a complete single-line ref-def is a ref-def + paragraph, not a table")
+    func bareDelimiterAfterCompleteReferenceDefinition() throws {
+        // `[o]:o\n-`: line 1 is a COMPLETE ref-def; line 2 `-` is a bare (pipe-less) delimiter row. cmark
+        // resolves the ref-def at the setext branch (no header left → no heading) and the `-` becomes a
+        // paragraph. #134's table-first ordering wrongly formed a table with header `[o]:o`.
+        let doc = try blocks("[o]:o\n-", options: [.tables, .cmarkBugCompatibility])
+        try #require(doc.count == 1, "expected the ref-def to be extracted, leaving one paragraph; got \(doc.count)")
+        try #require(doc[0].kind == .paragraph, "expected a paragraph, got \(doc[0].kind)")
+        #expect(doc[0].text == "-")
+    }
+
+    @Test("a bare `-` delimiter row after a ref-def with a space before the destination is a ref-def + paragraph")
+    func bareDelimiterAfterCompleteReferenceDefinitionWithSpace() throws {
+        // `[o]: o\n-`: same shape with a space after the label colon — still a complete ref-def + bare `-`.
+        let doc = try blocks("[o]: o\n-", options: [.tables, .cmarkBugCompatibility])
+        try #require(doc.count == 1, "expected the ref-def to be extracted, leaving one paragraph; got \(doc.count)")
+        try #require(doc[0].kind == .paragraph, "expected a paragraph, got \(doc[0].kind)")
+        #expect(doc[0].text == "-")
+    }
+
+    @Test("a PIPE delimiter row after a complete ref-def still forms a table (must not re-regress #134)")
+    func pipeDelimiterAfterCompleteReferenceDefinitionStaysTable() throws {
+        // `[o]:o\n|-`: line 2 `|-` has a pipe, so it does NOT match the setext scanner; cmark's table
+        // extension opens a table using the raw paragraph string `[o]:o` as the header cell (the ref-def is
+        // never resolved). Both implementations already agreed here; pin it so the fix keeps it a table.
+        let doc = try blocks("[o]:o\n|-", options: [.tables, .cmarkBugCompatibility])
+        let table = try #require(doc.first, "expected a block, got an empty document")
+        try #require(table.kind == .table, "expected a table, got \(table.kind)")
+        #expect(table.headerCells == ["[o]:o"])
+        #expect(table.bodyRows == [])
+        #expect(doc.count == 1)
+    }
+
+    @Test("the #134 incomplete-header table still forms under the fuzzer's option set")
+    func incompleteHeaderDelimiterStaysTableUnderBugCompat() throws {
+        // `[\n|-\n]:/` (the #134 case) under `.cmarkBugCompatibility`: line 2 `|-` is a pipe delimiter, so
+        // the table opens with header `[` and body `]:/`. The bare-delimiter fix must not regress this.
+        let doc = try blocks("[\n|-\n]:/", options: [.tables, .cmarkBugCompatibility])
+        let table = try #require(doc.first, "expected a block, got an empty document")
+        try #require(table.kind == .table, "expected a table, got \(table.kind)")
+        #expect(table.headerCells == ["["])
+        #expect(table.bodyRows == [["]:/"]])
+        #expect(doc.count == 1)
+    }
+
+    @Test("a genuine multi-line ref-def still resolves under the fuzzer's option set")
+    func genuineReferenceDefinitionStillResolvesUnderBugCompat() throws {
+        // `[a\nb]: /u\n\n[a b]`: no delimiter row, so no table pends; the multi-line ref-def is extracted
+        // and `[a b]` resolves to a link. Guards the fix against breaking real ref-defs under the fuzzer's
+        // option set.
+        let url = try #require(try firstLinkURL("[a\nb]: /u\n\n[a b]", options: [.tables, .cmarkBugCompatibility]),
+                               "expected `[a b]` to resolve to a link")
         #expect(url == "/u")
     }
 }

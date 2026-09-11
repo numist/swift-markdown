@@ -2549,8 +2549,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // a table before it is ever finalized — and `resolve_reference_link_definitions` runs only at
         // PARAGRAPH finalize (`src/blocks.c`). A paragraph that became a table is never probed for ref-defs,
         // so a paragraph whose second line is a delimiter row is a table even when it reads as a multi-line
-        // ref-def (`[\n|-\n]:/`), matching cmark. The delimiter row is the paragraph's second physical line;
-        // cmark opens a table only when that line is NOT indented >= 4 columns (`try_opening_table_block`'s
+        // ref-def (`[\n|-\n]:/`), matching cmark.
+        //
+        // Gated on `paragraphTablePending`: the table wins over ref-def extraction ONLY when the table
+        // extension actually opened during block parsing. That flag is set (`detectPendingTable`) exactly
+        // when cmark's `try_opening_table_block` would open the table, and is the necessary refinement over
+        // an unconditional table-first ordering. cmark's `open_new_blocks` tries the setext-heading-underline
+        // branch (`scan_setext_heading_line`, a pipe-less run of `-`/`=`) BEFORE the table extension (the
+        // last-resort block opener): a BARE `-`/`=` delimiter row therefore never reaches the table extension
+        // — it is consumed by the setext branch, which first resolves the paragraph's ref-defs. So a complete
+        // ref-def followed by a bare `-` (`[o]:o\n-`) resolves the ref-def and the `-` becomes a paragraph,
+        // while a PIPE delimiter (`[o]:o\n|-`) — which the setext scanner rejects — opens a table over the
+        // would-be ref-def. Only a pipe-less all-dashes/all-equals row is a setext underline, and cmark
+        // never opens a table on such a row (the setext branch consumes it first, before the extension), so
+        // a legitimate table's delimiter always went through `detectPendingTable` and set this flag; the only
+        // way table-shaped content reaches finalize with the flag unset is the flag-ON setext/ref-def
+        // reconstruction (PHASE 2c), which cmark treats as a ref-def. The delimiter row is the paragraph's
+        // second physical line; cmark opens a table only when that line is NOT indented >= 4 columns
+        // (`try_opening_table_block`'s
         // `!indented` gate) AND is a normal (prefix-matched) continuation, not a LAZY one (on a lazy line
         // cmark opens blocks against an ancestor of the paragraph, so `try_opening_table_block` never sees a
         // PARAGRAPH parent and the table never opens). Its leading whitespace / laziness are gone by the time
@@ -2558,6 +2574,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // / `paragraphSecondLineLazy`); an over-indented or lazy delimiter row stays a paragraph continuation,
         // as in cmark.
         if !isFootnoteDef && storage.options.contains(.tables)
+            && (paragraphTablePending[node] ?? false)
             && (paragraphSecondLineIndent[node] ?? 0) < 4
             && !(paragraphSecondLineLazy[node] ?? false) {
             // cmark's header is the raw paragraph content (never ref-def-stripped), so the table parser sees
