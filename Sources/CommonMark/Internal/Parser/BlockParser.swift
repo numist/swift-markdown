@@ -1910,11 +1910,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let indent = indentColumns(source: source, from: cursor, to: firstNonSpace)
 
         if case .codeBlock(let info) = storage[current].kind, info.isFenced {
-            // Fenced.
+            // Fenced. The closing-fence indent is measured in COLUMNS (cmark's `first_nonspace_column -
+            // column`, blocks.c `S_find_first_nonspace`): the absolute column of the first non-space byte
+            // minus the column the container prefixes advanced to. A tab therefore counts to its next tab
+            // stop, not one byte - a fenced-code body line skips leading-tab pre-expansion, so a raw
+            // leading tab must not be mistaken for the ≤3-column indent of a closing fence.
+            let closingFenceIndent =
+                columnWidth(source: source, from: lineRange.lowerBound, to: firstNonSpace) - prefixColumns
             if matchClosingFence(
                 source: source,
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
+                indentColumns: closingFenceIndent,
                 expectedChar: info.fenceCharacter,
                 minimumLength: info.fenceLength
             ) {
@@ -3600,12 +3607,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         )
     }
 
-    /// Try to match a closing fence line: ≤3 leading spaces, then a run of the same fence character at least as long as the opening fence, then only trailing whitespace. CommonMark 0.31 §4.5.
-    private func matchClosingFence(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, expectedChar: MarkdownNode.CodeBlockInfo.FenceCharacter?, minimumLength: Int) -> Bool {
+    /// Try to match a closing fence line: at most 3 COLUMNS of leading indentation, then a run of the
+    /// same fence character at least as long as the opening fence, then only trailing whitespace.
+    /// CommonMark 0.31 §4.5. The indent is measured in columns (cmark's `parser->indent <= 3`), where a
+    /// tab advances to the next tab stop, so a tab-led line (4 columns) fails the test and stays content.
+    private func matchClosingFence(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indentColumns: Int, expectedChar: MarkdownNode.CodeBlockInfo.FenceCharacter?, minimumLength: Int) -> Bool {
         guard let expectedChar else {
             return false
         }
-        if firstNonSpace - range.lowerBound > 3 {
+        if indentColumns > 3 {
             return false
         }
         guard firstNonSpace < range.upperBound else {
