@@ -703,10 +703,14 @@ extension BlockParser {
                 labelChunk = lab.interior
                 afterRefForm = pos + (lab.afterEnd - labelWindow.offset)
             }
-            // Collapsed `[]` or absent - fall back to shortcut form (the bracket text itself becomes the label) when no inner brackets were nested under this opener.
+            // Collapsed `[]`, a whitespace-only `[   ]`, or absent - fall back to shortcut form (the
+            // bracket text itself becomes the label) when no inner brackets were nested under this
+            // opener. cmark trims the scanned label (`cmark_chunk_trim`) before testing it for empty,
+            // so a whitespace-only full-reference label triggers the same shortcut fallback (`[x][ ]`
+            // resolves `[x]`).
             var shortcutRange: Range<Int>?
-            let labelLen = labelChunk?.length ?? 0
-            if labelLen == 0 && !openerBracketAfter {
+            let labelIsBlank = (labelChunk?.trimming(using: self).isEmpty) ?? true
+            if labelIsBlank && !openerBracketAfter {
                 // Virtual offsets: the opener's `[` / `![` sits at `virtualStart`; the shortcut label runs from just past it to the `]` (`cursor`). `contiguousChunk` maps that virtual range to a real buffer chunk only when it lies within a single source segment. When it does, resolve from that chunk. When it straddles a multi-segment join (a soft break inside the label, `[foo\nbar]`), `contiguousChunk` can't image the whole label, so carry the virtual range and normalize across the join instead — cmark resolves such a multi-line label, so giving up here would leave the reference literal.
                 let openerContentStart = brackets[openerIdx].virtualStart + (isImage ? 2 : 1)
                 let shortcutLen = cursor - openerContentStart
