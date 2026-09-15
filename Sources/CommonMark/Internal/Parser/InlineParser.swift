@@ -758,6 +758,9 @@ extension BlockParser {
                content: content
            ),
            storage.footnoteMap[normalizeLabel(chunk: labelChunk)] != nil {
+            // Resolve emphasis inside the bracket first (clearing its delimiters from the stack) so
+            // removing the inner nodes below doesn't leave stale delimiters for `processEmphasis`.
+            processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
             emitFootnoteReference(
                 openerInl: openerInl,
                 isImage: isImage,
@@ -779,6 +782,7 @@ extension BlockParser {
            footnoteBracketStart + 2 < cursor,
            content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
            footnoteSpanCrossesLine(content, from: footnoteBracketStart + 2, to: cursor) {
+            processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
             collapseMultilineFootnote(
                 openerInl: openerInl,
                 isImage: isImage,
@@ -798,6 +802,7 @@ extension BlockParser {
            footnoteBracketStart + 2 < end,
            content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
            content[footnoteBracketStart + 2] == UInt8(ascii: "[") {
+            processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
             collapseCaretBracket(
                 openerInl: openerInl,
                 isImage: isImage,
@@ -823,6 +828,7 @@ extension BlockParser {
            content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
            let labelChunk = footnoteRefLabel(openerVirtualStart: footnoteBracketStart, closeBracket: cursor, content: content),
            storage.footnoteMap[normalizeLabel(chunk: labelChunk)] == nil {
+            processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
             emitRawFootnoteLiteral(openerInl: openerInl, openerVirtualStart: brackets[openerIdx].virtualStart, closeBracket: cursor, content: content)
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             return initialPos
