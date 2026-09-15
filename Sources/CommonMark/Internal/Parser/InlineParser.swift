@@ -1004,12 +1004,41 @@ extension BlockParser {
         return (close - afterNLClose) - (open - afterNLOpen) - 2
     }
 
-    /// Whether a footnote-shaped `[^[…` opener takes cmark's `[^[` collapse. cmark produces the literal
-    /// `[^[` garbage exactly when the captured-label length is positive; when it is <= 0 the cross-line
-    /// branch captures an empty label instead (`[^]`). So `[^[]\n$<x>]` (positive length) collapses to
-    /// `[^[`, while `[^[]\na]` / `[^[]\n]` (non-positive) fall through to the cross-line `[^]`.
+    /// Whether a footnote-shaped `[^[…` opener takes cmark's `[^[` collapse (literal `[^[`, dropping
+    /// the rest of the line) rather than the cross-line label reconstruction. cmark produces the `[^[`
+    /// garbage when the inner bracket spans a soft break, or when the captured label reaches past the
+    /// inner bracket's matching `]`; otherwise the cross-line branch reconstructs `[^` + captured bytes
+    /// + `]` (which is `[^]` for a non-positive length, `[^[]` for the single inner `[`, …).
     private func caretBracketCollapses(_ content: borrowing ContentSpan, open: Int, outerClose: Int) -> Bool {
-        return footnoteCapturedLabelLength(content, open: open, close: outerClose) > 0
+        let labelStart = open + 2
+        // Find the inner `[`'s matching `]` (or the outer `]` if unbalanced).
+        var depth = 1
+        var innerClose = outerClose
+        var i = labelStart + 1
+        while i < outerClose {
+            let b = content[i]
+            if b == UInt8(ascii: "[") {
+                depth += 1
+            } else if b == UInt8(ascii: "]") {
+                depth -= 1
+                if depth == 0 {
+                    innerClose = i
+                    break
+                }
+            }
+            i += 1
+        }
+        // Inner bracket spans a soft break -> collapse.
+        var j = labelStart
+        while j < innerClose {
+            if content[j] == UInt8(ascii: "\n") {
+                return true
+            }
+            j += 1
+        }
+        // Inner bracket is on one line: collapse when the captured label reaches past its `]`.
+        let x = footnoteCapturedLabelLength(content, open: open, close: outerClose)
+        return labelStart + x > innerClose
     }
 
     /// Replace an unresolved same-line footnote-shaped bracket with its RAW `[^label]` (or `![^label]`)
