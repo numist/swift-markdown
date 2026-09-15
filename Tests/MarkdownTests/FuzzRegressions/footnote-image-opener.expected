@@ -1,0 +1,7 @@
+Document @1:1-3:11
+├─ Paragraph @1:1-1:7
+│  ├─ Text @1:1-1:3 "x!"
+│  └─ FootnoteReference label: "a" index: 1
+└─ FootnoteDefinition @3:1-3:11 label: "a"
+   └─ Paragraph @3:7-3:11
+      └─ Text @3:7-3:11 "note"

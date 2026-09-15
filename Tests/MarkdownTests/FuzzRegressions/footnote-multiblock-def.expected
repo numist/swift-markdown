@@ -1,0 +1,9 @@
+Document @1:1-5:9
+├─ Paragraph @5:1-5:9
+│  ├─ Text @5:1-5:5 "see "
+│  └─ FootnoteReference label: "a" index: 1
+└─ FootnoteDefinition @1:1-4:1 label: "a"
+   ├─ Paragraph @1:7-1:12
+   │  └─ Text @1:7-1:12 "first"
+   └─ Paragraph @3:5-3:16
+      └─ Text @3:5-3:16 "second para"

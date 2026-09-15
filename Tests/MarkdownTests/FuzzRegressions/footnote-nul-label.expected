@@ -1,0 +1,7 @@
+Document @1:1-3:9
+├─ Paragraph @3:1-3:9
+│  ├─ Text "see "
+│  └─ FootnoteReference label: "�" index: 1
+└─ FootnoteDefinition @1:1-2:1 label: "�"
+   └─ Paragraph @1:7-1:11
+      └─ Text @1:7-1:11 "body"

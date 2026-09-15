@@ -4191,8 +4191,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if b == UInt8(ascii: "]") {
                 break
             }
+            // cmark replaces NUL with U+FFFD before scanning, so its scanner (which excludes NUL)
+            // never rejects a source NUL — the replacement character is an allowed label byte. The
+            // zero-copy scanner reads the raw NUL here, so it must NOT reject it, matching cmark; the
+            // NUL surfaces as U+FFFD wherever the label is materialized.
             if b == UInt8(ascii: " ") || b == UInt8(ascii: "\t")
-                || b == UInt8(ascii: "\r") || b == UInt8(ascii: "\n") || b == 0 {
+                || b == UInt8(ascii: "\r") || b == UInt8(ascii: "\n") {
                 return nil
             }
             i += 1
@@ -4224,7 +4228,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Open a `.footnoteDefinition` container as a child of `current`, registering it in
     /// `storage.footnoteMap` keyed on the normalized label (first definition wins). Returns the new
     /// definition's index.
-    private mutating func openFootnoteDefinition(label: Chunk, firstNonSpace: Int) -> DocumentStorage.Index {
+    private mutating func openFootnoteDefinition(label rawLabel: Chunk, firstNonSpace: Int) -> DocumentStorage.Index {
+        // Materialize NUL -> U+FFFD in the label so its stored form and map key match the reference
+        // side, whose paragraph content is NUL-replaced before inline parsing (cmark replaces NUL in
+        // the whole input buffer, so a `[^<NUL>]` definition and a `[^<NUL>]` reference share the
+        // U+FFFD-normalized key).
+        let label = replacingNUL(rawLabel)
         let labelRef = storage.intern(label)
         let fnIdx = addChild(
             kind: .footnoteDefinition,
