@@ -22,11 +22,14 @@ struct MarkupParser {
     static func parseString(_ string: String, source: URL?, options: ParseOptions) -> Document {
         // Mirror the option set the old C path always used: tables + strikethrough + tasklist
         // extensions and table spans, smart punctuation unless disabled, and source positions
-        // always. GFM autolink is enabled only under the `.gfmAutolink` SPI option (fuzzer-driven;
-        // the shipped default surface is unchanged). (Footnotes and inline attributes are still not enabled here.)
+        // always. GFM autolink and footnotes are enabled only under their respective SPI options
+        // (fuzzer-driven; the shipped default surface is unchanged). (Inline attributes are still not enabled here.)
         var cmOptions: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans]
         if options.contains(.gfmAutolink) {
             cmOptions.insert(.gfmAutolink)
+        }
+        if options.contains(.footnotes) {
+            cmOptions.insert(.footnotes)
         }
         if !options.contains(.disableSmartOpts) {
             cmOptions.insert(.smart)
@@ -104,6 +107,14 @@ struct MarkupParser {
     private static func attributeString(_ node: borrowing MarkdownNode) -> String {
         if case .attribute(let attributes) = node.stringContent {
             return attributes
+        }
+        return ""
+    }
+
+    /// A footnote reference or definition label.
+    private static func footnoteLabel(_ node: borrowing MarkdownNode) -> String {
+        if case .footnote(let label) = node.stringContent {
+            return label
         }
         return ""
     }
@@ -240,9 +251,11 @@ struct MarkupParser {
         case .attribute:
             return .inlineAttributes(attributes: attributeString(node), parsedRange: parsedRange, children)
 
-        // Not produced by the option set used here (footnotes are never enabled).
-        case .footnoteReference, .footnoteDefinition:
-            fatalError("footnote nodes are not expected without footnote parsing enabled")
+        // Footnotes (enabled only under the `.footnotes` SPI option).
+        case .footnoteReference(let index):
+            return .footnoteReference(parsedRange: parsedRange, label: footnoteLabel(node), index: index)
+        case .footnoteDefinition:
+            return .footnoteDefinition(parsedRange: parsedRange, label: footnoteLabel(node), children)
         @unknown default:
             fatalError("unhandled CommonMark node kind")
         }
