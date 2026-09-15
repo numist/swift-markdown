@@ -378,8 +378,34 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
 
+        // Footnote post-processing (mirrors cmark's `process_footnotes`, run after inline parsing):
+        // drop definitions that were never referenced and move the referenced ones to the end of the
+        // document in first-reference (index) order.
+        processFootnotes()
+
         storage.lineCount = reader.lineNumber
         return storage
+    }
+
+    /// Replicate cmark's `process_footnotes` over the finalized tree: definitions that acquired no
+    /// reference are removed; referenced definitions are moved to the end of the document root in the
+    /// order their references first appeared (their assigned index order). Definitions can be nested
+    /// anywhere (a block quote, a list item); cmark extracts them all to the document root, leaving any
+    /// emptied container behind. Numbering and the `footnoteReferencedDefs` order were established
+    /// during inline parsing (`emitFootnoteReference`).
+    private mutating func processFootnotes() {
+        guard storage.options.contains(.footnotes) else { return }
+        let keep = Set(storage.footnoteReferencedDefs)
+        // Drop unreferenced definitions (including duplicate-label definitions, whose references all
+        // resolved to the first definition).
+        for defIdx in storage.footnoteDefinitionOrder where !keep.contains(defIdx) {
+            storage.unlinkChild(defIdx)
+        }
+        // Move referenced definitions to the document end, in first-reference order.
+        for defIdx in storage.footnoteReferencedDefs {
+            storage.unlinkChild(defIdx)
+            storage.appendChild(defIdx, to: documentIndex)
+        }
     }
 
     /// Inline-only parse path for `.inlineOnly` / `.preserveWhitespace`.
@@ -1821,6 +1847,32 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 } else {
                     return (deepestMatched, cursor, prefixColumns, false)
                 }
+            case .footnoteDefinition:
+                // Footnote-definition continuation, mirroring cmark's
+                // `parse_footnote_definition_block_prefix` (blocks.c): a line indented >= 4 columns
+                // (relative to the parent's consumed prefix) stays in the definition with 4 columns
+                // stripped; a blank line keeps the definition open without consuming; any other
+                // (non-indented, non-blank) line fails the prefix, so the definition's open paragraph
+                // may continue lazily (the walk stops here with `allMatched: false`).
+                let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
+                let isBlank = firstNonSpace == lineRange.upperBound
+                let availCols = indentColumns(source: source, from: cursor, to: firstNonSpace)
+                if availCols >= 4 {
+                    cursor = advanceColumns(
+                        source: source,
+                        from: cursor,
+                        to: lineRange.upperBound,
+                        columns: 4
+                    )
+                    prefixColumns += 4
+                    deepestMatched = node
+                } else if isBlank {
+                    cursor = firstNonSpace
+                    prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+                    deepestMatched = node
+                } else {
+                    return (deepestMatched, cursor, prefixColumns, false)
+                }
             case .paragraph, .heading, .codeBlock, .htmlBlock, .text, .thematicBreak:
                 // Leaves; they don't have container-level prefix matching. The chain effectively ends here. Caller decides leaf-specific continuation (e.g. code-block fence detection).
                 return (deepestMatched, cursor, prefixColumns, true)
@@ -1855,6 +1907,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // continuation). Allow type 7 exactly when it isn't interrupting a paragraph; `dispatchNewBlocks` then
         // opens it against the ancestor (its own `allowType7` gate fires there, `current` no longer a paragraph).
         if matchHTMLBlockStart(source: source, range: range, firstNonSpace: firstNonSpace, allowType7: !interruptsParagraph) != nil {
+            return true
+        }
+        // A GFM footnote definition opener `[^label]:` interrupts a paragraph (cmark's footnote-def
+        // opener carries no paragraph-non-interruption guard). Gated `indent < 4` like the block-open
+        // dispatch. So `[^a]: A\n[^b]: B` opens two definitions rather than folding the second into the
+        // first definition's paragraph.
+        if storage.options.contains(.footnotes),
+           indent < 4,
+           matchFootnoteDefinition(source: source, range: range, firstNonSpace: firstNonSpace) != nil {
             return true
         }
         // List markers interrupt a paragraph only if they'd start a non-empty first item (CommonMark 0.31 §5.2/§5.3). An ORDERED list can interrupt a paragraph only when its start number is 1; bullets are exempt. This is cmark's `interrupts_paragraph && start != 1` decline in `parse_list_marker` (blocks.c), and it applies at EVERY nesting level - `interruptsParagraph` is true exactly when the open paragraph's own container matched this line, so `- a\n  2. b` (the item matched → `2. b` interrupts the item's paragraph) keeps `2. b` as text, while `1. a\n2. b` (the item did NOT match → the marker sits at the list level) opens a sibling item regardless of start.
@@ -2128,6 +2189,29 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // close path rather than guessing the end on the HR's own line.
                 current = breakIdx
                 return pending
+            }
+
+            // GFM footnote definition (after thematic break, before list marker, per cmark's
+            // open_new_blocks order). Opens a block container that absorbs the rest of the line as
+            // its first content and continues via indent-≥4 / blank lines (see walkOpenContainers).
+            // Gated `indent < 4` (cmark's `!indented`), so an indented `[^x]:` is code, not a def.
+            if storage.options.contains(.footnotes),
+               indent < 4,
+               let fn = matchFootnoteDefinition(
+                   source: source,
+                   range: cursor..<lineRange.upperBound,
+                   firstNonSpace: firstNonSpace
+               ) {
+                // A footnote definition can't be a direct child of a list (lists hold only items), so
+                // an enclosing list closes first, mirroring the block-quote / thematic-break openers.
+                if storage[current].kind.isList {
+                    pending = try finalize(node: current, pending: pending)
+                }
+                let fnIdx = openFootnoteDefinition(label: fn.label, firstNonSpace: firstNonSpace)
+                current = fnIdx
+                cursor = fn.consumedTo
+                column = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+                continue
             }
 
             // List marker - opens a list (or extends an existing one) and an item. Both are containers; loop so we keep dispatching the rest of the line as content within the new item.
@@ -2540,14 +2624,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // (`open_tasklist_item`), so every finalize matcher below (footnote def, link ref-def, table)
         // sees the content AFTER the checkbox. Strip it first here to match.
         trimmed = stripTasklistCheckbox(node: node, content: trimmed)
-        // GFM footnote definition: `[^label]: content`. Detected first because a footnote-def line shouldn't also be probed for link ref-defs or task markers.
-        var isFootnoteDef = false
-        if storage.options.contains(.footnotes),
-           let fn = matchFootnoteDefinition(chunk: trimmed) {
-            wrapInFootnoteDefinition(paragraph: node, label: fn.label)
-            trimmed = fn.content
-            isFootnoteDef = true
-        }
         // GFM table detection: header line + delimiter row mutates the node in place to `.table`.
         // This runs BEFORE reference-link-definition extraction because cmark opens a table while
         // processing the delimiter row (`try_opening_table_block`), converting the still-open paragraph to
@@ -2578,7 +2654,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // content reaches here, so consult what was recorded during block parsing (`paragraphSecondLineIndent`
         // / `paragraphSecondLineLazy`); an over-indented or lazy delimiter row stays a paragraph continuation,
         // as in cmark.
-        if !isFootnoteDef && storage.options.contains(.tables)
+        if storage.options.contains(.tables)
             && (paragraphTablePending[node] ?? false)
             && (paragraphSecondLineIndent[node] ?? 0) < 4
             && !(paragraphSecondLineLazy[node] ?? false) {
@@ -2599,10 +2675,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
         // Reference link definitions stack at the start of a paragraph; any that match are stripped and registered.
-        if !isFootnoteDef {
-            trimmed = parseDefinitions(in: trimmed)
-        }
-        if !isFootnoteDef && isBlank(chunk: trimmed) {
+        trimmed = parseDefinitions(in: trimmed)
+        if isBlank(chunk: trimmed) {
             // Whole paragraph was ref-defs - drop the empty paragraph node.
             storage.unlinkChild(node)
             return
@@ -2984,6 +3058,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             UInt8(ascii: "`"), UInt8(ascii: "~"),
             UInt8(ascii: ">"),
             UInt8(ascii: "<"),
+            UInt8(ascii: "["),
             UInt8(ascii: "0")...UInt8(ascii: "9"):
             return true
         default:
@@ -4095,75 +4170,76 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return checked
     }
 
-    /// Match a GFM footnote definition `[^label]: content` at the start of a paragraph chunk.
+    /// Match a GFM footnote definition opener `[^label]:` at `firstNonSpace` on the current line.
     ///
-    /// Returns `(label, content)` chunks or `nil` if no match. The label allows ASCII alphanumerics, `_`, and `-`.
-    private func matchFootnoteDefinition(chunk: Chunk) -> (label: Chunk, content: Chunk)? {
-        if chunk.length < 5 {
+    /// The label is `[^` followed by one or more bytes that are none of `]`, space, tab, CR, LF, or
+    /// NUL (cmark's `_scan_footnote_definition`), then `]:` and optional trailing spaces/tabs.
+    /// Returns the label (raw source bytes between `^` and `]`) and the within-line offset just past
+    /// the consumed marker (`]:` plus trailing whitespace), where the definition's content begins,
+    /// or `nil` if this line is not a footnote-definition opener.
+    private func matchFootnoteDefinition(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> (label: Chunk, consumedTo: Int)? {
+        let end = range.upperBound
+        guard firstNonSpace + 1 < end,
+              source[firstNonSpace] == UInt8(ascii: "["),
+              source[firstNonSpace + 1] == UInt8(ascii: "^") else {
             return nil
         }
-        let off = chunk.offset
-        let endOff = chunk.offset + chunk.length
-        if readByte(at: off, in: chunk) != UInt8(ascii: "[") || readByte(at: off + 1, in: chunk) != UInt8(ascii: "^") {
-            return nil
-        }
-        let labelStart = off + 2
+        let labelStart = firstNonSpace + 2
         var i = labelStart
-        while i < endOff {
-            let b = readByte(at: i, in: chunk)
+        while i < end {
+            let b = source[i]
             if b == UInt8(ascii: "]") {
                 break
             }
-            let isLabelChar = b.isASCIILetter
-                || b.isASCIIDigit
-                || b == UInt8(ascii: "_") || b == UInt8(ascii: "-")
-            if !isLabelChar {
+            if b == UInt8(ascii: " ") || b == UInt8(ascii: "\t")
+                || b == UInt8(ascii: "\r") || b == UInt8(ascii: "\n") || b == 0 {
                 return nil
             }
             i += 1
         }
         let labelLen = i - labelStart
-        if labelLen == 0 || i >= endOff {
-            return nil
-        }
-        if i + 1 >= endOff || readByte(at: i + 1, in: chunk) != UInt8(ascii: ":") {
+        guard labelLen > 0,
+              i < end, source[i] == UInt8(ascii: "]"),
+              i + 1 < end, source[i + 1] == UInt8(ascii: ":") else {
             return nil
         }
         var contentStart = i + 2
-        while contentStart < endOff {
-            let b = readByte(at: contentStart, in: chunk)
+        while contentStart < end {
+            let b = source[contentStart]
             if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t") {
                 break
             }
             contentStart += 1
         }
+        // The opener line has 0–3 leading spaces (no straddling prefix tab), so its label region maps
+        // straight to source; `sourceOffset` is identity there. `?? labelStart` is a harmless fallback
+        // for the (never-hit in these configs) positions-off materialized case.
+        let labelOffset = sourceOffset(labelStart) ?? labelStart
         return (
-            label: Chunk(offset: labelStart, length: labelLen, inSource: chunk.inSource),
-            content: Chunk(offset: contentStart, length: endOff - contentStart, inSource: chunk.inSource)
+            label: Chunk(offset: labelOffset, length: labelLen, inSource: true),
+            consumedTo: contentStart
         )
     }
 
-    /// Splice a `.footnoteDefinition` node into the paragraph's parent in place of the paragraph, then re-parent the paragraph as the definition's only child. Registers the definition in `storage.footnoteMap` keyed on the normalized label.
-    private mutating func wrapInFootnoteDefinition(paragraph: DocumentStorage.Index, label: Chunk) {
-        let parent = storage[paragraph].parent
+    /// Open a `.footnoteDefinition` container as a child of `current`, registering it in
+    /// `storage.footnoteMap` keyed on the normalized label (first definition wins). Returns the new
+    /// definition's index.
+    private mutating func openFootnoteDefinition(label: Chunk, firstNonSpace: Int) -> DocumentStorage.Index {
         let labelRef = storage.intern(label)
-        let fnIdx = storage.appendNode(NodeRecord(
+        let fnIdx = addChild(
             kind: .footnoteDefinition,
-            parent: parent,
-            data: .footnoteDefinition(label: labelRef, referenceCount: 0)
-        ))
-        storage.insertChildBefore(fnIdx, before: paragraph)
-        storage.unlinkChild(paragraph)
-        storage.appendChild(paragraph, to: fnIdx)
-        // The label may be materialized into `storage.strings` (e.g. a multi-line footnote definition whose join wasn't source-contiguous), so read it from whichever buffer it lives in rather than assuming the source.
-        let key = normalizeLabel(
-            chunk: label
+            parent: current,
+            data: .footnoteDefinition(label: labelRef, referenceCount: 0),
+            start: sourceOffset(firstNonSpace)
         )
+        let key = normalizeLabel(chunk: label)
         if !key.isEmpty && storage.footnoteMap[key] == nil {
             storage.footnoteMap[key] = fnIdx
         }
+        storage.footnoteDefinitionOrder.append(fnIdx)
+        return fnIdx
     }
-    
+
     // MARK: Reference Parser
     
     // Detects and consumes link reference definitions at the start of a paragraph's materialized content during block finalization.

@@ -1855,7 +1855,9 @@ struct FootnoteTests {
 
     @Test("multiple footnotes get sequential indices")
     func multipleFootnotes() throws {
-        let source = "[^a] and [^b] and [^a] again"
+        // Indices are assigned in first-reference order, per label; repeat references reuse the index.
+        // Definitions are required — an unresolved reference becomes literal text (see `unresolvedRef`).
+        let source = "[^a] and [^b] and [^a] again\n\n[^a]: A\n[^b]: B"
         try MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         var indices: [Int] = []
         var labels: [String] = []
@@ -1874,19 +1876,23 @@ struct FootnoteTests {
         }
     }
 
-    @Test("unresolved reference still produces a node")
+    @Test("unresolved reference becomes literal text")
     func unresolvedRef() throws {
+        // cmark turns a `[^label]` with no matching definition back into literal text; the rewrite
+        // matches by not emitting a reference node when the label doesn't resolve.
         let source = "see [^missing]"
         try MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         let info = Self.firstFootnotes(doc)
-        #expect(info.ref?.label == "missing")
-        #expect(info.ref?.index == 1)
+        #expect(info.ref == nil)
+        let text = paragraphInlines(doc).compactMap { $0.literal }.joined()
+        #expect(text.contains("[^missing]"))
         }
     }
 
     @Test("definition produces a footnoteDefinition + paragraph child")
     func definitionStructure() throws {
-        let source = "[^a]: hello world"
+        // The definition must be referenced to survive — cmark drops unreferenced definitions.
+        let source = "[^a]: hello world\n\nsee [^a]"
         try MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         var found = false
         let root = doc.root

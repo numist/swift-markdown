@@ -749,14 +749,15 @@ extension BlockParser {
             }
             return pos
         }
-        // GFM footnote reference: when no link form matches but the bracket contents start with `^` (and have at least one more byte), treat the whole `[^label]` as a `.footnoteReference`.
+        // GFM footnote reference: when no link form matches but the bracket contents start with `^` (and have at least one more byte), treat the whole `[^label]` as a `.footnoteReference` — but only when the label resolves to a known definition. cmark turns an unresolved `[^x]` back into literal `[^x]` text (and then consolidates it with neighbours), which the normal no-match bracket handling below reproduces, since the footnote map is fully populated before inline parsing.
         if storage.options.contains(.footnotes),
            !isImage,
            let labelChunk = footnoteRefLabel(
                openerVirtualStart: brackets[openerIdx].virtualStart,
                closeBracket: cursor,
                content: content
-           ) {
+           ),
+           storage.footnoteMap[normalizeLabel(chunk: labelChunk)] != nil {
             emitFootnoteReference(
                 openerInl: openerInl,
                 labelChunk: labelChunk
@@ -837,9 +838,18 @@ extension BlockParser {
 
     /// Splice a `.footnoteReference` node in place of the opener `[`'s text node and any inner-content text nodes.
     ///
-    /// Assigns or reuses the 1-based index for this label. If the matching definition is already in `storage.footnoteMap`, increments its `referenceCount`.
+    /// Only called for a label that resolves to a registered definition. Assigns or reuses the 1-based
+    /// index for this label (in first-reference order), records the definition on first reference (so the
+    /// post-processing pass can move it to the document end in index order), and increments the
+    /// definition's `referenceCount`. The emitted reference carries the *definition's* raw label (cmark
+    /// discards the reference's own text and links back to the definition), so `[^Foo]` resolving to
+    /// `[^foo]` displays `foo`.
     private mutating func emitFootnoteReference(openerInl: DocumentStorage.Index, labelChunk: Chunk) {
         let key = normalizeLabel(chunk: labelChunk)
+        guard let defIdx = storage.footnoteMap[key],
+              case .footnoteDefinition(let defLabel, let count) = storage[defIdx].data else {
+            return
+        }
         let index: Int32
         if let existing = storage.footnoteIndices[key] {
             index = existing
@@ -847,20 +857,17 @@ extension BlockParser {
             storage.nextFootnoteIndex += 1
             index = storage.nextFootnoteIndex
             storage.footnoteIndices[key] = index
+            storage.footnoteReferencedDefs.append(defIdx)
         }
-        if let defIdx = storage.footnoteMap[key],
-           case .footnoteDefinition(let lbl, let count) = storage[defIdx].data {
-            storage[defIdx].data = .footnoteDefinition(
-                label: lbl,
-                referenceCount: count + 1
-            )
-        }
+        storage[defIdx].data = .footnoteDefinition(
+            label: defLabel,
+            referenceCount: count + 1
+        )
         let parentIdx = storage[openerInl].parent
-        let labelRef = storage.intern(labelChunk)
         let fnRefIdx = storage.appendNode(NodeRecord(
             kind: .footnoteReference(index: Int(index)),
             parent: parentIdx,
-            data: .footnoteReference(label: labelRef)
+            data: .footnoteReference(label: defLabel)
         ))
         storage.insertChildBefore(fnRefIdx, before: openerInl)
         // Detach inner-content text nodes (the `^label` part). They aren't part of the reference's emitted text - the reference is rendered by the consumer based on its label and index.

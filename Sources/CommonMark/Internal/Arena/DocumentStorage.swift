@@ -61,6 +61,16 @@ internal struct DocumentStorage: ~Copyable {
     /// Lets later references to the same label reuse the original index without consulting the definition node directly.
     internal var footnoteIndices: [String: Int32] = [:]
 
+    /// Every `.footnoteDefinition` node, in the order it was opened (document order).
+    ///
+    /// Used by the footnote post-processing pass to enumerate all definitions so unreferenced ones can be dropped.
+    internal var footnoteDefinitionOrder: [Index] = []
+
+    /// The definition nodes that acquired at least one reference, in order of first reference (= index order).
+    ///
+    /// The post-processing pass moves exactly these to the end of the document, in this order, mirroring cmark's `process_footnotes`.
+    internal var footnoteReferencedDefs: [Index] = []
+
     /// Number of lines in the document.
     internal var lineCount = 0
 
