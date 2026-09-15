@@ -789,6 +789,24 @@ extension BlockParser {
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             return initialPos
         }
+        // cmark BUG (bug-compat only): a footnote-shaped opener whose caret is immediately followed by
+        // another `[` (`[^[…`) collapses, once its outer `]` closes, to literal `[^[` (`![^[` for an
+        // image opener), dropping the inner bracket's content and everything to the end of the
+        // paragraph's inlines. See FINDINGS #146.
+        if storage.options.contains(.footnotes),
+           storage.options.contains(.cmarkBugCompatibility),
+           footnoteBracketStart + 2 < end,
+           content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
+           content[footnoteBracketStart + 2] == UInt8(ascii: "[") {
+            collapseCaretBracket(
+                openerInl: openerInl,
+                isImage: isImage,
+                footnoteBracketStart: footnoteBracketStart,
+                content: content
+            )
+            popBracket(brackets: &brackets, lastBracket: &lastBracket)
+            return end
+        }
         // No match: pop bracket, emit `]` text, rewind to just past `]`.
         popBracket(brackets: &brackets, lastBracket: &lastBracket)
         emitBracketLiteral(at: cursor, content: content, parent: parent)
@@ -928,6 +946,37 @@ extension BlockParser {
             i += 1
         }
         return false
+    }
+
+    /// Collapse a footnote-shaped bracket whose caret is *immediately* followed by another `[`
+    /// (`[^[…`) once its outer `]` closes, reproducing cmark's `.cmarkBugCompatibility` behavior:
+    /// cmark emits literal `[^[` (or `![^[` for an image opener) and drops everything from the inner
+    /// `[` to the end of the paragraph's inline content (`x[^[]]y` -> `x[^[`). This is cmark's inline
+    /// footnote branch interacting with the nested opener and its `subj->pos` handling; the caller
+    /// returns `end` to consume the rest. The spec-correct default keeps the bracket literal.
+    private mutating func collapseCaretBracket(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart: Int, content: borrowing ContentSpan) {
+        let parentIdx = storage[openerInl].parent
+        var literal: [UInt8] = []
+        if isImage {
+            literal.append(UInt8(ascii: "!"))
+        }
+        literal.append(UInt8(ascii: "["))
+        literal.append(UInt8(ascii: "^"))
+        literal.append(UInt8(ascii: "["))
+        let startOff = storage.strings.count
+        for b in literal {
+            storage.strings.append(b)
+        }
+        let ref = storage.intern(Chunk(offset: startOff, length: literal.count, inSource: false))
+        let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parentIdx, data: .literal(ref)))
+        storage.insertChildBefore(textIdx, before: openerInl)
+        stampInline(textIdx, footnoteBracketStart - (isImage ? 1 : 0), footnoteBracketStart + 3, content: content)
+        var sib: DocumentStorage.Index? = openerInl
+        while let s = sib {
+            let next = storage[s].next
+            storage.unlinkChild(s)
+            sib = next
+        }
     }
 
     /// Collapse a footnote-shaped bracket whose `]` lands on a later line than its opener, reproducing
