@@ -1068,19 +1068,27 @@ extension BlockParser {
     /// keeps the bracket literal with its soft break; see FINDINGS #146.
     private mutating func collapseMultilineFootnote(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan) {
         let labelStart = open + 2
-        var afterNL = labelStart
-        var i = labelStart
-        while i < close {
+        // cmark's columns reset at each newline (`handle_newline` sets `column_offset = -pos`), so the
+        // captured byte length is `colOf(]) - colOf([) - 2`, each column measured from its own line's
+        // start. Find the last newline before the `[` and before the `]` (scanning from the content
+        // start, `content.base`; multi-segment content is 0-based).
+        var afterNLOpen = content.base
+        var i = content.base
+        while i < open {
             if content[i] == UInt8(ascii: "\n") {
-                afterNL = i + 1
+                afterNLOpen = i + 1
             }
             i += 1
         }
-        // cmark's columns are 0-based within the paragraph content buffer; the rewrite's virtual
-        // offsets are global for single-segment content (offset by `content.base`), so shift the
-        // formula by `base` to recover buffer-relative columns. (Multi-segment content is 0-based,
-        // `base == 0`.)
-        let x = close - afterNL - open - 2 + content.base
+        var afterNLClose = afterNLOpen
+        i = open
+        while i < close {
+            if content[i] == UInt8(ascii: "\n") {
+                afterNLClose = i + 1
+            }
+            i += 1
+        }
+        let x = (close - afterNLClose) - (open - afterNLOpen) - 2
         var literal: [UInt8] = []
         if isImage {
             literal.append(UInt8(ascii: "!"))
