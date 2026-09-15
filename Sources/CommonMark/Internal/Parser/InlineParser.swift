@@ -768,6 +768,27 @@ extension BlockParser {
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             return initialPos
         }
+        // cmark BUG (bug-compat only): a footnote-shaped opener `[^…]` / `![^…]` whose `]` is on a
+        // later line than its `[` collapses to literal `[^]` / `![^]`, dropping the inner content and
+        // the soft break (empty label from a column-length underflow across the break). The
+        // spec-correct default falls through to normal bracket handling, keeping the break. See
+        // FINDINGS #146.
+        if storage.options.contains(.footnotes),
+           storage.options.contains(.cmarkBugCompatibility),
+           footnoteBracketStart + 1 < end,
+           footnoteBracketStart + 2 < cursor,
+           content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
+           footnoteSpanCrossesLine(content, from: footnoteBracketStart + 2, to: cursor) {
+            collapseMultilineFootnote(
+                openerInl: openerInl,
+                isImage: isImage,
+                openerVirtualStart: brackets[openerIdx].virtualStart,
+                closeBracket: cursor,
+                content: content
+            )
+            popBracket(brackets: &brackets, lastBracket: &lastBracket)
+            return initialPos
+        }
         // No match: pop bracket, emit `]` text, rewind to just past `]`.
         popBracket(brackets: &brackets, lastBracket: &lastBracket)
         emitBracketLiteral(at: cursor, content: content, parent: parent)
@@ -892,6 +913,49 @@ extension BlockParser {
             let nextSib = storage[sib_].next
             storage.unlinkChild(sib_)
             sib = nextSib
+        }
+    }
+
+    /// Whether the virtual content range `[from, to)` contains a line break (`\n`), i.e. a
+    /// footnote-shaped bracket's `]` lands on a later line than its `[`. Soft breaks appear as `\n`
+    /// bytes whether the paragraph content is one contiguous source chunk or a multi-segment join.
+    private func footnoteSpanCrossesLine(_ content: borrowing ContentSpan, from: Int, to: Int) -> Bool {
+        var i = from
+        while i < to {
+            if content[i] == UInt8(ascii: "\n") {
+                return true
+            }
+            i += 1
+        }
+        return false
+    }
+
+    /// Collapse a footnote-shaped bracket whose `]` lands on a later line than its opener into a
+    /// literal `[^]` (or `![^]` for an image opener), dropping the inner content — cmark's behavior
+    /// under `.cmarkBugCompatibility`. cmark's inline footnote branch computes the reference label as
+    /// `cmark_chunk_dup(literal, 1, end_column - start_column - 2)`; when the closing `]` is on a later
+    /// line the column delta underflows, so the captured label is empty and the whole span reconstructs
+    /// as `[^]`. The spec-correct default keeps the bracket literal with its soft break preserved.
+    private mutating func collapseMultilineFootnote(openerInl: DocumentStorage.Index, isImage: Bool, openerVirtualStart: Int, closeBracket: Int, content: borrowing ContentSpan) {
+        let parentIdx = storage[openerInl].parent
+        // The reconstructed literal is the opener's own bytes (`[` or `![`) followed by `^]`.
+        let literal: [UInt8] = isImage
+            ? [UInt8(ascii: "!"), UInt8(ascii: "["), UInt8(ascii: "^"), UInt8(ascii: "]")]
+            : [UInt8(ascii: "["), UInt8(ascii: "^"), UInt8(ascii: "]")]
+        let start = storage.strings.count
+        for b in literal {
+            storage.strings.append(b)
+        }
+        let ref = storage.intern(Chunk(offset: start, length: literal.count, inSource: false))
+        let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parentIdx, data: .literal(ref)))
+        storage.insertChildBefore(textIdx, before: openerInl)
+        stampInline(textIdx, openerVirtualStart, closeBracket + 1, content: content)
+        // Remove the opener and every inner-content sibling (the `^…` up to the `]`).
+        var sib: DocumentStorage.Index? = openerInl
+        while let s = sib {
+            let next = storage[s].next
+            storage.unlinkChild(s)
+            sib = next
         }
     }
 
