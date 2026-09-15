@@ -780,7 +780,8 @@ extension BlockParser {
            storage.options.contains(.cmarkBugCompatibility),
            footnoteBracketStart + 2 < end,
            content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
-           content[footnoteBracketStart + 2] == UInt8(ascii: "[") {
+           content[footnoteBracketStart + 2] == UInt8(ascii: "["),
+           caretBracketCollapses(content, innerOpen: footnoteBracketStart + 2, outerClose: cursor) {
             processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
             collapseCaretBracket(
                 openerInl: openerInl,
@@ -973,6 +974,37 @@ extension BlockParser {
             i += 1
         }
         return false
+    }
+
+    /// Whether a footnote-shaped `[^[…` opener takes cmark's `[^[` collapse: it does when the inner
+    /// bracket's matching `]` and the outer `]` are on the same line (no soft break between them). If
+    /// a soft break falls between the inner close and the outer `]`, cmark instead applies the
+    /// cross-line label capture (`[^]`), so the caller lets that branch handle it.
+    private func caretBracketCollapses(_ content: borrowing ContentSpan, innerOpen: Int, outerClose: Int) -> Bool {
+        var depth = 1
+        var i = innerOpen + 1
+        while i < outerClose {
+            let b = content[i]
+            if b == UInt8(ascii: "[") {
+                depth += 1
+            } else if b == UInt8(ascii: "]") {
+                depth -= 1
+                if depth == 0 {
+                    break
+                }
+            }
+            i += 1
+        }
+        // `i` is the inner bracket's matching `]` (or `outerClose` if unbalanced). A soft break between
+        // it and the outer `]` means the outer close is on a later line -> cross-line, not `[^[`.
+        var j = i + 1
+        while j < outerClose {
+            if content[j] == UInt8(ascii: "\n") {
+                return false
+            }
+            j += 1
+        }
+        return true
     }
 
     /// Replace an unresolved same-line footnote-shaped bracket with its RAW `[^label]` (or `![^label]`)
