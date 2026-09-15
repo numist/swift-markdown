@@ -781,7 +781,7 @@ extension BlockParser {
            footnoteBracketStart + 2 < end,
            content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
            content[footnoteBracketStart + 2] == UInt8(ascii: "["),
-           caretBracketCollapses(content, innerOpen: footnoteBracketStart + 2, outerClose: cursor) {
+           caretBracketCollapses(content, open: footnoteBracketStart, outerClose: cursor) {
             processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
             collapseCaretBracket(
                 openerInl: openerInl,
@@ -976,13 +976,35 @@ extension BlockParser {
         return false
     }
 
-    /// Whether a footnote-shaped `[^[…` opener takes cmark's `[^[` collapse. It does unless the outer
-    /// `]` sits at the start of its line (the byte before it is a soft break), in which case cmark's
-    /// cross-line label capture applies instead (`[^]`). So `[^[]\n]` (outer `]` after the break) is
-    /// cross-line, while `[^[]\n$<x>]` (content before the outer `]`) collapses to `[^[`.
-    private func caretBracketCollapses(_ content: borrowing ContentSpan, innerOpen: Int, outerClose: Int) -> Bool {
-        guard outerClose > innerOpen else { return true }
-        return content[outerClose - 1] != UInt8(ascii: "\n")
+    /// The byte length of the label cmark captures for a footnote-shaped bracket, `colOf(]) -
+    /// colOf([) - 2`, with each column measured from its own line's start (cmark resets `column_offset`
+    /// at each newline). Negative/zero means an empty captured label.
+    private func footnoteCapturedLabelLength(_ content: borrowing ContentSpan, open: Int, close: Int) -> Int {
+        var afterNLOpen = content.base
+        var i = content.base
+        while i < open {
+            if content[i] == UInt8(ascii: "\n") {
+                afterNLOpen = i + 1
+            }
+            i += 1
+        }
+        var afterNLClose = afterNLOpen
+        i = open
+        while i < close {
+            if content[i] == UInt8(ascii: "\n") {
+                afterNLClose = i + 1
+            }
+            i += 1
+        }
+        return (close - afterNLClose) - (open - afterNLOpen) - 2
+    }
+
+    /// Whether a footnote-shaped `[^[…` opener takes cmark's `[^[` collapse. cmark produces the literal
+    /// `[^[` garbage exactly when the captured-label length is positive; when it is <= 0 the cross-line
+    /// branch captures an empty label instead (`[^]`). So `[^[]\n$<x>]` (positive length) collapses to
+    /// `[^[`, while `[^[]\na]` / `[^[]\n]` (non-positive) fall through to the cross-line `[^]`.
+    private func caretBracketCollapses(_ content: borrowing ContentSpan, open: Int, outerClose: Int) -> Bool {
+        return footnoteCapturedLabelLength(content, open: open, close: outerClose) > 0
     }
 
     /// Replace an unresolved same-line footnote-shaped bracket with its RAW `[^label]` (or `![^label]`)
@@ -1046,27 +1068,7 @@ extension BlockParser {
     /// keeps the bracket literal with its soft break; see FINDINGS #146.
     private mutating func collapseMultilineFootnote(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan) {
         let labelStart = open + 2
-        // cmark's columns reset at each newline (`handle_newline` sets `column_offset = -pos`), so the
-        // captured byte length is `colOf(]) - colOf([) - 2`, each column measured from its own line's
-        // start. Find the last newline before the `[` and before the `]` (scanning from the content
-        // start, `content.base`; multi-segment content is 0-based).
-        var afterNLOpen = content.base
-        var i = content.base
-        while i < open {
-            if content[i] == UInt8(ascii: "\n") {
-                afterNLOpen = i + 1
-            }
-            i += 1
-        }
-        var afterNLClose = afterNLOpen
-        i = open
-        while i < close {
-            if content[i] == UInt8(ascii: "\n") {
-                afterNLClose = i + 1
-            }
-            i += 1
-        }
-        let x = (close - afterNLClose) - (open - afterNLOpen) - 2
+        let x = footnoteCapturedLabelLength(content, open: open, close: close)
         var literal: [UInt8] = []
         if isImage {
             literal.append(UInt8(ascii: "!"))
