@@ -976,35 +976,13 @@ extension BlockParser {
         return false
     }
 
-    /// Whether a footnote-shaped `[^[…` opener takes cmark's `[^[` collapse: it does when the inner
-    /// bracket's matching `]` and the outer `]` are on the same line (no soft break between them). If
-    /// a soft break falls between the inner close and the outer `]`, cmark instead applies the
-    /// cross-line label capture (`[^]`), so the caller lets that branch handle it.
+    /// Whether a footnote-shaped `[^[…` opener takes cmark's `[^[` collapse. It does unless the outer
+    /// `]` sits at the start of its line (the byte before it is a soft break), in which case cmark's
+    /// cross-line label capture applies instead (`[^]`). So `[^[]\n]` (outer `]` after the break) is
+    /// cross-line, while `[^[]\n$<x>]` (content before the outer `]`) collapses to `[^[`.
     private func caretBracketCollapses(_ content: borrowing ContentSpan, innerOpen: Int, outerClose: Int) -> Bool {
-        var depth = 1
-        var i = innerOpen + 1
-        while i < outerClose {
-            let b = content[i]
-            if b == UInt8(ascii: "[") {
-                depth += 1
-            } else if b == UInt8(ascii: "]") {
-                depth -= 1
-                if depth == 0 {
-                    break
-                }
-            }
-            i += 1
-        }
-        // `i` is the inner bracket's matching `]` (or `outerClose` if unbalanced). A soft break between
-        // it and the outer `]` means the outer close is on a later line -> cross-line, not `[^[`.
-        var j = i + 1
-        while j < outerClose {
-            if content[j] == UInt8(ascii: "\n") {
-                return false
-            }
-            j += 1
-        }
-        return true
+        guard outerClose > innerOpen else { return true }
+        return content[outerClose - 1] != UInt8(ascii: "\n")
     }
 
     /// Replace an unresolved same-line footnote-shaped bracket with its RAW `[^label]` (or `![^label]`)
