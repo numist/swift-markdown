@@ -912,6 +912,17 @@ extension BlockParser {
               chunk.length == closeBracket - labelStart else {
             return nil
         }
+        // A footnote reference is same-line only. Unlike a link reference (whose multi-line label
+        // cmark resolves after normalization), cmark never resolves a footnote-shaped bracket whose
+        // label spans a soft break — such a bracket takes the cross-line collapse instead. So reject a
+        // label containing a newline here; the cross-line branch handles it.
+        var i = labelStart
+        while i < closeBracket {
+            if content[i] == UInt8(ascii: "\n") {
+                return nil
+            }
+            i += 1
+        }
         return chunk
     }
 
