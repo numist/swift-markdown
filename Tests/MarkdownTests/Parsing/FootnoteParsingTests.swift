@@ -60,4 +60,20 @@ class FootnoteParsingTests: XCTestCase {
         """
         XCTAssertEqual(doc.debugDescription(), expected)
     }
+
+    // An image-shaped opener `![^a]` is a footnote reference (cmark ignores the image flag here); the
+    // `!` stays as literal text.
+    func testImageShapedReference() {
+        let doc = Document(parsing: "x![^a]\n\n[^a]: note\n", options: [.footnotes])
+        let expected = """
+        Document
+        ├─ Paragraph
+        │  ├─ Text "x!"
+        │  └─ FootnoteReference label: "a" index: 1
+        └─ FootnoteDefinition label: "a"
+           └─ Paragraph
+              └─ Text "note"
+        """
+        XCTAssertEqual(doc.debugDescription(), expected)
+    }
 }

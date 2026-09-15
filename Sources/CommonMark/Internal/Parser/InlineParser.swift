@@ -749,17 +749,20 @@ extension BlockParser {
             }
             return pos
         }
-        // GFM footnote reference: when no link form matches but the bracket contents start with `^` (and have at least one more byte), treat the whole `[^label]` as a `.footnoteReference` — but only when the label resolves to a known definition. cmark turns an unresolved `[^x]` back into literal `[^x]` text (and then consolidates it with neighbours), which the normal no-match bracket handling below reproduces, since the footnote map is fully populated before inline parsing.
+        // GFM footnote reference: when no link form matches but the bracket contents start with `^` (and have at least one more byte), treat the whole `[^label]` as a `.footnoteReference` — but only when the label resolves to a known definition. cmark turns an unresolved `[^x]` back into literal `[^x]` text (and then consolidates it with neighbours), which the normal no-match bracket handling below reproduces, since the footnote map is fully populated before inline parsing. An image-shaped opener `![^label]` is a footnote too (cmark ignores the image flag here): its `[` sits one past the opener's `!`.
+        let footnoteBracketStart = brackets[openerIdx].virtualStart + (isImage ? 1 : 0)
         if storage.options.contains(.footnotes),
-           !isImage,
            let labelChunk = footnoteRefLabel(
-               openerVirtualStart: brackets[openerIdx].virtualStart,
+               openerVirtualStart: footnoteBracketStart,
                closeBracket: cursor,
                content: content
            ),
            storage.footnoteMap[normalizeLabel(chunk: labelChunk)] != nil {
             emitFootnoteReference(
                 openerInl: openerInl,
+                isImage: isImage,
+                openerVirtualStart: brackets[openerIdx].virtualStart,
+                content: content,
                 labelChunk: labelChunk
             )
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
@@ -836,7 +839,7 @@ extension BlockParser {
         return chunk
     }
 
-    /// Splice a `.footnoteReference` node in place of the opener `[`'s text node and any inner-content text nodes.
+    /// Splice a `.footnoteReference` node in place of the opener's bracket text node and any inner-content text nodes.
     ///
     /// Only called for a label that resolves to a registered definition. Assigns or reuses the 1-based
     /// index for this label (in first-reference order), records the definition on first reference (so the
@@ -844,7 +847,11 @@ extension BlockParser {
     /// definition's `referenceCount`. The emitted reference carries the *definition's* raw label (cmark
     /// discards the reference's own text and links back to the definition), so `[^Foo]` resolving to
     /// `[^foo]` displays `foo`.
-    private mutating func emitFootnoteReference(openerInl: DocumentStorage.Index, labelChunk: Chunk) {
+    ///
+    /// cmark treats an image-shaped opener `![^a]` as a literal `!` followed by the footnote reference
+    /// (its footnote branch ignores the bracket's image flag), so for an image opener the opener node's
+    /// `![` is shrunk to a `!` text node kept before the reference; for a link opener the `[` node is removed.
+    private mutating func emitFootnoteReference(openerInl: DocumentStorage.Index, isImage: Bool, openerVirtualStart: Int, content: borrowing ContentSpan, labelChunk: Chunk) {
         let key = normalizeLabel(chunk: labelChunk)
         guard let defIdx = storage.footnoteMap[key],
               case .footnoteDefinition(let defLabel, let count) = storage[defIdx].data else {
@@ -869,15 +876,23 @@ extension BlockParser {
             parent: parentIdx,
             data: .footnoteReference(label: defLabel)
         ))
-        storage.insertChildBefore(fnRefIdx, before: openerInl)
-        // Detach inner-content text nodes (the `^label` part). They aren't part of the reference's emitted text - the reference is rendered by the consumer based on its label and index.
-        var sib = storage[openerInl].next
+        if isImage {
+            // The opener node holds `![`; keep the `!` as a literal text node before the reference.
+            let bang = content.chunk(offset: openerVirtualStart, length: 1)
+            storage[openerInl].data = .literal(storage.intern(bang))
+            stampInline(openerInl, openerVirtualStart, openerVirtualStart + 1, content: content)
+            storage.insertChildAfter(fnRefIdx, after: openerInl)
+        } else {
+            storage.insertChildBefore(fnRefIdx, before: openerInl)
+            storage.unlinkChild(openerInl)
+        }
+        // Detach inner-content text nodes (the `^label` part) that follow the reference. They aren't part of the reference's emitted text - the reference is rendered by the consumer based on its label and index.
+        var sib = storage[fnRefIdx].next
         while let sib_ = sib {
             let nextSib = storage[sib_].next
             storage.unlinkChild(sib_)
             sib = nextSib
         }
-        storage.unlinkChild(openerInl)
     }
 
     // MARK: - Extended attributes (`^[..]`)
