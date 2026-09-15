@@ -1078,38 +1078,52 @@ extension BlockParser {
         }
     }
 
-    /// Collapse a footnote-shaped bracket whose `]` lands on a later line than its opener, reproducing
+    /// Handle a footnote-shaped bracket whose `]` lands on a later line than its opener, reproducing
     /// cmark's `.cmarkBugCompatibility` behavior. cmark's inline footnote branch captures the label as
     /// `cmark_chunk_dup(caretNode, 1, end_col - start_col - 2)`, reading raw bytes from just after the
     /// `^` across the soft break; its column arithmetic resets at each newline (`handle_newline` sets
-    /// `column_offset = -pos`). With `open` = the `[` offset, `close` = the `]` offset, and `afterNL` =
-    /// one past the last `\n` before `]`, the captured byte length is `X = close - afterNL - open - 2`
-    /// (block offset cancels). The whole span reconstructs as `[^` + those `X` bytes + `]` (with a
-    /// leading `!` for an image opener). `X <= 0` yields the empty-label `[^]`. The spec-correct default
-    /// keeps the bracket literal with its soft break; see FINDINGS #146.
+    /// `column_offset = -pos`), so the captured byte length is `colOf(]) - colOf([) - 2` with per-line
+    /// columns (`footnoteCapturedLabelLength`), extended to the UTF-8 character boundary (the NUL /
+    /// invalid-byte -> U+FFFD replacement is atomic). cmark then RESOLVES that captured label if it
+    /// matches a definition (so a cross-line `[^a<nl>x]` resolves to `a`); otherwise the whole span
+    /// reconstructs as `[^` + the captured bytes + `]` (`[^]` for an empty capture). The spec-correct
+    /// default keeps the bracket literal with its soft break; see FINDINGS #146.
     private mutating func collapseMultilineFootnote(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan) {
         let labelStart = open + 2
         let x = footnoteCapturedLabelLength(content, open: open, close: close)
+        var labelBytes: [UInt8] = []
+        if x > 0 {
+            var end = min(labelStart + x, close)
+            while end < close, content[end] & 0b1100_0000 == 0b1000_0000 {
+                end += 1
+            }
+            var j = labelStart
+            while j < end {
+                labelBytes.append(content[j])
+                j += 1
+            }
+        }
+        // cmark resolves the reference by its byte-captured label; a match emits a footnote reference.
+        if !labelBytes.isEmpty {
+            let capStart = storage.strings.count
+            for b in labelBytes {
+                storage.strings.append(b)
+            }
+            let capturedChunk = Chunk(offset: capStart, length: labelBytes.count, inSource: false)
+            if !normalizeLabel(chunk: capturedChunk).isEmpty,
+               storage.footnoteMap[normalizeLabel(chunk: capturedChunk)] != nil {
+                emitFootnoteReference(openerInl: openerInl, isImage: isImage, openerVirtualStart: open - (isImage ? 1 : 0), content: content, labelChunk: capturedChunk)
+                return
+            }
+        }
+        // Unresolved: reconstruct `[^` (or `![^`) + captured bytes + `]`.
         var literal: [UInt8] = []
         if isImage {
             literal.append(UInt8(ascii: "!"))
         }
         literal.append(UInt8(ascii: "["))
         literal.append(UInt8(ascii: "^"))
-        if x > 0 {
-            var end = min(labelStart + x, close)
-            // cmark's replacement of invalid UTF-8 with U+FFFD is atomic, so a byte-length capture that
-            // lands mid-sequence still yields the whole character; extend past any trailing UTF-8
-            // continuation bytes to the character boundary.
-            while end < close, content[end] & 0b1100_0000 == 0b1000_0000 {
-                end += 1
-            }
-            var j = labelStart
-            while j < end {
-                literal.append(content[j])
-                j += 1
-            }
-        }
+        literal.append(contentsOf: labelBytes)
         literal.append(UInt8(ascii: "]"))
 
         let parentIdx = storage[openerInl].parent
