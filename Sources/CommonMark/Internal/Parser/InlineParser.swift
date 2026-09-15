@@ -782,7 +782,7 @@ extension BlockParser {
             collapseMultilineFootnote(
                 openerInl: openerInl,
                 isImage: isImage,
-                openerVirtualStart: brackets[openerIdx].virtualStart,
+                footnoteBracketStart: footnoteBracketStart,
                 closeBracket: cursor,
                 content: content
             )
@@ -930,18 +930,43 @@ extension BlockParser {
         return false
     }
 
-    /// Collapse a footnote-shaped bracket whose `]` lands on a later line than its opener into a
-    /// literal `[^]` (or `![^]` for an image opener), dropping the inner content — cmark's behavior
-    /// under `.cmarkBugCompatibility`. cmark's inline footnote branch computes the reference label as
-    /// `cmark_chunk_dup(literal, 1, end_column - start_column - 2)`; when the closing `]` is on a later
-    /// line the column delta underflows, so the captured label is empty and the whole span reconstructs
-    /// as `[^]`. The spec-correct default keeps the bracket literal with its soft break preserved.
-    private mutating func collapseMultilineFootnote(openerInl: DocumentStorage.Index, isImage: Bool, openerVirtualStart: Int, closeBracket: Int, content: borrowing ContentSpan) {
+    /// Collapse a footnote-shaped bracket whose `]` lands on a later line than its opener, reproducing
+    /// cmark's `.cmarkBugCompatibility` behavior. cmark's inline footnote branch captures the label as
+    /// `cmark_chunk_dup(caretNode, 1, end_col - start_col - 2)`, reading raw bytes from just after the
+    /// `^` across the soft break; its column arithmetic resets at each newline (`handle_newline` sets
+    /// `column_offset = -pos`). With `open` = the `[` offset, `close` = the `]` offset, and `afterNL` =
+    /// one past the last `\n` before `]`, the captured byte length is `X = close - afterNL - open - 2`
+    /// (block offset cancels). The whole span reconstructs as `[^` + those `X` bytes + `]` (with a
+    /// leading `!` for an image opener). `X <= 0` yields the empty-label `[^]`. The spec-correct default
+    /// keeps the bracket literal with its soft break; see FINDINGS #146.
+    private mutating func collapseMultilineFootnote(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan) {
+        let labelStart = open + 2
+        var afterNL = labelStart
+        var i = labelStart
+        while i < close {
+            if content[i] == UInt8(ascii: "\n") {
+                afterNL = i + 1
+            }
+            i += 1
+        }
+        let x = close - afterNL - open - 2
+        var literal: [UInt8] = []
+        if isImage {
+            literal.append(UInt8(ascii: "!"))
+        }
+        literal.append(UInt8(ascii: "["))
+        literal.append(UInt8(ascii: "^"))
+        if x > 0 {
+            let end = min(labelStart + x, close)
+            var j = labelStart
+            while j < end {
+                literal.append(content[j])
+                j += 1
+            }
+        }
+        literal.append(UInt8(ascii: "]"))
+
         let parentIdx = storage[openerInl].parent
-        // The reconstructed literal is the opener's own bytes (`[` or `![`) followed by `^]`.
-        let literal: [UInt8] = isImage
-            ? [UInt8(ascii: "!"), UInt8(ascii: "["), UInt8(ascii: "^"), UInt8(ascii: "]")]
-            : [UInt8(ascii: "["), UInt8(ascii: "^"), UInt8(ascii: "]")]
         let start = storage.strings.count
         for b in literal {
             storage.strings.append(b)
@@ -949,7 +974,7 @@ extension BlockParser {
         let ref = storage.intern(Chunk(offset: start, length: literal.count, inSource: false))
         let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parentIdx, data: .literal(ref)))
         storage.insertChildBefore(textIdx, before: openerInl)
-        stampInline(textIdx, openerVirtualStart, closeBracket + 1, content: content)
+        stampInline(textIdx, open - (isImage ? 1 : 0), close + 1, content: content)
         // Remove the opener and every inner-content sibling (the `^…` up to the `]`).
         var sib: DocumentStorage.Index? = openerInl
         while let s = sib {
