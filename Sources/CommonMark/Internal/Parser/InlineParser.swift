@@ -327,8 +327,13 @@ extension BlockParser {
                 pendingTextStart = cursor
                 
             case UInt8(ascii: "!"):
+                // cmark opens an image only for `![` NOT followed by `^` (src/inlines.c: "specifically
+                // check for '![' not followed by '^'"). `![^…` leaves the `!` as literal text and lets
+                // the `[` open a link/footnote bracket, so `![^a]` is `!` + a footnote (or, with
+                // footnotes off, `!` + a link/literal), never an image.
                 if cursor + 1 < endOffset,
-                   content[cursor + 1] == UInt8(ascii: "[") {
+                   content[cursor + 1] == UInt8(ascii: "["),
+                   !(cursor + 2 < endOffset && content[cursor + 2] == UInt8(ascii: "^")) {
                     flushPendingText(
                         start: pendingTextStart,
                         end: cursor,
