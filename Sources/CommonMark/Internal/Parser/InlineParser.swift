@@ -1049,7 +1049,13 @@ extension BlockParser {
         literal.append(UInt8(ascii: "["))
         literal.append(UInt8(ascii: "^"))
         if x > 0 {
-            let end = min(labelStart + x, close)
+            var end = min(labelStart + x, close)
+            // cmark's replacement of invalid UTF-8 with U+FFFD is atomic, so a byte-length capture that
+            // lands mid-sequence still yields the whole character; extend past any trailing UTF-8
+            // continuation bytes to the character boundary.
+            while end < close, content[end] & 0b1100_0000 == 0b1000_0000 {
+                end += 1
+            }
             var j = labelStart
             while j < end {
                 literal.append(content[j])
