@@ -997,13 +997,19 @@ extension BlockParser {
     }
 
     /// The byte length of the label cmark captures for a footnote-shaped bracket, `colOf(]) -
-    /// colOf([) - 2`, with each column measured from its own line's start (cmark resets `column_offset`
-    /// at each newline). Negative/zero means an empty captured label.
+    /// colOf([) - 2`, with each column measured from its own line's start (cmark's `handle_newline`
+    /// resets `column_offset` at each *bare* line ending). Negative/zero means an empty captured label.
+    ///
+    /// Only a bare `\n` resets: cmark's `handle_newline` (soft break, or the trailing-space hard break)
+    /// runs `column_offset = -subj->pos` unconditionally, but a `\n` consumed by a preceding backslash
+    /// hard break (`handle_backslash`'s `make_linebreak`) never touches `column_offset`. A `\n` is
+    /// backslash-consumed exactly when an *odd* run of backslashes immediately precedes it, so those
+    /// bytes must not reset the per-line column (see FINDINGS #154).
     private func footnoteCapturedLabelLength(_ content: borrowing ContentSpan, open: Int, close: Int) -> Int {
         var afterNLOpen = content.base
         var i = content.base
         while i < open {
-            if content[i] == UInt8(ascii: "\n") {
+            if content[i] == UInt8(ascii: "\n"), bareLineEnding(content, at: i) {
                 afterNLOpen = i + 1
             }
             i += 1
@@ -1011,12 +1017,26 @@ extension BlockParser {
         var afterNLClose = afterNLOpen
         i = open
         while i < close {
-            if content[i] == UInt8(ascii: "\n") {
+            if content[i] == UInt8(ascii: "\n"), bareLineEnding(content, at: i) {
                 afterNLClose = i + 1
             }
             i += 1
         }
         return (close - afterNLClose) - (open - afterNLOpen) - 2
+    }
+
+    /// Whether the `\n` at `i` is a *bare* line ending — one that cmark's `handle_newline` processes
+    /// (resetting `column_offset`) rather than one consumed by a preceding backslash hard break. The
+    /// last of an odd run of backslashes immediately before the `\n` consumes it (CommonMark's
+    /// backslash line-break rule), so the newline is bare exactly when that run has even length.
+    private func bareLineEnding(_ content: borrowing ContentSpan, at i: Int) -> Bool {
+        var backslashes = 0
+        var j = i - 1
+        while j >= content.base, content[j] == UInt8(ascii: "\\") {
+            backslashes += 1
+            j -= 1
+        }
+        return backslashes % 2 == 0
     }
 
     /// Whether a footnote-shaped `[^[…` opener takes cmark's `[^[` collapse (literal `[^[`, dropping
