@@ -771,6 +771,32 @@ extension BlockParser {
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             return initialPos
         }
+        // cmark BUG (bug-compat only): a footnote-shaped opener whose caret is immediately followed by
+        // another `[` (`[^[…`) collapses, once its outer `]` closes, to literal `[^[` (`![^[` for an
+        // image opener), dropping the inner bracket's content and the rest of the current line. Checked
+        // before the cross-line case because a `[^[…` opener takes this shape even when it spans lines.
+        // See FINDINGS #146.
+        if storage.options.contains(.footnotes),
+           storage.options.contains(.cmarkBugCompatibility),
+           footnoteBracketStart + 2 < end,
+           content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
+           content[footnoteBracketStart + 2] == UInt8(ascii: "[") {
+            processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
+            collapseCaretBracket(
+                openerInl: openerInl,
+                isImage: isImage,
+                footnoteBracketStart: footnoteBracketStart,
+                content: content
+            )
+            popBracket(brackets: &brackets, lastBracket: &lastBracket)
+            // cmark drops the rest of the CURRENT line (up to the next soft break); a following line
+            // continues normally.
+            var lineEnd = cursor
+            while lineEnd < end && content[lineEnd] != UInt8(ascii: "\n") {
+                lineEnd += 1
+            }
+            return lineEnd
+        }
         // cmark BUG (bug-compat only): a footnote-shaped opener `[^…]` / `![^…]` whose `]` is on a
         // later line than its `[` collapses to literal `[^]` / `![^]`, dropping the inner content and
         // the soft break (empty label from a column-length underflow across the break). The
@@ -792,31 +818,6 @@ extension BlockParser {
             )
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             return initialPos
-        }
-        // cmark BUG (bug-compat only): a footnote-shaped opener whose caret is immediately followed by
-        // another `[` (`[^[…`) collapses, once its outer `]` closes, to literal `[^[` (`![^[` for an
-        // image opener), dropping the inner bracket's content and everything to the end of the
-        // paragraph's inlines. See FINDINGS #146.
-        if storage.options.contains(.footnotes),
-           storage.options.contains(.cmarkBugCompatibility),
-           footnoteBracketStart + 2 < end,
-           content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
-           content[footnoteBracketStart + 2] == UInt8(ascii: "[") {
-            processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
-            collapseCaretBracket(
-                openerInl: openerInl,
-                isImage: isImage,
-                footnoteBracketStart: footnoteBracketStart,
-                content: content
-            )
-            popBracket(brackets: &brackets, lastBracket: &lastBracket)
-            // cmark drops the rest of the CURRENT line (up to the next soft break); a following line
-            // continues normally.
-            var lineEnd = cursor
-            while lineEnd < end && content[lineEnd] != UInt8(ascii: "\n") {
-                lineEnd += 1
-            }
-            return lineEnd
         }
         // cmark BUG (bug-compat only): any other unresolved footnote-shaped bracket with a same-line
         // label reconstructs to the RAW `[^label]` source span. cmark synthesizes the unresolved
