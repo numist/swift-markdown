@@ -949,7 +949,11 @@ extension BlockParser {
             }
             i += 1
         }
-        let x = close - afterNL - open - 2
+        // cmark's columns are 0-based within the paragraph content buffer; the rewrite's virtual
+        // offsets are global for single-segment content (offset by `content.base`), so shift the
+        // formula by `base` to recover buffer-relative columns. (Multi-segment content is 0-based,
+        // `base == 0`.)
+        let x = close - afterNL - open - 2 + content.base
         var literal: [UInt8] = []
         if isImage {
             literal.append(UInt8(ascii: "!"))

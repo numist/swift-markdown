@@ -1,0 +1,6 @@
+Document @1:1-4:5
+├─ Paragraph @1:1-1:6
+│  └─ Text @1:1-1:6 "hello"
+└─ Paragraph @3:1-4:5
+   └─ Text @3:1-4:5 "[^
+]"
