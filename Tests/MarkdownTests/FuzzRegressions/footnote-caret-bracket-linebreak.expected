@@ -1,0 +1,5 @@
+Document @1:1-2:2
+└─ Paragraph @1:1-2:2
+   ├─ Text "[^["
+   ├─ SoftBreak
+   └─ Text "�"

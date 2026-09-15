@@ -805,7 +805,13 @@ extension BlockParser {
                 content: content
             )
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
-            return end
+            // cmark drops the rest of the CURRENT line (up to the next soft break); a following line
+            // continues normally.
+            var lineEnd = cursor
+            while lineEnd < end && content[lineEnd] != UInt8(ascii: "\n") {
+                lineEnd += 1
+            }
+            return lineEnd
         }
         // cmark BUG (bug-compat only): any other unresolved footnote-shaped bracket with a same-line
         // label reconstructs to the RAW `[^label]` source span. cmark synthesizes the unresolved
