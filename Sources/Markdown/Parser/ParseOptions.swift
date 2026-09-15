@@ -36,5 +36,8 @@ public struct ParseOptions: OptionSet, Sendable {
 
     /// Enable GFM extended autolinks in the comparison config (for differential qualification). Default off; SPI-only so the shipped parser's default surface is unchanged. Fuzzer-driven via the option byte.
     @_spi(Autolinking) public static let gfmAutolink = ParseOptions(rawValue: 1 << 6)
+
+    /// Parse GFM footnote references (`[^label]`) and definitions (`[^label]:`). SPI-only so the shipped parser's default surface is unchanged; fuzzer-driven via the option byte.
+    @_spi(Footnotes) public static let footnotes = ParseOptions(rawValue: 1 << 7)
 }
 

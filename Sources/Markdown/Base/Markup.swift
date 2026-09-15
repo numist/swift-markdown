@@ -57,6 +57,10 @@ func makeMarkup(_ data: _MarkupData) -> Markup {
         return Text(data)
     case .strikethrough:
         return Strikethrough(data)
+    case .footnoteReference:
+        return FootnoteReference(data)
+    case .footnoteDefinition:
+        return FootnoteDefinition(data)
     case .table:
         return Table(data)
     case .tableRow:
