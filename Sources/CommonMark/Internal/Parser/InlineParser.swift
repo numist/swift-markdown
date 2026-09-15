@@ -807,6 +807,20 @@ extension BlockParser {
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             return end
         }
+        // cmark BUG (bug-compat only): any other unresolved footnote-shaped bracket with a same-line
+        // label reconstructs to the RAW `[^label]` source span. cmark synthesizes the unresolved
+        // reference's text from raw bytes in `process_footnotes`, bypassing the smart punctuation,
+        // backslash escapes, and entity decoding that the spec-correct literal path applies.
+        if storage.options.contains(.footnotes),
+           storage.options.contains(.cmarkBugCompatibility),
+           footnoteBracketStart + 1 < end,
+           content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
+           let labelChunk = footnoteRefLabel(openerVirtualStart: footnoteBracketStart, closeBracket: cursor, content: content),
+           storage.footnoteMap[normalizeLabel(chunk: labelChunk)] == nil {
+            emitRawFootnoteLiteral(openerInl: openerInl, openerVirtualStart: brackets[openerIdx].virtualStart, closeBracket: cursor, content: content)
+            popBracket(brackets: &brackets, lastBracket: &lastBracket)
+            return initialPos
+        }
         // No match: pop bracket, emit `]` text, rewind to just past `]`.
         popBracket(brackets: &brackets, lastBracket: &lastBracket)
         emitBracketLiteral(at: cursor, content: content, parent: parent)
@@ -946,6 +960,25 @@ extension BlockParser {
             i += 1
         }
         return false
+    }
+
+    /// Replace an unresolved same-line footnote-shaped bracket with its RAW `[^label]` (or `![^label]`)
+    /// source span as a single text node, reproducing cmark's `process_footnotes` reconstruction which
+    /// works from raw bytes — so smart punctuation, backslash escapes, and entity references inside the
+    /// bracket stay verbatim, unlike the spec-correct literal path.
+    private mutating func emitRawFootnoteLiteral(openerInl: DocumentStorage.Index, openerVirtualStart: Int, closeBracket: Int, content: borrowing ContentSpan) {
+        let parentIdx = storage[openerInl].parent
+        let chunk = content.chunk(offset: openerVirtualStart, length: closeBracket + 1 - openerVirtualStart)
+        let ref = storage.intern(chunk)
+        let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parentIdx, data: .literal(ref)))
+        storage.insertChildBefore(textIdx, before: openerInl)
+        stampInline(textIdx, openerVirtualStart, closeBracket + 1, content: content)
+        var sib: DocumentStorage.Index? = openerInl
+        while let s = sib {
+            let next = storage[s].next
+            storage.unlinkChild(s)
+            sib = next
+        }
     }
 
     /// Collapse a footnote-shaped bracket whose caret is *immediately* followed by another `[`
