@@ -3653,7 +3653,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Try to match a block-quote marker at `firstNonSpace`. CommonMark 0.31 §5.1: up to 3 leading spaces, then `>`, then optionally one space or tab. Returns the offset just past the consumed marker, or `nil` if no match.
     private func matchBlockQuoteMarker(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> Int? {
-        if firstNonSpace - range.lowerBound > 3 {
+        // cmark gates the block-quote marker on `parser->indent <= 3`, an indent measured in COLUMNS
+        // (`parse_block_quote_prefix` / `open_new_blocks`; blocks.c). Leading whitespace is byte-identical to
+        // its column width unless it contains a tab, which only reaches here on a fenced-code body line - every
+        // other line pre-expands its prefix tabs to spaces (`expandPrefixTabs`). A tab spans up to four
+        // columns, so a byte count would under-measure it and wrongly admit a `>` cmark rejects (e.g. `\t>`
+        // inside an open block quote's fenced code: 4 columns of indent, not a continuation marker).
+        if indentColumns(source: source, from: range.lowerBound, to: firstNonSpace) > 3 {
             return nil
         }
         guard firstNonSpace < range.upperBound else {
