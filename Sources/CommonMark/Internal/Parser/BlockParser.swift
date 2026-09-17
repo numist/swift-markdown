@@ -2509,18 +2509,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return true
     }
 
-    /// Cheap, over-approximate gate: could this segment content match a finalize-time matcher (ref-def / footnote / tasklist start with `[`, or a GFM table)?
+    /// Cheap, over-approximate gate: could this segment content match a finalize-time matcher (ref-def / footnote / tasklist start with `[`, an attribute def starts with `^[`, or a GFM table)?
     ///
     /// A false positive only costs an avoidable materialization; a false negative would skip a real matcher, so the checks must cover every matcher's necessary condition. The table necessary condition is on the DELIMITER (second) line, not the header: a single-column table's header need not contain a pipe (`a\n|-`, `a\n:-`), so the header-`|` check that once lived here would skip such tables. The segment list is isomorphic to `\n`-separated lines, so the second line is scanned directly.
     private func segmentsCouldMatchMatcher(_ segs: borrowing UniqueArray<Segment>) -> Bool {
         // First content byte == '['  ⇒ possible ref-def / footnote def / tasklist marker.
+        // First content bytes == '^['  ⇒ possible attribute reference definition (`^[label]: attrs`).
         outer: for i in 0..<segs.count {
             let seg = segs[i]
             for j in 0..<Int(seg.length) {
                 let b = segmentByte(seg, j)
                 if b.isSpaceTabOrNewline { continue }
                 if b == UInt8(ascii: "[") { return true }
-                break outer   // first non-whitespace byte isn't '['
+                // An attribute def opens with a `^` immediately followed by `[` — the same contiguity
+                // cmark requires (`chunk.data[0] == '^' && chunk.data[1] == '['`), so a `^` split from its
+                // `[` by a line join is correctly not admitted (the `[` would fall in the next segment).
+                if b == UInt8(ascii: "^"), j + 1 < Int(seg.length),
+                   segmentByte(seg, j + 1) == UInt8(ascii: "[") {
+                    return true
+                }
+                break outer   // first non-whitespace byte doesn't open a definition
             }
         }
         // Table: the delimiter row is the paragraph's SECOND line. It can only be a delimiter row if

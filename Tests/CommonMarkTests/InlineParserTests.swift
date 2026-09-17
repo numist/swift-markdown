@@ -1303,6 +1303,19 @@ struct ExtendedAttributeTests {
         }
     }
 
+    @Test("reference def whose label spans a soft break resolves")
+    func crossLineReferenceDef() throws {
+        // cmark scans the label over the paragraph's flat buffer, so a `^[..]:` definition whose label
+        // straddles a soft break is captured normally (`la\nbel` → `la bel`) and produces no visible node.
+        let source = "^[la\nbel]: color: blue\n\n^[content][la bel]"
+        try MarkdownDocument.withParsedDocument(source) { doc in
+        #expect(doc._storage.attributeReferenceMap["la bel"] != nil)
+        let info = Self.firstAttribute(doc)
+        #expect(info.attrs == "color: blue")
+        #expect(info.text == "content")
+        }
+    }
+
     @Test("attribute ref defs do not collide with link ref defs")
     func separateRefMaps() throws {
         let source = "[foo]: /url\n^[foo]: color: red\n\n[foo] and ^[content][foo]"
