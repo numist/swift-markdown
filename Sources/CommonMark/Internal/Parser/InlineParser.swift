@@ -3608,11 +3608,22 @@ extension BlockParser {
     /// `src/utf8.c`). For ASCII, `is_punctuation` routes through cmark's ctype table, so `isASCIIPunct` mirrors
     /// it exactly; `isASCIISpace` mirrors `is_space` for every byte the harness admits (the two differ only on
     /// VT (0x0B), which the harness filters and which `scanGFMURLBody` also treats as a boundary). The
-    /// predicate thus admits ASCII alphanumerics - and, matching cmark, non-whitespace control bytes; a
-    /// non-ASCII byte (part of a multibyte UTF-8 codepoint) is treated as valid, mirroring cmark iterating the
-    /// whole codepoint.
+    /// predicate thus admits ASCII alphanumerics - and, matching cmark, non-whitespace control bytes.
+    ///
+    /// A UTF-8 continuation byte (0x80-0xBF) is NOT a valid host byte: cmark's `is_valid_hostchar` runs
+    /// `cmark_utf8proc_iterate` and returns 0 when it fails (`r < 0`), which it does on a byte that cannot
+    /// START a codepoint. `check_domain` advances one byte at a time, so at the LEADING byte of a multibyte
+    /// codepoint iterate succeeds and reports the codepoint's category (a non-space/non-punct char is valid),
+    /// but the very next byte is a continuation byte where iterate fails and the scan breaks. The domain scan
+    /// therefore stops inside the first multibyte codepoint and never advances past it. Rejecting continuation
+    /// bytes reproduces that break: without it, the scan runs past a `�` (U+FFFD, whose repaired bytes are the
+    /// input `String`'s own - the harness decodes invalid UTF-8 to U+FFFD before parsing) into a trailing
+    /// `_`/`.` and spuriously triggers `checkDomainAccepted`'s underscore-in-last-label rejection.
     private func isValidGFMHostByte(_ b: UInt8) -> Bool {
-        !b.isASCIISpace && !b.isASCIIPunct
+        if b & 0b1100_0000 == 0b1000_0000 {
+            return false
+        }
+        return !b.isASCIISpace && !b.isASCIIPunct
     }
 
     /// Allowlist of characters that may directly precede a GFM `www.` autolink.

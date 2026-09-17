@@ -330,4 +330,59 @@ struct AutolinkDomainRulesTests {
             #expect(ns.compactMap(\.url) == ["http://www.a_b.c.d"])
         }
     }
+
+    // MARK: - Divergence 7: the domain scan stops inside a non-ASCII codepoint
+
+    // cmark's `check_domain` (`extensions/autolink.c`) advances one byte at a time, and its
+    // `is_valid_hostchar` runs `cmark_utf8proc_iterate`, which fails (returns 0) on a UTF-8 continuation
+    // byte. So after accepting the LEADING byte of a multibyte codepoint the scan lands on the
+    // continuation byte and breaks: the domain scan stops inside the first non-ASCII codepoint and never
+    // reaches a later `_`/`.`. A trailing `__` after a `�` (U+FFFD) is therefore left to the URL-body
+    // scan + `autolink_delim` trim rather than tripping the underscore-in-last-label rejection. The
+    // fuzzer harness (like `String(decoding:as:UTF8.self)`) repairs an invalid UTF-8 byte to U+FFFD
+    // before parsing, so the domain's `�` is three ordinary UTF-8 bytes the zero-copy scan already sees.
+
+    @Test("www domain containing an invalid byte (repaired to U+FFFD) autolinks (both modes)")
+    func wwwInvalidByteDomainAutolinks() throws {
+        // `www.` + 0xFF + `__` - the lone 0xFF is invalid UTF-8, repaired to U+FFFD as the harness
+        // decodes it. cmark links `www.�`: the domain scan stops within the U+FFFD, and `autolink_delim`
+        // peels the trailing `__`. The U+FFFD's bytes appear verbatim in both the destination and the
+        // link text.
+        let src = String(decoding: [0x77, 0x77, 0x77, 0x2e, 0xff, 0x5f, 0x5f] as [UInt8], as: UTF8.self)
+        for options in [Self.flagOff, Self.flagOn] {
+            let ns = try nodes(in: src, options: options)
+            #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
+            #expect(ns.map(\.text) == [nil, nil, nil, "www.\u{FFFD}", "__"])
+            #expect(ns.compactMap(\.url) == ["http://www.\u{FFFD}"])
+        }
+    }
+
+    @Test("guard: www domain with a valid multibyte codepoint still autolinks (both modes)")
+    func wwwValidMultibyteDomainAutolinks() throws {
+        // `www.éx y` (é = U+00E9, valid two-byte UTF-8) - the domain scan stops within `é`, the URL body
+        // links `www.éx` (up to the space), and ` y` is left as trailing text. Rejecting continuation
+        // bytes must not regress ordinary non-ASCII domains.
+        for options in [Self.flagOff, Self.flagOn] {
+            let ns = try nodes(in: "www.\u{E9}x y", options: options)
+            #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
+            #expect(ns.map(\.text) == [nil, nil, nil, "www.\u{E9}x", " y"])
+            #expect(ns.compactMap(\.url) == ["http://www.\u{E9}x"])
+        }
+    }
+
+    @Test("scheme URL whose domain holds a U+FFFD before an underscore autolinks (`://` call site)")
+    func schemeURLNonASCIIThenUnderscoreAutolinks() throws {
+        // `http://a` + 0xFF (repaired to U+FFFD) + `_b` - drives `checkDomainAccepted` through the
+        // `://`-scheme call site (`schemeURLDomainAccepted`), which shares the same continuation-byte
+        // fix. cmark's `check_domain` breaks inside the U+FFFD (its `is_valid_hostchar` fails on the
+        // continuation byte) before reaching the `_`, so the underscore-in-last-label rule never fires;
+        // the forward URL scan then reclaims `_b` and `autolink_delim` keeps it (the last char `b` is not
+        // trailing punctuation), linking the whole `http://a�_b`. Without the fix the domain scan would
+        // reach the `_` and wrongly reject the URL. `allow_short` means the scheme form needs no dot.
+        let src = String(decoding: [0x68, 0x74, 0x74, 0x70, 0x3a, 0x2f, 0x2f, 0x61, 0xff, 0x5f, 0x62] as [UInt8], as: UTF8.self)
+        let ns = try nodes(in: src, options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "http://a\u{FFFD}_b"])
+        #expect(ns.compactMap(\.url) == ["http://a\u{FFFD}_b"])
+    }
 }
