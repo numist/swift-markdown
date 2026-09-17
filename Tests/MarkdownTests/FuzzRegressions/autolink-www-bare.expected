@@ -1,0 +1,7 @@
+Document @1:1-2:2
+└─ Paragraph @1:1-2:2
+   ├─ Link destination: "http://www"
+   │  └─ Text "www"
+   ├─ Text @1:4-1:5 "."
+   ├─ SoftBreak
+   └─ Text @2:1-2:2 ""

@@ -3126,7 +3126,17 @@ extension BlockParser {
             content: content
         )
         if trimmedEnd <= start + 4 {
-            return nil
+            // why: nothing survives the trailing-punctuation trim past `www.`, so there is no real domain.
+            // Flag-OFF (spec-correct) this is not a www autolink. Flag-ON reproduce cmark's `www_match`
+            // over-trim: its `check_domain(data, size, allow_short: 0)` counts the dot inside `www.` as the
+            // domain's required period whenever the chunk holds at least one byte past `www.` (its
+            // `i < size - 1` bound reaches that dot only then), so cmark links a bare `www` once
+            // `autolink_delim` peels the trailing `.`. `www.` at end-of-input (nothing after) is not linked
+            // in either mode - the dot is never counted and `check_domain` returns 0.
+            guard storage.options.contains(.cmarkBugCompatibility),
+                  checkDomainAccepted(base: start, end: end, requireDot: true, content: content) else {
+                return nil
+            }
         }
         return GFMAutolinkMatch(urlStart: start, urlEnd: trimmedEnd, form: .www)
     }
@@ -3462,31 +3472,27 @@ extension BlockParser {
         return i
     }
 
-    /// cmark-gfm's `://`-scheme domain acceptance (`sd_autolink_issafe` + `check_domain(..., allow_short: 1)`,
-    /// `extensions/autolink.c`). Unlike the `www.` / email forms, a scheme URL does NOT require a dot: any
-    /// non-empty domain whose first character is a valid host char is accepted, EXCEPT one bearing an
-    /// underscore in either of its last two `.`-separated labels (a host-name restriction - `www.xxx.yyy._zzz`
-    /// is not a host - waived only once the domain has more than ten labels, to bound cost). `afterSlashes` is
-    /// the first byte after `://`; `end` is the inline-content boundary (cmark scans `check_domain` to the
-    /// chunk end, not to the trimmed URL).
-    private func schemeURLDomainAccepted(afterSlashes: Int, end: Int, content: borrowing ContentSpan) -> Bool {
-        // `sd_autolink_issafe`: the char immediately after `://` must be a valid host char.
-        if !isValidGFMHostByte(content[afterSlashes]) {
-            return false
-        }
-        // `check_domain`: reject an underscore in either of the last two labels. The scan starts at the second
-        // domain char and never examines the final content byte (`i < size - 1`), so a trailing `_` is left to
-        // the trailing-punctuation trim instead of failing the whole domain.
-        let size = end - afterSlashes
+    /// cmark-gfm's `check_domain` (`extensions/autolink.c`) domain-acceptance test, shared by the `www.` and
+    /// `://`-scheme autolink forms. Scanning from the second domain byte and never examining the final content
+    /// byte (`i < size - 1`), it rejects a domain that bears an underscore in either of its last two
+    /// `.`-separated labels - a host-name restriction (`www.xxx.yyy._zzz` is not a host) waived only once the
+    /// domain has more than ten labels, to bound cost (cmark's GHSA anti-quadratic guard). `requireDot` is
+    /// cmark's `!allow_short`: the `www.` form (`allow_short: 0`) additionally demands at least one period the
+    /// scan reaches, while the `://`-scheme form (`allow_short: 1`) accepts any non-empty domain of valid host
+    /// chars. `base` is the first domain byte; `end` is the inline-content boundary (cmark scans to the chunk
+    /// end, not to the trimmed URL), so a trailing `_` is left to the trailing-punctuation trim rather than
+    /// failing the whole domain.
+    private func checkDomainAccepted(base: Int, end: Int, requireDot: Bool, content: borrowing ContentSpan) -> Bool {
+        let size = end - base
         var dotCount = 0
         var underscoresInPrevLabel = 0
         var underscoresInLastLabel = 0
         var i = 1
         while i < size - 1 {
-            var b = content[afterSlashes + i]
+            var b = content[base + i]
             if b == UInt8(ascii: "\\"), i < size - 2 {
                 i += 1
-                b = content[afterSlashes + i]
+                b = content[base + i]
             }
             if b == UInt8(ascii: "_") {
                 underscoresInLastLabel += 1
@@ -3502,7 +3508,20 @@ extension BlockParser {
         if (underscoresInPrevLabel > 0 || underscoresInLastLabel > 0) && dotCount <= 10 {
             return false
         }
-        return true
+        return requireDot ? dotCount > 0 : true
+    }
+
+    /// cmark-gfm's `://`-scheme domain acceptance (`sd_autolink_issafe` + `check_domain(..., allow_short: 1)`,
+    /// `extensions/autolink.c`). Unlike the `www.` / email forms, a scheme URL does NOT require a dot: any
+    /// non-empty domain whose first character is a valid host char is accepted, EXCEPT one bearing an
+    /// underscore in either of its last two `.`-separated labels (deferred to `checkDomainAccepted`).
+    /// `afterSlashes` is the first byte after `://`; `end` is the inline-content boundary.
+    private func schemeURLDomainAccepted(afterSlashes: Int, end: Int, content: borrowing ContentSpan) -> Bool {
+        // `sd_autolink_issafe`: the char immediately after `://` must be a valid host char.
+        if !isValidGFMHostByte(content[afterSlashes]) {
+            return false
+        }
+        return checkDomainAccepted(base: afterSlashes, end: end, requireDot: false, content: content)
     }
 
     /// Approximates cmark-gfm's `is_valid_hostchar` (`extensions/autolink.c`) for a single byte: a host char
