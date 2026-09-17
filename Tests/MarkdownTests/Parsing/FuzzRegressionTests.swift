@@ -16,8 +16,12 @@ import Testing
 ///
 /// Each case is a pair of files in `FuzzRegressions/`:
 ///   - `<name>.input`    — the raw fuzzer artifact bytes (`[markdown …][final byte = options]`).
-///   - `<name>.expected` — the reference (cmark-gfm) comparison surface, minted losslessly with
-///                         `dump --ref <artifact>`. This is the oracle; the rewrite must reproduce it.
+///   - `<name>.expected` — the rewrite's comparison surface WITH source positions, minted with
+///                         `dump --new-pos <artifact>`. Its structure + literal content are validated
+///                         against the cmark-gfm reference (`dump --ref`, which is position-free) at mint
+///                         time; the positions are the rewrite's own byte projection (gated separately by
+///                         the `*PositionEncoding` suites, not the fuzzer). This is the oracle; the
+///                         rewrite must reproduce it.
 ///
 /// `@Test(arguments:)` runs one case per pair, so a failure names the exact fixture. The split +
 /// surface logic mirrors `DiffSupport` (the fuzzer and `dump` build from it); MarkdownTests can't
