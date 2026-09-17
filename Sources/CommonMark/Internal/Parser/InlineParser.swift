@@ -2607,7 +2607,10 @@ extension BlockParser {
         return nil
     }
 
-    /// Match `<![CDATA[…]]>`.
+    /// Match `<![CDATA[…]]>`. Flag-OFF (spec-correct, CommonMark 0.31 §6.6) the content is any run not
+    /// containing `]]>`, closed by the first `]]>`. Under `.cmarkBugCompatibility` the content is scanned
+    /// by cmark-gfm's stricter grammar instead (`scanCDATAContentEnd`), which rejects some forms the
+    /// first-`]]>` rule accepts (e.g. a content run ending in a lone `]`, `<![CDATA[…]]]>`).
     private mutating func matchHTMLCDATA(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         // why: cmark checks (and, on overrun, sets) `FLAG_SKIP_HTML_CDATA` around the CDATA scan
         // (`src/inlines.c` `handle_pointy_brace`). Flag-ON only.
@@ -2627,6 +2630,24 @@ extension BlockParser {
                 return nil
             }
         }
+        // why: cmark-gfm scans the CDATA body with the grammar in swift-cmark `src/scanners.re` (`cdata`,
+        // via `_scan_html_cdata`), then in `src/inlines.c` `handle_pointy_brace` ASSUMES a `]]>` closer
+        // follows the matched content WITHOUT verifying it (`matchlen += 5` for `![` + `]]>`), rejecting
+        // only when that assumed closer overruns the buffer (`subj->pos + matchlen > input.len`, which
+        // sets `FLAG_SKIP_HTML_CDATA`). The grammar's `"]]" [^>\x00]` token absorbs a content run ending
+        // in a lone `]` right before the real closer (`…]]]>` reads as `]]` + `]` content, then `>`
+        // content), carrying the match past where the closer would begin so the assumed `]]>` overruns
+        // and the `<` stays literal. Flag-ON (`.cmarkBugCompatibility`, adopted only by the differential
+        // fuzzer) reproduces that rejection; flag-OFF the deliverable stays spec-correct (0.31), matching
+        // the first `]]>` below.
+        if bugCompat {
+            let contentEnd = scanCDATAContentEnd(bodyStart: start + prefixLen, end: end, content: content)
+            if contentEnd + 3 <= end {
+                return contentEnd + 3
+            }
+            htmlScanSkip.insert(.cdata)
+            return nil
+        }
         var i = start + prefixLen
         while i + 3 <= end {
             let b0 = content[i]
@@ -2640,12 +2661,59 @@ extension BlockParser {
             }
             i += 1
         }
-        // No `]]>` through end-of-input: cmark's framed match overruns (`subj->pos + matchlen > input.len`),
-        // which sets `FLAG_SKIP_HTML_CDATA`.
-        if bugCompat {
-            htmlScanSkip.insert(.cdata)
-        }
         return nil
+    }
+
+    /// Scan a CDATA body under cmark-gfm's grammar (swift-cmark `src/scanners.re`:
+    /// `([^\]\x00]+ | "]" [^\]\x00] | "]]" [^>\x00])*`, the tail of the `cdata` production that
+    /// `_scan_html_cdata` matches after `CDATA[`). Returns the offset just past the longest content match
+    /// starting at `bodyStart`. Content bytes are admitted as `[^\]\x00]` runs; a `]` is admitted only
+    /// when a non-`]` byte follows (`] [^\]\x00]`) and `]]` only when a non-`>` byte follows
+    /// (`]] [^>\x00]`), so a run halts just before a `]]>` closer — but a lone `]` (or `]]`) whose
+    /// following bytes are themselves the closer's brackets (`…]]]>`) is absorbed as content, carrying the
+    /// match past the closer. A NUL byte or reaching `end` halts the run; a trailing `]`/`]]` with no
+    /// completing byte is excluded (its token never closed). The caller adds the assumed `]]>` and
+    /// bounds-checks, mirroring cmark. Operates byte-wise: valid multibyte UTF-8 (every byte ≠ `]`, `>`,
+    /// NUL) is consumed as content exactly as the grammar's codepoint classes intend (input is repaired to
+    /// U+FFFD upstream, so no invalid sequence reaches here).
+    private func scanCDATAContentEnd(bodyStart: Int, end: Int, content: borrowing ContentSpan) -> Int {
+        let bracket = UInt8(ascii: "]")
+        let gt = UInt8(ascii: ">")
+        // Furthest offset ending a complete token sequence (cmark's re2c backtrack marker); a `]` or `]]`
+        // still awaiting the byte that completes its token is not yet part of the match.
+        var lastComplete = bodyStart
+        var i = bodyStart
+        while i < end {
+            let b = content[i]
+            if b == 0 {
+                break
+            }
+            if b != bracket {
+                // Ordinary content byte: `[^\]\x00]+`, or the trailing byte of a `] X` / `]] X` token.
+                i += 1
+                lastComplete = i
+                continue
+            }
+            // A `]`. Consume it and look for the byte completing `] [^\]\x00]` or `]] [^>\x00]`.
+            i += 1
+            if i < end, content[i] == bracket {
+                // `]]`: needs a following non-`>`, non-NUL byte to complete `]] [^>\x00]`.
+                i += 1
+                if i < end, content[i] != 0, content[i] != gt {
+                    i += 1
+                    lastComplete = i
+                } else {
+                    break
+                }
+            } else if i < end, content[i] != 0 {
+                // `] [^\]\x00]`: the following byte is non-`]` (checked above) and non-NUL.
+                i += 1
+                lastComplete = i
+            } else {
+                break
+            }
+        }
+        return lastComplete
     }
 
     /// Match `<!NAME …>` where NAME is `[A-Z]+`, followed by at least one spacechar, any non-`>` non-NUL chars, then `>`.
