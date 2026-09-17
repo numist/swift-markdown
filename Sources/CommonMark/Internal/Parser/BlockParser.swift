@@ -1587,15 +1587,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 //
                 // Reproduce cmark's structure flag-ON by keeping the paragraph open and appending this
                 // line as a normal continuation (as PHASE 2d would), restoring the accumulated content
-                // - drained by the materialize above - as a zero-copy source range so the EXISTING
-                // finalize path extracts the ref-def. Gated on `raw.inSource`: that is the validity
-                // condition for the `.lazy` reconstruction (it addresses `sourceBytes`), and is true
-                // whenever the accumulated pre-underline content is source-backed - the common
-                // single-source-line ref-def, including one inside a block quote / list item. A ref-def
-                // whose accumulated content is not source-backed at all (a multi-line def broken across
-                // a stripped prefix, `!raw.inSource`) falls through to the spec-correct drop below.
-                if storage.options.contains(.cmarkBugCompatibility), raw.inSource {
-                    pending = PendingLeaf(node: para, content: .lazy(range: raw.range))
+                // - drained by the materialize above - so the EXISTING finalize path extracts the
+                // ref-def and the surviving underline text finalizes as this paragraph's body.
+                // `raw.inSource` distinguishes HOW the drained content is addressed, not how many lines
+                // it spans: content that survived as a contiguous source range restores zero-copy as
+                // that range (`.lazy`), while content that was flattened into the arena - because a
+                // continuation line's stripped leading whitespace, a CRLF join, or a tab broke source
+                // contiguity - restores from that arena chunk (`addChunk`). Structure and content are
+                // identical either way, so the empty marker / setext underline is absorbed as text
+                // instead of opening a new block. (A multi-line def whose lines stay source-contiguous,
+                // e.g. no stripped prefix, collapses back to one `.lazy` range and takes the first branch.)
+                if storage.options.contains(.cmarkBugCompatibility) {
+                    pending = raw.inSource
+                        ? PendingLeaf(node: para, content: .lazy(range: raw.range))
+                        : addChunk(raw, to: para, pending: pending)
                     pending = appendNewline(to: para, pending: pending)
                     pending = addLine(span: source, range: firstNonSpace..<lineRange.upperBound, to: para, pending: pending)
                     return pending
