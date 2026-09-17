@@ -43,7 +43,7 @@ extension Markup {
     /// - Returns: a description illustrating the hierarchy and contents of each element of the tree.
     public func debugDescription(options: MarkupDumpOptions = []) -> String {
         var dumper = MarkupTreeDumper(options: options)
-        dumper.visit(self)
+        dumper.dumpTree(self)
         return dumper.result
     }
 }
@@ -103,7 +103,6 @@ struct MarkupTreeDumper: MarkupWalker {
             }
             result += "\(customDescription)"
         }
-        increasingDepth(markup)
     }
 
     mutating func defaultVisit(_ markup: Markup) {
@@ -155,14 +154,32 @@ struct MarkupTreeDumper: MarkupWalker {
     }
 
     /**
-     Push `element` to the current path and descend into the children, popping `element` from the path when returning.
+     Dump the tree rooted at `root`, emitting one node per `visit` in depth-first, pre-order.
 
-     - parameter element: The parent element you're descending into.
+     Traversal uses an explicit iterator stack rather than recursion so that arbitrarily deep trees
+     (e.g. hundreds of nested block quotes) do not overflow the call stack. `path` holds the ancestor
+     chain of the node currently being emitted, exactly as the recursive descent maintained it, so the
+     edge-drawing indentation in `lineIndentPrefix` is unchanged.
+
+     - parameter root: The element to dump, together with its entire subtree.
      */
-    private mutating func increasingDepth(_ element: Markup) {
-        path.append(element)
-        descendInto(element)
-        path.removeLast()
+    fileprivate mutating func dumpTree(_ root: Markup) {
+        visit(root)
+        guard root.childCount > 0 else { return }
+        path.append(root)
+        var iterators = [root.children.makeIterator()]
+        while !iterators.isEmpty {
+            guard let child = iterators[iterators.count - 1].next() else {
+                iterators.removeLast()
+                path.removeLast()
+                continue
+            }
+            visit(child)
+            if child.childCount > 0 {
+                path.append(child)
+                iterators.append(child.children.makeIterator())
+            }
+        }
     }
 
     mutating func visitText(_ text: Text) {

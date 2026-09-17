@@ -52,7 +52,9 @@ struct MarkupParser {
                 convert(document.root, source: source, options: options)
             }
         } catch {
-            // The only error is an internal parsing/recursion limit; produce an empty document.
+            // Defensive handling of the parser's declared throwing contract (an internal parsing
+            // limit): map any such error to an empty document. Block-quote nesting is uncapped, so the
+            // parser currently imposes no limit and this is unreachable in practice.
             raw = .document(parsedRange: nil, [])
         }
 

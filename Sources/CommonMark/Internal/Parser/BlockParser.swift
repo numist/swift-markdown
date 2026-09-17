@@ -23,10 +23,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The root document node - always index 0.
     let documentIndex: DocumentStorage.Index
 
-    /// Bounds container-nesting depth (open block-quote/list ancestors) as a DoS guard.
+    /// The capacity initially reserved for the reused open-container chain buffer.
     ///
-    /// The parser throws `parsingLimitExceeded` rather than building an unbounded-depth tree that could overflow a recursive consumer.
-    static let maxContainerNesting = 256
+    /// `walkOpenContainers` rebuilds the open block-quote/list ancestor chain into this buffer each line;
+    /// the buffer grows on demand for deeper nesting, so this is only a starting reservation that avoids
+    /// reallocation for typical documents. Block-quote nesting itself is uncapped, matching cmark (which
+    /// caps only list/footnote opening, mirrored by `maxListNesting`).
+    static let initialOpenContainerCapacity = 256
 
     /// The number of containers a single line may open before it stops opening lists, matching cmark's
     /// `MAX_LIST_DEPTH` (blocks.c).
@@ -239,8 +242,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         var reader = LineReader(source: sourceBytes)
 
-        // One reused buffer for the open-container ancestor chain that `walkOpenContainers` rebuilds per line. Heap-backed and reserved once to the nesting limit; reset (keeping capacity) per line. The single open leaf's accumulated content (`pending`) is `~Copyable`, threaded by move through the per-line dispatch and drained to `nil` by the EOF-finalize loop below.
-        var chain = UniqueArray<DocumentStorage.Index>(minimumCapacity: Self.maxContainerNesting)
+        // One reused buffer for the open-container ancestor chain that `walkOpenContainers` rebuilds per line. Heap-backed and reserved once to `initialOpenContainerCapacity` (growing on demand for deeper nesting); reset (keeping capacity) per line. The single open leaf's accumulated content (`pending`) is `~Copyable`, threaded by move through the per-line dispatch and drained to `nil` by the EOF-finalize loop below.
+        var chain = UniqueArray<DocumentStorage.Index>(minimumCapacity: Self.initialOpenContainerCapacity)
         do {
             var pending: PendingLeaf? = nil
             while let line = reader.next() {
@@ -1770,9 +1773,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         chain.removeAll(keepingCapacity: true)
         var idx: DocumentStorage.Index? = current
         while let idx_ = idx {
-            if chain.count >= Self.maxContainerNesting {
-                throw MarkdownDocument.Error.parsingLimitExceeded
-            }
             chain.append(idx_)
             idx = storage[idx_].parent
         }
