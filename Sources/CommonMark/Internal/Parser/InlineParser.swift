@@ -867,6 +867,36 @@ extension BlockParser {
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             return initialPos
         }
+        // cmark BUG (bug-compat only): a same-line, non-image footnote-shaped bracket whose caret is
+        // backslash-escaped (`[\^…]`). cmark still treats it as a footnote — the text node after `[` is
+        // the escaped `^` — but measures the reference-label length in *columns* from the `[` (spanning
+        // the backslash) while reading the label bytes from just past the `^`, so the read over-runs by
+        // one byte and captures the closing `]`. The unresolved reference reconstructs as `[^` + captured
+        // bytes + `]`, doubling the `]` (`[\^x]` -> `[^x]]`). The spec-correct default processes the
+        // escape and keeps a single `]` (`[^x]`).
+        //
+        // Deliberately restricted to the non-image, same-line shape. Two neighbouring shapes diverge from
+        // cmark *differently* and are left for separate findings: an image opener `![\^…]` drops the `!`
+        // and — its column length now starting at the `!` — over-reads a byte PAST the `]` (into the
+        // following byte / trailing newline), and a cross-line `[\^\n…]` collapses to `[^]`. Neither is
+        // reproduced here; those inputs fall through unchanged.
+        if storage.options.contains(.footnotes),
+           storage.options.contains(.cmarkBugCompatibility),
+           !isImage,
+           footnoteBracketStart + 3 < cursor,
+           content[footnoteBracketStart + 1] == UInt8(ascii: "\\"),
+           content[footnoteBracketStart + 2] == UInt8(ascii: "^"),
+           !footnoteSpanCrossesLine(content, from: footnoteBracketStart + 2, to: cursor) {
+            processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
+            emitEscapedCaretFootnoteLiteral(
+                openerInl: openerInl,
+                footnoteBracketStart: footnoteBracketStart,
+                closeBracket: cursor,
+                content: content
+            )
+            popBracket(brackets: &brackets, lastBracket: &lastBracket)
+            return initialPos
+        }
         // No match: pop bracket, emit `]` text, rewind to just past `]`.
         popBracket(brackets: &brackets, lastBracket: &lastBracket)
         emitBracketLiteral(at: cursor, content: content, parent: parent)
@@ -1182,6 +1212,42 @@ extension BlockParser {
         storage.insertChildBefore(textIdx, before: openerInl)
         stampInline(textIdx, open - (isImage ? 1 : 0), close + 1, content: content)
         // Remove the opener and every inner-content sibling (the `^…` up to the `]`).
+        var sib: DocumentStorage.Index? = openerInl
+        while let s = sib {
+            let next = storage[s].next
+            storage.unlinkChild(s)
+            sib = next
+        }
+    }
+
+    /// Reconstruct a same-line, non-image footnote-shaped bracket `[\^…]` (backslash-escaped caret) under
+    /// `.cmarkBugCompatibility`. cmark reads the reference label from just past the `^` (`open + 3`, one
+    /// byte after the escaped caret) for its column-measured length `colOf(]) - colOf([) - 2`, which
+    /// counts the backslash and so runs one byte past the label into the closing `]`. The unresolved
+    /// reference then reconstructs as `[^` + captured bytes + `]`, so `[\^x]` -> `[^x]]`. The captured
+    /// span always ends at `]` (ASCII), so there is no partial-UTF-8 tail to extend past.
+    private mutating func emitEscapedCaretFootnoteLiteral(openerInl: DocumentStorage.Index, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan) {
+        var literal: [UInt8] = []
+        literal.append(UInt8(ascii: "["))
+        literal.append(UInt8(ascii: "^"))
+        // The captured label runs from just past the escaped `^` (`open + 3`) through the closing `]`.
+        var i = open + 3
+        while i <= close {
+            literal.append(content[i])
+            i += 1
+        }
+        literal.append(UInt8(ascii: "]"))
+
+        let parentIdx = storage[openerInl].parent
+        let start = storage.strings.count
+        for b in literal {
+            storage.strings.append(b)
+        }
+        let ref = storage.intern(Chunk(offset: start, length: literal.count, inSource: false))
+        let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parentIdx, data: .literal(ref)))
+        storage.insertChildBefore(textIdx, before: openerInl)
+        stampInline(textIdx, open, close + 1, content: content)
+        // Remove the opener and every inner-content sibling (the `\^…` up to the `]`).
         var sib: DocumentStorage.Index? = openerInl
         while let s = sib {
             let next = storage[s].next
