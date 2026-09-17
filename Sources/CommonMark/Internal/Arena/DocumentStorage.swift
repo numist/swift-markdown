@@ -71,6 +71,16 @@ internal struct DocumentStorage: ~Copyable {
     /// The post-processing pass moves exactly these to the end of the document, in this order, mirroring cmark's `process_footnotes`.
     internal var footnoteReferencedDefs: [Index] = []
 
+    /// Text nodes that truncate their text-consolidation run, dropping every following text node in it.
+    ///
+    /// Reproduces a cmark `.cmarkBugCompatibility` quirk: a `[^[` footnote-shaped bracket's inline
+    /// footnote branch captures its label from the static `"^["` string, over-reading past the inner
+    /// `[` into that string's NUL terminator. The unresolved reference reconstructs as `[^[` + NUL + …,
+    /// and reading the consolidated run as a C-string stops at the NUL — so the `[^[` node's own tail
+    /// and any following text merged into its run vanish, while structure (an enclosing link) survives.
+    /// `consolidateTextNodes` honors this by unlinking the trailing text siblings of a marked node.
+    internal var runTruncatingTextNodes: Set<Index> = []
+
     /// Number of lines in the document.
     internal var lineCount = 0
 

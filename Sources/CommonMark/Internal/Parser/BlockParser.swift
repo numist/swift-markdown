@@ -517,6 +517,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if storage.options.contains(.gfmAutolink) {
             consolidateTextNodes(paragraph)
             gfmEmailAutolinkPass(paragraph)
+        } else if !storage.runTruncatingTextNodes.isEmpty {
+            // A `[^[` footnote collapse (bug-compat) marked a run-truncating node; consolidation is what
+            // drops the text that node swallows, so it must run here even without the autolink pass.
+            consolidateTextNodes(paragraph)
         }
     }
 

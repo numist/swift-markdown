@@ -807,10 +807,13 @@ extension BlockParser {
             return initialPos
         }
         // cmark BUG (bug-compat only): a footnote-shaped opener whose caret is immediately followed by
-        // another `[` (`[^[…`) collapses, once its outer `]` closes, to literal `[^[` (`![^[` for an
-        // image opener), dropping the inner bracket's content and the rest of the current line. Checked
-        // before the cross-line case because a `[^[…` opener takes this shape even when it spans lines.
-        // See FINDINGS #146.
+        // another `[` (`[^[…`) has its inline footnote branch capture the label from the static `"^["`
+        // string, over-reading past the inner `[` into that string's NUL terminator (FINDINGS #146). The
+        // unresolved reference reconstructs to `[^[` (`![^[` for an image opener) followed by a NUL, so
+        // reading its consolidated run as a C-string truncates there. Emit the `[^[` text and mark it as
+        // run-truncating (its following consolidated text is dropped in `consolidateTextNodes`), then
+        // continue parsing so an enclosing bracket can still close (`[[^[]]]()` -> `Link[Text "[^["]`).
+        // Checked before the cross-line case because a `[^[…` opener takes this shape even across lines.
         if storage.options.contains(.footnotes),
            storage.options.contains(.cmarkBugCompatibility),
            footnoteBracketStart + 2 < end,
@@ -825,13 +828,7 @@ extension BlockParser {
                 content: content
             )
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
-            // cmark drops the rest of the CURRENT line (up to the next soft break); a following line
-            // continues normally.
-            var lineEnd = cursor
-            while lineEnd < end && content[lineEnd] != UInt8(ascii: "\n") {
-                lineEnd += 1
-            }
-            return lineEnd
+            return initialPos
         }
         // cmark BUG (bug-compat only): a footnote-shaped opener `[^…]` / `![^…]` whose `]` is on a
         // later line than its `[` collapses to literal `[^]` / `![^]`, dropping the inner content and
@@ -1095,10 +1092,12 @@ extension BlockParser {
 
     /// Collapse a footnote-shaped bracket whose caret is *immediately* followed by another `[`
     /// (`[^[…`) once its outer `]` closes, reproducing cmark's `.cmarkBugCompatibility` behavior:
-    /// cmark emits literal `[^[` (or `![^[` for an image opener) and drops everything from the inner
-    /// `[` to the end of the paragraph's inline content (`x[^[]]y` -> `x[^[`). This is cmark's inline
-    /// footnote branch interacting with the nested opener and its `subj->pos` handling; the caller
-    /// returns `end` to consume the rest. The spec-correct default keeps the bracket literal.
+    /// cmark's inline footnote branch captures the label from the static `"^["` string, over-reading
+    /// past the inner `[` into its NUL terminator, so the unresolved reference reconstructs to `[^[`
+    /// (`![^[` for an image opener) followed by a NUL. Emit that `[^[` literal in place of the opener
+    /// and its inner content, and mark it run-truncating so `consolidateTextNodes` drops the following
+    /// text merged into its run (cmark's C-string read stops at the NUL). The caller returns
+    /// `initialPos` so parsing continues — an enclosing bracket can still form a link around the `[^[`.
     private mutating func collapseCaretBracket(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart: Int, content: borrowing ContentSpan) {
         let parentIdx = storage[openerInl].parent
         var literal: [UInt8] = []
@@ -1116,6 +1115,7 @@ extension BlockParser {
         let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parentIdx, data: .literal(ref)))
         storage.insertChildBefore(textIdx, before: openerInl)
         stampInline(textIdx, footnoteBracketStart - (isImage ? 1 : 0), footnoteBracketStart + 3, content: content)
+        storage.runTruncatingTextNodes.insert(textIdx)
         var sib: DocumentStorage.Index? = openerInl
         while let s = sib {
             let next = storage[s].next
@@ -3666,10 +3666,24 @@ extension BlockParser {
         var child = storage[parent].firstChild
         while let current = child {
             if storage[current].kind == .text {
+                // A `[^[` footnote-collapse node (bug-compat) carries cmark's embedded NUL: reading its
+                // consolidated run as a C-string truncates at the NUL, dropping every following text node
+                // in the run. Reproduce that by unlinking the trailing text siblings once such a node has
+                // been reached, keeping the run's content up to and including it. A non-text node (link,
+                // emphasis, soft break) ends the run, so it - and anything after it - survives.
+                var runTruncated = storage.runTruncatingTextNodes.contains(current)
                 // Absorb all immediately-following text siblings into `current`. Stop if a pair can't be merged (non-contiguous segment runs) so the loop always makes progress - otherwise the un-merged sibling would be revisited forever.
                 while let next = storage[current].next, storage[next].kind == .text {
+                    if runTruncated {
+                        storage.unlinkChild(next)
+                        continue
+                    }
+                    let nextTruncates = storage.runTruncatingTextNodes.contains(next)
                     if !mergeTextNode(next, into: current) {
                         break
+                    }
+                    if nextTruncates {
+                        runTruncated = true
                     }
                 }
             } else {
