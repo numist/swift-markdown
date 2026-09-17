@@ -28,6 +28,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The parser throws `parsingLimitExceeded` rather than building an unbounded-depth tree that could overflow a recursive consumer.
     static let maxContainerNesting = 256
 
+    /// The number of containers a single line may open before it stops opening lists, matching cmark's
+    /// `MAX_LIST_DEPTH` (blocks.c).
+    ///
+    /// While opening the blocks on one line, once this many containers have been opened a list marker -
+    /// bullet or ordered - no longer opens a list and its text falls through to a paragraph. cmark caps
+    /// list opening here (block quotes are uncapped) to avoid quadratic blowup on deeply nested lists;
+    /// the cap counts the containers opened on the current line, so nesting spread across lines is
+    /// unaffected.
+    static let maxListNesting = 100
+
     /// The deepest currently-open block.
     ///
     /// New text is appended here (or to a new child of an ancestor) and finalization unwinds outward toward the root.
@@ -2147,7 +2157,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var pending = pending
         var cursor = startCursor
         var column = startColumn
+        // Containers opened on this line so far, matching cmark's per-line `depth` (open_new_blocks):
+        // incremented once per iteration and used to cap list opening at `maxListNesting`.
+        var depth = 0
         while true {
+            depth += 1
             let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
             let isBlank = firstNonSpace == lineRange.upperBound
             if isBlank {
@@ -2220,7 +2234,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
 
             // List marker - opens a list (or extends an existing one) and an item. Both are containers; loop so we keep dispatching the rest of the line as content within the new item.
-            if let marker = matchListMarker(
+            // Capped at `maxListNesting` containers per line, matching cmark's `depth < MAX_LIST_DEPTH`
+            // gate (open_new_blocks): once nesting reaches the cap the marker no longer opens a list -
+            // it falls through to the paragraph fallback as text. Applies to bullet and ordered lists
+            // alike; block quotes above are uncapped.
+            if depth < Self.maxListNesting, let marker = matchListMarker(
                 source: source,
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace
