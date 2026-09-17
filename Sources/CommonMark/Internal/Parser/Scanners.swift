@@ -24,7 +24,7 @@ extension BlockParser {
         var afterEnd: Int
     }
 
-    /// Parse `[label]` per CommonMark §6.6 / §6.7. Returns the interior chunk (excluding brackets) and the offset just past the closing `]`. Allows ASCII `\X` escapes inside the label. Capped at 999 chars.
+    /// Parse `[label]` per CommonMark §6.6 / §6.7. Returns the interior chunk (excluding brackets) and the offset just past the closing `]`. Allows ASCII `\X` escapes inside the label. Capped per `maxLinkLabelLength`.
     internal func matchLinkLabel(_ chunk: Chunk) -> LinkLabelMatch? {
         let start = chunk.offset
         let end = chunk.range.upperBound
@@ -34,6 +34,7 @@ extension BlockParser {
         if readByte(at: start, in: chunk) != UInt8(ascii: "[") {
             return nil
         }
+        let maxLabelLength = maxLinkLabelLength
         let interiorStart = start + 1
         var i = interiorStart
         var length = 0
@@ -59,7 +60,7 @@ extension BlockParser {
                 i += 1
                 length += 1
             }
-            if length > 999 {
+            if length > maxLabelLength {
                 return nil
             }
         }
@@ -72,12 +73,13 @@ extension BlockParser {
     /// offsets of `content` from `start` (which must be `[`) to the closing `]`, crossing joins; returns
     /// the interior's virtual range (excluding the brackets) and the offset just past `]`. Returns nil on
     /// an interior `[` or the content end — cmark rewinds in both cases. Allows ASCII `\X` escapes,
-    /// capped at 999 chars. The interior may straddle a join, so callers resolve it with
+    /// capped per `maxLinkLabelLength`. The interior may straddle a join, so callers resolve it with
     /// `normalizeLabel(virtualRange:in:)`, not a `Chunk`.
     internal func matchLinkLabel(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
         if start >= end || content[start] != UInt8(ascii: "[") {
             return nil
         }
+        let maxLabelLength = maxLinkLabelLength
         let interiorStart = start + 1
         var i = interiorStart
         var length = 0
@@ -100,11 +102,23 @@ extension BlockParser {
                 i += 1
                 length += 1
             }
-            if length > 999 {
+            if length > maxLabelLength {
                 return nil
             }
         }
         return nil
+    }
+
+    /// The maximum link-label length, in scanned bytes (`\X` escapes count as two), that
+    /// `matchLinkLabel` accepts before rewinding. CommonMark §6.6 caps a label at "at most 999
+    /// characters", which the shipped deliverable enforces (reject `> 999`). cmark-gfm's
+    /// `MAX_LINK_LABEL_LENGTH` is 1000 and its `link_label` rejects only `> 1000` (`src/inlines.c`),
+    /// so it accepts a 1000-char label — an off-by-one against the spec. Under `.cmarkBugCompatibility`
+    /// (adopted only by the differential fuzzer) we reproduce that and accept up to 1000; the single
+    /// cmark constant governs every label site (inline reference and block reference/attribute
+    /// definition), so both `matchLinkLabel` overloads read this.
+    private var maxLinkLabelLength: Int {
+        storage.options.contains(.cmarkBugCompatibility) ? 1000 : 999
     }
 
     // MARK: - Link destination
