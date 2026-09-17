@@ -696,12 +696,20 @@ extension BlockParser {
         // Try reference link forms: full `[label]`, collapsed `[]`, or shortcut.
         if !matched {
             var labelChunk: Chunk?
+            var labelRange: Range<Int>?
             var afterRefForm = pos
             // Scan the reference label through a contiguous window (see `contiguousChunk`); `lab.interior` is already a real buffer chunk and `lab.afterEnd` a buffer offset converted back to virtual via the window base.
             if let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
                let lab = matchLinkLabel(labelWindow) {
                 labelChunk = lab.interior
                 afterRefForm = pos + (lab.afterEnd - labelWindow.offset)
+            } else if let lab = matchLinkLabel(from: pos, end: end, in: content) {
+                // The full-reference label straddles a soft-break join (`[text][la\nbel]`), which the
+                // contiguous window can't image. cmark's `link_label` scans a flat buffer, so it crosses
+                // the join to the `]`; carry the interior's virtual range and normalize it across the
+                // join for lookup, exactly like the shortcut fallback below.
+                labelRange = lab.interior
+                afterRefForm = lab.afterEnd
             }
             // Collapsed `[]`, a whitespace-only `[   ]`, or absent - fall back to shortcut form (the
             // bracket text itself becomes the label) when no inner brackets were nested under this
@@ -709,7 +717,14 @@ extension BlockParser {
             // so a whitespace-only full-reference label triggers the same shortcut fallback (`[x][ ]`
             // resolves `[x]`).
             var shortcutRange: Range<Int>?
-            let labelIsBlank = (labelChunk?.trimming(using: self).isEmpty) ?? true
+            let labelIsBlank: Bool
+            if let lc = labelChunk {
+                labelIsBlank = lc.trimming(using: self).isEmpty
+            } else if let lr = labelRange {
+                labelIsBlank = normalizeLabel(virtualRange: lr, in: content).isEmpty
+            } else {
+                labelIsBlank = true
+            }
             if labelIsBlank && !openerBracketAfter {
                 // Virtual offsets: the opener's `[` / `![` sits at `virtualStart`; the shortcut label runs from just past it to the `]` (`cursor`). `contiguousChunk` maps that virtual range to a real buffer chunk only when it lies within a single source segment. When it does, resolve from that chunk. When it straddles a multi-segment join (a soft break inside the label, `[foo\nbar]`), `contiguousChunk` can't image the whole label, so carry the virtual range and normalize across the join instead — cmark resolves such a multi-line label, so giving up here would leave the reference literal.
                 let openerContentStart = brackets[openerIdx].virtualStart + (isImage ? 2 : 1)
@@ -728,6 +743,8 @@ extension BlockParser {
                 key = normalizeLabel(chunk: lc)
             } else if let sr = shortcutRange {
                 key = normalizeLabel(virtualRange: sr, in: content)
+            } else if let lr = labelRange, !lr.isEmpty {
+                key = normalizeLabel(virtualRange: lr, in: content)
             } else {
                 key = nil
             }

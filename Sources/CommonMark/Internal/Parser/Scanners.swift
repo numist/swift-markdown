@@ -66,6 +66,47 @@ extension BlockParser {
         return nil
     }
 
+    /// Cross-line variant of `matchLinkLabel(_:)` for multi-segment inline content. cmark's `link_label`
+    /// scans a flat input buffer, so a following full-reference label may span a soft-break join
+    /// (`[text][la\nbel]`) that `contiguousChunk` can't image within one source segment. Scans virtual
+    /// offsets of `content` from `start` (which must be `[`) to the closing `]`, crossing joins; returns
+    /// the interior's virtual range (excluding the brackets) and the offset just past `]`. Returns nil on
+    /// an interior `[` or the content end — cmark rewinds in both cases. Allows ASCII `\X` escapes,
+    /// capped at 999 chars. The interior may straddle a join, so callers resolve it with
+    /// `normalizeLabel(virtualRange:in:)`, not a `Chunk`.
+    internal func matchLinkLabel(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
+        if start >= end || content[start] != UInt8(ascii: "[") {
+            return nil
+        }
+        let interiorStart = start + 1
+        var i = interiorStart
+        var length = 0
+        while i < end {
+            let b = content[i]
+            if b == UInt8(ascii: "[") {
+                return nil
+            }
+            if b == UInt8(ascii: "]") {
+                return (interiorStart..<i, i + 1)
+            }
+            if b == UInt8(ascii: "\\") {
+                i += 1
+                length += 1
+                if i < end {
+                    i += 1
+                    length += 1
+                }
+            } else {
+                i += 1
+                length += 1
+            }
+            if length > 999 {
+                return nil
+            }
+        }
+        return nil
+    }
+
     // MARK: - Link destination
 
     internal struct LinkDestinationMatch {

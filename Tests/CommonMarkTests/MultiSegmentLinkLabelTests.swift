@@ -153,4 +153,32 @@ struct MultiSegmentLinkLabelTests {
             #expect(inlines.attributeStrings == ["\nb"])
         }
     }
+
+    /// A NON-blank full-reference label that straddles the line join: cmark's `link_label` scans a flat
+    /// buffer, so it crosses the soft break to the `]`, captures `la\nbel`, normalizes it to `la bel`,
+    /// and resolves the full reference `[t][la\nbel]` - consuming the trailing bracket pair. The
+    /// contiguous window can't image the straddling label, so this drives the cross-line label scan.
+    @Test("cross-line full-reference label resolves and consumes the trailing bracket")
+    func crossLineFullReferenceResolves() throws {
+        try MarkdownDocument.withParsedDocument("[la bel]: /u\n\n>[t][la\nbel]") { doc in
+            let inlines = Self.firstParagraphInlines(doc)
+            #expect(inlines.kinds == [.link])
+            #expect(inlines.hasLink)
+            #expect(inlines.linkURL == "/u")
+            #expect(inlines.linkText == "t")
+        }
+    }
+
+    /// The same cross-line full-reference shape with NO matching definition: cmark scans the label,
+    /// fails the lookup, and rewinds to a literal `]` - both bracket pairs stay literal text. Confirms
+    /// the cross-line scan doesn't spuriously consume the trailing label when the reference is unknown.
+    @Test("cross-line full-reference label with no definition stays literal")
+    func crossLineFullReferenceNoDefinition() throws {
+        try MarkdownDocument.withParsedDocument(">[t][la\nbel]") { doc in
+            let inlines = Self.firstParagraphInlines(doc)
+            #expect(inlines.kinds == [.text, .softBreak, .text])
+            #expect(inlines.texts == ["[t][la", "bel]"])
+            #expect(!inlines.hasLink)
+        }
+    }
 }
