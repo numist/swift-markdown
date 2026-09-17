@@ -190,7 +190,7 @@ extension BlockParser {
         s += 1
         // ... with nothing but delimiter-marker whitespace after it: a second unescaped pipe or any
         // content would make the scan loop yield at least one cell, so the row would be a real row.
-        for i in s..<e where !span[i].isTableDelimiterSpace {
+        for i in s..<e where !span[i].isExtensionScannerSpace {
             return false
         }
         return true
@@ -657,7 +657,7 @@ extension BlockParser {
         // VT/FF for the pipe. Consume the pipe + that padding only if a (non-escaped) pipe is actually
         // there — otherwise trailing VT/FF is the last cell's content (`cmark_strbuf_trim` keeps VT/FF).
         var pipeEnd = e
-        while pipeEnd > s && storage.strings[pipeEnd - 1].isTableDelimiterSpace {
+        while pipeEnd > s && storage.strings[pipeEnd - 1].isExtensionScannerSpace {
             pipeEnd -= 1
         }
         if pipeEnd > s && storage.strings[pipeEnd - 1] == UInt8(ascii: "|") {
@@ -689,11 +689,11 @@ extension BlockParser {
         // pipe and any trailing whitespace before the loop, which then finds nothing. Without this, `|`
         // counts as 1 column and a `|` header spuriously matches a 1-column delimiter (`|\n-|` → Table),
         // where cmark sees 0 vs 1 columns and keeps a paragraph. Space/tab were already trimmed from `e`
-        // above; the `isTableDelimiterSpace` check additionally covers a trailing VT/FF (also `spacechar`,
+        // above; the `isExtensionScannerSpace` check additionally covers a trailing VT/FF (also `spacechar`,
         // and fuzzer-reachable via FF). A leading+trailing pipe (`||`) has `hadClosingPipe`, so its one
         // empty cell (appended below) is kept.
         if cells.isEmpty && hadLeadingPipe && !hadClosingPipe
-            && (cellStart..<e).allSatisfy({ storage.strings[$0].isTableDelimiterSpace }) {
+            && (cellStart..<e).allSatisfy({ storage.strings[$0].isExtensionScannerSpace }) {
             return (cells, hadClosingPipe, hadLeadingPipe)
         }
         cells.append(cellStart..<e)
@@ -723,7 +723,7 @@ extension BlockParser {
         var s = range.lowerBound
         var e = range.upperBound
         if stripLeadingVTFF {
-            while s < e && storage.strings[s].isTableDelimiterSpace {
+            while s < e && storage.strings[s].isExtensionScannerSpace {
                 s += 1
             }
         } else {
@@ -744,10 +744,10 @@ extension BlockParser {
     private func trimTableDelimiterSpace(range: Range<Int>) -> Range<Int> {
         var s = range.lowerBound
         var e = range.upperBound
-        while s < e && storage.strings[s].isTableDelimiterSpace {
+        while s < e && storage.strings[s].isExtensionScannerSpace {
             s += 1
         }
-        while e > s && storage.strings[e - 1].isTableDelimiterSpace {
+        while e > s && storage.strings[e - 1].isExtensionScannerSpace {
             e -= 1
         }
         return s..<e
