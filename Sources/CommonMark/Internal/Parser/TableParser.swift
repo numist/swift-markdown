@@ -8,8 +8,6 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-internal import BasicContainers
-
 /// GFM-tables detection and transformation.
 ///
 /// Called from `BlockParser.finalize` for `.paragraph` nodes when the `.tables` parse option is set. If the paragraph's content matches the GFM table pattern (header line containing `|` followed by a delimiter line of `:?-+:?` cells), the paragraph node is mutated in place into a `.table` node with `.tableRow` / `.tableCell` descendants.
@@ -17,8 +15,8 @@ extension BlockParser {
 
     /// Try to transform `node` (a `.paragraph`) and its content `chunk` into a `.table`.
     /// Only supports reading from the standard source (not materialized strings).
-    /// Returns `true` on success (caller should skip inline-parsing the original paragraph since the cells were already inline-parsed). Returns `false` when the chunk doesn't match the table pattern.
-    internal mutating func parseTable(node: DocumentStorage.Index, chunk inputChunk: Chunk, sourceMap: [ArenaRun]) throws(MarkdownDocument.Error) -> Bool {
+    /// Returns `true` on success (caller should skip re-processing the original paragraph: it has become a table and its cells were enqueued for the deferred inline-parsing pass). Returns `false` when the chunk doesn't match the table pattern.
+    internal mutating func parseTable(node: DocumentStorage.Index, chunk inputChunk: Chunk, sourceMap: [ArenaRun]) -> Bool {
         // The table machinery (line splitting, cell extraction, pipe-unescape) reads exclusively from `storage.strings`. Paragraph content is usually already materialized there, but the source-contiguity fast path can hand us an `inSource` chunk (a zero-copy multi-line source range). A table's delimiter (second) line must be a delimiter row - only `-`, `:`, `|`, and delimiter-marker whitespace (space, tab, VT, FF), with at least one `-` - so before paying for a copy we scan the chunk's second line directly in the source: any other character there means this paragraph can't be a table and we bail without materializing, which keeps the overwhelmingly common non-table paragraph zero-copy. (The header line need NOT contain a pipe: a single-column table like `a\n|-` or `a\n:-` has a pipe-less header. `parseDelimRow` + the column-count match below are the exact gate; this scan is only the cheap necessary condition that avoids the copy.) Only when the second line clears that gate do we copy into the arena so the rest of this function can address it uniformly. Only paid when `.tables` is enabled.
         let chunk: Chunk
         // How the flattened content maps back to source for stamping rows/cells/cell-text:
@@ -64,7 +62,7 @@ extension BlockParser {
         // Cell node indices for every row built so far, so a rowspan marker can find the cell above it. Only tracked when `.tableSpans` is on - otherwise it stays empty (no allocation) and the span machinery is skipped entirely, keeping the common table path identical to a span-free build.
         var previousRows: [[DocumentStorage.Index]] = []
         // Header row.
-        let headerCellIndices = try appendRow(
+        let headerCellIndices = appendRow(
             parent: node,
             line: header,
             alignments: alignments,
@@ -81,7 +79,7 @@ extension BlockParser {
         }
         // Body rows. Each subsequent line becomes one `.tableRow`.
         for k in 2..<lines.count {
-            let cells = try appendRow(
+            let cells = appendRow(
                 parent: node,
                 line: lines[k],
                 alignments: alignments,
@@ -215,7 +213,7 @@ extension BlockParser {
         previousRows: [[DocumentStorage.Index]],
         mode: TableSourceMode,
         chunkOffset: Int
-    ) throws(MarkdownDocument.Error) -> [DocumentStorage.Index] {
+    ) -> [DocumentStorage.Index] {
         let rowIdx = storage.appendNode(NodeRecord(
             kind: .tableRow(isHeader: isHeader),
             parent: parent,
@@ -308,13 +306,6 @@ extension BlockParser {
             }
         }
 
-        // One pair of reusable inline-scratch stacks for all cells in this row.
-        var delimiters = UniqueArray<DelimiterRecord>()
-        var brackets = UniqueArray<BracketRecord>()
-        // Reused content scratch for all cells in this row. Owned here so its borrow stays independent of the `storage` mutations `parseInline` performs. Cell chunks are always arena-backed (`inSource == false`).
-        var scratch = UniqueArray<UInt8>()
-        // Reused arena→source run map for a cell whose content is parsed from an arena copy (a `\|`-unescaped or a re-based/flattened cell): a single run mapping the whole cell content to source. Owned here alongside `scratch` so its borrow stays valid for the cell's `parseInline`.
-        var runScratch = UniqueArray<ArenaRun>()
         for col in 0..<columnCount {
             let alignment = alignments[col]
             let cellIdx = storage.appendNode(NodeRecord(
@@ -347,50 +338,51 @@ extension BlockParser {
                 if !cellRange.isEmpty {
                     // Pre-process: replace `\|` with `|` so that whatever pipe-escaping the writer used to keep the cell intact is invisible to inline parsing - even inside a code span.
                     let cellChunk = unescapePipes(range: cellRange)
-                    // No `\|` was present iff `unescapePipes` returned the range unchanged. For a contiguous source-mapped table with no escapes, the cell content is a contiguous source slice, so parse it through a source-backed `ContentSpan` and inline stamping lands real source positions on the cell's text/code/etc. A flattened (re-based) or escaped cell instead parses from an arena copy carrying an arena→source run map; a non-source-mapped table has no map (inline positions left unstamped).
+                    // Defer the cell's inline parsing to `BlockParser`'s post-block pass (via `pendingInlines`),
+                    // exactly as paragraphs and headings do, so a link/footnote reference in the cell resolves
+                    // against reference definitions that appear ANYWHERE in the document - including AFTER the
+                    // table. cmark marks table cells `contains_inlines` and parses them in the same late
+                    // `process_inlines` pass, which runs after the reference map is fully populated; parsing
+                    // eagerly here would miss any definition that follows the table. The deferred pass copies the
+                    // cell content, parses it, then consolidates text nodes and runs the GFM email-autolink pass -
+                    // the same finishing steps a paragraph gets.
+                    //
+                    // No `\|` was present iff `unescapePipes` returned the range unchanged. For a contiguous
+                    // source-mapped table with no escapes, the cell content is a contiguous source slice, so
+                    // enqueue a source-backed chunk and inline stamping lands real source positions on the cell's
+                    // text/code/etc. A flattened (re-based) or escaped cell instead parses from its arena copy
+                    // carrying an arena→source run map (registered on `arenaSourceMaps`); a non-source-mapped table
+                    // registers no map (inline positions left unstamped).
                     let noEscape = cellChunk.offset == cellRange.lowerBound && cellChunk.length == cellRange.count
                     if case .contiguous(let sourceDelta) = mode, noEscape {
                         let srcLo = cellRange.lowerBound + sourceDelta
-                        let srcHi = cellRange.upperBound + sourceDelta
-                        try parseInline(
-                            content: ContentSpan(span: sourceBytes.extracting(srcLo..<srcHi), base: srcLo, inSource: true),
-                            into: cellIdx,
-                            delimiters: &delimiters, brackets: &brackets
-                        )
+                        pendingInlines.append((cellIdx, storage.intern(
+                            Chunk(offset: srcLo, length: cellRange.count, inSource: true))))
                     } else {
-                        scratch.removeAll(keepingCapacity: true)
-                        do {
-                            let copyMe = storage.strings.span.extracting(cellChunk.range)
-                            copyMe.withUnsafeBufferPointer { buffer in
-                                scratch.append(copying: buffer)
-                            }
-                        }
-                        // Hand the inline parser a linear arena→source mapping so the cell's inlines still get positions. cellChunk.offset (arena) images cellRange.lowerBound (source); cmark stamps cell inlines by their offset in the unescaped buffer added to the cell start, ignoring any stripped `\|` backslash, so a single constant-shift run (covering the whole cell content) reproduces its columns. A `.flattened` cell re-bases via the row projection (`rebasedDelta`). why: table-cell inline positions track the reference's escape-oblivious / re-based columns unconditionally - this is NOT enrolled in `.cmarkBugCompatibility` (there was no prior spec-correct behavior to protect: these inlines were unstamped before), so there is no flag split here. A non-source-mapped table (materialized content, no source image) has no mapping - leave `runScratch` empty so the cell stays unstamped as before.
-                        runScratch.removeAll(keepingCapacity: true)
+                        // The cell's arena→source mapping is a single constant-shift run over the whole cell
+                        // content. cmark stamps cell inlines by their offset in the unescaped buffer added to the
+                        // cell start, ignoring any stripped `\|` backslash, so one run (covering the whole content)
+                        // reproduces its columns. A `.flattened` cell re-bases via the row projection
+                        // (`rebasedDelta`). why: table-cell inline positions track the reference's escape-oblivious /
+                        // re-based columns unconditionally - this is NOT enrolled in `.cmarkBugCompatibility` (there
+                        // was no prior spec-correct behavior to protect: these inlines were unstamped before), so
+                        // there is no flag split here. A non-source-mapped table (materialized content, no source
+                        // image) registers no mapping, so the cell stays unstamped as before.
                         switch mode {
                         case .contiguous(let sourceDelta):
-                            runScratch.append(ArenaRun(length: Int32(cellChunk.length), sourceOffset: Int32(cellRange.lowerBound + sourceDelta)))
+                            arenaSourceMaps[cellIdx] = [ArenaRun(
+                                length: Int32(cellChunk.length),
+                                sourceOffset: Int32(cellRange.lowerBound + sourceDelta))]
                         case .flattened:
                             if let proj {
-                                runScratch.append(ArenaRun(
+                                arenaSourceMaps[cellIdx] = [ArenaRun(
                                     length: Int32(cellChunk.length),
-                                    sourceOffset: Int32(cellRange.lowerBound + proj.rebasedDelta)))
+                                    sourceOffset: Int32(cellRange.lowerBound + proj.rebasedDelta))]
                             }
                         case .none:
                             break
                         }
-                        try parseInline(
-                            content: ContentSpan(span: scratch.span, base: cellChunk.offset, inSource: cellChunk.inSource, arenaRuns: runScratch.span),
-                            into: cellIdx,
-                            delimiters: &delimiters, brackets: &brackets
-                        )
-                    }
-                    // Coalesce adjacent `.text` children so bracket-literal / entity / smart-punct substitutions don't leave the cell content split across sibling text nodes. cmark runs `cmark_consolidate_text_nodes` over every node's inlines uniformly; the paragraph path does the same after its `parseInline` (see `BlockParser`), but a cell is inline-parsed here on the table path, so consolidate it here too.
-                    consolidateTextNodes(cellIdx)
-                    // GFM email autolinks: detected over the consolidated cell inlines, matching cmark's
-                    // autolink `postprocess` (run tree-wide after consolidation). See `BlockParser`.
-                    if storage.options.contains(.gfmAutolink) {
-                        gfmEmailAutolinkPass(cellIdx)
+                        pendingInlines.append((cellIdx, storage.intern(cellChunk)))
                     }
                 }
             }

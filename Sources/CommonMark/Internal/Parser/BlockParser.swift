@@ -2670,7 +2670,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let tableMap = (positionsEnabled && !map.isEmpty)
                 ? sliceRuns(map, from: tableContent.offset - raw.offset, length: tableContent.length)
                 : []
-            if try parseTable(node: node, chunk: tableContent, sourceMap: tableMap) {
+            if parseTable(node: node, chunk: tableContent, sourceMap: tableMap) {
                 return
             }
         }
