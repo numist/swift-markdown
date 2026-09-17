@@ -44,4 +44,39 @@ struct MultiSegmentAttributeSurfaceTests {
         #expect(rendered.contains("InlineAttributes"))
         #expect(rendered.contains("attributes: `\(expectedAttributes)`"))
     }
+
+    /// A trailing `[label]` following an `^[](attrs)` attribute is consumed by cmark's `link_label`,
+    /// which scans a flat buffer and does not rewind on a match — so the bracket pair produces no output.
+    /// When the content is multi-segment (here a block-quote body, whose stripped `>` prefixes leave the
+    /// lines non-contiguous) the trailing label can straddle a soft-break join, landing the closing `]` in
+    /// a later segment that a contiguous-only scan never reaches — the scan must still cross the join and
+    /// consume the pair. Consumption is unconditional, so both flag modes must agree.
+    @Test(arguments: [ParseOptions(), ParseOptions.cmarkBugCompatibility])
+    func trailingBracketAfterAttributeConsumed(_ options: ParseOptions) {
+        // Single-line control: contiguous content, the trailing `[y]` is consumed.
+        #expect(Document(parsing: "^[](x)[y]", options: options).debugDescription() == """
+            Document
+            └─ Paragraph
+               └─ InlineAttributes attributes: `x`
+            """)
+        // Multi-segment: the trailing `[\nc]` straddles the block-quote line join, so the closing `]` sits
+        // in a later segment; the pair must still be consumed, leaving no literal `[` / `]` text.
+        #expect(Document(parsing: ">a^[](x)[\n>c]", options: options).debugDescription() == """
+            Document
+            └─ BlockQuote
+               └─ Paragraph
+                  ├─ Text "a"
+                  └─ InlineAttributes attributes: `x`
+            """)
+        // Multi-segment reference form: the join-straddling label `[a\nb]` normalizes to `a b`, resolves
+        // against the `^[a b]:` attribute reference, and overwrites the inline `(ignore)` attributes —
+        // cmark's `link_label` crosses the join to match the definition (`handle_close_bracket_attribute`).
+        #expect(Document(parsing: "^[a b]: color: red\n\n>x^[](ignore)[a\n>b]", options: options).debugDescription() == """
+            Document
+            └─ BlockQuote
+               └─ Paragraph
+                  ├─ Text "x"
+                  └─ InlineAttributes attributes: `color: red`
+            """)
+    }
 }

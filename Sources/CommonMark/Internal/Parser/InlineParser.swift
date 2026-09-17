@@ -1220,23 +1220,30 @@ extension BlockParser {
         // A resolved reference supplies the attributes; an unresolved one is still consumed. Unlike the
         // link path, the failure branch does NOT rewind (`handle_close_bracket` resets
         // `subj->pos = initial_pos`; the attribute path never does), so the consumed `[…]` does not
-        // re-parse - `^[][]` drops the trailing `[]`, leaving literal `^[]`. Scan through a contiguous
-        // window (see `contiguousChunk`) so multi-segment content reads real bytes; `lab.interior` is a
-        // real buffer chunk and `lab.afterEnd` a buffer offset converted back to virtual via the window base.
+        // re-parse - `^[][]` drops the trailing `[]`, leaving literal `^[]`.
+        var labelKey: String?
         if let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
            let lab = matchLinkLabel(labelWindow) {
+            // Contiguous window (see `contiguousChunk`): `lab.interior` is a real buffer chunk and
+            // `lab.afterEnd` a buffer offset converted back to virtual via the window base.
             pos = pos + (lab.afterEnd - labelWindow.offset)
-            let labelChunk = lab.interior
-            if labelChunk.length > 0 {
-                let key = normalizeLabel(
-                    chunk: labelChunk
-                )
-                if !key.isEmpty,
-                   let storedAttrs = storage.attributeReferenceMap[key] {
-                    attrs = storedAttrs
-                    matched = true
-                }
+            if lab.interior.length > 0 {
+                labelKey = normalizeLabel(chunk: lab.interior)
             }
+        } else if let lab = matchLinkLabel(from: pos, end: end, in: content) {
+            // The following `[…]` straddles a soft-break join (`^[](x)[la\nbel]`), which the contiguous
+            // window can't image - it stops at the segment boundary, leaving the closing `]` on the next
+            // line unseen. cmark's `link_label` scans a flat buffer, so it crosses the join to the `]` and
+            // consumes it without rewinding; normalize the interior across the join for lookup.
+            pos = lab.afterEnd
+            if !lab.interior.isEmpty {
+                labelKey = normalizeLabel(virtualRange: lab.interior, in: content)
+            }
+        }
+        if let key = labelKey, !key.isEmpty,
+           let storedAttrs = storage.attributeReferenceMap[key] {
+            attrs = storedAttrs
+            matched = true
         }
         if !matched {
             // Fail: pop bracket, emit a single `]` text at the (possibly label-advanced) close position
