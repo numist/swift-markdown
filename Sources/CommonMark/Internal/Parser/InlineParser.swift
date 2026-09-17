@@ -3708,10 +3708,24 @@ extension BlockParser {
     /// so a flanking `_`/`*` next to an email is already resolved as emphasis - or left as literal text
     /// folded into the local part - before the email boundaries are decided.
     ///
-    /// Link subtrees are skipped (cmark's `in_link`): the link text of an existing link - including a bare
-    /// URL / email link just emitted - must not be re-scanned. Every other container (emphasis, strong,
-    /// image, …) is recursed into, matching cmark iterating the whole tree.
+    /// Every non-link container (emphasis, strong, image, …) is recursed into, matching cmark iterating
+    /// the whole tree; a link's own text - including a bare URL / email link just emitted - is never
+    /// re-scanned as more link text.
+    ///
+    /// cmark's autolink `postprocess` (`extensions/autolink.c`) tracks link context with a single `in_link`
+    /// BOOLEAN, not a nesting depth: entering a link arms it and exiting ANY link clears it. So a link
+    /// nested in another link's text - e.g. an angle autolink `<a@b>` inside `[…]` link text - clears
+    /// `in_link` when it closes, and the OUTER link's remaining text then gets autolinked. Flag-ON
+    /// (`.cmarkBugCompatibility`) reproduces that boolean. Flag-OFF, since a link nested in a link is
+    /// invalid HTML/CommonMark, the spec-correct deliverable never autolinks inside a link and skips its
+    /// subtree.
     mutating func gfmEmailAutolinkPass(_ parent: DocumentStorage.Index) {
+        var inLink = false
+        gfmEmailAutolinkPass(parent, inLink: &inLink)
+    }
+
+    private mutating func gfmEmailAutolinkPass(_ parent: DocumentStorage.Index, inLink: inout Bool) {
+        let bugCompat = storage.options.contains(.cmarkBugCompatibility)
         var child = storage[parent].firstChild
         while let current = child {
             // Capture the next sibling BEFORE splitting: `splitEmailsInTextNode` inserts the link/after
@@ -3720,11 +3734,21 @@ extension BlockParser {
             let next = storage[current].next
             switch storage[current].kind {
             case .text:
-                splitEmailsInTextNode(current, parent: parent)
+                // Skip text inside a link (cmark's `!in_link`).
+                if !inLink {
+                    splitEmailsInTextNode(current, parent: parent)
+                }
             case .link:
-                break
+                // why: flag-ON reproduce cmark's `in_link` boolean by walking the link subtree with the
+                // flag set - a nested link's exit clears it, so the outer link's later text is scanned.
+                // Flag-OFF skip the subtree outright (never re-scan link text), matching the old behavior.
+                if bugCompat {
+                    inLink = true
+                    gfmEmailAutolinkPass(current, inLink: &inLink)
+                    inLink = false
+                }
             default:
-                gfmEmailAutolinkPass(current)
+                gfmEmailAutolinkPass(current, inLink: &inLink)
             }
             child = next
         }
