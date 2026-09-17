@@ -867,29 +867,27 @@ extension BlockParser {
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             return initialPos
         }
-        // cmark BUG (bug-compat only): a same-line, non-image footnote-shaped bracket whose caret is
-        // backslash-escaped (`[\^…]`). cmark still treats it as a footnote — the text node after `[` is
-        // the escaped `^` — but measures the reference-label length in *columns* from the `[` (spanning
-        // the backslash) while reading the label bytes from just past the `^`, so the read over-runs by
-        // one byte and captures the closing `]`. The unresolved reference reconstructs as `[^` + captured
-        // bytes + `]`, doubling the `]` (`[\^x]` -> `[^x]]`). The spec-correct default processes the
-        // escape and keeps a single `]` (`[^x]`).
-        //
-        // Deliberately restricted to the non-image, same-line shape. Two neighbouring shapes diverge from
-        // cmark *differently* and are left for separate findings: an image opener `![\^…]` drops the `!`
-        // and — its column length now starting at the `!` — over-reads a byte PAST the `]` (into the
-        // following byte / trailing newline), and a cross-line `[\^\n…]` collapses to `[^]`. Neither is
-        // reproduced here; those inputs fall through unchanged.
+        // cmark BUG (bug-compat only): a footnote-shaped bracket whose caret is backslash-escaped
+        // (`[\^…]` / `![\^…]`). cmark still treats it as a footnote — the text node after `[` is the
+        // escaped `^` — but measures the reference-label length in *columns* from the opener's start
+        // (the `[`, or the `!` of an image opener) spanning the backslash, while reading the label bytes
+        // from just past the `^`. Counting the backslash column runs the read one byte past the label:
+        //   - a `[` opener captures the closing `]` (`[\^x]` -> `[^x]]`);
+        //   - an image `![` opener, whose start column sits one further left, over-reads a *second* byte
+        //     past the `]` into the paragraph's trailing newline, and drops the `!` (`![\^x]` -> `[^x]\n]`);
+        //   - a cross-line span resets the per-line column at the soft break, underflowing the length to
+        //     an empty label (`[\^\nx]` -> `[^]`).
+        // The unresolved reference reconstructs as `[^` + captured bytes + `]`. The spec-correct default
+        // processes the escape and keeps a single `]` (`[^x]`).
         if storage.options.contains(.footnotes),
            storage.options.contains(.cmarkBugCompatibility),
-           !isImage,
            footnoteBracketStart + 3 < cursor,
            content[footnoteBracketStart + 1] == UInt8(ascii: "\\"),
-           content[footnoteBracketStart + 2] == UInt8(ascii: "^"),
-           !footnoteSpanCrossesLine(content, from: footnoteBracketStart + 2, to: cursor) {
+           content[footnoteBracketStart + 2] == UInt8(ascii: "^") {
             processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
             emitEscapedCaretFootnoteLiteral(
                 openerInl: openerInl,
+                isImage: isImage,
                 footnoteBracketStart: footnoteBracketStart,
                 closeBracket: cursor,
                 content: content
@@ -1220,20 +1218,38 @@ extension BlockParser {
         }
     }
 
-    /// Reconstruct a same-line, non-image footnote-shaped bracket `[\^…]` (backslash-escaped caret) under
+    /// Reconstruct a footnote-shaped bracket `[\^…]` / `![\^…]` (backslash-escaped caret) under
     /// `.cmarkBugCompatibility`. cmark reads the reference label from just past the `^` (`open + 3`, one
-    /// byte after the escaped caret) for its column-measured length `colOf(]) - colOf([) - 2`, which
-    /// counts the backslash and so runs one byte past the label into the closing `]`. The unresolved
-    /// reference then reconstructs as `[^` + captured bytes + `]`, so `[\^x]` -> `[^x]]`. The captured
-    /// span always ends at `]` (ASCII), so there is no partial-UTF-8 tail to extend past.
-    private mutating func emitEscapedCaretFootnoteLiteral(openerInl: DocumentStorage.Index, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan) {
+    /// byte after the escaped caret) for its column-measured length `colOf(]) - colOf(opener) - 2`, where
+    /// the opener column is the `[`'s for a `[` opener and the `!`'s for an image opener (one further
+    /// left, so an image captures one extra byte). Counting the backslash runs the read one byte past the
+    /// label: a `[` opener captures the closing `]` (`[\^x]` -> `[^x]]`); an image opener over-reads a
+    /// second byte into the paragraph's trailing newline and drops the `!` (`![\^x]` -> `[^x]\n]`). A
+    /// cross-line span resets the per-line column at the soft break, underflowing the length to an empty
+    /// label (`[\^\nx]` -> `[^]`). The unresolved reference reconstructs as `[^` + captured bytes + `]`.
+    private mutating func emitEscapedCaretFootnoteLiteral(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan) {
+        // cmark's byte-length label is `colOf(]) - colOf(opener) - 2` (per-line columns); an image
+        // opener's `![` shifts the start one byte left, so it captures one extra byte. A cross-line reset
+        // can drive it negative — cmark's underflow guard clamps that to an empty label.
+        let labelLength = max(0, footnoteCapturedLabelLength(content, open: open, close: close) + (isImage ? 1 : 0))
+        // The label runs from just past the escaped `^` (`open + 3`). cmark reads from the paragraph
+        // buffer, which carries a trailing newline the zero-copy span omits; the image over-read is the
+        // only read that reaches the content end, where that synthetic `\n` stands in.
+        let end = content.endOffset
+        let labelStart = open + 3
+        var labelEnd = labelStart + labelLength
+        // cmark's invalid-UTF-8 -> U+FFFD replacement is atomic, so a byte-length capture that lands
+        // mid-sequence still yields the whole character; extend past trailing continuation bytes.
+        while labelEnd < end, content[labelEnd] & 0b1100_0000 == 0b1000_0000 {
+            labelEnd += 1
+        }
+
         var literal: [UInt8] = []
         literal.append(UInt8(ascii: "["))
         literal.append(UInt8(ascii: "^"))
-        // The captured label runs from just past the escaped `^` (`open + 3`) through the closing `]`.
-        var i = open + 3
-        while i <= close {
-            literal.append(content[i])
+        var i = labelStart
+        while i < labelEnd {
+            literal.append(i < end ? content[i] : UInt8(ascii: "\n"))
             i += 1
         }
         literal.append(UInt8(ascii: "]"))
@@ -1246,7 +1262,9 @@ extension BlockParser {
         let ref = storage.intern(Chunk(offset: start, length: literal.count, inSource: false))
         let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parentIdx, data: .literal(ref)))
         storage.insertChildBefore(textIdx, before: openerInl)
-        stampInline(textIdx, open, close + 1, content: content)
+        // The reconstructed span runs from the opener (the `!` for an image, else the `[`) to just past
+        // the closing `]`.
+        stampInline(textIdx, open - (isImage ? 1 : 0), close + 1, content: content)
         // Remove the opener and every inner-content sibling (the `\^…` up to the `]`).
         var sib: DocumentStorage.Index? = openerInl
         while let s = sib {
