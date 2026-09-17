@@ -297,4 +297,37 @@ struct AutolinkDomainRulesTests {
         #expect(ns.map(\.text) == [nil, nil, "http://a_b.c_d"])
         #expect(ns.compactMap(\.url) == [])
     }
+
+    // MARK: - Divergence 6: a `www.` domain is rejected for an underscore in its last two labels
+
+    // Like the `://`-scheme form, cmark's `www_match` (`extensions/autolink.c`) gates on
+    // `check_domain(data, size, allow_short: 0)` before scanning the URL body, so a `www.` domain
+    // bearing an underscore in either of its last two `.`-separated labels is rejected outright. The
+    // rejection is GFM-spec-correct (a host name may not contain an underscore), so it applies in both
+    // modes - unlike the bare-`www` over-trim quirk, which is flag-ON only.
+
+    @Test("www domain with an underscore in its last label does not autolink (both modes)")
+    func wwwUnderscoreLastLabelNoAutolink() throws {
+        // `www.a_b x` - the domain's last two labels are `www` and `a_b`; `a_b` has an underscore, so
+        // cmark's `check_domain` returns 0 and the whole run stays plain text.
+        for options in [Self.flagOff, Self.flagOn] {
+            let ns = try nodes(in: "www.a_b x", options: options)
+            #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+            #expect(ns.map(\.text) == [nil, nil, "www.a_b x"])
+            #expect(ns.compactMap(\.url) == [])
+        }
+    }
+
+    @Test("guard: www domain with an underscore outside its last two labels still autolinks (both modes)")
+    func wwwUnderscoreOutsideLastTwoLabelsAutolinks() throws {
+        // `www.a_b.c.d x` - the underscore is in `a_b`, which is NOT among the last two labels (`c`, `d`),
+        // so `check_domain` accepts the domain and the URL links. The boundary between this and the
+        // rejected case above is exactly cmark's last-two-labels rule.
+        for options in [Self.flagOff, Self.flagOn] {
+            let ns = try nodes(in: "www.a_b.c.d x", options: options)
+            #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
+            #expect(ns.map(\.text) == [nil, nil, nil, "www.a_b.c.d", " x"])
+            #expect(ns.compactMap(\.url) == ["http://www.a_b.c.d"])
+        }
+    }
 }
