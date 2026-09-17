@@ -1,0 +1,4 @@
+Document @1:1-2:3
+└─ Paragraph @1:2-2:3
+   ├─ Text @1:2-1:3 "o"
+   └─ Link @1:3-2:4 destination: "f"

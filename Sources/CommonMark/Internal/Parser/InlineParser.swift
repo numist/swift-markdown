@@ -673,11 +673,20 @@ extension BlockParser {
                 let afterSpaces2 = skipSpaceChars(start: afterDest, end: end, content: content)
                 var titleEnd = afterDest
                 var maybeTitle: Chunk = .empty
-                if afterSpaces2 > afterDest,
-                   let titleWindow = content.contiguousChunk(fromVirtual: afterSpaces2, limit: end),
-                   let t = matchLinkTitle(titleWindow) {
-                    maybeTitle = t.chunk
-                    titleEnd = afterSpaces2 + (t.afterEnd - titleWindow.offset)
+                if afterSpaces2 > afterDest {
+                    if let titleWindow = content.contiguousChunk(fromVirtual: afterSpaces2, limit: end),
+                       let t = matchLinkTitle(titleWindow) {
+                        maybeTitle = t.chunk
+                        titleEnd = afterSpaces2 + (t.afterEnd - titleWindow.offset)
+                    } else if let t = matchLinkTitle(from: afterSpaces2, end: end, in: content) {
+                        // The `"…"` / `'…'` / `(…)` title straddles a soft-break join (`[](f (\n))`),
+                        // which the contiguous window can't image within one source segment. cmark's
+                        // `scan_link_title` scans a flat buffer, so it crosses the join to the closer
+                        // (like the cross-line link-label scan below). Materialize the interior — it may
+                        // straddle the join — then clean it exactly like the contiguous title.
+                        maybeTitle = materializedChunk(start: t.interior.lowerBound, end: t.interior.upperBound, content: content)
+                        titleEnd = t.afterEnd
+                    }
                 }
                 let afterTitleSpaces = skipSpaceChars(start: titleEnd, end: end, content: content)
                 if afterTitleSpaces < end,

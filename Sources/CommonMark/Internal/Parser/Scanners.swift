@@ -267,6 +267,63 @@ extension BlockParser {
         return LinkTitleMatch(chunk: chunk.extracting(1..<(closeAfterEnd - 1 - start)), afterEnd: closeAfterEnd)
     }
 
+    /// Cross-line variant of `matchLinkTitle(_:)` for multi-segment inline content. cmark's
+    /// `scan_link_title` scans a flat input buffer, so an inline link's `"…"` / `'…'` / `(…)` title
+    /// may span a soft-break join (`[](f (\n))`) that `contiguousChunk` can't image within one source
+    /// segment. Scans virtual offsets of `content` from `start` (the opening delimiter) to `end`,
+    /// crossing joins with the same longest-match two-thread DFA as `matchLinkTitle(_:)` (see there for
+    /// the DFA rationale); returns the interior's virtual range (excluding the delimiters) and the
+    /// offset just past the closer, or nil when the opener is not a delimiter or no closer is reached.
+    /// The interior may straddle a join, so callers materialize it with `materializedChunk`, not a
+    /// contiguous `Chunk`.
+    internal func matchLinkTitle(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
+        if start >= end {
+            return nil
+        }
+        let opener = content[start]
+        let closer: UInt8
+        switch opener {
+        case UInt8(ascii: "\""):
+            closer = UInt8(ascii: "\"")
+        case UInt8(ascii: "'"):
+            closer = UInt8(ascii: "'")
+        case UInt8(ascii: "("):
+            closer = UInt8(ascii: ")")
+        default:
+            return nil
+        }
+        var inBody = true
+        var afterBackslash = false
+        var closeAfterEnd: Int? = nil
+        var i = start + 1
+        while i < end, inBody || afterBackslash {
+            let c = content[i]
+            var nextInBody = false
+            var nextAfterBackslash = false
+            if inBody {
+                if c == closer {
+                    closeAfterEnd = i + 1
+                }
+                if c != opener && c != closer {
+                    nextInBody = true
+                }
+                if c == UInt8(ascii: "\\") {
+                    nextAfterBackslash = true
+                }
+            }
+            if afterBackslash && c.isASCIIPunct {
+                nextInBody = true
+            }
+            inBody = nextInBody
+            afterBackslash = nextAfterBackslash
+            i += 1
+        }
+        guard let closeAfterEnd else {
+            return nil
+        }
+        return ((start + 1)..<(closeAfterEnd - 1), closeAfterEnd)
+    }
+
     // MARK: - Whitespace
 
     /// Skip zero or more space and tab bytes only, from `cursor` up to the end of `chunk`.
