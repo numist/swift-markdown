@@ -2265,8 +2265,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     start: sourceOffset(firstNonSpace)
                 )
                 current = quoteIdx
-                cursor = advanced
-                column = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+                // The marker consumes `>` plus one optional following space or tab COLUMN (cmark's
+                // `open_new_blocks`, the same `S_advance_offset(parser, input, 1, true)` call
+                // `parse_block_quote_prefix` uses for a continuation). When that optional column falls
+                // on a TAB it only PARTIALLY consumes it: leave the tab byte at `cursor` so a leaf opened
+                // later on this line (an indented/fenced code block straddling the tab) can split it, and
+                // record the intended column in `column` (one column past `>`) - the opening-line sibling
+                // of `walkOpenContainers`'s continuation case. This only arises when a raw prefix tab
+                // reaches here unexpanded (`expandPrefixTabs` is skipped while continuing an open fenced
+                // code block); every other line's tabs are already spaces, so the byte check below is a
+                // no-op there.
+                let markerEnd = firstNonSpace + 1
+                if advanced == markerEnd + 1, source[markerEnd] == UInt8(ascii: "\t") {
+                    cursor = markerEnd
+                    column = columnWidth(source: source, from: lineRange.lowerBound, to: markerEnd) + 1
+                } else {
+                    cursor = advanced
+                    column = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+                }
                 continue
             }
 
