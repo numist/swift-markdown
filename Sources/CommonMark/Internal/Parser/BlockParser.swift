@@ -2346,8 +2346,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return try finalize(node: headingIdx, pending: pending, atxHeadingEnd: heading.end)
             }
 
-            // Fenced code block.
-            if let fence = matchOpeningFence(
+            // Fenced code block. Gated `indent < 4` (COLUMNS), cmark's `!indented` in the fence-opener
+            // branch (`open_new_blocks`; blocks.c). A line whose indent reaches four columns is indented
+            // code, not a fence - even when its byte distance from the cursor is <= 3 because a straddling
+            // tab widened it. A raw prefix tab reaches here only on a line processed while an open fenced
+            // code block was `current` (the one case `expandPrefixTabs` is skipped, per the `inFencedCode`
+            // guard); every other line has its prefix tabs expanded to spaces first, so its byte distance
+            // already equals its column indent. Example: in `>~~~` then `\t~~~`, the second line closes the
+            // quote's fence and its tab-indented `~~~` opens a top-level indented code block whose content
+            // is `~~~` rather than a second empty fence.
+            if indent < 4, let fence = matchOpeningFence(
                 source: source,
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace

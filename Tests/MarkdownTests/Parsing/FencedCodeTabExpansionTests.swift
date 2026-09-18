@@ -147,4 +147,34 @@ class FencedCodeTabExpansionTests: XCTestCase {
             contentDisplay: String(repeating: " ", count: 3) + "\t"
         )
     }
+
+    /// After a block quote (with an unclosed empty fenced code block) closes, a line whose leading TAB
+    /// reaches four columns opens an INDENTED code block, not a second fence. cmark gates the fence
+    /// opener on `!indented` (`parser->indent < 4`, blocks.c `open_new_blocks`), an indent measured in
+    /// COLUMNS - so the tab (one byte, four columns) is indented code and the `~~~` is its content, not a
+    /// fence marker. The tab reaches the opener unexpanded because a fenced-code body line skips
+    /// `expandPrefixTabs`; a byte-distance gate would see one byte, admit the fence, and drop the `~~~`.
+    func testTabIndentedCodeAfterBlockQuoteCloses() {
+        let input = ">~~~\n\t~~~"
+        XCTAssertTrue(input.utf8.contains(0x09), "fixture must contain a tab")
+
+        let document = Document(parsing: input)
+
+        // Top level: a block quote (holding the empty fenced code block) followed by an indented code block.
+        let blockQuotes = document.children.compactMap { $0 as? BlockQuote }
+        XCTAssertEqual(blockQuotes.count, 1, "expected exactly one top-level block quote")
+        let topLevelCodeBlocks = document.children.compactMap { $0 as? CodeBlock }
+        XCTAssertEqual(topLevelCodeBlocks.count, 1, "expected exactly one top-level code block")
+
+        // The block quote's fenced code block opened on `>~~~` and never closed, so it is empty.
+        let nestedCodeBlocks = blockQuotes.first?.children.compactMap { $0 as? CodeBlock } ?? []
+        XCTAssertEqual(nestedCodeBlocks.count, 1, "expected exactly one code block inside the block quote")
+        XCTAssertEqual(nestedCodeBlocks.first?.code, "")
+        XCTAssertNil(nestedCodeBlocks.first?.language)
+
+        // Ground truth (cmark): the tab-indented `~~~` is the indented code block's content, not a fence.
+        guard let topLevelCode = topLevelCodeBlocks.first else { return }
+        XCTAssertEqual(topLevelCode.code, "~~~\n")
+        XCTAssertNil(topLevelCode.language)
+    }
 }
