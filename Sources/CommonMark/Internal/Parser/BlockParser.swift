@@ -2213,7 +2213,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
 
             // Thematic break (must be before ATX so `---` etc. wins over content matchers, and before list-marker so `- - -` etc. wins over nested lists).
-            if matchThematicBreak(source: source, range: cursor..<lineRange.upperBound, firstNonSpace: firstNonSpace) {
+            // Gated `indent < 4` (COLUMNS), cmark's `!indented` in the thematic-break branch (`open_new_blocks`; blocks.c): a line whose indent reaches four columns is indented code, not a break. A raw prefix tab reaches here unexpanded only on a fenced-code body line - see the fenced-code branch below for the full mechanism.
+            if indent < 4, matchThematicBreak(source: source, range: cursor..<lineRange.upperBound, firstNonSpace: firstNonSpace) {
                 // Thematic breaks close any enclosing list - they don't become children of a list (lists can only contain items).
                 if storage[current].kind.isList {
                     pending = try finalize(node: current, pending: pending)
@@ -2328,8 +2329,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 pending = try finalize(node: current, pending: pending)
             }
 
-            // ATX heading.
-            if let heading = matchATXHeading(
+            // ATX heading. Gated `indent < 4` (COLUMNS), cmark's `!indented` in the ATX branch (`open_new_blocks`; blocks.c): a line whose indent reaches four columns is indented code, not a heading - see the fenced-code branch below for how a raw prefix tab reaches an opener unexpanded.
+            if indent < 4, let heading = matchATXHeading(
                 source: source,
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace
@@ -2397,8 +2398,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
 
             // HTML block (types 1–7). Leading 0–3 spaces of indent are preserved verbatim in the block's content. Type 7 is detected only when the current container isn't a paragraph, since it can't interrupt one (per CommonMark 0.31 §4.6).
+            // Gated `indent < 4` (COLUMNS), cmark's `!indented` in the HTML-block branch (`open_new_blocks`; blocks.c): a line whose indent reaches four columns is indented code, not an HTML block - see the fenced-code branch above for how a raw prefix tab reaches an opener unexpanded.
             let allowType7 = storage[current].kind != .paragraph
-            if let htmlType = matchHTMLBlockStart(
+            if indent < 4, let htmlType = matchHTMLBlockStart(
                 source: source,
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
