@@ -1213,29 +1213,54 @@ extension BlockParser {
         }
     }
 
+    /// The byte length of the UTF-8 sequence led by `b0` (1/2/3/4 per the lead-byte bit pattern, mirroring
+    /// the same tests `decodeUTF8Scalar` uses). The source is already known-valid UTF-8, so this is only
+    /// used to tell whether a raw byte cut (`collapseMultilineFootnote`) lands mid-sequence, never to
+    /// validate the sequence itself.
+    private static func utf8SequenceLength(_ b0: UInt8) -> Int {
+        if b0 & 0xE0 == 0xC0 { return 2 }
+        if b0 & 0xF0 == 0xE0 { return 3 }
+        if b0 & 0xF8 == 0xF0 { return 4 }
+        return 1
+    }
+
     /// Handle a footnote-shaped bracket whose `]` lands on a later line than its opener, reproducing
     /// cmark's `.cmarkBugCompatibility` behavior. cmark's inline footnote branch captures the label as
     /// `cmark_chunk_dup(caretNode, 1, end_col - start_col - 2)`, reading raw bytes from just after the
     /// `^` across the soft break; its column arithmetic resets at each newline (`handle_newline` sets
     /// `column_offset = -pos`), so the captured byte length is `colOf(]) - colOf([) - 2` with per-line
-    /// columns (`footnoteCapturedLabelLength`), extended to the UTF-8 character boundary (the NUL /
-    /// invalid-byte -> U+FFFD replacement is atomic). cmark then RESOLVES that captured label if it
-    /// matches a definition (so a cross-line `[^a<nl>x]` resolves to `a`); otherwise the whole span
-    /// reconstructs as `[^` + the captured bytes + `]` (`[^]` for an empty capture). The spec-correct
-    /// default keeps the bracket literal with its soft break; see FINDINGS #146.
+    /// columns (`footnoteCapturedLabelLength`). That raw byte cut can land mid-character: cmark's
+    /// `cmark_chunk` is just a length-bounded slice, so the copy is oblivious to UTF-8 boundaries and can
+    /// truncate a multi-byte scalar to its lead byte(s) alone. The reference's Swift bridge later turns
+    /// that raw C chunk into a `String` via `String(cString:)`, whose own UTF-8 decoding repairs the
+    /// truncated tail to a single U+FFFD (Unicode's maximal-subpart replacement) — so a captured lead
+    /// byte with no continuation bytes becomes `�`, not the rest of the (unrelated) character that
+    /// happened to follow it in the buffer. Materialize that same replacement here rather than reading
+    /// past the cut to complete the scalar. cmark then RESOLVES that captured label if it matches a
+    /// definition (so a cross-line `[^a<nl>x]` resolves to `a`); otherwise the whole span reconstructs as
+    /// `[^` + the captured bytes + `]` (`[^]` for an empty capture). The spec-correct default keeps the
+    /// bracket literal with its soft break; see FINDINGS #146.
     private mutating func collapseMultilineFootnote(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan) {
         let labelStart = open + 2
         let x = footnoteCapturedLabelLength(content, open: open, close: close)
         var labelBytes: [UInt8] = []
         if x > 0 {
-            var end = min(labelStart + x, close)
-            while end < close, content[end] & 0b1100_0000 == 0b1000_0000 {
-                end += 1
-            }
+            let end = min(labelStart + x, close)
             var j = labelStart
             while j < end {
-                labelBytes.append(content[j])
-                j += 1
+                let sequenceLength = Self.utf8SequenceLength(content[j])
+                if j + sequenceLength <= end {
+                    for k in j..<(j + sequenceLength) {
+                        labelBytes.append(content[k])
+                    }
+                    j += sequenceLength
+                } else {
+                    // The cut lands inside this scalar's continuation bytes: cmark's raw slice ends here,
+                    // so nothing beyond `end` is part of the capture. Emit the one U+FFFD the reference's
+                    // later UTF-8 repair produces for the truncated tail, and stop.
+                    labelBytes.append(contentsOf: [0xEF, 0xBF, 0xBD])
+                    break
+                }
             }
         }
         // cmark resolves the reference by its byte-captured label; a match emits a footnote reference.
