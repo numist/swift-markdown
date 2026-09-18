@@ -4569,10 +4569,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let afterTitleSpnl = skipSpacesAndOneLineEnd(from: i, in: chunk)
         var titleChunk: Chunk = .empty
         var afterAll = -1
+        var scannedTitleChunk: Chunk?
         if afterTitleSpnl > beforeTitle,
            let title = matchLinkTitle(
                Chunk(offset: afterTitleSpnl, length: end - afterTitleSpnl, inSource: inSource)
            ) {
+            scannedTitleChunk = title.chunk
             let afterSpaces = skipSpacesTabs(from: title.afterEnd, in: chunk)
             if let lineEnd = skipLineEndOrEOF(from: afterSpaces, in: chunk) {
                 titleChunk = title.chunk
@@ -4585,6 +4587,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return nil
             }
             afterAll = lineEnd
+            // why (ref-b4b): cmark's `cmark_parse_reference_inline` rewinds `subj.pos` to right
+            // after the destination when a scanned title has trailing (non-whitespace) content on
+            // its line, then re-checks for a clean line end from there - but never clears the
+            // `title` chunk it already scanned, so a title it just rejected gets attached to the
+            // reference anyway. That rewind point coincides with our `dest.afterEnd` recheck above,
+            // and lands on a line ending exactly when the title started on a CONTINUATION line (a
+            // real line break separates the destination from the title); on a single physical line
+            // there's no line ending to land on, so the recheck (and cmark's) fails outright and no
+            // bogus title survives. Reproduce cmark's stale-title bug only where its rewind would
+            // land on that line ending, i.e. exactly when this recheck (mirroring the rewind) finds one.
+            if storage.options.contains(.cmarkBugCompatibility), let scannedTitleChunk {
+                titleChunk = scannedTitleChunk
+            }
         }
         let key = normalizeLabel(
             chunk: label.interior
