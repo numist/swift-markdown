@@ -1,0 +1,5 @@
+Document @1:1-1:8
+└─ Paragraph @1:1-1:8
+   ├─ Text @1:1-1:2 "["
+   ├─ InlineAttributes @1:2-1:7 attributes: ``
+   └─ Text @1:7-1:8 "]"

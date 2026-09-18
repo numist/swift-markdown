@@ -23,6 +23,19 @@ private func dfsKindText(
     }
 }
 
+// Depth-annotated variant: pins the parent/child nesting the flat `dfsKindText` can't distinguish
+// (a node nested inside an attribute vs. a sibling of an empty attribute flatten to the same list).
+private func dfsDepthKind(
+    _ node: borrowing MarkdownNode,
+    depth: Int,
+    into out: inout [(depth: Int, kind: MarkdownNode.Kind, text: String?)]
+) {
+    out.append((depth, node.kind, node.literal()))
+    node.children.forEach { child in
+        dfsDepthKind(child, depth: depth + 1, into: &out)
+    }
+}
+
 /// A footnotes bug-compatibility divergence the differential fuzzer found against cmark-gfm (via
 /// swift-markdown@main): `[[^[]]]()` must form a `Link` whose text is `[^[`, not stay literal `[[^[`.
 ///
@@ -55,6 +68,17 @@ struct FootnoteNestedBracketLinkTests {
             doc -> [(kind: MarkdownNode.Kind, text: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?)] = []
             dfsKindText(doc.root, into: &out)
+            return out
+        }
+    }
+
+    private func depthNodes(
+        in src: String, options: MarkdownDocument.ParseOptions
+    ) throws -> [(depth: Int, kind: MarkdownNode.Kind, text: String?)] {
+        try MarkdownDocument.withParsedDocument(src, options: options) {
+            doc -> [(depth: Int, kind: MarkdownNode.Kind, text: String?)] in
+            var out: [(depth: Int, kind: MarkdownNode.Kind, text: String?)] = []
+            dfsDepthKind(doc.root, depth: 0, into: &out)
             return out
         }
     }
@@ -123,5 +147,35 @@ struct FootnoteNestedBracketLinkTests {
         let ns = try nodes(in: "[^[]()", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .attribute])
         #expect(ns.compactMap(\.text) == ["["])
+    }
+
+    // MARK: - The inner `^[…]()` / `^[…](…)` forms an attribute, so the collapse must NOT fire
+
+    @Test("`[^[]()]`: the inner `^[]()` is an empty attribute, so `[` + attribute + `]` (no collapse)")
+    func caretBracketAttributeInsideOuterBracket() throws {
+        let ns = try nodes(in: "[^[]()]", options: Self.fuzzOptions)
+        // Fixture sanity: a degenerate/empty tree must not pass vacuously.
+        #expect(ns.count == 5)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .attribute, .text])
+        #expect(ns.compactMap(\.text) == ["[", "]"])
+    }
+
+    @Test("`[^[x](y)]`: the inner `^[x](y)` is a non-empty attribute wrapping `x`, so `[` + attribute[`x`] + `]`")
+    func caretBracketNonEmptyAttributeInsideOuterBracket() throws {
+        let ns = try depthNodes(in: "[^[x](y)]", options: Self.fuzzOptions)
+        #expect(ns.count == 6)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .attribute, .text, .text])
+        // Depths pin the nesting: `x` (depth 3) is the attribute's child, while `[` and `]` (depth 2)
+        // are its siblings — a flat kind list alone can't distinguish this from an empty attribute.
+        #expect(ns.map(\.depth) == [0, 1, 2, 2, 3, 2])
+        #expect(ns.compactMap(\.text) == ["[", "x", "]"])
+    }
+
+    @Test("control: `[^[]y]`: `^[]y` is not an attribute (no `(`/`[` after `]`), so the collapse fires to `[^[`")
+    func caretBracketNonAttributeInsideOuterBracketStillCollapses() throws {
+        let ns = try nodes(in: "[^[]y]", options: Self.fuzzOptions)
+        #expect(ns.count == 3)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.compactMap(\.text) == ["[^["])
     }
 }

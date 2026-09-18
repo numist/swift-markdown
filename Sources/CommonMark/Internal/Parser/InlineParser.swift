@@ -786,7 +786,17 @@ extension BlockParser {
         }
         // GFM footnote reference: when no link form matches but the bracket contents start with `^` (and have at least one more byte), treat the whole `[^label]` as a `.footnoteReference` — but only when the label resolves to a known definition. cmark turns an unresolved `[^x]` back into literal `[^x]` text (and then consolidates it with neighbours), which the normal no-match bracket handling below reproduces, since the footnote map is fully populated before inline parsing. An image-shaped opener `![^label]` is a footnote too (cmark ignores the image flag here): its `[` sits one past the opener's `!`.
         let footnoteBracketStart = brackets[openerIdx].virtualStart + (isImage ? 1 : 0)
+        // cmark gates ALL footnote handling below — the resolved reference and every
+        // `.cmarkBugCompatibility` collapse — on the node immediately after the opener being a TEXT
+        // node (`handle_close_bracket`, src/inlines.c: `opener->inl_text->next->type ==
+        // CMARK_NODE_TEXT`). When the inner `^[…](…)` / `^[…][ref]` was consumed as an inline
+        // attribute, that node is the ATTRIBUTE node instead, so no footnote path applies and the
+        // bracket falls through to the literal `]` below (`[^[]()]` → `[` + attributes + `]`). The
+        // `[^[` collapse still fires when the inner `^[` did NOT form an attribute, because then the
+        // `^[` text node remains (`[[^[]]]()` → `Link[Text "[^["]`).
+        let footnoteAfterOpenerIsText = storage[openerInl].next.map { storage[$0].kind == .text } ?? false
         if storage.options.contains(.footnotes),
+           footnoteAfterOpenerIsText,
            let labelChunk = footnoteRefLabel(
                openerVirtualStart: footnoteBracketStart,
                closeBracket: cursor,
@@ -817,6 +827,7 @@ extension BlockParser {
         // Checked before the cross-line case because a `[^[…` opener takes this shape even across lines.
         if storage.options.contains(.footnotes),
            storage.options.contains(.cmarkBugCompatibility),
+           footnoteAfterOpenerIsText,
            footnoteBracketStart + 2 < end,
            content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
            content[footnoteBracketStart + 2] == UInt8(ascii: "["),
@@ -838,6 +849,7 @@ extension BlockParser {
         // FINDINGS #146.
         if storage.options.contains(.footnotes),
            storage.options.contains(.cmarkBugCompatibility),
+           footnoteAfterOpenerIsText,
            footnoteBracketStart + 1 < end,
            footnoteBracketStart + 2 < cursor,
            content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
@@ -859,6 +871,7 @@ extension BlockParser {
         // backslash escapes, and entity decoding that the spec-correct literal path applies.
         if storage.options.contains(.footnotes),
            storage.options.contains(.cmarkBugCompatibility),
+           footnoteAfterOpenerIsText,
            footnoteBracketStart + 1 < end,
            content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
            let labelChunk = footnoteRefLabel(openerVirtualStart: footnoteBracketStart, closeBracket: cursor, content: content),
@@ -882,6 +895,7 @@ extension BlockParser {
         // processes the escape and keeps a single `]` (`[^x]`).
         if storage.options.contains(.footnotes),
            storage.options.contains(.cmarkBugCompatibility),
+           footnoteAfterOpenerIsText,
            footnoteBracketStart + 3 < cursor,
            content[footnoteBracketStart + 1] == UInt8(ascii: "\\"),
            content[footnoteBracketStart + 2] == UInt8(ascii: "^") {
