@@ -42,6 +42,16 @@ struct MarkupParser {
         cmOptions.insert(.sourcePosition)
         if options.contains(.cmarkBugCompatibility) {
             cmOptions.insert(.cmarkBugCompatibility)
+            // With `.disableSourcePosOpts` the old C path leaves `CMARK_OPT_SOURCEPOS` off, and cmark
+            // then never runs `adjust_subj_node_newlines`, so a newline swallowed by a code span or raw
+            // HTML doesn't reset its per-line column cursor. That lengthens the raw byte capture of an
+            // unresolved cross-line footnote reference. Positions are still tracked here (ranges are read
+            // off the AST regardless of the flag), so keep `.sourcePosition` and forward a separate
+            // signal that reproduces only that content quirk. The deliverable stays spec-correct; this is
+            // quarantined to the differential (flag ON + disableSourcePosOpts).
+            if options.contains(.disableSourcePosOpts) {
+                cmOptions.insert(.cmarkSourcePositionsDisabled)
+            }
         }
 
         let raw: RawMarkup

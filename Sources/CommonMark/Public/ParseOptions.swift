@@ -81,5 +81,8 @@ extension MarkdownDocument {
 
         /// Replicate cmark-gfm's observable bugs bit-for-bit (for differential qualification). Covers both source-position quirks and structural ones that change the node tree (e.g. the inline code-span backtick-closer cache, which makes cmark miss some valid spans). Default off; the shipped parser is spec-correct.
         public static let cmarkBugCompatibility = MarkdownDocument.ParseOptions(rawValue: 1 << 26)
+
+        /// Reproduce the content quirks cmark-gfm exhibits only when it parses with `CMARK_OPT_SOURCEPOS` off (for differential qualification). With source positions off, cmark's `adjust_subj_node_newlines` never runs, so a newline consumed inside a code span or raw HTML does NOT reset its per-line column cursor — unlike `handle_newline` (soft/space breaks), which always resets. That lengthens the raw byte capture of an unresolved cross-line footnote reference (`` [^`\n`] `` stays verbatim rather than collapsing to `[^]`). The Markdown layer forwards this only alongside `.cmarkBugCompatibility` when `disableSourcePosOpts` is set; the shipped parser never sets it and always tracks precise positions.
+        public static let cmarkSourcePositionsDisabled = MarkdownDocument.ParseOptions(rawValue: 1 << 27)
     }
 }

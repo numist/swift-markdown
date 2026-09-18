@@ -77,6 +77,12 @@ extension BlockParser {
         let strikethroughEnabled = storage.options.contains(.strikethrough)
         let gfmAutolinkEnabled = storage.options.contains(.gfmAutolink)
         let smartEnabled = storage.options.contains(.smart)
+        // Record newlines swallowed by a code span / raw HTML only when reproducing cmark's
+        // source-positions-off column behavior (`footnoteColumnResets`); otherwise leave the set inert.
+        // Also require `.cmarkBugCompatibility` so this write-gate matches the reset-gate below (the set is
+        // cleared per pass only in that block) - the Markdown layer always forwards them together.
+        let recordSwallowedNewlines = storage.options.contains(.cmarkSourcePositionsDisabled)
+            && storage.options.contains(.cmarkBugCompatibility)
 
         // Reset cmark's per-subject backtick-closer cache (`matchCodeSpan`, flag-ON only). Flag-OFF the cache is never consulted, so leave it untouched - inert.
         if storage.options.contains(.cmarkBugCompatibility) {
@@ -86,6 +92,7 @@ extension BlockParser {
             }
             // cmark's per-subject `FLAG_SKIP_HTML_*` bits start clear for each new inline subject.
             htmlScanSkip = []
+            codeSpanSwallowedNewlines.removeAll(keepingCapacity: true)
         }
 
         while cursor < endOffset {
@@ -115,6 +122,9 @@ extension BlockParser {
                     )
                     storage.appendChild(codeIdx, to: parent)
                     stampInline(codeIdx, cursor, span.afterClose, content: content)
+                    if recordSwallowedNewlines {
+                        recordRawInlineSwallowedNewlines(from: cursor, to: span.afterClose, content: content)
+                    }
                     cursor = span.afterClose
                     pendingTextStart = cursor
                     continue
@@ -265,6 +275,9 @@ extension BlockParser {
                     )
                     storage.appendChild(nodeIdx, to: parent)
                     stampInline(nodeIdx, cursor, htmlEnd, content: content)
+                    if recordSwallowedNewlines {
+                        recordRawInlineSwallowedNewlines(from: cursor, to: htmlEnd, content: content)
+                    }
                     cursor = htmlEnd
                     pendingTextStart = cursor
                     continue
@@ -1075,7 +1088,7 @@ extension BlockParser {
         var afterNLOpen = content.base
         var i = content.base
         while i < open {
-            if content[i] == UInt8(ascii: "\n"), bareLineEnding(content, at: i) {
+            if content[i] == UInt8(ascii: "\n"), footnoteColumnResets(content, at: i) {
                 afterNLOpen = i + 1
             }
             i += 1
@@ -1083,7 +1096,7 @@ extension BlockParser {
         var afterNLClose = afterNLOpen
         i = open
         while i < close {
-            if content[i] == UInt8(ascii: "\n"), bareLineEnding(content, at: i) {
+            if content[i] == UInt8(ascii: "\n"), footnoteColumnResets(content, at: i) {
                 afterNLClose = i + 1
             }
             i += 1
@@ -1103,6 +1116,38 @@ extension BlockParser {
             j -= 1
         }
         return backslashes % 2 == 0
+    }
+
+    /// Whether the `\n` at `i` resets cmark's per-line column cursor when measuring a footnote
+    /// reference's captured label length (`footnoteCapturedLabelLength`). A backslash hard break's
+    /// newline never resets (`bareLineEnding`). Additionally, when the reference was parsed with source
+    /// positions off (`.cmarkSourcePositionsDisabled`), a newline swallowed by a code span or raw HTML
+    /// does not reset either: cmark runs its `adjust_subj_node_newlines` cursor reset only under
+    /// `CMARK_OPT_SOURCEPOS`, whereas `handle_newline` (soft/space breaks) always resets. So with source
+    /// positions off the swallowed newline stays part of the raw byte capture (`` [^`\n`] `` verbatim),
+    /// while with them on it collapses the label like a soft break (`[^]`). See FINDINGS Quirk I (#35/#74).
+    private func footnoteColumnResets(_ content: borrowing ContentSpan, at i: Int) -> Bool {
+        guard bareLineEnding(content, at: i) else {
+            return false
+        }
+        if storage.options.contains(.cmarkSourcePositionsDisabled), codeSpanSwallowedNewlines.contains(i) {
+            return false
+        }
+        return true
+    }
+
+    /// Record every newline byte in `[from, to)` as one consumed inside a raw-scan inline (a code span
+    /// or raw HTML). Called at those two handlers only when reproducing cmark's source-positions-off
+    /// column behavior; the recorded offsets suppress that newline's column reset in
+    /// `footnoteColumnResets`.
+    private mutating func recordRawInlineSwallowedNewlines(from: Int, to: Int, content: borrowing ContentSpan) {
+        var i = from
+        while i < to {
+            if content[i] == UInt8(ascii: "\n") {
+                codeSpanSwallowedNewlines.insert(i)
+            }
+            i += 1
+        }
     }
 
     /// Whether a footnote-shaped `[^[…` opener takes cmark's `[^[` collapse (literal `[^[`, dropping
