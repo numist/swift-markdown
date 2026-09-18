@@ -189,6 +189,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// table).
     var paragraphTablePending: [DocumentStorage.Index: Bool] = [:]
 
+    /// Paragraphs whose leading reference-link definitions the flag-ON PHASE-2c setext reconstruction
+    /// resolved (and registered) and then RESTORED into the buffer.
+    ///
+    /// cmark drops a ref-def from a paragraph's content buffer the instant its setext-underline scan
+    /// resolves it (`src/blocks.c` `resolve_reference_link_definitions`), so those bytes are gone before any
+    /// GFM table can open over the paragraph. The reconstruction instead keeps them so a later paragraph
+    /// finalize can re-extract them (matching cmark's absorbed-setext-line quirk). That reuse breaks when a
+    /// table forms first: `detectPendingTable` splits the earlier lines into a preceding paragraph WITHOUT
+    /// ref-def extraction (cmark's `try_inserting_table_header_paragraph`, correct for the general case where
+    /// the ref-defs were never resolved), leaking the restored definitions back as a spurious paragraph. The
+    /// split consults this set to drop the same leading definitions cmark had already removed.
+    var reconstructedRefDefParagraphs: Set<DocumentStorage.Index> = []
+
     /// The deepest list that has seen a blank line since its last item boundary.
     ///
     /// When a new item is added to that list (i.e., the blank line was between sibling items), the list gets marked loose. Cleared on each item open after the check, and stays stale (but harmless) when the list closes.
@@ -1271,29 +1284,44 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // The preceding lines are non-blank paragraph content (a blank line would have closed the
                 // paragraph), so they never trim to empty; guarding on it only avoids dropping content in a
                 // degenerate case rather than silently losing the earlier lines.
-                let precedingChunk = Chunk(offset: range.lowerBound, length: lastNewline - range.lowerBound, inSource: true)
+                var precedingChunk = Chunk(offset: range.lowerBound, length: lastNewline - range.lowerBound, inSource: true)
                     .trimming(using: self)
-                guard !precedingChunk.isEmpty else {
-                    return pending
+                // A flag-ON PHASE-2c reconstruction restored the leading ref-defs cmark had already resolved
+                // off its buffer; now that the reconstructed underline line is a table header, drop those
+                // same definitions from the preceding content - as cmark did - so they don't leak back as a
+                // spurious paragraph. Registration is first-wins, so the re-strip only removes bytes. When
+                // nothing but ref-defs preceded the header, cmark opens the table with no preceding paragraph.
+                let reconstructed = reconstructedRefDefParagraphs.contains(node)
+                if reconstructed {
+                    precedingChunk = parseDefinitions(in: precedingChunk).trimming(using: self)
                 }
-                let preceding = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
-                storage.insertChildBefore(preceding, before: node)
-                storage.setSourceStart(preceding, precedingChunk.offset)
-                storage.setSourceEnd(preceding, precedingChunk.offset + precedingChunk.length)
-                // cmark's table `unescape_pipes` runs over the preceding-paragraph text (after feed-time
-                // NUL→U+FFFD), so a `\|` there - even inside a code span - unescapes to `|`. When the
-                // source-backed text is materialized only for that unescape (no NUL), map the arena copy back
-                // to source by one constant shift so the paragraph's inlines keep positions: cmark stamps them
-                // by their offset in the unescaped buffer added to the paragraph start, ignoring the stripped
-                // backslash (its escape-oblivious column), which a single whole-content run reproduces exactly
-                // (the same treatment as the cell path). A NUL forces an arena copy with no source image, so
-                // its inlines stay unstamped, as before.
-                let nulReplaced = replacingNUL(precedingChunk)
-                let precedingContent = unescapingPipes(nulReplaced)
-                if positionsEnabled, nulReplaced.inSource, !precedingContent.inSource {
-                    arenaSourceMaps[preceding] = [ArenaRun(length: Int32(precedingContent.length), sourceOffset: Int32(nulReplaced.offset))]
+                if precedingChunk.isEmpty {
+                    // Non-reconstructed content never trims to empty (see above); leave the paragraph whole
+                    // rather than silently drop content. A reconstructed paragraph whose entire preceding run
+                    // was leading ref-defs falls through to open the table with no preceding paragraph.
+                    if !reconstructed {
+                        return pending
+                    }
+                } else {
+                    let preceding = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
+                    storage.insertChildBefore(preceding, before: node)
+                    storage.setSourceStart(preceding, precedingChunk.offset)
+                    storage.setSourceEnd(preceding, precedingChunk.offset + precedingChunk.length)
+                    // cmark's table `unescape_pipes` runs over the preceding-paragraph text (after feed-time
+                    // NUL→U+FFFD), so a `\|` there - even inside a code span - unescapes to `|`. When the
+                    // source-backed text is materialized only for that unescape (no NUL), map the arena copy back
+                    // to source by one constant shift so the paragraph's inlines keep positions: cmark stamps them
+                    // by their offset in the unescaped buffer added to the paragraph start, ignoring the stripped
+                    // backslash (its escape-oblivious column), which a single whole-content run reproduces exactly
+                    // (the same treatment as the cell path). A NUL forces an arena copy with no source image, so
+                    // its inlines stay unstamped, as before.
+                    let nulReplaced = replacingNUL(precedingChunk)
+                    let precedingContent = unescapingPipes(nulReplaced)
+                    if positionsEnabled, nulReplaced.inSource, !precedingContent.inSource {
+                        arenaSourceMaps[preceding] = [ArenaRun(length: Int32(precedingContent.length), sourceOffset: Int32(nulReplaced.offset))]
+                    }
+                    pendingInlines.append((preceding, storage.intern(precedingContent)))
                 }
-                pendingInlines.append((preceding, storage.intern(precedingContent)))
                 storage.setSourceStart(node, headerRange.lowerBound)
                 recordSplitDelimiterLine(node, delimIndent: delimIndent)
                 paragraphTablePending[node] = true
@@ -1414,9 +1442,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         segs.removeSubrange(lastNewlineIndex..<segs.count)
         let preceding = trimSegments(segs)
-        // A blank line closes a paragraph, so the earlier lines are never blank; splitting only when they
-        // carry content avoids inserting an empty paragraph node in a degenerate case.
-        if !isBlankSegments(preceding) {
+        if reconstructedRefDefParagraphs.contains(node) {
+            // A flag-ON PHASE-2c reconstruction restored the leading ref-defs cmark had already resolved off
+            // its buffer (see `reconstructedRefDefParagraphs`). Flatten the preceding lines to strip those
+            // definitions - as cmark did - and emit only the non-def remainder as the preceding paragraph so
+            // the reconstructed underline-line-turned-header doesn't leak them back. When nothing else
+            // preceded the header the table opens with no preceding paragraph.
+            var map: [ArenaRun] = []
+            let flat = flattenSegments(preceding, map: &map)
+            let stripped = parseDefinitions(in: flat).trimming(using: self)
+            if !stripped.isEmpty {
+                let precedingNode = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
+                storage.insertChildBefore(precedingNode, before: node)
+                pendingInlines.append((precedingNode, storage.intern(unescapingPipes(replacingNUL(stripped)))))
+            }
+        } else if !isBlankSegments(preceding) {
+            // A blank line closes a paragraph, so the earlier lines are never blank; splitting only when they
+            // carry content avoids inserting an empty paragraph node in a degenerate case.
             let precedingNode = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
             storage.insertChildBefore(precedingNode, before: node)
             // Stamp the preceding lines' source span, read through a borrow so `preceding` can then be
@@ -1475,7 +1517,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         for k in 0..<lastNewline {
             storage.strings.append(buffer[k])
         }
-        let precedingChunk = Chunk(offset: precedingStart, length: lastNewline, inSource: false).trimming(using: self)
+        var precedingChunk = Chunk(offset: precedingStart, length: lastNewline, inSource: false).trimming(using: self)
+        // A flag-ON PHASE-2c reconstruction restored the leading ref-defs cmark had already resolved off its
+        // buffer (see `reconstructedRefDefParagraphs`); drop them from the preceding content - as cmark did -
+        // so the reconstructed underline-line-turned-header doesn't leak them back as a spurious paragraph.
+        // When nothing else preceded the header the table opens with no preceding paragraph, exactly as when
+        // the earlier lines were blank.
+        if reconstructedRefDefParagraphs.contains(node) {
+            precedingChunk = parseDefinitions(in: precedingChunk).trimming(using: self)
+        }
         if !precedingChunk.isEmpty {
             let precedingNode = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
             storage.insertChildBefore(precedingNode, before: node)
@@ -1635,6 +1685,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // instead of opening a new block. (A multi-line def whose lines stay source-contiguous,
                 // e.g. no stripped prefix, collapses back to one `.lazy` range and takes the first branch.)
                 if storage.options.contains(.cmarkBugCompatibility) {
+                    // Record that these leading ref-defs were resolved by the setext scan (cmark drops them
+                    // from the buffer now); restoring them below lets a later paragraph finalize re-extract
+                    // them, but a table that forms first must drop them in the split (`detectPendingTable`)
+                    // rather than leak them back as a paragraph.
+                    reconstructedRefDefParagraphs.insert(para)
                     pending = raw.inSource
                         ? PendingLeaf(node: para, content: .lazy(range: raw.range))
                         : addChunk(raw, to: para, pending: pending)
