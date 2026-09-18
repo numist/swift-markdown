@@ -389,6 +389,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if storage.options.contains(.gfmAutolink) {
                 gfmEmailAutolinkPass(node)
             }
+            // A `[^[` footnote collapse (bug-compat) marked run-truncating nodes; their invisible tail is
+            // dropped here, AFTER the autolink pass, so a trailing email in that tail still links.
+            if !storage.runTruncatingTextNodes.isEmpty {
+                dropRunTruncatedTails(node)
+            }
         }
 
         // Footnote post-processing (mirrors cmark's `process_footnotes`, run after inline parsing):
@@ -522,8 +527,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             gfmEmailAutolinkPass(paragraph)
         } else if !storage.runTruncatingTextNodes.isEmpty {
             // A `[^[` footnote collapse (bug-compat) marked a run-truncating node; consolidation is what
-            // drops the text that node swallows, so it must run here even without the autolink pass.
+            // ends its run, so it must run here even without the autolink pass.
             consolidateTextNodes(paragraph)
+        }
+        // Drop the invisible tail of any `[^[` collapse AFTER the autolink pass, so a trailing email links.
+        if !storage.runTruncatingTextNodes.isEmpty {
+            dropRunTruncatedTails(paragraph)
         }
     }
 

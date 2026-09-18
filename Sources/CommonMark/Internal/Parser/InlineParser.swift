@@ -811,8 +811,9 @@ extension BlockParser {
         // string, over-reading past the inner `[` into that string's NUL terminator (FINDINGS #146). The
         // unresolved reference reconstructs to `[^[` (`![^[` for an image opener) followed by a NUL, so
         // reading its consolidated run as a C-string truncates there. Emit the `[^[` text and mark it as
-        // run-truncating (its following consolidated text is dropped in `consolidateTextNodes`), then
-        // continue parsing so an enclosing bracket can still close (`[[^[]]]()` -> `Link[Text "[^["]`).
+        // run-truncating (its invisible tail is dropped in `dropRunTruncatedTails`, after the autolink pass
+        // so a trailing email still links), then continue parsing so an enclosing bracket can still close
+        // (`[[^[]]]()` -> `Link[Text "[^["]`).
         // Checked before the cross-line case because a `[^[…` opener takes this shape even across lines.
         if storage.options.contains(.footnotes),
            storage.options.contains(.cmarkBugCompatibility),
@@ -1123,9 +1124,10 @@ extension BlockParser {
     /// cmark's inline footnote branch captures the label from the static `"^["` string, over-reading
     /// past the inner `[` into its NUL terminator, so the unresolved reference reconstructs to `[^[`
     /// (`![^[` for an image opener) followed by a NUL. Emit that `[^[` literal in place of the opener
-    /// and its inner content, and mark it run-truncating so `consolidateTextNodes` drops the following
-    /// text merged into its run (cmark's C-string read stops at the NUL). The caller returns
-    /// `initialPos` so parsing continues — an enclosing bracket can still form a link around the `[^[`.
+    /// and its inner content, and mark it run-truncating so `dropRunTruncatedTails` (run after the autolink
+    /// pass) drops the invisible tail the NUL would hide - while an email in that tail still links. The
+    /// caller returns `initialPos` so parsing continues - an enclosing bracket can still form a link
+    /// around the `[^[`.
     private mutating func collapseCaretBracket(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart: Int, content: borrowing ContentSpan) {
         let parentIdx = storage[openerInl].parent
         var literal: [UInt8] = []
@@ -3761,30 +3763,64 @@ extension BlockParser {
         var child = storage[parent].firstChild
         while let current = child {
             if storage[current].kind == .text {
-                // A `[^[` footnote-collapse node (bug-compat) carries cmark's embedded NUL: reading its
-                // consolidated run as a C-string truncates at the NUL, dropping every following text node
-                // in the run. Reproduce that by unlinking the trailing text siblings once such a node has
-                // been reached, keeping the run's content up to and including it. A non-text node (link,
-                // emphasis, soft break) ends the run, so it - and anything after it - survives.
-                var runTruncated = storage.runTruncatingTextNodes.contains(current)
-                // Absorb all immediately-following text siblings into `current`. Stop if a pair can't be merged (non-contiguous segment runs) so the loop always makes progress - otherwise the un-merged sibling would be revisited forever.
-                while let next = storage[current].next, storage[next].kind == .text {
-                    if runTruncated {
-                        storage.unlinkChild(next)
-                        continue
-                    }
-                    let nextTruncates = storage.runTruncatingTextNodes.contains(next)
-                    if !mergeTextNode(next, into: current) {
-                        break
-                    }
-                    if nextTruncates {
-                        runTruncated = true
+                // A `[^[` footnote-collapse node (bug-compat) stands in for cmark's embedded NUL, which ends
+                // the consolidation run when it is read as a C-string. Merge preceding text INTO the run so
+                // `x[^[` becomes one node (as cmark does), but do NOT absorb the following text: its invisible
+                // tail is dropped in `dropRunTruncatedTails`, run AFTER the autolink pass so an email hiding
+                // in that tail is linked first.
+                if !storage.runTruncatingTextNodes.contains(current) {
+                    // Absorb all immediately-following text siblings into `current`. Stop if a pair can't be merged (non-contiguous segment runs) so the loop always makes progress - otherwise the un-merged sibling would be revisited forever.
+                    while let next = storage[current].next, storage[next].kind == .text {
+                        let nextTruncates = storage.runTruncatingTextNodes.contains(next)
+                        if !mergeTextNode(next, into: current) {
+                            break
+                        }
+                        if nextTruncates {
+                            // The `[^[` node folded into this run; the merged node inherits the mark and the
+                            // run stops here (its tail is dropped later, not now).
+                            storage.runTruncatingTextNodes.remove(next)
+                            storage.runTruncatingTextNodes.insert(current)
+                            break
+                        }
                     }
                 }
             } else {
                 consolidateTextNodes(current)
             }
             child = storage[current].next
+        }
+    }
+
+    /// Drop the invisible tail a `[^[` footnote-collapse node (bug-compat) leaves behind, after the autolink
+    /// pass has run.
+    ///
+    /// A run-truncating node stands in for cmark's embedded NUL: at render cmark reads the consolidated run as
+    /// a C-string and stops at the NUL, so the reconstructed node's own tail and any text merged after it in
+    /// the run vanish. Reproduce that by unlinking the marked node's following text siblings - but only AFTER
+    /// `gfmEmailAutolinkPass`, so an email in that tail is already carved into a `Link` (a non-text node that
+    /// ends the run and survives, along with the empty text the split leaves after it). Recurses into
+    /// containers like the autolink pass, since the collapse can sit inside a link or emphasis.
+    mutating func dropRunTruncatedTails(_ parent: DocumentStorage.Index) {
+        var child = storage[parent].firstChild
+        while let current = child {
+            if storage.runTruncatingTextNodes.contains(current) {
+                storage.runTruncatingTextNodes.remove(current)
+                var sib = storage[current].next
+                while let s = sib, storage[s].kind == .text {
+                    let after = storage[s].next
+                    // A following text sibling may itself be run-truncating (two `[^[` collapses in a row);
+                    // it is dropped here, so clear its mark too rather than leave a stale index in the set.
+                    storage.runTruncatingTextNodes.remove(s)
+                    storage.unlinkChild(s)
+                    sib = after
+                }
+                child = storage[current].next
+            } else {
+                if storage[current].kind != .text {
+                    dropRunTruncatedTails(current)
+                }
+                child = storage[current].next
+            }
         }
     }
 
@@ -3998,6 +4034,15 @@ extension BlockParser {
         // produced (`didSplit`), never a pre-existing `@`-free node.
         if didSplit, !keepEmpties, case .literal(let last) = storage[current].data, last.totalLength == 0 {
             storage.unlinkChild(current)
+        }
+        // A `[^[` footnote-collapse node (bug-compat) that also carried an email (the email precedes the
+        // collapse, e.g. `f@.f[^[]]…`) has just been split: the split reuses `node` for the `before` run and
+        // carves the `[^[` residual into the tail `current`. cmark's embedded NUL sits at the end of that
+        // reconstructed prefix, so the run-truncating mark belongs on the tail - move it there so
+        // `dropRunTruncatedTails` drops the tail's following siblings, not the `before` node's.
+        if didSplit, storage.runTruncatingTextNodes.contains(node) {
+            storage.runTruncatingTextNodes.remove(node)
+            storage.runTruncatingTextNodes.insert(current)
         }
     }
 
