@@ -1215,13 +1215,44 @@ extension BlockParser {
 
     /// The byte length of the UTF-8 sequence led by `b0` (1/2/3/4 per the lead-byte bit pattern, mirroring
     /// the same tests `decodeUTF8Scalar` uses). The source is already known-valid UTF-8, so this is only
-    /// used to tell whether a raw byte cut (`collapseMultilineFootnote`) lands mid-sequence, never to
-    /// validate the sequence itself.
+    /// used to tell whether a raw byte cut (`capturedLabelBytes`) lands mid-sequence, never to validate
+    /// the sequence itself.
     private static func utf8SequenceLength(_ b0: UInt8) -> Int {
         if b0 & 0xE0 == 0xC0 { return 2 }
         if b0 & 0xF0 == 0xE0 { return 3 }
         if b0 & 0xF8 == 0xF0 { return 4 }
         return 1
+    }
+
+    /// Build the byte-captured label for a raw byte-length cut `[start, cutEnd)`, reproducing cmark's
+    /// `cmark_chunk` truncation: the cut is a length-bounded slice oblivious to UTF-8 boundaries, so a
+    /// scalar split by the cut is replaced by a single U+FFFD (the reference's later `String(cString:)`
+    /// bridge repairing the truncated tail) instead of reading past the cut to complete it. Shared by both
+    /// footnote-shaped-bracket label captures (`collapseMultilineFootnote`, `emitEscapedCaretFootnoteLiteral`).
+    /// `overreadByte`, when non-nil, stands in for content at/past `content.endOffset` — the
+    /// escaped-caret image form's one-byte over-read into the paragraph's synthetic trailing newline;
+    /// callers that don't over-read never pass a `cutEnd` past `content.endOffset`, so it's never forced.
+    private static func capturedLabelBytes(content: borrowing ContentSpan, start: Int, cutEnd: Int, overreadByte: UInt8? = nil) -> [UInt8] {
+        let contentEnd = content.endOffset
+        var bytes: [UInt8] = []
+        var j = start
+        while j < cutEnd {
+            let b0 = j < contentEnd ? content[j] : overreadByte!
+            let sequenceLength = utf8SequenceLength(b0)
+            if j + sequenceLength <= cutEnd {
+                for k in j..<(j + sequenceLength) {
+                    bytes.append(k < contentEnd ? content[k] : overreadByte!)
+                }
+                j += sequenceLength
+            } else {
+                // The cut lands inside this scalar's continuation bytes: cmark's raw slice ends here, so
+                // nothing beyond `cutEnd` is part of the capture. Emit the one U+FFFD the reference's
+                // later UTF-8 repair produces for the truncated tail, and stop.
+                bytes.append(contentsOf: [0xEF, 0xBF, 0xBD])
+                break
+            }
+        }
+        return bytes
     }
 
     /// Handle a footnote-shaped bracket whose `]` lands on a later line than its opener, reproducing
@@ -1245,23 +1276,7 @@ extension BlockParser {
         let x = footnoteCapturedLabelLength(content, open: open, close: close)
         var labelBytes: [UInt8] = []
         if x > 0 {
-            let end = min(labelStart + x, close)
-            var j = labelStart
-            while j < end {
-                let sequenceLength = Self.utf8SequenceLength(content[j])
-                if j + sequenceLength <= end {
-                    for k in j..<(j + sequenceLength) {
-                        labelBytes.append(content[k])
-                    }
-                    j += sequenceLength
-                } else {
-                    // The cut lands inside this scalar's continuation bytes: cmark's raw slice ends here,
-                    // so nothing beyond `end` is part of the capture. Emit the one U+FFFD the reference's
-                    // later UTF-8 repair produces for the truncated tail, and stop.
-                    labelBytes.append(contentsOf: [0xEF, 0xBF, 0xBD])
-                    break
-                }
-            }
+            labelBytes = Self.capturedLabelBytes(content: content, start: labelStart, cutEnd: min(labelStart + x, close))
         }
         // cmark resolves the reference by its byte-captured label; a match emits a footnote reference.
         if !labelBytes.isEmpty {
@@ -1312,7 +1327,11 @@ extension BlockParser {
     /// label: a `[` opener captures the closing `]` (`[\^x]` -> `[^x]]`); an image opener over-reads a
     /// second byte into the paragraph's trailing newline and drops the `!` (`![\^x]` -> `[^x]\n]`). A
     /// cross-line span resets the per-line column at the soft break, underflowing the length to an empty
-    /// label (`[\^\nx]` -> `[^]`). The unresolved reference reconstructs as `[^` + captured bytes + `]`.
+    /// label (`[\^\nx]` -> `[^]`). That raw byte cut can land mid-character the same way the plain
+    /// `[^…]` capture does (`collapseMultilineFootnote`): cmark's `cmark_chunk` slice is UTF-8-oblivious,
+    /// and its Swift bridge's later `String(cString:)` repairs a truncated tail to a single U+FFFD
+    /// (`capturedLabelBytes`), rather than reading past the cut to complete the scalar. The unresolved
+    /// reference reconstructs as `[^` + captured bytes + `]`.
     private mutating func emitEscapedCaretFootnoteLiteral(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan) {
         // cmark's byte-length label is `colOf(]) - colOf(opener) - 2` (per-line columns); an image
         // opener's `![` shifts the start one byte left, so it captures one extra byte. A cross-line reset
@@ -1321,23 +1340,14 @@ extension BlockParser {
         // The label runs from just past the escaped `^` (`open + 3`). cmark reads from the paragraph
         // buffer, which carries a trailing newline the zero-copy span omits; the image over-read is the
         // only read that reaches the content end, where that synthetic `\n` stands in.
-        let end = content.endOffset
         let labelStart = open + 3
-        var labelEnd = labelStart + labelLength
-        // cmark's invalid-UTF-8 -> U+FFFD replacement is atomic, so a byte-length capture that lands
-        // mid-sequence still yields the whole character; extend past trailing continuation bytes.
-        while labelEnd < end, content[labelEnd] & 0b1100_0000 == 0b1000_0000 {
-            labelEnd += 1
-        }
+        let labelBytes = Self.capturedLabelBytes(
+            content: content, start: labelStart, cutEnd: labelStart + labelLength, overreadByte: UInt8(ascii: "\n"))
 
         var literal: [UInt8] = []
         literal.append(UInt8(ascii: "["))
         literal.append(UInt8(ascii: "^"))
-        var i = labelStart
-        while i < labelEnd {
-            literal.append(i < end ? content[i] : UInt8(ascii: "\n"))
-            i += 1
-        }
+        literal.append(contentsOf: labelBytes)
         literal.append(UInt8(ascii: "]"))
 
         let parentIdx = storage[openerInl].parent
