@@ -107,4 +107,60 @@ struct TaskListMarkerWhitespaceTests {
         }
         #expect(texts == ["a", "b"])
     }
+
+    // MARK: - FIX: a vertical-tab / form-feed gap BEFORE the checkbox is still a checkbox
+
+    // cmark's `scan_tasklist` scans the marker→checkbox separator as `spacechar+` (`[ \t\v\f]`), so a
+    // vertical tab or form feed between the marker's space and the `[` keeps the checkbox recognized. But
+    // cmark's `open_tasklist_item` advances exactly 3 bytes from the space/tab-skipped content start (the
+    // VT/FF byte), NOT from the `[`, so the 3-byte advance eats `\v[`+space and the checkbox's `]` (plus
+    // whatever follows) survives as the item's content.
+
+    @Test("a vertical-tab gap before an unchecked checkbox is recognized")
+    func vertTabGapUnchecked() throws {
+        let (found, checked, text) = try parse("- \u{0B}[ ] a")
+        #expect(found && checked == false)   // recognized as an unchecked task item
+        #expect(text == "] a")               // the 3-byte advance from the VT leaves the `]`
+    }
+
+    @Test("a vertical-tab gap before a checked checkbox is recognized")
+    func vertTabGapChecked() throws {
+        let (found, checked, text) = try parse("- \u{0B}[x] a")
+        #expect(found && checked == true)
+        #expect(text == "] a")
+    }
+
+    @Test("a form-feed gap before the checkbox is recognized too")
+    func formFeedGap() throws {
+        let (found, checked, text) = try parse("- \u{0C}[ ] a")
+        #expect(found && checked == false)
+        #expect(text == "] a")
+    }
+
+    @Test("a non-whitespace char before the checkbox is not a task item")
+    func nonWhitespaceBeforeCheckboxIsLiteral() throws {
+        // Only a `spacechar` gap is absorbed; a literal byte before `[ ]` breaks `scan_tasklist`, so this
+        // is an ordinary list item whose whole content stays literal text.
+        let (found, checked, text) = try parse("- a[ ] b")
+        #expect(found && checked == nil)     // an ordinary (non-task) list item
+        #expect(text == "a[ ] b")
+    }
+
+    @Test("a mixed VT+space gap before the checkbox is recognized")
+    func mixedVertTabSpaceGap() throws {
+        // `- \v [ ] a` : the gap is VT then space (both `spacechar`). The 3-byte advance from the content
+        // start (the VT) still lands mid-gap, so the `]` survives — content is "] a", not "a".
+        let (found, checked, text) = try parse("- \u{0B} [ ] a")
+        #expect(found && checked == false)
+        #expect(text == "] a")
+    }
+
+    @Test("a two-VT gap before the checkbox is recognized")
+    func twoVertTabGap() throws {
+        // `- \v\v[ ] a` : locks the "advance 3 from the content start regardless of gap size" invariant —
+        // the advance eats `\v\v` + the following space, leaving "] a".
+        let (found, checked, text) = try parse("- \u{0B}\u{0B}[ ] a")
+        #expect(found && checked == false)
+        #expect(text == "] a")
+    }
 }

@@ -710,7 +710,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// `currentContentIndent` is a *column* count. A space-separated marker (`[ ] `) is exactly `tasklistMarkerWidth` single-byte columns, so the bump equals its byte width. A TAB-separated marker (`[ ]\t`) is still recognized by `matchTasklistMarker` but its column width is tab-stop-dependent, not its byte width, so it is left to the deferred tab class (see CLAUDE.md "tab after a list marker") rather than bumped with a wrong column count - `require`ing a space separator here keeps the arithmetic column-exact. A vertical-tab / form-feed separator is also recognized (both are scanner `spacechar`) but survives as leading content rather than being stripped, so its content column is `[`+3 not `[`+4; the same space-separator guard drops it through to `0`. The recognition otherwise mirrors `matchTasklistMarker` (same `tasklistMarkerChecked` predicate, same first-child-of-item condition, same `lineAnchoredTaskItems` gate so an item whose marker shares its line with a `>` or an outer marker - whose checkbox stays literal - re-indents like a plain bullet), so in the common case - marker on the first line, no preceding ref-def / footnote / table matcher redirecting finalize - the finalize consumption and this re-indent bump agree.
     ///
-    /// This bump assumes a SINGLE separator space (`tasklistMarkerWidth`). `matchTasklistMarker` strips the whole post-checkbox whitespace run for the item's first-line CONTENT, so a MULTI-space marker (`[x]  a`) puts the true content column one-plus further right than this bump records - a flag-ON re-indent-base inaccuracy for a multi-space task item's continuation. It is unobservable: source positions are not part of the differential compare surface (see `DiffSupport.newSurface`) and this base is Quirk-E (`.cmarkBugCompatibility`) machinery only; the deliverable's spec-correct positions come from the true column, and no position suite exercises a multi-space task marker.
+    /// This bump assumes a SINGLE separator space (`tasklistMarkerWidth`). `matchTasklistMarker` strips the whole post-checkbox whitespace run for the item's first-line CONTENT, so a MULTI-space marker (`[x]  a`) puts the true content column one-plus further right than this bump records - a flag-ON re-indent-base inaccuracy for a multi-space task item's continuation. It is unobservable: source positions are not part of the differential compare surface (see `DiffSupport.newSurface`) and this base is Quirk-E (`.cmarkBugCompatibility`) machinery only; the deliverable's spec-correct positions come from the true column, and no position suite exercises a multi-space task marker. A vertical-tab / form-feed GAP BEFORE the checkbox (`- \v[ ] `) is likewise now `lineAnchoredTaskItems`-eligible and reaches here, but `range.lowerBound` sits on the VT/FF (not gap-skipped like `matchTasklistMarker` / `openingLineCheckbox`), so `tasklistMarkerChecked` returns nil and the bump falls through to `0` - the same unobservable flag-ON continuation-base inaccuracy, for the same reasons.
     private func tasklistContentIndentBump(node: DocumentStorage.Index, span: Span<UInt8>, range: Range<Int>) -> Int {
         guard storage.options.contains(.tasklist),
               storage[node].kind == .paragraph,
@@ -4094,24 +4094,50 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return checked
     }
 
-    /// Match a GFM tasklist marker at the start of a paragraph chunk: `[ ]`, `[x]`, or `[X]` followed by a `spacechar` separator.
+    /// Match a GFM tasklist marker at the start of a paragraph chunk: an optional `spacechar` gap that
+    /// the content start skipped over, then `[ ]`, `[x]`, or `[X]`.
     ///
-    /// Returns the `checked` state and the remaining content, or `nil` if the chunk doesn't start with a marker. The required separator is cmark's scanner `spacechar` (`[ \t\v\f]`, in `tasklistMarkerChecked`), but cmark's tasklist extension advances past only the `[x]` (3 bytes) and then the paragraph's first-non-space logic strips the following space/tab run — so the content begins at the first non-space/tab after the checkbox. A space/tab separator is dropped; a vertical-tab / form-feed separator is recognized but SURVIVES as leading content (cmark's `S_find_first_nonspace` and `cmark_isspace` trim both exclude VT/FF). Paragraph content is always materialized so we only handle `inSource: false` here.
+    /// Returns the `checked` state and the remaining content, or `nil` if the chunk doesn't hold a
+    /// checkbox. cmark's `scan_tasklist` treats the marker→checkbox separator as `spacechar+`
+    /// (`[ \t\v\f]`), but the block parser's content start skips only space/tab (like cmark's
+    /// `S_find_first_nonspace`), so a vertical-tab / form-feed run survives at the front of the flattened
+    /// content (`- \v[ ] `); skip the rest of the `spacechar` run here to reach the `[`, exactly as the
+    /// scanner does. The trailing `spacechar` that `scan_tasklist` also requires was validated on the
+    /// opening line at open time (`openingLineCheckbox`, which gates `lineAnchoredTaskItems` — this
+    /// method's caller-side guard); by finalize it may have been trailing-trimmed off the content, so a
+    /// space is substituted for it when the checkbox ends the chunk.
+    ///
+    /// cmark's `open_tasklist_item` advances exactly 3 bytes from the content start (the space/tab-skipped
+    /// position), NOT from the `[`: with a vertical-tab / form-feed gap the 3-byte advance lands
+    /// mid-checkbox, leaving its tail as content (`- \v[ ] ` → `Text "]"`); the paragraph then strips the
+    /// leading space/tab run. Consuming 3 bytes from the chunk start plus that run reproduces this
+    /// uniformly — in the common no-gap case those 3 bytes are exactly `[ ]`. Paragraph content is always
+    /// materialized so we only handle `inSource: false` here.
     private func matchTasklistMarker(chunk: Chunk) -> (checked: Bool, remaining: Chunk)? {
-        if chunk.length < Self.tasklistMarkerWidth {
+        let off = chunk.offset
+        // Skip the residual marker→checkbox `spacechar` gap in front of the `[`: a vertical-tab / form-
+        // feed run (leading space/tab were already trimmed off `chunk`), plus any space/tab following it -
+        // exactly the `spacechar+` cmark's scanner spans.
+        var gap = 0
+        while gap < chunk.length, readByte(at: off + gap, in: chunk).isExtensionScannerSpace {
+            gap += 1
+        }
+        guard gap + Self.tasklistMarkerWidth - 1 <= chunk.length else {
             return nil
         }
-        let off = chunk.offset
+        let separator = gap + Self.tasklistMarkerWidth - 1 < chunk.length
+            ? readByte(at: off + gap + Self.tasklistMarkerWidth - 1, in: chunk)
+            : UInt8(ascii: " ")
         guard let checked = Self.tasklistMarkerChecked(
-            readByte(at: off, in: chunk),
-            readByte(at: off + 1, in: chunk),
-            readByte(at: off + 2, in: chunk),
-            readByte(at: off + 3, in: chunk)
+            readByte(at: off + gap, in: chunk),
+            readByte(at: off + gap + 1, in: chunk),
+            readByte(at: off + gap + 2, in: chunk),
+            separator
         ) else {
             return nil
         }
-        // Skip the whole `[x]`-to-content whitespace run (space/tab), starting at the required separator
-        // byte (index 3). cmark strips all of it via the paragraph's leading-whitespace handling.
+        // cmark advances 3 bytes from the content start, then the paragraph strips the leading space/tab
+        // run; do the same from the chunk start (index 3), not from the checkbox.
         var contentStart = 3
         while contentStart < chunk.length {
             let b = readByte(at: off + contentStart, in: chunk)
@@ -4215,9 +4241,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         indexOfFirstNonSpace(source: source, range: lineStart..<markerStart) >= markerStart
     }
 
-    /// The checked state of a GFM task-list checkbox that begins at `contentStart` (the item's opening-line
-    /// first content byte, `marker.consumedTo`) and fits before `lineEnd`, or `nil` if no checkbox begins
-    /// there.
+    /// The checked state of a GFM task-list checkbox at (or, past a `spacechar` gap, just after)
+    /// `contentStart` (the item's opening-line first content byte, `marker.consumedTo`), fitting before
+    /// `lineEnd`, or `nil` if no checkbox is there.
     ///
     /// Wraps `tasklistMarkerChecked` with the bounds check so the two open-time task paths agree on what
     /// counts as a checkbox on the OPENING line - the eligibility gate for `lineAnchoredTaskItems`
@@ -4227,14 +4253,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// line is blank after the marker has `contentStart == lineEnd`, so no checkbox fits and the item is
     /// not recognized from a later continuation line.
     private func openingLineCheckbox(source: Span<UInt8>, contentStart: Int, lineEnd: Int) -> Bool? {
-        guard contentStart + Self.tasklistMarkerWidth <= lineEnd else {
+        // cmark's `scan_tasklist` treats the marker→checkbox separator as `spacechar+` (`[ \t\v\f]`), but
+        // the content start skips only space/tab, so a vertical-tab / form-feed gap survives before the
+        // `[` (`- \v[ ] `). Skip the rest of the `spacechar` run to reach the checkbox, as the scanner does.
+        var cb = contentStart
+        while cb < lineEnd, source[cb].isExtensionScannerSpace {
+            cb += 1
+        }
+        guard cb + Self.tasklistMarkerWidth <= lineEnd else {
             return nil
         }
         return Self.tasklistMarkerChecked(
-            source[contentStart],
-            source[contentStart + 1],
-            source[contentStart + 2],
-            source[contentStart + 3]
+            source[cb],
+            source[cb + 1],
+            source[cb + 2],
+            source[cb + 3]
         )
     }
 
