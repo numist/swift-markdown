@@ -545,12 +545,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return lineOffset
         }
         guard positionsEnabled else { return nil }
-        if lineOffset >= materializedTailBufferStart {
+        return materializedSourceOffset(lineOffset)
+    }
+
+    /// Map a materialized-buffer offset back to its original-source byte offset, independent of
+    /// `positionsEnabled` (unlike `sourceOffset`, which gates on positions). A tail offset maps by a
+    /// constant delta; an offset inside the expanded prefix resolves to the byte whose expansion covers
+    /// it (a mid-tab offset resolves to that tab's byte). Callers must hold `!currentLineMapsToSource`.
+    private func materializedSourceOffset(_ bufferOffset: Int) -> Int {
+        if bufferOffset >= materializedTailBufferStart {
             // Verbatim tail: a single constant delta covers every content offset.
-            return currentLineSourceRange.lowerBound + materializedRestStart + (lineOffset - materializedTailBufferStart)
+            return currentLineSourceRange.lowerBound + materializedRestStart + (bufferOffset - materializedTailBufferStart)
         }
         // Inside the expanded prefix (e.g. an indented-code `bodyStart` landing mid-prefix, or a container marker): re-walk the original prefix to find the byte covering this buffer offset.
-        return originalPrefixSourceOffset(bufferOffset: lineOffset)
+        return originalPrefixSourceOffset(bufferOffset: bufferOffset)
     }
 
     /// Map a buffer offset lying inside a materialized line's expanded prefix back to an original-source byte offset.
@@ -1708,7 +1716,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     firstNonSpace: firstNonSpace,
                     indent: indent,
                     currentKind: stillOpenKind,
-                    interruptsParagraph: interruptsParagraph
+                    interruptsParagraph: interruptsParagraph,
+                    lineStart: lineRange.lowerBound
                 )
             if !canInterrupt {
                 // Continue paragraph (matched or lazy). Don't close stale containers - the paragraph absorbs without breaking the chain.
@@ -1905,7 +1914,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Returns `true` if the line's content (starting at `firstNonSpace`) begins a new block that would interrupt an open paragraph.
     ///
     /// `interruptsParagraph` mirrors cmark's `interrupts_paragraph` flag: `true` when the open paragraph's OWN container matched this line's continuation prefix (so the line is genuinely interrupting THAT paragraph), `false` when only a shallower container matched (the marker is a sibling item continuing an existing list, not interrupting the paragraph).
-    private func lineStartsNewBlock(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indent: Int, currentKind: MarkdownNode.Kind, interruptsParagraph: Bool) -> Bool {
+    private func lineStartsNewBlock(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indent: Int, currentKind: MarkdownNode.Kind, interruptsParagraph: Bool, lineStart: Int) -> Bool {
         if matchThematicBreak(source: source, range: range, firstNonSpace: firstNonSpace) {
             return true
         }
@@ -1938,7 +1947,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return true
         }
         // List markers interrupt a paragraph only if they'd start a non-empty first item (CommonMark 0.31 §5.2/§5.3). An ORDERED list can interrupt a paragraph only when its start number is 1; bullets are exempt. This is cmark's `interrupts_paragraph && start != 1` decline in `parse_list_marker` (blocks.c), and it applies at EVERY nesting level - `interruptsParagraph` is true exactly when the open paragraph's own container matched this line, so `- a\n  2. b` (the item matched → `2. b` interrupts the item's paragraph) keeps `2. b` as text, while `1. a\n2. b` (the item did NOT match → the marker sits at the list level) opens a sibling item regardless of start.
-        if let marker = matchListMarker(source: source, range: range, firstNonSpace: firstNonSpace) {
+        if let marker = matchListMarker(source: source, range: range, firstNonSpace: firstNonSpace, lineStart: lineStart) {
             if marker.isEmpty {
                 // An EMPTY marker opens a list only when it does NOT interrupt the open paragraph, exactly as cmark's `parse_list_marker` accepts an empty bullet/ordered marker iff `!interrupts_paragraph` (blocks.c). Same `interruptsParagraph` signal as the ordered rule below: `- a\n  +` (the item matched → the marker interrupts the item's paragraph) keeps `+` as text, `> a\n+` (the block quote's continuation failed → the marker doesn't interrupt that paragraph) opens a new top-level list, and `a\n+` at the top level (the document always matches the paragraph) keeps `+` as text (FINDINGS #43).
                 return !interruptsParagraph
@@ -2242,13 +2251,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // gate (open_new_blocks): once nesting reaches the cap the marker no longer opens a list -
             // it falls through to the paragraph fallback as text. Applies to bullet and ordered lists
             // alike; block quotes above are uncapped.
-            if depth < Self.maxListNesting, let marker = matchListMarker(
+            // Gated on `indent < 4` (COLUMNS), cmark's `parser->indent < 4` in the list-marker branch
+            // (open_new_blocks). A marker whose content indent reaches four columns is indented code, not a
+            // list - even when its byte distance from the cursor is ≤ 3 because a straddling tab widened it
+            // (e.g. the `-` after `marker\t\t`, six columns in but two bytes over: falls through to the
+            // indented-code branch below).
+            if indent < 4, depth < Self.maxListNesting, let marker = matchListMarker(
                 source: source,
                 range: cursor..<lineRange.upperBound,
-                firstNonSpace: firstNonSpace
+                firstNonSpace: firstNonSpace,
+                lineStart: lineRange.lowerBound
             ) {
                 pending = try openListItem(marker: marker, firstNonSpace: firstNonSpace, pending: pending)
                 cursor = marker.consumedTo
+                // The item content begins at `marker.contentStartColumn`, which exceeds the physical
+                // column of `cursor` when the optional padding column partially consumed a tab (the tab
+                // byte stays at `cursor`); use it so the re-dispatch indent below is measured from the
+                // column cmark reached, not the tab's left edge (cmark's `partially_consumed_tab`).
+                column = marker.contentStartColumn
                 // Mark this item eligible for finalize-time checkbox recognition only when cmark's
                 // open-time `scan_tasklist` would match on THIS opening line: the marker is preceded by
                 // only whitespace (`taskMarkerLineAnchored`) AND a checkbox directly follows the marker
@@ -2289,8 +2309,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 ) {
                     storage[current].kind = .item(checked: checked)
                     cursor = lineRange.upperBound
+                    column = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
                 }
-                column = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
                 continue
             }
 
@@ -2335,12 +2355,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
                 let cleanInfo = EntityParser.unescapeURLChunk(infoChunk, source: sourceBytes, into: &storage)
                 let infoRef = storage.intern(replacingNUL(cleanInfo))
+                // cmark stores `fence_offset` in raw SOURCE bytes (`first_nonspace - offset`), which counts
+                // a tab straddling the container prefix and the fence as a SINGLE byte even though it spans
+                // several columns. On a materialized line the prefix tabs were expanded to spaces, so the
+                // buffer distance over-counts that tab; map both endpoints back to source so a fence opened
+                // after a partially-consumed tab (e.g. `>\t```) strips only the tab's remaining column on
+                // its continuation lines, not the tab's full width.
+                let fenceOffset = currentLineMapsToSource
+                    ? fence.fenceOffset
+                    : materializedSourceOffset(firstNonSpace) - materializedSourceOffset(cursor)
                 let codeIdx = addChild(
                     kind: .codeBlock(MarkdownNode.CodeBlockInfo(
                         isFenced: true,
                         fenceCharacter: fence.character,
                         fenceLength: fence.length,
-                        fenceOffset: fence.fenceOffset
+                        fenceOffset: fenceOffset
                     )),
                     parent: current,
                     data: .codeBlock(info: infoRef, literal: .empty),
@@ -3148,6 +3177,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var markerOffset: Int     // columns of leading whitespace before marker
         var markerWidth: Int      // bytes of marker (1 for bullet, 2..10 for ordered)
         var contentColumn: Int    // column at which item content begins (after marker + space)
+        // Absolute column the item content begins at. Exceeds the physical column of `consumedTo` when the
+        // optional padding column partially consumed a tab (the tab byte stays at `consumedTo`).
+        var contentStartColumn: Int
         var consumedTo: Int       // source offset of first byte of item content
         var isEmpty: Bool         // marker opens an empty item (only whitespace to the line end)
     }
@@ -3164,7 +3196,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// - Bullet: one of `-`, `+`, `*` followed by a space, tab, or end of line.
     /// - Ordered: 1-9 ASCII digits, then `.` or `)`, then space/tab/end.
     /// `≤3` leading spaces; markers immediately at end-of-line are valid (empty item).
-    private func matchListMarker(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> ListMarkerInfo? {
+    ///
+    /// `lineStart` is the physical line start; the marker's absolute column (needed for tab-stop math in
+    /// the padding run) is `columnWidth(lineStart, firstNonSpace)`.
+    private func matchListMarker(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, lineStart: Int) -> ListMarkerInfo? {
         let markerOffset = firstNonSpace - range.lowerBound
         if markerOffset > 3 {
             return nil
@@ -3227,49 +3262,72 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
 
         let afterMarker = firstNonSpace + markerWidth
+        // The marker's absolute column (a tab before the marker widens to its stop); the optional padding
+        // run after the marker is measured in COLUMNS from here so a tab counts to its next tab stop -
+        // cmark's `parse_list_marker` (blocks.c) advances columns, not bytes.
+        let markerColumn = columnWidth(source: source, from: lineStart, to: firstNonSpace)
+        let contentColumnAfterMarker = markerColumn + markerWidth
+        // `contentColumn` (the item's relative padding) folds in `markerOffset` in BYTES. It equals cmark's
+        // column-based `marker_offset` in every case reached here: a materialized line pre-expands its prefix
+        // tabs to spaces (byte count == column count), and the source-mapped fenced-code re-dispatch path
+        // that keeps literal tabs opens these markers at the line cursor (`markerOffset == 0`). Only the
+        // padding run AFTER the marker needs the column-accurate measurement below.
         // Marker must be followed by a space, tab, or end of line.
         var contentStart: Int
         var contentColumn: Int
+        var contentStartColumn: Int
         var isEmpty = false
         if afterMarker >= range.upperBound {
             // Empty item - the line is just `- ` (or end of input after marker).
             contentStart = afterMarker
             contentColumn = markerOffset + markerWidth + 1
+            contentStartColumn = contentColumnAfterMarker + 1
             isEmpty = true
         } else {
             let next = source[afterMarker]
             if next != UInt8(ascii: " ") && next != UInt8(ascii: "\t") {
                 return nil
             }
-            // Per CommonMark §5.2, count the run of spaces / tabs after the marker. With 1–4 spaces of padding, the content column is the column of the first non-blank char. With 5+ spaces, the extra beyond 1 are part of the content (indented code block within the item) and the content column is `marker + 1 space`.
-            var spaces = 0
+            // CommonMark §5.2 / cmark `parse_list_marker`: measure the whitespace run after the marker in
+            // COLUMNS (tab stops at 1,5,9,…). With 1–4 columns the content column is the first non-blank
+            // char's column. With ≥5 columns (or an all-blank line after the marker) only ONE optional
+            // column is consumed and the rest becomes content (an indented code block within the item);
+            // when that one column falls on a TAB wider than a column it is only PARTIALLY consumed, so
+            // the tab byte stays at the content start and its leftover columns surface later (cmark's
+            // `partially_consumed_tab`; blocks.c `add_line`).
+            var col = contentColumnAfterMarker
             var k = afterMarker
-            while k < range.upperBound, k < afterMarker + 5 {
+            while k < range.upperBound {
                 let b = source[k]
                 if b == UInt8(ascii: " ") {
-                    spaces += 1
-                    k += 1
+                    col += 1
                 } else if b == UInt8(ascii: "\t") {
-                    // Tab in indent - count it as 1 here; column math elsewhere handles the 4-column boundary.
-                    spaces += 1
-                    k += 1
+                    col += 4 - (col & 3)
                 } else {
                     break
                 }
+                k += 1
             }
-            // Treat a fully-blank line after the marker as an empty item (e.g. `-     \n` or `-` followed by EOF after the optional space).
+            let runColumns = col - contentColumnAfterMarker
+            // `k` sits at the first non-whitespace byte or the line end (the run was scanned in full), so
+            // an all-blank tail is exactly `k == upperBound`.
             let blankAfter = k >= range.upperBound
-            // Emptiness follows the WHOLE trailing run, not the 5-column-capped `spaces` count: CommonMark §5.2 (cmark `parse_list_marker`) treats the item as empty when only spaces/tabs remain to the line end. `k` sits at the first non-whitespace byte or at the cap, and the loop already proved `[afterMarker, k)` blank, so scanning `[k, upper)` decides emptiness even past the cap (e.g. `*` + 6 spaces).
-            isEmpty = indexOfFirstNonSpace(source: source, range: k..<range.upperBound) >= range.upperBound
-            if blankAfter {
-                contentStart = afterMarker + 1
+            isEmpty = blankAfter
+            if blankAfter || runColumns >= 5 {
+                // Consume exactly one optional column. If it lands mid-tab (the tab spans more than the one
+                // column consumed), leave the tab byte at the content start for the leaf strip to split.
+                if next == UInt8(ascii: "\t") && (4 - (contentColumnAfterMarker & 3)) > 1 {
+                    contentStart = afterMarker
+                } else {
+                    contentStart = afterMarker + 1
+                }
                 contentColumn = markerOffset + markerWidth + 1
-            } else if spaces >= 5 {
-                contentStart = afterMarker + 1
-                contentColumn = markerOffset + markerWidth + 1
+                contentStartColumn = contentColumnAfterMarker + 1
             } else {
-                contentStart = afterMarker + spaces
-                contentColumn = markerOffset + markerWidth + spaces
+                // 1–4 columns: the whole run is padding; content begins at the first non-blank byte.
+                contentStart = k
+                contentColumn = markerOffset + markerWidth + runColumns
+                contentStartColumn = contentColumnAfterMarker + runColumns
             }
         }
 
@@ -3281,6 +3339,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             markerOffset: markerOffset,
             markerWidth: markerWidth,
             contentColumn: contentColumn,
+            contentStartColumn: contentStartColumn,
             consumedTo: contentStart,
             isEmpty: isEmpty
         )

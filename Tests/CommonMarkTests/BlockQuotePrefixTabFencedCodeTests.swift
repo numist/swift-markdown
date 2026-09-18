@@ -144,4 +144,30 @@ struct BlockQuotePrefixTabFencedCodeTests {
             #expect(codeBlocks(doc).map(\.literal) == [""])
         }
     }
+
+    // FIX: a tab ALSO sits after `>` on the OPENING fence line. cmark stores `fence_offset` in raw
+    // SOURCE bytes (`first_nonspace - offset`), so the tab straddling the marker's optional column and
+    // the fence counts as a SINGLE byte (fence_offset 1) even though it spans two leftover columns. On
+    // the body line the block-quote marker consumes one optional column of the tab (column 1 → 2) and
+    // the fence-indent strip consumes ONE more (fence_offset 1), leaving one column as a content space.
+    // The rewrite previously measured the fence offset on the tab-expanded opening line (two columns),
+    // stripping the whole tab and dropping the content.
+    @Test("tab after `>` on the opening fence line leaves one content space")
+    func openingLineTabFenceOffsetLeavesOneSpace() throws {
+        try MarkdownDocument.withParsedDocument(">\t```\n>\t") { doc in
+            let kinds = dfs(doc).map(\.kind)
+            #expect(kinds == [.document, .blockQuote, .fencedCode(offset: 1)])
+            #expect(codeBlocks(doc).map(\.literal) == [" \n"])
+        }
+    }
+
+    // FIX: the same opening-line tab, with content on the body line: one leftover column precedes `x`.
+    @Test("tab after `>` on the opening fence line keeps one space before content")
+    func openingLineTabFenceOffsetThenContent() throws {
+        try MarkdownDocument.withParsedDocument(">\t```\n>\tx") { doc in
+            let kinds = dfs(doc).map(\.kind)
+            #expect(kinds == [.document, .blockQuote, .fencedCode(offset: 1)])
+            #expect(codeBlocks(doc).map(\.literal) == [" x\n"])
+        }
+    }
 }
