@@ -2831,15 +2831,34 @@ extension BlockParser {
         if bugCompat, htmlScanSkip.contains(.cdata) {
             return nil
         }
-        // Need `<![CDATA[`.
+        // Need `<![CDATA[`. The two brackets are literal; the letters `CDATA` are matched
+        // case-SENSITIVELY per CommonMark start condition 5 (spec-correct, flag OFF). Under
+        // `.cmarkBugCompatibility` they are matched case-INSENSITIVELY to reproduce cmark-gfm.
+        // why: cmark-gfm's `inlines.c` `handle_pointy_brace` matches the leading `<![` with literal
+        // byte compares, then hands the rest to `_scan_html_cdata` (`src/scanners.re`'s
+        // `cdata = "CDATA[" (...)*` production). `scanners.re` is compiled with `re2c --case-insensitive`
+        // (swift-cmark `Makefile`, the `scanners.c` build rule), so the generated DFA accepts either case
+        // at each of the five `CDATA` letter states (`scanners.c`: `if (yych == 'C') ... if (yych == 'c')
+        // ...`, and likewise D/A/T/A) while the literal brackets are unaffected.
         let prefixLen = 9
         if start + prefixLen > end {
             return nil
         }
         let prefix: StaticString = "<![CDATA["
         let prefixPtr = prefix.utf8Start
+        let letters = 3..<8
         for k in 0..<prefixLen {
-            if content[start + k] != prefixPtr[k] {
+            var actual = content[start + k]
+            var expected = prefixPtr[k]
+            if bugCompat, letters.contains(k) {
+                if actual.isUppercaseASCIILetter {
+                    actual += 32
+                }
+                if expected.isUppercaseASCIILetter {
+                    expected += 32
+                }
+            }
+            if actual != expected {
                 return nil
             }
         }
