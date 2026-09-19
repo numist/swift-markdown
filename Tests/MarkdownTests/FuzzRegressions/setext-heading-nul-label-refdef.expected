@@ -1,0 +1,4 @@
+Document @1:1-3:2
+└─ Heading @1:1-3:2 level: 2
+   └─ Link destination: "l"
+      └─ Text "bar’���"
