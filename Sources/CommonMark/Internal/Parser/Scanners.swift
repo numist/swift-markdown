@@ -424,8 +424,15 @@ extension BlockParser {
     }
 
     /// CommonMark §4.7 normalization over an already-resolved span. The byte-level worker behind `normalizeLabel(chunk:)`; `static` because it touches no parser state.
+    ///
+    /// Also folds a NUL byte to U+FFFD (CommonMark §2.3) inline, into this same local output buffer -
+    /// never by materializing into `storage.strings`. A definition's label can reach this normalizer
+    /// mid-parse (the setext-underline path, PHASE 2c, keys its label before the paragraph's own content
+    /// is drained), while other live borrows of `storage.strings` may still be on the call stack; growing
+    /// that shared arena here would risk invalidating them. Sized generously (`span.count * 3`, the
+    /// worst case if every byte were NUL) so the one-pass loop never needs to resize.
     private static func normalizeLabel(_ span: Span<UInt8>) -> String {
-        String(unsafeUninitializedCapacity: span.count) { buffer in
+        String(unsafeUninitializedCapacity: span.count * 3) { buffer in
             var output = OutputSpan(buffer: buffer, initializedCount: 0)
             var pendingSpace = false
 
@@ -445,7 +452,13 @@ extension BlockParser {
                     output.append(UInt8(ascii: " "))
                     pendingSpace = false
                 }
-                output.append(b)
+                if b == 0 {
+                    output.append(0xEF)
+                    output.append(0xBF)
+                    output.append(0xBD)
+                } else {
+                    output.append(b)
+                }
             }
 
             return output.finalize(for: buffer)

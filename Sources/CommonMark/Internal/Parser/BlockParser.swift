@@ -4601,6 +4601,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 titleChunk = scannedTitleChunk
             }
         }
+        // `normalizeLabel` folds a NUL in the label to U+FFFD itself (CommonMark §2.3), matching the
+        // reference side's key even though this definition may be keyed straight from the
+        // setext-underline path's pre-`drainLeaf` content (PHASE 2c reads `materializePendingContent`
+        // directly, before the leftover heading text is drained through `drainLeaf`'s own NUL
+        // replacement) - the label never needs its own arena materialization here.
         let key = normalizeLabel(
             chunk: label.interior
         )
