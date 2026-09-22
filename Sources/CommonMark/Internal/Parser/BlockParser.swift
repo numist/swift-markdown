@@ -2412,6 +2412,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     storage[current].kind = .item(checked: checked)
                     cursor = lineRange.upperBound
                     column = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+                    // The checkbox is fully consumed above, so this item must NOT reach the two
+                    // finalize-time `lineAnchoredTaskItems` consumers (the checkbox strip in
+                    // `runParagraphMatchers` / `eligibleTasklistMarker` and the re-indent bump in
+                    // `tasklistContentIndentBump`) - it was inserted just above on `openingLineCheckbox`
+                    // alone, which this (stricter) empty-item case also satisfies. Left in the set, a
+                    // later lazy-continuation line that supplies the item's first paragraph (its content
+                    // is bracket-shaped, e.g. `[x]`) would be mistaken by those finalize consumers for the
+                    // opening line's checkbox and stripped/dropped - `matchTasklistMarker` even accepts a
+                    // checkbox with no real trailing separator when it ends the chunk. Undo the insert so
+                    // the set carries forward only the content-bearing case, per its documented contract.
+                    lineAnchoredTaskItems.remove(current)
                 }
                 continue
             }
