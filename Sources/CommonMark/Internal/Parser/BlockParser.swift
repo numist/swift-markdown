@@ -2280,10 +2280,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let indent = columnWidth(source: source, from: lineRange.lowerBound, to: firstNonSpace) - column
 
             // Block quote opens a container; loop to keep dispatching the rest.
+            // `baseColumn: column` - `cursor` can sit mid-tab here (a PRIOR iteration's marker on this
+            // same line partially consumed a tab; see the partial-tab branch below), so the matcher must
+            // measure the tab's remaining columns from the column already reached, not from an assumed 0.
             if let advanced = matchBlockQuoteMarker(
                 source: source,
                 range: cursor..<lineRange.upperBound,
-                firstNonSpace: firstNonSpace
+                firstNonSpace: firstNonSpace,
+                baseColumn: column
             ) {
                 // A block quote can't be a direct child of a list (lists only contain items), so an enclosing list closes first - e.g. a `>` line after list items ends the list and starts a top-level quote, matching cmark's `add_child` ancestor-finalize rule.
                 if storage[current].kind.isList {
@@ -3175,8 +3179,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Count the column-width of the leading whitespace `start..<end` per CommonMark's 4-column tab rule: a tab advances the column to the next multiple of 4.
-    private func indentColumns(source: Span<UInt8>, from start: Int, to end: Int) -> Int {
-        var col = 0
+    /// `baseColumn` is the true column of `start` (default 0, i.e. `start` is a line's own left edge).
+    /// It must be supplied explicitly when `start` sits mid-tab after an ancestor partially consumed
+    /// that tab's leading columns (cmark's `partially_consumed_tab`): a tab's expansion depends on the
+    /// column it starts at, so measuring from an assumed column 0 would recompute the REMAINING tab as
+    /// a fresh 4-column tab instead of the columns actually left over.
+    private func indentColumns(source: Span<UInt8>, from start: Int, to end: Int, baseColumn: Int = 0) -> Int {
+        var col = baseColumn
         for i in start..<end {
             let b = source[i]
             if b == UInt8(ascii: " ") {
@@ -3187,7 +3196,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 break
             }
         }
-        return col
+        return col - baseColumn
     }
 
     /// A line whose leading tabs were expanded into spaces, plus the mapping needed to recover original-source byte offsets for positions on that line (consumed by `sourceOffset`).
@@ -3920,14 +3929,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Try to match a block-quote marker at `firstNonSpace`. CommonMark 0.31 §5.1: up to 3 leading spaces, then `>`, then optionally one space or tab. Returns the offset just past the consumed marker, or `nil` if no match.
-    private func matchBlockQuoteMarker(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> Int? {
+    ///
+    /// `baseColumn` is the true column of `range.lowerBound` (default 0). It must be supplied when
+    /// `range.lowerBound` sits mid-tab because an ancestor marker on THIS line already partially consumed
+    /// that tab's leading columns (cmark's `partially_consumed_tab`) - otherwise `indentColumns` below would
+    /// measure the tab's REMAINING columns as if it started fresh at column 0.
+    private func matchBlockQuoteMarker(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, baseColumn: Int = 0) -> Int? {
         // cmark gates the block-quote marker on `parser->indent <= 3`, an indent measured in COLUMNS
         // (`parse_block_quote_prefix` / `open_new_blocks`; blocks.c). Leading whitespace is byte-identical to
         // its column width unless it contains a tab, which only reaches here on a fenced-code body line - every
         // other line pre-expands its prefix tabs to spaces (`expandPrefixTabs`). A tab spans up to four
         // columns, so a byte count would under-measure it and wrongly admit a `>` cmark rejects (e.g. `\t>`
         // inside an open block quote's fenced code: 4 columns of indent, not a continuation marker).
-        if indentColumns(source: source, from: range.lowerBound, to: firstNonSpace) > 3 {
+        if indentColumns(source: source, from: range.lowerBound, to: firstNonSpace, baseColumn: baseColumn) > 3 {
             return nil
         }
         guard firstNonSpace < range.upperBound else {
