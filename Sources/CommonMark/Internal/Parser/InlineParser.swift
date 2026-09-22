@@ -93,6 +93,7 @@ extension BlockParser {
             // cmark's per-subject `FLAG_SKIP_HTML_*` bits start clear for each new inline subject.
             htmlScanSkip = []
             codeSpanSwallowedNewlines.removeAll(keepingCapacity: true)
+            attributeSwallowedNewlines.removeAll(keepingCapacity: true)
         }
 
         while cursor < endOffset {
@@ -1133,6 +1134,9 @@ extension BlockParser {
         if storage.options.contains(.cmarkSourcePositionsDisabled), codeSpanSwallowedNewlines.contains(i) {
             return false
         }
+        if attributeSwallowedNewlines.contains(i) {
+            return false
+        }
         return true
     }
 
@@ -1141,13 +1145,31 @@ extension BlockParser {
     /// column behavior; the recorded offsets suppress that newline's column reset in
     /// `footnoteColumnResets`.
     private mutating func recordRawInlineSwallowedNewlines(from: Int, to: Int, content: borrowing ContentSpan) {
+        codeSpanSwallowedNewlines.formUnion(Self.newlineOffsets(from: from, to: to, content: content))
+    }
+
+    /// Record every newline byte in `[from, to)` as one consumed inside a matched inline-attribute
+    /// `(…)` payload scan. Called only when that scan actually matches (`handleCloseBracketAttribute`);
+    /// the recorded offsets suppress that newline's column reset in `footnoteColumnResets`,
+    /// unconditionally - unlike `recordRawInlineSwallowedNewlines`, this doesn't depend on
+    /// `.cmarkSourcePositionsDisabled` (cmark's attribute scan never calls `adjust_subj_node_newlines`
+    /// regardless of `CMARK_OPT_SOURCEPOS`).
+    private mutating func recordAttributeSwallowedNewlines(from: Int, to: Int, content: borrowing ContentSpan) {
+        attributeSwallowedNewlines.formUnion(Self.newlineOffsets(from: from, to: to, content: content))
+    }
+
+    /// Every newline byte offset in `[from, to)`. Shared scan behind `recordRawInlineSwallowedNewlines`
+    /// and `recordAttributeSwallowedNewlines`, which differ only in which set the offsets join.
+    private static func newlineOffsets(from: Int, to: Int, content: borrowing ContentSpan) -> [Int] {
+        var offsets: [Int] = []
         var i = from
         while i < to {
             if content[i] == UInt8(ascii: "\n") {
-                codeSpanSwallowedNewlines.insert(i)
+                offsets.append(i)
             }
             i += 1
         }
+        return offsets
     }
 
     /// Whether a footnote-shaped `[^[…` opener takes cmark's `[^[` collapse (literal `[^[`, dropping
@@ -1390,6 +1412,9 @@ extension BlockParser {
                     attrs = scanned.chunk
                     pos = endAttrs + 1
                     matched = true
+                    if storage.options.contains(.cmarkBugCompatibility) {
+                        recordAttributeSwallowedNewlines(from: startAttrs, to: endAttrs, content: content)
+                    }
                 }
             }
         }

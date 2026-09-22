@@ -226,6 +226,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Content offsets of newlines swallowed by a code span or raw HTML in the current `parseInline` pass. Under `.cmarkSourcePositionsDisabled` (cmark parsed with `CMARK_OPT_SOURCEPOS` off), such a newline does NOT reset cmark's per-line column cursor - `adjust_subj_node_newlines` runs only with source positions on - so it must not reset an unresolved footnote reference's captured-label measurement either (`footnoteColumnResets`). Recorded only when that option is set; reset per pass.
     var codeSpanSwallowedNewlines: Set<Int> = []
 
+    /// Content offsets of newlines swallowed by a matched inline-attribute `(…)` payload scan (`handleCloseBracketAttribute`'s `matchAttributeAttributes`) in the current `parseInline` pass. cmark's `manual_scan_attribute_attributes` (`handle_close_bracket_attribute`, `src/inlines.c`) reads the payload as a raw byte scan that bypasses the per-character dispatch loop, so it never calls `adjust_subj_node_newlines` - unlike code spans / raw HTML, this holds regardless of `CMARK_OPT_SOURCEPOS`. Such a newline must not reset an unresolved footnote reference's captured-label measurement (`footnoteColumnResets`). Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per pass.
+    var attributeSwallowedNewlines: Set<Int> = []
+
     // MARK: - Init
     
     @_lifetime(copy source)
