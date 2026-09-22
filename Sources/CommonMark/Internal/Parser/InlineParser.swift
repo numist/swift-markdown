@@ -3764,9 +3764,15 @@ extension BlockParser {
     /// Approximates cmark-gfm's `is_valid_hostchar` (`extensions/autolink.c`) for a single byte: a host char
     /// is neither whitespace nor punctuation (`cmark_utf8proc_is_space` / `cmark_utf8proc_is_punctuation`,
     /// `src/utf8.c`). For ASCII, `is_punctuation` routes through cmark's ctype table, so `isASCIIPunct` mirrors
-    /// it exactly; `isASCIISpace` mirrors `is_space` for every byte the harness admits (the two differ only on
-    /// VT (0x0B), which the harness filters and which `scanGFMURLBody` also treats as a boundary). The
-    /// predicate thus admits ASCII alphanumerics - and, matching cmark, non-whitespace control bytes.
+    /// it exactly. `isASCIISpace` mirrors `cmark_utf8proc_is_space` for every byte except vertical tab
+    /// (0x0B): cmark's hand-rolled space table (`uc == 9 || uc == 10 || uc == 12 || uc == 13 || uc == 32 ||
+    /// ...`) omits 0x0B, unlike the real Unicode `White_Space` property this rewrite's spec-correct
+    /// `isASCIISpace` follows (and unlike `scanGFMURLBody`'s `cmark_isspace`, a DIFFERENT, narrower cmark
+    /// function that also excludes VT/FF - see that function's doc comment). That gap lets a domain-less
+    /// `http://` immediately followed by VT slip past `sd_autolink_issafe` as a "safe" URI in cmark, forming
+    /// a bogus autolink (a domain-less URL is not a valid GFM autolink - a reference quirk, `[ref-b4b]`).
+    /// Flag-ON (`.cmarkBugCompatibility`) reproduces the gap by treating VT as a valid host byte; flag-OFF
+    /// stays spec-correct (VT is whitespace, so a bare `http://` before it never autolinks).
     ///
     /// A UTF-8 continuation byte (0x80-0xBF) is NOT a valid host byte: cmark's `is_valid_hostchar` runs
     /// `cmark_utf8proc_iterate` and returns 0 when it fails (`r < 0`), which it does on a byte that cannot
@@ -3781,7 +3787,13 @@ extension BlockParser {
         if b & 0b1100_0000 == 0b1000_0000 {
             return false
         }
-        return !b.isASCIISpace && !b.isASCIIPunct
+        if b.isASCIIPunct {
+            return false
+        }
+        if b == 0x0B {
+            return storage.options.contains(.cmarkBugCompatibility)
+        }
+        return !b.isASCIISpace
     }
 
     /// Allowlist of characters that may directly precede a GFM `www.` autolink.
