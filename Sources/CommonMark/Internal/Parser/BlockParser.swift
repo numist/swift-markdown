@@ -4805,6 +4805,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         if storage.referenceMap[key] == nil {
+            // cmark keeps both link and attribute definitions in one refmap and resolves a link
+            // reference only when the first-registered entry for the label is a link ref. Record when
+            // an attribute definition already claimed this label so inline link resolution can leave
+            // the reference literal, matching that shadowing.
+            if storage.attributeReferenceMap[key] != nil {
+                storage.linkLabelsShadowedByAttribute.insert(key)
+            }
             // CommonMark §2.3: a NUL in the destination/title becomes U+FFFD. Ref-defs are parsed
             // straight from the (possibly still source-backed) paragraph content on both the normal
             // (`runParagraphMatchers`) and the setext-underline (`processLine`) paths, so normalize here -

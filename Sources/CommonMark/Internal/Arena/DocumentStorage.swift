@@ -46,6 +46,11 @@ internal struct DocumentStorage: ~Copyable {
     /// Keyed by the same normalized label form as `referenceMap` but stored separately so `[foo]` (link) and `^[foo]` (attribute) lookups don't collide. First definition wins.
     internal var attributeReferenceMap: [String: Chunk] = [:]
 
+    /// Normalized labels for which an attribute definition (`^[label]:`) was registered *before* any link reference definition (`[label]:`) for the same label.
+    ///
+    /// cmark stores both kinds in one refmap keyed by label and keeps only the first-registered entry (`references.c`, `map.c`), so link resolution (`inlines.c` `handle_close_bracket`) succeeds only when that surviving entry is a link ref (`!ref->is_attributes_reference`). An earlier attribute definition therefore shadows a later same-label link reference, leaving it literal. The rewrite keeps the two kinds in separate maps, so this records the cross-map ordering the shared refmap would otherwise encode.
+    internal var linkLabelsShadowedByAttribute: Set<String> = []
+
     /// GFM footnote definitions discovered while finalizing paragraphs.
     ///
     /// Keyed by normalized label, value is the index of the `.footnoteDefinition` node in `nodes`. First definition wins.

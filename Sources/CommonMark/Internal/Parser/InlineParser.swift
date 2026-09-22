@@ -775,7 +775,9 @@ extension BlockParser {
             } else {
                 key = nil
             }
-            if let key, !key.isEmpty, let ref = storage.referenceMap[key] {
+            if let key, !key.isEmpty,
+               !storage.linkLabelsShadowedByAttribute.contains(key),
+               let ref = storage.referenceMap[key] {
                 url = ref.destination
                 title = ref.title
                 pos = afterRefForm
