@@ -2536,7 +2536,25 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     start: sourceOffset(firstNonSpace)
                 )
                 current = htmlIdx
-                pending = addLine(span: source, range: cursor..<lineRange.upperBound, to: htmlIdx, pending: pending)
+                // `cursor` can sit mid-tab here (an ancestor container - block quote or list item -
+                // partially consumed it with its own optional-column/padding advance; see the
+                // block-quote-open and list-marker branches above). Split that tab the same way the
+                // indented-code-block opener below does: leftover columns become synthetic leading
+                // spaces, then the rest of the line copies verbatim (cmark's `partially_consumed_tab`;
+                // blocks.c `add_line`). `maxColumns` is 0 in the ordinary (non-straddling) case, so
+                // `stripFenceIndent` is a no-op and the ORIGINAL zero-copy `addLine` path is taken.
+                let priorColumn = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+                let (bodyStart, leadingSpaces) = stripFenceIndent(
+                    source: source,
+                    range: cursor..<lineRange.upperBound,
+                    maxColumns: column - priorColumn,
+                    startColumn: priorColumn
+                )
+                if leadingSpaces == 0 {
+                    pending = addLine(span: source, range: bodyStart..<lineRange.upperBound, to: htmlIdx, pending: pending)
+                } else {
+                    pending = appendSplitTabCodeContent(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineRange.upperBound, to: htmlIdx, pending: pending)
+                }
                 // Check whether this same line also satisfies the end condition.
                 if htmlBlockLineMatchesEndCondition(
                     type: htmlType,
