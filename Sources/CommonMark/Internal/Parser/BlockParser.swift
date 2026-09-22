@@ -1150,11 +1150,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return
             }
         }
+        // cmark's tasklist extension consumes a task item's checkbox at ITEM-OPEN time
+        // (`open_tasklist_item`), before the paragraph text exists at all - so when this header line is a
+        // checkbox-eligible item's first line, cmark's own header candidate never carries the checkbox.
+        // The rewrite defers that strip to finalize (`runParagraphMatchers`), so the scratch header just
+        // copied above still carries the literal marker; drop it here too, or the checkbox's own bytes can
+        // coincidentally give the header the same column count as the delimiter and open a table cmark
+        // never does (`- [ ] |` / `  -|`: header "[ ] |" -> 1 column, matching the delimiter, where cmark's
+        // already-stripped header "|" is the zero-column lone-pipe row).
+        var headerStart = scratchStart
+        if let mark = eligibleTasklistMarker(
+            node: node,
+            content: Chunk(offset: scratchStart, length: storage.strings.count - scratchStart, inSource: false)
+        ) {
+            headerStart = mark.remaining.offset
+        }
         storage.strings.append(UInt8(ascii: "\n"))
         for i in delimRange {
             storage.strings.append(delimSpan[i])
         }
-        let chunk = Chunk(offset: scratchStart, length: storage.strings.count - scratchStart, inSource: false)
+        let chunk = Chunk(offset: headerStart, length: storage.strings.count - headerStart, inSource: false)
         switch classifyTableOpen(chunk: chunk) {
         case .opens:
             paragraphTablePending[node] = true
@@ -4243,6 +4258,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return (checked, chunk.extracting(contentStart..<chunk.length))
     }
 
+    /// Whether `node` is an eligible task item's first leaf (the same gate `stripTasklistCheckbox` uses:
+    /// `.tasklist` on, `node` is the parent item's first child, and `lineAnchoredTaskItems` recognized a
+    /// checkbox on the item's opening physical line) AND `content` begins with that checkbox, per
+    /// `matchTasklistMarker`. Read-only - callers that only need to know the marker's width (to skip past
+    /// it for a classification decision) without yet performing the strip (which also sets the item's
+    /// checked state and adjusts stamped positions) use this instead of `stripTasklistCheckbox`.
+    private func eligibleTasklistMarker(node: DocumentStorage.Index, content: Chunk) -> (parent: DocumentStorage.Index, checked: Bool, remaining: Chunk)? {
+        guard storage.options.contains(.tasklist),
+              let parent = storage[node].parent,
+              case .item = storage[parent].kind,
+              storage[parent].firstChild == node,
+              lineAnchoredTaskItems.contains(parent),
+              let mark = matchTasklistMarker(chunk: content) else {
+            return nil
+        }
+        return (parent, mark.checked, mark.remaining)
+    }
+
     /// Consume a GFM task-list checkbox from `content` - the trimmed first-leaf content of a list item -
     /// setting the item's `.item(checked:)` state and returning the content past the marker + separator.
     /// Returns `content` unchanged when the item is not an eligible task item (or the content doesn't
@@ -4257,12 +4290,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// checkbox directly follows it), so an item sharing its line with a `>` or an outer marker is absent
     /// from the set and keeps its `[ ]`/`[x]` as literal text (matching cmark's `scan_tasklist`).
     private mutating func stripTasklistCheckbox(node: DocumentStorage.Index, content: Chunk) -> Chunk {
-        guard storage.options.contains(.tasklist),
-              let parent = storage[node].parent,
-              case .item = storage[parent].kind,
-              storage[parent].firstChild == node,
-              lineAnchoredTaskItems.contains(parent),
-              let mark = matchTasklistMarker(chunk: content) else {
+        guard let mark = eligibleTasklistMarker(node: node, content: content) else {
             return content
         }
         var checked = mark.checked
@@ -4276,7 +4304,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if storage.options.contains(.cmarkBugCompatibility) {
             checked = firstLineContainsCheckedBox(chunk: content)
         }
-        storage[parent].kind = .item(checked: checked)
+        storage[mark.parent].kind = .item(checked: checked)
         // cmark attributes the leaf's source range to the content after the checkbox and all the whitespace following it (the first non-space/tab). The marker+whitespace length is the offset delta between the content and the marker's remainder (buffer-agnostic), so advance the already-stamped leaf start by that many bytes.
         if positionsEnabled {
             let start = storage.sourceRanges[node].start
