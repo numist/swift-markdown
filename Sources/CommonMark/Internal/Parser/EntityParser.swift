@@ -282,6 +282,58 @@ internal enum EntityParser {
         )
     }
     
+    /// Reproduces cmark's fenced-code info-string order: `blocks.c`'s `CMARK_NODE_CODE_BLOCK` case
+    /// calls `houdini_unescape_html_f` (entity decode over the WHOLE chunk, backslashes untouched)
+    /// and only afterwards `cmark_strbuf_unescape` (strip backslash escapes from THAT result) - two
+    /// separate passes, entities first. That's a different order than `escapedURLChunkBytes`'s single
+    /// left-to-right pass (which interleaves the two, matching standard CommonMark inline processing
+    /// where a `\` immediately escapes a following `&` before it can start an entity). Under this
+    /// order `\&#3;` entity-decodes first to `\` + U+0003, and the backslash then survives the second
+    /// pass because U+0003 isn't escapable punctuation - whereas the interleaved pass would escape the
+    /// `&` before `&#3;` ever becomes an entity. Gated `.cmarkBugCompatibility` at the one call site
+    /// (the fence info string); this quirk is specific to cmark's fenced-code-info path, so it isn't
+    /// threaded through the other `unescapeURLChunk` (link destination / title) callers.
+    private static func entityFirstEscapedURLChunkBytes(_ chunk: Chunk, source: Span<UInt8>, into storage: inout DocumentStorage) -> Chunk {
+        let endOff = chunk.offset + chunk.length
+        var decoded = [UInt8]()
+        decoded.reserveCapacity(chunk.length)
+        var i = chunk.offset
+        while i < endOff {
+            let b = source[i]
+            if b == UInt8(ascii: "&"),
+               let entity = matchEntity(
+                   start: i,
+                   end: endOff,
+                   source: source,
+                   bugCompat: storage.options.contains(.cmarkBugCompatibility)
+               ) {
+                for k in 0..<entity.count {
+                    decoded.append(entity.bytes[k])
+                }
+                i = entity.afterSemi
+                continue
+            }
+            decoded.append(b)
+            i += 1
+        }
+        let outOffset = storage.strings.count
+        var r = 0
+        while r < decoded.count {
+            if decoded[r] == UInt8(ascii: "\\"), r + 1 < decoded.count, decoded[r + 1].isASCIIPunct {
+                storage.strings.append(decoded[r + 1])
+                r += 2
+                continue
+            }
+            storage.strings.append(decoded[r])
+            r += 1
+        }
+        return Chunk(
+            offset: outOffset,
+            length: storage.strings.count - outOffset,
+            inSource: false
+        )
+    }
+
     /// If `chunk` contains any backslash escapes (`\<ASCII punct>`), materialize a clean copy into `storage.strings` with the escapes processed.
     ///
     /// Returns the original chunk untouched if no escapes are present. Used for inline-link / inline-image URLs and titles so that downstream rendering doesn't have to re-process them. Autolink URLs go through `emitAutolink` and are kept literal.
@@ -289,7 +341,10 @@ internal enum EntityParser {
         guard urlChunkHasEscape(chunk, source: source) else {
             return chunk
         }
-        
+
+        if storage.options.contains(.cmarkBugCompatibility) {
+            return entityFirstEscapedURLChunkBytes(chunk, source: source, into: &storage)
+        }
         return escapedURLChunkBytes(chunk, source: source, into: &storage)
     }
 }
