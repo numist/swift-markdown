@@ -2261,6 +2261,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Containers opened on this line so far, matching cmark's per-line `depth` (open_new_blocks):
         // incremented once per iteration and used to cap list opening at `maxListNesting`.
         var depth = 0
+        // Whether a list marker matched THIS line (below), opening or extending an item that's still
+        // `current` when the loop reaches the childless-item tasklist-quirk check further down. cmark's
+        // `open_tasklist_item` fires once per line when the container-to-extend is a bare item, and on
+        // the marker's own opening line that's already covered inline by `taskMarkerLineAnchored` /
+        // `openingLineCheckbox` right where the marker matches - so the later, generic check must skip
+        // an item this same call just opened, or it would re-scan (and mis-handle, since it doesn't
+        // track multi-line paragraph content the way finalize-time `stripTasklistCheckbox` does) a line
+        // the marker-line path already decided.
+        var openedListItemThisLine = false
         while true {
             depth += 1
             let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
@@ -2368,6 +2377,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 lineStart: lineRange.lowerBound
             ) {
                 pending = try openListItem(marker: marker, firstNonSpace: firstNonSpace, pending: pending)
+                openedListItemThisLine = true
                 cursor = marker.consumedTo
                 // The item content begins at `marker.contentStartColumn`, which exceeds the physical
                 // column of `cursor` when the optional padding column partially consumed a tab (the tab
@@ -2377,10 +2387,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // Mark this item eligible for finalize-time checkbox recognition only when cmark's
                 // open-time `scan_tasklist` would match on THIS opening line: the marker is preceded by
                 // only whitespace (`taskMarkerLineAnchored`) AND a checkbox directly follows the marker
-                // (`openingLineCheckbox`). cmark scans only the opening line as the item opens, so a
-                // checkbox that first appears on a later continuation line is never recognized - gating
-                // both halves here keeps the finalize consumers (which see flattened content and cannot
-                // tell an opening line from a continuation line) from over-recognizing it. `firstNonSpace`
+                // (`openingLineCheckbox`). A checkbox that first appears on a later continuation line
+                // (the item's opening line was blank, or a blank line closed its last child) is a
+                // DIFFERENT cmark quirk, handled separately in `dispatchNewBlocks`'s paragraph-fallback
+                // (`tasklistScanMatchesFromLineStart`) since it needs that later line's own bytes, not
+                // this opening line's. Gating both halves here keeps the finalize consumers (which see
+                // flattened content and cannot tell an opening line from a continuation line) from
+                // over-recognizing it. `firstNonSpace`
                 // is the marker column; `cursor` is the opening line's first content byte
                 // (`marker.consumedTo`); `lineRange.lowerBound` is the physical line start (unchanged by
                 // any block-quote prefix already consumed this line).
@@ -2571,6 +2584,32 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     to: codeIdx,
                     pending: pending
                 )
+            }
+
+            // GFM tasklist quirk (`.cmarkBugCompatibility` only): cmark's tasklist extension gets a shot
+            // at opening a new container on EVERY line where the deepest open container is still the bare
+            // item (`open_tasklist_item`'s only gate is `parent_container`'s type being
+            // `CMARK_NODE_ITEM`) - not only the item's own opening line, which `taskMarkerLineAnchored` /
+            // `openingLineCheckbox` above cover. When the item's opening line was blank (or a blank line
+            // closed its last child), `current` is still `.item` here, and cmark re-runs the scan against
+            // THIS physical line's raw bytes from `lineRange.lowerBound` - NOT `cursor` - since
+            // `open_tasklist_item` receives the whole current line (`blocks.c` `open_new_blocks`'s
+            // extension loop passes `input->data`, unrelated to `parser->offset`). On a match, cmark sets
+            // the checked state from a whole-line `strstr` for `"[x]"`/`"[X]"` and advances exactly 3
+            // bytes from `parser->offset` (`cursor` here) - unrelated to how many bytes the scan itself
+            // matched - then falls through to open the paragraph from there, exactly like the empty-item
+            // case above.
+            if storage.options.contains(.cmarkBugCompatibility),
+               storage.options.contains(.tasklist),
+               !openedListItemThisLine,
+               case .item = storage[current].kind,
+               tasklistScanMatchesFromLineStart(source: source, lineRange: lineRange) {
+                storage[current].kind = .item(checked: lineContainsCheckedBox(source: source, lineRange: lineRange))
+                let advancedCursor = min(cursor + 3, lineRange.upperBound)
+                let contentStart = indexOfFirstNonSpace(source: source, range: advancedCursor..<lineRange.upperBound)
+                let paragraphIdx = addChild(kind: .paragraph, parent: current, start: sourceOffset(contentStart))
+                current = paragraphIdx
+                return addLine(span: source, range: contentStart..<lineRange.upperBound, to: paragraphIdx, pending: pending)
             }
 
             // Paragraph fallback. By this point the list-close-if-needed step above has already ensured `current` isn't a list.
@@ -4410,9 +4449,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// counts as a checkbox on the OPENING line - the eligibility gate for `lineAnchoredTaskItems`
     /// (checkbox present, any trailing content) and the empty-item consumer (`emptyTaskItemChecked`, which
     /// additionally requires only whitespace to `lineEnd`). This is the checkbox half of cmark's
-    /// `scan_tasklist`, anchored to the opening line where `open_tasklist_item` runs; an item whose opening
-    /// line is blank after the marker has `contentStart == lineEnd`, so no checkbox fits and the item is
-    /// not recognized from a later continuation line.
+    /// `scan_tasklist`, anchored to the opening line where `open_tasklist_item` runs on THIS call; an item
+    /// whose opening line is blank after the marker has `contentStart == lineEnd`, so no checkbox fits
+    /// here - but `open_tasklist_item` runs AGAIN on the item's first later, still-childless line, where
+    /// `tasklistScanMatchesFromLineStart` (a different, whole-line scan) picks it up instead.
     private func openingLineCheckbox(source: Span<UInt8>, contentStart: Int, lineEnd: Int) -> Bool? {
         // cmark's `scan_tasklist` treats the marker→checkbox separator as `spacechar+` (`[ \t\v\f]`), but
         // the content start skips only space/tab, so a vertical-tab / form-feed gap survives before the
@@ -4468,6 +4508,90 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         return checked
+    }
+
+    /// Whether cmark's `scan_tasklist` pattern (`extensions/ext_scanners.re`) matches `lineRange`'s raw
+    /// bytes from their TRUE start (`lineRange.lowerBound`), independent of any container prefix already
+    /// stripped up to `cursor`: `spacechar*("-"|"+"|"*"|[0-9]+.)spacechar+("[ ]"|"[x]")spacechar+`. This is
+    /// the childless-item continuation half of `open_tasklist_item` - see the call site in
+    /// `dispatchNewBlocks` for why cmark re-runs this scan on a line the item's own marker never touched.
+    ///
+    /// The digit-run alternative's trailing `.` matches ANY byte (re2c wildcard), and re2c compiles the
+    /// whole pattern to one DFA that accepts if ANY split of the digit run between `[0-9]+` and `.`
+    /// completes the rest of the pattern - not just the greedy (all-digits-to-the-run) split. E.g. for
+    /// `222 [ ] `, only ceding the LAST digit to the wildcard leaves a space for the mandatory
+    /// `spacechar+` that follows; ceding zero or two digits does not. So every split is tried.
+    private func tasklistScanMatchesFromLineStart(source: Span<UInt8>, lineRange: Range<Int>) -> Bool {
+        let end = lineRange.upperBound
+        var p = lineRange.lowerBound
+        while p < end, source[p].isExtensionScannerSpace {
+            p += 1
+        }
+        guard p < end else {
+            return false
+        }
+        switch source[p] {
+        case UInt8(ascii: "-"), UInt8(ascii: "+"), UInt8(ascii: "*"):
+            return tasklistScanTailMatches(source: source, from: p + 1, end: end)
+        default:
+            break
+        }
+        guard source[p].isASCIIDigit else {
+            return false
+        }
+        var digitsEnd = p
+        while digitsEnd < end, source[digitsEnd].isASCIIDigit {
+            digitsEnd += 1
+        }
+        // `[0-9]+.` needs >= 1 digit then exactly 1 more (any) byte. `wildcard` is that byte's index;
+        // try every position the digit run allows ceding to it.
+        var wildcard = p + 1
+        while wildcard <= digitsEnd, wildcard < end {
+            if tasklistScanTailMatches(source: source, from: wildcard + 1, end: end) {
+                return true
+            }
+            wildcard += 1
+        }
+        return false
+    }
+
+    /// The `spacechar+("[ ]"|"[x]")spacechar+` tail of cmark's `scan_tasklist`, starting at `from`. Both
+    /// `spacechar` runs are greedy with no ambiguity to backtrack over: neither literal that follows
+    /// (`[` for the checkbox, end-of-pattern for the trailing run) is itself a `spacechar`.
+    private func tasklistScanTailMatches(source: Span<UInt8>, from: Int, end: Int) -> Bool {
+        var p = from
+        guard p < end, source[p].isExtensionScannerSpace else {
+            return false
+        }
+        while p < end, source[p].isExtensionScannerSpace {
+            p += 1
+        }
+        guard p + 3 <= end,
+              source[p] == UInt8(ascii: "["),
+              source[p + 1] == UInt8(ascii: " ") || source[p + 1] == UInt8(ascii: "x"),
+              source[p + 2] == UInt8(ascii: "]") else {
+            return false
+        }
+        let afterCheckbox = p + 3
+        return afterCheckbox < end && source[afterCheckbox].isExtensionScannerSpace
+    }
+
+    /// Whether `lineRange`'s raw bytes contain `"[x]"` or `"[X]"` anywhere - cmark's whole-line
+    /// `strstr(input, "[x]") || strstr(input, "[X]")` check (`open_tasklist_item`) for a task item's
+    /// checked state. This is independent of where (or whether via which split) the marker scan itself
+    /// matched: any `[x]`/`[X]` substring on the line flips the item checked.
+    private func lineContainsCheckedBox(source: Span<UInt8>, lineRange: Range<Int>) -> Bool {
+        var i = lineRange.lowerBound
+        while i + 2 < lineRange.upperBound {
+            if source[i] == UInt8(ascii: "["), source[i + 2] == UInt8(ascii: "]") {
+                let mid = source[i + 1]
+                if mid == UInt8(ascii: "x") || mid == UInt8(ascii: "X") {
+                    return true
+                }
+            }
+            i += 1
+        }
+        return false
     }
 
     /// Match a GFM footnote definition opener `[^label]:` at `firstNonSpace` on the current line.
