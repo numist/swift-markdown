@@ -178,6 +178,12 @@ extension BlockParser {
     /// row and the open table closes. This is the source-span twin of `splitCells`' zero-cell case, used
     /// during parsing to break a lone-pipe line out of a pending table rather than absorb it into a
     /// spurious one-empty-cell body row.
+    ///
+    /// Every caller passes a `firstNonSpace..<end` range (a body-row candidate cmark reads from
+    /// `input + first_nonspace`), so this never sees leading whitespace and its own leading space/tab trim
+    /// below is only defensive. It must NOT be repurposed to classify a HEADER row: cmark builds the header
+    /// from the raw, un-first-non-spaced `parent_string`, where a leading space turns `<ws>|` into one empty
+    /// cell (see `splitCells`), not the zero-column lone-pipe row this reports.
     internal static func isLonePipeRow(span: Span<UInt8>, range: Range<Int>) -> Bool {
         // cmark reads the row from the first non-space, then `cmark_strbuf_trim` (space/tab) bounds the
         // scan — trim space/tab from both ends to isolate the pipe and its `spacechar` padding.
@@ -636,18 +642,28 @@ extension BlockParser {
         return alignments
     }
 
-    /// Split `line` into cells on unescaped `|`. Strips a single leading and trailing `|` if present (with optional surrounding whitespace). `hadClosingPipe` reports whether a trailing `|` was stripped, so the caller can tell a rightmost cell capped by a pipe from one that runs to the line end.
+    /// Split `line` into cells on unescaped `|`. Strips a single trailing `|` if present (with optional surrounding whitespace), and a single leading `|` only when the row's first byte is that pipe (no whitespace before it). `hadClosingPipe` reports whether a trailing `|` was stripped, so the caller can tell a rightmost cell capped by a pipe from one that runs to the line end.
     private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool, hadLeadingPipe: Bool) {
         var s = line.lowerBound
         var e = line.upperBound
+        let lineStart = s
         while s < e && storage.strings[s].isSpaceOrTab {
             s += 1
         }
+        let trimmedLeadingSpace = s > lineStart
         while e > s && storage.strings[e - 1].isSpaceOrTab {
             e -= 1
         }
+        // cmark's `row_from_string` strips a leading pipe only through `scan_table_cell_end` at offset 0
+        // (`[|] spacechar*`), which requires the FIRST byte to be `|`. A pipe reached only after leading
+        // whitespace is therefore NOT a stripped leading pipe: cmark leaves that whitespace as an empty
+        // leading cell's content and treats the pipe as its closing delimiter (` |` → one empty cell,
+        // `colspan 0`, not the zero-column lone-pipe row that `|` alone yields). A table row acquires leading
+        // whitespace only from a lazy paragraph continuation's preserved residual (`addLineSegment`, gated on
+        // `.cmarkBugCompatibility`); a matched continuation and every flag-OFF row begin at their first
+        // non-space, so `trimmedLeadingSpace` is only ever true when reproducing that cmark quirk.
         var hadLeadingPipe = false
-        if s < e && storage.strings[s] == UInt8(ascii: "|") {
+        if s < e && storage.strings[s] == UInt8(ascii: "|") && !trimmedLeadingSpace {
             s += 1
             hadLeadingPipe = true
         }

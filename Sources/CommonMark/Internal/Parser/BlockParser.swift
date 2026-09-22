@@ -2640,17 +2640,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Trim leading whitespace off the first segment and trailing whitespace off the last (matching `Chunk.trimming(using:)`), in place. Interior segments - the newline joins and any hard-break trailing spaces before them - are untouched. An edge segment trimmed to zero length is harmless (read as empty).
-    private func trimSegments(_ segs: consuming UniqueArray<Segment>) -> UniqueArray<Segment> {
+    ///
+    /// Pass `trimLeading: false` to keep the first segment's leading whitespace: a table-pending node's header row (its first line) must retain a lazy continuation's preserved residual, since cmark builds the header row from the raw paragraph content and never trims its leading edge (that residual becomes the header's empty leading cell).
+    private func trimSegments(_ segs: consuming UniqueArray<Segment>, trimLeading: Bool = true) -> UniqueArray<Segment> {
         var segs = segs
         if segs.count == 0 { return segs }
-        var first = segs[0]
-        var l = 0
-        while l < Int(first.length) && segmentByte(first, l).isSpaceTabOrNewline { l += 1 }
-        first.offset += Int32(l)
-        // The first segment is a paragraph's opening line (never re-indented), so `sourceOffset == offset`; advance it in step to keep the source mapping aligned with the trimmed bytes.
-        first.sourceOffset += Int32(l)
-        first.length -= Int32(l)
-        segs[0] = first
+        if trimLeading {
+            var first = segs[0]
+            var l = 0
+            while l < Int(first.length) && segmentByte(first, l).isSpaceTabOrNewline { l += 1 }
+            first.offset += Int32(l)
+            // The first segment is a paragraph's opening line (never re-indented), so `sourceOffset == offset`; advance it in step to keep the source mapping aligned with the trimmed bytes.
+            first.sourceOffset += Int32(l)
+            first.length -= Int32(l)
+            segs[0] = first
+        }
         let li = segs.count - 1
         var last = segs[li]
         var len = Int(last.length)
@@ -2798,7 +2802,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // GFM tasklist: cmark's tasklist extension consumes the checkbox marker at item-OPEN time
         // (`open_tasklist_item`), so every finalize matcher below (footnote def, link ref-def, table)
         // sees the content AFTER the checkbox. Strip it first here to match.
+        let beforeCheckbox = trimmed
         trimmed = stripTasklistCheckbox(node: node, content: trimmed)
+        let strippedCheckbox = trimmed.offset != beforeCheckbox.offset
         // GFM table detection: header line + delimiter row mutates the node in place to `.table`.
         // This runs BEFORE reference-link-definition extraction because cmark opens a table while
         // processing the delimiter row (`try_opening_table_block`), converting the still-open paragraph to
@@ -2834,8 +2840,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             && (paragraphSecondLineIndent[node] ?? 0) < 4
             && !(paragraphSecondLineLazy[node] ?? false) {
             // cmark's header is the raw paragraph content (never ref-def-stripped), so the table parser sees
-            // `trimmed` before `parseDefinitions` touches it.
-            let tableContent = trimmed.trimmingTrailing(using: self)
+            // the content before `parseDefinitions` touches it. cmark also never trims the header row's
+            // LEADING edge: a lazy continuation's residual leading whitespace (kept by `addLineSegment` and
+            // preserved through finalize for a table-pending node) is the header's empty leading cell
+            // (` |` → `Cell colspan: 0`, not the zero-column lone-pipe `|`). So build from the leading-
+            // preserving `raw` — except when a task-list checkbox was stripped, where the header is the
+            // item's first line (which carries no such residual) and must start after the checkbox. The two
+            // never coexist: a checkbox sits only on an item's first line, a promoted residual only on a
+            // later split-off line.
+            let tableContent = strippedCheckbox
+                ? trimmed.trimmingTrailing(using: self)
+                : raw.trimmingTrailing(using: self)
             // A top-level row with leading whitespace makes the paragraph non-contiguous, so its content
             // reaches here flattened from a segment list carrying a re-indent run map (Quirk E): each row's
             // surviving content is mapped to the table's content column, exactly cmark's re-based cell
@@ -2905,7 +2920,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 try runParagraphMatchers(node: node, raw: raw)
             case .segments(let segs):
                 // Multi-line non-contiguous body held as zero-copy source segments. Trim, then only materialize (flatten) if it could match a finalize matcher; plain prose stays segments.
-                let trimmed = trimSegments(segs)
+                // A table-pending node keeps its header row's leading residual (a lazy continuation's
+                // preserved whitespace, promoted to the first line by a multi-line split): cmark builds the
+                // header row from the untrimmed content, so that residual is the header's empty leading cell.
+                let tablePending = storage.options.contains(.tables) && (paragraphTablePending[node] ?? false)
+                let trimmed = trimSegments(segs, trimLeading: !tablePending)
                 if isBlankSegments(trimmed) {
                     // Entirely whitespace after trim - leave the paragraph empty (matches the chunk path).
                 } else if segmentsCouldMatchMatcher(trimmed) {
