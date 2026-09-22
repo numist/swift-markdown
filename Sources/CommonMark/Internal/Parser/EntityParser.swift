@@ -220,7 +220,7 @@ internal enum EntityParser {
     
     // MARK: URL Escaping
     
-    private static func urlChunkHasEscape(_ chunk: Chunk, source: Span<UInt8>) -> Bool {
+    internal static func urlChunkHasEscape(_ chunk: Chunk, source: Span<UInt8>) -> Bool {
         if chunk.isEmpty {
             return false
         }
@@ -290,10 +290,11 @@ internal enum EntityParser {
     /// where a `\` immediately escapes a following `&` before it can start an entity). Under this
     /// order `\&#3;` entity-decodes first to `\` + U+0003, and the backslash then survives the second
     /// pass because U+0003 isn't escapable punctuation - whereas the interleaved pass would escape the
-    /// `&` before `&#3;` ever becomes an entity. Gated `.cmarkBugCompatibility` at the one call site
-    /// (the fence info string); this quirk is specific to cmark's fenced-code-info path, so it isn't
-    /// threaded through the other `unescapeURLChunk` (link destination / title) callers.
-    private static func entityFirstEscapedURLChunkBytes(_ chunk: Chunk, source: Span<UInt8>, into storage: inout DocumentStorage) -> Chunk {
+    /// `&` before `&#3;` ever becomes an entity. `cmark_clean_url` (link destinations) uses this same
+    /// entity-first order, so `BlockParser.cleanURLChunk` also calls this under `.cmarkBugCompatibility`.
+    /// Link titles (`cmark_clean_title`) do not reproduce this quirk on the compare surface, so the
+    /// title callers of `unescapeURLChunk` are left on the interleaved pass.
+    internal static func entityFirstEscapedURLChunkBytes(_ chunk: Chunk, source: Span<UInt8>, into storage: inout DocumentStorage) -> Chunk {
         let endOff = chunk.offset + chunk.length
         var decoded = [UInt8]()
         decoded.reserveCapacity(chunk.length)

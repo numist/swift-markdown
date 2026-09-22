@@ -4815,7 +4815,38 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// which is `Chunk.trimming(using:)`'s `isSpaceTabOrNewline`. Only DESTINATIONS are cleaned this
     /// way; titles use cmark's `cmark_clean_title`, which does NOT trim, so the title path calls
     /// `unescapeURLChunk` directly instead.
+    ///
+    /// `cmark_clean_url` decodes entities in a first pass, then strips backslash escapes from that
+    /// result in a second pass (`houdini_unescape_html_f` followed by `cmark_strbuf_unescape`) — the
+    /// same entity-first order as the fenced-code info string (see
+    /// `EntityParser.entityFirstEscapedURLChunkBytes`), so `\&#3;` decodes its entity first and the
+    /// backslash survives (U+0003 isn't escapable punctuation), where the interleaved pass below would
+    /// let the backslash escape the `&` before `&#3;` can become an entity. Reproduced under
+    /// `.cmarkBugCompatibility`; flag-off keeps the spec-correct interleaved pass.
     mutating func cleanURLChunk(_ chunk: Chunk) -> Chunk {
-        unescapeURLChunk(chunk.trimming(using: self))
+        let trimmed = chunk.trimming(using: self)
+        guard storage.options.contains(.cmarkBugCompatibility) else {
+            return unescapeURLChunk(trimmed)
+        }
+        if trimmed.inSource {
+            guard EntityParser.urlChunkHasEscape(trimmed, source: sourceBytes) else {
+                return trimmed
+            }
+            return EntityParser.entityFirstEscapedURLChunkBytes(trimmed, source: sourceBytes, into: &storage)
+        }
+        guard EntityParser.urlChunkHasEscape(trimmed, source: storage.strings.span) else {
+            return trimmed
+        }
+        // `entityFirstEscapedURLChunkBytes` reads `source` while appending the result to
+        // `storage.strings`; for an arena-backed chunk `source` would otherwise alias the very
+        // storage being mutated (an exclusivity violation), so snapshot the chunk into an
+        // independent buffer first - a plain copy, not a new architectural pattern.
+        var snapshot = UniqueArray<UInt8>(minimumCapacity: trimmed.length)
+        snapshot.append(copying: storage.strings.span.extracting(trimmed.range))
+        return EntityParser.entityFirstEscapedURLChunkBytes(
+            Chunk(offset: 0, length: trimmed.length, inSource: false),
+            source: snapshot.span,
+            into: &storage
+        )
     }
 }
