@@ -229,6 +229,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Content offsets of newlines swallowed by a matched inline-attribute `(…)` payload scan (`handleCloseBracketAttribute`'s `matchAttributeAttributes`) in the current `parseInline` pass. cmark's `manual_scan_attribute_attributes` (`handle_close_bracket_attribute`, `src/inlines.c`) reads the payload as a raw byte scan that bypasses the per-character dispatch loop, so it never calls `adjust_subj_node_newlines` - unlike code spans / raw HTML, this holds regardless of `CMARK_OPT_SOURCEPOS`. Such a newline must not reset an unresolved footnote reference's captured-label measurement (`footnoteColumnResets`). Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per pass.
     var attributeSwallowedNewlines: Set<Int> = []
 
+    /// Content offsets of newlines swallowed by a matched inline link/image destination `(…)` payload scan (`handleCloseBracket`'s inline-link match) in the current `parseInline` pass. cmark's `manual_scan_link_url` / `scan_spacechars` / `scan_link_title` (`handle_close_bracket`, `src/inlines.c`) read that payload as raw byte scans that bypass the per-character dispatch loop, so `handle_close_bracket`'s `match:` label never calls `adjust_subj_node_newlines` - unlike code spans / raw HTML, this holds regardless of `CMARK_OPT_SOURCEPOS`. Such a newline must not reset an unresolved footnote reference's captured-label measurement (`footnoteColumnResets`). Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per pass.
+    var linkDestinationSwallowedNewlines: Set<Int> = []
+
     // MARK: - Init
     
     @_lifetime(copy source)

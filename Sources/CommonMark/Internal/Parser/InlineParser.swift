@@ -94,6 +94,7 @@ extension BlockParser {
             htmlScanSkip = []
             codeSpanSwallowedNewlines.removeAll(keepingCapacity: true)
             attributeSwallowedNewlines.removeAll(keepingCapacity: true)
+            linkDestinationSwallowedNewlines.removeAll(keepingCapacity: true)
         }
 
         while cursor < endOffset {
@@ -710,6 +711,9 @@ extension BlockParser {
                     url = cleanURLChunk(dest.chunk)
                     title = unescapeURLChunk(maybeTitle)
                     matched = true
+                    if storage.options.contains(.cmarkBugCompatibility) {
+                        recordLinkDestinationSwallowedNewlines(from: afterParen, to: afterTitleSpaces, content: content)
+                    }
                 }
             }
             if !matched {
@@ -1137,6 +1141,9 @@ extension BlockParser {
         if attributeSwallowedNewlines.contains(i) {
             return false
         }
+        if linkDestinationSwallowedNewlines.contains(i) {
+            return false
+        }
         return true
     }
 
@@ -1158,8 +1165,19 @@ extension BlockParser {
         attributeSwallowedNewlines.formUnion(Self.newlineOffsets(from: from, to: to, content: content))
     }
 
-    /// Every newline byte offset in `[from, to)`. Shared scan behind `recordRawInlineSwallowedNewlines`
-    /// and `recordAttributeSwallowedNewlines`, which differ only in which set the offsets join.
+    /// Record every newline byte in `[from, to)` as one consumed inside a matched inline link/image
+    /// destination `(…)` payload scan. Called only when that scan actually matches (`handleCloseBracket`'s
+    /// inline-link form); the recorded offsets suppress that newline's column reset in
+    /// `footnoteColumnResets`, unconditionally - like `recordAttributeSwallowedNewlines`, this doesn't
+    /// depend on `.cmarkSourcePositionsDisabled` (cmark's `manual_scan_link_url` / `scan_spacechars` /
+    /// `scan_link_title` never call `adjust_subj_node_newlines` regardless of `CMARK_OPT_SOURCEPOS`).
+    private mutating func recordLinkDestinationSwallowedNewlines(from: Int, to: Int, content: borrowing ContentSpan) {
+        linkDestinationSwallowedNewlines.formUnion(Self.newlineOffsets(from: from, to: to, content: content))
+    }
+
+    /// Every newline byte offset in `[from, to)`. Shared scan behind `recordRawInlineSwallowedNewlines`,
+    /// `recordAttributeSwallowedNewlines`, and `recordLinkDestinationSwallowedNewlines`, which differ
+    /// only in which set the offsets join.
     private static func newlineOffsets(from: Int, to: Int, content: borrowing ContentSpan) -> [Int] {
         var offsets: [Int] = []
         var i = from
