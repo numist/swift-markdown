@@ -53,12 +53,12 @@ extension BlockParser {
                 i += 1
                 length += 1
                 if i < end {
+                    length += labelLengthWeight(readByte(at: i, in: chunk))
                     i += 1
-                    length += 1
                 }
             } else {
+                length += labelLengthWeight(b)
                 i += 1
-                length += 1
             }
             if length > maxLabelLength {
                 return nil
@@ -95,12 +95,12 @@ extension BlockParser {
                 i += 1
                 length += 1
                 if i < end {
+                    length += labelLengthWeight(content[i])
                     i += 1
-                    length += 1
                 }
             } else {
+                length += labelLengthWeight(b)
                 i += 1
-                length += 1
             }
             if length > maxLabelLength {
                 return nil
@@ -119,6 +119,16 @@ extension BlockParser {
     /// definition), so both `matchLinkLabel` overloads read this.
     private var maxLinkLabelLength: Int {
         storage.options.contains(.cmarkBugCompatibility) ? 1000 : 999
+    }
+
+    /// A scanned byte's contribution to the link-label length against `maxLinkLabelLength`. cmark
+    /// measures a label in its NUL→U+FFFD normalized input buffer (`blocks.c`'s `S_parser_feed`
+    /// replaces every source NUL with the 3-byte U+FFFD encoding before any block or inline scanning
+    /// sees it), so a source NUL counts as 3 bytes toward cmark's cap. Under `.cmarkBugCompatibility`
+    /// we reproduce that; flag-off stays spec-correct (a NUL is 1 character, matching the U+FFFD it
+    /// becomes). Every other byte counts as 1 on both sides.
+    private func labelLengthWeight(_ byte: UInt8) -> Int {
+        byte == 0 && storage.options.contains(.cmarkBugCompatibility) ? 3 : 1
     }
 
     // MARK: - Link destination
