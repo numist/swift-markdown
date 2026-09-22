@@ -2692,11 +2692,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private func segmentsCouldMatchMatcher(_ segs: borrowing UniqueArray<Segment>) -> Bool {
         // First content byte == '['  ⇒ possible ref-def / footnote def / tasklist marker.
         // First content bytes == '^['  ⇒ possible attribute reference definition (`^[label]: attrs`).
+        // The skip must tolerate a vertical-tab / form-feed gap too, not just space/tab/newline: a
+        // tasklist checkbox's marker->checkbox separator is cmark's `spacechar` (`[ \t\v\f]`,
+        // `matchTasklistMarker`'s own gap skip), so `- ` VT `[x] ` reaches its `[` past a VT this scan
+        // must not stop at, or this pre-filter under-approximates and skips a real matcher.
         outer: for i in 0..<segs.count {
             let seg = segs[i]
             for j in 0..<Int(seg.length) {
                 let b = segmentByte(seg, j)
-                if b.isSpaceTabOrNewline { continue }
+                if b.isASCIISpace { continue }
                 if b == UInt8(ascii: "[") { return true }
                 // An attribute def opens with a `^` immediately followed by `[` — the same contiguity
                 // cmark requires (`chunk.data[0] == '^' && chunk.data[1] == '['`), so a `^` split from its
