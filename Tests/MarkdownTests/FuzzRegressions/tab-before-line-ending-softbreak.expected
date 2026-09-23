@@ -1,0 +1,7 @@
+Document @1:1-5:2
+└─ Paragraph @1:1-5:2
+   ├─ Text "="
+   ├─ SoftBreak
+   ├─ Text "*"
+   ├─ SoftBreak
+   └─ Text "*"
