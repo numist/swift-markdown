@@ -925,7 +925,8 @@ extension BlockParser {
                 isImage: isImage,
                 footnoteBracketStart: footnoteBracketStart,
                 closeBracket: cursor,
-                content: content
+                content: content,
+                parent: parent
             )
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             return initialPos
@@ -1272,8 +1273,9 @@ extension BlockParser {
     /// bridge repairing the truncated tail) instead of reading past the cut to complete it. Shared by both
     /// footnote-shaped-bracket label captures (`collapseMultilineFootnote`, `emitEscapedCaretFootnoteLiteral`).
     /// `overreadByte`, when non-nil, stands in for content at/past `content.endOffset` — the
-    /// escaped-caret image form's one-byte over-read into the paragraph's synthetic trailing newline;
-    /// callers that don't over-read never pass a `cutEnd` past `content.endOffset`, so it's never forced.
+    /// escaped-caret image form's one-byte over-read past the block's own content, into whatever cmark's
+    /// buffer holds right there (its caller, `emitEscapedCaretFootnoteLiteral`, picks the byte); callers
+    /// that don't over-read never pass a `cutEnd` past `content.endOffset`, so it's never forced.
     private static func capturedLabelBytes(content: borrowing ContentSpan, start: Int, cutEnd: Int, overreadByte: UInt8? = nil) -> [UInt8] {
         let contentEnd = content.endOffset
         var bytes: [UInt8] = []
@@ -1367,30 +1369,41 @@ extension BlockParser {
     /// the opener column is the `[`'s for a `[` opener and the `!`'s for an image opener (one further
     /// left, so an image captures one extra byte). Counting the backslash runs the read one byte past the
     /// label: a `[` opener captures the closing `]` (`[\^x]` -> `[^x]]`); an image opener over-reads a
-    /// second byte into the paragraph's trailing newline and drops the `!` (`![\^x]` -> `[^x]\n]`). A
+    /// second byte, landing on whatever cmark's buffer holds one past the block's own content - a
+    /// paragraph's (or setext heading's) buffer keeps that line's trailing newline there (`![\^x]` ->
+    /// `[^x]\n]`), while an ATX heading's buffer was pre-trimmed of it and cmark's `cmark_strbuf` always
+    /// writes a NUL terminator at its logical end instead (`# ![\^x]` -> `[^x]` - see `atxHeadings`); a
     /// cross-line span resets the per-line column at the soft break, underflowing the length to an empty
     /// label (`[\^\nx]` -> `[^]`). That raw byte cut can land mid-character the same way the plain
     /// `[^…]` capture does (`collapseMultilineFootnote`): cmark's `cmark_chunk` slice is UTF-8-oblivious,
     /// and its Swift bridge's later `String(cString:)` repairs a truncated tail to a single U+FFFD
     /// (`capturedLabelBytes`), rather than reading past the cut to complete the scalar. The unresolved
-    /// reference reconstructs as `[^` + captured bytes + `]`.
-    private mutating func emitEscapedCaretFootnoteLiteral(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan) {
+    /// reference reconstructs as `[^` + captured bytes + `]` - and that same `String(cString:)` bridge
+    /// truncates the WHOLE reconstructed literal at the ATX case's embedded NUL, dropping it and the `]`
+    /// appended after it.
+    private mutating func emitEscapedCaretFootnoteLiteral(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index) {
         // cmark's byte-length label is `colOf(]) - colOf(opener) - 2` (per-line columns); an image
         // opener's `![` shifts the start one byte left, so it captures one extra byte. A cross-line reset
         // can drive it negative — cmark's underflow guard clamps that to an empty label.
         let labelLength = max(0, footnoteCapturedLabelLength(content, open: open, close: close) + (isImage ? 1 : 0))
-        // The label runs from just past the escaped `^` (`open + 3`). cmark reads from the paragraph
-        // buffer, which carries a trailing newline the zero-copy span omits; the image over-read is the
-        // only read that reaches the content end, where that synthetic `\n` stands in.
+        // The label runs from just past the escaped `^` (`open + 3`). The image over-read is the only
+        // read that reaches the content end, where the synthetic stand-in below applies.
         let labelStart = open + 3
+        let overreadByte: UInt8 = storage.atxHeadings.contains(parent) ? 0 : UInt8(ascii: "\n")
         let labelBytes = Self.capturedLabelBytes(
-            content: content, start: labelStart, cutEnd: labelStart + labelLength, overreadByte: UInt8(ascii: "\n"))
+            content: content, start: labelStart, cutEnd: labelStart + labelLength, overreadByte: overreadByte)
 
         var literal: [UInt8] = []
         literal.append(UInt8(ascii: "["))
         literal.append(UInt8(ascii: "^"))
         literal.append(contentsOf: labelBytes)
         literal.append(UInt8(ascii: "]"))
+        // The ATX over-read's NUL stands in for cmark's `cmark_strbuf` terminator; the later
+        // `String(cString:)` bridge that materializes this literal stops at the first NUL, so drop it
+        // and everything reconstructed after it (the closing `]` just appended above).
+        if let nulIndex = literal.firstIndex(of: 0) {
+            literal.removeSubrange(nulIndex...)
+        }
 
         let parentIdx = storage[openerInl].parent
         let start = storage.strings.count

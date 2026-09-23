@@ -2463,6 +2463,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     parent: current,
                     start: sourceOffset(firstNonSpace)
                 )
+                // Record this heading as ATX (not setext) for `atxHeadings` - see its declaration.
+                storage.atxHeadings.insert(headingIdx)
                 current = headingIdx
                 if !heading.contentRange.isEmpty {
                     pending = addLine(span: source, range: heading.contentRange, to: headingIdx, pending: pending)
