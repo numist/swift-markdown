@@ -726,9 +726,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return addLineSegment(span: span, range: range, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
             case let other:
                 var buffer = unwrap(other)
-                buffer.reserveCapacity(buffer.count + range.count)
-                for i in range {
-                    buffer.append(span[i])
+                // A tab-expanded current line (`!currentLineMapsToSource`) has `span` pointing at the per-line expanded buffer, not source - appending `span[range]` directly would bake the expanded-tab spaces into the arena as if they were literal content. Map back to the literal source range instead (same rule as the `.none` case above and `addLineSegment`'s materialized branch): cmark expands tabs only for block-structure indentation and keeps them literal in inline content.
+                if !currentLineMapsToSource, positionsEnabled,
+                   let sourceLow = sourceOffset(range.lowerBound), let sourceHigh = sourceOffset(range.upperBound) {
+                    buffer.reserveCapacity(buffer.count + (sourceHigh - sourceLow))
+                    for i in sourceLow..<sourceHigh {
+                        buffer.append(sourceBytes[i])
+                    }
+                } else {
+                    buffer.reserveCapacity(buffer.count + range.count)
+                    for i in range {
+                        buffer.append(span[i])
+                    }
                 }
                 return PendingLeaf(node: node, content: .materialized(buffer))
             }
