@@ -1015,10 +1015,10 @@ extension BlockParser {
 
     /// Splice a `.footnoteReference` node in place of the opener's bracket text node and any inner-content text nodes.
     ///
-    /// Only called for a label that resolves to a registered definition. Assigns or reuses the 1-based
-    /// index for this label (in first-reference order), records the definition on first reference (so the
-    /// post-processing pass can move it to the document end in index order), and increments the
-    /// definition's `referenceCount`. The emitted reference carries the *definition's* raw label (cmark
+    /// Only called for a label that resolves to a registered definition. The reference's index (and the
+    /// definition's `referenceCount`) is assigned later, by the footnote post-processing pass over the
+    /// finalized tree, because an enclosing bracket can still discard this reference; until then it
+    /// carries a placeholder index of 0. The emitted reference carries the *definition's* raw label (cmark
     /// discards the reference's own text and links back to the definition), so `[^Foo]` resolving to
     /// `[^foo]` displays `foo`.
     ///
@@ -1028,25 +1028,12 @@ extension BlockParser {
     private mutating func emitFootnoteReference(openerInl: DocumentStorage.Index, isImage: Bool, openerVirtualStart: Int, content: borrowing ContentSpan, labelChunk: Chunk) {
         let key = normalizeLabel(chunk: labelChunk)
         guard let defIdx = storage.footnoteMap[key],
-              case .footnoteDefinition(let defLabel, let count) = storage[defIdx].data else {
+              case .footnoteDefinition(let defLabel, _) = storage[defIdx].data else {
             return
         }
-        let index: Int32
-        if let existing = storage.footnoteIndices[key] {
-            index = existing
-        } else {
-            storage.nextFootnoteIndex += 1
-            index = storage.nextFootnoteIndex
-            storage.footnoteIndices[key] = index
-            storage.footnoteReferencedDefs.append(defIdx)
-        }
-        storage[defIdx].data = .footnoteDefinition(
-            label: defLabel,
-            referenceCount: count + 1
-        )
         let parentIdx = storage[openerInl].parent
         let fnRefIdx = storage.appendNode(NodeRecord(
-            kind: .footnoteReference(index: Int(index)),
+            kind: .footnoteReference(index: 0),
             parent: parentIdx,
             data: .footnoteReference(label: defLabel)
         ))

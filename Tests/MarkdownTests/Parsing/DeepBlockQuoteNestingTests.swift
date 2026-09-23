@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-import Markdown
+@_spi(Footnotes) import Markdown
 import Testing
 
 /// Deep block-quote nesting must build the full tree (cmark leaves block quotes uncapped) and must
@@ -45,5 +45,25 @@ struct DeepBlockQuoteNestingTests {
         let document = Document(parsing: String(repeating: ">", count: 300))
         let html = HTMLFormatter.format(document)
         #expect(html.contains("<blockquote>"))
+    }
+
+    /// Footnote post-processing must not recurse one native stack frame per level either: a
+    /// reference at the bottom of a deep block-quote chain keeps its definition, which moves to the
+    /// document end.
+    @Test func deepBlockQuoteFootnoteReferenceDoesNotOverflow() {
+        let depth = 2_000
+        let markdown = String(repeating: ">", count: depth) + " x[^a]\n\n[^a]: y\n"
+        let document = Document(parsing: markdown, options: .footnotes)
+
+        #expect(document.childCount == 2)
+        var quotes = 0
+        var node: Markup? = document.child(at: 0)
+        while let blockQuote = node as? BlockQuote {
+            quotes += 1
+            node = blockQuote.child(at: 0)
+        }
+        #expect(quotes == depth)
+        #expect(node?.child(at: 1) is FootnoteReference)
+        #expect(document.child(at: 1) is FootnoteDefinition)
     }
 }

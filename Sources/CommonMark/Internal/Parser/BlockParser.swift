@@ -427,25 +427,80 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return storage
     }
 
-    /// Replicate cmark's `process_footnotes` over the finalized tree: definitions that acquired no
-    /// reference are removed; referenced definitions are moved to the end of the document root in the
-    /// order their references first appeared (their assigned index order). Definitions can be nested
-    /// anywhere (a block quote, a list item); cmark extracts them all to the document root, leaving any
-    /// emptied container behind. Numbering and the `footnoteReferencedDefs` order were established
-    /// during inline parsing (`emitFootnoteReference`).
+    /// Replicate cmark's `process_footnotes` over the finalized tree: number the footnote references
+    /// in document order, drop definitions that no reference resolves to, and move the referenced ones
+    /// to the end of the document root in index order. Definitions can be nested anywhere (a block
+    /// quote, a list item); cmark extracts them all to the document root, leaving any emptied container
+    /// behind.
+    ///
+    /// Numbering is decided here from the references that survive in the finalized tree, not when they
+    /// were emitted during inline parsing: an enclosing footnote-shaped bracket's
+    /// `.cmarkBugCompatibility` literal reconstruction can discard a reference after emission (the
+    /// inner `[^a]` of `[^ [^a]]`), and cmark, which numbers only what its tree walk finds, gives such
+    /// a reference no index and lets it keep no definition alive.
     private mutating func processFootnotes() {
         guard storage.options.contains(.footnotes) else { return }
-        let keep = Set(storage.footnoteReferencedDefs)
-        // Drop unreferenced definitions (including duplicate-label definitions, whose references all
-        // resolved to the first definition).
+        // No definitions means no reference can have been emitted (a reference resolves only against a
+        // registered definition), so there is nothing to number, keep, or drop.
+        guard !storage.footnoteDefinitionOrder.isEmpty else { return }
+        let referencedDefs = numberLiveFootnoteReferences()
+        let keep = Set(referencedDefs)
+        // Drop definitions with no surviving reference (including duplicate-label definitions, whose
+        // references all resolved to the first definition).
         for defIdx in storage.footnoteDefinitionOrder where !keep.contains(defIdx) {
             storage.unlinkChild(defIdx)
         }
-        // Move referenced definitions to the document end, in first-reference order.
-        for defIdx in storage.footnoteReferencedDefs {
+        for defIdx in referencedDefs {
             storage.unlinkChild(defIdx)
             storage.appendChild(defIdx, to: documentIndex)
         }
+    }
+
+    /// Assign each footnote reference in the finalized tree its 1-based index, and each referenced
+    /// definition its reference count, mirroring cmark's `process_footnotes` reference walk (blocks.c).
+    /// Returns the referenced definitions in index order (the order of their first reference).
+    ///
+    /// A definition's index is fixed by its first reference in document pre-order; later references to
+    /// the same definition reuse it. Every reference label resolves through `footnoteMap` exactly as it
+    /// did at emit time. The walk covers every container, including footnote definitions (whose own
+    /// content can reference other footnotes), matching cmark's whole-tree iteration. It keeps an
+    /// explicit stack of pending nodes rather than recursing, so arbitrarily deep trees (e.g. thousands
+    /// of nested block quotes) do not overflow the call stack.
+    private mutating func numberLiveFootnoteReferences() -> [DocumentStorage.Index] {
+        var referencedDefs: [DocumentStorage.Index] = []
+        var indices: [DocumentStorage.Index: Int] = [:]
+        var referenceCounts: [DocumentStorage.Index: Int] = [:]
+        var pending: [DocumentStorage.Index] = []
+        if let first = storage[documentIndex].firstChild {
+            pending.append(first)
+        }
+        while let node = pending.popLast() {
+            if case .footnoteReference(let label) = storage[node].data,
+               let defIdx = storage.footnoteMap[normalizeLabel(chunk: storage.chunk(of: label))] {
+                let index: Int
+                if let existing = indices[defIdx] {
+                    index = existing
+                } else {
+                    referencedDefs.append(defIdx)
+                    index = referencedDefs.count
+                    indices[defIdx] = index
+                }
+                storage[node].kind = .footnoteReference(index: index)
+                referenceCounts[defIdx, default: 0] += 1
+            }
+            if let next = storage[node].next {
+                pending.append(next)
+            }
+            if let child = storage[node].firstChild {
+                pending.append(child)
+            }
+        }
+        for (defIdx, count) in referenceCounts {
+            if case .footnoteDefinition(let label, _) = storage[defIdx].data {
+                storage[defIdx].data = .footnoteDefinition(label: label, referenceCount: count)
+            }
+        }
+        return referencedDefs
     }
 
     /// Inline-only parse path for `.inlineOnly` / `.preserveWhitespace`.

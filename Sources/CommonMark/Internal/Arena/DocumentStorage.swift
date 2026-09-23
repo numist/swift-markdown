@@ -56,25 +56,10 @@ internal struct DocumentStorage: ~Copyable {
     /// Keyed by normalized label, value is the index of the `.footnoteDefinition` node in `nodes`. First definition wins.
     internal var footnoteMap: [String: Index] = [:]
 
-    /// Counter for assigning 1-based indices to `.footnoteReference` nodes in order of first reference.
-    ///
-    /// The first `[^a]` reference becomes index 1; subsequent `[^a]`s reuse index 1; the next distinct label becomes index 2; and so on.
-    internal var nextFootnoteIndex: Int32 = 0
-
-    /// Map of normalized footnote label -> assigned 1-based index for references that have already been seen.
-    ///
-    /// Lets later references to the same label reuse the original index without consulting the definition node directly.
-    internal var footnoteIndices: [String: Int32] = [:]
-
     /// Every `.footnoteDefinition` node, in the order it was opened (document order).
     ///
     /// Used by the footnote post-processing pass to enumerate all definitions so unreferenced ones can be dropped.
     internal var footnoteDefinitionOrder: [Index] = []
-
-    /// The definition nodes that acquired at least one reference, in order of first reference (= index order).
-    ///
-    /// The post-processing pass moves exactly these to the end of the document, in this order, mirroring cmark's `process_footnotes`.
-    internal var footnoteReferencedDefs: [Index] = []
 
     /// Text nodes that stand in for cmark's embedded NUL after a `[^[` footnote collapse, ending their
     /// text-consolidation run.
