@@ -59,10 +59,10 @@ extension BlockParser {
         )
         let spansEnabled = storage.options.contains(.tableSpans)
         let dittoEnabled = storage.options.contains(.tableRowspanDitto)
-        // Cell node indices for every row built so far, so a rowspan marker can find the cell above it. Only tracked when `.tableSpans` is on - otherwise it stays empty (no allocation) and the span machinery is skipped entirely, keeping the common table path identical to a span-free build.
-        var previousRows: [[DocumentStorage.Index]] = []
+        // Every row built so far (its cell node indices and how many of them were parsed rather than padded in), so a rowspan marker can find the cell above it. Only tracked when `.tableSpans` is on - otherwise it stays empty (no allocation) and the span machinery is skipped entirely, keeping the common table path identical to a span-free build.
+        var previousRows: [SpanRow] = []
         // Header row.
-        let headerCellIndices = appendRow(
+        let headerRow = appendRow(
             parent: node,
             line: header,
             alignments: alignments,
@@ -75,11 +75,11 @@ extension BlockParser {
             chunkOffset: chunk.offset
         )
         if spansEnabled {
-            previousRows.append(headerCellIndices)
+            previousRows.append(headerRow)
         }
         // Body rows. Each subsequent line becomes one `.tableRow`.
         for k in 2..<lines.count {
-            let cells = appendRow(
+            let row = appendRow(
                 parent: node,
                 line: lines[k],
                 alignments: alignments,
@@ -92,7 +92,7 @@ extension BlockParser {
                 chunkOffset: chunk.offset
             )
             if spansEnabled {
-                previousRows.append(cells)
+                previousRows.append(row)
             }
         }
         return true
@@ -206,7 +206,7 @@ extension BlockParser {
 
     /// Build a `.tableRow` node + its cells under `parent`. Missing trailing cells are emitted as empty; extras beyond `columnCount` are dropped.
     ///
-    /// When `spansEnabled`, each cell carries `.tableCell` span data: an empty `||` cell becomes a colspan filler (colspan 0) and grows the nearest preceding real cell's colspan (a leading filler has none, so it just carries colspan 0); a cell whose content is the lone rowspan marker (`^`, or `"` when `dittoEnabled`) becomes a rowspan filler (rowspan 0) and grows the matching cell in the nearest non-filler row above, with its marker text suppressed. Returns the row's cell node indices (for the next row's rowspan resolution).
+    /// When `spansEnabled`, each cell carries `.tableCell` span data: an empty `||` cell becomes a colspan filler (colspan 0) and grows the nearest preceding real cell's colspan (a leading filler has none, so it just carries colspan 0); a cell whose content is the lone rowspan marker (`^`, or `"` when `dittoEnabled`) becomes a rowspan filler (rowspan 0) and grows the matching cell in the nearest non-filler row above, with its marker text suppressed. Returns the row's cells (for the next row's rowspan resolution).
     @discardableResult
     private mutating func appendRow(
         parent: DocumentStorage.Index,
@@ -216,10 +216,10 @@ extension BlockParser {
         isLastLine: Bool,
         spansEnabled: Bool,
         dittoEnabled: Bool,
-        previousRows: [[DocumentStorage.Index]],
+        previousRows: [SpanRow],
         mode: TableSourceMode,
         chunkOffset: Int
-    ) -> [DocumentStorage.Index] {
+    ) -> SpanRow {
         let rowIdx = storage.appendNode(NodeRecord(
             kind: .tableRow(isHeader: isHeader),
             parent: parent,
@@ -293,19 +293,28 @@ extension BlockParser {
                 for col in 0..<columnCount where rowspans[col] == 0 {
                     var r = previousRows.count - 1
                     var spanning: DocumentStorage.Index? = nil
+                    var spanningIsPadded = false
                     while r >= 0 {
                         let prev = previousRows[r]
-                        guard col < prev.count else { break }
-                        let candidate = prev[col]
+                        guard col < prev.cells.count else { break }
+                        let candidate = prev.cells[col]
                         if cellRowspan(candidate) == 0 {
                             r -= 1
                             continue
                         }
                         spanning = candidate
+                        spanningIsPadded = col >= prev.parsedCellCount
                         break
                     }
                     if let spanning {
-                        setCellRowspan(spanning, cellRowspan(spanning) + 1)
+                        // why: cmark-gfm creates a short row's padded-in cells with no span data
+                        // (`try_opening_table_row`), so `get_cell_rowspan` reads them as 1 but
+                        // `increment_cell_rowspan` is a no-op: the marker still resolves to (and stops at)
+                        // the padded cell and is cleared, yet the padded cell never grows, leaving the
+                        // row a cell short. Reproduced flag-on only; flag-off the padded cell spans.
+                        if !(spanningIsPadded && storage.options.contains(.cmarkBugCompatibility)) {
+                            setCellRowspan(spanning, cellRowspan(spanning) + 1)
+                        }
                         skipContent[col] = true
                     }
                 }
@@ -393,7 +402,7 @@ extension BlockParser {
                 }
             }
         }
-        return cellIndices
+        return SpanRow(cells: cellIndices, parsedCellCount: cells.count)
     }
 
     // MARK: - Source projection
@@ -455,6 +464,13 @@ extension BlockParser {
     private mutating func stampEnd(_ node: DocumentStorage.Index, arena: Int, _ proj: RowProjection) {
         let rebased = arena + proj.rebasedDelta
         storage.setSourceEnd(node, rebased)
+    }
+
+    /// A built row's cell node indices, kept so the rows below it can resolve their rowspan markers.
+    private struct SpanRow {
+        let cells: [DocumentStorage.Index]
+        /// How many leading cells were parsed from the row's source line; any cells after them were padded in for a short row.
+        let parsedCellCount: Int
     }
 
     /// Current rowspan of a `.tableCell` node (`1` if it carries no span data).
