@@ -1981,8 +1981,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     baseColumn: prefixColumns
                 ) {
                     // The marker consumes `>` plus one optional following space or tab COLUMN (cmark's
-                    // `parse_block_quote_prefix`). When that optional column falls on a TAB it only
-                    // PARTIALLY consumes it: leave the tab byte at `cursor` so the leaf strip can split
+                    // `parse_block_quote_prefix`). When that optional column falls on a TAB wider than one
+                    // column it only PARTIALLY consumes it: leave the tab byte at `cursor` so the leaf strip can split
                     // it, and record the intended column in `prefixColumns` (one column past `>`),
                     // mirroring the list-item content-indent straddle. `handleCodeBlockContinuation`
                     // folds the shortfall into `stripFenceIndent`, surfacing the tab's leftover columns
@@ -2065,13 +2065,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // may continue lazily (the walk stops here with `allMatched: false`).
                 let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
                 let isBlank = firstNonSpace == lineRange.upperBound
-                let availCols = indentColumns(source: source, from: cursor, to: firstNonSpace)
+                // Measured from `prefixColumns`, like the item branch above: `cursor` can sit mid-tab.
+                let availCols = indentColumns(source: source, from: cursor, to: firstNonSpace, baseColumn: prefixColumns)
                 if availCols >= 4 {
                     cursor = advanceColumns(
                         source: source,
                         from: cursor,
                         to: lineRange.upperBound,
-                        columns: 4
+                        columns: 4,
+                        baseColumn: prefixColumns
                     )
                     prefixColumns += 4
                     deepestMatched = node
@@ -2395,7 +2397,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // The marker consumes `>` plus one optional following space or tab COLUMN (cmark's
                 // `open_new_blocks`, the same `S_advance_offset(parser, input, 1, true)` call
                 // `parse_block_quote_prefix` uses for a continuation). When that optional column falls
-                // on a TAB it only PARTIALLY consumes it: leave the tab byte at `cursor` so a leaf opened
+                // on a TAB wider than one column it only PARTIALLY consumes it: leave the tab byte at `cursor` so a leaf opened
                 // later on this line (an indented/fenced code block straddling the tab) can split it, and
                 // record the intended column in `column` (one column past `>`) - the opening-line sibling
                 // of `walkOpenContainers`'s continuation case. This only arises when a raw prefix tab
