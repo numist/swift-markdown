@@ -2541,6 +2541,12 @@ extension BlockParser {
             if b == UInt8(ascii: ">") {
                 break
             }
+            // why: stop at the first byte no domain can contain (`validateEmailDomain` would reject it
+            // anyway), as cmark's `_scan_autolink_email` does; scanning on to a distant `>` or the block's
+            // end makes each unclosed `<local@` cost O(block length).
+            if !(b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-") || b == UInt8(ascii: ".")) {
+                return nil
+            }
             i += 1
         }
         if i == domainStart || i >= end {
