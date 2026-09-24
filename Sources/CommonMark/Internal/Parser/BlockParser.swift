@@ -223,6 +223,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Which inline raw-HTML scan kinds have overrun to end-of-input in the current `parseInline` pass and must not be re-attempted - cmark's per-subject `subject.flags` bits `FLAG_SKIP_HTML_{COMMENT,CDATA,DECLARATION,PI}` (`src/inlines.c` `handle_pointy_brace`). The `.comment` bit gates the ENTIRE `<!` dispatch, so it also suppresses later CDATA and declaration matches. Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per pass.
     var htmlScanSkip: HTMLScanSkip = []
 
+    /// Per-kind stretches of scan starts from which a first-closer raw-HTML scan is known to fail in the current `parseInline` pass (`HTMLCloserMisses`). Reset per pass.
+    var htmlCloserMisses = HTMLCloserMisses()
+
     /// Content offsets of newlines swallowed by a code span or raw HTML in the current `parseInline` pass. Under `.cmarkSourcePositionsDisabled` (cmark parsed with `CMARK_OPT_SOURCEPOS` off), such a newline does NOT reset cmark's per-line column cursor - `adjust_subj_node_newlines` runs only with source positions on - so it must not reset an unresolved footnote reference's captured-label measurement either (`footnoteColumnResets`). Recorded only when that option is set; reset per pass.
     var codeSpanSwallowedNewlines: Set<Int> = []
 

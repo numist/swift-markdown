@@ -32,4 +32,45 @@ final class InlineScanPerformanceTests: XCTestCase {
         // Generous bound for a loaded machine and a debug build; the cubic scan took about a minute here.
         XCTAssertLessThan(elapsed, .seconds(5))
     }
+
+    /// Many unclosed mid-line `<!--` comment openers in one paragraph whose continuation lines are indented must parse in time that does not grow cubically with their count.
+    func testUnclosedHTMLCommentOpenersInIndentedParagraph() throws {
+        try assertUnclosedRawHTMLOpenersParseQuickly(opener: "<!--")
+    }
+
+    /// Many unclosed mid-line `<?` processing-instruction openers in one paragraph whose continuation lines are indented must parse in time that does not grow cubically with their count.
+    func testUnclosedHTMLProcessingInstructionOpenersInIndentedParagraph() throws {
+        try assertUnclosedRawHTMLOpenersParseQuickly(opener: "<?")
+    }
+
+    /// Many unclosed mid-line `<!X ` declaration openers in one paragraph whose continuation lines are indented must parse in time that does not grow cubically with their count.
+    func testUnclosedHTMLDeclarationOpenersInIndentedParagraph() throws {
+        try assertUnclosedRawHTMLOpenersParseQuickly(opener: "<!X ")
+    }
+
+    /// Many unclosed mid-line `<![CDATA[` openers in one paragraph whose continuation lines are indented must parse in time that does not grow cubically with their count.
+    func testUnclosedHTMLCDATAOpenersInIndentedParagraph() throws {
+        try assertUnclosedRawHTMLOpenersParseQuickly(opener: "<![CDATA[")
+    }
+
+    private func assertUnclosedRawHTMLOpenersParseQuickly(opener: String, file: StaticString = #filePath, line: UInt = #line) throws {
+        let repetitions = 400
+        let source = "x\n" + String(repeating: " a\(opener)b\n", count: repetitions)
+
+        let clock = ContinuousClock()
+        var document: Document!
+        let elapsed = clock.measure {
+            document = Document(parsing: source)
+        }
+
+        // Fixture sanity: a single paragraph whose `repetitions` interior line endings are all soft breaks, with every opener left literal.
+        XCTAssertEqual(document.childCount, 1, file: file, line: line)
+        let paragraph = try XCTUnwrap(document.child(at: 0) as? Paragraph, file: file, line: line)
+        XCTAssertEqual(paragraph.children.filter { $0 is SoftBreak }.count, repetitions, file: file, line: line)
+        XCTAssertFalse(paragraph.children.contains { $0 is InlineHTML }, file: file, line: line)
+        XCTAssertEqual(paragraph.plainText.filter { $0 == "<" }.count, repetitions, file: file, line: line)
+
+        // Generous bound for a loaded machine and a debug build; rescanning to the paragraph end for every opener took 20-45 seconds here.
+        XCTAssertLessThan(elapsed, .seconds(5), file: file, line: line)
+    }
 }

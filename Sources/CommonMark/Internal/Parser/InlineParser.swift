@@ -46,6 +46,17 @@ internal struct HTMLScanSkip: OptionSet {
     static let processingInstruction = HTMLScanSkip(rawValue: 1 << 3)
 }
 
+/// Per-kind stretch of scan-start offsets from which a spec (first-closer) raw-HTML closer scan is known to
+/// fail in the current `parseInline` pass. A scan that fails from `p` because it reached the content end rules
+/// out every start at or after `p`; one that fails at a NUL rules out every start from `p` up to that NUL.
+/// Without it, every unclosed opener of a kind rescans to the content end. Reset per `parseInline` pass.
+internal struct HTMLCloserMisses {
+    var comment: Range<Int> = 0..<0
+    var cdata: Range<Int> = 0..<0
+    var declaration: Range<Int> = 0..<0
+    var processingInstruction: Range<Int> = 0..<0
+}
+
 /// Inline-level Markdown parsing functions.
 extension BlockParser {
 
@@ -96,6 +107,7 @@ extension BlockParser {
             attributeSwallowedNewlines.removeAll(keepingCapacity: true)
             linkDestinationSwallowedNewlines.removeAll(keepingCapacity: true)
         }
+        htmlCloserMisses = HTMLCloserMisses()
 
         while cursor < endOffset {
             let byte = content[cursor]
@@ -2833,18 +2845,7 @@ extension BlockParser {
             htmlScanSkip.insert(.comment)
             return nil
         }
-        var i = bodyStart
-        while i + 3 <= end {
-            let b0 = content[i]
-            if b0 == 0 {
-                return nil
-            }
-            if b0 == UInt8(ascii: "-") && content[i + 1] == UInt8(ascii: "-") && content[i + 2] == UInt8(ascii: ">") {
-                return i + 3
-            }
-            i += 1
-        }
-        return nil
+        return Self.scanRawHTMLCloser("-->", from: bodyStart, end: end, content: content, misses: &htmlCloserMisses.comment)
     }
 
     /// Match a comment body + `-->` closer under cmark-gfm's stricter grammar (swift-cmark `src/scanners.re`: `([^\x00-]+ | "-" [^\x00-] | "--" [^\x00>])* "-->"`, scanned by `_scan_html_comment` after the `<!--` opener). Returns the offset just past `-->`, or `nil` if no closer is reachable. Dashes are admitted only in runs of one or two before a non-dash / non-`>` char, so a body element can never leave a lone `-->` closer — which is why `<!----->` is rejected (its three interior dashes are absorbed as `--` + `-`, then `>` no longer follows a `--`). A NUL byte, or reaching `end` without a closer, fails.
@@ -2931,20 +2932,7 @@ extension BlockParser {
             htmlScanSkip.insert(.cdata)
             return nil
         }
-        var i = start + prefixLen
-        while i + 3 <= end {
-            let b0 = content[i]
-            if b0 == 0 {
-                return nil
-            }
-            if b0 == UInt8(ascii: "]")
-                && content[i + 1] == UInt8(ascii: "]")
-                && content[i + 2] == UInt8(ascii: ">") {
-                return i + 3
-            }
-            i += 1
-        }
-        return nil
+        return Self.scanRawHTMLCloser("]]>", from: start + prefixLen, end: end, content: content, misses: &htmlCloserMisses.cdata)
     }
 
     /// Scan a CDATA body under cmark-gfm's grammar (swift-cmark `src/scanners.re`:
@@ -3028,20 +3016,13 @@ extension BlockParser {
         if afterSpaces == i {
             return nil
         }
-        i = afterSpaces
-        while i < end {
-            let b = content[i]
-            if b == 0 {
-                return nil
-            }
-            if b == UInt8(ascii: ">") {
-                return i + 1
-            }
-            i += 1
+        if let match = Self.scanRawHTMLCloser(">", from: afterSpaces, end: end, content: content, misses: &htmlCloserMisses.declaration) {
+            return match
         }
-        // Matched name + spaces but no closing `>` through end-of-input: cmark's framed match overruns
+        // Matched name + spaces but no closing `>` through end-of-input (the known-failing stretch reaches
+        // `end`, unlike a scan stopped by a NUL): cmark's framed match overruns
         // (`subj->pos + matchlen > input.len`), which sets `FLAG_SKIP_HTML_DECLARATION`.
-        if bugCompat {
+        if bugCompat, htmlCloserMisses.declaration.contains(end) {
             htmlScanSkip.insert(.declaration)
         }
         return nil
@@ -3057,18 +3038,36 @@ extension BlockParser {
         if storage.options.contains(.cmarkBugCompatibility) {
             return matchHTMLProcessingInstructionCmark(start: start, end: end, content: content)
         }
-        var i = start + 2
-        while i + 2 <= end {
-            let b0 = content[i]
-            if b0 == 0 {
+        return Self.scanRawHTMLCloser("?>", from: start + 2, end: end, content: content, misses: &htmlCloserMisses.processingInstruction)
+    }
+
+    /// Scan for the first `closer` starting at or after `start`. Returns the offset just past it, or `nil` if a NUL byte or the end of the content comes first.
+    ///
+    /// `misses` is the kind's stretch of scan starts already known to fail (`HTMLCloserMisses`): a `start` inside it returns `nil` without rescanning, and a failing scan replaces it with the stretch that scan rules out. Both are exact: a scan from any later start inside that stretch sees a subset of the same bytes, none of which begins `closer`, and then the same NUL or content end.
+    private static func scanRawHTMLCloser(
+        _ closer: StaticString, from start: Int, end: Int, content: borrowing ContentSpan, misses: inout Range<Int>
+    ) -> Int? {
+        if misses.contains(start) {
+            return nil
+        }
+        let closerBytes = closer.utf8Start
+        let width = closer.utf8CodeUnitCount
+        var i = start
+        while i + width <= end {
+            if content[i] == 0 {
+                misses = start..<(i + 1)
                 return nil
             }
-            if b0 == UInt8(ascii: "?")
-                && content[i + 1] == UInt8(ascii: ">") {
-                return i + 2
+            var matched = 0
+            while matched < width, content[i + matched] == closerBytes[matched] {
+                matched += 1
+            }
+            if matched == width {
+                return i + width
             }
             i += 1
         }
+        misses = start..<Int.max
         return nil
     }
 
