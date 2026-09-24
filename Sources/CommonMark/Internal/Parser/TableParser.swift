@@ -280,9 +280,10 @@ extension BlockParser {
                 }
                 // Rowspan marker: the trimmed cell is exactly the marker byte. cmark's rowspan pass (and
                 // the cell emit) both stop at `columnCount`, so a marker beyond it is dropped, never
-                // resolved — only track markers for cells that survive to emit.
+                // resolved — only track markers for cells that survive to emit. cmark tests the cell's
+                // CONTENT buffer, so a pipe-preceded cell's leading VT/FF is padding here too.
                 if col < columnCount {
-                    let trimmed = trimSpaceTabs(range: raw)
+                    let trimmed = trimCellContent(range: raw, stripLeadingVTFF: col > 0 || hadLeadingPipe)
                     if trimmed.count == 1 && storage.strings[trimmed.lowerBound] == markerByte {
                         rowspans[col] = 0
                     }
@@ -750,7 +751,8 @@ extension BlockParser {
     /// is no leading pipe is not pipe-preceded, so its only leading trim is `cmark_strbuf_trim` (space/tab,
     /// VT/FF NOT trimmed) — pass `false`. The trailing edge is always `cmark_strbuf_trim` (space/tab only;
     /// a trailing VT/FF stays content). The cell NODE range is stamped from the untrimmed span (it includes
-    /// the leading whitespace, as cmark's cell start_offset does); only the inline content uses this range.
+    /// the leading whitespace, as cmark's cell start_offset does); this range is the cell's content buffer
+    /// (`cell->buf`), which cmark inline-parses and also tests for the lone rowspan marker.
     private func trimCellContent(range: Range<Int>, stripLeadingVTFF: Bool) -> Range<Int> {
         var s = range.lowerBound
         var e = range.upperBound
