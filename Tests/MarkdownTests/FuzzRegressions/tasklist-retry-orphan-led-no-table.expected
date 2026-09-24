@@ -1,0 +1,9 @@
+Document @1:1-4:6
+└─ UnorderedList @1:1-4:6
+   └─ ListItem @1:1-4:6 checkbox: [x]
+      └─ Paragraph @2:4-4:6
+         ├─ Text "� [x] a|b"
+         ├─ SoftBreak
+         ├─ Text "-|-"
+         ├─ SoftBreak
+         └─ Text "c|d"
