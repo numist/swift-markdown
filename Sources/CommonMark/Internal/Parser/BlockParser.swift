@@ -316,10 +316,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var delimiters = UniqueArray<DelimiterRecord>()
         var brackets = UniqueArray<BracketRecord>()
         
-        // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content); `runScratch` holds a stable copy of a flattened block's arena→source run map; `arenaScratch` holds a stable snapshot of `storage.strings` backing a multi-segment content's synthetic arena segment (a split-tab residual). All owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
+        // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content) and `segEndScratch` its running virtual end offsets; `runScratch` holds a stable copy of a flattened block's arena→source run map and `runEndScratch` its running end offsets; `arenaScratch` holds a stable snapshot of `storage.strings` backing a multi-segment content's synthetic arena segment (a split-tab residual). All owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
         var scratch = UniqueArray<UInt8>()
         var segScratch = UniqueArray<Segment>()
+        var segEndScratch = UniqueArray<Int>()
         var runScratch = UniqueArray<ArenaRun>()
+        var runEndScratch = UniqueArray<Int>()
         var arenaScratch = UniqueArray<UInt8>()
         
         for (node, ref) in pending {
@@ -347,11 +349,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // Flattened content (a non-contiguous setext heading) carries an arena→source run map so its inlines still get source positions; plain arena content (no map) parses unmapped as before.
                     if let map = arenaSourceMaps[node], !map.isEmpty {
                         runScratch.removeAll(keepingCapacity: true)
+                        runEndScratch.removeAll(keepingCapacity: true)
+                        var runEnd = 0
                         for run in map {
                             runScratch.append(run)
+                            runEnd += Int(run.length)
+                            runEndScratch.append(runEnd)
                         }
                         try parseInline(
-                            content: ContentSpan(span: scratch.span, base: chunk.offset, inSource: false, arenaRuns: runScratch.span),
+                            content: ContentSpan(span: scratch.span, base: chunk.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span),
                             into: node,
                             delimiters: &delimiters,
                             brackets: &brackets
@@ -368,8 +374,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             } else {
                 // Multi-segment content (multi-line non-contiguous paragraph/heading): copy the segment list into stable storage and parse it directly from the source - no flattening into the arena.
                 segScratch.removeAll(keepingCapacity: true)
+                segEndScratch.removeAll(keepingCapacity: true)
+                var virtualEnd = 0
                 for i in 0..<Int(ref.count) {
-                    segScratch.append(storage.segments[Int(ref.first) + i])
+                    let seg = storage.segments[Int(ref.first) + i]
+                    segScratch.append(seg)
+                    virtualEnd += Int(seg.length)
+                    segEndScratch.append(virtualEnd)
                 }
                 // A synthetic arena-backed segment (a lazy-continuation split-tab residual, `addLineSegment`)
                 // lives at a NON-zero arena offset; the interned newline join sits at offset 0 and is read as
@@ -389,14 +400,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                         arenaScratch.append(copying: buffer)
                     }
                     try parseInline(
-                        content: ContentSpan(source: sourceBytes, segments: segScratch.span, virtualLength: Int(ref.totalLength), arena: arenaScratch.span),
+                        content: ContentSpan(source: sourceBytes, segments: segScratch.span, segmentEnds: segEndScratch.span, virtualLength: Int(ref.totalLength), arena: arenaScratch.span),
                         into: node,
                         delimiters: &delimiters,
                         brackets: &brackets
                     )
                 } else {
                     try parseInline(
-                        content: ContentSpan(source: sourceBytes, segments: segScratch.span, virtualLength: Int(ref.totalLength)),
+                        content: ContentSpan(source: sourceBytes, segments: segScratch.span, segmentEnds: segEndScratch.span, virtualLength: Int(ref.totalLength)),
                         into: node,
                         delimiters: &delimiters,
                         brackets: &brackets

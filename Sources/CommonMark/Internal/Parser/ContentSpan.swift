@@ -27,11 +27,17 @@ internal struct ContentSpan: ~Escapable {
     /// Single-segment: which buffer `span` is (`true` = source, `false` = arena scratch). Multi-segment: unused.
     @usableFromInline let inSource: Bool
 
-    /// Single-segment arena content that images a source range: an arena→source run map, content-relative (keyed from the first content byte). `sourceOffset` walks it to recover per-line source columns for reconstructed content - a flattened non-contiguous setext heading, or (as a single constant-shift run) a `\|`-unescaped table cell. Empty (`count == 0`) for source-backed content or arena content with no source image (in which case `sourceOffset` returns `nil`). Only consulted for `!inSource` single-segment content.
+    /// Single-segment arena content that images a source range: an arena→source run map, content-relative (keyed from the first content byte). `sourceOffset` resolves through it to recover per-line source columns for reconstructed content - a flattened non-contiguous setext heading, or (as a single constant-shift run) a `\|`-unescaped table cell. Empty (`count == 0`) for source-backed content or arena content with no source image (in which case `sourceOffset` returns `nil`). Only consulted for `!inSource` single-segment content.
     @usableFromInline let arenaRuns: Span<ArenaRun>
+
+    /// `arenaRunEnds[i]` is the content-relative offset just past run `i` of `arenaRuns` (the running total of run lengths), held in stable storage alongside it; empty when `arenaRuns` is. Non-decreasing, so the run covering an offset is found by binary search (`firstIndex(endingAfter:in:)`) - a flattened heading has a run per line, and positions are resolved once per inline node.
+    @usableFromInline let arenaRunEnds: Span<Int>
 
     /// Multi-segment only: the content's segments (empty for single-segment). A copy held in stable storage for the inline loop's duration (the live `storage.segments` pool grows during parsing).
     @usableFromInline let segments: Span<Segment>
+
+    /// Multi-segment only: `segmentEnds[i]` is the virtual offset just past segment `i` (the running total of segment lengths), held in stable storage alongside `segments`. Non-decreasing, so the segment covering a virtual offset is found by binary search (`segmentIndex(covering:)`) rather than a walk from the first segment - a paragraph has a segment per line, and the inline pass resolves offsets once per byte.
+    @usableFromInline let segmentEnds: Span<Int>
 
     /// Multi-segment only: a stable snapshot of `storage.strings` (from offset 0) that backs the content's non-source segments. Empty unless the content carries a synthetic-space segment (a lazy-continuation split-tab residual); when empty, non-source segments synthesize `\n` (the only other non-source segment is the interned newline). Held as an independent copy because `storage.strings` grows - and may reallocate - as the inline loop interns node content.
     @usableFromInline let arena: Span<UInt8>
@@ -47,46 +53,54 @@ internal struct ContentSpan: ~Escapable {
         self.base = base
         self.inSource = inSource
         self.arenaRuns = Span<ArenaRun>()
+        self.arenaRunEnds = Span<Int>()
         self.segments = Span<Segment>()
+        self.segmentEnds = Span<Int>()
         self.arena = Span<UInt8>()
         self.multiVirtualLength = 0
     }
 
-    /// Single-segment arena initializer carrying an arena→source run map (see `arenaRuns`) so inline stamping recovers source positions for reconstructed (flattened) content.
-    @_lifetime(copy span, copy arenaRuns)
+    /// Single-segment arena initializer carrying an arena→source run map (see `arenaRuns`) and its running end offsets (see `arenaRunEnds`) so inline stamping recovers source positions for reconstructed (flattened) content.
+    @_lifetime(copy span, copy arenaRuns, copy arenaRunEnds)
     @inlinable
-    init(span: Span<UInt8>, base: Int, inSource: Bool, arenaRuns: Span<ArenaRun>) {
+    init(span: Span<UInt8>, base: Int, inSource: Bool, arenaRuns: Span<ArenaRun>, arenaRunEnds: Span<Int>) {
         self.span = span
         self.base = base
         self.inSource = inSource
         self.arenaRuns = arenaRuns
+        self.arenaRunEnds = arenaRunEnds
         self.segments = Span<Segment>()
+        self.segmentEnds = Span<Int>()
         self.arena = Span<UInt8>()
         self.multiVirtualLength = 0
     }
 
-    /// Multi-segment initializer: `source` is the borrowed source bytes; `segments` is the content's segment list (held in stable storage); `virtualLength` is their total length. The content's only non-source segment is the interned `"\n"` join, synthesized directly on read.
-    @_lifetime(copy source, copy segments)
+    /// Multi-segment initializer: `source` is the borrowed source bytes; `segments` is the content's segment list and `segmentEnds` its running virtual end offsets (both held in stable storage); `virtualLength` is their total length. The content's only non-source segment is the interned `"\n"` join, synthesized directly on read.
+    @_lifetime(copy source, copy segments, copy segmentEnds)
     @inlinable
-    init(source: Span<UInt8>, segments: Span<Segment>, virtualLength: Int) {
+    init(source: Span<UInt8>, segments: Span<Segment>, segmentEnds: Span<Int>, virtualLength: Int) {
         self.span = source
         self.base = 0
         self.inSource = false
         self.arenaRuns = Span<ArenaRun>()
+        self.arenaRunEnds = Span<Int>()
         self.segments = segments
+        self.segmentEnds = segmentEnds
         self.arena = Span<UInt8>()
         self.multiVirtualLength = virtualLength
     }
 
     /// Multi-segment initializer carrying an arena snapshot: identical to the plain multi-segment initializer, but the content also holds a synthetic-space segment (a lazy-continuation split-tab residual) whose bytes live in `arena` (a stable snapshot of `storage.strings` from offset 0). Non-source segments read `arena[offset]` - synthetic spaces resolve to spaces and the interned `"\n"` (offset 0) resolves to `\n`.
-    @_lifetime(copy source, copy segments, copy arena)
+    @_lifetime(copy source, copy segments, copy segmentEnds, copy arena)
     @inlinable
-    init(source: Span<UInt8>, segments: Span<Segment>, virtualLength: Int, arena: Span<UInt8>) {
+    init(source: Span<UInt8>, segments: Span<Segment>, segmentEnds: Span<Int>, virtualLength: Int, arena: Span<UInt8>) {
         self.span = source
         self.base = 0
         self.inSource = false
         self.arenaRuns = Span<ArenaRun>()
+        self.arenaRunEnds = Span<Int>()
         self.segments = segments
+        self.segmentEnds = segmentEnds
         self.arena = arena
         self.multiVirtualLength = virtualLength
     }
@@ -105,6 +119,34 @@ internal struct ContentSpan: ~Escapable {
     @inlinable
     var isEmpty: Bool { isMultiSegment ? multiVirtualLength == 0 : span.count == 0 }
 
+    /// The index of the first entry of the non-decreasing running-end table `ends` that is past `offset` - the index of the piece (segment or arena run) covering `offset` (never a zero-length one for an in-range offset) - or `ends.count` when `offset` is at or past the last end.
+    @inlinable
+    static func firstIndex(endingAfter offset: Int, in ends: Span<Int>) -> Int {
+        var lo = 0
+        var hi = ends.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if ends[mid] > offset {
+                hi = mid
+            } else {
+                lo = mid + 1
+            }
+        }
+        return lo
+    }
+
+    /// Multi-segment only: the index of the segment covering virtual `offset`, or `segments.count` when `offset` is at or past the end.
+    @inlinable
+    func segmentIndex(covering offset: Int) -> Int {
+        Self.firstIndex(endingAfter: offset, in: segmentEnds)
+    }
+
+    /// Multi-segment only: the virtual offset of segment `i`'s first byte.
+    @inlinable
+    func segmentStart(_ i: Int) -> Int {
+        i == 0 ? 0 : segmentEnds[i - 1]
+    }
+
     /// Read the byte at `offset` (global for single-segment, virtual for multi-segment).
     @inlinable
     subscript(_ offset: Int) -> UInt8 {
@@ -116,24 +158,20 @@ internal struct ContentSpan: ~Escapable {
 
     /// Multi-segment byte resolution: find the segment covering virtual `offset` and read it. Source segments read `span` (== `sourceBytes`); a non-source segment reads the arena snapshot (`arena[offset]`) when one is present - the interned newline at offset 0 yields `\n`, a synthetic-space run yields spaces - or synthesizes `\n` directly when no snapshot is carried (the common case, whose only non-source segment is the interned newline).
     private func multiByte(at offset: Int) -> UInt8 {
-        var v = 0
-        for i in 0..<segments.count {
-            let seg = segments[i]
-            let len = Int(seg.length)
-            if offset < v + len {
-                let local = offset - v
-                if seg.inSource {
-                    return span[Int(seg.offset) + local]
-                }
-                if arena.count > 0 {
-                    return arena[Int(seg.offset) + local]
-                }
-                // No arena snapshot: the only non-source segment is the shared interned `"\n"`.
-                return UInt8(ascii: "\n")
-            }
-            v += len
+        let i = segmentIndex(covering: offset)
+        if i == segments.count {
+            return 0
         }
-        return 0
+        let seg = segments[i]
+        let local = offset - segmentStart(i)
+        if seg.inSource {
+            return span[Int(seg.offset) + local]
+        }
+        if arena.count > 0 {
+            return arena[Int(seg.offset) + local]
+        }
+        // No arena snapshot: the only non-source segment is the shared interned `"\n"`.
+        return UInt8(ascii: "\n")
     }
 
     /// The original-source byte offset for `offset`, or `nil` if it maps to a synthetic/arena byte. Single-segment source content maps identity (the offset already IS a source offset); single-segment arena content resolves through its arena→source run map (`nil` when unmapped); multi-segment resolves through the segment list.
@@ -143,16 +181,13 @@ internal struct ContentSpan: ~Escapable {
             if inSource {
                 return offset
             }
-            // Arena content with a source pre-image carries an arena→source run map, content-relative (keyed from the first content byte). Walk it exactly like the multi-segment segment list below: a run whose `sourceOffset < 0` is a synthetic gap (the interned `\n` line-join) and yields `nil`; arena content with no map (`arenaRuns` empty) has no source image and also yields `nil`. cmark maps a `\|`-unescaped table cell's bytes back to source by a constant shift (it does NOT re-widen for the removed backslash), which the degenerate single-run case reproduces exactly.
+            // Arena content with a source pre-image carries an arena→source run map, content-relative (keyed from the first content byte). Resolve it exactly like the multi-segment segment list below: a run whose `sourceOffset < 0` is a synthetic gap (the interned `\n` line-join) and yields `nil`; arena content with no map (`arenaRuns` empty) has no source image and also yields `nil`. cmark maps a `\|`-unescaped table cell's bytes back to source by a constant shift (it does NOT re-widen for the removed backslash), which the degenerate single-run case reproduces exactly.
             let k = offset - base
-            var v = 0
-            for i in 0..<arenaRuns.count {
+            let i = Self.firstIndex(endingAfter: k, in: arenaRunEnds)
+            if i < arenaRuns.count {
                 let run = arenaRuns[i]
-                let len = Int(run.length)
-                if k < v + len {
-                    return run.sourceOffset < 0 ? nil : Int(run.sourceOffset) + (k - v)
-                }
-                v += len
+                let v = i == 0 ? 0 : arenaRunEnds[i - 1]
+                return run.sourceOffset < 0 ? nil : Int(run.sourceOffset) + (k - v)
             }
             // One-past-the-end: map just past the last source run, if any.
             if arenaRuns.count > 0 {
@@ -163,15 +198,11 @@ internal struct ContentSpan: ~Escapable {
             }
             return nil
         }
-        var v = 0
-        for i in 0..<segments.count {
+        let i = segmentIndex(covering: offset)
+        if i < segments.count {
             let seg = segments[i]
-            let len = Int(seg.length)
-            if offset < v + len {
-                // Map through `sourceOffset` (re-indents a continuation line to its block-content column), not the byte-read `offset`; they coincide except for a re-indented continuation segment.
-                return seg.inSource ? Int(seg.sourceOffset) + (offset - v) : nil
-            }
-            v += len
+            // Map through `sourceOffset` (re-indents a continuation line to its block-content column), not the byte-read `offset`; they coincide except for a re-indented continuation segment.
+            return seg.inSource ? Int(seg.sourceOffset) + (offset - segmentStart(i)) : nil
         }
         // One-past-the-end: map to just past the last source segment, if any.
         if segments.count > 0 {
@@ -189,17 +220,13 @@ internal struct ContentSpan: ~Escapable {
         if !isMultiSegment {
             return Chunk(offset: offset, length: length, inSource: inSource)
         }
-        var v = 0
-        for i in 0..<segments.count {
-            let seg = segments[i]
-            let len = Int(seg.length)
-            if offset < v + len {
-                let local = offset - v
-                return Chunk(offset: Int(seg.offset) + local, length: length, inSource: seg.inSource)
-            }
-            v += len
+        let i = segmentIndex(covering: offset)
+        if i == segments.count {
+            return .empty
         }
-        return .empty
+        let seg = segments[i]
+        let local = offset - segmentStart(i)
+        return Chunk(offset: Int(seg.offset) + local, length: length, inSource: seg.inSource)
     }
 
     /// A contiguous buffer `Chunk` for forward byte scanning from virtual `offset`, bounded to one readable region and to `limit`.
@@ -218,21 +245,17 @@ internal struct ContentSpan: ~Escapable {
         if !isMultiSegment {
             return Chunk(offset: offset, length: limit - offset, inSource: inSource)
         }
-        var v = 0
-        for i in 0..<segments.count {
-            let seg = segments[i]
-            let len = Int(seg.length)
-            if offset < v + len {
-                if !seg.inSource {
-                    return nil
-                }
-                let local = offset - v
-                let regionEnd = min(limit, v + len)
-                return Chunk(offset: Int(seg.offset) + local, length: regionEnd - offset, inSource: true)
-            }
-            v += len
+        let i = segmentIndex(covering: offset)
+        if i == segments.count {
+            return nil
         }
-        return nil
+        let seg = segments[i]
+        if !seg.inSource {
+            return nil
+        }
+        let local = offset - segmentStart(i)
+        let regionEnd = min(limit, segmentEnds[i])
+        return Chunk(offset: Int(seg.offset) + local, length: regionEnd - offset, inSource: true)
     }
 
     /// Global offset of the next inline-significant byte at or after `globalCursor`, or `endOffset` if none remain. Used to skip plain-text runs in the inline dispatch loop without stepping byte by byte: a `SIMD16` scan compares 16 bytes at once against the significant set, recovering the first matching lane; a sub-16 tail is scanned scalar.
@@ -260,18 +283,9 @@ internal struct ContentSpan: ~Escapable {
         if globalCursor >= end {
             return end
         }
-        // Locate the segment containing globalCursor (segment count per block is tiny).
         let count = segments.count
-        var si = 0
-        var segVStart = 0
-        while si < count {
-            let len = Int(segments[si].length)
-            if globalCursor < segVStart + len {
-                break
-            }
-            segVStart += len
-            si += 1
-        }
+        let si = segmentIndex(covering: globalCursor)
+        let segVStart = segmentStart(si)
         return span.withUnsafeBufferPointer { buf -> Int in
             guard let p = buf.baseAddress else { return end }
             var i = si
