@@ -1,0 +1,14 @@
+Document @1:1-4:4
+└─ Table @1:1-4:4 alignments: |-|-|
+   ├─ Head
+   │  ├─ Cell colspan: 0
+   │  └─ Cell colspan: 0
+   └─ Body
+      ├─ Row
+      │  ├─ Cell
+      │  │  └─ Text "�"
+      │  └─ Cell
+      └─ Row
+         ├─ Cell
+         │  └─ Text "�"
+         └─ Cell rowspan: 0
