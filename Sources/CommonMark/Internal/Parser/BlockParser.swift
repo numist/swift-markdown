@@ -202,6 +202,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// split consults this set to drop the same leading definitions cmark had already removed.
     var reconstructedRefDefParagraphs: Set<DocumentStorage.Index> = []
 
+    /// Lists and thematic breaks that cmark has finalized because a later sibling was added after them.
+    ///
+    /// cmark keeps a list or thematic break open until a later sibling closes it (`add_child` finalizes it
+    /// as a parent that cannot contain the new block), and `check_open_blocks` matches it on every line
+    /// while it is open. The sibling can vanish again - a reference-definition-only paragraph is dropped at
+    /// finalize - leaving a closed list or break as the last child, so the last child's kind alone does not
+    /// say whether cmark still has it open. Consulted by `lastChildAlwaysContinues(item:)`.
+    var listsAndBreaksClosedBySibling: Set<DocumentStorage.Index> = []
+
     /// The deepest list that has seen a blank line since its last item boundary.
     ///
     /// When a new item is added to that list (i.e., the blank line was between sibling items), the list gets marked loose. Cleared on each item open after the check, and stays stale (but harmless) when the list closes.
@@ -631,6 +640,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     
     /// Append a node as a child of the given parent. Returns the new node's index.
     private mutating func addChild(kind: MarkdownNode.Kind, parent: DocumentStorage.Index, data: NodeData? = nil, start: Int? = nil) -> DocumentStorage.Index {
+        if let previous = storage[parent].lastChild, alwaysContinues(storage[previous].kind) {
+            listsAndBreaksClosedBySibling.insert(previous)
+        }
         let idx = storage.appendNode(NodeRecord(kind: kind, parent: parent, data: data))
         storage.appendChild(idx, to: parent)
         storage.setSourceStart(idx, start)
@@ -2748,10 +2760,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // matched - then falls through to open the paragraph from there, exactly like the empty-item
             // case above. Those 3 bytes are counted in cmark's line buffer, not ours (see
             // `tasklistAdvanceEnd`), so the paragraph can start inside a NUL's U+FFFD.
+            // An item whose last child is a list or a thematic break cmark still has open is never that
+            // container: `check_open_blocks` matches either on every line (neither has a continuation
+            // test), so `parent_container` is that child, not the item. The rewrite closes such a child
+            // earlier than cmark does, so `current` alone can't tell.
             if storage.options.contains(.cmarkBugCompatibility),
                storage.options.contains(.tasklist),
                !openedListItemThisLine,
                case .item = storage[current].kind,
+               !lastChildAlwaysContinues(item: current),
                tasklistScanMatchesFromLineStart(source: source, lineRange: lineRange) {
                 storage[current].kind = .item(checked: lineContainsCheckedBox(source: source, lineRange: lineRange))
                 let lineEnd = currentLineSourceRange.upperBound
@@ -4734,6 +4751,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         return checked
+    }
+
+    /// Whether `kind` is a block that cmark's `check_open_blocks` matches on every line while it is open - a
+    /// list or a thematic break (`blocks.c`: neither has a case in its switch, so it falls to `default`).
+    private func alwaysContinues(_ kind: MarkdownNode.Kind) -> Bool {
+        kind.isList || kind == .thematicBreak
+    }
+
+    /// Whether `item`'s last child is a list or thematic break that cmark still has open, making it (not the
+    /// item) the line's deepest matched container. cmark finalizes such a child only when its item closes or
+    /// a later sibling is added (`listsAndBreaksClosedBySibling`).
+    private func lastChildAlwaysContinues(item: DocumentStorage.Index) -> Bool {
+        guard let lastChild = storage[item].lastChild else {
+            return false
+        }
+        return alwaysContinues(storage[lastChild].kind) && !listsAndBreaksClosedBySibling.contains(lastChild)
     }
 
     /// Whether cmark's `scan_tasklist` pattern (`extensions/ext_scanners.re`) matches `lineRange`'s raw
