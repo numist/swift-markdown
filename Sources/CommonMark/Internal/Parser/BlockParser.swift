@@ -683,6 +683,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return prefixEnd
     }
 
+    /// Map an original-source byte offset on the current materialized line to its buffer offset: the
+    /// inverse of `materializedSourceOffset`. A prefix byte's buffer offset is the column its expansion
+    /// starts at. Callers must hold `!currentLineMapsToSource`.
+    private func materializedBufferOffset(ofSource sourceOffset: Int) -> Int {
+        let lineStart = currentLineSourceRange.lowerBound
+        let prefixEnd = lineStart + materializedRestStart
+        if sourceOffset >= prefixEnd {
+            return materializedTailBufferStart + (sourceOffset - prefixEnd)
+        }
+        var col = 0
+        for i in lineStart..<sourceOffset {
+            col += sourceBytes[i] == UInt8(ascii: "\t") ? 4 - (col & 3) : 1
+        }
+        return col
+    }
+
     /// Consume `pending` and return `node`'s accumulated content, or `nil` if `node` has none (either nothing was pending, or a *different* node's leaf was - which the single-open-leaf invariant forbids).
     ///
     /// Moves the content out; the leaf is destroyed. Used by the append helpers, which always either find their own node's content or none.
@@ -2730,18 +2746,47 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // the checked state from a whole-line `strstr` for `"[x]"`/`"[X]"` and advances exactly 3
             // bytes from `parser->offset` (`cursor` here) - unrelated to how many bytes the scan itself
             // matched - then falls through to open the paragraph from there, exactly like the empty-item
-            // case above.
+            // case above. Those 3 bytes are counted in cmark's line buffer, not ours (see
+            // `tasklistAdvanceEnd`), so the paragraph can start inside a NUL's U+FFFD.
             if storage.options.contains(.cmarkBugCompatibility),
                storage.options.contains(.tasklist),
                !openedListItemThisLine,
                case .item = storage[current].kind,
                tasklistScanMatchesFromLineStart(source: source, lineRange: lineRange) {
                 storage[current].kind = .item(checked: lineContainsCheckedBox(source: source, lineRange: lineRange))
-                let advancedCursor = min(cursor + 3, lineRange.upperBound)
-                let contentStart = indexOfFirstNonSpace(source: source, range: advancedCursor..<lineRange.upperBound)
-                let paragraphIdx = addChild(kind: .paragraph, parent: current, start: sourceOffset(contentStart))
+                let lineEnd = currentLineSourceRange.upperBound
+                let advance = tasklistAdvanceEnd(cursor: cursor)
+                if advance.orphanedBytes > 0 {
+                    // The advance stopped inside a NUL's U+FFFD, so cmark's paragraph starts with that
+                    // replacement's orphaned continuation bytes, and the reference's String bridge repairs
+                    // each one to its own U+FFFD. Materialize this first line into the arena with those
+                    // replacements leading the rest of the line (from the byte after the NUL). It stays a
+                    // single-line `.materialized` leaf, the first-line shape the pending-table checks expect.
+                    let nul = advance.sourceOffset - 1
+                    let paragraphIdx = addChild(kind: .paragraph, parent: current, start: nul)
+                    current = paragraphIdx
+                    if positionsEnabled {
+                        currentContentIndent = nul - currentLineSourceRange.lowerBound
+                    }
+                    let rest = advance.sourceOffset..<lineEnd
+                    let buffer = UniqueArray<UInt8>(capacity: 3 * advance.orphanedBytes + rest.count) { buffer in
+                        for _ in 0..<advance.orphanedBytes {
+                            buffer.append(0xEF)
+                            buffer.append(0xBF)
+                            buffer.append(0xBD)
+                        }
+                        for i in rest {
+                            buffer.append(sourceBytes[i])
+                        }
+                    }
+                    _ = take(pending, ifNode: paragraphIdx)
+                    return PendingLeaf(node: paragraphIdx, content: .materialized(buffer))
+                }
+                let contentStart = indexOfFirstNonSpace(source: sourceBytes, range: advance.sourceOffset..<lineEnd)
+                let lineContentStart = currentLineMapsToSource ? contentStart : materializedBufferOffset(ofSource: contentStart)
+                let paragraphIdx = addChild(kind: .paragraph, parent: current, start: sourceOffset(lineContentStart))
                 current = paragraphIdx
-                return addLine(span: source, range: contentStart..<lineRange.upperBound, to: paragraphIdx, pending: pending)
+                return addLine(span: source, range: lineContentStart..<lineRange.upperBound, to: paragraphIdx, pending: pending)
             }
 
             // Paragraph fallback. By this point the list-close-if-needed step above has already ensured `current` isn't a list.
@@ -4753,6 +4798,35 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         let afterCheckbox = p + 3
         return afterCheckbox < end && source[afterCheckbox].isExtensionScannerSpace
+    }
+
+    /// Where cmark's `open_tasklist_item` 3-byte advance (`S_advance_offset` with `columns == false`) from
+    /// `cursor` ends, as an original-source byte offset on the current line.
+    ///
+    /// cmark counts those bytes in its own line buffer, which differs from the rewrite's in two ways. A NUL
+    /// is already the 3-byte U+FFFD there (feed-time replacement), so it counts 3 and the advance can stop
+    /// inside it. `orphanedBytes` is then how many of its bytes are left over, and `sourceOffset` is the byte
+    /// after the NUL. A tab is 1 byte, including one the item's indent only partly consumed: cmark's offset
+    /// still sits on that tab, where the rewrite's tab-expanded `cursor` is a column inside it.
+    private func tasklistAdvanceEnd(cursor: Int) -> (sourceOffset: Int, orphanedBytes: Int) {
+        var p: Int
+        if currentLineMapsToSource {
+            p = cursor
+        } else {
+            let (sourceStart, splitTabSpaces) = materializedSourceStart(bufferStart: cursor)
+            p = splitTabSpaces > 0 ? sourceStart - 1 : sourceStart
+        }
+        let lineEnd = currentLineSourceRange.upperBound
+        var remaining = 3
+        while remaining > 0, p < lineEnd {
+            let width = sourceBytes[p] == 0 ? 3 : 1
+            p += 1
+            if width > remaining {
+                return (p, width - remaining)
+            }
+            remaining -= width
+        }
+        return (p, 0)
     }
 
     /// Whether `lineRange`'s raw bytes contain `"[x]"` or `"[X]"` anywhere - cmark's whole-line
