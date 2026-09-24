@@ -2765,6 +2765,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     let nul = advance.sourceOffset - 1
                     let paragraphIdx = addChild(kind: .paragraph, parent: current, start: nul)
                     current = paragraphIdx
+                    markOrphanLedParagraphTableVisited(paragraphIdx)
                     if positionsEnabled {
                         currentContentIndent = nul - currentLineSourceRange.lowerBound
                     }
@@ -2786,6 +2787,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let lineContentStart = currentLineMapsToSource ? contentStart : materializedBufferOffset(ofSource: contentStart)
                 let paragraphIdx = addChild(kind: .paragraph, parent: current, start: sourceOffset(lineContentStart))
                 current = paragraphIdx
+                // An advance that stopped inside a multi-byte scalar (`22\u{E9} [x] `) leaves the content on
+                // one of its continuation bytes: an orphan straight from the source.
+                if contentStart < lineEnd, sourceBytes[contentStart] & 0xC0 == 0x80 {
+                    markOrphanLedParagraphTableVisited(paragraphIdx)
+                }
                 return addLine(span: source, range: lineContentStart..<lineRange.upperBound, to: paragraphIdx, pending: pending)
             }
 
@@ -4798,6 +4804,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         let afterCheckbox = p + 3
         return afterCheckbox < end && source[afterCheckbox].isExtensionScannerSpace
+    }
+
+    /// Mark a paragraph that cmark starts with orphaned UTF-8 continuation bytes as never able to open a GFM
+    /// table. The childless-item tasklist advance orphans them when it stops inside a scalar: a NUL's U+FFFD
+    /// (see `tasklistAdvanceEnd`), or a multi-byte scalar the digit run's wildcard matched.
+    ///
+    /// cmark's `try_opening_table_header` parses its header row from the paragraph's whole raw content
+    /// (`row_from_string` over `cmark_node_get_string_content`), and those orphans stay at the front of that
+    /// content for the paragraph's lifetime. The compiled `scan_table_cell` is a UTF-8 DFA that rejects a lone
+    /// continuation byte, so the row scan stops at offset 0 and the header row is NULL for every delimiter
+    /// line, and cmark sets `CMARK_NODE__TABLE_VISITED`. `paragraphTablePending == false` is that state: no
+    /// later delimiter line is classified, and finalize never builds a table.
+    private mutating func markOrphanLedParagraphTableVisited(_ paragraph: DocumentStorage.Index) {
+        paragraphTablePending[paragraph] = false
     }
 
     /// Where cmark's `open_tasklist_item` 3-byte advance (`S_advance_offset` with `columns == false`) from

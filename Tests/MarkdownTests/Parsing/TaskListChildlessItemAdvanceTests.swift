@@ -62,11 +62,47 @@ class TaskListChildlessItemAdvanceTests: XCTestCase {
             surface("+\n  2\u{0} [x] a\n  b"))
     }
 
-    /// The orphan-led line is still a table header candidate, as cmark's byte-wise `try_opening_table_header` sees it.
-    func testOrphanLineOpensTable() {
+    private func paragraphItem(_ lines: [String]) -> String {
+        "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n"
+            + lines.enumerated().map { index, line in
+                "         \(index == lines.count - 1 ? "└" : "├")─ Text \"\(line)\""
+            }.joined(separator: "\n         ├─ SoftBreak\n")
+    }
+
+    // MARK: An orphan-led paragraph never opens a table
+
+    // cmark's table header row is parsed from the paragraph's whole raw content, which starts with the
+    // orphaned byte(s); its UTF-8 `scan_table_cell` rejects a lone continuation byte, so no header row ever
+    // parses.
+
+    func testNULOrphanLineDoesNotOpenTable() {
+        XCTAssertEqual(paragraphItem(["\u{FFFD} [x] a|b", "-|-", "c|d"]), surface("+\n  2\u{0} [x] a|b\n  -|-\n  c|d"))
+    }
+
+    func testMultiByteOrphanLineDoesNotOpenTable() {
+        XCTAssertEqual(paragraphItem(["\u{FFFD} [x] a|b", "-|-"]), surface("+\n  22\u{E9} [x] a|b\n  -|-"))
+    }
+
+    func testFourByteOrphanLineDoesNotOpenTable() {
+        XCTAssertEqual(paragraphItem(["\u{FFFD}\u{FFFD} [x] a|b", "-|-"]), surface("+\n  2\u{1F600} [x] a|b\n  -|-"))
+    }
+
+    /// Control: an advance that ends on a scalar boundary leaves nothing orphaned, so the table opens.
+    func testOrphanFreeLineOpensTable() {
         XCTAssertEqual(
-            "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"\u{FFFD} [x] a\"\n         │  └─ Cell\n         │     └─ Text \"b\"\n         └─ Body\n            └─ Row\n               ├─ Cell\n               │  └─ Text \"c\"\n               └─ Cell\n                  └─ Text \"d\"",
-            surface("+\n  2\u{0} [x] a|b\n  -|-\n  c|d"))
+            "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"[x] a\"\n         │  └─ Cell\n         │     └─ Text \"b\"\n         └─ Body",
+            surface("+\n  22 [x] a|b\n  -|-"))
+    }
+
+    func testOrphanLedParagraphDoesNotOpenTableOnLaterLine() {
+        XCTAssertEqual(paragraphItem(["\u{FFFD} [x] a", "b|c", "-|-"]), surface("+\n  2\u{0} [x] a\n  b|c\n  -|-"))
+    }
+
+    /// Without a checkbox the scan doesn't match, nothing is advanced, and the NUL is an ordinary U+FFFD.
+    func testNULHeaderWithoutCheckboxOpensTable() {
+        XCTAssertEqual(
+            "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"2\u{FFFD} a\"\n         │  └─ Cell\n         │     └─ Text \"b\"\n         └─ Body",
+            surface("+\n  2\u{0} a|b\n  -|-"))
     }
 
     // MARK: Tabs count one byte
