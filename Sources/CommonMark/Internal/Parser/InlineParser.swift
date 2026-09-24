@@ -1255,17 +1255,6 @@ extension BlockParser {
         }
     }
 
-    /// The byte length of the UTF-8 sequence led by `b0` (1/2/3/4 per the lead-byte bit pattern, mirroring
-    /// the same tests `decodeUTF8Scalar` uses). The source is already known-valid UTF-8, so this is only
-    /// used to tell whether a raw byte cut (`capturedLabelBytes`) lands mid-sequence, never to validate
-    /// the sequence itself.
-    private static func utf8SequenceLength(_ b0: UInt8) -> Int {
-        if b0 & 0xE0 == 0xC0 { return 2 }
-        if b0 & 0xF0 == 0xE0 { return 3 }
-        if b0 & 0xF8 == 0xF0 { return 4 }
-        return 1
-    }
-
     /// Build the byte-captured label for a raw byte-length cut `[start, cutEnd)`, reproducing cmark's
     /// `cmark_chunk` truncation: the cut is a length-bounded slice oblivious to UTF-8 boundaries, so a
     /// scalar split by the cut is replaced by a single U+FFFD (the reference's later `String(cString:)`
@@ -1281,7 +1270,7 @@ extension BlockParser {
         var j = start
         while j < cutEnd {
             let b0 = j < contentEnd ? content[j] : overreadByte!
-            let sequenceLength = utf8SequenceLength(b0)
+            let sequenceLength = b0.utf8SequenceLength
             if j + sequenceLength <= cutEnd {
                 for k in j..<(j + sequenceLength) {
                     bytes.append(k < contentEnd ? content[k] : overreadByte!)

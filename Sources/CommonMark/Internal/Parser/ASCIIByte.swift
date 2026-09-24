@@ -112,4 +112,15 @@ extension UInt8 {
             return false
         }
     }
+
+    /// The byte length of the UTF-8 sequence this byte leads (1/2/3/4 per the lead-byte bit pattern,
+    /// mirroring the same tests `decodeUTF8Scalar` uses). The source is already known-valid UTF-8, so this
+    /// only measures a scalar's extent, never validates the sequence itself.
+    @inline(__always)
+    var utf8SequenceLength: Int {
+        if self & 0xE0 == 0xC0 { return 2 }
+        if self & 0xF0 == 0xE0 { return 3 }
+        if self & 0xF8 == 0xF0 { return 4 }
+        return 1
+    }
 }

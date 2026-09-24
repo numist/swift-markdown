@@ -4424,7 +4424,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Classify the four leading bytes of a candidate GFM tasklist marker (`[`, ` `/`x`/`X`, `]`, `spacechar`).
     ///
-    /// Returns the checked state (`false` for `[ ]`, `true` for `[x]`/`[X]`), or `nil` if the bytes aren't a marker. The fourth byte is cmark's tasklist-scanner `spacechar` (`[ \t\v\f]`, `isExtensionScannerSpace`): `scan_tasklist` requires `("[ ]"|"[x]") spacechar+` after the checkbox (`extensions/ext_scanners.re`), so space, tab, vertical tab, and form feed all separate the checkbox from its content. Shared by `matchTasklistMarker` (finalize-time, over the flattened paragraph content) and the continuation re-indent base (`addLine`, over the first line's source bytes) so both agree on exactly what counts as a checkbox.
+    /// Returns the checked state (`false` for `[ ]`, `true` for `[x]`/`[X]`), or `nil` if the bytes aren't a marker. The fourth byte is cmark's tasklist-scanner `spacechar` (`[ \t\v\f]`, `isExtensionScannerSpace`): `scan_tasklist` requires `("[ ]"|"[x]"|"[X]") spacechar+` after the checkbox (the compiled `extensions/ext_scanners.c`; its `.re` source omits `[X]` but isn't what's built), so space, tab, vertical tab, and form feed all separate the checkbox from its content. Shared by `matchTasklistMarker` (finalize-time, over the flattened paragraph content) and the continuation re-indent base (`addLine`, over the first line's source bytes) so both agree on exactly what counts as a checkbox.
     static func tasklistMarkerChecked(_ b0: UInt8, _ b1: UInt8, _ b2: UInt8, _ b3: UInt8) -> Bool? {
         guard b0 == UInt8(ascii: "[") else {
             return nil
@@ -4687,13 +4687,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Whether cmark's `scan_tasklist` pattern (`extensions/ext_scanners.re`) matches `lineRange`'s raw
     /// bytes from their TRUE start (`lineRange.lowerBound`), independent of any container prefix already
-    /// stripped up to `cursor`: `spacechar*("-"|"+"|"*"|[0-9]+.)spacechar+("[ ]"|"[x]")spacechar+`. This is
+    /// stripped up to `cursor`: `spacechar*("-"|"+"|"*"|[0-9]+.)spacechar+("[ ]"|"[x]"|"[X]")spacechar+`. This is
     /// the childless-item continuation half of `open_tasklist_item` - see the call site in
     /// `dispatchNewBlocks` for why cmark re-runs this scan on a line the item's own marker never touched.
     ///
-    /// The digit-run alternative's trailing `.` matches ANY byte (re2c wildcard), and re2c compiles the
-    /// whole pattern to one DFA that accepts if ANY split of the digit run between `[0-9]+` and `.`
-    /// completes the rest of the pattern - not just the greedy (all-digits-to-the-run) split. E.g. for
+    /// The digit-run alternative's trailing `.` matches ANY one UTF-8 scalar other than a newline (re2c
+    /// wildcard; the compiled `ext_scanners.c` decodes a whole multi-byte sequence there), and re2c
+    /// compiles the whole pattern to one DFA that accepts if ANY split of the digit run between `[0-9]+`
+    /// and `.` completes the rest of the pattern - not just the greedy (all-digits-to-the-run) split. E.g. for
     /// `222 [ ] `, only ceding the LAST digit to the wildcard leaves a space for the mandatory
     /// `spacechar+` that follows; ceding zero or two digits does not. So every split is tried.
     private func tasklistScanMatchesFromLineStart(source: Span<UInt8>, lineRange: Range<Int>) -> Bool {
@@ -4718,11 +4719,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         while digitsEnd < end, source[digitsEnd].isASCIIDigit {
             digitsEnd += 1
         }
-        // `[0-9]+.` needs >= 1 digit then exactly 1 more (any) byte. `wildcard` is that byte's index;
-        // try every position the digit run allows ceding to it.
+        // `[0-9]+.` needs >= 1 digit then exactly 1 more (any) scalar. `wildcard` is that scalar's first
+        // byte; try every position the digit run allows ceding to it.
         var wildcard = p + 1
         while wildcard <= digitsEnd, wildcard < end {
-            if tasklistScanTailMatches(source: source, from: wildcard + 1, end: end) {
+            if tasklistScanTailMatches(source: source, from: wildcard + source[wildcard].utf8SequenceLength, end: end) {
                 return true
             }
             wildcard += 1
@@ -4730,7 +4731,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return false
     }
 
-    /// The `spacechar+("[ ]"|"[x]")spacechar+` tail of cmark's `scan_tasklist`, starting at `from`. Both
+    /// The `spacechar+("[ ]"|"[x]"|"[X]")spacechar+` tail of cmark's `scan_tasklist`, starting at `from`.
+    /// The uppercase `[X]` isn't in `ext_scanners.re`'s pattern, but the compiled `ext_scanners.c` (the
+    /// `.re` is excluded from the build) accepts it, so it's matched here too. Both
     /// `spacechar` runs are greedy with no ambiguity to backtrack over: neither literal that follows
     /// (`[` for the checkbox, end-of-pattern for the trailing run) is itself a `spacechar`.
     private func tasklistScanTailMatches(source: Span<UInt8>, from: Int, end: Int) -> Bool {
@@ -4743,7 +4746,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         guard p + 3 <= end,
               source[p] == UInt8(ascii: "["),
-              source[p + 1] == UInt8(ascii: " ") || source[p + 1] == UInt8(ascii: "x"),
+              source[p + 1] == UInt8(ascii: " ") || source[p + 1] == UInt8(ascii: "x")
+                || source[p + 1] == UInt8(ascii: "X"),
               source[p + 2] == UInt8(ascii: "]") else {
             return false
         }
