@@ -2128,7 +2128,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return true
         }
         // List markers interrupt a paragraph only if they'd start a non-empty first item (CommonMark 0.31 §5.2/§5.3). An ORDERED list can interrupt a paragraph only when its start number is 1; bullets are exempt. This is cmark's `interrupts_paragraph && start != 1` decline in `parse_list_marker` (blocks.c), and it applies at EVERY nesting level - `interruptsParagraph` is true exactly when the open paragraph's own container matched this line, so `- a\n  2. b` (the item matched → `2. b` interrupts the item's paragraph) keeps `2. b` as text, while `1. a\n2. b` (the item did NOT match → the marker sits at the list level) opens a sibling item regardless of start.
-        if let marker = matchListMarker(source: source, range: range, firstNonSpace: firstNonSpace, lineStart: lineStart) {
+        if let marker = matchListMarker(source: source, range: range, firstNonSpace: firstNonSpace, lineStart: lineStart, indent: indent) {
             if marker.isEmpty {
                 // An EMPTY marker opens a list only when it does NOT interrupt the open paragraph, exactly as cmark's `parse_list_marker` accepts an empty bullet/ordered marker iff `!interrupts_paragraph` (blocks.c). Same `interruptsParagraph` signal as the ordered rule below: `- a\n  +` (the item matched → the marker interrupts the item's paragraph) keeps `+` as text, `> a\n+` (the block quote's continuation failed → the marker doesn't interrupt that paragraph) opens a new top-level list, and `a\n+` at the top level (the document always matches the paragraph) keeps `+` as text (FINDINGS #43).
                 return !interruptsParagraph
@@ -2469,7 +2469,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 source: source,
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
-                lineStart: lineRange.lowerBound
+                lineStart: lineRange.lowerBound,
+                indent: indent
             ) {
                 pending = try openListItem(marker: marker, firstNonSpace: firstNonSpace, pending: pending)
                 openedListItemThisLine = true
@@ -3510,8 +3511,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// `lineStart` is the physical line start; the marker's absolute column (needed for tab-stop math in
     /// the padding run) is `columnWidth(lineStart, firstNonSpace)`.
-    private func matchListMarker(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, lineStart: Int) -> ListMarkerInfo? {
-        let markerOffset = firstNonSpace - range.lowerBound
+    ///
+    /// `indent` is the marker's leading indent in COLUMNS, measured from the column the enclosing prefixes
+    /// reached (cmark's `parser->indent`, stored as the item's `marker_offset`; blocks.c `open_new_blocks`).
+    /// A byte count would under-measure a tab before the marker, including a tab an enclosing `>` left
+    /// partially consumed.
+    private func matchListMarker(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, lineStart: Int, indent: Int) -> ListMarkerInfo? {
+        let markerOffset = indent
         if markerOffset > 3 {
             return nil
         }
@@ -3578,11 +3584,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // cmark's `parse_list_marker` (blocks.c) advances columns, not bytes.
         let markerColumn = columnWidth(source: source, from: lineStart, to: firstNonSpace)
         let contentColumnAfterMarker = markerColumn + markerWidth
-        // `contentColumn` (the item's relative padding) folds in `markerOffset` in BYTES. It equals cmark's
-        // column-based `marker_offset` in every case reached here: a materialized line pre-expands its prefix
-        // tabs to spaces (byte count == column count), and the source-mapped fenced-code re-dispatch path
-        // that keeps literal tabs opens these markers at the line cursor (`markerOffset == 0`). Only the
-        // padding run AFTER the marker needs the column-accurate measurement below.
         // Marker must be followed by a space, tab, or end of line.
         var contentStart: Int
         var contentColumn: Int
