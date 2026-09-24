@@ -1964,6 +1964,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     }
                 }
                 pending = appendNewline(to: current, pending: pending)
+                // GFM tasklist quirk (`.cmarkBugCompatibility` only): on a lazy line cmark's deepest matched
+                // container can be a bare item (a block quote inside it failed its `>` check). cmark then
+                // runs `open_new_blocks` against that item, and with no block start there its tasklist
+                // extension retries the checkbox exactly as in `dispatchNewBlocks`: it sets the ITEM's
+                // checked state and advances the offset 3 bytes, and `add_text_to_container` still adds the
+                // rest of the line to the open paragraph as a lazy continuation (blocks.c:1405-1408).
+                if currentLineIsLazyContinuation,
+                   isTasklistRetryItem(deepestMatched),
+                   tasklistScanMatchesFromLineStart(source: source, lineRange: lineRange) {
+                    storage[deepestMatched].kind = .item(checked: lineContainsCheckedBox(source: source, lineRange: lineRange))
+                    return addLazyLineAfterTasklistAdvance(source: source, lineRange: lineRange, cursor: cursor, pending: pending)
+                }
                 pending = addLine(span: source, range: firstNonSpace..<lineRange.upperBound, to: current, pending: pending)
                 return pending
             }
@@ -2759,16 +2771,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // bytes from `parser->offset` (`cursor` here) - unrelated to how many bytes the scan itself
             // matched - then falls through to open the paragraph from there, exactly like the empty-item
             // case above. Those 3 bytes are counted in cmark's line buffer, not ours (see
-            // `tasklistAdvanceEnd`), so the paragraph can start inside a NUL's U+FFFD.
-            // An item whose last child is a list or a thematic break cmark still has open is never that
-            // container: `check_open_blocks` matches either on every line (neither has a continuation
-            // test), so `parent_container` is that child, not the item. The rewrite closes such a child
-            // earlier than cmark does, so `current` alone can't tell.
-            if storage.options.contains(.cmarkBugCompatibility),
-               storage.options.contains(.tasklist),
-               !openedListItemThisLine,
-               case .item = storage[current].kind,
-               !lastChildAlwaysContinues(item: current),
+            // `tasklistAdvanceEnd`), so the paragraph can start inside a NUL's U+FFFD. A lazy paragraph
+            // continuation reaches the same retry in `processLine` PHASE 2d instead.
+            if !openedListItemThisLine,
+               isTasklistRetryItem(current),
                tasklistScanMatchesFromLineStart(source: source, lineRange: lineRange) {
                 storage[current].kind = .item(checked: lineContainsCheckedBox(source: source, lineRange: lineRange))
                 let lineEnd = currentLineSourceRange.upperBound
@@ -2786,17 +2792,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     if positionsEnabled {
                         currentContentIndent = nul - currentLineSourceRange.lowerBound
                     }
-                    let rest = advance.sourceOffset..<lineEnd
-                    let buffer = UniqueArray<UInt8>(capacity: 3 * advance.orphanedBytes + rest.count) { buffer in
-                        for _ in 0..<advance.orphanedBytes {
-                            buffer.append(0xEF)
-                            buffer.append(0xBF)
-                            buffer.append(0xBD)
-                        }
-                        for i in rest {
-                            buffer.append(sourceBytes[i])
-                        }
-                    }
+                    var buffer = UniqueArray<UInt8>()
+                    Self.appendOrphanLedLine(orphanedBytes: advance.orphanedBytes, rest: advance.sourceOffset..<lineEnd, of: sourceBytes, to: &buffer)
                     _ = take(pending, ifNode: paragraphIdx)
                     return PendingLeaf(node: paragraphIdx, content: .materialized(buffer))
                 }
@@ -2804,11 +2801,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let lineContentStart = currentLineMapsToSource ? contentStart : materializedBufferOffset(ofSource: contentStart)
                 let paragraphIdx = addChild(kind: .paragraph, parent: current, start: sourceOffset(lineContentStart))
                 current = paragraphIdx
-                // An advance that stopped inside a multi-byte scalar (`22\u{E9} [x] `) leaves the content on
-                // one of its continuation bytes: an orphan straight from the source.
-                if contentStart < lineEnd, sourceBytes[contentStart] & 0xC0 == 0x80 {
-                    markOrphanLedParagraphTableVisited(paragraphIdx)
-                }
+                markTableVisitedIfContentStartIsOrphan(paragraphIdx, contentStart: contentStart)
                 return addLine(span: source, range: lineContentStart..<lineRange.upperBound, to: paragraphIdx, pending: pending)
             }
 
@@ -4759,6 +4752,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         kind.isList || kind == .thematicBreak
     }
 
+    /// Whether cmark's `open_tasklist_item` retries a checkbox on the current line with `node` as its
+    /// `parent_container` (`.cmarkBugCompatibility` only): `node` is an item that is the line's deepest matched
+    /// container. The rewrite's walk can stop at an item whose last child is a list or thematic break cmark
+    /// still has open; `check_open_blocks` matches either on every line (neither has a continuation test), so
+    /// cmark's container is that child, not the item. The rewrite closes such a child earlier than cmark does.
+    private func isTasklistRetryItem(_ node: DocumentStorage.Index) -> Bool {
+        guard storage.options.contains(.cmarkBugCompatibility),
+              storage.options.contains(.tasklist),
+              case .item = storage[node].kind else {
+            return false
+        }
+        return !lastChildAlwaysContinues(item: node)
+    }
+
     /// Whether `item`'s last child is a list or thematic break that cmark still has open, making it (not the
     /// item) the line's deepest matched container. cmark finalizes such a child only when its item closes or
     /// a later sibling is added (`listsAndBreaksClosedBySibling`).
@@ -4839,18 +4846,27 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return afterCheckbox < end && source[afterCheckbox].isExtensionScannerSpace
     }
 
-    /// Mark a paragraph that cmark starts with orphaned UTF-8 continuation bytes as never able to open a GFM
-    /// table. The childless-item tasklist advance orphans them when it stops inside a scalar: a NUL's U+FFFD
+    /// Mark a paragraph whose cmark content contains orphaned UTF-8 continuation bytes as never able to open a
+    /// GFM table. The later-line tasklist advance orphans them when it stops inside a scalar: a NUL's U+FFFD
     /// (see `tasklistAdvanceEnd`), or a multi-byte scalar the digit run's wildcard matched.
     ///
     /// cmark's `try_opening_table_header` parses its header row from the paragraph's whole raw content
-    /// (`row_from_string` over `cmark_node_get_string_content`), and those orphans stay at the front of that
-    /// content for the paragraph's lifetime. The compiled `scan_table_cell` is a UTF-8 DFA that rejects a lone
-    /// continuation byte, so the row scan stops at offset 0 and the header row is NULL for every delimiter
-    /// line, and cmark sets `CMARK_NODE__TABLE_VISITED`. `paragraphTablePending == false` is that state: no
+    /// (`row_from_string` over `cmark_node_get_string_content`), and those orphans stay in that content for
+    /// the paragraph's lifetime. The compiled `scan_table_cell` is a UTF-8 DFA that rejects a lone
+    /// continuation byte, so the row scan stops at the first orphan short of the content's end and the header
+    /// row is NULL for every delimiter line, and cmark sets `CMARK_NODE__TABLE_VISITED`. `paragraphTablePending == false` is that state: no
     /// later delimiter line is classified, and finalize never builds a table.
     private mutating func markOrphanLedParagraphTableVisited(_ paragraph: DocumentStorage.Index) {
         paragraphTablePending[paragraph] = false
+    }
+
+    /// Mark `paragraph` table-visited when the tasklist advance stopped inside a multi-byte scalar
+    /// (`22\u{E9} [x] `), leaving the content at `contentStart` (a source offset on the current line) on one of
+    /// its continuation bytes: an orphan straight from the source.
+    private mutating func markTableVisitedIfContentStartIsOrphan(_ paragraph: DocumentStorage.Index, contentStart: Int) {
+        if contentStart < currentLineSourceRange.upperBound, sourceBytes[contentStart] & 0xC0 == 0x80 {
+            markOrphanLedParagraphTableVisited(paragraph)
+        }
     }
 
     /// Where cmark's `open_tasklist_item` 3-byte advance (`S_advance_offset` with `columns == false`) from
@@ -4880,6 +4896,60 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             remaining -= width
         }
         return (p, 0)
+    }
+
+    /// Append a line that cmark's tasklist advance left starting with `orphanedBytes` orphaned bytes of a NUL's
+    /// U+FFFD (`tasklistAdvanceEnd`): one U+FFFD per orphan, as the reference's String bridge repairs each, then
+    /// the source bytes `rest`.
+    private static func appendOrphanLedLine(orphanedBytes: Int, rest: Range<Int>, of source: Span<UInt8>, to buffer: inout UniqueArray<UInt8>) {
+        buffer.reserveCapacity(buffer.count + 3 * orphanedBytes + rest.count)
+        for _ in 0..<orphanedBytes {
+            buffer.append(0xEF)
+            buffer.append(0xBF)
+            buffer.append(0xBD)
+        }
+        for i in rest {
+            buffer.append(source[i])
+        }
+    }
+
+    /// Add the current line to the open paragraph `current` as a lazy continuation that starts where cmark's
+    /// `open_tasklist_item` 3-byte advance from `cursor` ended (`tasklistAdvanceEnd`).
+    ///
+    /// cmark's lazy `add_line` copies from that offset, so whitespace between it and the first non-space is
+    /// the preserved lazy residual (`currentLineContentCursor`). An advance that stopped inside a NUL's U+FFFD
+    /// leaves its orphaned continuation bytes leading the added text (`appendOrphanLedLine`); only that line
+    /// is copied into the arena. Orphaned bytes, from a NUL or a multi-byte wildcard scalar, keep the
+    /// paragraph from ever opening a table (`markOrphanLedParagraphTableVisited`).
+    private mutating func addLazyLineAfterTasklistAdvance(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        let lineEnd = currentLineSourceRange.upperBound
+        let advance = tasklistAdvanceEnd(cursor: cursor)
+        if advance.orphanedBytes > 0 {
+            markOrphanLedParagraphTableVisited(current)
+            var segs: UniqueArray<Segment>
+            switch take(pending, ifNode: current) {
+            case .segments(let existing)?:
+                segs = existing
+            case .lazyNewline(let prev)?:
+                // Keep the borrowed earlier lines zero-copy, as `addLine` does for a non-contiguous continuation.
+                segs = UniqueArray<Segment>()
+                segs.append(Segment(offset: Int32(prev.lowerBound), length: Int32(prev.count), inSource: true))
+                segs.append(storage.newlineSegment)
+            case let other:
+                var buffer = unwrap(other)
+                Self.appendOrphanLedLine(orphanedBytes: advance.orphanedBytes, rest: advance.sourceOffset..<lineEnd, of: sourceBytes, to: &buffer)
+                return PendingLeaf(node: current, content: .materialized(buffer))
+            }
+            let offset = storage.strings.count
+            Self.appendOrphanLedLine(orphanedBytes: advance.orphanedBytes, rest: advance.sourceOffset..<lineEnd, of: sourceBytes, to: &storage.strings)
+            let line = Segment(offset: Int32(offset), length: Int32(storage.strings.count - offset), inSource: false)
+            return appendSegment(line, to: current, pending: PendingLeaf(node: current, content: .segments(segs)))
+        }
+        let contentStart = indexOfFirstNonSpace(source: sourceBytes, range: advance.sourceOffset..<lineEnd)
+        markTableVisitedIfContentStartIsOrphan(current, contentStart: contentStart)
+        currentLineContentCursor = currentLineMapsToSource ? advance.sourceOffset : materializedBufferOffset(ofSource: advance.sourceOffset)
+        let lineContentStart = currentLineMapsToSource ? contentStart : materializedBufferOffset(ofSource: contentStart)
+        return addLine(span: source, range: lineContentStart..<lineRange.upperBound, to: current, pending: pending)
     }
 
     /// Whether `lineRange`'s raw bytes contain `"[x]"` or `"[X]"` anywhere - cmark's whole-line
