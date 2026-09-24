@@ -1971,10 +1971,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 deepestMatched = node
             case .blockQuote:
                 let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
+                // `baseColumn: prefixColumns` - an outer quote's marker on this line can leave `cursor`
+                // mid-tab (see `blockQuotePrefixEnd`), so this marker's indent is measured from the
+                // column already reached, as in `dispatchNewBlocks`.
                 if let advanced = matchBlockQuoteMarker(
                     source: source,
                     range: cursor..<lineRange.upperBound,
-                    firstNonSpace: firstNonSpace
+                    firstNonSpace: firstNonSpace,
+                    baseColumn: prefixColumns
                 ) {
                     // The marker consumes `>` plus one optional following space or tab COLUMN (cmark's
                     // `parse_block_quote_prefix`). When that optional column falls on a TAB it only
@@ -1986,14 +1990,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // only arises on a source-mapped fenced-code body line - every other line
                     // pre-expands its prefix tabs to spaces (`expandPrefixTabs`), so the optional
                     // character is a space and the leaf is the fenced code block.
-                    let markerEnd = firstNonSpace + 1
-                    if advanced == markerEnd + 1, source[markerEnd] == UInt8(ascii: "\t") {
-                        cursor = markerEnd
-                        prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: markerEnd) + 1
-                    } else {
-                        cursor = advanced
-                        prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
-                    }
+                    (cursor, prefixColumns) = blockQuotePrefixEnd(
+                        source: source,
+                        lineStart: lineRange.lowerBound,
+                        markerEnd: firstNonSpace + 1,
+                        advanced: advanced
+                    )
                     deepestMatched = node
                 } else {
                     // No `>` on this line: the block quote's paragraph continues lazily. The walk stops
@@ -2020,7 +2022,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     return (deepestMatched, cursor, prefixColumns, false)
                 }
                 // Compare in COLUMNS, not bytes, so a leading tab counts as up to 4 cols of indent.
-                let availCols = indentColumns(source: source, from: cursor, to: firstNonSpace)
+                // Measured from `prefixColumns`, the column the outer prefixes reached: `cursor` can sit
+                // after a marker at any column, or mid-tab after a partially consumed tab, and a tab's
+                // width depends on the column it starts at (cmark's `parser->indent`,
+                // `first_nonspace_column - column`).
+                let availCols = indentColumns(source: source, from: cursor, to: firstNonSpace, baseColumn: prefixColumns)
                 if availCols >= padding {
                     // The indent reaches the item's content column: consume exactly `padding` columns and
                     // match. cmark tests this BEFORE the childless-blank check, so a whitespace-only line
@@ -2030,7 +2036,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                         source: source,
                         from: cursor,
                         to: lineRange.upperBound,
-                        columns: padding
+                        columns: padding,
+                        baseColumn: prefixColumns
                     )
                     // The item intends to consume `padding` columns even when a straddling tab kept
                     // `advanceColumns` from advancing `cursor` past it: record the intended column so the
@@ -2395,14 +2402,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // reaches here unexpanded (`expandPrefixTabs` is skipped while continuing an open fenced
                 // code block); every other line's tabs are already spaces, so the byte check below is a
                 // no-op there.
-                let markerEnd = firstNonSpace + 1
-                if advanced == markerEnd + 1, source[markerEnd] == UInt8(ascii: "\t") {
-                    cursor = markerEnd
-                    column = columnWidth(source: source, from: lineRange.lowerBound, to: markerEnd) + 1
-                } else {
-                    cursor = advanced
-                    column = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
-                }
+                (cursor, column) = blockQuotePrefixEnd(
+                    source: source,
+                    lineStart: lineRange.lowerBound,
+                    markerEnd: firstNonSpace + 1,
+                    advanced: advanced
+                )
                 continue
             }
 
@@ -3435,17 +3440,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Walk leading whitespace from `start` toward `end`, consuming up to `columns` columns of indentation (with tab = next 4-col boundary).
     ///
     /// Returns the byte position past the consumed indentation. If a tab would over-shoot `columns`, it isn't split - the function returns the byte before the tab, leaving callers to handle the partial case (rare for indented-code purposes).
-    private func advanceColumns(source: Span<UInt8>, from start: Int, to end: Int, columns: Int) -> Int {
+    ///
+    /// `baseColumn` is the true column of `start` (default 0), as for `indentColumns`: a tab's width depends on
+    /// the column it starts at, including a `start` left mid-tab by an outer container's partial consumption.
+    private func advanceColumns(source: Span<UInt8>, from start: Int, to end: Int, columns: Int, baseColumn: Int = 0) -> Int {
         var i = start
-        var col = 0
-        while i < end && col < columns {
+        var col = baseColumn
+        let target = baseColumn + columns
+        while i < end && col < target {
             let b = source[i]
             if b == UInt8(ascii: " ") {
                 col += 1
                 i += 1
             } else if b == UInt8(ascii: "\t") {
                 let advance = 4 - (col & 3)
-                if col + advance > columns {
+                if col + advance > target {
                     break
                 }
                 col += advance
@@ -4061,6 +4070,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             i += 1
         }
         return i
+    }
+
+    /// Where a matched block-quote marker leaves the line: the byte cursor and the absolute column reached,
+    /// for the `>` ending at `markerEnd` and `matchBlockQuoteMarker`'s `advanced` result.
+    ///
+    /// The optional character after `>` is consumed as ONE COLUMN (cmark's `S_advance_offset(parser, input,
+    /// 1, true)`, blocks.c). A tab there is fully consumed only when its tab stop is one column away; a
+    /// wider tab is partially consumed (`partially_consumed_tab = chars_to_tab > count`), so the cursor
+    /// stays on the tab byte while the column moves one past `>`. Callers rely on a cursor left on a tab
+    /// having a column strictly inside that tab: measuring from a column already at the tab's stop would
+    /// recount the whole tab as four fresh columns.
+    private func blockQuotePrefixEnd(source: Span<UInt8>, lineStart: Int, markerEnd: Int, advanced: Int) -> (cursor: Int, column: Int) {
+        let markerEndColumn = columnWidth(source: source, from: lineStart, to: markerEnd)
+        if advanced == markerEnd + 1, source[markerEnd] == UInt8(ascii: "\t"), 4 - (markerEndColumn & 3) > 1 {
+            return (markerEnd, markerEndColumn + 1)
+        }
+        return (advanced, columnWidth(source: source, from: lineStart, to: advanced))
     }
 
     /// Try to match an opening fenced code-block line. CommonMark 0.31 §4.5.
