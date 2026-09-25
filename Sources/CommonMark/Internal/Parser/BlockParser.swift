@@ -2125,7 +2125,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // Footnote-definition continuation, mirroring cmark's
                 // `parse_footnote_definition_block_prefix` (blocks.c): a line indented >= 4 columns
                 // (relative to the parent's consumed prefix) stays in the definition with 4 columns
-                // stripped; a blank line keeps the definition open without consuming; any other
+                // stripped; a blank line (flag-ON: an empty raw line) keeps the definition open; any other
                 // (non-indented, non-blank) line fails the prefix, so the definition's open paragraph
                 // may continue lazily (the walk stops here with `allMatched: false`).
                 let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
@@ -2142,7 +2142,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     )
                     prefixColumns += 4
                     deepestMatched = node
-                } else if isBlank {
+                } else if isBlank, lineRange.isEmpty || !storage.options.contains(.cmarkBugCompatibility) {
+                    // why: cmark keeps the definition open on a short-indented blank line only when the
+                    // whole raw line is empty (`input->data[0] == '\n'` tests byte 0 of the line, not the
+                    // parser's offset), so a whitespace-only line, or a blank line behind a container prefix
+                    // like `>`, closes it. CommonMark counts a whitespace-only line as blank (§4.9), so
+                    // flag-OFF keeps the definition open on any blank line.
                     cursor = firstNonSpace
                     prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
                     deepestMatched = node
