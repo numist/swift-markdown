@@ -836,7 +836,11 @@ extension BlockParser {
                closeBracket: cursor,
                content: content
            ),
-           storage.footnoteMap[normalizeLabel(chunk: labelChunk)] != nil {
+           let defIdx = footnoteDefinition(
+               label: labelChunk,
+               measuredOver: (footnoteBracketStart + 2)..<cursor,
+               in: content
+           ) {
             // Resolve emphasis inside the bracket first (clearing its delimiters from the stack) so
             // removing the inner nodes below doesn't leave stale delimiters for `processEmphasis`.
             processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
@@ -845,7 +849,7 @@ extension BlockParser {
                 isImage: isImage,
                 openerVirtualStart: brackets[openerIdx].virtualStart,
                 content: content,
-                labelChunk: labelChunk
+                definition: defIdx
             )
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             return initialPos
@@ -909,7 +913,7 @@ extension BlockParser {
            footnoteBracketStart + 1 < end,
            content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
            let labelChunk = footnoteRefLabel(openerVirtualStart: footnoteBracketStart, closeBracket: cursor, content: content),
-           storage.footnoteMap[normalizeLabel(chunk: labelChunk)] == nil {
+           footnoteDefinition(label: labelChunk, measuredOver: (footnoteBracketStart + 2)..<cursor, in: content) == nil {
             processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
             emitRawFootnoteLiteral(openerInl: openerInl, openerVirtualStart: brackets[openerIdx].virtualStart, closeBracket: cursor, content: content)
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
@@ -1027,9 +1031,20 @@ extension BlockParser {
         return chunk
     }
 
+    /// The footnote definition a reference's `label` resolves to, or `nil`, as cmark's `process_footnotes`
+    /// resolves it: `cmark_map_lookup` (`src/map.c`) returns no definition for a label over the link-label
+    /// length cap, so an over-cap reference stays literal. `labelRange` is the virtual range of `content`
+    /// holding the label cmark measures. A definition's own label is not capped (`cmark_footnote_create`).
+    private func footnoteDefinition(label: Chunk, measuredOver labelRange: Range<Int>, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
+        guard linkLabelFitsLengthCap(virtualRange: labelRange, in: content) else {
+            return nil
+        }
+        return storage.footnoteMap[normalizeLabel(chunk: label)]
+    }
+
     /// Splice a `.footnoteReference` node in place of the opener's bracket text node and any inner-content text nodes.
     ///
-    /// Only called for a label that resolves to a registered definition. The reference's index (and the
+    /// Only called with the `definition` the reference's label resolved to (`footnoteDefinition`). The reference's index (and the
     /// definition's `referenceCount`) is assigned later, by the footnote post-processing pass over the
     /// finalized tree, because an enclosing bracket can still discard this reference; until then it
     /// carries a placeholder index of 0. The emitted reference carries the *definition's* raw label (cmark
@@ -1039,10 +1054,8 @@ extension BlockParser {
     /// cmark treats an image-shaped opener `![^a]` as a literal `!` followed by the footnote reference
     /// (its footnote branch ignores the bracket's image flag), so for an image opener the opener node's
     /// `![` is shrunk to a `!` text node kept before the reference; for a link opener the `[` node is removed.
-    private mutating func emitFootnoteReference(openerInl: DocumentStorage.Index, isImage: Bool, openerVirtualStart: Int, content: borrowing ContentSpan, labelChunk: Chunk) {
-        let key = normalizeLabel(chunk: labelChunk)
-        guard let defIdx = storage.footnoteMap[key],
-              case .footnoteDefinition(let defLabel, _) = storage[defIdx].data else {
+    private mutating func emitFootnoteReference(openerInl: DocumentStorage.Index, isImage: Bool, openerVirtualStart: Int, content: borrowing ContentSpan, definition defIdx: DocumentStorage.Index) {
+        guard case .footnoteDefinition(let defLabel, _) = storage[defIdx].data else {
             return
         }
         let parentIdx = storage[openerInl].parent
@@ -1319,9 +1332,10 @@ extension BlockParser {
                 storage.strings.append(b)
             }
             let capturedChunk = Chunk(offset: capStart, length: labelBytes.count, inSource: false)
+            // cmark measures the captured length `x`, not `labelBytes`, which a U+FFFD repair can lengthen.
             if !normalizeLabel(chunk: capturedChunk).isEmpty,
-               storage.footnoteMap[normalizeLabel(chunk: capturedChunk)] != nil {
-                emitFootnoteReference(openerInl: openerInl, isImage: isImage, openerVirtualStart: open - (isImage ? 1 : 0), content: content, labelChunk: capturedChunk)
+               let defIdx = footnoteDefinition(label: capturedChunk, measuredOver: labelStart..<min(labelStart + x, close), in: content) {
+                emitFootnoteReference(openerInl: openerInl, isImage: isImage, openerVirtualStart: open - (isImage ? 1 : 0), content: content, definition: defIdx)
                 return
             }
         }

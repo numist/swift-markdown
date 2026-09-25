@@ -109,11 +109,12 @@ extension BlockParser {
         return nil
     }
 
-    /// Whether a shortcut or collapsed reference's label - the link text at virtual `range` of
-    /// `content`, between the opener's `[` / `![` and the `]` - is within `maxLinkLabelLength`. The
-    /// link text is never scanned by `matchLinkLabel`, so the cap is applied here, as cmark applies it
-    /// at lookup: `cmark_map_lookup` (`src/map.c`) returns no reference for a label over
-    /// `MAX_LINK_LABEL_LENGTH` bytes, measured on the raw, untrimmed text.
+    /// Whether a label that is looked up without being scanned by `matchLinkLabel` - the text at
+    /// virtual `range` of `content` - is within `maxLinkLabelLength`. That is a shortcut or collapsed
+    /// reference's link text (between the opener's `[` / `![` and the `]`) or a footnote reference's
+    /// label (past its `^`). cmark applies the cap to both at lookup: `cmark_map_lookup` (`src/map.c`),
+    /// shared by the link and footnote maps, returns no entry for a label over `MAX_LINK_LABEL_LENGTH`
+    /// bytes, measured on the raw, untrimmed text.
     internal func linkLabelFitsLengthCap(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> Bool {
         let maxLabelLength = maxLinkLabelLength
         var length = 0
@@ -127,7 +128,8 @@ extension BlockParser {
     }
 
     /// The maximum link-label length that `matchLinkLabel` accepts before rewinding and that
-    /// `linkLabelFitsLengthCap` accepts for a shortcut label, in the units of `labelLengthWeight`.
+    /// `linkLabelFitsLengthCap` accepts for a shortcut or footnote label, in the units of
+    /// `labelLengthWeight`.
     /// CommonMark §6.6 caps a label at "at most 999 characters", which the shipped deliverable
     /// enforces (reject `> 999`). cmark-gfm's `MAX_LINK_LABEL_LENGTH` is 1000 and both its
     /// `link_label` (`src/inlines.c`) and `cmark_map_lookup` (`src/map.c`) reject only `> 1000`, so it
