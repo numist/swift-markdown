@@ -109,26 +109,48 @@ extension BlockParser {
         return nil
     }
 
-    /// The maximum link-label length, in scanned bytes (`\X` escapes count as two), that
-    /// `matchLinkLabel` accepts before rewinding. CommonMark §6.6 caps a label at "at most 999
-    /// characters", which the shipped deliverable enforces (reject `> 999`). cmark-gfm's
-    /// `MAX_LINK_LABEL_LENGTH` is 1000 and its `link_label` rejects only `> 1000` (`src/inlines.c`),
-    /// so it accepts a 1000-char label — an off-by-one against the spec. Under `.cmarkBugCompatibility`
+    /// Whether a shortcut or collapsed reference's label - the link text at virtual `range` of
+    /// `content`, between the opener's `[` / `![` and the `]` - is within `maxLinkLabelLength`. The
+    /// link text is never scanned by `matchLinkLabel`, so the cap is applied here, as cmark applies it
+    /// at lookup: `cmark_map_lookup` (`src/map.c`) returns no reference for a label over
+    /// `MAX_LINK_LABEL_LENGTH` bytes, measured on the raw, untrimmed text.
+    internal func linkLabelFitsLengthCap(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> Bool {
+        let maxLabelLength = maxLinkLabelLength
+        var length = 0
+        for i in range {
+            length += labelLengthWeight(content[i])
+            if length > maxLabelLength {
+                return false
+            }
+        }
+        return true
+    }
+
+    /// The maximum link-label length that `matchLinkLabel` accepts before rewinding and that
+    /// `linkLabelFitsLengthCap` accepts for a shortcut label, in the units of `labelLengthWeight`.
+    /// CommonMark §6.6 caps a label at "at most 999 characters", which the shipped deliverable
+    /// enforces (reject `> 999`). cmark-gfm's `MAX_LINK_LABEL_LENGTH` is 1000 and both its
+    /// `link_label` (`src/inlines.c`) and `cmark_map_lookup` (`src/map.c`) reject only `> 1000`, so it
+    /// accepts a 1000-byte label - an off-by-one against the spec. Under `.cmarkBugCompatibility`
     /// (adopted only by the differential fuzzer) we reproduce that and accept up to 1000; the single
     /// cmark constant governs every label site (inline reference and block reference/attribute
-    /// definition), so both `matchLinkLabel` overloads read this.
+    /// definition).
     private var maxLinkLabelLength: Int {
         storage.options.contains(.cmarkBugCompatibility) ? 1000 : 999
     }
 
-    /// A scanned byte's contribution to the link-label length against `maxLinkLabelLength`. cmark
-    /// measures a label in its NUL→U+FFFD normalized input buffer (`blocks.c`'s `S_parser_feed`
-    /// replaces every source NUL with the 3-byte U+FFFD encoding before any block or inline scanning
-    /// sees it), so a source NUL counts as 3 bytes toward cmark's cap. Under `.cmarkBugCompatibility`
-    /// we reproduce that; flag-off stays spec-correct (a NUL is 1 character, matching the U+FFFD it
-    /// becomes). Every other byte counts as 1 on both sides.
+    /// A content byte's contribution to the link-label length against `maxLinkLabelLength`.
+    ///
+    /// cmark counts bytes of its normalized input buffer: every byte is 1, including each byte of a
+    /// multi-byte UTF-8 character, and a source NUL is 3 because `blocks.c`'s `S_parser_feed` replaces
+    /// it with the 3-byte U+FFFD encoding before any scanning. Under `.cmarkBugCompatibility` we
+    /// reproduce that. Flag-off counts characters (Unicode code points, CommonMark §2.1): a UTF-8
+    /// continuation byte counts 0 and every other byte, NUL included, counts 1.
     private func labelLengthWeight(_ byte: UInt8) -> Int {
-        byte == 0 && storage.options.contains(.cmarkBugCompatibility) ? 3 : 1
+        if storage.options.contains(.cmarkBugCompatibility) {
+            return byte == 0 ? 3 : 1
+        }
+        return byte & 0xC0 == 0x80 ? 0 : 1
     }
 
     // MARK: - Link destination

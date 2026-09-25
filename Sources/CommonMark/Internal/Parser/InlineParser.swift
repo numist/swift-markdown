@@ -768,7 +768,9 @@ extension BlockParser {
                 // Virtual offsets: the opener's `[` / `![` sits at `virtualStart`; the shortcut label runs from just past it to the `]` (`cursor`). `contiguousChunk` maps that virtual range to a real buffer chunk only when it lies within a single source segment. When it does, resolve from that chunk. When it straddles a multi-segment join (a soft break inside the label, `[foo\nbar]`), `contiguousChunk` can't image the whole label, so carry the virtual range and normalize across the join instead — cmark resolves such a multi-line label, so giving up here would leave the reference literal.
                 let openerContentStart = brackets[openerIdx].virtualStart + (isImage ? 2 : 1)
                 let shortcutLen = cursor - openerContentStart
-                if shortcutLen > 0 {
+                // cmark's refmap lookup rejects an over-cap raw label, so such a shortcut stays literal.
+                if shortcutLen > 0,
+                   linkLabelFitsLengthCap(virtualRange: openerContentStart..<cursor, in: content) {
                     if let sc = content.contiguousChunk(fromVirtual: openerContentStart, limit: cursor),
                        sc.length == shortcutLen {
                         labelChunk = sc
