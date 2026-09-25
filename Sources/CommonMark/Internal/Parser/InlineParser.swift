@@ -794,6 +794,11 @@ extension BlockParser {
                chargeReferenceExpansion(ref) {
                 url = ref.destination
                 title = ref.title
+                // why: cmark's `link_label` consumed this `[…]` as a raw byte scan and `goto match` keeps
+                // that position, so its newlines never reset the column cursor a later footnote measures.
+                if storage.options.contains(.cmarkBugCompatibility) {
+                    recordLinkDestinationSwallowedNewlines(from: pos, to: afterRefForm, content: content)
+                }
                 pos = afterRefForm
                 matched = true
             }
@@ -1172,22 +1177,23 @@ extension BlockParser {
         codeSpanSwallowedNewlines.formUnion(Self.newlineOffsets(from: from, to: to, content: content))
     }
 
-    /// Record every newline byte in `[from, to)` as one consumed inside a matched inline-attribute
-    /// `(…)` payload scan. Called only when that scan actually matches (`handleCloseBracketAttribute`);
+    /// Record every newline byte in `[from, to)` as one consumed inside `handleCloseBracketAttribute`'s
+    /// raw scans: a matched inline-attribute `(…)` payload, or the following `[…]` label it consumes;
     /// the recorded offsets suppress that newline's column reset in `footnoteColumnResets`,
     /// unconditionally - unlike `recordRawInlineSwallowedNewlines`, this doesn't depend on
-    /// `.cmarkSourcePositionsDisabled` (cmark's attribute scan never calls `adjust_subj_node_newlines`
+    /// `.cmarkSourcePositionsDisabled` (cmark's attribute scans never call `adjust_subj_node_newlines`
     /// regardless of `CMARK_OPT_SOURCEPOS`).
     private mutating func recordAttributeSwallowedNewlines(from: Int, to: Int, content: borrowing ContentSpan) {
         attributeSwallowedNewlines.formUnion(Self.newlineOffsets(from: from, to: to, content: content))
     }
 
     /// Record every newline byte in `[from, to)` as one consumed inside a matched inline link/image
-    /// destination `(…)` payload scan. Called only when that scan actually matches (`handleCloseBracket`'s
-    /// inline-link form); the recorded offsets suppress that newline's column reset in
-    /// `footnoteColumnResets`, unconditionally - like `recordAttributeSwallowedNewlines`, this doesn't
-    /// depend on `.cmarkSourcePositionsDisabled` (cmark's `manual_scan_link_url` / `scan_spacechars` /
-    /// `scan_link_title` never call `adjust_subj_node_newlines` regardless of `CMARK_OPT_SOURCEPOS`).
+    /// destination `(…)` payload scan, or inside the `[…]` label of a resolved reference link/image.
+    /// Called only when that form actually matches (`handleCloseBracket`); the recorded offsets suppress
+    /// that newline's column reset in `footnoteColumnResets`, unconditionally - like
+    /// `recordAttributeSwallowedNewlines`, this doesn't depend on `.cmarkSourcePositionsDisabled` (cmark's
+    /// `manual_scan_link_url` / `scan_spacechars` / `scan_link_title` / `link_label` never call
+    /// `adjust_subj_node_newlines` regardless of `CMARK_OPT_SOURCEPOS`).
     private mutating func recordLinkDestinationSwallowedNewlines(from: Int, to: Int, content: borrowing ContentSpan) {
         linkDestinationSwallowedNewlines.formUnion(Self.newlineOffsets(from: from, to: to, content: content))
     }
@@ -1478,6 +1484,7 @@ extension BlockParser {
         // `subj->pos = initial_pos`; the attribute path never does), so the consumed `[…]` does not
         // re-parse - `^[][]` drops the trailing `[]`, leaving literal `^[]`.
         var labelKey: String?
+        let labelStart = pos
         if let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
            let lab = matchLinkLabel(labelWindow) {
             // Contiguous window (see `contiguousChunk`): `lab.interior` is a real buffer chunk and
@@ -1495,6 +1502,12 @@ extension BlockParser {
             if !lab.interior.isEmpty {
                 labelKey = normalizeLabel(virtualRange: lab.interior, in: content)
             }
+        }
+        // why: cmark's `link_label` consumes the `[…]` as a raw byte scan outside the dispatch loop, so a
+        // newline inside it never reaches `handle_newline` and never resets the column cursor that a
+        // later `[^[` footnote collapse measures its captured label with (`[^[][\n]]` → `[^[`).
+        if storage.options.contains(.cmarkBugCompatibility) {
+            recordAttributeSwallowedNewlines(from: labelStart, to: pos, content: content)
         }
         // why: cmark looks the label up in the refmap it shares with link references, so a link
         // reference that is the label's surviving entry is charged against the expansion budget here
