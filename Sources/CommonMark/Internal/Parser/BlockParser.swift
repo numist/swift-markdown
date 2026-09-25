@@ -1870,6 +1870,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 current = parent
                 stillOpenKind = storage[current].kind
             } else {
+                // The re-seed below drops the trailing whitespace this heading's buffer keeps in cmark.
+                recordTrailingBlank(of: para, chunk: raw)
                 // Re-seed pending content with the stripped bytes so the heading's inline-parse pass sees only what's left after ref-defs (and any task checkbox) were extracted. Keep source-backed content zero-copy as a `.lazy` source range (its offset/length are source offsets when `inSource`), so the heading's inlines are source-mapped and get positions exactly as paragraph / ATX-heading content does; only arena-backed content (non-contiguous or normalized lines) is copied.
                 if stripped.inSource {
                     pending = PendingLeaf(node: para, content: .lazy(range: stripped.range))
@@ -2919,6 +2921,36 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return segs
     }
 
+    /// Record, flag-ON, the first space or tab of the trailing whitespace a line-built block's content ends
+    /// with - see `trailingBlankAfterContent`.
+    private mutating func recordTrailingBlank(of node: DocumentStorage.Index, chunk raw: Chunk) {
+        guard storage.options.contains(.cmarkBugCompatibility) else { return }
+        var hi = raw.length
+        while hi > 0, readByte(at: raw.offset + hi - 1, in: raw).isSpaceTabOrNewline { hi -= 1 }
+        if hi < raw.length {
+            storeTrailingBlank(readByte(at: raw.offset + hi, in: raw), for: node)
+        }
+    }
+
+    /// `recordTrailingBlank(of:chunk:)` for a segment-list body, whose trailing whitespace lies in its last segment
+    /// (`trimSegments`).
+    private mutating func recordTrailingBlank(of node: DocumentStorage.Index, segments segs: borrowing UniqueArray<Segment>) {
+        guard storage.options.contains(.cmarkBugCompatibility), segs.count > 0 else { return }
+        let last = segs[segs.count - 1]
+        var hi = Int(last.length)
+        while hi > 0, segmentByte(last, hi - 1).isSpaceTabOrNewline { hi -= 1 }
+        if hi < Int(last.length) {
+            storeTrailingBlank(segmentByte(last, hi), for: node)
+        }
+    }
+
+    private mutating func storeTrailingBlank(_ byte: UInt8, for node: DocumentStorage.Index) {
+        // A line ending is what cmark's buffer holds there anyway (it replaces each one with `\n`).
+        if byte == UInt8(ascii: " ") || byte == UInt8(ascii: "\t") {
+            storage.trailingBlankAfterContent[node] = byte
+        }
+    }
+
     /// `true` if every byte across all segments is whitespace (the trimmed paragraph is empty).
     private func isBlankSegments(_ segs: borrowing UniqueArray<Segment>) -> Bool {
         for i in 0..<segs.count {
@@ -3176,8 +3208,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             pending = drained.pending
             switch consume drained.content {
             case .chunk(let raw):
+                recordTrailingBlank(of: node, chunk: raw)
                 try runParagraphMatchers(node: node, raw: raw)
             case .segments(let segs):
+                recordTrailingBlank(of: node, segments: segs)
                 // Multi-line non-contiguous body held as zero-copy source segments. Trim, then only materialize (flatten) if it could match a finalize matcher; plain prose stays segments.
                 // A table-pending node keeps its header row's leading residual (a lazy continuation's
                 // preserved whitespace, promoted to the first line by a multi-line split): cmark builds the

@@ -84,8 +84,17 @@ internal struct DocumentStorage: ~Copyable {
     /// `chop_trailing_hashtags` *before* that content is copied in; a table cell (`row_from_string`) and the
     /// preceding paragraph (`try_inserting_table_header_paragraph`) are built from a trimmed buffer via
     /// `cmark_node_set_string_content`. Every other inline-bearing node - a paragraph assembled line by line,
-    /// or a setext heading, which is one - keeps its last line's newline as that physical last byte instead.
+    /// or a setext heading, which is one - keeps its last line's trailing whitespace and newline there instead
+    /// (see `trailingBlankAfterContent`).
     internal var nulTerminatedInlineContainers: Set<Index> = []
+
+    /// The first space or tab of the trailing whitespace a line-built block (a paragraph or setext heading) ends
+    /// with, recorded flag-ON only. Consulted only by the escaped-caret footnote-image over-read simulation
+    /// (`emitEscapedCaretFootnote`): cmark keeps each line's trailing whitespace in the block's buffer (it
+    /// replaces only the line ending, with a `\n`), and the inline subject's `cmark_chunk_rtrim` shortens its
+    /// length without touching those bytes, so the over-read one past the trimmed content lands on this byte.
+    /// A line-built block absent here holds the `\n` there instead.
+    internal var trailingBlankAfterContent: [Index: UInt8] = [:]
 
     /// Number of lines in the document.
     internal var lineCount = 0

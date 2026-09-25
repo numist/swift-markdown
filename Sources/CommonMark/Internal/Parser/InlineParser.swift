@@ -929,8 +929,9 @@ extension BlockParser {
         // from just past the `^`. Counting the backslash column runs the read one byte past the label:
         //   - a `[` opener captures the closing `]` (`[\^x]` -> `[^x]]`);
         //   - an image `![` opener, whose start column sits one further left, over-reads a *second* byte
-        //     past the `]` into whatever follows the block's content - a paragraph's trailing newline, or the
-        //     NUL terminator of a `nulTerminatedInlineContainers` block - and drops the `!` (`![\^x]` -> `[^x]\n]`);
+        //     past the `]` into whatever follows the block's content - a paragraph's first trailing space/tab
+        //     (`trailingBlankAfterContent`), else its trailing newline, or the NUL terminator of a
+        //     `nulTerminatedInlineContainers` block - and drops the `!` (`![\^x]` -> `[^x]\n]`);
         //   - a cross-line span resets the per-line column at the soft break, so the length comes from the
         //     `]`'s column on its own line: it can underflow to an empty label (`[\^\nx]` -> `[^]`) or cut
         //     the first line short (`[\^abcdef\nxxxxx]` captures `abc`).
@@ -1395,7 +1396,8 @@ extension BlockParser {
     /// image captures one extra byte). Counting the backslash runs the read one byte past the label: a `[`
     /// opener captures the closing `]` (`[\^x]` -> `[^x]]`); an image opener over-reads a second byte,
     /// landing on whatever cmark's buffer holds one past the block's own content - a paragraph's (or setext
-    /// heading's) buffer keeps that line's trailing newline there (`![\^x]` -> `[^x]\n]`), while an ATX
+    /// heading's) buffer keeps its last line's first trailing space or tab there (`![\^x] ` -> `[^x] ]` - see
+    /// `trailingBlankAfterContent`), else that line's trailing newline (`![\^x]` -> `[^x]\n]`), while an ATX
     /// heading's, a table cell's, or a table's preceding paragraph's buffer has none, and cmark's
     /// `cmark_strbuf` always writes a NUL terminator at its logical end instead (`# ![\^x]` -> `[^x]` - see
     /// `nulTerminatedInlineContainers`); a cross-line span resets the per-line column at the soft break,
@@ -1415,7 +1417,9 @@ extension BlockParser {
         // The label runs from just past the escaped `^` (`open + 3`). The image over-read is the only
         // read that reaches the content end, where the synthetic stand-in below applies.
         let labelStart = open + 3
-        let overreadByte: UInt8 = storage.nulTerminatedInlineContainers.contains(parent) ? 0 : UInt8(ascii: "\n")
+        let overreadByte: UInt8 = storage.nulTerminatedInlineContainers.contains(parent)
+            ? 0
+            : storage.trailingBlankAfterContent[parent] ?? UInt8(ascii: "\n")
         let labelBytes = Self.capturedLabelBytes(
             content: content, start: labelStart, cutEnd: labelStart + labelLength, overreadByte: overreadByte)
         // cmark resolves the captured label like any footnote reference. The measured range stops at the
