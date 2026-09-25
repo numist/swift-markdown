@@ -1338,7 +1338,7 @@ extension BlockParser {
     /// byte with no continuation bytes becomes `�`, not the rest of the (unrelated) character that
     /// happened to follow it in the buffer. Materialize that same replacement here rather than reading
     /// past the cut to complete the scalar. cmark then RESOLVES that captured label if it matches a
-    /// definition (so a cross-line `[^a<nl>x]` resolves to `a`); otherwise the whole span reconstructs as
+    /// definition (so a cross-line `[^abcdef<nl>xxxxx]` resolves to `abc`); otherwise the whole span reconstructs as
     /// `[^` + the captured bytes + `]` (`[^]` for an empty capture). The spec-correct default keeps the
     /// bracket literal with its soft break; see FINDINGS #146.
     private mutating func collapseMultilineFootnote(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan) {
