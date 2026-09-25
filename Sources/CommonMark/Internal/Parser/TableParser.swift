@@ -334,6 +334,8 @@ extension BlockParser {
                 data: nil
             ))
             storage.appendChild(cellIdx, to: rowIdx)
+            // A cell's buffer is NUL-terminated - see `nulTerminatedInlineContainers`.
+            storage.nulTerminatedInlineContainers.insert(cellIdx)
             if spansEnabled {
                 cellIndices.append(cellIdx)
             }

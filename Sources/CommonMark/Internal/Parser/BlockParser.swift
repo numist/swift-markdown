@@ -1438,8 +1438,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                         return pending
                     }
                 } else {
-                    let preceding = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
-                    storage.insertChildBefore(preceding, before: node)
+                    let preceding = insertTablePrecedingParagraph(before: node)
                     storage.setSourceStart(preceding, precedingChunk.offset)
                     storage.setSourceEnd(preceding, precedingChunk.offset + precedingChunk.length)
                     // cmark's table `unescape_pipes` runs over the preceding-paragraph text (after feed-time
@@ -1463,6 +1462,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return PendingLeaf(node: node, content: .lazy(range: headerRange))
             }
         }
+    }
+
+    /// Insert the paragraph cmark splits off the lines before a table's header
+    /// (`try_inserting_table_header_paragraph`) as `node`'s preceding sibling, and return it.
+    private mutating func insertTablePrecedingParagraph(before node: DocumentStorage.Index) -> DocumentStorage.Index {
+        let paragraph = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
+        storage.insertChildBefore(paragraph, before: node)
+        // cmark builds it from a trimmed buffer, not newline-terminated lines - see `nulTerminatedInlineContainers`.
+        storage.nulTerminatedInlineContainers.insert(paragraph)
+        return paragraph
     }
 
     /// After a multi-line paragraph is split so the delimiter row becomes the re-seeded paragraph's second
@@ -1590,15 +1599,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let flat = flattenSegments(preceding, map: &map)
             let stripped = parseDefinitions(in: stripTasklistCheckbox(node: node, content: flat)).trimming(using: self)
             if !stripped.isEmpty {
-                let precedingNode = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
-                storage.insertChildBefore(precedingNode, before: node)
+                let precedingNode = insertTablePrecedingParagraph(before: node)
                 pendingInlines.append((precedingNode, storage.intern(unescapingPipes(replacingNUL(stripped)))))
             }
         } else if !isBlankSegments(preceding) {
             // A blank line closes a paragraph, so the earlier lines are never blank; splitting only when they
             // carry content avoids inserting an empty paragraph node in a degenerate case.
-            let precedingNode = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
-            storage.insertChildBefore(precedingNode, before: node)
+            let precedingNode = insertTablePrecedingParagraph(before: node)
             // Stamp the preceding lines' source span, read through a borrow so `preceding` can then be
             // consumed by `intern`.
             if positionsEnabled, let span = segmentsSourceSpan(preceding) {
@@ -1677,8 +1684,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             precedingChunk = parseDefinitions(in: precedingChunk).trimming(using: self)
         }
         if !precedingChunk.isEmpty {
-            let precedingNode = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
-            storage.insertChildBefore(precedingNode, before: node)
+            let precedingNode = insertTablePrecedingParagraph(before: node)
             // Apply cmark's table `unescape_pipes` (`\|`→`|`) after NUL→U+FFFD, matching the source-backed
             // preceding-paragraph split. Materialized content only arises with positions off, so no source
             // map is threaded.
@@ -2614,8 +2620,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     parent: current,
                     start: sourceOffset(firstNonSpace)
                 )
-                // Record this heading as ATX (not setext) for `atxHeadings` - see its declaration.
-                storage.atxHeadings.insert(headingIdx)
+                // An ATX (not setext) heading's buffer is NUL-terminated - see `nulTerminatedInlineContainers`.
+                storage.nulTerminatedInlineContainers.insert(headingIdx)
                 current = headingIdx
                 if !heading.contentRange.isEmpty {
                     pending = addLine(span: source, range: heading.contentRange, to: headingIdx, pending: pending)

@@ -76,15 +76,16 @@ internal struct DocumentStorage: ~Copyable {
     /// tail is unlinked in `dropRunTruncatedTails`, run AFTER the autolink pass so a trailing email links.
     internal var runTruncatingTextNodes: Set<Index> = []
 
-    /// The `.heading` nodes opened by an ATX (`#`) line, as opposed to a setext (`===`/`---`)
-    /// underline. Consulted only by the escaped-caret footnote-image over-read simulation
-    /// (`emitEscapedCaretFootnote`): cmark's ATX heading content buffer is pre-trimmed of its
-    /// line's trailing newline by `chop_trailing_hashtags` *before* that content is copied in, so the
-    /// `cmark_strbuf` NUL terminator cmark always writes one past its logical end lands right after
-    /// the heading's own last byte. A paragraph (or setext heading, which skips that pre-trim) keeps
-    /// its trailing newline as that physical last byte instead. The two containers are the only ones
-    /// that parse inline content (`contains_inlines`), so this set is consulted by container identity.
-    internal var atxHeadings: Set<Index> = []
+    /// The inline-bearing nodes whose cmark content buffer ends in its `cmark_strbuf` NUL terminator
+    /// rather than a trailing newline: ATX headings, table cells, and the paragraph split off before a
+    /// table's header. Consulted only by the escaped-caret footnote-image over-read simulation
+    /// (`emitEscapedCaretFootnote`), whose one-byte over-read lands on whatever cmark's buffer holds one
+    /// past the node's own content. An ATX heading's line is pre-trimmed of its trailing newline by
+    /// `chop_trailing_hashtags` *before* that content is copied in; a table cell (`row_from_string`) and the
+    /// preceding paragraph (`try_inserting_table_header_paragraph`) are built from a trimmed buffer via
+    /// `cmark_node_set_string_content`. Every other inline-bearing node - a paragraph assembled line by line,
+    /// or a setext heading, which is one - keeps its last line's newline as that physical last byte instead.
+    internal var nulTerminatedInlineContainers: Set<Index> = []
 
     /// Number of lines in the document.
     internal var lineCount = 0

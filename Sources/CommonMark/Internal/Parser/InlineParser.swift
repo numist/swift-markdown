@@ -929,7 +929,8 @@ extension BlockParser {
         // from just past the `^`. Counting the backslash column runs the read one byte past the label:
         //   - a `[` opener captures the closing `]` (`[\^x]` -> `[^x]]`);
         //   - an image `![` opener, whose start column sits one further left, over-reads a *second* byte
-        //     past the `]` into the paragraph's trailing newline, and drops the `!` (`![\^x]` -> `[^x]\n]`);
+        //     past the `]` into whatever follows the block's content - a paragraph's trailing newline, or the
+        //     NUL terminator of a `nulTerminatedInlineContainers` block - and drops the `!` (`![\^x]` -> `[^x]\n]`);
         //   - a cross-line span resets the per-line column at the soft break, so the length comes from the
         //     `]`'s column on its own line: it can underflow to an empty label (`[\^\nx]` -> `[^]`) or cut
         //     the first line short (`[\^abcdef\nxxxxx]` captures `abc`).
@@ -1388,24 +1389,24 @@ extension BlockParser {
     }
 
     /// Reconstruct a footnote-shaped bracket `[\^…]` / `![\^…]` (backslash-escaped caret) under
-    /// `.cmarkBugCompatibility`. cmark reads the reference label from just past the `^` (`open + 3`, one
-    /// byte after the escaped caret) for its column-measured length `colOf(]) - colOf(opener) - 2`, where
-    /// the opener column is the `[`'s for a `[` opener and the `!`'s for an image opener (one further
-    /// left, so an image captures one extra byte). Counting the backslash runs the read one byte past the
-    /// label: a `[` opener captures the closing `]` (`[\^x]` -> `[^x]]`); an image opener over-reads a
-    /// second byte, landing on whatever cmark's buffer holds one past the block's own content - a
-    /// paragraph's (or setext heading's) buffer keeps that line's trailing newline there (`![\^x]` ->
-    /// `[^x]\n]`), while an ATX heading's buffer was pre-trimmed of it and cmark's `cmark_strbuf` always
-    /// writes a NUL terminator at its logical end instead (`# ![\^x]` -> `[^x]` - see `atxHeadings`); a
-    /// cross-line span resets the per-line column at the soft break, underflowing the length to an empty
-    /// label (`[\^\nx]` -> `[^]`). That raw byte cut can land mid-character the same way the plain
-    /// `[^…]` capture does (`collapseMultilineFootnote`): cmark's `cmark_chunk` slice is UTF-8-oblivious,
-    /// and its Swift bridge's later `String(cString:)` repairs a truncated tail to a single U+FFFD
-    /// (`capturedLabelBytes`), rather than reading past the cut to complete the scalar. cmark resolves
-    /// the captured label if it matches a definition (a cross-line `[\^abcdef<nl>xxxxx]` captures `abc`);
-    /// otherwise the reference reconstructs as `[^` + captured bytes + `]` - and that same `String(cString:)` bridge
-    /// truncates the WHOLE reconstructed literal at the ATX case's embedded NUL, dropping it and the `]`
-    /// appended after it.
+    /// `.cmarkBugCompatibility`. cmark reads the reference label from just past the `^` (`open + 3`, one byte
+    /// after the escaped caret) for its column-measured length `colOf(]) - colOf(opener) - 2`, where the
+    /// opener column is the `[`'s for a `[` opener and the `!`'s for an image opener (one further left, so an
+    /// image captures one extra byte). Counting the backslash runs the read one byte past the label: a `[`
+    /// opener captures the closing `]` (`[\^x]` -> `[^x]]`); an image opener over-reads a second byte,
+    /// landing on whatever cmark's buffer holds one past the block's own content - a paragraph's (or setext
+    /// heading's) buffer keeps that line's trailing newline there (`![\^x]` -> `[^x]\n]`), while an ATX
+    /// heading's, a table cell's, or a table's preceding paragraph's buffer has none, and cmark's
+    /// `cmark_strbuf` always writes a NUL terminator at its logical end instead (`# ![\^x]` -> `[^x]` - see
+    /// `nulTerminatedInlineContainers`); a cross-line span resets the per-line column at the soft break,
+    /// underflowing the length to an empty label (`[\^\nx]` -> `[^]`). That raw byte cut can land
+    /// mid-character the same way the plain `[^…]` capture does (`collapseMultilineFootnote`): cmark's
+    /// `cmark_chunk` slice is UTF-8-oblivious, and its Swift bridge's later `String(cString:)` repairs a
+    /// truncated tail to a single U+FFFD (`capturedLabelBytes`), rather than reading past the cut to complete
+    /// the scalar. cmark resolves the captured label if it matches a definition (a cross-line
+    /// `[\^abcdef<nl>xxxxx]` captures `abc`); otherwise the reference reconstructs as `[^` + captured bytes +
+    /// `]` - and that same `String(cString:)` bridge truncates the WHOLE reconstructed literal at the
+    /// NUL-terminated case's embedded NUL, dropping it and the `]` appended after it.
     private mutating func emitEscapedCaretFootnote(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index) {
         // cmark's byte-length label is `colOf(]) - colOf(opener) - 2` (per-line columns); an image
         // opener's `![` shifts the start one byte left, so it captures one extra byte. A cross-line reset
@@ -1414,7 +1415,7 @@ extension BlockParser {
         // The label runs from just past the escaped `^` (`open + 3`). The image over-read is the only
         // read that reaches the content end, where the synthetic stand-in below applies.
         let labelStart = open + 3
-        let overreadByte: UInt8 = storage.atxHeadings.contains(parent) ? 0 : UInt8(ascii: "\n")
+        let overreadByte: UInt8 = storage.nulTerminatedInlineContainers.contains(parent) ? 0 : UInt8(ascii: "\n")
         let labelBytes = Self.capturedLabelBytes(
             content: content, start: labelStart, cutEnd: labelStart + labelLength, overreadByte: overreadByte)
         // cmark resolves the captured label like any footnote reference. The measured range stops at the
@@ -1431,7 +1432,7 @@ extension BlockParser {
         literal.append(UInt8(ascii: "^"))
         literal.append(contentsOf: labelBytes)
         literal.append(UInt8(ascii: "]"))
-        // The ATX over-read's NUL stands in for cmark's `cmark_strbuf` terminator; the later
+        // A NUL-terminated container's over-read NUL stands in for cmark's `cmark_strbuf` terminator; the later
         // `String(cString:)` bridge that materializes this literal stops at the first NUL, so drop it
         // and everything reconstructed after it (the closing `]` just appended above).
         if let nulIndex = literal.firstIndex(of: 0) {
