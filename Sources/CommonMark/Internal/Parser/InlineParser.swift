@@ -789,7 +789,8 @@ extension BlockParser {
             }
             if let key, !key.isEmpty,
                !storage.linkLabelsShadowedByAttribute.contains(key),
-               let ref = storage.referenceMap[key] {
+               let ref = storage.referenceMap[key],
+               chargeReferenceExpansion(ref) {
                 url = ref.destination
                 title = ref.title
                 pos = afterRefForm
@@ -1413,6 +1414,20 @@ extension BlockParser {
         }
     }
 
+    /// Charges a found link reference against cmark's reference-expansion budget, returning whether it may resolve.
+    ///
+    /// cmark caps the total bytes that reference links expand to at `max(source bytes, 100000)` (`blocks.c` `finalize_document`); each found lookup costs the stored destination plus title bytes (`references.c` `cmark_reference_create`), and a lookup that would exceed the remaining budget fails without spending any (`map.c` `cmark_map_lookup`), leaving the reference literal. CommonMark has no such cap, so flag-OFF every reference resolves.
+    private mutating func chargeReferenceExpansion(_ ref: ReferenceDefinition) -> Bool {
+        guard storage.options.contains(.cmarkBugCompatibility) else { return true }
+        let size = ref.destination.length + ref.title.length
+        let budget = max(sourceBytes.count, 100_000)
+        if size > budget - referenceExpansionSpent {
+            return false
+        }
+        referenceExpansionSpent += size
+        return true
+    }
+
     // MARK: - Extended attributes (`^[..]`)
 
     /// Resolve a `]` that closes an `^[…]` attribute opener. Tries the inline form `(attrs)` first, then the reference form `[label]` whose label resolves in `storage.attributeReferenceMap`.
@@ -1465,6 +1480,14 @@ extension BlockParser {
             if !lab.interior.isEmpty {
                 labelKey = normalizeLabel(virtualRange: lab.interior, in: content)
             }
+        }
+        // why: cmark looks the label up in the refmap it shares with link references, so a link
+        // reference that is the label's surviving entry is charged against the expansion budget here
+        // even though it can't supply attributes.
+        if let key = labelKey, !key.isEmpty,
+           !storage.linkLabelsShadowedByAttribute.contains(key),
+           let ref = storage.referenceMap[key] {
+            _ = chargeReferenceExpansion(ref)
         }
         if let key = labelKey, !key.isEmpty,
            let storedAttrs = storage.attributeReferenceMap[key] {
