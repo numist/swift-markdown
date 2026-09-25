@@ -242,6 +242,47 @@ extension BlockParser {
         return LinkDestinationMatch(chunk: chunk.extracting(0..<(i - start)), afterEnd: i)
     }
 
+    /// Cross-line variant of `matchLinkDestination(_:)` for inline content, which may be multi-segment.
+    /// cmark's `manual_scan_link_url` scans a flat input buffer, and its `<…>` form skips the byte after
+    /// any `\` - a line ending included - so a `<a\` LF `b>` destination spans a soft-break join that
+    /// `contiguousChunk` can't image within one source segment. Scans virtual offsets of `content` from
+    /// `start` to `end`; returns the destination's virtual range (excluding any `<` `>`) and the offset
+    /// just past it. A bare destination ends at the first space or line ending, so it never reaches a
+    /// join and is scanned through the contiguous window by `matchLinkDestination(_:)`. The `<…>` range
+    /// may straddle a join, so callers materialize it with `materializedChunk`, not a contiguous `Chunk`.
+    internal func matchLinkDestination(from start: Int, end: Int, in content: borrowing ContentSpan) -> (destination: Range<Int>, afterEnd: Int)? {
+        if start >= end {
+            return nil
+        }
+        if content[start] == UInt8(ascii: "<") {
+            var i = start + 1
+            while i < end {
+                let c = content[i]
+                if c == UInt8(ascii: ">") {
+                    return ((start + 1)..<i, i + 1)
+                }
+                // why: cmark's `manual_scan_link_url` (`src/inlines.c`) skips the byte after any `\`,
+                // a line ending included, so `<a\` LF `b>` is a destination. CommonMark §6.3 forbids line
+                // endings inside `<…>`; this replicates cmark, as `matchLinkDestination(_:)` does.
+                if c == UInt8(ascii: "\\") {
+                    i += 2
+                    continue
+                }
+                if c == UInt8(ascii: "\n") || c == UInt8(ascii: "<") {
+                    return nil
+                }
+                i += 1
+            }
+            return nil
+        }
+        guard let window = content.contiguousChunk(fromVirtual: start, limit: end),
+              let dest = matchLinkDestination(window) else {
+            return nil
+        }
+        let afterEnd = start + (dest.afterEnd - window.offset)
+        return (start..<afterEnd, afterEnd)
+    }
+
     // MARK: - Link title
 
     internal struct LinkTitleMatch {
@@ -315,11 +356,13 @@ extension BlockParser {
         return LinkTitleMatch(chunk: chunk.extracting(1..<(closeAfterEnd - 1 - start)), afterEnd: closeAfterEnd)
     }
 
-    /// Cross-line variant of `matchLinkTitle(_:)` for multi-segment inline content. cmark's
+    /// Cross-line variant of `matchLinkTitle(_:)` for inline content, which may be multi-segment. cmark's
     /// `scan_link_title` scans a flat input buffer, so an inline link's `"…"` / `'…'` / `(…)` title
     /// may span a soft-break join (`[](f (\n))`) that `contiguousChunk` can't image within one source
-    /// segment. Scans virtual offsets of `content` from `start` (the opening delimiter) to `end`,
-    /// crossing joins with the same longest-match two-thread DFA as `matchLinkTitle(_:)` (see there for
+    /// segment. Its longest match can also pass a closer that ends the first line (`'\'` LF `'` closes
+    /// on the second line), so the scan must span the whole content, not one segment. Scans virtual
+    /// offsets of `content` from `start` (the opening delimiter) to `end`, crossing joins with the same
+    /// longest-match two-thread DFA as `matchLinkTitle(_:)` (see there for
     /// the DFA rationale); returns the interior's virtual range (excluding the delimiters) and the
     /// offset just past the closer, or nil when the opener is not a delimiter or no closer is reached.
     /// The interior may straddle a join, so callers materialize it with `materializedChunk`, not a

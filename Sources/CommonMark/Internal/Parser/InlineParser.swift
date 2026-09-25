@@ -691,35 +691,26 @@ extension BlockParser {
            content[pos] == UInt8(ascii: "(") {
             let afterParen = pos + 1
             let afterSpaces1 = skipSpaceChars(start: afterParen, end: end, content: content)
-            // Scan the destination through a contiguous window so multi-segment content reads real bytes in bounds; `dest.afterEnd` is a buffer offset, converted back to a virtual offset via the window base.
-            if let destWindow = content.contiguousChunk(fromVirtual: afterSpaces1, limit: end),
-               let dest = matchLinkDestination(destWindow) {
-                let afterDest = afterSpaces1 + (dest.afterEnd - destWindow.offset)
+            // Scan the destination and title over virtual offsets, as cmark's `manual_scan_link_url` and
+            // `scan_link_title` scan its flat buffer: either may cross a soft-break join of multi-segment
+            // content (`<a\` LF `b>`, `'\'` LF `'`), which a one-segment contiguous window would cut short.
+            if let dest = matchLinkDestination(from: afterSpaces1, end: end, in: content) {
+                let afterDest = dest.afterEnd
                 let afterSpaces2 = skipSpaceChars(start: afterDest, end: end, content: content)
                 var titleEnd = afterDest
-                var maybeTitle: Chunk = .empty
-                if afterSpaces2 > afterDest {
-                    if let titleWindow = content.contiguousChunk(fromVirtual: afterSpaces2, limit: end),
-                       let t = matchLinkTitle(titleWindow) {
-                        maybeTitle = t.chunk
-                        titleEnd = afterSpaces2 + (t.afterEnd - titleWindow.offset)
-                    } else if let t = matchLinkTitle(from: afterSpaces2, end: end, in: content) {
-                        // The `"…"` / `'…'` / `(…)` title straddles a soft-break join (`[](f (\n))`),
-                        // which the contiguous window can't image within one source segment. cmark's
-                        // `scan_link_title` scans a flat buffer, so it crosses the join to the closer
-                        // (like the cross-line link-label scan below). Materialize the interior — it may
-                        // straddle the join — then clean it exactly like the contiguous title.
-                        maybeTitle = materializedChunk(start: t.interior.lowerBound, end: t.interior.upperBound, content: content)
-                        titleEnd = t.afterEnd
-                    }
+                var titleInterior: Range<Int> = afterDest..<afterDest
+                if afterSpaces2 > afterDest,
+                   let t = matchLinkTitle(from: afterSpaces2, end: end, in: content) {
+                    titleInterior = t.interior
+                    titleEnd = t.afterEnd
                 }
                 let afterTitleSpaces = skipSpaceChars(start: titleEnd, end: end, content: content)
                 if afterTitleSpaces < end,
                    content[afterTitleSpaces] == UInt8(ascii: ")") {
                     pos = afterTitleSpaces + 1
-                    // Clean the destination like cmark's `cmark_clean_url` (trim surrounding whitespace, then remove escapes / decode entities); the title uses `unescapeURLChunk` alone, since cmark's `cmark_clean_title` does not trim. Both read via the buffer-aware accessor (selects `sourceBytes` vs the arena per `chunk.inSource`): a link inside flattened/arena content (a non-contiguous setext heading, a `\|`-unescaped table cell) has an arena-backed destination/title, so reading must not index the source buffer at an arena offset.
-                    url = cleanURLChunk(dest.chunk)
-                    title = unescapeURLChunk(maybeTitle)
+                    // Clean the destination like cmark's `cmark_clean_url` (trim surrounding whitespace, then remove escapes / decode entities); the title uses `unescapeURLChunk` alone, since cmark's `cmark_clean_title` does not trim. Both read via the buffer-aware accessor (selects `sourceBytes` vs the arena per `chunk.inSource`): a link inside flattened/arena content (a non-contiguous setext heading, a `\|`-unescaped table cell) has an arena-backed destination/title, so reading must not index the source buffer at an arena offset. Either range may straddle a join, so it is materialized (zero-copy when it lies within one segment).
+                    url = cleanURLChunk(materializedChunk(start: dest.destination.lowerBound, end: dest.destination.upperBound, content: content))
+                    title = unescapeURLChunk(materializedChunk(start: titleInterior.lowerBound, end: titleInterior.upperBound, content: content))
                     matched = true
                     if storage.options.contains(.cmarkBugCompatibility) {
                         recordLinkDestinationSwallowedNewlines(from: afterParen, to: afterTitleSpaces, content: content)
