@@ -1,0 +1,4 @@
+Document @1:1-1:10
+└─ Paragraph @1:1-1:10
+   └─ Link @1:1-1:10 destination: "op:�"
+      └─ Text @1:2-1:9 "op:�"
