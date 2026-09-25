@@ -294,7 +294,12 @@ internal enum EntityParser {
     /// entity-first order, so `BlockParser.cleanURLChunk` also calls this under `.cmarkBugCompatibility`.
     /// Link titles (`cmark_clean_title`) do not reproduce this quirk on the compare surface, so the
     /// title callers of `unescapeURLChunk` are left on the interleaved pass.
-    internal static func entityFirstEscapedURLChunkBytes(_ chunk: Chunk, source: Span<UInt8>, into storage: inout DocumentStorage) -> Chunk {
+    ///
+    /// `trimmingDecodedWhitespace` reproduces the info string's `cmark_strbuf_trim`, which runs BETWEEN
+    /// the two passes over the `cmark_isspace` set, so whitespace a reference decodes to at either end
+    /// (```` ```&#9;x ```` → `x`) is dropped. `cmark_clean_url` trims before decoding instead, so
+    /// destinations pass `false`.
+    internal static func entityFirstEscapedURLChunkBytes(_ chunk: Chunk, source: Span<UInt8>, into storage: inout DocumentStorage, trimmingDecodedWhitespace: Bool = false) -> Chunk {
         let endOff = chunk.offset + chunk.length
         var decoded = [UInt8]()
         decoded.reserveCapacity(chunk.length)
@@ -317,10 +322,15 @@ internal enum EntityParser {
             decoded.append(b)
             i += 1
         }
-        let outOffset = storage.strings.count
         var r = 0
-        while r < decoded.count {
-            if decoded[r] == UInt8(ascii: "\\"), r + 1 < decoded.count, decoded[r + 1].isASCIIPunct {
+        var end = decoded.count
+        if trimmingDecodedWhitespace {
+            while r < end && decoded[r].isSpaceTabOrNewline { r += 1 }
+            while end > r && decoded[end - 1].isSpaceTabOrNewline { end -= 1 }
+        }
+        let outOffset = storage.strings.count
+        while r < end {
+            if decoded[r] == UInt8(ascii: "\\"), r + 1 < end, decoded[r + 1].isASCIIPunct {
                 storage.strings.append(decoded[r + 1])
                 r += 2
                 continue
@@ -335,16 +345,16 @@ internal enum EntityParser {
         )
     }
 
-    /// If `chunk` contains any backslash escapes (`\<ASCII punct>`), materialize a clean copy into `storage.strings` with the escapes processed.
+    /// Clean a fenced code block's info string: if `chunk` contains any backslash escapes (`\<ASCII punct>`) or references, materialize a clean copy into `storage.strings` with them processed.
     ///
-    /// Returns the original chunk untouched if no escapes are present. Used for inline-link / inline-image URLs and titles so that downstream rendering doesn't have to re-process them. Autolinks decode references (without backslash escapes) in `emitAutolink` instead.
-    internal static func unescapeURLChunk(_ chunk: Chunk, source: Span<UInt8>, into storage: inout DocumentStorage) -> Chunk {
+    /// Returns the original chunk untouched if it contains neither a backslash escape nor an `&`. Under `.cmarkBugCompatibility` this is cmark's `blocks.c` order (decode references, trim, strip backslash escapes); otherwise the spec's single interleaved pass over the already-trimmed info string.
+    internal static func unescapeInfoStringChunk(_ chunk: Chunk, source: Span<UInt8>, into storage: inout DocumentStorage) -> Chunk {
         guard urlChunkHasEscape(chunk, source: source) else {
             return chunk
         }
 
         if storage.options.contains(.cmarkBugCompatibility) {
-            return entityFirstEscapedURLChunkBytes(chunk, source: source, into: &storage)
+            return entityFirstEscapedURLChunkBytes(chunk, source: source, into: &storage, trimmingDecodedWhitespace: true)
         }
         return escapedURLChunkBytes(chunk, source: source, into: &storage)
     }

@@ -2660,7 +2660,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     let end = materializedSourceStart(bufferStart: fence.infoChunk.range.upperBound).sourceStart
                     infoChunk = Chunk(offset: start, length: end - start, inSource: true)
                 }
-                let cleanInfo = EntityParser.unescapeURLChunk(infoChunk, source: sourceBytes, into: &storage)
+                let cleanInfo = EntityParser.unescapeInfoStringChunk(infoChunk, source: sourceBytes, into: &storage)
                 let infoRef = storage.intern(replacingNUL(cleanInfo))
                 // cmark stores `fence_offset` in raw SOURCE bytes (`first_nonspace - offset`), which counts
                 // a tab straddling the container prefix and the fence as a SINGLE byte even though it spans
