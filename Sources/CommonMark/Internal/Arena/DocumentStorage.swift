@@ -78,7 +78,7 @@ internal struct DocumentStorage: ~Copyable {
 
     /// The `.heading` nodes opened by an ATX (`#`) line, as opposed to a setext (`===`/`---`)
     /// underline. Consulted only by the escaped-caret footnote-image over-read simulation
-    /// (`emitEscapedCaretFootnoteLiteral`): cmark's ATX heading content buffer is pre-trimmed of its
+    /// (`emitEscapedCaretFootnote`): cmark's ATX heading content buffer is pre-trimmed of its
     /// line's trailing newline by `chop_trailing_hashtags` *before* that content is copied in, so the
     /// `cmark_strbuf` NUL terminator cmark always writes one past its logical end lands right after
     /// the heading's own last byte. A paragraph (or setext heading, which skips that pre-trim) keeps
