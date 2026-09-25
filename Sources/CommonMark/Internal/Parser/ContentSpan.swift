@@ -14,7 +14,7 @@
 ///
 /// - **Single-segment (the overwhelmingly common case).** The content is one contiguous buffer region - a zero-copy slice of the source (`inSource == true`) or of a scratch copy of `storage.strings` (`inSource == false`). Bytes are addressed by *global* offsets (`startOffset..<endOffset`) via a branchless `span[offset - base]`, identical in cost to a plain single-buffer read. For source-backed content the global offset IS the original-source byte offset.
 ///
-/// - **Multi-segment.** The content is an ordered list of `Segment`s - source-line ranges (zero-copy into `sourceBytes`) joined by the shared interned `"\n"` - addressed by flat *virtual* offsets (`0..<virtualLength`). Used for multi-line paragraph/heading bodies whose lines aren't source-contiguous (block-quote/list continuation, CRLF) so no source bytes are copied. Almost all non-source segments are the interned `"\n"` join, read as `\n` without touching the arena. The one exception is a lazy-continuation **split-tab residual** (Quirk E, flag-ON): an outer container's matched prefix partially consumes a tab, and the tab's leftover columns become *synthetic spaces* with no source byte - materialized into the arena as one non-source segment interleaved among the source-backed ones (`BlockParser.appendSyntheticResidualSpaces`). To read those bytes without holding the growing `storage.strings` across the inline loop's appends, the multi-segment span carries a stable snapshot of the arena (`arena`) taken before inline parsing; non-source segments then read `arena[offset]` (the interned `\n` sits at offset 0, so it resolves naturally too). When no synthetic segment is present the snapshot is empty and non-source segments synthesize `\n` directly, keeping the common multi-line-paragraph path zero-copy.
+/// - **Multi-segment.** The content is an ordered list of `Segment`s - source-line ranges (zero-copy into `sourceBytes`) joined by the shared interned `"\n"` - addressed by flat *virtual* offsets (`0..<virtualLength`). Used for multi-line paragraph/heading bodies whose lines aren't source-contiguous (block-quote/list continuation, CRLF) so no source bytes are copied. Almost all non-source segments are the interned `"\n"` join, read as `\n` without touching the arena. The one exception is a lazy-continuation **split-tab residual** (Quirk E, flag-ON): an outer container's matched prefix partially consumes a tab, and the tab's leftover columns become *synthetic spaces* with no source byte - materialized into the arena as one non-source segment interleaved among the source-backed ones (`BlockParser.appendSyntheticResidualSpaces`). A lazy tasklist-retry line whose advance stopped inside a NUL's U+FFFD likewise carries its orphaned-byte U+FFFD replacements as one such segment ahead of the line's source segment (`BlockParser.addLazyLineAfterTasklistAdvance`). Either filler carries no inline-significant byte, so inline syntax only ever lives in source segments (`multiNextSignificant` skips non-newline arena segments whole). To read those bytes without holding the growing `storage.strings` across the inline loop's appends, the multi-segment span carries a stable snapshot of the arena (`arena`) taken before inline parsing; non-source segments then read `arena[offset]` (the interned `\n` sits at offset 0, so it resolves naturally too). When no synthetic segment is present the snapshot is empty and non-source segments synthesize `\n` directly, keeping the common multi-line-paragraph path zero-copy.
 ///
 /// `sourceOffset(ofVirtual:)` maps a (virtual) offset back to its original-source byte offset (or `nil` for arena/synthetic positions), which is how inline nodes get stamped with source ranges.
 internal struct ContentSpan: ~Escapable {
@@ -39,7 +39,7 @@ internal struct ContentSpan: ~Escapable {
     /// Multi-segment only: `segmentEnds[i]` is the virtual offset just past segment `i` (the running total of segment lengths), held in stable storage alongside `segments`. Non-decreasing, so the segment covering a virtual offset is found by binary search (`segmentIndex(covering:)`) rather than a walk from the first segment - a paragraph has a segment per line, and the inline pass resolves offsets once per byte.
     @usableFromInline let segmentEnds: Span<Int>
 
-    /// Multi-segment only: a stable snapshot of `storage.strings` (from offset 0) that backs the content's non-source segments. Empty unless the content carries a synthetic-space segment (a lazy-continuation split-tab residual); when empty, non-source segments synthesize `\n` (the only other non-source segment is the interned newline). Held as an independent copy because `storage.strings` grows - and may reallocate - as the inline loop interns node content.
+    /// Multi-segment only: a stable snapshot of `storage.strings` (from offset 0) that backs the content's non-source segments. Empty unless the content carries a synthetic filler segment (a lazy-continuation split-tab residual's spaces, or a lazy tasklist-retry line's orphaned-byte U+FFFD replacements); when empty, non-source segments synthesize `\n` (the only other non-source segment is the interned newline). Held as an independent copy because `storage.strings` grows - and may reallocate - as the inline loop interns node content.
     @usableFromInline let arena: Span<UInt8>
 
     /// Multi-segment only: total virtual byte length across `segments`.
@@ -90,7 +90,7 @@ internal struct ContentSpan: ~Escapable {
         self.multiVirtualLength = virtualLength
     }
 
-    /// Multi-segment initializer carrying an arena snapshot: identical to the plain multi-segment initializer, but the content also holds a synthetic-space segment (a lazy-continuation split-tab residual) whose bytes live in `arena` (a stable snapshot of `storage.strings` from offset 0). Non-source segments read `arena[offset]` - synthetic spaces resolve to spaces and the interned `"\n"` (offset 0) resolves to `\n`.
+    /// Multi-segment initializer carrying an arena snapshot: identical to the plain multi-segment initializer, but the content also holds a synthetic filler segment (a lazy-continuation split-tab residual's spaces, or a lazy tasklist-retry line's orphaned-byte U+FFFD replacements) whose bytes live in `arena` (a stable snapshot of `storage.strings` from offset 0). Non-source segments read `arena[offset]` - synthetic filler resolves to its bytes and the interned `"\n"` (offset 0) resolves to `\n`.
     @_lifetime(copy source, copy segments, copy segmentEnds, copy arena)
     @inlinable
     init(source: Span<UInt8>, segments: Span<Segment>, segmentEnds: Span<Int>, virtualLength: Int, arena: Span<UInt8>) {
@@ -156,7 +156,7 @@ internal struct ContentSpan: ~Escapable {
         return span[offset - base]
     }
 
-    /// Multi-segment byte resolution: find the segment covering virtual `offset` and read it. Source segments read `span` (== `sourceBytes`); a non-source segment reads the arena snapshot (`arena[offset]`) when one is present - the interned newline at offset 0 yields `\n`, a synthetic-space run yields spaces - or synthesizes `\n` directly when no snapshot is carried (the common case, whose only non-source segment is the interned newline).
+    /// Multi-segment byte resolution: find the segment covering virtual `offset` and read it. Source segments read `span` (== `sourceBytes`); a non-source segment reads the arena snapshot (`arena[offset]`) when one is present - the interned newline at offset 0 yields `\n`, a synthetic filler run yields its spaces or U+FFFD bytes - or synthesizes `\n` directly when no snapshot is carried (the common case, whose only non-source segment is the interned newline).
     private func multiByte(at offset: Int) -> UInt8 {
         let i = segmentIndex(covering: offset)
         if i == segments.count {
@@ -214,7 +214,7 @@ internal struct ContentSpan: ~Escapable {
         return nil
     }
 
-    /// Build a `Chunk` for a sub-range of this content. Single-segment: a direct sub-chunk. Multi-segment: valid only when the range lies within one segment (the common case - most inline nodes don't straddle a line join); callers whose range can straddle (a code span, or a text run that keeps a flag-ON split-tab residual) materialize via `InlineParser.materializedChunk` themselves.
+    /// Build a `Chunk` for a sub-range of this content. Single-segment: a direct sub-chunk. Multi-segment: valid only when the range lies within one segment (the common case - most inline nodes don't straddle a line join); callers whose range can straddle (a code span, or a text run that keeps a flag-ON synthetic filler segment) materialize via `InlineParser.materializedChunk` themselves.
     @inlinable
     func chunk(offset: Int, length: Int) -> Chunk {
         if !isMultiSegment {
@@ -277,7 +277,7 @@ internal struct ContentSpan: ~Escapable {
         return base + found
     }
 
-    /// Multi-segment `nextSignificant`: walk the segment list, SIMD-scanning each source segment's contiguous source sub-range via `scanSignificant`. The interned `"\n"` joining two lines is itself in the significant set (the dispatch emits a soft/hard break for it), so a newline segment's first byte is reported immediately without scanning; a synthetic-space run (arena-backed, non-newline) carries no significant byte and is skipped. Cost is `SIMD(content bytes)` plus a tiny per-segment fixed cost - the same order as the single-segment fast path, not an O(bytes × segments) scalar walk.
+    /// Multi-segment `nextSignificant`: walk the segment list, SIMD-scanning each source segment's contiguous source sub-range via `scanSignificant`. The interned `"\n"` joining two lines is itself in the significant set (the dispatch emits a soft/hard break for it), so a newline segment's first byte is reported immediately without scanning; a synthetic filler run (arena-backed, non-newline: split-tab spaces or orphaned-byte U+FFFDs) carries no significant byte and is skipped. Cost is `SIMD(content bytes)` plus a tiny per-segment fixed cost - the same order as the single-segment fast path, not an O(bytes × segments) scalar walk.
     private func multiNextSignificant(from globalCursor: Int, strikethrough: Bool, gfmAutolink: Bool, smart: Bool) -> Int {
         let end = multiVirtualLength
         if globalCursor >= end {
@@ -306,7 +306,7 @@ internal struct ContentSpan: ~Escapable {
                     // The interned "\n" join is always inline-significant (soft/hard break) - report its position directly.
                     return cursor
                 }
-                // else: a synthetic-space run (arena-backed, non-newline) carries no inline-significant byte; fall through to advance past it.
+                // else: a synthetic filler run (arena-backed, non-newline) carries no inline-significant byte; fall through to advance past it.
                 vStart += len
                 cursor = vStart
                 i += 1

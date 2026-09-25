@@ -331,7 +331,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var delimiters = UniqueArray<DelimiterRecord>()
         var brackets = UniqueArray<BracketRecord>()
         
-        // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content) and `segEndScratch` its running virtual end offsets; `runScratch` holds a stable copy of a flattened block's arena→source run map and `runEndScratch` its running end offsets; `arenaScratch` holds a stable snapshot of `storage.strings` backing a multi-segment content's synthetic arena segment (a split-tab residual). All owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
+        // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content) and `segEndScratch` its running virtual end offsets; `runScratch` holds a stable copy of a flattened block's arena→source run map and `runEndScratch` its running end offsets; `arenaScratch` holds a stable snapshot of `storage.strings` backing a multi-segment content's synthetic arena segment (a split-tab residual, or a lazy tasklist-retry line's orphaned-byte replacements). All owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
         var scratch = UniqueArray<UInt8>()
         var segScratch = UniqueArray<Segment>()
         var segEndScratch = UniqueArray<Int>()
@@ -397,7 +397,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     virtualEnd += Int(seg.length)
                     segEndScratch.append(virtualEnd)
                 }
-                // A synthetic arena-backed segment (a lazy-continuation split-tab residual, `addLineSegment`)
+                // A synthetic arena-backed segment (a lazy-continuation split-tab residual, `addLineSegment`, or
+                // a lazy tasklist-retry line's orphaned-byte replacements, `addLazyLineAfterTasklistAdvance`)
                 // lives at a NON-zero arena offset; the interned newline join sits at offset 0 and is read as
                 // `\n` without touching the arena. When one is present, snapshot the arena prefix that backs it
                 // into a stable buffer (the inline pass appends to `storage.strings`, which may reallocate) and
@@ -2863,9 +2864,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             switch consume leaf.content {
             case .segments(let segs):
                 // A NUL anywhere in the body forces a flatten into one normalized arena chunk (U+FFFD
-                // substituted): inline multi-segment content can't carry an arena content segment
-                // (`ContentSpan.multiByte` resolves only source segments + the interned newline), so the
-                // segment representation can't hold the replacement. NUL-free bodies stay zero-copy segments.
+                // substituted): inline multi-segment content can't carry an arena content segment (a
+                // non-source segment is only the interned newline or synthetic filler with no inline syntax,
+                // `ContentSpan.multiNextSignificant`), so the segment representation can't hold the replacement. NUL-free bodies stay zero-copy segments.
                 if segmentsContainNUL(segs) {
                     var map: [ArenaRun] = []
                     let flat = flattenSegments(segs, map: &map)
@@ -4951,13 +4952,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// the source bytes `rest`.
     private static func appendOrphanLedLine(orphanedBytes: Int, rest: Range<Int>, of source: Span<UInt8>, to buffer: inout UniqueArray<UInt8>) {
         buffer.reserveCapacity(buffer.count + 3 * orphanedBytes + rest.count)
+        appendOrphanReplacements(orphanedBytes, to: &buffer)
+        for i in rest {
+            buffer.append(source[i])
+        }
+    }
+
+    /// Append one U+FFFD per orphaned byte of a NUL's U+FFFD (`tasklistAdvanceEnd`), as the reference's String
+    /// bridge repairs each.
+    private static func appendOrphanReplacements(_ orphanedBytes: Int, to buffer: inout UniqueArray<UInt8>) {
         for _ in 0..<orphanedBytes {
             buffer.append(0xEF)
             buffer.append(0xBF)
             buffer.append(0xBD)
-        }
-        for i in rest {
-            buffer.append(source[i])
         }
     }
 
@@ -4966,8 +4973,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// cmark's lazy `add_line` copies from that offset, so whitespace between it and the first non-space is
     /// the preserved lazy residual (`currentLineContentCursor`). An advance that stopped inside a NUL's U+FFFD
-    /// leaves its orphaned continuation bytes leading the added text (`appendOrphanLedLine`); only that line
-    /// is copied into the arena. Orphaned bytes, from a NUL or a multi-byte wildcard scalar, keep the
+    /// leaves its orphaned continuation bytes leading the added text: a materialized leaf copies that line into
+    /// its buffer (`appendOrphanLedLine`); a segment list gets the replacements as an arena segment followed by
+    /// the rest of the line as a source segment. Orphaned bytes, from a NUL or a multi-byte wildcard scalar, keep the
     /// paragraph from ever opening a table (`markOrphanLedParagraphTableVisited`).
     private mutating func addLazyLineAfterTasklistAdvance(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         let lineEnd = currentLineSourceRange.upperBound
@@ -4988,10 +4996,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 Self.appendOrphanLedLine(orphanedBytes: advance.orphanedBytes, rest: advance.sourceOffset..<lineEnd, of: sourceBytes, to: &buffer)
                 return PendingLeaf(node: current, content: .materialized(buffer))
             }
+            // Only the replacements go to the arena; the rest of the line stays a zero-copy source segment.
+            // A multi-segment inline span scans only source segments for inline syntax (a non-source segment
+            // is the newline join or synthetic filler, `ContentSpan.multiNextSignificant`), so the line's
+            // emphasis, links, entities, ... must not sit in the arena segment.
             let offset = storage.strings.count
-            Self.appendOrphanLedLine(orphanedBytes: advance.orphanedBytes, rest: advance.sourceOffset..<lineEnd, of: sourceBytes, to: &storage.strings)
-            let line = Segment(offset: Int32(offset), length: Int32(storage.strings.count - offset), inSource: false)
-            return appendSegment(line, to: current, pending: PendingLeaf(node: current, content: .segments(segs)))
+            Self.appendOrphanReplacements(advance.orphanedBytes, to: &storage.strings)
+            let replacements = Segment(offset: Int32(offset), length: Int32(storage.strings.count - offset), inSource: false)
+            let afterReplacements = appendSegment(replacements, to: current, pending: PendingLeaf(node: current, content: .segments(segs)))
+            let rest = Segment(offset: Int32(advance.sourceOffset), length: Int32(lineEnd - advance.sourceOffset), inSource: true)
+            return appendSegment(rest, to: current, pending: afterReplacements)
         }
         let contentStart = indexOfFirstNonSpace(source: sourceBytes, range: advance.sourceOffset..<lineEnd)
         markTableVisitedIfContentStartIsOrphan(current, contentStart: contentStart)

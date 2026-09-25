@@ -3941,11 +3941,11 @@ extension BlockParser {
             }
             return
         }
-        // A text run can straddle a segment boundary when a lazy split-tab residual keeps a synthetic
-        // arena segment in text flow (flag-ON, after a backslash hard break where the residual-skip does
-        // not fire): `[start, end)` then spans the synthetic spaces and the following source line, which no
-        // single buffer holds. Materialize such a run into the arena; a run within one segment stays
-        // zero-copy. (An ordinary run never straddles - soft/hard breaks bound text at the newline.)
+        // A text run can straddle a segment boundary when a synthetic arena segment stays in text flow
+        // (flag-ON): a lazy split-tab residual after a backslash hard break, where the residual-skip does
+        // not fire, or a lazy tasklist-retry line's orphaned-byte replacements. `[start, end)` then spans the
+        // synthetic bytes and the following source line, which no single buffer holds. Materialize such a run into the arena; a run within one segment stays
+        // zero-copy. (Otherwise a run never straddles - soft/hard breaks bound text at the newline.)
         let chunk = materializedChunk(start: start, end: end, content: content)
         let chunkRef = storage.intern(chunk)
         let textIdx = storage.appendNode(
