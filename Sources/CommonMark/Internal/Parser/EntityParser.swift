@@ -337,7 +337,7 @@ internal enum EntityParser {
 
     /// If `chunk` contains any backslash escapes (`\<ASCII punct>`), materialize a clean copy into `storage.strings` with the escapes processed.
     ///
-    /// Returns the original chunk untouched if no escapes are present. Used for inline-link / inline-image URLs and titles so that downstream rendering doesn't have to re-process them. Autolink URLs go through `emitAutolink` and are kept literal.
+    /// Returns the original chunk untouched if no escapes are present. Used for inline-link / inline-image URLs and titles so that downstream rendering doesn't have to re-process them. Autolinks decode references (without backslash escapes) in `emitAutolink` instead.
     internal static func unescapeURLChunk(_ chunk: Chunk, source: Span<UInt8>, into storage: inout DocumentStorage) -> Chunk {
         guard urlChunkHasEscape(chunk, source: source) else {
             return chunk

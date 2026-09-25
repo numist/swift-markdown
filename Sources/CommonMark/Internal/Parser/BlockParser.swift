@@ -5297,10 +5297,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// If `chunk` contains backslash escapes (`\<ASCII punct>`) or HTML entity references, append a clean copy to the strings arena and return a chunk pointing at the new region.
     ///
-    /// Reads via `readByte(at:in:)`, so it works for both source-backed and arena-backed (`inSource == false`) chunks - used by block-level reference definitions and by inline links whose destination lives in flattened/arena content.
+    /// Reads via `readByte(at:in:)`, so it works for both source-backed and arena-backed (`inSource == false`) chunks - used by block-level reference definitions, by inline links whose destination lives in flattened/arena content, and by autolinks.
     ///
     /// Returns `chunk` untouched if no escapes are present.
-    mutating func unescapeURLChunk(_ chunk: Chunk) -> Chunk {
+    ///
+    /// With `backslashEscapes: false` only entity references are decoded and backslashes stay literal - the
+    /// autolink form, where CommonMark §6.5 disables backslash escapes but §6.2 still recognizes references.
+    mutating func unescapeURLChunk(_ chunk: Chunk, backslashEscapes: Bool = true) -> Chunk {
         guard !chunk.isEmpty else {
             return chunk
         }
@@ -5309,7 +5312,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var hasEscape = false
         for i in chunk.offset..<endOff {
             let b = readByte(at: i, in: chunk)
-            if b == UInt8(ascii: "\\"), i + 1 < endOff,
+            if backslashEscapes, b == UInt8(ascii: "\\"), i + 1 < endOff,
                readByte(at: i + 1, in: chunk).isASCIIPunct {
                 hasEscape = true
                 break
@@ -5326,7 +5329,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var j = chunk.offset
         while j < endOff {
             let b = readByte(at: j, in: chunk)
-            if b == UInt8(ascii: "\\"), j + 1 < endOff {
+            if backslashEscapes, b == UInt8(ascii: "\\"), j + 1 < endOff {
                 let next = readByte(at: j + 1, in: chunk)
                 if next.isASCIIPunct {
                     storage.strings.append(next)

@@ -2716,8 +2716,12 @@ extension BlockParser {
 
     /// Emit a `.link` node + a single `.text` child for an autolink match.
     ///
-    /// For email forms, the URL gets a `mailto:` prefix and is materialized into the string arena. For URI forms, the URL chunk references the original interior bytes directly.
+    /// The text is the interior with entity and numeric character references decoded (CommonMark §6.2 recognizes them in every context but code; backslash escapes stay literal per §6.5), materialized into the string arena only when a `&` is present - cmark's `make_str_with_entities` (`src/inlines.c`). For email forms, the URL gets a `mailto:` prefix and is materialized into the string arena; the email grammar admits no `;`, so its interior can hold no reference to decode. For URI forms, the URL is the decoded text - cmark's `cmark_clean_autolink` runs the same `houdini_unescape_html_f` over it.
     private mutating func emitAutolink(auto: AutolinkMatch, into parent: DocumentStorage.Index, content: borrowing ContentSpan) {
+        let textChunk = unescapeURLChunk(
+            content.chunk(offset: auto.interior.lowerBound, length: auto.interior.count),
+            backslashEscapes: false
+        )
         let urlChunk: Chunk
         if auto.isEmail {
             // Build `mailto:` + interior into the string arena.
@@ -2734,15 +2738,8 @@ extension BlockParser {
             // Materialized into the arena, so `inSource: false` regardless of `content`'s buffer.
             urlChunk = Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
         } else {
-            urlChunk = content.chunk(
-                offset: auto.interior.lowerBound,
-                length: auto.interior.count
-            )
+            urlChunk = textChunk
         }
-        let textChunk = content.chunk(
-            offset: auto.interior.lowerBound,
-            length: auto.interior.count
-        )
         let urlRef = storage.intern(urlChunk)
         let textRef = storage.intern(textChunk)
         let linkIdx = storage.appendNode(
