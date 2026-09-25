@@ -788,7 +788,6 @@ extension BlockParser {
                 key = nil
             }
             if let key, !key.isEmpty,
-               !storage.linkLabelsShadowedByAttribute.contains(key),
                let ref = storage.referenceMap[key],
                chargeReferenceExpansion(ref) {
                 url = ref.destination
@@ -1485,7 +1484,6 @@ extension BlockParser {
         // reference that is the label's surviving entry is charged against the expansion budget here
         // even though it can't supply attributes.
         if let key = labelKey, !key.isEmpty,
-           !storage.linkLabelsShadowedByAttribute.contains(key),
            let ref = storage.referenceMap[key] {
             _ = chargeReferenceExpansion(ref)
         }

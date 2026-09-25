@@ -43,13 +43,16 @@ internal struct DocumentStorage: ~Copyable {
 
     /// Fork-specific extended-attribute reference definitions of the form `^[label]: attrs`.
     ///
-    /// Keyed by the same normalized label form as `referenceMap` but stored separately so `[foo]` (link) and `^[foo]` (attribute) lookups don't collide. First definition wins.
+    /// Keyed by the same normalized label form as `referenceMap` but stored separately so `[foo]` (link) and `^[foo]` (attribute) lookups don't collide. First definition wins; under `.cmarkBugCompatibility` the first definition of *either* kind wins (see `isLabelClaimedInSharedRefmap(_:)`).
     internal var attributeReferenceMap: [String: Chunk] = [:]
 
-    /// Normalized labels for which an attribute definition (`^[label]:`) was registered *before* any link reference definition (`[label]:`) for the same label.
+    /// Under `.cmarkBugCompatibility`, whether a new link or attribute definition for normalized label `key` loses to an existing definition of either kind; always `false` flag-OFF, where each registration site checks only its own kind.
     ///
-    /// cmark stores both kinds in one refmap keyed by label and keeps only the first-registered entry (`references.c`, `map.c`), so link resolution (`inlines.c` `handle_close_bracket`) succeeds only when that surviving entry is a link ref (`!ref->is_attributes_reference`). An earlier attribute definition therefore shadows a later same-label link reference, leaving it literal. The rewrite keeps the two kinds in separate maps, so this records the cross-map ordering the shared refmap would otherwise encode.
-    internal var linkLabelsShadowedByAttribute: Set<String> = []
+    /// cmark-gfm keeps both kinds in one refmap keyed by label and keeps only the first-registered entry (`references.c`, `map.c` `sort_map`); a lookup that lands on the other kind's entry fails (`inlines.c` `handle_close_bracket` requires `!ref->is_attributes_reference`, `handle_close_bracket_attribute` requires `ref->is_attributes_reference`). So a later definition of the other kind is shadowed. The two syntaxes are distinct, so flag-OFF each kind keeps its own namespace and only a same-kind earlier definition wins.
+    internal func isLabelClaimedInSharedRefmap(_ key: String) -> Bool {
+        options.contains(.cmarkBugCompatibility)
+            && (referenceMap[key] != nil || attributeReferenceMap[key] != nil)
+    }
 
     /// GFM footnote definitions discovered while finalizing paragraphs.
     ///
