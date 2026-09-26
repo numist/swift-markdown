@@ -329,6 +329,12 @@ extension BlockParser {
         var closeAfterEnd: Int? = nil
         var i = start + 1
         while i < end, inBody || afterBackslash {
+            // why: the re2c scanners validate UTF-8, so an orphaned continuation byte in cmark's buffer (the
+            // U+FFFD standing for it here) matches no transition and ends the scan (`src/scanners.c`
+            // `_scan_link_title`).
+            if !chunk.inSource, isOrphanReplacement(at: i) {
+                break
+            }
             let c = readByte(at: i, in: chunk)
             var nextInBody = false
             var nextAfterBackslash = false

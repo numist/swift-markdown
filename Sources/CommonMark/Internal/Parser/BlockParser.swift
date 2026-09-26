@@ -131,6 +131,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Populated only for a non-contiguous setext heading (PHASE 2c): its content is flattened into one arena `Chunk` by `flattenSegments`, which drops the per-line source mapping the segments carried. The run map (content-relative, so it survives the re-seed's arena re-copy) lets the inline pass stamp the heading's text/emphasis with real source positions instead of leaving them unstamped. Consulted in the inline pass when building an arena single-segment `ContentSpan`.
     var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
 
+    /// The `storage.strings` byte ranges holding a U+FFFD that stands for an orphaned UTF-8 continuation byte
+    /// of cmark's buffer (`tasklistAdvanceEnd`), one range per U+FFFD, ascending.
+    ///
+    /// cmark's UTF-8-validating scanners stop at an orphan, but its U+FFFD reads exactly like a NUL's, so the
+    /// scans need to be told which U+FFFDs are orphans (`ContentSpan.orphanReplacements`). A range is
+    /// registered where the replacement is written into the arena, and again wherever arena content holding
+    /// it is copied to a new arena offset (`flattenSegments`, `replacingNUL`, a `.materialized` buffer's
+    /// drain). Slicing content needs no update, as the offsets are the arena's own.
+    var orphanReplacementRanges = UniqueArray<Range<Int>>()
+
+    /// The orphan replacements inside a node's `.materialized` pending buffer, as buffer offsets, one range per
+    /// U+FFFD, ascending. Moved into `orphanReplacementRanges` when the buffer is copied into the arena.
+    var materializedOrphanReplacements: [DocumentStorage.Index: [Range<Int>]] = [:]
+
     /// List-item nodes whose GFM task-list checkbox is eligible for recognition. cmark's
     /// `open_tasklist_item` runs only as the item opens and scans that OPENING line from column 0
     /// (`scan_tasklist`: `spacechar* marker spacechar+ checkbox spacechar+`), so an item qualifies only
@@ -340,6 +354,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var runScratch = UniqueArray<ArenaRun>()
         var runEndScratch = UniqueArray<Int>()
         var arenaScratch = UniqueArray<UInt8>()
+        // `orphanScratch` holds a stable copy of the content's orphan replacements (`orphanReplacementRanges`).
+        var orphanScratch = UniqueArray<Range<Int>>()
         
         for (node, ref) in pending {
             if ref.count == 0 || ref.totalLength == 0 {
@@ -364,29 +380,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                         }
                     }
                     // Flattened content (a non-contiguous setext heading) carries an arena→source run map so its inlines still get source positions; plain arena content (no map) parses unmapped as before.
-                    if let map = arenaSourceMaps[node], !map.isEmpty {
-                        runScratch.removeAll(keepingCapacity: true)
-                        runEndScratch.removeAll(keepingCapacity: true)
+                    runScratch.removeAll(keepingCapacity: true)
+                    runEndScratch.removeAll(keepingCapacity: true)
+                    if let map = arenaSourceMaps[node] {
                         var runEnd = 0
                         for run in map {
                             runScratch.append(run)
                             runEnd += Int(run.length)
                             runEndScratch.append(runEnd)
                         }
-                        try parseInline(
-                            content: ContentSpan(span: scratch.span, base: chunk.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span),
-                            into: node,
-                            delimiters: &delimiters,
-                            brackets: &brackets
-                        )
-                    } else {
-                        try parseInline(
-                            content: ContentSpan(span: scratch.span, base: chunk.offset, inSource: false),
-                            into: node,
-                            delimiters: &delimiters,
-                            brackets: &brackets
-                        )
                     }
+                    orphanScratch.removeAll()
+                    for replacement in orphanReplacements(in: chunk.range) {
+                        orphanScratch.append(replacement)
+                    }
+                    try parseInline(
+                        content: ContentSpan(span: scratch.span, base: chunk.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span, orphanReplacements: orphanScratch.span),
+                        into: node,
+                        delimiters: &delimiters,
+                        brackets: &brackets
+                    )
                 }
             } else {
                 // Multi-segment content (multi-line non-contiguous paragraph/heading): copy the segment list into stable storage and parse it directly from the source - no flattening into the arena.
@@ -406,10 +419,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // into a stable buffer (the inline pass appends to `storage.strings`, which may reallocate) and
                 // hand it to the span. The common multi-line paragraph has no such segment and stays zero-copy.
                 var arenaExtent = 0
+                var replacements: [Range<Int>] = []
                 for i in 0..<segScratch.count {
                     let seg = segScratch[i]
                     if !seg.inSource && seg.offset != DocumentStorage.newlineOffset {
                         arenaExtent = max(arenaExtent, Int(seg.offset) + Int(seg.length))
+                        replacements += orphanReplacements(in: Int(seg.offset)..<(Int(seg.offset) + Int(seg.length)))
                     }
                 }
                 if arenaExtent > 0 {
@@ -417,8 +432,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     storage.strings.span.extracting(0..<arenaExtent).withUnsafeBufferPointer { buffer in
                         arenaScratch.append(copying: buffer)
                     }
+                    // Already ascending, as `ContentSpan.orphanedContinuationByteLength`'s search needs: each
+                    // arena segment was written at the arena's end when its line was added.
+                    orphanScratch.removeAll()
+                    for replacement in replacements {
+                        orphanScratch.append(replacement)
+                    }
                     try parseInline(
-                        content: ContentSpan(source: sourceBytes, segments: segScratch.span, segmentEnds: segEndScratch.span, virtualLength: Int(ref.totalLength), arena: arenaScratch.span),
+                        content: ContentSpan(source: sourceBytes, segments: segScratch.span, segmentEnds: segEndScratch.span, virtualLength: Int(ref.totalLength), arena: arenaScratch.span, orphanReplacements: orphanScratch.span),
                         into: node,
                         delimiters: &delimiters,
                         brackets: &brackets
@@ -645,7 +666,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     runEndScratch.append(runEnd)
                 }
             }
-            let content = ContentSpan(span: scratch.span, base: rest.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span)
+            let content = ContentSpan(span: scratch.span, base: rest.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span, orphanReplacements: Span<Range<Int>>())
             try parseInline(
                 content: content,
                 into: paragraph,
@@ -822,6 +843,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 buffer.append(sourceBytes[i])
             }
         } else {
+            let shift = buffer.count - chunk.offset
+            let replacements = orphanReplacements(in: chunk.range)
+            if !replacements.isEmpty {
+                materializedOrphanReplacements[node, default: []] += replacements.map { ($0.lowerBound + shift)..<($0.upperBound + shift) }
+            }
             for i in chunk.offset..<end {
                 buffer.append(storage.strings[i])
             }
@@ -1147,7 +1173,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func replacingNUL(_ chunk: Chunk) -> Chunk {
         guard containsNUL(chunk) else { return chunk }
         let offset = storage.strings.count
+        // An orphan replacement holds no NUL, so it is copied whole and only moves.
+        let replacements = chunk.inSource ? [] : orphanReplacements(in: chunk.range)
+        var nextReplacement = 0
+        var carried: [Range<Int>] = []
         for i in chunk.range {
+            if nextReplacement < replacements.count, replacements[nextReplacement].lowerBound == i {
+                let start = storage.strings.count
+                carried.append(start..<(start + replacements[nextReplacement].count))
+                nextReplacement += 1
+            }
             let b = readByte(at: i, in: chunk)
             if b == 0 {
                 storage.strings.append(0xEF)
@@ -1157,6 +1192,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 storage.strings.append(b)
             }
         }
+        registerOrphanReplacements(carried)
         return Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
     }
 
@@ -1342,6 +1378,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             content.span.withUnsafeBufferPointer { buffer in
                 storage.strings.append(copying: buffer)
             }
+            carryMaterializedOrphanReplacements(of: node, to: offset)
             return LeafMaterialization(chunk: Chunk(offset: offset, length: content.count, inSource: false), pending: nil)
         case .segments(let segs):
             // Flatten a segment list to one arena chunk (used when a `Chunk` is required - e.g. a setext heading's paragraph re-seed, or matcher-eligible content). The common multi-line paragraph path keeps segments zero-copy via the finalize segment branch. Capture the arena→source run map so the re-seed can carry per-line source columns onto the heading's inlines.
@@ -1776,6 +1813,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// positions OFF) into a preceding paragraph plus a header-only re-seed. The preceding bytes are copied
     /// into the arena; no source stamping is needed (a materialized multi-line paragraph only arises with
     /// positions off - the positions-on paths map tab-expanded lines back to source segments instead).
+    /// The buffer carries no orphan replacement (`materializedOrphanReplacements`): an orphan-led paragraph
+    /// never opens a table (`markOrphanLedParagraphTableVisited`).
     private mutating func splitMaterializedHeader(_ node: DocumentStorage.Index, buffer: consuming UniqueArray<UInt8>) -> PendingLeaf? {
         var lastNewline = -1
         for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
@@ -2922,7 +2961,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                         currentContentIndent = advance.orphanStart - currentLineSourceRange.lowerBound
                     }
                     var buffer = UniqueArray<UInt8>()
-                    Self.appendOrphanLedLine(orphanedBytes: advance.orphanedBytes, rest: advance.sourceOffset..<lineEnd, of: sourceBytes, to: &buffer)
+                    materializedOrphanReplacements[paragraphIdx] = Self.appendOrphanLedLine(orphanedBytes: advance.orphanedBytes, rest: advance.sourceOffset..<lineEnd, of: sourceBytes, to: &buffer)
                     _ = take(pending, ifNode: paragraphIdx)
                     return PendingLeaf(node: paragraphIdx, content: .materialized(buffer))
                 }
@@ -3007,6 +3046,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
                 let offset = storage.strings.count
                 content.span.withUnsafeBufferPointer { storage.strings.append(copying: $0) }
+                carryMaterializedOrphanReplacements(of: node, to: offset)
                 var map = seededMap
                 let replaced = replacingNUL(Chunk(offset: offset, length: content.count, inSource: false), map: &map)
                 return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
@@ -3164,6 +3204,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         for i in 0..<segs.count { total += Int(segs[i].length) }
         if total == 0 { return .empty }
         var buf = UniqueArray<UInt8>(minimumCapacity: total)
+        let offset = storage.strings.count
         for i in 0..<segs.count {
             let seg = segs[i]
             let len = Int(seg.length)
@@ -3171,6 +3212,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if seg.inSource {
                 for j in Int(seg.offset)..<end { buf.append(sourceBytes[j]) }
             } else {
+                carryOrphanReplacements(from: Int(seg.offset)..<end, to: offset + buf.count)
                 for j in Int(seg.offset)..<end { buf.append(storage.strings[j]) }
             }
             if len > 0 {
@@ -3181,7 +3223,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     physicalOffset: seg.inSource ? seg.offset : -1))
             }
         }
-        let offset = storage.strings.count
         buf.span.withUnsafeBufferPointer { storage.strings.append(copying: $0) }
         return Chunk(offset: offset, length: total, inSource: false)
     }
@@ -5088,22 +5129,72 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Append a line that cmark's tasklist advance left starting with `orphanedBytes` orphaned continuation
     /// bytes (`tasklistAdvanceEnd`): one U+FFFD per orphan, as the reference's String bridge repairs each, then
-    /// the source bytes `rest`.
-    private static func appendOrphanLedLine(orphanedBytes: Int, rest: Range<Int>, of source: Span<UInt8>, to buffer: inout UniqueArray<UInt8>) {
+    /// the source bytes `rest`. Returns the buffer ranges of the U+FFFDs, one per orphan.
+    private static func appendOrphanLedLine(orphanedBytes: Int, rest: Range<Int>, of source: Span<UInt8>, to buffer: inout UniqueArray<UInt8>) -> [Range<Int>] {
         buffer.reserveCapacity(buffer.count + 3 * orphanedBytes + rest.count)
-        appendOrphanReplacements(orphanedBytes, to: &buffer)
+        let replacements = appendOrphanReplacements(orphanedBytes, to: &buffer)
         for i in rest {
             buffer.append(source[i])
         }
+        return replacements
     }
 
     /// Append one U+FFFD per orphaned continuation byte (`tasklistAdvanceEnd`), as the reference's String
-    /// bridge repairs each.
-    private static func appendOrphanReplacements(_ orphanedBytes: Int, to buffer: inout UniqueArray<UInt8>) {
+    /// bridge repairs each. Returns the buffer ranges of the U+FFFDs, one per orphan.
+    private static func appendOrphanReplacements(_ orphanedBytes: Int, to buffer: inout UniqueArray<UInt8>) -> [Range<Int>] {
+        var replacements: [Range<Int>] = []
         for _ in 0..<orphanedBytes {
+            let start = buffer.count
             buffer.append(0xEF)
             buffer.append(0xBF)
             buffer.append(0xBD)
+            replacements.append(start..<buffer.count)
+        }
+        return replacements
+    }
+
+    /// The index in `orphanReplacementRanges` of the first range ending after arena offset `offset`.
+    private func firstOrphanReplacementIndex(endingAfter offset: Int) -> Int {
+        ContentSpan.firstIndex(endingAfter: offset, in: orphanReplacementRanges.span)
+    }
+
+    /// The orphan replacements (`orphanReplacementRanges`) within the arena bytes `range`, clamped to it.
+    func orphanReplacements(in range: Range<Int>) -> [Range<Int>] {
+        var result: [Range<Int>] = []
+        var i = firstOrphanReplacementIndex(endingAfter: range.lowerBound)
+        while i < orphanReplacementRanges.count, orphanReplacementRanges[i].lowerBound < range.upperBound {
+            result.append(orphanReplacementRanges[i].clamped(to: range))
+            i += 1
+        }
+        return result
+    }
+
+    /// Whether arena offset `offset` is within an orphan replacement (`orphanReplacementRanges`).
+    func isOrphanReplacement(at offset: Int) -> Bool {
+        let i = firstOrphanReplacementIndex(endingAfter: offset)
+        return i < orphanReplacementRanges.count && orphanReplacementRanges[i].lowerBound <= offset
+    }
+
+    /// Register `ranges`, arena ranges past every registered one, as orphan replacements.
+    private mutating func registerOrphanReplacements(_ ranges: [Range<Int>]) {
+        assert(ranges.first.map { orphanReplacementRanges.isEmpty || $0.lowerBound >= orphanReplacementRanges[orphanReplacementRanges.count - 1].upperBound } ?? true, "orphan replacements are registered in arena order")
+        for range in ranges {
+            orphanReplacementRanges.append(range)
+        }
+    }
+
+    /// Register the orphan replacements of the arena bytes `source` at their copy starting at arena offset
+    /// `destination` (past every registered replacement).
+    private mutating func carryOrphanReplacements(from source: Range<Int>, to destination: Int) {
+        let shift = destination - source.lowerBound
+        registerOrphanReplacements(orphanReplacements(in: source).map { ($0.lowerBound + shift)..<($0.upperBound + shift) })
+    }
+
+    /// Register the orphan replacements of `node`'s `.materialized` buffer at its copy starting at arena offset
+    /// `destination` (`materializedOrphanReplacements`).
+    private mutating func carryMaterializedOrphanReplacements(of node: DocumentStorage.Index, to destination: Int) {
+        if let replacements = materializedOrphanReplacements.removeValue(forKey: node) {
+            registerOrphanReplacements(replacements.map { ($0.lowerBound + destination)..<($0.upperBound + destination) })
         }
     }
 
@@ -5121,8 +5212,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let lineEnd = currentLineSourceRange.upperBound
         let advance = tasklistAdvanceEnd(cursor: cursor)
         // Orphans are replaced rather than borrowed, including a multi-byte source scalar's: content bytes
-        // must stay well-formed UTF-8 (`StorageView.string(of:)`), and the replacements' arena segment is what
-        // the inline scanners recognize as orphans (`ContentSpan.orphanedContinuationByteLength`).
+        // must stay well-formed UTF-8 (`StorageView.string(of:)`), and the registered replacements are what
+        // the inline scanners recognize as orphans (`orphanReplacementRanges`).
         if advance.orphanedBytes > 0 {
             markOrphanLedParagraphTableVisited(current)
             var segs: UniqueArray<Segment>
@@ -5136,7 +5227,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 segs.append(storage.newlineSegment)
             case let other:
                 var buffer = unwrap(other)
-                Self.appendOrphanLedLine(orphanedBytes: advance.orphanedBytes, rest: advance.sourceOffset..<lineEnd, of: sourceBytes, to: &buffer)
+                let replacements = Self.appendOrphanLedLine(orphanedBytes: advance.orphanedBytes, rest: advance.sourceOffset..<lineEnd, of: sourceBytes, to: &buffer)
+                materializedOrphanReplacements[current, default: []] += replacements
                 return PendingLeaf(node: current, content: .materialized(buffer))
             }
             // Only the replacements go to the arena; the rest of the line stays a zero-copy source segment.
@@ -5144,7 +5236,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // is the newline join or synthetic filler, `ContentSpan.multiNextSignificant`), so the line's
             // emphasis, links, entities, ... must not sit in the arena segment.
             let offset = storage.strings.count
-            Self.appendOrphanReplacements(advance.orphanedBytes, to: &storage.strings)
+            let replacementRanges = Self.appendOrphanReplacements(advance.orphanedBytes, to: &storage.strings)
+            registerOrphanReplacements(replacementRanges)
             let replacements = Segment(offset: Int32(offset), length: Int32(storage.strings.count - offset), inSource: false)
             let afterReplacements = appendSegment(replacements, to: current, pending: PendingLeaf(node: current, content: .segments(segs)))
             let rest = Segment(offset: Int32(advance.sourceOffset), length: Int32(lineEnd - advance.sourceOffset), inSource: true)

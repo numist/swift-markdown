@@ -45,6 +45,9 @@ internal struct ContentSpan: ~Escapable {
     /// Multi-segment only: total virtual byte length across `segments`.
     @usableFromInline let multiVirtualLength: Int
 
+    /// The arena byte ranges of the content's U+FFFDs that stand for orphaned UTF-8 continuation bytes in cmark's buffer, one range per U+FFFD, ascending (`BlockParser.orphanReplacementRanges`). Offsets are `storage.strings` offsets: a single-segment arena content's global offsets are exactly those, and a multi-segment content's non-source segment maps to them through its `offset`. Empty for content with no orphan (the common case). Held in stable storage for the inline loop's duration.
+    @usableFromInline let orphanReplacements: Span<Range<Int>>
+
     /// Single-segment initializer (zero-copy source slice or arena scratch) with no arena→source mapping. For source-backed content `sourceOffset` is the identity map; for arena content it returns `nil`.
     @_lifetime(copy span)
     @inlinable
@@ -58,12 +61,13 @@ internal struct ContentSpan: ~Escapable {
         self.segmentEnds = Span<Int>()
         self.arena = Span<UInt8>()
         self.multiVirtualLength = 0
+        self.orphanReplacements = Span<Range<Int>>()
     }
 
-    /// Single-segment arena initializer carrying an arena→source run map (see `arenaRuns`) and its running end offsets (see `arenaRunEnds`) so inline stamping recovers source positions for reconstructed (flattened) content.
-    @_lifetime(copy span, copy arenaRuns, copy arenaRunEnds)
+    /// Single-segment arena initializer carrying an arena→source run map (see `arenaRuns`) and its running end offsets (see `arenaRunEnds`) so inline stamping recovers source positions for reconstructed (flattened) content, and the content's orphan replacements (see `orphanReplacements`).
+    @_lifetime(copy span, copy arenaRuns, copy arenaRunEnds, copy orphanReplacements)
     @inlinable
-    init(span: Span<UInt8>, base: Int, inSource: Bool, arenaRuns: Span<ArenaRun>, arenaRunEnds: Span<Int>) {
+    init(span: Span<UInt8>, base: Int, inSource: Bool, arenaRuns: Span<ArenaRun>, arenaRunEnds: Span<Int>, orphanReplacements: Span<Range<Int>>) {
         self.span = span
         self.base = base
         self.inSource = inSource
@@ -73,6 +77,7 @@ internal struct ContentSpan: ~Escapable {
         self.segmentEnds = Span<Int>()
         self.arena = Span<UInt8>()
         self.multiVirtualLength = 0
+        self.orphanReplacements = orphanReplacements
     }
 
     /// Multi-segment initializer: `source` is the borrowed source bytes; `segments` is the content's segment list and `segmentEnds` its running virtual end offsets (both held in stable storage); `virtualLength` is their total length. The content's only non-source segment is the interned `"\n"` join, synthesized directly on read.
@@ -88,12 +93,13 @@ internal struct ContentSpan: ~Escapable {
         self.segmentEnds = segmentEnds
         self.arena = Span<UInt8>()
         self.multiVirtualLength = virtualLength
+        self.orphanReplacements = Span<Range<Int>>()
     }
 
-    /// Multi-segment initializer carrying an arena snapshot: identical to the plain multi-segment initializer, but the content also holds a synthetic filler segment (a lazy-continuation split-tab residual's spaces, or a lazy tasklist-retry line's orphaned-byte U+FFFD replacements) whose bytes live in `arena` (a stable snapshot of `storage.strings` from offset 0). Non-source segments read `arena[offset]` - synthetic filler resolves to its bytes and the interned `"\n"` (offset 0) resolves to `\n`.
-    @_lifetime(copy source, copy segments, copy segmentEnds, copy arena)
+    /// Multi-segment initializer carrying an arena snapshot: identical to the plain multi-segment initializer, but the content also holds a synthetic filler segment (a lazy-continuation split-tab residual's spaces, or a lazy tasklist-retry line's orphaned-byte U+FFFD replacements, listed in `orphanReplacements`) whose bytes live in `arena` (a stable snapshot of `storage.strings` from offset 0). Non-source segments read `arena[offset]` - synthetic filler resolves to its bytes and the interned `"\n"` (offset 0) resolves to `\n`.
+    @_lifetime(copy source, copy segments, copy segmentEnds, copy arena, copy orphanReplacements)
     @inlinable
-    init(source: Span<UInt8>, segments: Span<Segment>, segmentEnds: Span<Int>, virtualLength: Int, arena: Span<UInt8>) {
+    init(source: Span<UInt8>, segments: Span<Segment>, segmentEnds: Span<Int>, virtualLength: Int, arena: Span<UInt8>, orphanReplacements: Span<Range<Int>>) {
         self.span = source
         self.base = 0
         self.inSource = false
@@ -103,6 +109,7 @@ internal struct ContentSpan: ~Escapable {
         self.segmentEnds = segmentEnds
         self.arena = arena
         self.multiVirtualLength = virtualLength
+        self.orphanReplacements = orphanReplacements
     }
 
     @inlinable
@@ -127,6 +134,22 @@ internal struct ContentSpan: ~Escapable {
         while lo < hi {
             let mid = (lo + hi) / 2
             if ends[mid] > offset {
+                hi = mid
+            } else {
+                lo = mid + 1
+            }
+        }
+        return lo
+    }
+
+    /// The index of the first range of the ascending, disjoint `ranges` whose `upperBound` is past `offset` - the range containing `offset`, if any contains it - or `ranges.count` when none ends past it.
+    @inlinable
+    static func firstIndex(endingAfter offset: Int, in ranges: Span<Range<Int>>) -> Int {
+        var lo = 0
+        var hi = ranges.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if ranges[mid].upperBound > offset {
                 hi = mid
             } else {
                 lo = mid + 1
@@ -178,18 +201,25 @@ internal struct ContentSpan: ~Escapable {
     /// continuation byte, the number of content bytes from `offset` to the end of that U+FFFD; otherwise `nil`.
     ///
     /// Only a lazy tasklist-retry line whose checkbox advance stopped inside a multi-byte scalar starts with
-    /// orphans, and they are carried as one U+FFFD each in the arena filler segment ahead of the line's source
-    /// segment (`BlockParser.addLazyLineAfterTasklistAdvance`). Every non-ASCII byte of an arena filler segment
-    /// belongs to one: the only other filler is a split-tab residual's spaces. Single-segment content carries
-    /// no filler segment, so this is always `nil` for it.
+    /// orphans (`BlockParser.tasklistAdvanceEnd`), and their U+FFFDs are listed in `orphanReplacements`, so a
+    /// NUL's own U+FFFD elsewhere in the content is not one.
     func orphanedContinuationByteLength(at offset: Int) -> Int? {
-        // An empty arena snapshot means the content carries no filler segment (the common case).
-        guard isMultiSegment, arena.count > 0, multiByte(at: offset) >= 0x80 else {
+        if orphanReplacements.count == 0 {
             return nil
         }
-        let i = segmentIndex(covering: offset)
-        if i < segments.count, !segments[i].inSource {
-            return 3 - (offset - segmentStart(i)) % 3
+        let arenaOffset: Int
+        if isMultiSegment {
+            let i = segmentIndex(covering: offset)
+            guard i < segments.count, !segments[i].inSource else {
+                return nil
+            }
+            arenaOffset = Int(segments[i].offset) + (offset - segmentStart(i))
+        } else {
+            arenaOffset = offset
+        }
+        let i = Self.firstIndex(endingAfter: arenaOffset, in: orphanReplacements)
+        if i < orphanReplacements.count, orphanReplacements[i].lowerBound <= arenaOffset {
+            return orphanReplacements[i].upperBound - arenaOffset
         }
         return nil
     }
