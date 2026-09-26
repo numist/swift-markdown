@@ -558,6 +558,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return
         }
 
+        // Link reference definitions leading the content are still consumed, and the paragraph is kept even when
+        // nothing (or only whitespace) remains: cmark's paragraph `finalize` (src/blocks.c) runs
+        // `resolve_reference_link_definitions` in every mode but gates the empty-paragraph removal off for
+        // `CMARK_OPT_PRESERVE_WHITESPACE` - whose `options & …` mask also matches a bare `CMARK_OPT_INLINE_ONLY`.
         let paragraph = addChild(kind: .paragraph, parent: documentIndex)
 
         var delimiters = UniqueArray<DelimiterRecord>()
@@ -571,7 +575,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         if !hasCR && !hasNUL {
             // Zero-copy: the paragraph content is a source slice; emitted text references the source in place.
-            let content = ContentSpan(span: sourceBytes.extracting(start..<count), base: start, inSource: true)
+            let rest = parseDefinitions(in: Chunk(offset: start, length: count - start, inSource: true))
+            let content = ContentSpan(span: sourceBytes.extracting(rest.range), base: rest.offset, inSource: true)
             try parseInline(
                 content: content,
                 into: paragraph,
@@ -600,11 +605,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 j += 1
             }
             let arenaEnd = storage.strings.count
+            let rest = parseDefinitions(in: Chunk(offset: arenaStart, length: arenaEnd - arenaStart, inSource: false))
             var scratch = UniqueArray<UInt8>()
-            storage.strings.span.extracting(arenaStart..<arenaEnd).withUnsafeBufferPointer { buffer in
+            storage.strings.span.extracting(rest.range).withUnsafeBufferPointer { buffer in
                 scratch.append(copying: buffer)
             }
-            let content = ContentSpan(span: scratch.span, base: arenaStart, inSource: false)
+            let content = ContentSpan(span: scratch.span, base: rest.offset, inSource: false)
             try parseInline(
                 content: content,
                 into: paragraph,
@@ -5114,7 +5120,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     //
     // The extended-attribute reference form `^[label]: attrs` is recognized in the same loop and stored separately on `DocumentStorage.attributeReferenceMap`.
     //
-    // Multiple definitions may stack consecutively at the start of a paragraph. After consuming all that match, the remaining (possibly blank) content is returned for the inline parser to handle. If everything was consumed, the caller is expected to detach the paragraph node from its parent.
+    // Multiple definitions may stack consecutively at the start of a paragraph. After consuming all that match, the remaining (possibly blank) content is returned for the inline parser to handle. If everything was consumed, a block-mode caller is expected to detach the paragraph node from its parent (the inline-only path keeps it, as cmark does).
 
     /// Repeatedly consume `[label]: dest "title"` and `^[label]: attrs` definitions from the start of `chunk`.
     ///
@@ -5184,6 +5190,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         guard let dest = matchLinkDestination(
             Chunk(offset: i, length: end - i, inSource: inSource)
         ) else {
+            return nil
+        }
+        // why: cmark's `manual_scan_link_url` / `manual_scan_link_url_2` (src/inlines.c) reject a
+        // destination that reaches the end of their input (`if (i >= input->len) return -1;`). Block-mode
+        // paragraph content always ends in a newline, so only inline-only content - whose final line
+        // `cmark_parser_finish` leaves unterminated (`ensureEndsInNewline` is off when the
+        // `CMARK_OPT_PRESERVE_WHITESPACE` mask matches, which a bare `CMARK_OPT_INLINE_ONLY` also does) -
+        // hits it, leaving e.g. a lone `[a]: /u` literal while `[a]: /u "t"` is consumed. Inline-only mode
+        // has no spec and its clients (Foundation's AttributedString inline modes) shipped on cmark, so this
+        // applies in both flag states rather than silently dropping the text of such a definition.
+        if storage.options.contains(.inlineOnly), dest.afterEnd >= end {
             return nil
         }
         i = dest.afterEnd

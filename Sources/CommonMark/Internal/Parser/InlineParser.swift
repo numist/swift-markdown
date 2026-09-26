@@ -149,16 +149,21 @@ extension BlockParser {
                 )
 
             case UInt8(ascii: "\n"):
-                // Inline-only / preserve-whitespace mode: a newline is literal text, not a soft/hard break. Leave it in the pending-text region (it has already been normalized to `\n` by `parseInlineOnly`) and step past it.
+                let info: LineBreakInfo
                 if preserveWhitespace {
-                    cursor += 1
-                    continue
+                    // Inline-only / preserve-whitespace mode: a newline is literal text, not a soft or trailing-space hard break. Leave it in the pending-text region (it has already been normalized to `\n` by `parseInlineOnly`) and step past it - unless a pending `\` precedes it: cmark's `handle_backslash` (src/inlines.c) builds a LINEBREAK for `\<line ending>` with no whitespace-option gate.
+                    guard cursor > pendingTextStart, content[cursor - 1] == UInt8(ascii: "\\") else {
+                        cursor += 1
+                        continue
+                    }
+                    info = LineBreakInfo(isHard: true, textEnd: cursor - 1, isBackslash: true)
+                } else {
+                    info = classifyLineBreak(
+                        at: cursor,
+                        pendingTextStart: pendingTextStart,
+                        content: content
+                    )
                 }
-                let info = classifyLineBreak(
-                    at: cursor,
-                    pendingTextStart: pendingTextStart,
-                    content: content
-                )
                 flushPendingText(
                     start: pendingTextStart,
                     end: info.textEnd,
