@@ -31,6 +31,11 @@ struct MarkupParser {
         if options.contains(.footnotes) {
             cmOptions.insert(.footnotes)
         }
+        if options.contains(.preserveWhitespace) {
+            cmOptions.insert(.preserveWhitespace)
+        } else if options.contains(.inlineOnly) {
+            cmOptions.insert(.inlineOnly)
+        }
         if !options.contains(.disableSmartOpts) {
             cmOptions.insert(.smart)
         }

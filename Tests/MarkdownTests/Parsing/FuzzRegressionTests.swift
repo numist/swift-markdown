@@ -9,7 +9,7 @@
 */
 
 import Foundation
-@_spi(CmarkBugCompatibility) import Markdown
+@_spi(CmarkBugCompatibility) @_spi(InlineOnly) import Markdown
 import Testing
 
 /// Regression coverage for divergences found by the swift-markdown-difftest differential fuzzer.
@@ -49,13 +49,23 @@ struct FuzzRegressionTests {
     }()
 
     /// Split a raw artifact exactly as `DiffSupport.splitInput`: the last byte selects parse options
-    /// (mask `0b11011111`: bits 0-4 plus bit 6 = `gfmAutolink` and bit 7 = `footnotes`; bit 5 =
-    /// `cmarkBugCompatibility` is inserted by `surface()`, not fuzzed), the rest is the UTF-8 document
-    /// (invalid sequences → U+FFFD).
+    /// (as `DiffSupport.fuzzedOptionsRawValue`: bits 0-4 plus bit 6 = `gfmAutolink` and bit 7 =
+    /// `footnotes`; bit 5 selects inline-only mode, within which bit 4 selects `preserveWhitespace`
+    /// instead of `inlineOnly`; `cmarkBugCompatibility` is inserted by `surface()`, not fuzzed), the
+    /// rest is the UTF-8 document (invalid sequences → U+FFFD).
     static func splitInput(_ bytes: [UInt8]) -> (markdown: String, options: ParseOptions)? {
         guard let optionBits = bytes.last else { return nil }
         let markdown = String(decoding: bytes.dropLast(), as: UTF8.self)
-        return (markdown, ParseOptions(rawValue: UInt(optionBits & 0b11011111)))
+        var options = ParseOptions(rawValue: UInt(optionBits & 0b11011111))
+        if optionBits & 0b0010_0000 != 0 {
+            if optionBits & 0b0001_0000 != 0 {
+                options.remove(.disableSourcePosOpts)
+                options.insert(.preserveWhitespace)
+            } else {
+                options.insert(.inlineOnly)
+            }
+        }
+        return (markdown, options)
     }
 
     /// The rewrite's comparison surface, matching `DiffSupport.newSurface`.

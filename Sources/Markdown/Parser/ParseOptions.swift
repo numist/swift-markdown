@@ -39,5 +39,11 @@ public struct ParseOptions: OptionSet, Sendable {
 
     /// Parse GFM footnote references (`[^label]`) and definitions (`[^label]:`). SPI-only so the shipped parser's default surface is unchanged; fuzzer-driven via the option byte.
     @_spi(Footnotes) public static let footnotes = ParseOptions(rawValue: 1 << 7)
+
+    /// Parse the whole input as the inline content of a single paragraph (the CommonMark parser's `.inlineOnly`). SPI-only so the shipped parser's default surface is unchanged; fuzzer-driven via the option byte.
+    @_spi(InlineOnly) public static let inlineOnly = ParseOptions(rawValue: 1 << 8)
+
+    /// ``inlineOnly`` that also keeps whitespace verbatim (the CommonMark parser's `.preserveWhitespace`). SPI-only so the shipped parser's default surface is unchanged; fuzzer-driven via the option byte.
+    @_spi(InlineOnly) public static let preserveWhitespace = ParseOptions(rawValue: 1 << 9 | 1 << 8)
 }
 
