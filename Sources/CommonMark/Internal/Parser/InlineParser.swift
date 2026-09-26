@@ -104,6 +104,7 @@ extension BlockParser {
             codeSpanSwallowedNewlines.removeAll(keepingCapacity: true)
             attributeSwallowedNewlines.removeAll(keepingCapacity: true)
             linkDestinationSwallowedNewlines.removeAll(keepingCapacity: true)
+            lineEndingsAreLiteral = preserveWhitespace
         }
         htmlCloserMisses = HTMLCloserMisses()
 
@@ -1157,12 +1158,13 @@ extension BlockParser {
     /// raw scan, so their offsets never coincide with a code span's or raw HTML's.
     ///
     /// Otherwise a backslash hard break's newline never resets (`bareLineEnding`), nor does a newline
-    /// swallowed by an attribute or link-destination scan.
+    /// swallowed by an attribute or link-destination scan, nor any newline of a pass whose line endings
+    /// are literal text (`lineEndingsAreLiteral`) - cmark's `handle_newline` never runs there.
     private func footnoteColumnResets(_ content: borrowing ContentSpan, at i: Int) -> Bool {
         if codeSpanSwallowedNewlines.contains(i) {
             return !storage.options.contains(.cmarkSourcePositionsDisabled)
         }
-        guard bareLineEnding(content, at: i) else {
+        guard !lineEndingsAreLiteral, bareLineEnding(content, at: i) else {
             return false
         }
         if attributeSwallowedNewlines.contains(i) {

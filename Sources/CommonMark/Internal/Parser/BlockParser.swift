@@ -244,6 +244,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Content offsets of newlines swallowed by a matched inline link/image destination `(…)` payload scan, or by the `[…]` label of a resolved reference link/image (`handleCloseBracket`'s link match), in the current `parseInline` pass. cmark's `manual_scan_link_url` / `scan_spacechars` / `scan_link_title` / `link_label` (`handle_close_bracket`, `src/inlines.c`) read these as raw byte scans that bypass the per-character dispatch loop, so `handle_close_bracket`'s `match:` label never calls `adjust_subj_node_newlines` - unlike code spans / raw HTML, this holds regardless of `CMARK_OPT_SOURCEPOS`. Such a newline must not reset an unresolved footnote reference's captured-label measurement (`footnoteColumnResets`). Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per pass.
     var linkDestinationSwallowedNewlines: Set<Int> = []
 
+    /// Whether the current `parseInline` pass keeps line endings as literal text (its `preserveWhitespace` argument, cmark's `CMARK_OPT_PRESERVE_WHITESPACE`). cmark then emits each `\n` as a text node instead of calling `handle_newline`, so a bare line ending never resets the per-line column cursor, and an unresolved footnote reference's captured-label measurement (`footnoteColumnResets`) runs across it. Meaningful only flag-ON (`.cmarkBugCompatibility`); set per pass.
+    var lineEndingsAreLiteral = false
+
     /// Bytes of reference-link expansion spent so far across the whole document - cmark's `refmap->ref_size`. cmark charges every found reference lookup its destination-plus-title size against a document-wide budget (`chargeReferenceExpansion`). Meaningful only flag-ON (`.cmarkBugCompatibility`); never reset.
     var referenceExpansionSpent = 0
 
@@ -563,6 +566,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // `resolve_reference_link_definitions` in every mode but gates the empty-paragraph removal off for
         // `CMARK_OPT_PRESERVE_WHITESPACE` - whose `options & …` mask also matches a bare `CMARK_OPT_INLINE_ONLY`.
         let paragraph = addChild(kind: .paragraph, parent: documentIndex)
+        // cmark's inline-only buffer is neither newline-terminated nor trimmed - see `nulTerminatedInlineContainers`.
+        storage.nulTerminatedInlineContainers.insert(paragraph)
 
         var delimiters = UniqueArray<DelimiterRecord>()
         var brackets = UniqueArray<BracketRecord>()

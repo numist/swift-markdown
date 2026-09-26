@@ -77,13 +77,17 @@ internal struct DocumentStorage: ~Copyable {
     internal var runTruncatingTextNodes: Set<Index> = []
 
     /// The inline-bearing nodes whose cmark content buffer ends in its `cmark_strbuf` NUL terminator
-    /// rather than a trailing newline: ATX headings, table cells, and the paragraph split off before a
-    /// table's header. Consulted only by the escaped-caret footnote-image over-read simulation
-    /// (`emitEscapedCaretFootnote`), whose one-byte over-read lands on whatever cmark's buffer holds one
+    /// rather than a trailing newline: ATX headings, table cells, the paragraph split off before a
+    /// table's header, and the inline-only paragraph. Consulted only by the escaped-caret footnote-image
+    /// over-read simulation (`emitEscapedCaretFootnote`), whose one-byte over-read lands on whatever cmark's buffer holds one
     /// past the node's own content. An ATX heading's line is pre-trimmed of its trailing newline by
     /// `chop_trailing_hashtags` *before* that content is copied in; a table cell (`row_from_string`) and the
     /// preceding paragraph (`try_inserting_table_header_paragraph`) are built from a trimmed buffer via
-    /// `cmark_node_set_string_content`. Every other inline-bearing node - a paragraph assembled line by line,
+    /// `cmark_node_set_string_content`. Under `CMARK_OPT_INLINE_ONLY` (whose `PRESERVE_WHITESPACE` tests are
+    /// all true, as that macro includes the `INLINE_ONLY` bit) the final unterminated line gets no newline
+    /// (`cmark_parser_finish`'s `S_process_line`) and the inline subject is never rtrimmed, so the content -
+    /// including any trailing whitespace or newline the source itself ends with - runs right up to the NUL.
+    /// Every other inline-bearing node - a paragraph assembled line by line,
     /// or a setext heading, which is one - keeps its last line's trailing whitespace and newline there instead
     /// (see `trailingBlankAfterContent`).
     internal var nulTerminatedInlineContainers: Set<Index> = []
