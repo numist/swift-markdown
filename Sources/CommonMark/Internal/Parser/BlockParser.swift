@@ -464,7 +464,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let referencedDefs = numberLiveFootnoteReferences()
         let keep = Set(referencedDefs)
         // Drop definitions with no surviving reference (including duplicate-label definitions, whose
-        // references all resolved to the first definition).
+        // references all resolved to the label's winning definition).
         for defIdx in storage.footnoteDefinitionOrder where !keep.contains(defIdx) {
             storage.unlinkChild(defIdx)
         }
@@ -3409,6 +3409,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         case .list:
             detectLooseList(node)
+        case .footnoteDefinition:
+            // A label's winning definition is the first to close: cmark's
+            // `process_footnotes` (blocks.c) registers definitions on the tree walk's EXIT events and
+            // `sort_map` (map.c) keeps the earliest-registered one, so a definition nested in a
+            // same-label definition (`[^b]:[^b]:A`) wins over its encloser. Blocks close in that
+            // post-order: a container closes only after all its children have.
+            if case .footnoteDefinition(let labelRef, _) = storage[node].data {
+                let key = normalizeLabel(chunk: storage.chunk(of: labelRef))
+                if !key.isEmpty && storage.footnoteMap[key] == nil {
+                    storage.footnoteMap[key] = node
+                }
+            }
         default:
             break
         }
@@ -5216,9 +5228,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         )
     }
 
-    /// Open a `.footnoteDefinition` container as a child of `current`, registering it in
-    /// `storage.footnoteMap` keyed on the normalized label (first definition wins). Returns the new
-    /// definition's index.
+    /// Open a `.footnoteDefinition` container as a child of `current`. Returns the new definition's
+    /// index; `finalize` registers it in `storage.footnoteMap` when it closes.
     private mutating func openFootnoteDefinition(label rawLabel: Chunk, firstNonSpace: Int) -> DocumentStorage.Index {
         // Materialize NUL -> U+FFFD in the label so its stored form and map key match the reference
         // side, whose paragraph content is NUL-replaced before inline parsing (cmark replaces NUL in
@@ -5232,10 +5243,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             data: .footnoteDefinition(label: labelRef, referenceCount: 0),
             start: sourceOffset(firstNonSpace)
         )
-        let key = normalizeLabel(chunk: label)
-        if !key.isEmpty && storage.footnoteMap[key] == nil {
-            storage.footnoteMap[key] = fnIdx
-        }
         storage.footnoteDefinitionOrder.append(fnIdx)
         return fnIdx
     }

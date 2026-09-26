@@ -54,9 +54,9 @@ internal struct DocumentStorage: ~Copyable {
             && (referenceMap[key] != nil || attributeReferenceMap[key] != nil)
     }
 
-    /// GFM footnote definitions discovered while finalizing paragraphs.
+    /// GFM footnote definitions, registered as each definition block closes.
     ///
-    /// Keyed by normalized label, value is the index of the `.footnoteDefinition` node in `nodes`. First definition wins.
+    /// Keyed by normalized label, value is the index of the `.footnoteDefinition` node in `nodes`. The first definition to close wins, so a definition nested in a same-label one wins over its encloser.
     internal var footnoteMap: [String: Index] = [:]
 
     /// Every `.footnoteDefinition` node, in the order it was opened (document order).
