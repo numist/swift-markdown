@@ -245,7 +245,7 @@ extension BlockParser {
                 stampEnd(rowIdx, arena: line.upperBound, proj)
             }
         }
-        let (cells, hadClosingPipe, hadLeadingPipe) = splitCells(line: line)
+        let (cells, hadClosingPipe, hadLeadingPipe, leadingWhitespace) = splitCells(line: line)
         let columnCount = alignments.count
 
         // Span bookkeeping is only allocated/computed when `.tableSpans` is on. With spans off these stay empty (the empty `Array` is a non-allocating singleton) and every per-cell read below is guarded by `spansEnabled`, so the common table path does no extra allocation or work.
@@ -268,8 +268,8 @@ extension BlockParser {
             let markerByte = dittoEnabled ? UInt8(ascii: "\"") : UInt8(ascii: "^")
             for col in 0..<cells.count {
                 let raw = cells[col]
-                // Colspan filler: a literally empty (`||`, zero-width) cell. cmark marks any zero-width cell colspan 0 (`row_from_string`: empty buf AND start_offset == end_offset), including the first column — its `n_columns > 0` guard is always satisfied because the cell was already appended. The nearest preceding real cell (if any) absorbs the span; a leading filler has none, so it just carries colspan 0.
-                if raw.isEmpty {
+                // Colspan filler: a zero-width cell. cmark marks any zero-width cell colspan 0 (`row_from_string`: empty buf AND start_offset == end_offset), including the first column — its `n_columns > 0` guard is always satisfied because the cell was already appended. A pipe-delimited cell is zero-width iff literally empty (`||`). A first cell's leading whitespace (only a lazy continuation header keeps it) is excluded from `raw`, but cmark scans it as the cell's bytes (`end_offset = start_offset + cell_matched - 1`), so a whitespace-only first cell is zero-width only when that whitespace is a single byte (` |` is a filler, `  |` a plain empty cell). The nearest preceding real cell (if any) absorbs the span; a leading filler has none, so it just carries colspan 0.
+                if raw.isEmpty && (col > 0 || leadingWhitespace <= 1) {
                     colspans[col] = 0
                     var j = col - 1
                     while j >= 0 {
@@ -706,15 +706,16 @@ extension BlockParser {
         return alignments
     }
 
-    /// Split `line` into cells on unescaped `|`. Strips a single trailing `|` if present (with optional surrounding whitespace), and a single leading `|` only when the row's first byte is that pipe (no whitespace before it). `hadClosingPipe` reports whether a trailing `|` was stripped, so the caller can tell a rightmost cell capped by a pipe from one that runs to the line end.
-    private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool, hadLeadingPipe: Bool) {
+    /// Split `line` into cells on unescaped `|`. Strips a single trailing `|` if present (with optional surrounding whitespace), and a single leading `|` only when the row's first byte is that pipe (no whitespace before it). `hadClosingPipe` reports whether a trailing `|` was stripped, so the caller can tell a rightmost cell capped by a pipe from one that runs to the line end. `leadingWhitespace` is the number of leading space/tab bytes trimmed before the first cell (non-zero only for a lazy-continuation header, flag-ON), which cmark scans as that cell's bytes.
+    private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool, hadLeadingPipe: Bool, leadingWhitespace: Int) {
         var s = line.lowerBound
         var e = line.upperBound
         let lineStart = s
         while s < e && storage.strings[s].isSpaceOrTab {
             s += 1
         }
-        let trimmedLeadingSpace = s > lineStart
+        let leadingWhitespace = s - lineStart
+        let trimmedLeadingSpace = leadingWhitespace > 0
         while e > s && storage.strings[e - 1].isSpaceOrTab {
             e -= 1
         }
@@ -774,10 +775,10 @@ extension BlockParser {
         // empty cell (appended below) is kept.
         if cells.isEmpty && hadLeadingPipe && !hadClosingPipe
             && (cellStart..<e).allSatisfy({ storage.strings[$0].isExtensionScannerSpace }) {
-            return (cells, hadClosingPipe, hadLeadingPipe)
+            return (cells, hadClosingPipe, hadLeadingPipe, leadingWhitespace)
         }
         cells.append(cellStart..<e)
-        return (cells, hadClosingPipe, hadLeadingPipe)
+        return (cells, hadClosingPipe, hadLeadingPipe, leadingWhitespace)
     }
 
     private func trimSpaceTabs(range: Range<Int>) -> Range<Int> {
