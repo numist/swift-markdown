@@ -2918,7 +2918,9 @@ extension BlockParser {
         var i = bodyStart
         while i < end {
             let b = content[i]
-            if b == 0 {
+            // why: the re2c scanners validate UTF-8, so an orphaned continuation byte matches no body
+            // alternative and the comment fails like at a NUL (`src/scanners.c` `_scan_html_comment`).
+            if b == 0 || content.orphanedContinuationByteLength(at: i) != nil {
                 return nil
             }
             if b == UInt8(ascii: "-") {
@@ -2988,8 +2990,9 @@ extension BlockParser {
         // the first `]]>` below.
         if bugCompat {
             let contentEnd = scanCDATAContentEnd(bodyStart: start + prefixLen, end: end, content: content)
-            if contentEnd + 3 <= end {
-                return contentEnd + 3
+            let cdataEnd = Self.offset(advancingCmarkBytes: 3, from: contentEnd, end: end, content: content)
+            if cdataEnd <= end {
+                return cdataEnd
             }
             htmlScanSkip.insert(.cdata)
             return nil
@@ -3007,8 +3010,9 @@ extension BlockParser {
     /// match past the closer. A NUL byte or reaching `end` halts the run; a trailing `]`/`]]` with no
     /// completing byte is excluded (its token never closed). The caller adds the assumed `]]>` and
     /// bounds-checks, mirroring cmark. Operates byte-wise: valid multibyte UTF-8 (every byte ≠ `]`, `>`,
-    /// NUL) is consumed as content exactly as the grammar's codepoint classes intend (input is repaired to
-    /// U+FFFD upstream, so no invalid sequence reaches here).
+    /// NUL) is consumed as content exactly as the grammar's codepoint classes intend. The re2c scanners
+    /// validate UTF-8, so an orphaned continuation byte in cmark's buffer (the U+FFFD standing for it here,
+    /// `ContentSpan.orphanedContinuationByteLength`) halts the run like a NUL.
     private func scanCDATAContentEnd(bodyStart: Int, end: Int, content: borrowing ContentSpan) -> Int {
         let bracket = UInt8(ascii: "]")
         let gt = UInt8(ascii: ">")
@@ -3018,7 +3022,7 @@ extension BlockParser {
         var i = bodyStart
         while i < end {
             let b = content[i]
-            if b == 0 {
+            if b == 0 || content.orphanedContinuationByteLength(at: i) != nil {
                 break
             }
             if b != bracket {
@@ -3032,13 +3036,13 @@ extension BlockParser {
             if i < end, content[i] == bracket {
                 // `]]`: needs a following non-`>`, non-NUL byte to complete `]] [^>\x00]`.
                 i += 1
-                if i < end, content[i] != 0, content[i] != gt {
+                if i < end, content[i] != 0, content[i] != gt, content.orphanedContinuationByteLength(at: i) == nil {
                     i += 1
                     lastComplete = i
                 } else {
                     break
                 }
-            } else if i < end, content[i] != 0 {
+            } else if i < end, content[i] != 0, content.orphanedContinuationByteLength(at: i) == nil {
                 // `] [^\]\x00]`: the following byte is non-`]` (checked above) and non-NUL.
                 i += 1
                 lastComplete = i
@@ -3078,15 +3082,37 @@ extension BlockParser {
         if afterSpaces == i {
             return nil
         }
-        if let match = Self.scanRawHTMLCloser(">", from: afterSpaces, end: end, content: content, misses: &htmlCloserMisses.declaration) {
-            return match
+        if bugCompat {
+            return matchHTMLDeclarationBodyCmark(from: afterSpaces, end: end, content: content)
         }
-        // Matched name + spaces but no closing `>` through end-of-input (the known-failing stretch reaches
-        // `end`, unlike a scan stopped by a NUL): cmark's framed match overruns
-        // (`subj->pos + matchlen > input.len`), which sets `FLAG_SKIP_HTML_DECLARATION`.
-        if bugCompat, htmlCloserMisses.declaration.contains(end) {
-            htmlScanSkip.insert(.declaration)
+        return Self.scanRawHTMLCloser(">", from: afterSpaces, end: end, content: content, misses: &htmlCloserMisses.declaration)
+    }
+
+    /// Match a declaration body + `>` closer from `bodyStart` under cmark-gfm's grammar, reproduced only under
+    /// `.cmarkBugCompatibility`. Returns the offset just past the closer, or `nil` if a NUL or the end of the
+    /// content comes first.
+    ///
+    /// cmark scans the body as `[^>\x00]*` (swift-cmark `src/scanners.re` `declaration`) and frames it with a
+    /// `>` it never verifies (`src/inlines.c` `handle_pointy_brace`, `matchlen += 2`), rejecting only a framing
+    /// that overruns the input (`subj->pos + matchlen > input.len`), which sets `FLAG_SKIP_HTML_DECLARATION`.
+    /// The re2c scanners validate UTF-8, so the body also stops at an orphaned continuation byte
+    /// (`ContentSpan.orphanedContinuationByteLength`), and that orphan stands in for the `>`.
+    private mutating func matchHTMLDeclarationBodyCmark(from bodyStart: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+        var i = bodyStart
+        while i < end {
+            let b = content[i]
+            if b == UInt8(ascii: ">") {
+                return i + 1
+            }
+            if b == 0 {
+                return nil
+            }
+            if let orphan = content.orphanedContinuationByteLength(at: i) {
+                return i + orphan
+            }
+            i += 1
         }
+        htmlScanSkip.insert(.declaration)
         return nil
     }
 
@@ -3146,7 +3172,8 @@ extension BlockParser {
     /// scan of `??>` eats `??` (a `[?][^>\x00]` pair) then `>` (a lone `[>]`), consuming through the
     /// input with no room left for the closer, so cmark rejects it. `<?x?>` matches only `x`, stops
     /// before `?>`, and is accepted. The body ends at the first NUL, the first `?` immediately before
-    /// `>` (or at input end), whichever comes first.
+    /// `>` (or at input end), or an orphaned continuation byte (`ContentSpan.orphanedContinuationByteLength`),
+    /// whichever comes first.
     private mutating func matchHTMLProcessingInstructionCmark(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         // why: cmark checks `FLAG_SKIP_HTML_PI` before attempting the PI (`src/inlines.c`
         // `handle_pointy_brace`); once set, the `<` stays literal. Reached only flag-ON.
@@ -3167,23 +3194,29 @@ extension BlockParser {
             }
             if b == UInt8(ascii: "?") {
                 // `[?][^>\x00]`: a `?` is consumed only when paired with a following non-`>`,
-                // non-NUL byte. A `?` at input end, or immediately before `>` or NUL, cannot be
-                // consumed and ends the body — this is where cmark stops before a real `?>`.
+                // non-NUL, well-formed byte. A `?` at input end, or immediately before `>`, NUL or an
+                // orphan, cannot be consumed and ends the body — this is where cmark stops before a real `?>`.
                 if i + 1 < end {
                     let next = content[i + 1]
-                    if next != UInt8(ascii: ">") && next != 0 {
+                    if next != UInt8(ascii: ">") && next != 0 && content.orphanedContinuationByteLength(at: i + 1) == nil {
                         i += 2
                         continue
                     }
                 }
                 break
             }
+            // why: the re2c scanners validate UTF-8, so an orphaned continuation byte matches no
+            // alternative and ends the body (`src/scanners.c` `_scan_html_pi`).
+            if content.orphanedContinuationByteLength(at: i) != nil {
+                break
+            }
             // `[^?>\x00]`: any other byte is consumed.
             i += 1
         }
         // cmark: matchlen = (body length) + 3, reject when subj->pos (start + 1) + matchlen > end.
-        // Body length = i - (start + 2), so the offset just past the framed `?>` is i + 2.
-        let piEnd = i + 2
+        // The offset just past the framed `?>` is two cmark bytes past the body: `?>` itself, or at an
+        // orphan the unverified orphan and the byte after it.
+        let piEnd = Self.offset(advancingCmarkBytes: 2, from: i, end: end, content: content)
         if piEnd > end {
             // Framing overruns the input: cmark sets `FLAG_SKIP_HTML_PI`, so no later `<?` is reparsed
             // in this run.
@@ -3191,6 +3224,17 @@ extension BlockParser {
             return nil
         }
         return piEnd
+    }
+
+    /// The content offset `count` bytes of cmark's buffer past `offset`, where the U+FFFD standing for an
+    /// orphaned continuation byte is one of them (`ContentSpan.orphanedContinuationByteLength`). May pass `end`,
+    /// as cmark's unverified closer framing does before its overrun check.
+    private static func offset(advancingCmarkBytes count: Int, from offset: Int, end: Int, content: borrowing ContentSpan) -> Int {
+        var j = offset
+        for _ in 0..<count {
+            j += (j < end ? content.orphanedContinuationByteLength(at: j) : nil) ?? 1
+        }
+        return j
     }
 
     /// Scan `[A-Za-z][A-Za-z0-9-]*`. Returns the offset just past the last tag-name byte, or `nil` if the first byte isn't a letter.
@@ -3275,7 +3319,9 @@ extension BlockParser {
             var i = start + 1
             while i < end {
                 let b = content[i]
-                if b == 0 {
+                // why: the re2c scanners validate UTF-8, so an orphaned continuation byte matches no
+                // quoted-value byte and the tag fails like at a NUL (`src/scanners.c` `_scan_html_tag`).
+                if b == 0 || content.orphanedContinuationByteLength(at: i) != nil {
                     return nil
                 }
                 if b == first {

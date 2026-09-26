@@ -14,7 +14,7 @@
 ///
 /// - **Single-segment (the overwhelmingly common case).** The content is one contiguous buffer region - a zero-copy slice of the source (`inSource == true`) or of a scratch copy of `storage.strings` (`inSource == false`). Bytes are addressed by *global* offsets (`startOffset..<endOffset`) via a branchless `span[offset - base]`, identical in cost to a plain single-buffer read. For source-backed content the global offset IS the original-source byte offset.
 ///
-/// - **Multi-segment.** The content is an ordered list of `Segment`s - source-line ranges (zero-copy into `sourceBytes`) joined by the shared interned `"\n"` - addressed by flat *virtual* offsets (`0..<virtualLength`). Used for multi-line paragraph/heading bodies whose lines aren't source-contiguous (block-quote/list continuation, CRLF) so no source bytes are copied. Almost all non-source segments are the interned `"\n"` join, read as `\n` without touching the arena. The one exception is a lazy-continuation **split-tab residual** (Quirk E, flag-ON): an outer container's matched prefix partially consumes a tab, and the tab's leftover columns become *synthetic spaces* with no source byte - materialized into the arena as one non-source segment interleaved among the source-backed ones (`BlockParser.appendSyntheticResidualSpaces`). A lazy tasklist-retry line whose advance stopped inside a NUL's U+FFFD likewise carries its orphaned-byte U+FFFD replacements as one such segment ahead of the line's source segment (`BlockParser.addLazyLineAfterTasklistAdvance`). Either filler carries no inline-significant byte, so inline syntax only ever lives in source segments (`multiNextSignificant` skips non-newline arena segments whole). To read those bytes without holding the growing `storage.strings` across the inline loop's appends, the multi-segment span carries a stable snapshot of the arena (`arena`) taken before inline parsing; non-source segments then read `arena[offset]` (the interned `\n` sits at offset 0, so it resolves naturally too). When no synthetic segment is present the snapshot is empty and non-source segments synthesize `\n` directly, keeping the common multi-line-paragraph path zero-copy.
+/// - **Multi-segment.** The content is an ordered list of `Segment`s - source-line ranges (zero-copy into `sourceBytes`) joined by the shared interned `"\n"` - addressed by flat *virtual* offsets (`0..<virtualLength`). Used for multi-line paragraph/heading bodies whose lines aren't source-contiguous (block-quote/list continuation, CRLF) so no source bytes are copied. Almost all non-source segments are the interned `"\n"` join, read as `\n` without touching the arena. The one exception is a lazy-continuation **split-tab residual** (Quirk E, flag-ON): an outer container's matched prefix partially consumes a tab, and the tab's leftover columns become *synthetic spaces* with no source byte - materialized into the arena as one non-source segment interleaved among the source-backed ones (`BlockParser.appendSyntheticResidualSpaces`). A lazy tasklist-retry line whose advance stopped inside a scalar (a NUL's U+FFFD, or a multi-byte source scalar) likewise carries its orphaned-byte U+FFFD replacements as one such segment ahead of the line's source segment (`BlockParser.addLazyLineAfterTasklistAdvance`). Either filler carries no inline-significant byte, so inline syntax only ever lives in source segments (`multiNextSignificant` skips non-newline arena segments whole). To read those bytes without holding the growing `storage.strings` across the inline loop's appends, the multi-segment span carries a stable snapshot of the arena (`arena`) taken before inline parsing; non-source segments then read `arena[offset]` (the interned `\n` sits at offset 0, so it resolves naturally too). When no synthetic segment is present the snapshot is empty and non-source segments synthesize `\n` directly, keeping the common multi-line-paragraph path zero-copy.
 ///
 /// `sourceOffset(ofVirtual:)` maps a (virtual) offset back to its original-source byte offset (or `nil` for arena/synthetic positions), which is how inline nodes get stamped with source ranges.
 internal struct ContentSpan: ~Escapable {
@@ -172,6 +172,26 @@ internal struct ContentSpan: ~Escapable {
         }
         // No arena snapshot: the only non-source segment is the shared interned `"\n"`.
         return UInt8(ascii: "\n")
+    }
+
+    /// If `offset` is within the U+FFFD standing for a byte that cmark's buffer has as an orphaned UTF-8
+    /// continuation byte, the number of content bytes from `offset` to the end of that U+FFFD; otherwise `nil`.
+    ///
+    /// Only a lazy tasklist-retry line whose checkbox advance stopped inside a multi-byte scalar starts with
+    /// orphans, and they are carried as one U+FFFD each in the arena filler segment ahead of the line's source
+    /// segment (`BlockParser.addLazyLineAfterTasklistAdvance`). Every non-ASCII byte of an arena filler segment
+    /// belongs to one: the only other filler is a split-tab residual's spaces. Single-segment content carries
+    /// no filler segment, so this is always `nil` for it.
+    func orphanedContinuationByteLength(at offset: Int) -> Int? {
+        // An empty arena snapshot means the content carries no filler segment (the common case).
+        guard isMultiSegment, arena.count > 0, multiByte(at: offset) >= 0x80 else {
+            return nil
+        }
+        let i = segmentIndex(covering: offset)
+        if i < segments.count, !segments[i].inSource {
+            return 3 - (offset - segmentStart(i)) % 3
+        }
+        return nil
     }
 
     /// The original-source byte offset for `offset`, or `nil` if it maps to a synthetic/arena byte. Single-segment source content maps identity (the offset already IS a source offset); single-segment arena content resolves through its arena→source run map (`nil` when unmapped); multi-segment resolves through the segment list.

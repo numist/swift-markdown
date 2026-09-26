@@ -2909,17 +2909,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let lineEnd = currentLineSourceRange.upperBound
                 let advance = tasklistAdvanceEnd(cursor: cursor)
                 if advance.orphanedBytes > 0 {
-                    // The advance stopped inside a NUL's U+FFFD, so cmark's paragraph starts with that
-                    // replacement's orphaned continuation bytes, and the reference's String bridge repairs
-                    // each one to its own U+FFFD. Materialize this first line into the arena with those
-                    // replacements leading the rest of the line (from the byte after the NUL). It stays a
-                    // single-line `.materialized` leaf, the first-line shape the pending-table checks expect.
-                    let nul = advance.sourceOffset - 1
-                    let paragraphIdx = addChild(kind: .paragraph, parent: current, start: nul)
+                    // The advance stopped inside a scalar (a NUL's U+FFFD, or a multi-byte source scalar), so
+                    // cmark's paragraph starts with its orphaned continuation bytes, and the reference's String
+                    // bridge repairs each one to its own U+FFFD. Materialize this first line into the arena with
+                    // those replacements leading the rest of the line (from the byte after the orphans), so the
+                    // content stays well-formed UTF-8 (`StorageView.string(of:)`). It stays a single-line
+                    // `.materialized` leaf, the first-line shape the pending-table checks expect.
+                    let paragraphIdx = addChild(kind: .paragraph, parent: current, start: advance.orphanStart)
                     current = paragraphIdx
                     markOrphanLedParagraphTableVisited(paragraphIdx)
                     if positionsEnabled {
-                        currentContentIndent = nul - currentLineSourceRange.lowerBound
+                        currentContentIndent = advance.orphanStart - currentLineSourceRange.lowerBound
                     }
                     var buffer = UniqueArray<UInt8>()
                     Self.appendOrphanLedLine(orphanedBytes: advance.orphanedBytes, rest: advance.sourceOffset..<lineEnd, of: sourceBytes, to: &buffer)
@@ -2930,7 +2930,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let lineContentStart = currentLineMapsToSource ? contentStart : materializedBufferOffset(ofSource: contentStart)
                 let paragraphIdx = addChild(kind: .paragraph, parent: current, start: sourceOffset(lineContentStart))
                 current = paragraphIdx
-                markTableVisitedIfContentStartIsOrphan(paragraphIdx, contentStart: contentStart)
                 return addLine(span: source, range: lineContentStart..<lineRange.upperBound, to: paragraphIdx, pending: pending)
             }
 
@@ -5050,15 +5049,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         paragraphTablePending[paragraph] = false
     }
 
-    /// Mark `paragraph` table-visited when the tasklist advance stopped inside a multi-byte scalar
-    /// (`22\u{E9} [x] `), leaving the content at `contentStart` (a source offset on the current line) on one of
-    /// its continuation bytes: an orphan straight from the source.
-    private mutating func markTableVisitedIfContentStartIsOrphan(_ paragraph: DocumentStorage.Index, contentStart: Int) {
-        if contentStart < currentLineSourceRange.upperBound, sourceBytes[contentStart] & 0xC0 == 0x80 {
-            markOrphanLedParagraphTableVisited(paragraph)
-        }
-    }
-
     /// Where cmark's `open_tasklist_item` 3-byte advance (`S_advance_offset` with `columns == false`) from
     /// `cursor` ends, as an original-source byte offset on the current line.
     ///
@@ -5067,7 +5057,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// inside it. `orphanedBytes` is then how many of its bytes are left over, and `sourceOffset` is the byte
     /// after the NUL. A tab is 1 byte, including one the item's indent only partly consumed: cmark's offset
     /// still sits on that tab, where the rewrite's tab-expanded `cursor` is a column inside it.
-    private func tasklistAdvanceEnd(cursor: Int) -> (sourceOffset: Int, orphanedBytes: Int) {
+    ///
+    /// An advance that stops inside a multi-byte source scalar (one the digit run's wildcard matched) orphans
+    /// that scalar's remaining continuation bytes: `orphanedBytes` counts them and `sourceOffset` is past them.
+    /// Either way `orphanStart` is the source byte holding the first orphan, the NUL or that continuation byte.
+    private func tasklistAdvanceEnd(cursor: Int) -> (sourceOffset: Int, orphanedBytes: Int, orphanStart: Int) {
         var p: Int
         if currentLineMapsToSource {
             p = cursor
@@ -5081,15 +5075,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let width = sourceBytes[p] == 0 ? 3 : 1
             p += 1
             if width > remaining {
-                return (p, width - remaining)
+                return (p, width - remaining, p - 1)
             }
             remaining -= width
         }
-        return (p, 0)
+        let orphanStart = p
+        while p < lineEnd, sourceBytes[p] & 0xC0 == 0x80 {
+            p += 1
+        }
+        return (p, p - orphanStart, orphanStart)
     }
 
-    /// Append a line that cmark's tasklist advance left starting with `orphanedBytes` orphaned bytes of a NUL's
-    /// U+FFFD (`tasklistAdvanceEnd`): one U+FFFD per orphan, as the reference's String bridge repairs each, then
+    /// Append a line that cmark's tasklist advance left starting with `orphanedBytes` orphaned continuation
+    /// bytes (`tasklistAdvanceEnd`): one U+FFFD per orphan, as the reference's String bridge repairs each, then
     /// the source bytes `rest`.
     private static func appendOrphanLedLine(orphanedBytes: Int, rest: Range<Int>, of source: Span<UInt8>, to buffer: inout UniqueArray<UInt8>) {
         buffer.reserveCapacity(buffer.count + 3 * orphanedBytes + rest.count)
@@ -5099,7 +5097,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Append one U+FFFD per orphaned byte of a NUL's U+FFFD (`tasklistAdvanceEnd`), as the reference's String
+    /// Append one U+FFFD per orphaned continuation byte (`tasklistAdvanceEnd`), as the reference's String
     /// bridge repairs each.
     private static func appendOrphanReplacements(_ orphanedBytes: Int, to buffer: inout UniqueArray<UInt8>) {
         for _ in 0..<orphanedBytes {
@@ -5113,14 +5111,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `open_tasklist_item` 3-byte advance from `cursor` ended (`tasklistAdvanceEnd`).
     ///
     /// cmark's lazy `add_line` copies from that offset, so whitespace between it and the first non-space is
-    /// the preserved lazy residual (`currentLineContentCursor`). An advance that stopped inside a NUL's U+FFFD
-    /// leaves its orphaned continuation bytes leading the added text: a materialized leaf copies that line into
-    /// its buffer (`appendOrphanLedLine`); a segment list gets the replacements as an arena segment followed by
-    /// the rest of the line as a source segment. Orphaned bytes, from a NUL or a multi-byte wildcard scalar, keep the
-    /// paragraph from ever opening a table (`markOrphanLedParagraphTableVisited`).
+    /// the preserved lazy residual (`currentLineContentCursor`). An advance that stopped inside a scalar - a
+    /// NUL's U+FFFD, or a multi-byte scalar the digit run's wildcard matched - leaves its orphaned continuation
+    /// bytes leading the added text, each replaced by a U+FFFD as the reference's String bridge repairs it: a
+    /// materialized leaf copies that line into its buffer (`appendOrphanLedLine`); a segment list gets the
+    /// replacements as an arena segment followed by the rest of the line as a source segment. Orphaned bytes
+    /// keep the paragraph from ever opening a table (`markOrphanLedParagraphTableVisited`).
     private mutating func addLazyLineAfterTasklistAdvance(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         let lineEnd = currentLineSourceRange.upperBound
         let advance = tasklistAdvanceEnd(cursor: cursor)
+        // Orphans are replaced rather than borrowed, including a multi-byte source scalar's: content bytes
+        // must stay well-formed UTF-8 (`StorageView.string(of:)`), and the replacements' arena segment is what
+        // the inline scanners recognize as orphans (`ContentSpan.orphanedContinuationByteLength`).
         if advance.orphanedBytes > 0 {
             markOrphanLedParagraphTableVisited(current)
             var segs: UniqueArray<Segment>
@@ -5149,7 +5151,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return appendSegment(rest, to: current, pending: afterReplacements)
         }
         let contentStart = indexOfFirstNonSpace(source: sourceBytes, range: advance.sourceOffset..<lineEnd)
-        markTableVisitedIfContentStartIsOrphan(current, contentStart: contentStart)
         currentLineContentCursor = currentLineMapsToSource ? advance.sourceOffset : materializedBufferOffset(ofSource: advance.sourceOffset)
         let lineContentStart = currentLineMapsToSource ? contentStart : materializedBufferOffset(ofSource: contentStart)
         return addLine(span: source, range: lineContentStart..<lineRange.upperBound, to: current, pending: pending)
