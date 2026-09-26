@@ -140,6 +140,25 @@ struct InlineOnlyOptionTests {
         }
     }
 
+    @Test(
+        "inline-only modes consolidate adjacent text nodes, as cmark's cmark_parser_finish does in every mode",
+        arguments: [
+            ("_f", "_f"),
+            ("[t", "[t"),
+            ("a\\*b", "a*b"),
+            ("a&amp;b", "a&b"),
+        ]
+    )
+    func inlineOnlyConsolidatesText(source: String, merged: String) throws {
+        for options in [MarkdownDocument.ParseOptions.inlineOnly, .preserveWhitespace] {
+            try MarkdownDocument.withParsedDocument(source, options: options) { doc in
+                let inlines = inlines(doc)
+                #expect(inlines.map(\.kind) == [.text])
+                #expect(inlines.first?.literal == merged)
+            }
+        }
+    }
+
     // MARK: - preserveWhitespace
 
     @Test("preserveWhitespace is a superset that includes inlineOnly")

@@ -430,19 +430,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     )
                 }
             }
-            
-            // Coalesce adjacent text nodes so smart-punct / entity substitutions don't leave the content split across sibling text nodes.
-            consolidateTextNodes(node)
-            // GFM email autolinks are detected here, over the finalized+consolidated inline tree, matching
-            // cmark's autolink `postprocess` (which runs after emphasis + `cmark_consolidate_text_nodes`).
-            if storage.options.contains(.gfmAutolink) {
-                gfmEmailAutolinkPass(node)
-            }
-            // A `[^[` footnote collapse (bug-compat) marked run-truncating nodes; their invisible tail is
-            // dropped here, AFTER the autolink pass, so a trailing email in that tail still links.
-            if !storage.runTruncatingTextNodes.isEmpty {
-                dropRunTruncatedTails(node)
-            }
+
+            finishInlines(node)
         }
 
         // Footnote post-processing (mirrors cmark's `process_footnotes`, run after inline parsing):
@@ -624,19 +613,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 brackets: &brackets
             )
         }
-        // GFM email autolinks run after consolidation, matching cmark's autolink `postprocess`. Gated on
-        // the option so it never perturbs the plain inline-only tree (which does not consolidate).
+        finishInlines(paragraph)
+    }
+
+    /// Post-process a leaf's freshly parsed inline children, mirroring cmark's `cmark_parser_finish` (consolidate, then extension postprocess).
+    ///
+    /// Consolidation runs unconditionally, in every parse mode including inline-only (swift-cmark `src/blocks.c` `cmark_parser_finish` calls `cmark_consolidate_text_nodes` with no option gate), so failed delimiters, entities and escapes merge with their neighbouring text.
+    private mutating func finishInlines(_ leaf: DocumentStorage.Index) {
+        consolidateTextNodes(leaf)
+        // GFM email autolinks are detected over the consolidated inline tree, matching cmark's autolink
+        // `postprocess` (which runs after emphasis + `cmark_consolidate_text_nodes`).
         if storage.options.contains(.gfmAutolink) {
-            consolidateTextNodes(paragraph)
-            gfmEmailAutolinkPass(paragraph)
-        } else if !storage.runTruncatingTextNodes.isEmpty {
-            // A `[^[` footnote collapse (bug-compat) marked a run-truncating node; consolidation is what
-            // ends its run, so it must run here even without the autolink pass.
-            consolidateTextNodes(paragraph)
+            gfmEmailAutolinkPass(leaf)
         }
-        // Drop the invisible tail of any `[^[` collapse AFTER the autolink pass, so a trailing email links.
+        // A `[^[` footnote collapse (bug-compat) marked run-truncating nodes; their invisible tail is
+        // dropped AFTER the autolink pass, so a trailing email in that tail still links.
         if !storage.runTruncatingTextNodes.isEmpty {
-            dropRunTruncatedTails(paragraph)
+            dropRunTruncatedTails(leaf)
         }
     }
 
