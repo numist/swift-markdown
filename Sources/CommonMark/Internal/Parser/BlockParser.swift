@@ -657,14 +657,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         finishInlines(paragraph)
     }
 
-    /// Extend an arena→source run map by one content byte that images source byte `sourceOffset`: the last run grows when the byte continues it, otherwise a new run starts.
+    /// Extend an arena→source run map by one content byte that images source byte `sourceOffset` (read from physical byte `physicalOffset`, which defaults to `sourceOffset`; see `ArenaRun`), or by one synthetic gap byte when `sourceOffset < 0`: the last run grows when the byte continues it, otherwise a new run starts.
     @inline(__always)
-    private static func appendContentByte(imaging sourceOffset: Int, to runs: inout [ArenaRun]) {
-        if let last = runs.last, Int(last.sourceOffset) + Int(last.length) == sourceOffset {
-            runs[runs.count - 1].length += 1
-        } else {
-            runs.append(ArenaRun(length: 1, sourceOffset: Int32(sourceOffset)))
+    private static func appendContentByte(imaging sourceOffset: Int, physicalOffset: Int? = nil, to runs: inout [ArenaRun]) {
+        let physicalOffset = physicalOffset ?? sourceOffset
+        if let last = runs.last {
+            let length = Int(last.length)
+            let continuesGap = sourceOffset < 0 && last.sourceOffset < 0
+            let continuesRun = sourceOffset >= 0 && last.sourceOffset >= 0
+                && Int(last.sourceOffset) + length == sourceOffset
+                && Int(last.physicalOffset) + length == physicalOffset
+            if continuesGap || continuesRun {
+                runs[runs.count - 1].length += 1
+                return
+            }
         }
+        runs.append(ArenaRun(length: 1, sourceOffset: Int32(sourceOffset), physicalOffset: Int32(physicalOffset)))
     }
 
     /// Post-process a leaf's freshly parsed inline children, mirroring cmark's `cmark_parser_finish` (consolidate, then extension postprocess).
@@ -1152,6 +1160,37 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
     }
 
+    /// `replacingNUL(_:)` that also rewrites `map`, `chunk`'s content-relative arena→source run map, to image the replaced content.
+    ///
+    /// Each of a U+FFFD's three bytes images the one NUL byte it replaces, so an inline node starting or ending at it covers exactly that source byte; every other byte keeps its image. An empty `map` on a source-backed `chunk` means the chunk images itself (see `sourceImage(of:map:)`). Arena content with no map has no source image and keeps an empty map. With positions off, `map` is left untouched.
+    private mutating func replacingNUL(_ chunk: Chunk, map: inout [ArenaRun]) -> Chunk {
+        guard positionsEnabled, containsNUL(chunk) else { return replacingNUL(chunk) }
+        let image = sourceImage(of: chunk, map: map)
+        assert(image.isEmpty || image.reduce(0) { $0 + Int($1.length) } == chunk.length, "a run map must tile its chunk")
+        var replacedMap: [ArenaRun] = []
+        var i = chunk.offset
+        for run in image {
+            for local in 0..<Int(run.length) {
+                let sourceOffset = run.sourceOffset < 0 ? -1 : Int(run.sourceOffset) + local
+                let physicalOffset = run.physicalOffset < 0 ? -1 : Int(run.physicalOffset) + local
+                for _ in 0..<(readByte(at: i, in: chunk) == 0 ? 3 : 1) {
+                    Self.appendContentByte(imaging: sourceOffset, physicalOffset: physicalOffset, to: &replacedMap)
+                }
+                i += 1
+            }
+        }
+        map = replacedMap
+        return replacingNUL(chunk)
+    }
+
+    /// `chunk`'s content-relative arena→source run map: `map` itself, or, when `map` is empty and `chunk` is source-backed, the single run by which the chunk images its own source range.
+    private func sourceImage(of chunk: Chunk, map: [ArenaRun]) -> [ArenaRun] {
+        if map.isEmpty, chunk.inSource, chunk.length > 0 {
+            return [ArenaRun(length: Int32(chunk.length), sourceOffset: Int32(chunk.offset))]
+        }
+        return map
+    }
+
     /// cmark's table `unescape_pipes` (`extensions/table.c`): replace each `\|` with `|`.
     ///
     /// cmark runs this over a table's raw text before inline parsing, including the text it splits off into
@@ -1190,6 +1229,38 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             j += 1
         }
         return Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
+    }
+
+    /// The content-relative arena→source run map of `unescapingPipes(raw)`, given `map`, `raw`'s own.
+    ///
+    /// cmark stamps pipe-unescaped text by its offset in the unescaped buffer, ignoring each stripped backslash
+    /// (its escape-oblivious column), so every byte after a stripped backslash images one source byte earlier
+    /// than its raw byte does: the backslash's image is dropped and each later image on its line shifts left
+    /// by one per backslash stripped before it there. cmark counts columns per line, so the shift ends at the
+    /// line break. A U+FFFD's three bytes still image one (shifted) NUL byte.
+    func unescapedPipesMap(_ map: [ArenaRun], of raw: Chunk) -> [ArenaRun] {
+        assert(map.reduce(0) { $0 + Int($1.length) } == raw.length, "a run map must tile its chunk")
+        var unescapedMap: [ArenaRun] = []
+        var stripped = 0
+        var i = raw.offset
+        let end = raw.offset + raw.length
+        for run in map {
+            for local in 0..<Int(run.length) {
+                defer { i += 1 }
+                // The same `\|` match as `unescapingPipes`: a backslash immediately followed by a pipe.
+                if readByte(at: i, in: raw) == UInt8(ascii: "\\"), i + 1 < end, readByte(at: i + 1, in: raw) == UInt8(ascii: "|") {
+                    stripped += 1
+                    continue
+                }
+                let sourceOffset = run.sourceOffset < 0 ? -1 : Int(run.sourceOffset) + local - stripped
+                let physicalOffset = run.physicalOffset < 0 ? -1 : Int(run.physicalOffset) + local - stripped
+                Self.appendContentByte(imaging: sourceOffset, physicalOffset: physicalOffset, to: &unescapedMap)
+                if readByte(at: i, in: raw) == UInt8(ascii: "\n") {
+                    stripped = 0
+                }
+            }
+        }
+        return unescapedMap
     }
 
     /// Replace NUL with U+FFFD in a code/HTML block body's segment list, in place.
@@ -1486,20 +1557,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     let preceding = insertTablePrecedingParagraph(before: node)
                     storage.setSourceStart(preceding, precedingChunk.offset)
                     storage.setSourceEnd(preceding, precedingChunk.offset + precedingChunk.length)
-                    // cmark's table `unescape_pipes` runs over the preceding-paragraph text (after feed-time
-                    // NUL→U+FFFD), so a `\|` there - even inside a code span - unescapes to `|`. When the
-                    // source-backed text is materialized only for that unescape (no NUL), map the arena copy back
-                    // to source by one constant shift so the paragraph's inlines keep positions: cmark stamps them
-                    // by their offset in the unescaped buffer added to the paragraph start, ignoring the stripped
-                    // backslash (its escape-oblivious column), which a single whole-content run reproduces exactly
-                    // (the same treatment as the cell path). A NUL forces an arena copy with no source image, so
-                    // its inlines stay unstamped, as before.
-                    let nulReplaced = replacingNUL(precedingChunk)
-                    let precedingContent = unescapingPipes(nulReplaced)
-                    if positionsEnabled, nulReplaced.inSource, !precedingContent.inSource {
-                        arenaSourceMaps[preceding] = [ArenaRun(length: Int32(precedingContent.length), sourceOffset: Int32(nulReplaced.offset))]
-                    }
-                    pendingInlines.append((preceding, storage.intern(precedingContent)))
+                    enqueueTablePrecedingContent(precedingChunk, map: [], of: preceding)
                 }
                 storage.setSourceStart(node, headerRange.lowerBound)
                 recordSplitDelimiterLine(node, delimIndent: delimIndent)
@@ -1507,6 +1565,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return PendingLeaf(node: node, content: .lazy(range: headerRange))
             }
         }
+    }
+
+    /// Queue a table-preceding paragraph's `content` for inline parsing after cmark's substitutions on it -
+    /// feed-time NUL→U+FFFD, then the table's `unescape_pipes` (`\|`→`|`, even inside a code span) - and
+    /// register the arena→source run map its inlines stamp positions through.
+    ///
+    /// `map` is `content`'s content-relative run map (empty for source-backed content). The unescaped text
+    /// keeps cmark's escape-oblivious columns, as for a table cell (see `unescapedPipesMap`).
+    private mutating func enqueueTablePrecedingContent(_ content: Chunk, map: [ArenaRun], of node: DocumentStorage.Index) {
+        var map = map
+        let nulReplaced = replacingNUL(content, map: &map)
+        let unescaped = unescapingPipes(nulReplaced)
+        if positionsEnabled, !unescaped.inSource {
+            let image = sourceImage(of: nulReplaced, map: map)
+            let unescapedImage = image.isEmpty || unescaped == nulReplaced ? image : unescapedPipesMap(image, of: nulReplaced)
+            if !unescapedImage.isEmpty {
+                arenaSourceMaps[node] = unescapedImage
+            }
+        }
+        pendingInlines.append((node, storage.intern(unescaped)))
     }
 
     /// Insert the paragraph cmark splits off the lines before a table's header
@@ -1645,7 +1723,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let stripped = parseDefinitions(in: stripTasklistCheckbox(node: node, content: flat)).trimming(using: self)
             if !stripped.isEmpty {
                 let precedingNode = insertTablePrecedingParagraph(before: node)
-                pendingInlines.append((precedingNode, storage.intern(unescapingPipes(replacingNUL(stripped)))))
+                let strippedMap = positionsEnabled ? sliceRuns(map, from: stripped.offset - flat.offset, length: stripped.length) : []
+                enqueueTablePrecedingContent(stripped, map: strippedMap, of: precedingNode)
             }
         } else if !isBlankSegments(preceding) {
             // A blank line closes a paragraph, so the earlier lines are never blank; splitting only when they
@@ -1660,23 +1739,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // A NUL (feed-time U+FFFD) or a `\|` (cmark's table `unescape_pipes`) in the split-off preceding
             // lines forces a flatten into one normalized arena chunk with both substitutions applied: this
             // content bypasses `drainLeaf`, so it is normalized here at its own intern (see `ContentSpan`
-            // for why a segment list can't carry the replacement). With a substitution the map `flattenSegments`
-            // builds is discarded and no `arenaSourceMaps` entry is registered, so a nested table's
-            // preceding-paragraph inlines stay unstamped - as the pre-existing NUL branch already did.
+            // for why a segment list can't carry the replacement).
             let substitutes = segmentsContainNUL(preceding) || segmentsContainEscapedPipe(preceding)
             if substitutes || mayHoldCheckbox {
                 var map: [ArenaRun] = []
                 let flat = flattenSegments(preceding, map: &map)
                 // `precedingNode` is now the item's first child, so the strip also advances its stamped start.
                 let content = stripTasklistCheckbox(node: precedingNode, content: flat)
-                // Content with no substitution keeps its bytes, so the flattened map still images it.
-                if positionsEnabled, !substitutes {
-                    let slice = sliceRuns(map, from: content.offset - flat.offset, length: content.length)
-                    if !slice.isEmpty {
-                        arenaSourceMaps[precedingNode] = slice
-                    }
-                }
-                pendingInlines.append((precedingNode, storage.intern(unescapingPipes(replacingNUL(content)))))
+                let contentMap = positionsEnabled ? sliceRuns(map, from: content.offset - flat.offset, length: content.length) : []
+                enqueueTablePrecedingContent(content, map: contentMap, of: precedingNode)
             } else {
                 pendingInlines.append((precedingNode, storage.intern(preceding)))
             }
@@ -1921,12 +1992,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 if stripped.inSource {
                     pending = PendingLeaf(node: para, content: .lazy(range: stripped.range))
                 } else {
-                    // Arena-backed (non-contiguous) content: `addChunk` re-copies the stripped bytes into a fresh arena buffer, so a plain arena chunk would reach inline parsing unmapped and leave the heading's text/emphasis unstamped (spec #12). The flattened content's run map is content-relative, so it survives the re-copy; narrow it to the window that actually reaches inline parsing - the stripped remainder after finalize's own leading/trailing trim (mirrored here by `stripped.trimming`) - keyed from `raw`'s first content byte, and stamp it on the heading via `arenaSourceMaps`.
-                    if positionsEnabled, !flatMap.isEmpty {
-                        let finalWindow = stripped.trimming(using: self)
-                        if !finalWindow.isEmpty {
-                            arenaSourceMaps[para] = sliceRuns(flatMap, from: finalWindow.offset - raw.offset, length: finalWindow.length)
-                        }
+                    // Arena-backed (non-contiguous) content: `addChunk` re-copies the stripped bytes into a fresh arena buffer, so a plain arena chunk would reach inline parsing unmapped and leave the heading's text/emphasis unstamped (spec #12). The flattened content's run map is content-relative, so it survives the re-copy; narrow it to the re-seeded bytes and register it on the heading via `arenaSourceMaps`, where the heading's finalize takes it back to carry it through NUL replacement and its own trim.
+                    if positionsEnabled, !flatMap.isEmpty, !stripped.isEmpty {
+                        arenaSourceMaps[para] = sliceRuns(flatMap, from: stripped.offset - raw.offset, length: stripped.length)
                     }
                     pending = addChunk(stripped, to: para, pending: pending)
                 }
@@ -2894,10 +2962,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private struct LeafDrainResult: ~Copyable {
         var content: DrainedLeaf
         var pending: PendingLeaf?
+        /// A `.chunk` content's content-relative arena→source run map when it is arena content with a source image (NUL-replaced content, or a re-seeded setext heading); empty otherwise.
+        var map: [ArenaRun] = []
     }
 
     /// Drain `node`'s pending content, tagging it as a flat chunk or a segment list (mirrors `materializePendingContent` for the chunk cases; returns `.segments` zero-copy instead of flattening).
-    private mutating func drainLeaf(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> LeafDrainResult {
+    ///
+    /// `seededMap` is the content-relative arena→source run map of `.materialized` content that has one (a setext heading re-seeded from flattened content); the drained chunk's map is carried through NUL replacement so its inlines keep source positions.
+    private mutating func drainLeaf(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?, seededMap: [ArenaRun] = []) -> LeafDrainResult {
         switch consume pending {
         case .none:
             return LeafDrainResult(content: .chunk(.empty), pending: nil)
@@ -2914,14 +2986,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 if segmentsContainNUL(segs) {
                     var map: [ArenaRun] = []
                     let flat = flattenSegments(segs, map: &map)
-                    return LeafDrainResult(content: .chunk(replacingNUL(flat)), pending: nil)
+                    let replaced = replacingNUL(flat, map: &map)
+                    return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
                 }
                 return LeafDrainResult(content: .segments(segs), pending: nil)
             case .lazy(let range):
                 if range.isEmpty {
                     return LeafDrainResult(content: .chunk(.empty), pending: nil)
                 }
-                return LeafDrainResult(content: .chunk(replacingNUL(Chunk(offset: range.lowerBound, length: range.count, inSource: true))), pending: nil)
+                var map: [ArenaRun] = []
+                let replaced = replacingNUL(Chunk(offset: range.lowerBound, length: range.count, inSource: true), map: &map)
+                return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
             case .lazyNewline(let range):
                 let offset = storage.strings.count
                 for i in range { storage.strings.append(sourceBytes[i]) }
@@ -2933,7 +3008,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
                 let offset = storage.strings.count
                 content.span.withUnsafeBufferPointer { storage.strings.append(copying: $0) }
-                return LeafDrainResult(content: .chunk(replacingNUL(Chunk(offset: offset, length: content.count, inSource: false))), pending: nil)
+                var map = seededMap
+                let replaced = replacingNUL(Chunk(offset: offset, length: content.count, inSource: false), map: &map)
+                return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
             }
         }
     }
@@ -3113,7 +3190,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Narrow a content-relative arena→source run map to the sub-window `[start, start + length)` of the original flattened content, rebased so its first run begins at content offset 0.
     ///
     /// Drops runs outside the window and advances a partially-included source run's `sourceOffset` by the trimmed-off prefix; synthetic gaps stay gaps. Used when a flattened setext heading's content is re-seeded after leading/trailing whitespace trim and ref-def stripping, so the stored map matches exactly the bytes that reach inline parsing.
-    private func sliceRuns(_ runs: [ArenaRun], from start: Int, length: Int) -> [ArenaRun] {
+    func sliceRuns(_ runs: [ArenaRun], from start: Int, length: Int) -> [ArenaRun] {
         let end = start + length
         var result: [ArenaRun] = []
         var v = 0
@@ -3134,7 +3211,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Run the paragraph finalize-time matchers on a single flat content `Chunk`: footnote definition, reference-link definitions, GFM table detection, and tasklist marker - then queue the remaining content for inline parsing (or drop the node if it was entirely ref-defs).
     ///
-    /// Factored out so both the flat-content path and the (eligibility-gated) segment path can reuse it. `map` is the flattened content's arena→source run map (empty for the contiguous flat-content path): when the content was flattened from a non-contiguous, re-indented segment list it carries per-line source columns, and is sliced to the surviving `contentChunk` window and stamped on the node so the inline pass can stamp positions.
+    /// Factored out so both the flat-content path and the (eligibility-gated) segment path can reuse it. `map` is the content's arena→source run map (empty for source-backed content): when the content was flattened from a non-contiguous, re-indented segment list it carries per-line source columns, and when NULs were replaced it images each U+FFFD back to its NUL. It is sliced to the surviving `contentChunk` window and stamped on the node so the inline pass can stamp positions.
     private mutating func runParagraphMatchers(node: DocumentStorage.Index, raw: Chunk, map: [ArenaRun] = []) throws(MarkdownDocument.Error) {
         var trimmed = raw.trimming(using: self)
         if trimmed.isEmpty {
@@ -3195,7 +3272,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // A top-level row with leading whitespace makes the paragraph non-contiguous, so its content
             // reaches here flattened from a segment list carrying a re-indent run map (Quirk E): each row's
             // surviving content is mapped to the table's content column, exactly cmark's re-based cell
-            // columns. Narrow that map to the content window the table parser sees. The contiguous fast path
+            // columns. Content whose NULs were replaced likewise carries a run map imaging each U+FFFD back
+            // to its NUL. Narrow that map to the content window the table parser sees. The contiguous fast path
             // passes an empty map (the table parser maps by a constant source delta instead), and a table
             // nested in a block quote / list keeps its cells unstamped as before (see `parseTable`).
             let tableMap = (positionsEnabled && !map.isEmpty)
@@ -3213,7 +3291,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return
         }
         let contentChunk = trimmed.trimmingTrailing(using: self)
-        // Stamp the (re-indented) run map for the content that actually reaches inline parsing: narrow the flattened content's map to the surviving `contentChunk` window (after trailing trim, ref-def stripping, and any tasklist marker; leading whitespace left by a ref-def's lazy residual is preserved, see `trimmingTrailing`). Only meaningful when the content was flattened from a re-indented segment list; the contiguous flat-content path passes an empty map.
+        // Stamp the run map for the content that actually reaches inline parsing: narrow the content's map to the surviving `contentChunk` window (after trailing trim, ref-def stripping, and any tasklist marker; leading whitespace left by a ref-def's lazy residual is preserved, see `trimmingTrailing`). Source-backed content passes an empty map.
         if positionsEnabled, !map.isEmpty {
             let slice = sliceRuns(map, from: contentChunk.offset - raw.offset, length: contentChunk.length)
             if !slice.isEmpty {
@@ -3256,10 +3334,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .paragraph:
             let drained = drainLeaf(node, pending: pending)
             pending = drained.pending
+            let map = drained.map
             switch consume drained.content {
             case .chunk(let raw):
                 recordTrailingBlank(of: node, chunk: raw)
-                try runParagraphMatchers(node: node, raw: raw)
+                try runParagraphMatchers(node: node, raw: raw, map: map)
             case .segments(let segs):
                 recordTrailingBlank(of: node, segments: segs)
                 // Multi-line non-contiguous body held as zero-copy source segments. Trim, then only materialize (flatten) if it could match a finalize matcher; plain prose stays segments.
@@ -3280,12 +3359,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
             }
         case .heading:
-            let drained = drainLeaf(node, pending: pending)
+            // A setext heading re-seeded from flattened content registered its content's run map (see the PHASE 2c re-seed); take it back so draining can carry it through NUL replacement.
+            let seededMap = arenaSourceMaps.removeValue(forKey: node) ?? []
+            let drained = drainLeaf(node, pending: pending, seededMap: seededMap)
             pending = drained.pending
+            let map = drained.map
             switch consume drained.content {
             case .chunk(let raw):
                 let trimmed = raw.trimming(using: self)
                 if !trimmed.isEmpty {
+                    if positionsEnabled, !map.isEmpty {
+                        arenaSourceMaps[node] = sliceRuns(map, from: trimmed.offset - raw.offset, length: trimmed.length)
+                    }
                     pendingInlines.append((node, storage.intern(trimmed)))
                 }
             case .segments(let segs):

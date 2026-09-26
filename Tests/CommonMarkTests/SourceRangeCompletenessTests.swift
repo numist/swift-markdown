@@ -77,6 +77,51 @@ struct SourceRangeCompletenessTests {
         #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
     }
 
+    /// The same ratchet with every `o` in every example replaced by a NUL. Block parsing materializes
+    /// NUL-bearing content into the arena (each NUL becomes U+FFFD) instead of taking the zero-copy source
+    /// slice, so this covers content that must map back to source through an arena run map: paragraphs,
+    /// headings, table cells, and the inlines within them. A letter is replaced rather than a NUL inserted, so
+    /// block markers and most inline syntax stay intact.
+    @Test("every non-exempt node carries a valid source range when content contains NULs")
+    func everyNonExemptNodeWithNULHasValidRange() throws {
+        let audit = try Self.audit(options: Self.options) { $0.replacingOccurrences(of: "o", with: "\u{0}") }
+
+        #expect(audit.totalNodes > 3000)
+        #expect(audit.exemptFillerCells == 2)
+        #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
+    }
+
+    /// A NUL is one source byte, as an `o` is, so replacing each `o` with a NUL leaves every node's source range unchanged
+    /// wherever it leaves the node tree unchanged: this checks the values, not just the presence, of the ranges
+    /// that NUL-bearing content maps back to source through an arena run map.
+    @Test("a NUL projects onto its one source byte")
+    func nulReplacementPreservesRanges() throws {
+        func nodes(_ markdown: String) throws -> [(kind: String, range: String)] {
+            var nodes: [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)] = []
+            try MarkdownDocument.withParsedDocument(markdown, options: Self.options) { doc in
+                dfsCompleteness(doc.root, into: &nodes)
+            }
+            return nodes.map { ("\($0.kind)", String(describing: $0.range)) }
+        }
+
+        var compared = 0
+        var failures: [String] = []
+        for ex in try Self.loadSpec() {
+            let original = try nodes(ex.markdown)
+            let withNUL = try nodes(ex.markdown.replacingOccurrences(of: "o", with: "\u{0}"))
+            // A NUL can change structure (an `o` in an entity or HTML tag name, U+FFFD's emphasis flanking), and then its ranges aren't comparable.
+            guard ex.markdown.contains("o"), original.map(\.kind) == withNUL.map(\.kind) else { continue }
+            compared += 1
+            for (a, b) in zip(original, withNUL) where a.range != b.range {
+                failures.append("#\(ex.number) [\(ex.section)] \(a.kind): \(a.range) became \(b.range); input=\(ex.markdown.debugDescription)")
+            }
+        }
+
+        // Fixture sanity: most examples contain an `o` and keep their structure, so a substitution that broke structure wholesale fails loudly.
+        #expect(compared > 500)
+        #expect(failures.isEmpty, Comment(rawValue: failures.prefix(25).joined(separator: "\n")))
+    }
+
     /// The same ratchet over inline-only parsing (`.inlineOnly`, and `.preserveWhitespace` which
     /// implies it), where each whole spec example becomes one paragraph of inline content. Each
     /// example also runs with CRLF line endings, which inline-only parsing normalizes through an
@@ -85,7 +130,7 @@ struct SourceRangeCompletenessTests {
         MarkdownDocument.ParseOptions.inlineOnly, .preserveWhitespace,
     ], ["\n", "\r\n"])
     func everyNonExemptInlineOnlyNodeHasValidRange(mode: MarkdownDocument.ParseOptions, lineEnding: String) throws {
-        let audit = try Self.audit(options: Self.options.union(mode), lineEnding: lineEnding)
+        let audit = try Self.audit(options: Self.options.union(mode)) { $0.replacingOccurrences(of: "\n", with: lineEnding) }
 
         // Fixture sanity: every example yields at least a document, a paragraph, and a child.
         #expect(audit.totalNodes > 3000)
@@ -94,10 +139,10 @@ struct SourceRangeCompletenessTests {
         #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
     }
 
-    /// Parse every spec example with `options`, its line endings rewritten to `lineEnding`, and collect
-    /// each node that lacks a valid source range, skipping the exempt set documented on
+    /// Parse every spec example with `options`, its markdown passed through `rewrite`, and collect each
+    /// node that lacks a valid source range, skipping the exempt set documented on
     /// `everyNonExemptNodeHasValidRange`.
-    private static func audit(options: MarkdownDocument.ParseOptions, lineEnding: String = "\n") throws -> (totalNodes: Int, exemptFillerCells: Int, failures: [String]) {
+    private static func audit(options: MarkdownDocument.ParseOptions, rewrite: (String) -> String = { $0 }) throws -> (totalNodes: Int, exemptFillerCells: Int, failures: [String]) {
         let examples = try Self.loadSpec()
         #expect(examples.count > 600)
 
@@ -107,7 +152,7 @@ struct SourceRangeCompletenessTests {
 
         for ex in examples {
             var nodes: [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)] = []
-            let markdown = ex.markdown.replacingOccurrences(of: "\n", with: lineEnding)
+            let markdown = rewrite(ex.markdown)
             try MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
                 dfsCompleteness(doc.root, into: &nodes)
             }
