@@ -36,7 +36,8 @@ internal enum EntityParser {
     ///
     /// Returns the decoded codepoints and the offset just past the trailing `;`. CommonMark 0.31 §6.5.
     ///
-    /// `bugCompat` selects cmark-gfm's looser numeric digit limits (see `matchNumericEntity`); it is
+    /// `bugCompat` selects cmark-gfm's looser numeric digit limits and its U+FFFE / U+FFFF → U+FFFD
+    /// replacement (see `matchNumericEntity`); it is
     /// threaded from `MarkdownDocument.ParseOptions.cmarkBugCompatibility` at the call sites.
     internal static func matchEntity(start: Int, end: Int, source: Span<UInt8>, bugCompat: Bool) -> EntityMatch? {
         let after = start + 1
@@ -53,7 +54,8 @@ internal enum EntityParser {
     /// Match `&#NNN;` (decimal) or `&#xHHH;` / `&#XHHH;` (hex).
     ///
     /// The spec-correct digit limits are 1–7 decimal / 1–6 hex (CommonMark §6.5). When `bugCompat` is
-    /// set, both branches accept up to 8 digits instead, matching cmark-gfm (see below).
+    /// set, both branches accept up to 8 digits instead, and U+FFFE / U+FFFF decode to U+FFFD, matching
+    /// cmark-gfm (see below).
     private static func matchNumericEntity(start: Int, end: Int, source: Span<UInt8>, bugCompat: Bool) -> EntityMatch? {
         var i = start + 2 // past `&#`
         if i >= end {
@@ -110,7 +112,13 @@ internal enum EntityParser {
         }
         let afterSemi = i + 1
         // Validate codepoint per CommonMark / Unicode.
-        if n == 0 || n > 0x10FFFF || (n >= 0xD800 && n <= 0xDFFF) {
+        // why: cmark-gfm's `cmark_utf8proc_encode_char` (swift-cmark src/utf8.c) special-cases exactly
+        // U+FFFF and U+FFFE, emitting the lone invalid bytes 0xFF / 0xFE; swift-markdown's cmark bridge
+        // reads every literal, destination, title and info string with `String(cString:)`, which repairs
+        // each such byte to U+FFFD. Flag-ON (`.cmarkBugCompatibility`) reproduces that; flag-OFF keeps the
+        // noncharacter, a valid Unicode scalar that CommonMark §6.5 does not replace.
+        let cmarkEncodesAsInvalidByte = bugCompat && (n == 0xFFFE || n == 0xFFFF)
+        if n == 0 || n > 0x10FFFF || (n >= 0xD800 && n <= 0xDFFF) || cmarkEncodesAsInvalidByte {
             let encoded = encodeCodepointUTF8(0xFFFD)
             return EntityMatch(bytes: encoded.bytes, count: encoded.count, afterSemi: afterSemi)
         }
