@@ -1,0 +1,5 @@
+Document
+└─ Paragraph
+   ├─ Text @1:1-1:2 "a"
+   ├─ LineBreak
+   └─ Text @1:4-1:5 "b"
