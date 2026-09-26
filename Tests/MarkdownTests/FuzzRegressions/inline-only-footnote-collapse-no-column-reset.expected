@@ -1,0 +1,3 @@
+Document
+└─ Paragraph
+   └─ Text @1:1-1:4 "[^["
