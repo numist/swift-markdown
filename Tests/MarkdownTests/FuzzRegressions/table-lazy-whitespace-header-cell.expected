@@ -1,0 +1,8 @@
+Document @1:1-3:4
+└─ BlockQuote @1:1-3:4
+   ├─ Paragraph @1:2-1:3
+   │  └─ Text @1:2-1:3 "x"
+   └─ Table @2:1-3:4 alignments: |-|
+      ├─ Head
+      │  └─ Cell
+      └─ Body
