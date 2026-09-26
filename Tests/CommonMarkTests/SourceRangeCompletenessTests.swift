@@ -63,6 +63,41 @@ struct SourceRangeCompletenessTests {
     /// genuinely unstamped case and a regression.
     @Test("every non-exempt node carries a valid source range")
     func everyNonExemptNodeHasValidRange() throws {
+        let audit = try Self.audit(options: Self.options)
+
+        // Fixture sanity: the corpus and the walk must both be substantial, so a vacuous setup
+        // (empty corpus, or a walk that never descends into children) fails loudly.
+        #expect(audit.totalNodes > 3000)
+        // Pin the filler-cell exemption to its verified population (the two padding cells in the
+        // GFM tables section). Because an out-of-order range collapses to nil, a childless
+        // .tableCell going nil when it should carry a range would otherwise be silently exempted;
+        // asserting the exact count makes the ratchet trip if that population ever changes shape,
+        // forcing a re-triage against the reference.
+        #expect(audit.exemptFillerCells == 2)
+        #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
+    }
+
+    /// The same ratchet over inline-only parsing (`.inlineOnly`, and `.preserveWhitespace` which
+    /// implies it), where each whole spec example becomes one paragraph of inline content. Each
+    /// example also runs with CRLF line endings, which inline-only parsing normalizes through an
+    /// arena copy rather than the zero-copy source slice the LF-only corpus takes.
+    @Test("every non-exempt node carries a valid source range in inline-only parsing", arguments: [
+        MarkdownDocument.ParseOptions.inlineOnly, .preserveWhitespace,
+    ], ["\n", "\r\n"])
+    func everyNonExemptInlineOnlyNodeHasValidRange(mode: MarkdownDocument.ParseOptions, lineEnding: String) throws {
+        let audit = try Self.audit(options: Self.options.union(mode), lineEnding: lineEnding)
+
+        // Fixture sanity: every example yields at least a document, a paragraph, and a child.
+        #expect(audit.totalNodes > 3000)
+        // Inline-only parsing builds no tables, so there are no filler cells to exempt.
+        #expect(audit.exemptFillerCells == 0)
+        #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
+    }
+
+    /// Parse every spec example with `options`, its line endings rewritten to `lineEnding`, and collect
+    /// each node that lacks a valid source range, skipping the exempt set documented on
+    /// `everyNonExemptNodeHasValidRange`.
+    private static func audit(options: MarkdownDocument.ParseOptions, lineEnding: String = "\n") throws -> (totalNodes: Int, exemptFillerCells: Int, failures: [String]) {
         let examples = try Self.loadSpec()
         #expect(examples.count > 600)
 
@@ -72,7 +107,8 @@ struct SourceRangeCompletenessTests {
 
         for ex in examples {
             var nodes: [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)] = []
-            try MarkdownDocument.withParsedDocument(ex.markdown, options: Self.options) { doc in
+            let markdown = ex.markdown.replacingOccurrences(of: "\n", with: lineEnding)
+            try MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
                 dfsCompleteness(doc.root, into: &nodes)
             }
             totalNodes += nodes.count
@@ -94,7 +130,7 @@ struct SourceRangeCompletenessTests {
                         exemptFillerCells += 1
                         continue
                     }
-                    failures.append("#\(ex.number) [\(ex.section)] \(node.kind): nil sourceRange; input=\(ex.markdown.debugDescription)")
+                    failures.append("#\(ex.number) [\(ex.section)] \(node.kind): nil sourceRange; input=\(markdown.debugDescription)")
                     continue
                 }
                 // A non-nil range is well-ordered by construction: `MarkdownNode.sourceRange` (via
@@ -103,20 +139,10 @@ struct SourceRangeCompletenessTests {
                 // this restates the requirement's `lowerBound <= upperBound` invariant defensively,
                 // in case that upstream contract ever changes.
                 if range.lowerBound > range.upperBound {
-                    failures.append("#\(ex.number) [\(ex.section)] \(node.kind): inverted range \(range); input=\(ex.markdown.debugDescription)")
+                    failures.append("#\(ex.number) [\(ex.section)] \(node.kind): inverted range \(range); input=\(markdown.debugDescription)")
                 }
             }
         }
-
-        // Fixture sanity: the corpus and the walk must both be substantial, so a vacuous setup
-        // (empty corpus, or a walk that never descends into children) fails loudly.
-        #expect(totalNodes > 3000)
-        // Pin the filler-cell exemption to its verified population (the two padding cells in the
-        // GFM tables section). Because an out-of-order range collapses to nil, a childless
-        // .tableCell going nil when it should carry a range would otherwise be silently exempted;
-        // asserting the exact count makes the ratchet trip if that population ever changes shape,
-        // forcing a re-triage against the reference.
-        #expect(exemptFillerCells == 2)
-        #expect(failures.isEmpty, Comment(rawValue: failures.prefix(25).joined(separator: "\n")))
+        return (totalNodes, exemptFillerCells, failures)
     }
 }

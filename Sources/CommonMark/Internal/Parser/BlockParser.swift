@@ -267,8 +267,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         documentIndex = self.storage.appendNode(NodeRecord(kind: .document))
         current = documentIndex
-        // The document root spans the whole source; its start is byte 0 (1:1). Its end is stamped at EOF finalize.
-        self.storage.setSourceStart(documentIndex, 0)
     }
     
     // MARK: - Parse
@@ -322,8 +320,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 pending = try finalize(node: current, pending: pending, atEOF: true)
             }
             
-            // The document root is never passed to `finalize`; stamp its end (whole-source span) here. A truly-empty document (no lines) is left unstamped so it reports no source range - cmark emits `1:1-0:0` for empty input, which downstream treats as "no position".
+            // The document root is never passed to `finalize`; stamp its whole-source span here, from the first line's start (after any leading BOM, so it projects to 1:1) to the last line's content end. A truly-empty document (no lines) is left unstamped so it reports no source range - cmark emits `1:1-0:0` for empty input, which downstream treats as "no position".
             if positionsEnabled, reader.lineNumber > 0 {
+                storage.setSourceStart(documentIndex, storage.lineStarts[0])
                 storage.setSourceEnd(documentIndex, currentLineSourceRange.upperBound)
             }
         }
@@ -539,6 +538,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var lines = 0
         var i = start
         while i < count {
+            // Record each line's start for byte→line/col conversion (`StorageView.position(ofByte:)`), exactly as the block path does per `LineReader` line.
+            if positionsEnabled {
+                storage.lineStarts.append(i)
+            }
             let brk = i + LineReader.firstLineTerminator(in: sourceBytes.extracting(i..<count))
             if brk == count {
                 // Trailing content with no terminator → one final unterminated line.
@@ -565,9 +568,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // nothing (or only whitespace) remains: cmark's paragraph `finalize` (src/blocks.c) runs
         // `resolve_reference_link_definitions` in every mode but gates the empty-paragraph removal off for
         // `CMARK_OPT_PRESERVE_WHITESPACE` - whose `options & …` mask also matches a bare `CMARK_OPT_INLINE_ONLY`.
-        let paragraph = addChild(kind: .paragraph, parent: documentIndex)
+        let paragraph = addChild(kind: .paragraph, parent: documentIndex, start: start)
         // cmark's inline-only buffer is neither newline-terminated nor trimmed - see `nulTerminatedInlineContainers`.
         storage.nulTerminatedInlineContainers.insert(paragraph)
+        // The paragraph's content is the whole post-BOM input, trailing line ending included (it is literal text here), and the document spans exactly its one paragraph.
+        storage.setSourceStart(documentIndex, start)
+        storage.setSourceEnd(documentIndex, count)
+        storage.setSourceEnd(paragraph, count)
 
         var delimiters = UniqueArray<DelimiterRecord>()
         var brackets = UniqueArray<BracketRecord>()
@@ -591,21 +598,34 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             )
         } else {
             // Normalize `\r\n` and lone `\r` to `\n` and each NUL to U+FFFD into the string arena, then read from an independent scratch copy (the inline parser appends to `storage.strings` as it runs).
+            // With positions on, also record the arena→source run map (inline stamping resolves a node's first byte for its start and its last byte, plus one, for its end). Every byte copied as-is, or a lone `\r` → `\n`, images its own source byte. A CRLF's `\n` images its LF, so a node ending at the line break covers the whole CRLF and projects to the next line's start, as it does for LF input; the cost is that a node *starting* at that `\n` starts one byte late, after the CR. Each of a U+FFFD's three bytes images its one NUL byte, so a node starting or ending at it covers exactly that byte.
             let arenaStart = storage.strings.count
+            var runs: [ArenaRun] = []
             var j = start
             while j < count {
                 let byte = sourceBytes[j]
                 if byte == UInt8(ascii: "\r") {
-                    storage.strings.append(UInt8(ascii: "\n"))
                     if j + 1 < count, sourceBytes[j + 1] == UInt8(ascii: "\n") {
                         j += 1
+                    }
+                    storage.strings.append(UInt8(ascii: "\n"))
+                    if positionsEnabled {
+                        Self.appendContentByte(imaging: j, to: &runs)
                     }
                 } else if byte == 0 {
                     storage.strings.append(0xEF)
                     storage.strings.append(0xBF)
                     storage.strings.append(0xBD)
+                    if positionsEnabled {
+                        for _ in 0..<3 {
+                            Self.appendContentByte(imaging: j, to: &runs)
+                        }
+                    }
                 } else {
                     storage.strings.append(byte)
+                    if positionsEnabled {
+                        Self.appendContentByte(imaging: j, to: &runs)
+                    }
                 }
                 j += 1
             }
@@ -615,7 +635,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             storage.strings.span.extracting(rest.range).withUnsafeBufferPointer { buffer in
                 scratch.append(copying: buffer)
             }
-            let content = ContentSpan(span: scratch.span, base: rest.offset, inSource: false)
+            var runScratch = UniqueArray<ArenaRun>()
+            var runEndScratch = UniqueArray<Int>()
+            if positionsEnabled {
+                var runEnd = 0
+                for run in sliceRuns(runs, from: rest.offset - arenaStart, length: rest.length) {
+                    runScratch.append(run)
+                    runEnd += Int(run.length)
+                    runEndScratch.append(runEnd)
+                }
+            }
+            let content = ContentSpan(span: scratch.span, base: rest.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span)
             try parseInline(
                 content: content,
                 into: paragraph,
@@ -625,6 +655,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             )
         }
         finishInlines(paragraph)
+    }
+
+    /// Extend an arena→source run map by one content byte that images source byte `sourceOffset`: the last run grows when the byte continues it, otherwise a new run starts.
+    @inline(__always)
+    private static func appendContentByte(imaging sourceOffset: Int, to runs: inout [ArenaRun]) {
+        if let last = runs.last, Int(last.sourceOffset) + Int(last.length) == sourceOffset {
+            runs[runs.count - 1].length += 1
+        } else {
+            runs.append(ArenaRun(length: 1, sourceOffset: Int32(sourceOffset)))
+        }
     }
 
     /// Post-process a leaf's freshly parsed inline children, mirroring cmark's `cmark_parser_finish` (consolidate, then extension postprocess).

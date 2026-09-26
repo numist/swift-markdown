@@ -524,6 +524,18 @@ struct BlockPositionEncodingTests {
         }
     }
 
+    // MARK: - Byte-order mark
+
+    @Test("leading BOM — line 1 columns, including the document's start, count from after the BOM")
+    func leadingByteOrderMark() throws {
+        let out = try parse("\u{FEFF}a\nb")
+        try #require(shape(out) == ["document", "paragraph", "text", "softBreak", "text"])
+        #expect(out[0].range == r(1, 1, 2, 2))
+        #expect(out[1].range == r(1, 1, 2, 2))
+        #expect(out[2].range == r(1, 1, 1, 2))
+        #expect(out[4].range == r(2, 1, 2, 2))
+    }
+
     // MARK: - Collection / assertion helpers
 
     /// Build a source range from 1-based line/byte-column endpoints.
