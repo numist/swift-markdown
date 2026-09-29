@@ -5549,14 +5549,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         if storage.attributeReferenceMap[key] == nil, !storage.isLabelClaimedInSharedRefmap(key) {
+            // cmark stores the value through `cmark_clean_attributes`, which is `cmark_clean_url`
+            // (swift-cmark `src/inlines.c`): trimmed and unescaped, like a link ref-def destination.
             // CommonMark §2.3: a NUL in the stored attributes becomes U+FFFD, symmetric with the link
             // ref-def store above. Parsed straight from the (possibly source-backed) content, so normalize
             // here.
-            let attrs = replacingNUL(Chunk(
+            let attrs = replacingNUL(cleanURLChunk(Chunk(
                 offset: attrsStart,
                 length: attrsLen,
                 inSource: inSource
-            ))
+            )))
             storage.attributeReferenceMap[key] = attrs
         }
         return afterAll
