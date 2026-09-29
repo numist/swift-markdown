@@ -72,6 +72,14 @@ class InlineOnlySourcePositionTests: XCTestCase {
         }
     }
 
+    /// A BOM-only input's empty paragraph sits at the start of line 1, past the BOM; a blank line after the BOM ends just past its line ending.
+    func testByteOrderMarkWithoutContent() {
+        for mode: ParseOptions in [.inlineOnly, .preserveWhitespace] {
+            XCTAssertEqual("Document @1:1\n└─ Paragraph @1:1", positions("\u{FEFF}", mode))
+            XCTAssertEqual("Document @1:1-1:2\n└─ Paragraph @1:1-1:2\n   └─ Text @1:1-1:2 \"\n\"", positions("\u{FEFF}\n", mode))
+        }
+    }
+
     /// Blank lines and a trailing line ending are literal paragraph content, so the paragraph and document span them; the input's end sits just past the final line ending, on the last line.
     func testBlankLinesAndTrailingLineEnding() {
         for mode: ParseOptions in [.inlineOnly, .preserveWhitespace] {

@@ -544,9 +544,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Inline-only parse path for `.inlineOnly` / `.preserveWhitespace`.
     ///
-    /// Bypasses block structure completely: the entire input becomes a single `.paragraph` whose content is the source with a leading UTF-8 BOM skipped and line endings normalized to `\n`, but with every other byte preserved verbatim - leading indentation, interior space runs, trailing spaces, and all newlines (including a trailing one). Markers like `#`, `* `, `> `, fences and 4-space indents stay literal text; only *inline* syntax (emphasis, code spans, links, autolinks, …) is parsed, and even newlines remain literal text rather than becoming soft/hard breaks.
+    /// Bypasses block structure completely: any non-empty input (even a BOM-only one) becomes a single `.paragraph`, and empty input yields no paragraph. The paragraph's content is the source with a leading UTF-8 BOM skipped and line endings normalized to `\n`, but with every other byte preserved verbatim - leading indentation, interior space runs, trailing spaces, and all newlines (including a trailing one). Markers like `#`, `* `, `> `, fences and 4-space indents stay literal text; only *inline* syntax (emphasis, code spans, links, autolinks, …) is parsed, and even newlines remain literal text rather than becoming soft/hard breaks.
     private mutating func parseInlineOnly() throws (MarkdownDocument.Error) {
         let count = sourceBytes.count
+
+        // Empty input yields an empty document with no paragraph: cmark's `S_parser_feed` (src/blocks.c) processes no line for zero bytes, so no paragraph is ever opened.
+        guard count > 0 else {
+            return
+        }
 
         // Skip a leading UTF-8 BOM, matching cmark's first-line BOM skip.
         var start = 0
@@ -558,7 +563,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var hasCR = false
         var lines = 0
         var i = start
-        while i < count {
+        // A BOM-only input is still one (empty) line: cmark's `S_process_line` skips the BOM within that line, then opens the paragraph for what remains.
+        repeat {
             // Record each line's start for byte→line/col conversion (`StorageView.position(ofByte:)`), exactly as the block path does per `LineReader` line.
             if positionsEnabled {
                 storage.lineStarts.append(i)
@@ -577,13 +583,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             } else {
                 i = brk + 1
             }
-        }
+        } while i < count
         storage.lineCount = lines
-
-        // Empty input (or BOM-only) yields an empty document with no paragraph, as cmark does.
-        guard start < count else {
-            return
-        }
 
         // Link reference definitions leading the content are still consumed, and the paragraph is kept even when
         // nothing (or only whitespace) remains: cmark's paragraph `finalize` (src/blocks.c) runs
