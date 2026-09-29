@@ -3406,7 +3406,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let map = drained.map
             switch consume drained.content {
             case .chunk(let raw):
-                let trimmed = raw.trimming(using: self)
+                // why: a setext heading whose leading ref-def was resolved can open on a lazy continuation's
+                // residual whitespace (kept flag-ON, see `addLineSegment`). cmark's setext branch drops the
+                // ref-def through its newline and heading inlines are only right-trimmed (inlines.c
+                // `cmark_parse_inlines`), so the residual stays literal text (`>[a]:u\n b\n>=` -> Text " b").
+                // Spec-correct flag-off strips it; an ATX heading's content never carries leading whitespace.
+                let keepsLeadingResidual = atxHeadingEnd == nil && storage.options.contains(.cmarkBugCompatibility)
+                let trimmed = keepsLeadingResidual ? raw.trimmingTrailing(using: self) : raw.trimming(using: self)
                 if !trimmed.isEmpty {
                     if positionsEnabled, !map.isEmpty {
                         arenaSourceMaps[node] = sliceRuns(map, from: trimmed.offset - raw.offset, length: trimmed.length)

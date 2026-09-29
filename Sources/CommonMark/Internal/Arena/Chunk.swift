@@ -48,7 +48,7 @@ internal struct Chunk: Equatable, Hashable {
         return extracting(lo..<hi)
     }
 
-    /// Return a copy narrowed to drop TRAILING ASCII whitespace only (space, tab, `\n`, `\r`), preserving any leading whitespace. Used for the paragraph content that reaches inline parsing after ref-def stripping: a lazy-continuation line's leading whitespace can survive at the front (flag-ON the block parser keeps that residual, `BlockParser.addLineSegment`), and cmark does not re-strip it - the ref-def parser consumes the earlier line through its newline, leaving the residual as literal text (`* [o]:e\n ~` -> Text " ~").
+    /// Return a copy narrowed to drop TRAILING ASCII whitespace only (space, tab, `\n`, `\r`), preserving any leading whitespace. Used for the paragraph / flag-ON setext-heading content that reaches inline parsing after ref-def stripping: a lazy-continuation line's leading whitespace can survive at the front (flag-ON the block parser keeps that residual, `BlockParser.addLineSegment`), and cmark does not re-strip it - the ref-def parser consumes the earlier line through its newline, leaving the residual as literal text (`* [o]:e\n ~` -> Text " ~").
     internal func trimmingTrailing(using parser: borrowing BlockParser) -> Chunk {
         var hi = length
         while hi > 0, parser.readByte(at: offset + hi - 1, in: self).isSpaceTabOrNewline {
