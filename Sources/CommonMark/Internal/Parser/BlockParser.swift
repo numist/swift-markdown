@@ -113,7 +113,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// A paragraph continuation line's inline content is re-indented to this column: cmark fixes `block_offset` at the paragraph's first-line content column (`start_column - 1`) and reports EVERY *matched* continuation line's surviving content there, discarding each line's own leading whitespace. So a matched continuation segment maps its source to `currentLineSourceRange.lowerBound + currentContentIndent` (the bytes are still read from their true offset). It equals a continuation line's own content column only when the first line has no indentation beyond its container marker (the common case), so this is usually a no-op. A *lazy* continuation is the exception - cmark keeps the residual whitespace after the last matched prefix (see `currentLineIsLazyContinuation` / `currentLineContentCursor`). Set in `addLine` when a leaf's first line is accumulated; consumed by `addLineSegment`. Code/HTML bodies preserve their true offset instead.
     var currentContentIndent: Int = 0
 
-    /// `true` when the line currently being processed is a *lazy* paragraph continuation: at least one open container's continuation prefix failed to match on this line (a block quote with no `>`, or a list item indented less than its content column), so the container-prefix walk stopped short of the open leaf. Set per line in `processLine` from the walk's `allMatched`; consumed by `addLineSegment` under `.cmarkBugCompatibility`.
+    /// `true` when the line currently being processed is a *lazy* paragraph continuation: at least one open container's continuation prefix failed to match on this line (a block quote with no `>`, or a list item indented less than its content column), so the container-prefix walk stopped short of the open leaf. Set per line in `processLine` from the walk's `allMatched`; consumed by `addLineSegment` and `addLine` (via `keepsLazyResidual`) under `.cmarkBugCompatibility`.
     ///
     /// cmark strips a *matched* paragraph continuation's leading whitespace - it advances the line offset to the first non-space (`add_text_to_container`'s `accepts_lines` branch, blocks.c:1465) before adding the line - but a *lazy* continuation is added straight from the offset where prefix matching stopped (`add_line(parser->current, …)`, blocks.c:1408), so the residual whitespace between that stopping point and the first non-space survives in the content and shifts the reported column right. The inline parser then maps a continuation line's first content byte to `residual + block_offset + 1` columns (blocks.c/inlines.c `handle_newline`), where `residual` is the leading-space count in the added content. So a lazy continuation re-indents to `currentLineContentCursor`-relative residual plus the block-content column; a matched continuation discards its residual and re-indents to the block-content column outright.
     var currentLineIsLazyContinuation: Bool = false
@@ -906,22 +906,32 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return addLineSegment(span: span, range: range, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
             case let other:
                 var buffer = unwrap(other)
-                // A tab-expanded current line (`!currentLineMapsToSource`) has `span` pointing at the per-line expanded buffer, not source - appending `span[range]` directly would bake the expanded-tab spaces into the arena as if they were literal content. Map back to the literal source range instead (same rule as the `.none` case above and `addLineSegment`'s materialized branch): cmark expands tabs only for block-structure indentation and keeps them literal in inline content.
-                if !currentLineMapsToSource, positionsEnabled,
-                   let sourceLow = sourceOffset(range.lowerBound), let sourceHigh = sourceOffset(range.upperBound) {
-                    buffer.reserveCapacity(buffer.count + (sourceHigh - sourceLow))
+                // why: flag ON, a LAZY continuation keeps its residual whitespace in the content, exactly as `addLineSegment` does for a segment list (cmark's lazy `add_line` copies from where prefix matching stopped, blocks.c:1408), so a code span or link title spanning the line reads it. With positions on, such a line reaches this materialized buffer when the paragraph began as an orphan-led tasklist-retry line (`appendOrphanLedLine`).
+                let contentStart = keepsLazyResidual(before: range.lowerBound) ? currentLineContentCursor : range.lowerBound
+                // A tab-expanded current line (`!currentLineMapsToSource`) has `span` pointing at the per-line expanded buffer, not source - appending `span[range]` directly would bake the expanded-tab spaces into the arena as if they were literal content. Map back to the literal source range instead (same rule as the `.none` case above and `addLineSegment`'s materialized branch): cmark expands tabs only for block-structure indentation and keeps them literal in inline content. A kept residual that starts inside a tab an outer container partly consumed begins with that tab's leftover columns as spaces (cmark's `partially_consumed_tab`, blocks.c `add_line`).
+                if !currentLineMapsToSource, positionsEnabled, let sourceHigh = sourceOffset(range.upperBound) {
+                    let (sourceLow, splitTabSpaces) = materializedSourceStart(bufferStart: contentStart)
+                    buffer.reserveCapacity(buffer.count + splitTabSpaces + (sourceHigh - sourceLow))
+                    for _ in 0..<splitTabSpaces {
+                        buffer.append(UInt8(ascii: " "))
+                    }
                     for i in sourceLow..<sourceHigh {
                         buffer.append(sourceBytes[i])
                     }
                 } else {
-                    buffer.reserveCapacity(buffer.count + range.count)
-                    for i in range {
+                    buffer.reserveCapacity(buffer.count + (range.upperBound - contentStart))
+                    for i in contentStart..<range.upperBound {
                         buffer.append(span[i])
                     }
                 }
                 return PendingLeaf(node: node, content: .materialized(buffer))
             }
         }
+    }
+
+    /// Whether the current line's content, whose first non-space is at line offset `contentStart`, keeps its leading residual whitespace: under `.cmarkBugCompatibility`, a *lazy* continuation with whitespace between the prefix-match stop (`currentLineContentCursor`) and its first non-space.
+    private func keepsLazyResidual(before contentStart: Int) -> Bool {
+        currentLineIsLazyContinuation && contentStart > currentLineContentCursor && storage.options.contains(.cmarkBugCompatibility)
     }
 
     /// Extra content-indent columns a task-list item contributes to a paragraph's continuation re-indent base.
@@ -995,7 +1005,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let isBodyLiteral = kind.isCodeBlock || kind == .htmlBlock
             let reindent = positionsEnabled && storage.options.contains(.cmarkBugCompatibility) && !isBodyLiteral
             let residual = currentLineIsLazyContinuation ? (range.lowerBound - currentLineContentCursor) : 0
-            let keepResidual = residual > 0 && storage.options.contains(.cmarkBugCompatibility) && !isBodyLiteral
+            let keepResidual = keepsLazyResidual(before: range.lowerBound) && !isBodyLiteral
             let segStart = keepResidual ? currentLineContentCursor : range.lowerBound
             let reindentBase = currentLineSourceRange.lowerBound + residual
             // `mapsAt` is the source projection of the FIRST NON-SPACE byte (`range.lowerBound`). When the segment begins at the prefix stop (residual kept), back its projection up by the residual so the first non-space keeps the column the re-indent assigns it - the residual bytes take the columns before it.
@@ -1024,7 +1034,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         //   - `splitTabSpaces > 0`: the stop lands INSIDE an expanded tab, because an OUTER container that DID match consumed PART of that tab (cmark's `partially_consumed_tab`), leaving the stop mid-tab (e.g. `> > \`x` then `>\ty\``). cmark drops the split tab byte and emits its leftover columns as SYNTHETIC spaces (blocks.c `add_line`), then copies the rest of the line verbatim - so the residual has no source byte to slice. Materialize just those spaces into the arena as one non-source segment and follow it with the zero-copy source segment starting past the split tab (`residualMap.sourceStart`, which preserves any following LITERAL tab). The multi-segment span is handed an arena snapshot so the synthetic segment reads back as spaces (see the inline pass in `parse()` and `ContentSpan.multiByte`). This is the split-tab sibling of the literal-tab carry above.
         //
         // The clean-boundary case earlier findings targeted - a top-level lazy block quote whose failing prefix consumed nothing, so the stop is the line start - has `splitTabSpaces == 0` and carries the literal tab.
-        let keepResidual = residual > 0 && storage.options.contains(.cmarkBugCompatibility)
+        let keepResidual = keepsLazyResidual(before: range.lowerBound)
         let residualMap = keepResidual ? materializedSourceStart(bufferStart: currentLineContentCursor) : (sourceStart: sourceStart, splitTabSpaces: 0)
         if keepResidual && residualMap.splitTabSpaces > 0 {
             // Split-tab residual: emit the leftover columns as synthetic arena spaces, then the literal content from just past the split tab. The synthetic spaces are position-less (like the newline join); the literal content maps to its own source bytes (the exact flag-ON column is unobservable - positions are off on the fuzzer surface and the flag-ON positions path is not unit-gated).
