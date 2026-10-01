@@ -1725,10 +1725,10 @@ extension BlockParser {
         let afterScalar: Int32 = afterIdx < end
             ? Self.flankingScalarAfter(startingAt: afterIdx, upperBound: end, content: content)
             : 0x0A
-        let beforeIsSpace = Self.isFlankingWhitespace(beforeScalar)
-        let beforeIsPunct = Self.isFlankingPunctuation(beforeScalar)
-        let afterIsSpace = Self.isFlankingWhitespace(afterScalar)
-        let afterIsPunct = Self.isFlankingPunctuation(afterScalar)
+        let beforeIsSpace = Self.isUnicodeWhitespace(beforeScalar)
+        let beforeIsPunct = Self.isUnicodePunctuation(beforeScalar)
+        let afterIsSpace = Self.isUnicodeWhitespace(afterScalar)
+        let afterIsPunct = Self.isUnicodePunctuation(afterScalar)
         let leftFlanking = !afterIsSpace && (!afterIsPunct || beforeIsSpace || beforeIsPunct)
         let rightFlanking = !beforeIsSpace && (!beforeIsPunct || afterIsSpace || afterIsPunct)
         return Flanking(
@@ -1801,11 +1801,11 @@ extension BlockParser {
         }
     }
 
-    /// Whether `uc` is "Unicode whitespace" for flanking - cmark's `cmark_utf8proc_is_space` (`src/utf8.c`):
-    /// the Zs general category plus TAB/LF/FF/CR. The ASCII subset ({9,10,12,13,32}) routes through the
-    /// `isFlankingSpace` byte predicate.
+    /// Whether `uc` is "Unicode whitespace" (for flanking and GFM autolink hosts) - cmark's
+    /// `cmark_utf8proc_is_space` (`src/utf8.c`): the Zs general category plus TAB/LF/FF/CR. The ASCII
+    /// subset ({9,10,12,13,32}) routes through the `isFlankingSpace` byte predicate.
     @inline(__always)
-    private static func isFlankingWhitespace(_ uc: Int32) -> Bool {
+    private static func isUnicodeWhitespace(_ uc: Int32) -> Bool {
         if uc < 0x80 { return UInt8(uc).isFlankingSpace }
         switch uc {
         case 160, 5760, 8192...8202, 8239, 8287, 12288:
@@ -1815,11 +1815,11 @@ extension BlockParser {
         }
     }
 
-    /// Whether `uc` is a "Unicode punctuation character" for flanking - cmark's
+    /// Whether `uc` is a "Unicode punctuation character" (for flanking and GFM autolink hosts) - cmark's
     /// `cmark_utf8proc_is_punctuation` (`src/utf8.c`): the P[cdefios] general categories. The ASCII subset
     /// routes through the `isASCIIPunct` byte predicate (which mirrors cmark's `cmark_ispunct` ctype table).
     @inline(__always)
-    private static func isFlankingPunctuation(_ uc: Int32) -> Bool {
+    private static func isUnicodePunctuation(_ uc: Int32) -> Bool {
         if uc < 0x80 { return UInt8(uc).isASCIIPunct }
         switch uc {
         case 161, 167, 171, 182, 183, 187, 191, 894, 903,
@@ -3887,9 +3887,19 @@ extension BlockParser {
     /// underscore in either of its last two `.`-separated labels (deferred to `checkDomainAccepted`).
     /// `afterSlashes` is the first byte after `://`; `end` is the inline-content boundary.
     private func schemeURLDomainAccepted(afterSlashes: Int, end: Int, content: borrowing ContentSpan) -> Bool {
-        // `sd_autolink_issafe`: the char immediately after `://` must be a valid host char.
-        if !isValidGFMHostByte(content[afterSlashes]) {
-            return false
+        // `sd_autolink_issafe`: the char immediately after `://` must be a valid host char. There cmark's
+        // `is_valid_hostchar` decodes the whole scalar, so a multi-byte Unicode space or punctuation scalar
+        // (`«`, `—`, `“`, NBSP, ...) rejects the URL; letters, marks, symbols and emoji are valid.
+        let first = content[afterSlashes]
+        if first < 0x80 {
+            if !isValidGFMHostByte(first) {
+                return false
+            }
+        } else {
+            guard let scalar = Self.decodeUTF8Scalar(at: afterSlashes, upperBound: end, content: content),
+                  !Self.isUnicodeWhitespace(scalar), !Self.isUnicodePunctuation(scalar) else {
+                return false
+            }
         }
         return checkDomainAccepted(base: afterSlashes, end: end, requireDot: false, content: content)
     }
