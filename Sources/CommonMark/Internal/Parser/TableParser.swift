@@ -203,6 +203,35 @@ extension BlockParser {
         return true
     }
 
+    // MARK: - cmark's anti-DoS limits
+
+    /// The cell count at which cmark's `row_from_string` gives up on a row and returns none
+    /// (`UINT16_MAX`, the `int_overflow_abort` check after each appended cell in `extensions/table.c`).
+    static let cmarkRowCellLimit = Int(UInt16.max)
+
+    /// cmark's `MAX_AUTOCOMPLETED_CELLS` (`extensions/table.c`): `try_opening_table_row` refuses a body row
+    /// while the table's autocompleted cells exceed it.
+    static let cmarkMaxAutocompletedCells = 0x80000
+
+    /// The number of cells cmark's `row_from_string` scans from the single row `span[range]`.
+    internal mutating func tableRowCellCount(span: Span<UInt8>, range: Range<Int>) -> Int {
+        let scratchStart = storage.strings.count
+        for i in range {
+            storage.strings.append(span[i])
+        }
+        let count = splitCells(line: scratchStart..<storage.strings.count).cells.count
+        storage.strings.removeLast(storage.strings.count - scratchStart)
+        return count
+    }
+
+    /// Whether any line of the materialized `chunk` reaches `cmarkRowCellLimit` cells.
+    internal mutating func anyLineReachesTableRowCellLimit(chunk: Chunk) -> Bool {
+        // A line shorter than `cmarkRowCellLimit` bytes can't hold that many cells, so skip splitting it.
+        splitLines(chunk: chunk).contains { line in
+            line.count >= Self.cmarkRowCellLimit && splitCells(line: line).cells.count >= Self.cmarkRowCellLimit
+        }
+    }
+
     // MARK: - Row construction
 
     /// Build a `.tableRow` node + its cells under `parent`. Missing trailing cells are emitted as empty; extras beyond `columnCount` are dropped.
@@ -657,6 +686,11 @@ extension BlockParser {
     private func parseDelimRow(line: Range<Int>) -> [MarkdownNode.TableAlignment]? {
         let cells = splitCells(line: line).cells
         if cells.isEmpty {
+            return nil
+        }
+        // why: cmark's `row_from_string` returns no row once it reaches `cmarkRowCellLimit` cells, so such a
+        // delimiter line opens no table (`try_opening_table_header`). CommonMark has no such limit.
+        if storage.options.contains(.cmarkBugCompatibility) && cells.count >= Self.cmarkRowCellLimit {
             return nil
         }
         var alignments: [MarkdownNode.TableAlignment] = []

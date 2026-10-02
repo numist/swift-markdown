@@ -203,6 +203,25 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// table).
     var paragraphTablePending: [DocumentStorage.Index: Bool] = [:]
 
+    /// cmark's autocompleted-cell accounting for a table-pending paragraph (`node_table`'s `n_columns`,
+    /// `n_rows`, `n_nonempty_cells` in `extensions/table.c`), keyed by the paragraph node. Populated only
+    /// flag-ON (`.cmarkBugCompatibility`), when the delimiter row opens the table.
+    var tableCellBudgets: [DocumentStorage.Index: TableCellBudget] = [:]
+
+    struct TableCellBudget {
+        /// The table's column count.
+        let columns: Int
+        /// The rows charged so far, header included.
+        var rows: Int
+        /// The cells charged so far: each row's scanned cells, capped at `columns`.
+        var cellsPresent: Int
+
+        /// cmark's `get_n_autocompleted_cells`: the empty cells the table has padded its rows out with.
+        var autocompletedCells: Int {
+            columns * rows - cellsPresent
+        }
+    }
+
     /// Paragraphs whose leading reference-link definitions the flag-ON PHASE-2c setext reconstruction
     /// resolved (and registered) and then RESTORED into the buffer.
     ///
@@ -1548,6 +1567,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 paragraphTablePending[node] = false
                 return pending
             case .opens:
+                if cmarkHeaderScanAborts(pending) {
+                    paragraphTablePending[node] = false
+                    return pending
+                }
                 recordSplitDelimiterLine(node, delimIndent: delimIndent)
                 return splitNoncontiguousPendingTable(node, pending: pending)
             }
@@ -1573,6 +1596,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 paragraphTablePending[node] = false
                 return pending
             case .opens:
+                if cmarkHeaderScanAborts(pending) {
+                    paragraphTablePending[node] = false
+                    return pending
+                }
                 // Split the earlier lines off into a preceding paragraph, then re-seed `node` to the header
                 // line so the two-line finalize detection builds the table from `header` + delimiter (+ body).
                 // The preceding lines are non-blank paragraph content (a blank line would have closed the
@@ -1613,6 +1640,67 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return PendingLeaf(node: node, content: .lazy(range: headerRange))
             }
         }
+    }
+
+    /// Whether cmark's header-row scan over the multi-line paragraph `pending` returns no row, so the
+    /// paragraph is marked `TABLE_VISITED` and never becomes a table. Always `false` flag-OFF.
+    ///
+    /// cmark's `try_opening_table_header` scans the whole paragraph with `row_from_string`, discarding each
+    /// line's cells before the header line, but a discarded line that reaches `cmarkRowCellLimit` cells
+    /// still aborts the scan. (A header line that long can't match the delimiter's column count, which
+    /// `parseDelimRow` caps below the limit.) CommonMark has no such limit.
+    private mutating func cmarkHeaderScanAborts(_ pending: borrowing PendingLeaf?) -> Bool {
+        guard storage.options.contains(.cmarkBugCompatibility) else { return false }
+        let scratchStart = storage.strings.count
+        switch pending {
+        case .none:
+            return false
+        case .some(let leaf):
+            switch leaf.content {
+            case .lazy(let r):
+                for i in r { storage.strings.append(sourceBytes[i]) }
+            case .lazyNewline(let r):
+                for i in r { storage.strings.append(sourceBytes[i]) }
+            case .materialized(let buffer):
+                for i in 0..<buffer.count { storage.strings.append(buffer[i]) }
+            case .segments(let segs):
+                for i in 0..<segs.count {
+                    for j in 0..<Int(segs[i].length) {
+                        storage.strings.append(segmentByte(segs[i], j))
+                    }
+                }
+            }
+        }
+        let aborts = anyLineReachesTableRowCellLimit(
+            chunk: Chunk(offset: scratchStart, length: storage.strings.count - scratchStart, inSource: false)
+        )
+        storage.strings.removeLast(storage.strings.count - scratchStart)
+        return aborts
+    }
+
+    /// Whether cmark ends the table-pending paragraph `node`'s table at the body-row candidate
+    /// `span[range]` instead of adding it as a row; when it doesn't, charges the row to `node`'s
+    /// autocompleted-cell budget. Always `false` flag-OFF.
+    ///
+    /// cmark refuses a row that reaches `cmarkRowCellLimit` cells (`row_from_string` returns none, so the
+    /// table's `matches` fails) and, before scanning a row, refuses it while the table's autocompleted cells
+    /// exceed `cmarkMaxAutocompletedCells` (`try_opening_table_row`); either way the line starts a fresh
+    /// block after the table. An admitted row is charged its cells capped at the column count
+    /// (`incr_table_row_count`). Charging a line that goes on to start some other block is harmless: that
+    /// closes the table, so its budget is never consulted again. CommonMark has neither limit.
+    private mutating func cmarkTableRefusesBodyRow(_ node: DocumentStorage.Index, span: Span<UInt8>, range: Range<Int>) -> Bool {
+        guard storage.options.contains(.cmarkBugCompatibility), var budget = tableCellBudgets[node] else { return false }
+        if budget.autocompletedCells > Self.cmarkMaxAutocompletedCells {
+            return true
+        }
+        let cells = tableRowCellCount(span: span, range: range)
+        if cells >= Self.cmarkRowCellLimit {
+            return true
+        }
+        budget.rows += 1
+        budget.cellsPresent += min(cells, budget.columns)
+        tableCellBudgets[node] = budget
+        return false
     }
 
     /// Queue a table-preceding paragraph's `content` for inline parsing after cmark's substitutions on it -
@@ -2088,7 +2176,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let breaksOutOfPendingTable = tablePending
             && (currentLineIsLazyContinuation
                 || indent >= 4
-                || Self.isLonePipeRow(span: source, range: firstNonSpace..<lineRange.upperBound))
+                || Self.isLonePipeRow(span: source, range: firstNonSpace..<lineRange.upperBound)
+                || cmarkTableRefusesBodyRow(current, span: source, range: firstNonSpace..<lineRange.upperBound))
         if stillOpenKind == .paragraph && !breaksOutOfPendingTable {
             // The matcher ladder can only return true if the first content byte is one that some block construct starts with; for ordinary prose continuation lines it isn't, so we skip the whole ladder. `mightStartBlock` is a superset of every matcher's trigger byte, so a `false` here is exactly what `lineStartsNewBlock` would have returned.
             // `interruptsParagraph` mirrors cmark's flag (blocks.c: `check_open_blocks` backs `container` up to its parent on a failed continuation): true iff the open paragraph's OWN container matched this line, i.e. `deepestMatched` is the paragraph's parent. When a shallower container matched, the marker is a sibling item at the list level, not an interruption of this paragraph.
@@ -2135,6 +2224,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                        indent < 4, !currentLineIsLazyContinuation,
                        Self.couldBeDelimiterRow(span: source, range: firstNonSpace..<lineRange.upperBound) {
                         pending = detectPendingTable(current, delimSpan: source, delimRange: firstNonSpace..<lineRange.upperBound, delimIndent: indent, pending: pending)
+                        if storage.options.contains(.cmarkBugCompatibility), paragraphTablePending[current] ?? false {
+                            // The header row has as many cells as the delimiter row, so it autocompletes none.
+                            let columns = tableRowCellCount(span: source, range: firstNonSpace..<lineRange.upperBound)
+                            tableCellBudgets[current] = TableCellBudget(columns: columns, rows: 1, cellsPresent: columns)
+                        }
                     }
                 }
                 pending = appendNewline(to: current, pending: pending)
