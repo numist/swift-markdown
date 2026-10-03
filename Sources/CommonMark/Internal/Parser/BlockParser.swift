@@ -789,8 +789,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             col += width
             i += 1
         }
-        // `bufferOffset` is always `< materializedTailBufferStart` here, so the walk covers it; the prefix end is a safe fallback.
-        return prefixEnd
+        preconditionFailure("a buffer offset inside the expanded prefix is covered by the prefix walk")
     }
 
     /// Map an original-source byte offset on the current materialized line to its buffer offset: the
@@ -826,24 +825,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Consume `content` and materialize it into a `UniqueArray<UInt8>` ready for further appends.
     ///
-    /// A `.lazy` entry is copied out of `source`; a `.lazyNewline` entry is copied out plus its deferred trailing `\n`; a `.materialized` entry's buffer is *moved* out (no copy). `nil` yields an empty buffer.
+    /// A `.materialized` entry's buffer is *moved* out (no copy). `nil` yields an empty buffer.
     private func unwrap(_ content: consuming PendingContent?) -> UniqueArray<UInt8> {
         switch consume content {
         case .none:
             return UniqueArray()
-        case .lazy(let range)?:
-            return UniqueArray(capacity: range.count) { span in
-                for i in range {
-                    span.append(sourceBytes[i])
-                }
-            }
-        case .lazyNewline(let range)?:
-            return UniqueArray(capacity: range.count + 1) { span in
-                for i in range {
-                    span.append(sourceBytes[i])
-                }
-                span.append(UInt8(ascii: "\n"))
-            }
+        case .lazy?:
+            preconditionFailure("source-backed content is extended in place, never copied into a buffer")
+        case .lazyNewline?:
+            preconditionFailure("source-backed content is extended in place, never copied into a buffer")
         case .materialized(let existing)?:
             return existing
         case .segments?:
@@ -852,26 +842,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Append the bytes of `chunk` (which may live in either `storage.strings` or `self.source`) to `pending` for `node`, returning the updated leaf.
+    /// Append the bytes of the arena `chunk` to `pending` for `node`, returning the updated leaf.
     ///
     /// Used when re-seeding a node's content after a transformation step (e.g. setext-heading content trimmed of leading ref-defs).
     private mutating func addChunk(_ chunk: Chunk, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
+        precondition(!chunk.inSource, "source-backed content re-seeds as a `.lazy` range, not through addChunk")
         var buffer = unwrap(take(pending, ifNode: node))
         buffer.reserveCapacity(buffer.count + chunk.length)
         let end = chunk.offset + chunk.length
-        if chunk.inSource {
-            for i in chunk.offset..<end {
-                buffer.append(sourceBytes[i])
-            }
-        } else {
-            let shift = buffer.count - chunk.offset
-            let replacements = orphanReplacements(in: chunk.range)
-            if !replacements.isEmpty {
-                materializedOrphanReplacements[node, default: []] += replacements.map { ($0.lowerBound + shift)..<($0.upperBound + shift) }
-            }
-            for i in chunk.offset..<end {
-                buffer.append(storage.strings[i])
-            }
+        let shift = buffer.count - chunk.offset
+        let replacements = orphanReplacements(in: chunk.range)
+        if !replacements.isEmpty {
+            materializedOrphanReplacements[node, default: []] += replacements.map { ($0.lowerBound + shift)..<($0.upperBound + shift) }
+        }
+        for i in chunk.offset..<end {
+            buffer.append(storage.strings[i])
         }
         return PendingLeaf(node: node, content: .materialized(buffer))
     }
@@ -997,7 +982,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // A multi-line paragraph already accumulating as segments: the line join is the shared interned `\n` segment (zero-copy), not a byte appended to a materialized buffer.
             return appendSegment(storage.newlineSegment, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
         case .none:
-            return PendingLeaf(node: node, content: .materialized(UniqueArray(repeating: UInt8(ascii: "\n"), count: 1)))
+            preconditionFailure("a line join is appended only to a leaf that already holds a line")
         case .some(let existing):
             var buffer = unwrap(existing)
             buffer.append(UInt8(ascii: "\n"))
@@ -1152,7 +1137,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             col += width
             i += 1
         }
-        return (prefixEnd, 0)
+        preconditionFailure("a buffer offset inside the expanded prefix is covered by the prefix walk")
     }
 
     // MARK: - NUL -> U+FFFD replacement (CommonMark §2.3)
@@ -1376,35 +1361,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Materialize the pending content for `node` and return a `Chunk` pointing at it, along with the leaf with `node`'s content cleared (handed back untouched if `node` isn't the pending leaf).
+    /// Materialize the pending content of the open paragraph `node` and return a `Chunk` pointing at it, along with the leaf with `node`'s content cleared.
     ///
-    /// A `.lazy` entry resolves to a `Chunk(inSource: true)` addressing the original source - no copy (this covers source-contiguous multi-line paragraphs). A `.lazyNewline` entry (a dangling deferred separator with no following line - not produced by the normal continuation flow) materializes its span plus the trailing `\n`. A `.materialized` entry is appended to `storage.strings` and a `Chunk(inSource: false)` is returned.
+    /// A `.lazy` entry resolves to a `Chunk(inSource: true)` addressing the original source - no copy (this covers source-contiguous multi-line paragraphs). A `.materialized` entry is appended to `storage.strings` and a `Chunk(inSource: false)` is returned.
     private mutating func materializePendingContent(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> LeafMaterialization {
         guard let leaf = pending else {
-            return LeafMaterialization(chunk: .empty, pending: nil)
+            preconditionFailure("an open paragraph always holds its accumulated content")
         }
-        
-        guard leaf.node == node else {
-            return LeafMaterialization(chunk: .empty, pending: leaf)
-        }
-        
+        precondition(leaf.node == node, "the pending leaf is the open paragraph's")
         switch consume leaf.content {
         case .lazy(let range):
-            if range.isEmpty {
-                return LeafMaterialization(chunk: .empty, pending: nil)
-            }
             return LeafMaterialization(chunk: Chunk(offset: range.lowerBound, length: range.count, inSource: true), pending: nil)
-        case .lazyNewline(let range):
-            let offset = storage.strings.count
-            for i in range {
-                storage.strings.append(sourceBytes[i])
-            }
-            storage.strings.append(UInt8(ascii: "\n"))
-            return LeafMaterialization(chunk: Chunk(offset: offset, length: range.count + 1, inSource: false), pending: nil)
+        case .lazyNewline:
+            preconditionFailure("a deferred line join is always consumed by the next line")
         case .materialized(let content):
-            if content.isEmpty {
-                return LeafMaterialization(chunk: .empty, pending: nil)
-            }
             let offset = storage.strings.count
             content.span.withUnsafeBufferPointer { buffer in
                 storage.strings.append(copying: buffer)
@@ -1427,26 +1397,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// finalize). Reads `pending` through a borrow, so the paragraph's zero-copy accumulated content is
     /// untouched. Sets `paragraphTablePending[node]` per cmark's `CMARK_NODE__TABLE_VISITED` semantics: a
     /// header/delimiter column mismatch marks the paragraph as never-a-table (`false`), but a candidate that
-    /// isn't a valid delimiter row leaves the flag unset so a LATER line can still open a table. A single
-    /// first line is never a segment list, so the `.segments` case leaves it unset. `couldBeDelimiterRow`
-    /// gates the cost. `detectPendingTable` routes the MULTI-line (header-preceded-by-text) case elsewhere;
+    /// isn't a valid delimiter row leaves the flag unset so a LATER line can still open a table.
+    /// `couldBeDelimiterRow` gates the cost. `detectPendingTable` routes the MULTI-line (header-preceded-by-text) case elsewhere;
     /// this handles only the case where `pending` is a single line (the header itself).
     private mutating func recordTablePending(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf?) {
         let scratchStart = storage.strings.count
         switch pending {
         case .none:
-            return
+            preconditionFailure("an open paragraph always holds its accumulated content")
         case .some(let leaf):
             switch leaf.content {
             case .lazy(let r):
                 for i in r { storage.strings.append(sourceBytes[i]) }
-            case .lazyNewline(let r):
-                for i in r { storage.strings.append(sourceBytes[i]) }
             case .materialized(let buffer):
                 for i in 0..<buffer.count { storage.strings.append(buffer[i]) }
+            case .lazyNewline:
+                preconditionFailure("a single-line table header is a source range or a materialized buffer")
             case .segments:
-                // A single first line is never a segment list; leave table-pending unset.
-                return
+                preconditionFailure("a single-line table header is a source range or a materialized buffer")
             }
         }
         // cmark's tasklist extension consumes a task item's checkbox at ITEM-OPEN time
@@ -1485,8 +1453,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Shape of an open paragraph's accumulated content, as it bears on GFM table detection when a
     /// delimiter-candidate continuation line arrives.
     private enum PendingTableShape {
-        /// No accumulated content.
-        case empty
         /// A single physical line (no embedded `\n`): the header is the whole pending, the two-line case.
         case single
         /// Multiple physical lines held as a zero-copy source range: the header is the last line, and the
@@ -1512,13 +1478,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         switch pending {
         case .none:
-            return .empty
+            preconditionFailure("an open paragraph always holds its accumulated content")
         case .some(let leaf):
             switch leaf.content {
             case .lazy(let r):
                 return lastNewline(in: r).map { .multiContiguous(range: r, lastNewline: $0) } ?? .single
-            case .lazyNewline(let r):
-                return lastNewline(in: r).map { .multiContiguous(range: r, lastNewline: $0) } ?? .single
+            case .lazyNewline:
+                preconditionFailure("a deferred line join is always consumed by the next line")
             case .materialized(let buffer):
                 for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
                     return .multiOther
@@ -1552,8 +1518,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// lazy, which would wrongly veto the finalize-time table gate.
     private mutating func detectPendingTable(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, delimIndent: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         switch pendingTableShape(pending) {
-        case .empty:
-            return pending
         case .single:
             recordTablePending(node, delimSpan: delimSpan, delimRange: delimRange, pending: pending)
             return pending
@@ -1655,13 +1619,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let scratchStart = storage.strings.count
         switch pending {
         case .none:
-            return false
+            preconditionFailure("an open paragraph always holds its accumulated content")
         case .some(let leaf):
             switch leaf.content {
             case .lazy(let r):
                 for i in r { storage.strings.append(sourceBytes[i]) }
-            case .lazyNewline(let r):
-                for i in r { storage.strings.append(sourceBytes[i]) }
+            case .lazyNewline:
+                preconditionFailure("a deferred line join is always consumed by the next line")
             case .materialized(let buffer):
                 for i in 0..<buffer.count { storage.strings.append(buffer[i]) }
             case .segments(let segs):
@@ -1755,7 +1719,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let scratchStart = storage.strings.count
         switch pending {
         case .none:
-            return .notDelimiterRow
+            preconditionFailure("an open paragraph always holds its accumulated content")
         case .some(let leaf):
             switch leaf.content {
             case .segments(let segs):
@@ -1766,9 +1730,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 for i in 0..<segs.count where segs[i] == nl {
                     lastNewlineIndex = i
                 }
-                guard lastNewlineIndex >= 0 else {
-                    return .notDelimiterRow
-                }
+                precondition(lastNewlineIndex >= 0, "a paragraph's segment list holds a line join")
                 for i in (lastNewlineIndex + 1)..<segs.count {
                     let seg = segs[i]
                     for j in 0..<Int(seg.length) {
@@ -1781,17 +1743,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
                     lastNewline = k
                 }
-                guard lastNewline >= 0 else {
-                    return .notDelimiterRow
-                }
+                precondition(lastNewline >= 0, "a multi-line materialized paragraph holds a line join")
                 for k in (lastNewline + 1)..<buffer.count {
                     storage.strings.append(buffer[k])
                 }
             case .lazy:
-                // A single source range is `.single` / `.multiContiguous`, never `.multiOther`.
-                return .notDelimiterRow
+                preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
             case .lazyNewline:
-                return .notDelimiterRow
+                preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
             }
         }
         storage.strings.append(UInt8(ascii: "\n"))
@@ -1812,17 +1771,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `try_inserting_table_header_paragraph`). Called only after `classifyMultiLineHeader` returns `.opens`.
     private mutating func splitNoncontiguousPendingTable(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         guard let leaf = pending else {
-            return nil
+            preconditionFailure("an open paragraph always holds its accumulated content")
         }
         switch consume leaf.content {
         case .segments(let segs):
             return splitSegmentHeader(node, segments: segs)
         case .materialized(let buffer):
             return splitMaterializedHeader(node, buffer: buffer)
-        case .lazy(let range):
-            return PendingLeaf(node: node, content: .lazy(range: range))
-        case .lazyNewline(let range):
-            return PendingLeaf(node: node, content: .lazyNewline(range: range))
+        case .lazy:
+            preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
+        case .lazyNewline:
+            preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
         }
     }
 
@@ -1836,10 +1795,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         for i in 0..<segs.count where segs[i] == nl {
             lastNewlineIndex = i
         }
-        guard lastNewlineIndex >= 0 else {
-            // No line join: a single-line segment list (unreachable for `.multiOther`). Leave it whole.
-            return PendingLeaf(node: node, content: .segments(segs))
-        }
+        precondition(lastNewlineIndex >= 0, "a paragraph's segment list holds a line join")
         var header = UniqueArray<Segment>()
         for i in (lastNewlineIndex + 1)..<segs.count {
             header.append(segs[i])
@@ -1863,13 +1819,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let strippedMap = positionsEnabled ? sliceRuns(map, from: stripped.offset - flat.offset, length: stripped.length) : []
                 enqueueTablePrecedingContent(stripped, map: strippedMap, of: precedingNode)
             }
-        } else if !isBlankSegments(preceding) {
-            // A blank line closes a paragraph, so the earlier lines are never blank; splitting only when they
-            // carry content avoids inserting an empty paragraph node in a degenerate case.
+        } else {
             let precedingNode = insertTablePrecedingParagraph(before: node)
             // Stamp the preceding lines' source span, read through a borrow so `preceding` can then be
             // consumed by `intern`.
-            if positionsEnabled, let span = segmentsSourceSpan(preceding) {
+            if positionsEnabled {
+                let span = segmentsSourceSpan(preceding)
                 storage.setSourceStart(precedingNode, span.start)
                 storage.setSourceEnd(precedingNode, span.end)
             }
@@ -1889,8 +1844,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 pendingInlines.append((precedingNode, storage.intern(preceding)))
             }
         }
-        if positionsEnabled, let headerSpan = segmentsSourceSpan(header) {
-            storage.setSourceStart(node, headerSpan.start)
+        if positionsEnabled {
+            storage.setSourceStart(node, segmentsSourceSpan(header).start)
         }
         paragraphTablePending[node] = true
         return PendingLeaf(node: node, content: .segments(header))
@@ -1899,11 +1854,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The source byte span of a paragraph's accumulated segment list - the first content line's start to
     /// the last content line's end - read through a borrow so the segments can then be consumed. The first
     /// and last entries of a paragraph segment list are content lines (source segments), so their byte-read
-    /// offsets are real source positions. `nil` for an empty list.
-    private func segmentsSourceSpan(_ segs: borrowing UniqueArray<Segment>) -> (start: Int, end: Int)? {
-        guard segs.count > 0 else {
-            return nil
-        }
+    /// offsets are real source positions.
+    private func segmentsSourceSpan(_ segs: borrowing UniqueArray<Segment>) -> (start: Int, end: Int) {
+        precondition(segs.count > 0, "a paragraph's split-off lines and header line are never empty")
         let first = segs[0]
         let last = segs[segs.count - 1]
         return (Int(first.offset), Int(last.offset) + Int(last.length))
@@ -1920,9 +1873,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
             lastNewline = k
         }
-        guard lastNewline >= 0 else {
-            return PendingLeaf(node: node, content: .materialized(buffer))
-        }
+        precondition(lastNewline >= 0, "a multi-line materialized paragraph holds a line join")
         let precedingStart = storage.strings.count
         for k in 0..<lastNewline {
             storage.strings.append(buffer[k])
@@ -2341,9 +2292,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // its own content column - not a shallower ancestor's.
                 let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
                 let isBlank = firstNonSpace == lineRange.upperBound
-                guard let padding = itemPadding(of: node) else {
-                    return (deepestMatched, cursor, prefixColumns, false)
-                }
+                let padding = itemPadding(of: node)
                 // Compare in COLUMNS, not bytes, so a leading tab counts as up to 4 cols of indent.
                 // Measured from `prefixColumns`, the column the outer prefixes reached: `cursor` can sit
                 // after a marker at any column, or mid-tab after a partially consumed tab, and a tab's
@@ -2478,7 +2427,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func handleHTMLBlockContinuation(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, pending: consuming PendingLeaf?) throws(MarkdownDocument.Error) -> LeafContinuation {
         var pending = pending
         guard case .htmlBlock(let type, _) = storage[current].data else {
-            return LeafContinuation(stillOpen: false, pending: pending)
+            preconditionFailure("an HTML block node always carries its block type")
         }
         let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
         let isBlank = firstNonSpace == lineRange.upperBound
@@ -2604,8 +2553,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let start = sourceOffset(firstNonSpace)
         let parentList: DocumentStorage.Index
         if storage[current].kind.isList,
-           let listInfo = storedListInfo(of: current),
-           listInfo.matches(marker: marker) {
+           storedListInfo(of: current).matches(marker: marker) {
             parentList = current
             // Tight/loose detection runs at list-finalize time via `detectLooseList` + the `endsWithBlankLine` recursion, which catches the "blank between sibling items" case at finalize.
         } else {
@@ -2639,15 +2587,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Read the kind/marker fields of a `.list` node.
-    private func storedListInfo(of node: DocumentStorage.Index) -> StoredListInfo? {
-        if case .list(let info) = storage[node].kind {
-            return StoredListInfo(
-                kind: info.kind,
-                orderedDelimiter: info.orderedDelimiter,
-                bulletMarker: info.bulletMarker
-            )
+    private func storedListInfo(of node: DocumentStorage.Index) -> StoredListInfo {
+        guard case .list(let info) = storage[node].kind else {
+            preconditionFailure("list info is read only from a list node")
         }
-        return nil
+        return StoredListInfo(
+            kind: info.kind,
+            orderedDelimiter: info.orderedDelimiter,
+            bulletMarker: info.bulletMarker
+        )
     }
 
     private struct StoredListInfo {
@@ -3080,14 +3028,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
             // Paragraph fallback. By this point the list-close-if-needed step above has already ensured `current` isn't a list.
             let textRange = firstNonSpace..<lineRange.upperBound
-            if storage[current].kind == .paragraph {
-                pending = appendNewline(to: current, pending: pending)
-                return addLine(span: source, range: textRange, to: current, pending: pending)
-            } else {
-                let paragraphIdx = addChild(kind: .paragraph, parent: current, start: sourceOffset(firstNonSpace))
-                current = paragraphIdx
-                return addLine(span: source, range: textRange, to: paragraphIdx, pending: pending)
-            }
+            precondition(storage[current].kind != .paragraph, "dispatch starts below the deepest matched container and opens only containers before a leaf, so `current` is never a paragraph here")
+            let paragraphIdx = addChild(kind: .paragraph, parent: current, start: sourceOffset(firstNonSpace))
+            current = paragraphIdx
+            return addLine(span: source, range: textRange, to: paragraphIdx, pending: pending)
         }
     }
 
@@ -3118,9 +3062,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .none:
             return LeafDrainResult(content: .chunk(.empty), pending: nil)
         case .some(let leaf):
-            guard leaf.node == node else {
-                return LeafDrainResult(content: .chunk(.empty), pending: leaf)
-            }
+            precondition(leaf.node == node, "pending content belongs to the one open leaf, which drains when it closes")
             switch consume leaf.content {
             case .segments(let segs):
                 // A NUL anywhere in the body forces a flatten into one normalized arena chunk (U+FFFD
@@ -3135,21 +3077,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
                 return LeafDrainResult(content: .segments(segs), pending: nil)
             case .lazy(let range):
-                if range.isEmpty {
-                    return LeafDrainResult(content: .chunk(.empty), pending: nil)
-                }
                 var map: [ArenaRun] = []
                 let replaced = replacingNUL(Chunk(offset: range.lowerBound, length: range.count, inSource: true), map: &map)
                 return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
-            case .lazyNewline(let range):
-                let offset = storage.strings.count
-                for i in range { storage.strings.append(sourceBytes[i]) }
-                storage.strings.append(UInt8(ascii: "\n"))
-                return LeafDrainResult(content: .chunk(replacingNUL(Chunk(offset: offset, length: range.count + 1, inSource: false))), pending: nil)
+            case .lazyNewline:
+                preconditionFailure("a deferred line join is always consumed by the next line")
             case .materialized(let content):
-                if content.isEmpty {
-                    return LeafDrainResult(content: .chunk(.empty), pending: nil)
-                }
                 let offset = storage.strings.count
                 content.span.withUnsafeBufferPointer { storage.strings.append(copying: $0) }
                 carryMaterializedOrphanReplacements(of: node, to: offset)
@@ -3221,17 +3154,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if byte == UInt8(ascii: " ") || byte == UInt8(ascii: "\t") {
             storage.trailingBlankAfterContent[node] = byte
         }
-    }
-
-    /// `true` if every byte across all segments is whitespace (the trimmed paragraph is empty).
-    private func isBlankSegments(_ segs: borrowing UniqueArray<Segment>) -> Bool {
-        for i in 0..<segs.count {
-            let seg = segs[i]
-            for j in 0..<Int(seg.length) where !segmentByte(seg, j).isSpaceTabOrNewline {
-                return false
-            }
-        }
-        return true
     }
 
     /// Cheap, over-approximate gate: could this segment content match a finalize-time matcher (ref-def / footnote / tasklist start with `[`, an attribute def starts with `^[`, or a GFM table)?
@@ -3360,9 +3282,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Factored out so both the flat-content path and the (eligibility-gated) segment path can reuse it. `map` is the content's arena→source run map (empty for source-backed content): when the content was flattened from a non-contiguous, re-indented segment list it carries per-line source columns, and when NULs were replaced it images each U+FFFD back to its NUL. It is sliced to the surviving `contentChunk` window and stamped on the node so the inline pass can stamp positions.
     private mutating func runParagraphMatchers(node: DocumentStorage.Index, raw: Chunk, map: [ArenaRun] = []) throws(MarkdownDocument.Error) {
         var trimmed = raw.trimming(using: self)
-        if trimmed.isEmpty {
-            return
-        }
+        precondition(!trimmed.isEmpty, "paragraph content always holds a non-blank line")
         // GFM tasklist: cmark's tasklist extension consumes the checkbox marker at item-OPEN time
         // (`open_tasklist_item`), so every finalize matcher below (footnote def, link ref-def, table)
         // sees the content AFTER the checkbox. Strip it first here to match.
@@ -3492,9 +3412,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // header row from the untrimmed content, so that residual is the header's empty leading cell.
                 let tablePending = storage.options.contains(.tables) && (paragraphTablePending[node] ?? false)
                 let trimmed = trimSegments(segs, trimLeading: !tablePending)
-                if isBlankSegments(trimmed) {
-                    // Entirely whitespace after trim - leave the paragraph empty (matches the chunk path).
-                } else if segmentsCouldMatchMatcher(trimmed) {
+                if segmentsCouldMatchMatcher(trimmed) {
                     // Flatten for the chunk-based matchers, capturing the arena→source run map so a re-indented continuation line's inline content is still stamped (matchers that survive re-seed the map via `runParagraphMatchers`).
                     var map: [ArenaRun] = []
                     let raw = flattenSegments(trimmed, map: &map)
@@ -3524,31 +3442,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     }
                     pendingInlines.append((node, storage.intern(trimmed)))
                 }
-            case .segments(let segs):
-                let trimmed = trimSegments(segs)
-                if !isBlankSegments(trimmed) {
-                    pendingInlines.append((node, storage.intern(trimmed)))
-                }
+            case .segments:
+                preconditionFailure("heading content is never a segment list: a setext heading re-seeds as a range or an arena chunk")
             }
-        case .codeBlock:
+        case .codeBlock(let info):
             // Body lines were accumulated as zero-copy source segments; normalize the segment list (drop the leading separator, strip trailing blank lines for indented code, ensure one trailing `\n`) without copying the bodies into the arena.
             let drained = drainSegments(node, pending: pending)
             var segs = drained.segments
             pending = drained.pending
-            let isFenced: Bool
-            if case .codeBlock(let info) = storage[node].kind {
-                isFenced = info.isFenced
-            } else {
-                isFenced = false
-            }
-            normalizeCodeBlockSegments(&segs, isFenced: isFenced)
+            normalizeCodeBlockSegments(&segs, isFenced: info.isFenced)
             replacingNULInSegments(&segs)
             let literalRef = storage.intern(segs)
             if case .codeBlock(let info, _) = storage[node].data {
                 storage[node].data = .codeBlock(info: info, literal: literalRef)
             }
         case .htmlBlock:
-            // Body lines accumulate as zero-copy source segments (same as code blocks). Normalize: drop our accumulator's leading separator and ensure a single trailing `\n` (cmark).
+            // Body lines accumulate as zero-copy source segments (same as code blocks). Normalize: ensure a single trailing `\n` (cmark).
             let drained = drainSegments(node, pending: pending)
             var segs = drained.segments
             pending = drained.pending
@@ -3581,16 +3490,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return pending
     }
 
-    /// Normalize an HTML block's accumulated body segments: drop the leading separator our accumulator inserts and ensure a single trailing `\n` (matching cmark).
+    /// Normalize an HTML block's accumulated body segments: ensure a single trailing `\n` (matching cmark).
     private func normalizeHTMLBlockSegments(_ segs: inout UniqueArray<Segment>) {
         let nl = storage.newlineSegment
-        if segs.count > 0, segs[0] == nl {
-            segs.remove(at: 0)
-        }
-        if segs.isEmpty {
-            // Empty body - emit a single newline.
-            segs.append(nl)
-        }
+        precondition(segs.count > 0 && segs[0] != nl, "an HTML block's body starts with its opening line, which is never empty")
         if segs[segs.count - 1] != nl {
             segs.append(nl)
         }
@@ -3914,12 +3817,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var isEmpty: Bool         // marker opens an empty item (only whitespace to the line end)
     }
 
-    /// Read the padding stored on an `.item` node. Returns `nil` if the node is not actually an item.
-    private func itemPadding(of node: DocumentStorage.Index) -> Int? {
-        if case .item(let padding) = storage[node].data {
-            return padding
+    /// Read the padding stored on an `.item` node.
+    private func itemPadding(of node: DocumentStorage.Index) -> Int {
+        guard case .item(let padding) = storage[node].data else {
+            preconditionFailure("an item node always carries its padding")
         }
-        return nil
+        return padding
     }
 
     /// Try to match a list marker at `firstNonSpace` within `range`. CommonMark 0.31 §5.2:
@@ -3939,9 +3842,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if markerOffset > 3 {
             return nil
         }
-        guard firstNonSpace < range.upperBound else {
-            return nil
-        }
+        precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         let first = source[firstNonSpace]
 
         var kind: MarkdownNode.ListInfo.Kind
@@ -4122,9 +4023,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if firstNonSpace - range.lowerBound > 3 {
             return nil
         }
-        guard firstNonSpace < range.upperBound else {
-            return nil
-        }
+        precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         if source[firstNonSpace] != UInt8(ascii: "<") {
             return nil
         }
@@ -4417,7 +4316,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return false
     }
 
-    /// Search for `</tagname>` (case-insensitive) anywhere within `range`.
+    /// Search for `</tagname>` (case-insensitive) anywhere within `range`. `name` is one of the lowercase `htmlBlockType1Tags`.
     private func findClosingTag(span: Span<UInt8>, range: Range<Int>, name: StaticString) -> Bool {
         let nameLen = name.utf8CodeUnitCount
         // `</` + name + `>` length:
@@ -4435,14 +4334,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 var matched = true
                 for k in 0..<nameLen {
                     var a = span[nameRange.lowerBound + k]
-                    var b = pointer[k]
                     if a.isUppercaseASCIILetter {
                         a += 32
                     }
-                    if b.isUppercaseASCIILetter {
-                        b += 32
-                    }
-                    if a != b {
+                    if a != pointer[k] {
                         matched = false
                         break
                     }
@@ -4514,9 +4409,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if fenceOffset > 3 {
             return nil
         }
-        guard firstNonSpace < range.upperBound else {
-            return nil
-        }
+        precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         let markerCharacter = source[firstNonSpace]
         guard let marker = MarkdownNode.CodeBlockInfo.FenceCharacter(character: markerCharacter) else {
             return nil
@@ -4562,7 +4455,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// tab advances to the next tab stop, so a tab-led line (4 columns) fails the test and stays content.
     private func matchClosingFence(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indentColumns: Int, expectedChar: MarkdownNode.CodeBlockInfo.FenceCharacter?, minimumLength: Int) -> Bool {
         guard let expectedChar else {
-            return false
+            preconditionFailure("a fenced code block always records its fence character")
         }
         if indentColumns > 3 {
             return false
@@ -4647,9 +4540,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if firstNonSpace - range.lowerBound > 3 {
             return nil
         }
-        guard firstNonSpace < range.upperBound else {
-            return nil
-        }
+        precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         let marker = source[firstNonSpace]
         let level: UInt8
         switch marker {
@@ -4679,9 +4570,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if firstNonSpace - range.lowerBound > 3 {
             return false
         }
-        guard firstNonSpace < range.upperBound else {
-            return false
-        }
+        precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         let marker = source[firstNonSpace]
         if marker != UInt8(ascii: "-") && marker != UInt8(ascii: "_") && marker != UInt8(ascii: "*") {
             return false
@@ -5622,9 +5511,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let start = chunk.offset
         let end = chunk.range.upperBound
         let inSource = chunk.inSource
-        if start >= end || readByte(at: start, in: chunk) != UInt8(ascii: "^") {
-            return nil
-        }
+        precondition(start < end && readByte(at: start, in: chunk) == UInt8(ascii: "^"), "an attribute definition is parsed only from a `^`")
         guard let label = matchLinkLabel(chunk.extracting(1..<chunk.length)) else {
             return nil
         }
@@ -5646,9 +5533,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if attrsLen == 0 {
             return nil
         }
-        let afterSpaces = skipSpacesTabs(from: i, in: chunk)
-        guard let afterAll = skipLineEndOrEOF(from: afterSpaces, in: chunk) else {
-            return nil
+        guard let afterAll = skipLineEndOrEOF(from: i, in: chunk) else {
+            preconditionFailure("an attribute definition's attributes run to a line end or the content end")
         }
         let key = normalizeLabel(
             chunk: label.interior
