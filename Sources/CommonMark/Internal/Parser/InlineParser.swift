@@ -1297,15 +1297,16 @@ extension BlockParser {
         return (display, display)
     }
 
-    /// The footnote definition a byte-captured label's lookup key (`capturedLabelBytes`) resolves to, or `nil`, as
-    /// cmark's `process_footnotes` looks up the captured reference literal. `labelRange` is the virtual
-    /// range of `content` whose bytes cmark counts against the label-length cap (`footnoteDefinition`).
-    private mutating func capturedFootnoteDefinition(_ labelBytes: [UInt8], measuredOver labelRange: Range<Int>, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
+    /// The footnote definition a byte-captured label's lookup key (`capturedLabelBytes`) resolves to,
+    /// or `nil`, as cmark's `process_footnotes` looks up the captured reference literal. `labelRange` is
+    /// the virtual range of `content` whose bytes cmark counts against the label-length cap
+    /// (`footnoteDefinition`).
+    private mutating func capturedFootnoteDefinition(_ lookupKey: [UInt8], measuredOver labelRange: Range<Int>, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
         let capStart = storage.strings.count
-        for b in labelBytes {
+        for b in lookupKey {
             storage.strings.append(b)
         }
-        let capturedChunk = Chunk(offset: capStart, length: labelBytes.count, inSource: false)
+        let capturedChunk = Chunk(offset: capStart, length: lookupKey.count, inSource: false)
         if normalizeLabel(chunk: capturedChunk).isEmpty {
             return nil
         }
@@ -1385,9 +1386,9 @@ extension BlockParser {
     /// mid-character the same way the plain `[^…]` capture does (`collapseMultilineFootnote`): cmark's
     /// `cmark_chunk` slice is UTF-8-oblivious, and its Swift bridge's later `String(cString:)` repairs a
     /// truncated tail to a single U+FFFD (`capturedLabelBytes`), rather than reading past the cut to complete
-    /// the scalar. cmark resolves the captured label, keyed as `capturedLabelBytes` describes, if it matches a definition (a cross-line
-    /// `[\^abcdef<nl>xxxxx]` captures `abc`); otherwise the reference reconstructs as `[^` + captured bytes +
-    /// `]` - and that same `String(cString:)` bridge truncates the WHOLE reconstructed literal at the
+    /// the scalar. cmark resolves the captured label, keyed as `capturedLabelBytes` describes, if it
+    /// matches a definition (a cross-line `[\^abcdef<nl>xxxxx]` captures `abc`); otherwise the reference
+    /// reconstructs as `[^` + captured bytes + `]` - and that same `String(cString:)` bridge truncates the WHOLE reconstructed literal at the
     /// NUL-terminated case's embedded NUL, dropping it and the `]` appended after it.
     private mutating func emitEscapedCaretFootnote(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index) {
         // cmark's byte-length label is `colOf(]) - colOf(opener) - 2` (per-line columns); an image

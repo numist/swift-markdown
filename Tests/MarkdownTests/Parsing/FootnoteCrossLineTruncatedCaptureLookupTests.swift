@@ -44,7 +44,9 @@ struct FootnoteCrossLineTruncatedCaptureLookupTests {
         ("[^a\u{20AC}\nxxxxx]\n\n[^a\u{FFFD}\u{FFFD}]: n", "a\u{FFFD}\u{FFFD}"),
         // The escaped-caret form captures from just past the `^`.
         ("[\\^\u{2003}\nxxxx]\n\n[^\u{FFFD}\u{FFFD}]: n", "\u{FFFD}\u{FFFD}"),
-        // One byte of a scalar folds to a single U+FFFD.
+        // The escaped-caret image form captures one byte more, measured from the `!`.
+        ("![\\^\u{2003}\nxxxx]\n\n[^\u{FFFD}\u{FFFD}]: n", "\u{FFFD}\u{FFFD}"),
+        // A one-byte cut keeps the same single U+FFFD in its display and its lookup key.
         ("[^\u{FFFD}\nxxx]\n\n[^\u{FFFD}]: n", "\u{FFFD}"),
     ])
     func truncatedCaptureResolvesOneReplacementPerByte(_ markdown: String, _ label: String) {
