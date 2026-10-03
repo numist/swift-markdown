@@ -1396,22 +1396,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// isn't a valid delimiter row leaves the flag unset so a LATER line can still open a table.
     /// `couldBeDelimiterRow` gates the cost. `detectPendingTable` routes the MULTI-line (header-preceded-by-text) case elsewhere;
     /// this handles only the case where `pending` is a single line (the header itself).
-    private mutating func recordTablePending(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf?) {
+    private mutating func recordTablePending(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf) {
         let scratchStart = storage.strings.count
-        switch pending {
-        case .none:
-            preconditionFailure("an open paragraph always holds its accumulated content")
-        case .some(let leaf):
-            switch leaf.content {
-            case .lazy(let r):
-                for i in r { storage.strings.append(sourceBytes[i]) }
-            case .materialized(let buffer):
-                for i in 0..<buffer.count { storage.strings.append(buffer[i]) }
-            case .lazyNewline:
-                preconditionFailure("a single-line table header is a source range or a materialized buffer")
-            case .segments:
-                preconditionFailure("a single-line table header is a source range or a materialized buffer")
-            }
+        switch pending.content {
+        case .lazy(let r):
+            for i in r { storage.strings.append(sourceBytes[i]) }
+        case .materialized(let buffer):
+            for i in 0..<buffer.count { storage.strings.append(buffer[i]) }
+        case .lazyNewline:
+            preconditionFailure("a single-line table header is a source range or a materialized buffer")
+        case .segments:
+            preconditionFailure("a single-line table header is a source range or a materialized buffer")
         }
         // cmark's tasklist extension consumes a task item's checkbox at ITEM-OPEN time
         // (`open_tasklist_item`), before the paragraph text exists at all - so when this header line is a
@@ -1462,7 +1457,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Classify `pending`'s content for table detection without consuming it.
-    private func pendingTableShape(_ pending: borrowing PendingLeaf?) -> PendingTableShape {
+    private func pendingTableShape(_ pending: borrowing PendingLeaf) -> PendingTableShape {
         /// The offset of the last `\n` in the source range, or `nil` if the range is a single line.
         func lastNewline(in r: Range<Int>) -> Int? {
             var i = r.upperBound - 1
@@ -1472,23 +1467,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             return nil
         }
-        switch pending {
-        case .none:
-            preconditionFailure("an open paragraph always holds its accumulated content")
-        case .some(let leaf):
-            switch leaf.content {
-            case .lazy(let r):
-                return lastNewline(in: r).map { .multiContiguous(range: r, lastNewline: $0) } ?? .single
-            case .lazyNewline:
-                preconditionFailure("a deferred line join is always consumed by the next line")
-            case .materialized(let buffer):
-                for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
-                    return .multiOther
-                }
-                return .single
-            case .segments:
+        switch pending.content {
+        case .lazy(let r):
+            return lastNewline(in: r).map { .multiContiguous(range: r, lastNewline: $0) } ?? .single
+        case .lazyNewline:
+            preconditionFailure("a deferred line join is always consumed by the next line")
+        case .materialized(let buffer):
+            for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
                 return .multiOther
             }
+            return .single
+        case .segments:
+            return .multiOther
         }
     }
 
@@ -1513,22 +1503,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `recordSplitDelimiterLine`): the values captured from the ORIGINAL second line may be indented or
     /// lazy, which would wrongly veto the finalize-time table gate.
     private mutating func detectPendingTable(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, delimIndent: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
-        switch pendingTableShape(pending) {
+        precondition(pending != nil, "an open paragraph always holds its accumulated content")
+        switch pendingTableShape(pending!) {
         case .single:
-            recordTablePending(node, delimSpan: delimSpan, delimRange: delimRange, pending: pending)
+            recordTablePending(node, delimSpan: delimSpan, delimRange: delimRange, pending: pending!)
             return pending
         case .multiOther:
             // The header is the last accumulated physical line, held in a non-contiguous representation
             // (segment list or materialized buffer). Classify header + delimiter through a borrow (like
             // `recordTablePending`); only split when a table actually opens.
-            switch classifyMultiLineHeader(delimSpan: delimSpan, delimRange: delimRange, pending: pending) {
+            switch classifyMultiLineHeader(delimSpan: delimSpan, delimRange: delimRange, pending: pending!) {
             case .notDelimiterRow:
                 return pending
             case .headerMismatch:
                 paragraphTablePending[node] = false
                 return pending
             case .opens:
-                if cmarkHeaderScanAborts(pending) {
+                if cmarkHeaderScanAborts(pending!) {
                     paragraphTablePending[node] = false
                     return pending
                 }
@@ -1557,7 +1548,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 paragraphTablePending[node] = false
                 return pending
             case .opens:
-                if cmarkHeaderScanAborts(pending) {
+                if cmarkHeaderScanAborts(pending!) {
                     paragraphTablePending[node] = false
                     return pending
                 }
@@ -1606,25 +1597,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// line's cells before the header line, but a discarded line that reaches `cmarkRowCellLimit` cells
     /// still aborts the scan. (A header line that long can't match the delimiter's column count, which
     /// `parseDelimRow` caps below the limit.) CommonMark has no such limit.
-    private mutating func cmarkHeaderScanAborts(_ pending: borrowing PendingLeaf?) -> Bool {
+    private mutating func cmarkHeaderScanAborts(_ pending: borrowing PendingLeaf) -> Bool {
         guard storage.options.contains(.cmarkBugCompatibility) else { return false }
         let scratchStart = storage.strings.count
-        switch pending {
-        case .none:
-            preconditionFailure("an open paragraph always holds its accumulated content")
-        case .some(let leaf):
-            switch leaf.content {
-            case .lazy(let r):
-                for i in r { storage.strings.append(sourceBytes[i]) }
-            case .lazyNewline:
-                preconditionFailure("a deferred line join is always consumed by the next line")
-            case .materialized(let buffer):
-                for i in 0..<buffer.count { storage.strings.append(buffer[i]) }
-            case .segments(let segs):
-                for i in 0..<segs.count {
-                    for j in 0..<Int(segs[i].length) {
-                        storage.strings.append(segmentByte(segs[i], j))
-                    }
+        switch pending.content {
+        case .lazy(let r):
+            for i in r { storage.strings.append(sourceBytes[i]) }
+        case .lazyNewline:
+            preconditionFailure("a deferred line join is always consumed by the next line")
+        case .materialized(let buffer):
+            for i in 0..<buffer.count { storage.strings.append(buffer[i]) }
+        case .segments(let segs):
+            for i in 0..<segs.count {
+                for j in 0..<Int(segs[i].length) {
+                    storage.strings.append(segmentByte(segs[i], j))
                 }
             }
         }
@@ -1707,43 +1693,38 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// stored representation into a scratch region of the arena, appends `\n` + the delimiter, runs
     /// `classifyTableOpen`, then truncates the scratch back off - reading `pending` through a borrow so the
     /// paragraph's accumulated content is untouched (mirrors `recordTablePending`).
-    private mutating func classifyMultiLineHeader(delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf?) -> TableOpenClassification {
+    private mutating func classifyMultiLineHeader(delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf) -> TableOpenClassification {
         let scratchStart = storage.strings.count
-        switch pending {
-        case .none:
-            preconditionFailure("an open paragraph always holds its accumulated content")
-        case .some(let leaf):
-            switch leaf.content {
-            case .segments(let segs):
-                // Content segments (one physical line each) alternate with the shared `newlineSegment`; the
-                // header is every segment after the last line-join.
-                let nl = storage.newlineSegment
-                var lastNewlineIndex = -1
-                for i in 0..<segs.count where segs[i] == nl {
-                    lastNewlineIndex = i
-                }
-                precondition(lastNewlineIndex >= 0, "a paragraph's segment list holds a line join")
-                for i in (lastNewlineIndex + 1)..<segs.count {
-                    let seg = segs[i]
-                    for j in 0..<Int(seg.length) {
-                        storage.strings.append(segmentByte(seg, j))
-                    }
-                }
-            case .materialized(let buffer):
-                // The header is the bytes after the last embedded newline.
-                var lastNewline = -1
-                for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
-                    lastNewline = k
-                }
-                precondition(lastNewline >= 0, "a multi-line materialized paragraph holds a line join")
-                for k in (lastNewline + 1)..<buffer.count {
-                    storage.strings.append(buffer[k])
-                }
-            case .lazy:
-                preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
-            case .lazyNewline:
-                preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
+        switch pending.content {
+        case .segments(let segs):
+            // Content segments (one physical line each) alternate with the shared `newlineSegment`; the
+            // header is every segment after the last line-join.
+            let nl = storage.newlineSegment
+            var lastNewlineIndex = -1
+            for i in 0..<segs.count where segs[i] == nl {
+                lastNewlineIndex = i
             }
+            precondition(lastNewlineIndex >= 0, "a paragraph's segment list holds a line join")
+            for i in (lastNewlineIndex + 1)..<segs.count {
+                let seg = segs[i]
+                for j in 0..<Int(seg.length) {
+                    storage.strings.append(segmentByte(seg, j))
+                }
+            }
+        case .materialized(let buffer):
+            // The header is the bytes after the last embedded newline.
+            var lastNewline = -1
+            for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
+                lastNewline = k
+            }
+            precondition(lastNewline >= 0, "a multi-line materialized paragraph holds a line join")
+            for k in (lastNewline + 1)..<buffer.count {
+                storage.strings.append(buffer[k])
+            }
+        case .lazy:
+            preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
+        case .lazyNewline:
+            preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
         }
         storage.strings.append(UInt8(ascii: "\n"))
         for i in delimRange {
