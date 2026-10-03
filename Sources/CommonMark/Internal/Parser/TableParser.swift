@@ -13,11 +13,11 @@
 /// Called from `BlockParser.finalize` for `.paragraph` nodes when the `.tables` parse option is set. If the paragraph's content matches the GFM table pattern (header line containing `|` followed by a delimiter line of `:?-+:?` cells), the paragraph node is mutated in place into a `.table` node with `.tableRow` / `.tableCell` descendants.
 extension BlockParser {
 
-    /// Try to transform `node` (a `.paragraph`) and its content `chunk` into a `.table`.
-    /// Only supports reading from the standard source (not materialized strings).
-    /// Returns `true` on success (caller should skip re-processing the original paragraph: it has become a table and its cells were enqueued for the deferred inline-parsing pass). Returns `false` when the chunk doesn't match the table pattern.
-    internal mutating func parseTable(node: DocumentStorage.Index, chunk inputChunk: Chunk, sourceMap: [ArenaRun]) -> Bool {
-        // The table machinery (line splitting, cell extraction, pipe-unescape) reads exclusively from `storage.strings`. Paragraph content is usually already materialized there, but the source-contiguity fast path can hand us an `inSource` chunk (a zero-copy multi-line source range). A table's delimiter (second) line must be a delimiter row - only `-`, `:`, `|`, and delimiter-marker whitespace (space, tab, VT, FF), with at least one `-` - so before paying for a copy we scan the chunk's second line directly in the source: any other character there means this paragraph can't be a table and we bail without materializing, which keeps the overwhelmingly common non-table paragraph zero-copy. (The header line need NOT contain a pipe: a single-column table like `a\n|-` or `a\n:-` has a pipe-less header. `parseDelimRow` + the column-count match below are the exact gate; this scan is only the cheap necessary condition that avoids the copy.) Only when the second line clears that gate do we copy into the arena so the rest of this function can address it uniformly. Only paid when `.tables` is enabled.
+    /// Transform `node` (a table-pending `.paragraph`) and its content `chunk` into a `.table`, enqueueing its cells for the deferred inline-parsing pass.
+    ///
+    /// The paragraph is table-pending only after `classifyTableOpen` returned `.opens` for this same header and delimiter line, so the content always opens a table.
+    internal mutating func parseTable(node: DocumentStorage.Index, chunk inputChunk: Chunk, sourceMap: [ArenaRun]) {
+        // The table machinery (line splitting, cell extraction, pipe-unescape) reads exclusively from `storage.strings`. Paragraph content is usually already materialized there, but the source-contiguity fast path can hand us an `inSource` chunk (a zero-copy multi-line source range), which is copied into the arena so the rest of this function can address it uniformly.
         let chunk: Chunk
         // How the flattened content maps back to source for stamping rows/cells/cell-text:
         //   - `.contiguous`: the arena copy below is a byte-for-byte image of an `inSource` range, so arena offset `A` maps to source `A + delta`. The common no-leading-whitespace table.
@@ -25,9 +25,6 @@ extension BlockParser {
         //   - `.none`: materialized content with no source image (block-quote/list/CRLF tables) - positions are left unstamped, as before.
         let mode: TableSourceMode
         if inputChunk.inSource {
-            if !sourceSecondLineCouldBeDelimiterRow(chunk: inputChunk) {
-                return false
-            }
             let offset = storage.strings.count
             for i in inputChunk.offset..<(inputChunk.offset + inputChunk.length) {
                 storage.strings.append(sourceBytes[i])
@@ -41,8 +38,10 @@ extension BlockParser {
             mode = (positionsEnabled && topLevel && !sourceMap.isEmpty) ? .flattened(sourceMap) : .none
         }
         let lines = splitLines(chunk: chunk)
-        guard let alignments = tableOpenAlignments(lines: lines) else {
-            return false
+        precondition(lines.count >= 2, "a table-pending paragraph holds its header and delimiter lines")
+        guard let alignments = parseDelimRow(line: lines[1]),
+              splitCells(line: lines[0]).cells.count == alignments.count else {
+            preconditionFailure("a table-pending paragraph's header and delimiter lines open a table")
         }
         let projection = TableProjection(mode: mode, chunk: chunk)
         let columnCount = alignments.count
@@ -96,26 +95,6 @@ extension BlockParser {
                 previousRows.append(row)
             }
         }
-        return true
-    }
-
-    /// The per-column alignments of the delimiter row if `lines` (a materialized paragraph's physical lines,
-    /// as ranges into `storage.strings`) would open a GFM table, else `nil`. This is cmark's
-    /// `try_opening_table_block` gate: at least two lines, a valid delimiter second line, and a header (first)
-    /// line whose cell count equals the delimiter's column count. Shared by `parseTable` (which then builds
-    /// the table from the returned alignments) and `classifyTableOpen`.
-    private func tableOpenAlignments(lines: [Range<Int>]) -> [MarkdownNode.TableAlignment]? {
-        if lines.count < 2 {
-            return nil
-        }
-        guard let alignments = parseDelimRow(line: lines[1]), !alignments.isEmpty else {
-            return nil
-        }
-        // GFM: header column count must equal delimiter column count, else not a table.
-        if splitCells(line: lines[0]).cells.count != alignments.count {
-            return nil
-        }
-        return alignments
     }
 
     /// The outcome of testing whether a header line + a just-arrived delimiter-candidate line open a GFM
@@ -142,9 +121,7 @@ extension BlockParser {
     /// isn't a delimiter row at all leaves it open to a later delimiter.
     internal mutating func classifyTableOpen(chunk: Chunk) -> TableOpenClassification {
         let lines = splitLines(chunk: chunk)
-        if lines.count < 2 {
-            return .notDelimiterRow
-        }
+        precondition(lines.count >= 2, "a table candidate holds a header line and a delimiter-candidate line")
         guard let alignments = parseDelimRow(line: lines[1]), !alignments.isEmpty else {
             return .notDelimiterRow
         }
@@ -550,12 +527,12 @@ extension BlockParser {
         let parsedCellCount: Int
     }
 
-    /// Current rowspan of a `.tableCell` node (`1` if it carries no span data).
+    /// Current rowspan of a `.tableCell` node.
     private func cellRowspan(_ idx: DocumentStorage.Index) -> Int {
-        if case .tableCell(_, _, let rowspan) = storage[idx].kind {
-            return rowspan
+        guard case .tableCell(_, _, let rowspan) = storage[idx].kind else {
+            preconditionFailure("a span row holds only table cells")
         }
-        return 1
+        return rowspan
     }
 
     /// Set the rowspan of a `.tableCell` node, preserving its alignment and colspan.
@@ -625,69 +602,10 @@ extension BlockParser {
         return lines
     }
 
-    /// `true` if the SECOND line of an `inSource` `chunk` could be a table delimiter row, reading directly from `sourceBytes` without materializing. A delimiter row consists solely of `-`, `:`, `|`, and delimiter-marker whitespace (space, tab, VT, FF) and contains at least one `-`; any other byte on the second line means the paragraph can't be a table, so this is the cheap necessary-condition gate that keeps non-table paragraphs zero-copy. (`parseDelimRow` applies the exact rule once the chunk is materialized; the header line need not contain a pipe, so a single-column table like `a\n|-` or `a\n:-` still passes here.) This runs for every paragraph (when `.tables` is on): the header line (which may be long) is skipped to its newline with a vectorized scan like `LineReader` - 16 bytes per step - and the short delimiter line is then checked byte-by-byte, bailing at the first disqualifying character (a letter, for ordinary prose). Only LF endings reach an `inSource` chunk (CRLF/CR paragraphs are materialized), so `\n` is the sole line terminator.
-    private func sourceSecondLineCouldBeDelimiterRow(chunk: Chunk) -> Bool {
-        let endOff = chunk.offset + chunk.length
-        return sourceBytes.withUnsafeBufferPointer { buf -> Bool in
-            guard let base = buf.baseAddress else { return false }
-            let nl = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
-            let lanes = SIMD16<UInt8>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
-            let noMatch = SIMD16<UInt8>(repeating: 16)
-            // Skip the header (first) line: advance to its terminating newline.
-            var i = chunk.offset
-            var foundNewline = false
-            while i < endOff {
-                // Vectorized skip over the header bytes; stop at the first `\n`.
-                if i + 16 <= endOff {
-                    let c = UnsafeRawPointer(base + i).loadUnaligned(as: SIMD16<UInt8>.self)
-                    let matched = c .== nl
-                    if !any(matched) {
-                        i += 16
-                        continue
-                    }
-                    i += Int(lanes.replacing(with: noMatch, where: .!matched).min())
-                }
-                if base[i] == UInt8(ascii: "\n") {
-                    foundNewline = true
-                    break
-                }
-                i += 1
-            }
-            // A single-line paragraph has no delimiter row and is never a table.
-            if !foundNewline {
-                return false
-            }
-            i += 1
-            // Scan the delimiter (second) line: only `-`, `:`, `|`, and spaces/tabs, with at least one `-`.
-            var sawDash = false
-            while i < endOff {
-                let b = base[i]
-                if b == UInt8(ascii: "\n") {
-                    break
-                }
-                switch b {
-                case UInt8(ascii: "-"):
-                    sawDash = true
-                // VT (0x0B) / FF (0x0C) are delimiter-marker whitespace (`scan_table_start`'s
-                // `spacechar`), so admit them alongside space/tab; `parseDelimRow` applies the exact rule.
-                case UInt8(ascii: ":"), UInt8(ascii: "|"), UInt8(ascii: " "), UInt8(ascii: "\t"),
-                     0x0B, 0x0C:
-                    break
-                default:
-                    return false
-                }
-                i += 1
-            }
-            return sawDash
-        }
-    }
-
     /// Parse the delimiter row into per-column alignments. Returns nil if the line isn't a valid delimiter row. After pipe splitting, each cell must be a valid GFM delimiter marker: `:?-+:?` bracketed by delimiter-marker whitespace (space, tab, VT, FF), with at least one column. Alignment colons are read from a space/tab-trimmed cell, reproducing cmark's alignment test on the `cmark_strbuf_trim`'d buffer (whose whitespace set excludes VT/FF), so a colon hidden behind a leading/trailing VT/FF does not set the column's alignment even though the marker stays valid.
     private func parseDelimRow(line: Range<Int>) -> [MarkdownNode.TableAlignment]? {
         let cells = splitCells(line: line).cells
-        if cells.isEmpty {
-            return nil
-        }
+        precondition(!cells.isEmpty, "a delimiter-candidate line holds a `-`, so it splits into at least one cell")
         // why: cmark's `row_from_string` returns no row once it reaches `cmarkRowCellLimit` cells, so such a
         // delimiter line opens no table (`try_opening_table_header`). CommonMark has no such limit.
         if storage.options.contains(.cmarkBugCompatibility) && cells.count >= Self.cmarkRowCellLimit {
@@ -843,9 +761,7 @@ extension BlockParser {
                 s += 1
             }
         } else {
-            while s < e && storage.strings[s].isSpaceOrTab {
-                s += 1
-            }
+            precondition(s == e || !storage.strings[s].isSpaceOrTab, "a row's first cell starts past the row's leading spaces and tabs")
         }
         while e > s && storage.strings[e - 1].isSpaceOrTab {
             e -= 1

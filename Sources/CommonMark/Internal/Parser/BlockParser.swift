@@ -3425,9 +3425,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let tableMap = (positionsEnabled && !map.isEmpty)
                 ? sliceRuns(map, from: tableContent.offset - raw.offset, length: tableContent.length)
                 : []
-            if parseTable(node: node, chunk: tableContent, sourceMap: tableMap) {
-                return
-            }
+            parseTable(node: node, chunk: tableContent, sourceMap: tableMap)
+            return
         }
         // Reference link definitions stack at the start of a paragraph; any that match are stripped and registered.
         trimmed = parseDefinitions(in: trimmed)
