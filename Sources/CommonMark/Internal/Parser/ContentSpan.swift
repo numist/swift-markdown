@@ -182,9 +182,7 @@ internal struct ContentSpan: ~Escapable {
     /// Multi-segment byte resolution: find the segment covering virtual `offset` and read it. Source segments read `span` (== `sourceBytes`); a non-source segment reads the arena snapshot (`arena[offset]`) when one is present - the interned newline at offset 0 yields `\n`, a synthetic filler run yields its spaces or U+FFFD bytes - or synthesizes `\n` directly when no snapshot is carried (the common case, whose only non-source segment is the interned newline).
     private func multiByte(at offset: Int) -> UInt8 {
         let i = segmentIndex(covering: offset)
-        if i == segments.count {
-            return 0
-        }
+        assert(i < segments.count, "inline content is read only at offsets inside the content")
         let seg = segments[i]
         let local = offset - segmentStart(i)
         if seg.inSource {
@@ -239,29 +237,14 @@ internal struct ContentSpan: ~Escapable {
                 let v = i == 0 ? 0 : arenaRunEnds[i - 1]
                 return run.sourceOffset < 0 ? nil : Int(run.sourceOffset) + (k - v)
             }
-            // One-past-the-end: map just past the last source run, if any.
-            if arenaRuns.count > 0 {
-                let last = arenaRuns[arenaRuns.count - 1]
-                if last.sourceOffset >= 0 {
-                    return Int(last.sourceOffset) + Int(last.length)
-                }
-            }
+            precondition(arenaRuns.count == 0, "an inline node's source range lies inside its content's arena run map")
             return nil
         }
         let i = segmentIndex(covering: offset)
-        if i < segments.count {
-            let seg = segments[i]
-            // Map through `sourceOffset` (re-indents a continuation line to its block-content column), not the byte-read `offset`; they coincide except for a re-indented continuation segment.
-            return seg.inSource ? Int(seg.sourceOffset) + (offset - segmentStart(i)) : nil
-        }
-        // One-past-the-end: map to just past the last source segment, if any.
-        if segments.count > 0 {
-            let last = segments[segments.count - 1]
-            if last.inSource {
-                return Int(last.sourceOffset) + Int(last.length)
-            }
-        }
-        return nil
+        precondition(i < segments.count, "an inline node's source range lies inside its multi-segment content")
+        let seg = segments[i]
+        // Map through `sourceOffset` (re-indents a continuation line to its block-content column), not the byte-read `offset`; they coincide except for a re-indented continuation segment.
+        return seg.inSource ? Int(seg.sourceOffset) + (offset - segmentStart(i)) : nil
     }
 
     /// Build a `Chunk` for a sub-range of this content. Single-segment: a direct sub-chunk. Multi-segment: valid only when the range lies within one segment (the common case - most inline nodes don't straddle a line join); callers whose range can straddle (a code span, or a text run that keeps a flag-ON synthetic filler segment) materialize via `InlineParser.materializedChunk` themselves.

@@ -1695,7 +1695,7 @@ extension BlockParser {
             ? Self.flankingScalarBefore(endingAt: beforeIdx, lowerBound: chunkStart, content: content)
             : 0x0A
         let afterScalar: Int32 = afterIdx < end
-            ? Self.flankingScalarAfter(startingAt: afterIdx, upperBound: end, content: content)
+            ? Self.flankingScalarAfter(startingAt: afterIdx, content: content)
             : 0x0A
         let beforeIsSpace = Self.isUnicodeWhitespace(beforeScalar)
         let beforeIsPunct = Self.isUnicodePunctuation(beforeScalar)
@@ -1714,63 +1714,36 @@ extension BlockParser {
 
     /// The Unicode scalar just before a delimiter run, whose last byte is at `endIdx`. An ASCII byte is
     /// its own scalar (the common fast path); otherwise walk back over UTF-8 continuation bytes (not past
-    /// `lowerBound`) to the lead byte and decode. A malformed sequence reads as U+000A, matching cmark's
-    /// `scan_delims` (a `cmark_utf8proc_iterate` failure leaves `before_char` at the newline sentinel 10).
+    /// `lowerBound`) to the lead byte and decode.
     @inline(__always)
     private static func flankingScalarBefore(endingAt endIdx: Int, lowerBound: Int, content: borrowing ContentSpan) -> Int32 {
         let last = content[endIdx]
         if last < 0x80 { return Int32(last) }
         var lead = endIdx
         while lead > lowerBound, content[lead] & 0xC0 == 0x80 { lead -= 1 }
-        return decodeUTF8Scalar(at: lead, upperBound: endIdx + 1, content: content) ?? 0x0A
+        return decodeUTF8Scalar(at: lead, content: content)
     }
 
-    /// The Unicode scalar just after a delimiter run, beginning at `idx`. A malformed sequence reads as
-    /// U+000A, matching cmark's `scan_delims` (see `flankingScalarBefore`).
+    /// The Unicode scalar just after a delimiter run, beginning at `idx`.
     @inline(__always)
-    private static func flankingScalarAfter(startingAt idx: Int, upperBound: Int, content: borrowing ContentSpan) -> Int32 {
+    private static func flankingScalarAfter(startingAt idx: Int, content: borrowing ContentSpan) -> Int32 {
         let first = content[idx]
         if first < 0x80 { return Int32(first) }
-        return decodeUTF8Scalar(at: idx, upperBound: upperBound, content: content) ?? 0x0A
+        return decodeUTF8Scalar(at: idx, content: content)
     }
 
-    /// Decode the UTF-8 scalar beginning at `idx` (its lead byte), reading no further than `upperBound`.
-    /// Returns `nil` for a malformed, truncated, overlong, surrogate, or out-of-range sequence, mirroring
-    /// `cmark_utf8proc_iterate` (`src/utf8.c`) returning -1.
-    private static func decodeUTF8Scalar(at idx: Int, upperBound: Int, content: borrowing ContentSpan) -> Int32? {
+    /// Decode the multi-byte UTF-8 scalar whose lead byte is at `idx`. Inline content is valid UTF-8 cut only on
+    /// ASCII bytes, so the whole sequence lies inside the content.
+    private static func decodeUTF8Scalar(at idx: Int, content: borrowing ContentSpan) -> Int32 {
         let b0 = content[idx]
-        if b0 < 0x80 { return Int32(b0) }
-        let length: Int
-        if b0 & 0xE0 == 0xC0 {
-            length = 2
-        } else if b0 & 0xF0 == 0xE0 {
-            length = 3
-        } else if b0 & 0xF8 == 0xF0 {
-            length = 4
-        } else {
-            return nil
+        precondition(b0 >= 0xC2 && b0 <= 0xF4, "inline content is valid UTF-8, so a decoded scalar starts at a multi-byte lead byte")
+        if b0 < 0xE0 {
+            return (Int32(b0 & 0x1F) << 6) | Int32(content[idx + 1] & 0x3F)
         }
-        guard idx + length <= upperBound else { return nil }
-        switch length {
-        case 2:
-            let b1 = content[idx + 1]
-            guard b1 & 0xC0 == 0x80 else { return nil }
-            let uc = (Int32(b0 & 0x1F) << 6) | Int32(b1 & 0x3F)
-            return uc < 0x80 ? nil : uc
-        case 3:
-            let b1 = content[idx + 1]
-            let b2 = content[idx + 2]
-            guard b1 & 0xC0 == 0x80, b2 & 0xC0 == 0x80 else { return nil }
-            let uc = (Int32(b0 & 0x0F) << 12) | (Int32(b1 & 0x3F) << 6) | Int32(b2 & 0x3F)
-            return (uc < 0x800 || (uc >= 0xD800 && uc < 0xE000)) ? nil : uc
-        default:
-            let b1 = content[idx + 1]
-            let b2 = content[idx + 2]
-            let b3 = content[idx + 3]
-            guard b1 & 0xC0 == 0x80, b2 & 0xC0 == 0x80, b3 & 0xC0 == 0x80 else { return nil }
-            let uc = (Int32(b0 & 0x07) << 18) | (Int32(b1 & 0x3F) << 12) | (Int32(b2 & 0x3F) << 6) | Int32(b3 & 0x3F)
-            return (uc < 0x10000 || uc >= 0x110000) ? nil : uc
+        if b0 < 0xF0 {
+            return (Int32(b0 & 0x0F) << 12) | (Int32(content[idx + 1] & 0x3F) << 6) | Int32(content[idx + 2] & 0x3F)
         }
+        return (Int32(b0 & 0x07) << 18) | (Int32(content[idx + 1] & 0x3F) << 12) | (Int32(content[idx + 2] & 0x3F) << 6) | Int32(content[idx + 3] & 0x3F)
     }
 
     /// Whether `uc` is "Unicode whitespace" (for flanking and GFM autolink hosts) - cmark's
@@ -3826,8 +3799,8 @@ extension BlockParser {
                 return false
             }
         } else {
-            guard let scalar = Self.decodeUTF8Scalar(at: afterSlashes, upperBound: end, content: content),
-                  !Self.isUnicodeWhitespace(scalar), !Self.isUnicodePunctuation(scalar) else {
+            let scalar = Self.decodeUTF8Scalar(at: afterSlashes, content: content)
+            guard !Self.isUnicodeWhitespace(scalar), !Self.isUnicodePunctuation(scalar) else {
                 return false
             }
         }
