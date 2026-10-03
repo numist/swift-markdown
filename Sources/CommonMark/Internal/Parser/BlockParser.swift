@@ -2513,8 +2513,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var pending = pending
         let start = sourceOffset(firstNonSpace)
         let parentList: DocumentStorage.Index
-        if storage[current].kind.isList,
-           storedListInfo(of: current).matches(marker: marker) {
+        if case .list(let info) = storage[current].kind,
+           Self.marker(marker, continues: info) {
             parentList = current
             // Tight/loose detection runs at list-finalize time via `detectLooseList` + the `endsWithBlankLine` recursion, which catches the "blank between sibling items" case at finalize.
         } else {
@@ -2547,33 +2547,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return pending
     }
 
-    /// Read the kind/marker fields of a `.list` node.
-    private func storedListInfo(of node: DocumentStorage.Index) -> StoredListInfo {
-        guard case .list(let info) = storage[node].kind else {
-            preconditionFailure("list info is read only from a list node")
+    /// Whether an item opened by `marker` continues the open list described by `list`: the same list kind, with the same bullet character or ordered delimiter.
+    private static func marker(_ marker: ListMarkerInfo, continues list: MarkdownNode.ListInfo) -> Bool {
+        if list.kind != marker.kind {
+            return false
         }
-        return StoredListInfo(
-            kind: info.kind,
-            orderedDelimiter: info.orderedDelimiter,
-            bulletMarker: info.bulletMarker
-        )
-    }
-
-    private struct StoredListInfo {
-        var kind: MarkdownNode.ListInfo.Kind
-        var orderedDelimiter: MarkdownNode.ListInfo.OrderedDelimiter
-        var bulletMarker: MarkdownNode.ListInfo.BulletMarker
-
-        func matches(marker: ListMarkerInfo) -> Bool {
-            if kind != marker.kind {
-                return false
-            }
-            switch kind {
-            case .bullet:
-                return bulletMarker == marker.bulletMarker
-            case .ordered:
-                return orderedDelimiter == marker.orderedDelimiter
-            }
+        switch list.kind {
+        case .bullet:
+            return list.bulletMarker == marker.bulletMarker
+        case .ordered:
+            return list.orderedDelimiter == marker.orderedDelimiter
         }
     }
 
