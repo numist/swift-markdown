@@ -243,9 +243,8 @@ internal struct DocumentStorage: ~Copyable {
     ///
     /// The detached node's `parent` pointer is preserved so that paragraph finalize can still bubble `state.current` back up via `parent` after dropping the empty paragraph.
     internal mutating func unlinkChild(_ childIndex: Index) {
-        guard let parent = nodes[childIndex].parent else {
-            preconditionFailure("only the document node has no parent, and it is never unlinked")
-        }
+        precondition(nodes[childIndex].parent != nil, "only the document node has no parent, and it is never unlinked")
+        let parent = nodes[childIndex].parent!
         let prev = nodes[childIndex].previous
         let next = nodes[childIndex].next
         if let prev {

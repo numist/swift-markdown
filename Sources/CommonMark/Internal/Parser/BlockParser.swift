@@ -778,18 +778,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let lineStart = currentLineSourceRange.lowerBound
         let prefixEnd = lineStart + materializedRestStart
         var col = 0
-        var buf = 0
         var i = lineStart
         while i < prefixEnd {
             let width = sourceBytes[i] == UInt8(ascii: "\t") ? 4 - (col & 3) : 1
-            if bufferOffset < buf + width {
-                return i
+            if bufferOffset < col + width {
+                break
             }
-            buf += width
             col += width
             i += 1
         }
-        preconditionFailure("a buffer offset inside the expanded prefix is covered by the prefix walk")
+        precondition(i < prefixEnd, "a buffer offset inside the expanded prefix is covered by the prefix walk")
+        return i
     }
 
     /// Map an original-source byte offset on the current materialized line to its buffer offset: the
@@ -981,9 +980,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .segments(let segs)?:
             // A multi-line paragraph already accumulating as segments: the line join is the shared interned `\n` segment (zero-copy), not a byte appended to a materialized buffer.
             return appendSegment(storage.newlineSegment, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
-        case .none:
-            preconditionFailure("a line join is appended only to a leaf that already holds a line")
-        case .some(let existing):
+        case let existing:
             var buffer = unwrap(existing)
             buffer.append(UInt8(ascii: "\n"))
             return PendingLeaf(node: node, content: .materialized(buffer))
@@ -1124,20 +1121,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // In the expanded prefix: re-walk the original prefix, tracking each byte's buffer-column span.
         let prefixEnd = lineStart + materializedRestStart
         var col = 0
+        var width = 0
         var i = lineStart
         while i < prefixEnd {
-            let width = sourceBytes[i] == UInt8(ascii: "\t") ? 4 - (col & 3) : 1
+            width = sourceBytes[i] == UInt8(ascii: "\t") ? 4 - (col & 3) : 1
             if bufferStart < col + width {
-                if bufferStart == col {
-                    return (i, 0)
-                }
-                // A tab split by the consumed indentation: emit its remaining columns as spaces, resume after it.
-                return (i + 1, (col + width) - bufferStart)
+                break
             }
             col += width
             i += 1
         }
-        preconditionFailure("a buffer offset inside the expanded prefix is covered by the prefix walk")
+        precondition(i < prefixEnd, "a buffer offset inside the expanded prefix is covered by the prefix walk")
+        if bufferStart == col {
+            return (i, 0)
+        }
+        // A tab split by the consumed indentation: emit its remaining columns as spaces, resume after it.
+        return (i + 1, (col + width) - bufferStart)
     }
 
     // MARK: - NUL -> U+FFFD replacement (CommonMark §2.3)
@@ -4454,20 +4453,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// CommonMark 0.31 §4.5. The indent is measured in columns (cmark's `parser->indent <= 3`), where a
     /// tab advances to the next tab stop, so a tab-led line (4 columns) fails the test and stays content.
     private func matchClosingFence(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indentColumns: Int, expectedChar: MarkdownNode.CodeBlockInfo.FenceCharacter?, minimumLength: Int) -> Bool {
-        guard let expectedChar else {
-            preconditionFailure("a fenced code block always records its fence character")
-        }
+        precondition(expectedChar != nil, "a fenced code block always records its fence character")
+        let fenceByte = expectedChar!.character
         if indentColumns > 3 {
             return false
         }
         guard firstNonSpace < range.upperBound else {
             return false
         }
-        if source[firstNonSpace] != expectedChar.character {
+        if source[firstNonSpace] != fenceByte {
             return false
         }
         var i = firstNonSpace
-        while i < range.upperBound && source[i] == expectedChar.character {
+        while i < range.upperBound && source[i] == fenceByte {
             i += 1
         }
         let runLength = i - firstNonSpace
@@ -5533,9 +5531,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if attrsLen == 0 {
             return nil
         }
-        guard let afterAll = skipLineEndOrEOF(from: i, in: chunk) else {
-            preconditionFailure("an attribute definition's attributes run to a line end or the content end")
-        }
+        let lineEnd = skipLineEndOrEOF(from: i, in: chunk)
+        precondition(lineEnd != nil, "an attribute definition's attributes run to a line end or the content end")
+        let afterAll = lineEnd!
         let key = normalizeLabel(
             chunk: label.interior
         )

@@ -39,10 +39,10 @@ extension BlockParser {
         }
         let lines = splitLines(chunk: chunk)
         precondition(lines.count >= 2, "a table-pending paragraph holds its header and delimiter lines")
-        guard let alignments = parseDelimRow(line: lines[1]),
-              splitCells(line: lines[0]).cells.count == alignments.count else {
-            preconditionFailure("a table-pending paragraph's header and delimiter lines open a table")
-        }
+        let delimiterAlignments = parseDelimRow(line: lines[1])
+        precondition(delimiterAlignments != nil, "a table-pending paragraph's delimiter line is a delimiter row")
+        let alignments = delimiterAlignments!
+        precondition(splitCells(line: lines[0]).cells.count == alignments.count, "a table-pending paragraph's header has the delimiter row's column count")
         let projection = TableProjection(mode: mode, chunk: chunk)
         let columnCount = alignments.count
         let header = lines[0]

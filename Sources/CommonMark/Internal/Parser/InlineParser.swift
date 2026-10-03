@@ -195,9 +195,9 @@ extension BlockParser {
                 // source segment's slice for multi-segment content (whose virtual offsets index no
                 // single buffer). An entity can't cross a segment boundary - the join newline
                 // terminates the name/number - so a window from `&` to the segment end is sufficient.
-                guard let window = content.contiguousChunk(fromVirtual: cursor, limit: endOffset) else {
-                    preconditionFailure("an `&` lies in a source segment: synthetic segments hold only newlines, spaces and U+FFFD")
-                }
+                let contiguous = content.contiguousChunk(fromVirtual: cursor, limit: endOffset)
+                precondition(contiguous != nil, "an `&` lies in a source segment: synthetic segments hold only newlines, spaces and U+FFFD")
+                let window = contiguous!
                 // Match in an expression of its own so the borrowed `source` span (lifetime-dependent) stays scoped to the call and can't escape into the body.
                 let entity: EntityParser.EntityMatch? = if window.inSource {
                     EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: sourceBytes, bugCompat: storage.options.contains(.cmarkBugCompatibility))
@@ -2752,10 +2752,9 @@ extension BlockParser {
     private func matchHTMLOpenTag(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         var i = start + 1
         // Tag name.
-        guard let afterName = scanTagName(start: i, end: end, content: content) else {
-            preconditionFailure("an open tag is matched only when its `<` is followed by a letter")
-        }
-        i = afterName
+        let afterName = scanTagName(start: i, end: end, content: content)
+        precondition(afterName != nil, "an open tag is matched only when its `<` is followed by a letter")
+        i = afterName!
         // Attributes.
         while i < end {
             let saved = i
@@ -3339,20 +3338,17 @@ extension BlockParser {
 
     /// Dispatch a GFM bare-URL autolink trial based on the trigger byte. Returns nil if no autolink starts at / contains `cursor`. The `@`-triggered email form is handled separately in `gfmEmailAutolinkPass`, not here.
     private func matchGFMAutolink(trigger: UInt8, cursor: Int, end: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
-        switch trigger {
-        case UInt8(ascii: ":"):
+        if trigger == UInt8(ascii: ":") {
             return matchGFMSchemeAutolink(
                 colon: cursor, end: end,
                 content: content
             )
-        case UInt8(ascii: "w"), UInt8(ascii: "W"):
-            return matchGFMWWWAutolink(
-                start: cursor, end: end,
-                content: content
-            )
-        default:
-            preconditionFailure("a GFM autolink trial is dispatched only on `:`, `w` or `W`")
         }
+        precondition(trigger == UInt8(ascii: "w") || trigger == UInt8(ascii: "W"), "a GFM autolink trial is dispatched only on `:`, `w` or `W`")
+        return matchGFMWWWAutolink(
+            start: cursor, end: end,
+            content: content
+        )
     }
 
     /// `:`-triggered: looks back for `http`/`https`/`ftp`, then forward for `//` and a URL body.
@@ -3643,21 +3639,19 @@ extension BlockParser {
 
     /// Emit a `.link` node + a single `.text` child for a GFM autolink match. `www.` and email forms get a synthetic scheme prefix (`http://` or `mailto:`) materialized into the string arena.
     private mutating func emitGFMAutolink(auto: GFMAutolinkMatch, content: borrowing ContentSpan, into parent: DocumentStorage.Index) {
+        precondition(auto.form != .email, "email autolinks are emitted by gfmEmailAutolinkPass")
         let urlChunk: Chunk
-        switch auto.form {
-        case .uri:
+        if auto.form == .uri {
             urlChunk = content.chunk(
                 offset: auto.urlStart,
                 length: auto.urlEnd - auto.urlStart
             )
-        case .www:
+        } else {
             urlChunk = materializeAutolinkURL(
                 prefix: "http://",
                 start: auto.urlStart, end: auto.urlEnd,
                 content: content
             )
-        case .email:
-            preconditionFailure("email autolinks are emitted by gfmEmailAutolinkPass")
         }
         let textChunk = content.chunk(
             offset: auto.urlStart,
