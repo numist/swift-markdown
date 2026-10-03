@@ -51,7 +51,8 @@ internal struct StorageView: ~Escapable, Copyable {
             }
         }
         let lineIndex = max(0, lo - 1)
-        let lineStart = lineStarts.count > 0 ? lineStarts[lineIndex] : 0
+        precondition(!lineStarts.isEmpty, "a stamped source range lies on a line the parser read")
+        let lineStart = lineStarts[lineIndex]
         return MarkdownNode.SourcePosition(line: lineIndex + 1, column: Int(offset - lineStart) + 1)
     }
 

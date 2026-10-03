@@ -81,7 +81,8 @@ internal struct LineReader: ~Escapable, ~Copyable {
     internal static func firstLineTerminator(in span: Span<UInt8>) -> Int {
         span.withUnsafeBufferPointer { buf in
             let count = buf.count
-            guard let base = buf.baseAddress else { return count }
+            precondition(buf.baseAddress != nil, "line scans run over a non-empty source buffer")
+            let base = buf.baseAddress!
             
             let nl = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
             let cr = SIMD16<UInt8>(repeating: UInt8(ascii: "\r"))

@@ -34,7 +34,8 @@ extension BlockParser {
         } else {
             chunk = inputChunk
             // A run map is threaded in only for a top-level flattened table (`runParagraphMatchers` gates on the parent); a nested/materialized table gets an empty map and stays unstamped.
-            let topLevel = storage[node].parent.map { storage[$0].kind == .document } ?? false
+            precondition(storage[node].parent != nil, "a table-pending paragraph has a parent container")
+            let topLevel = storage[storage[node].parent!].kind == .document
             mode = (positionsEnabled && topLevel && !sourceMap.isEmpty) ? .flattened(sourceMap) : .none
         }
         let lines = splitLines(chunk: chunk)
@@ -158,16 +159,15 @@ extension BlockParser {
     /// spurious one-empty-cell body row.
     ///
     /// Every caller passes a `firstNonSpace..<end` range (a body-row candidate cmark reads from
-    /// `input + first_nonspace`), so this never sees leading whitespace and its own leading space/tab trim
-    /// below is only defensive. It must NOT be repurposed to classify a HEADER row: cmark builds the header
+    /// `input + first_nonspace`), so this never sees leading whitespace. It must NOT be repurposed to classify a HEADER row: cmark builds the header
     /// from the raw, un-first-non-spaced `parent_string`, where a leading space turns `<ws>|` into one empty
     /// cell (see `splitCells`), not the zero-column lone-pipe row this reports.
     internal static func isLonePipeRow(span: Span<UInt8>, range: Range<Int>) -> Bool {
         // cmark reads the row from the first non-space, then `cmark_strbuf_trim` (space/tab) bounds the
-        // scan — trim space/tab from both ends to isolate the pipe and its `spacechar` padding.
+        // scan — trim trailing space/tab to isolate the pipe and its `spacechar` padding.
         var s = range.lowerBound
         var e = range.upperBound
-        while s < e && span[s].isSpaceOrTab { s += 1 }
+        precondition(s == e || !span[s].isSpaceOrTab, "a body-row candidate starts at the line's first non-space byte")
         while e > s && span[e - 1].isSpaceOrTab { e -= 1 }
         // Must lead with a pipe (the leading pipe the scan consumes), ...
         guard s < e && span[s] == UInt8(ascii: "|") else { return false }
@@ -235,7 +235,7 @@ extension BlockParser {
         storage.appendChild(rowIdx, to: parent)
         // The row spans its whole source line. cmark sets a table row's end column to the parent table's end column (`try_opening_table_row`): the full source line INCLUDING trailing whitespace. Interior rows already reach their line-terminating newline via `splitLines`, but the paragraph→table content chunk had its outermost whitespace trimmed (`runParagraphMatchers`), so the LAST line stops one or more bytes short of the source line end. Recover the untrimmed end from the table node's own end (the paragraph extent, stamped before this runs).
         // `nil` when the table isn't source-mapped (or the row's content didn't image source), leaving the row unstamped as before.
-        let proj = projection.flatMap { RowProjection(table: $0, rowStartArena: line.lowerBound) }
+        let proj = projection.map { RowProjection(table: $0, rowStartArena: line.lowerBound) }
         // The untrimmed row-content extent's re-based source end, reused for the row end and the rightmost-no-closing-pipe cell.
         var rowContentEnd: Int? = nil
         if let proj {
@@ -305,7 +305,7 @@ extension BlockParser {
                     var spanningIsPadded = false
                     while r >= 0 {
                         let prev = previousRows[r]
-                        guard col < prev.cells.count else { break }
+                        precondition(col < prev.cells.count, "every row of a table holds one cell per column")
                         let candidate = prev.cells[col]
                         if cellRowspan(candidate) == 0 {
                             r -= 1
@@ -445,12 +445,12 @@ extension BlockParser {
             chunkOffset = chunk.offset
         }
 
-        /// The run covering the content byte at arena offset `arena`, and the content-relative offset of that run's first byte; `nil` outside the content.
-        func run(covering arena: Int) -> (run: ArenaRun, start: Int)? {
+        /// The run covering the content byte at arena offset `arena`, and the content-relative offset of that run's first byte.
+        func run(covering arena: Int) -> (run: ArenaRun, start: Int) {
             let k = arena - chunkOffset
-            guard k >= 0 else { return nil }
+            precondition(k >= 0, "a table offset lies inside its content")
             let i = firstRun(endingAfter: k)
-            guard i < runs.count else { return nil }
+            precondition(i < runs.count, "a table offset lies inside its content")
             return (runs[i], runStart(i))
         }
 
@@ -491,22 +491,23 @@ extension BlockParser {
         let table: TableProjection
         let reindent: Int
 
-        /// `nil` when the row's first content byte doesn't image source.
-        init?(table: TableProjection, rowStartArena: Int) {
-            guard let (run, _) = table.run(covering: rowStartArena), run.sourceOffset >= 0, run.physicalOffset >= 0 else { return nil }
+        init(table: TableProjection, rowStartArena: Int) {
+            let (run, _) = table.run(covering: rowStartArena)
+            precondition(run.sourceOffset >= 0 && run.physicalOffset >= 0, "a table row's first byte images its source")
             self.table = table
             reindent = Int(run.sourceOffset) - Int(run.physicalOffset)
         }
 
-        /// The re-based source offset imaged by the content byte at arena offset `arena`; `nil` outside the content or in a synthetic gap (a row's bytes always image source).
-        func start(arena: Int) -> Int? {
-            guard let (run, runStart) = table.run(covering: arena), run.sourceOffset >= 0 else { return nil }
+        /// The re-based source offset imaged by the content byte at arena offset `arena`.
+        func start(arena: Int) -> Int {
+            let (run, runStart) = table.run(covering: arena)
+            precondition(run.sourceOffset >= 0, "a table row or cell boundary byte images its source")
             return Int(run.sourceOffset) + (arena - table.chunkOffset - runStart)
         }
 
         /// The re-based half-open source end for a range of content ending at arena offset `arena`: just past the source byte its last byte images, so a range ending in a U+FFFD ends just past its NUL.
-        func end(arena: Int) -> Int? {
-            start(arena: arena - 1).map { $0 + 1 }
+        func end(arena: Int) -> Int {
+            start(arena: arena - 1) + 1
         }
     }
 

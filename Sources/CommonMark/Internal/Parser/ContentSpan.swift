@@ -314,8 +314,8 @@ internal struct ContentSpan: ~Escapable {
         let n = span.count
         let startIdx = globalCursor - base
         let found = span.withUnsafeBufferPointer { buf -> Int in
-            guard let p = buf.baseAddress else { return n }
-            return Self.scanSignificant(p, from: startIdx, to: n, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
+            precondition(buf.baseAddress != nil, "the inline dispatch scans only non-empty content")
+            return Self.scanSignificant(buf.baseAddress!, from: startIdx, to: n, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
         }
         return base + found
     }
@@ -327,7 +327,8 @@ internal struct ContentSpan: ~Escapable {
         let si = segmentIndex(covering: globalCursor)
         let segVStart = segmentStart(si)
         return span.withUnsafeBufferPointer { buf -> Int in
-            guard let p = buf.baseAddress else { return end }
+            precondition(buf.baseAddress != nil, "multi-segment content borrows a non-empty source")
+            let p = buf.baseAddress!
             var i = si
             var vStart = segVStart
             var cursor = globalCursor
