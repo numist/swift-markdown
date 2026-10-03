@@ -378,9 +378,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var orphanScratch = UniqueArray<Range<Int>>()
         
         for (node, ref) in pending {
-            if ref.count == 0 || ref.totalLength == 0 {
-                continue
-            }
+            precondition(ref.totalLength > 0, "only non-empty content is queued for inline parsing")
             if ref.count == 1 {
                 let chunk = storage.segments[Int(ref.first)].chunk
                 if chunk.inSource {
@@ -1364,9 +1362,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// A `.lazy` entry resolves to a `Chunk(inSource: true)` addressing the original source - no copy (this covers source-contiguous multi-line paragraphs). A `.materialized` entry is appended to `storage.strings` and a `Chunk(inSource: false)` is returned.
     private mutating func materializePendingContent(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> LeafMaterialization {
-        guard let leaf = pending else {
-            preconditionFailure("an open paragraph always holds its accumulated content")
-        }
+        precondition(pending != nil, "an open paragraph always holds its accumulated content")
+        let leaf = pending!
         precondition(leaf.node == node, "the pending leaf is the open paragraph's")
         switch consume leaf.content {
         case .lazy(let range):
@@ -1567,8 +1564,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // Split the earlier lines off into a preceding paragraph, then re-seed `node` to the header
                 // line so the two-line finalize detection builds the table from `header` + delimiter (+ body).
                 // The preceding lines are non-blank paragraph content (a blank line would have closed the
-                // paragraph), so they never trim to empty; guarding on it only avoids dropping content in a
-                // degenerate case rather than silently losing the earlier lines.
+                // paragraph), so they never trim to empty.
                 var precedingChunk = Chunk(offset: range.lowerBound, length: lastNewline - range.lowerBound, inSource: true)
                     .trimming(using: self)
                 // The split-off lines start with the paragraph's first line, so they carry any task-item
@@ -1586,12 +1582,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     precedingChunk = parseDefinitions(in: precedingChunk).trimming(using: self)
                 }
                 if precedingChunk.isEmpty {
-                    // Non-reconstructed content never trims to empty (see above); leave the paragraph whole
-                    // rather than silently drop content. A reconstructed paragraph whose entire preceding run
-                    // was leading ref-defs falls through to open the table with no preceding paragraph.
-                    if !reconstructed {
-                        return pending
-                    }
+                    // A reconstructed paragraph whose entire preceding run was leading ref-defs opens the
+                    // table with no preceding paragraph.
+                    precondition(reconstructed, "non-blank preceding lines empty out only when they were all reconstructed definitions")
                 } else {
                     let preceding = insertTablePrecedingParagraph(before: node)
                     storage.setSourceStart(preceding, precedingChunk.offset)
@@ -1769,9 +1762,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `.multiContiguous` split for the segment-list / materialized representations (cmark's
     /// `try_inserting_table_header_paragraph`). Called only after `classifyMultiLineHeader` returns `.opens`.
     private mutating func splitNoncontiguousPendingTable(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
-        guard let leaf = pending else {
-            preconditionFailure("an open paragraph always holds its accumulated content")
-        }
+        precondition(pending != nil, "an open paragraph always holds its accumulated content")
+        let leaf = pending!
         switch consume leaf.content {
         case .segments(let segs):
             return splitSegmentHeader(node, segments: segs)
@@ -4761,9 +4753,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         while gap < chunk.length, readByte(at: off + gap, in: chunk).isExtensionScannerSpace {
             gap += 1
         }
-        guard gap + Self.tasklistMarkerWidth - 1 <= chunk.length else {
-            return nil
-        }
+        precondition(gap + Self.tasklistMarkerWidth - 1 <= chunk.length, "an eligible task item's first leaf begins with its checkbox")
         let separator = gap + Self.tasklistMarkerWidth - 1 < chunk.length
             ? readByte(at: off + gap + Self.tasklistMarkerWidth - 1, in: chunk)
             : UInt8(ascii: " ")
