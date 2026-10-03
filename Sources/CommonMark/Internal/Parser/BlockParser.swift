@@ -1347,7 +1347,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .none:
             return LeafSegments(segments: UniqueArray(), pending: nil)
         case .some(let leaf):
-            guard leaf.node == node else { return LeafSegments(segments: UniqueArray(), pending: leaf) }
+            precondition(leaf.node == node, "pending content belongs to the one open leaf, which drains when it closes")
             switch consume leaf.content {
             case .segments(let segs):
                 return LeafSegments(segments: segs, pending: nil)
@@ -3092,22 +3092,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return storage.strings[Int(seg.offset) + local]
     }
 
-    /// Trim leading whitespace off the first segment and trailing whitespace off the last (matching `Chunk.trimming(using:)`), in place. Interior segments - the newline joins and any hard-break trailing spaces before them - are untouched. An edge segment trimmed to zero length is harmless (read as empty).
+    /// Trim trailing whitespace off the last segment (matching `Chunk.trimming(using:)`), in place. Interior segments - the newline joins and any hard-break trailing spaces before them - are untouched. A last segment trimmed to zero length is harmless (read as empty).
     ///
-    /// Pass `trimLeading: false` to keep the first segment's leading whitespace: a table-pending node's header row (its first line) must retain a lazy continuation's preserved residual, since cmark builds the header row from the raw paragraph content and never trims its leading edge (that residual becomes the header's empty leading cell).
+    /// The first segment is a paragraph's opening line, which starts at its first non-space byte, so there is no leading whitespace to trim - except in a table-pending node's header row (pass `trimLeading: false`), which keeps a lazy continuation's preserved residual, since cmark builds the header row from the raw paragraph content and never trims its leading edge (that residual becomes the header's empty leading cell).
     private func trimSegments(_ segs: consuming UniqueArray<Segment>, trimLeading: Bool = true) -> UniqueArray<Segment> {
         var segs = segs
-        if segs.count == 0 { return segs }
-        if trimLeading {
-            var first = segs[0]
-            var l = 0
-            while l < Int(first.length) && segmentByte(first, l).isSpaceTabOrNewline { l += 1 }
-            first.offset += Int32(l)
-            // The first segment is a paragraph's opening line (never re-indented), so `sourceOffset == offset`; advance it in step to keep the source mapping aligned with the trimmed bytes.
-            first.sourceOffset += Int32(l)
-            first.length -= Int32(l)
-            segs[0] = first
-        }
+        precondition(segs.count > 0, "a paragraph's segment list starts with its opening line")
+        precondition(!trimLeading || !segmentByte(segs[0], 0).isSpaceTabOrNewline, "a paragraph's opening line starts at its first non-space byte")
         let li = segs.count - 1
         var last = segs[li]
         var len = Int(last.length)
@@ -3221,7 +3212,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func flattenSegments(_ segs: borrowing UniqueArray<Segment>, map: inout [ArenaRun]) -> Chunk {
         var total = 0
         for i in 0..<segs.count { total += Int(segs[i].length) }
-        if total == 0 { return .empty }
         var buf = UniqueArray<UInt8>(minimumCapacity: total)
         let offset = storage.strings.count
         for i in 0..<segs.count {
@@ -3310,10 +3300,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // content reaches here, so consult what was recorded during block parsing (`paragraphSecondLineIndent`
         // / `paragraphSecondLineLazy`); an over-indented or lazy delimiter row stays a paragraph continuation,
         // as in cmark.
-        if storage.options.contains(.tables)
-            && (paragraphTablePending[node] ?? false)
-            && (paragraphSecondLineIndent[node] ?? 0) < 4
-            && !(paragraphSecondLineLazy[node] ?? false) {
+        let tablePending = storage.options.contains(.tables) && (paragraphTablePending[node] ?? false)
+        precondition(!tablePending || (paragraphSecondLineIndent[node] != nil && paragraphSecondLineLazy[node] != nil), "a table-pending paragraph recorded its second line's indent and laziness when that line arrived")
+        if tablePending && paragraphSecondLineIndent[node]! < 4 && !paragraphSecondLineLazy[node]! {
             // cmark's header is the raw paragraph content (never ref-def-stripped), so the table parser sees
             // the content before `parseDefinitions` touches it. cmark also never trims the header row's
             // LEADING edge: a lazy continuation's residual leading whitespace (kept by `addLineSegment` and
@@ -3373,8 +3362,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if case .heading = kind { isSetextHeading = true } else { isSetextHeading = false }
             let end: Int
             if let atxHeadingEnd {
-                // An ATX heading ends at its trimmed content extent, not the raw line. Map the line-offset through `sourceOffset` exactly like the heading start, so tab-expanded lines resolve correctly; fall back to the raw line end if the mapping is unavailable.
-                end = sourceOffset(atxHeadingEnd) ?? currentLineSourceRange.upperBound
+                // An ATX heading ends at its trimmed content extent, not the raw line. Map the line-offset through `sourceOffset` exactly like the heading start, so tab-expanded lines resolve correctly.
+                let mappedEnd = sourceOffset(atxHeadingEnd)
+                precondition(mappedEnd != nil, "with positions tracked, every line offset maps to source")
+                end = mappedEnd!
                 // cmark's chop_trailing_hashtags shrinks the line chunk before `last_line_length` is recorded (src/blocks.c), so a block later attributed to this line - notably the document, whose end is stamped from the final line - inherits the trimmed extent, not the raw line end. Mirror that by shrinking the tracked current-line end to the heading's content end.
                 currentLineSourceRange = currentLineSourceRange.lowerBound..<end
             } else {
@@ -3525,8 +3516,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
 
         if lo >= hi {
-            // Empty body: fenced → genuinely empty; indented → a single newline.
-            segs = isFenced ? UniqueArray() : UniqueArray(repeating: nl, count: 1)
+            // An indented code block opens on a line with content, so only a fenced body can be empty.
+            precondition(isFenced, "an indented code block's first line holds content, so its body is never empty")
+            segs = UniqueArray()
             return
         }
 
@@ -3614,10 +3606,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let b = source[i]
             if b == UInt8(ascii: " ") {
                 col += 1
-            } else if b == UInt8(ascii: "\t") {
-                col += 4 - (col & 3)
             } else {
-                break
+                assert(b == UInt8(ascii: "\t"), "an indent run holds only spaces and tabs")
+                col += 4 - (col & 3)
             }
         }
         return col - baseColumn
@@ -3765,15 +3756,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if b == UInt8(ascii: " ") {
                 col += 1
                 i += 1
-            } else if b == UInt8(ascii: "\t") {
+            } else {
+                assert(b == UInt8(ascii: "\t"), "the columns advanced lie within the line's leading spaces and tabs")
                 let advance = 4 - (col & 3)
                 if col + advance > target {
                     break
                 }
                 col += advance
                 i += 1
-            } else {
-                break
             }
         }
         return i
@@ -4757,14 +4747,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let separator = gap + Self.tasklistMarkerWidth - 1 < chunk.length
             ? readByte(at: off + gap + Self.tasklistMarkerWidth - 1, in: chunk)
             : UInt8(ascii: " ")
-        guard let checked = Self.tasklistMarkerChecked(
+        let marker = Self.tasklistMarkerChecked(
             readByte(at: off + gap, in: chunk),
             readByte(at: off + gap + 1, in: chunk),
             readByte(at: off + gap + 2, in: chunk),
             separator
-        ) else {
-            return nil
-        }
+        )
+        precondition(marker != nil, "an eligible task item's first leaf begins with the checkbox its opening line held")
+        let checked = marker!
         // cmark advances 3 bytes from the content start, then the paragraph strips the leading space/tab
         // run; do the same from the chunk start (index 3), not from the checkbox.
         var contentStart = 3
