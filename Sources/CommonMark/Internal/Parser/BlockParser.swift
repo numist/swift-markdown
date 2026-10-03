@@ -5427,10 +5427,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             contentStart += 1
         }
-        // The opener line has 0–3 leading spaces (no straddling prefix tab), so its label region maps
-        // straight to source; `sourceOffset` is identity there. `?? labelStart` is a harmless fallback
-        // for the (never-hit in these configs) positions-off materialized case.
-        let labelOffset = sourceOffset(labelStart) ?? labelStart
+        // The label is read back from the original source. On a line whose prefix tabs were expanded, the
+        // label (which follows `[^`) lies in the copy's verbatim tail, so it maps back by the tail's constant
+        // delta whether or not positions are tracked.
+        let labelOffset = currentLineMapsToSource ? labelStart : materializedSourceOffset(labelStart)
         return (
             label: Chunk(offset: labelOffset, length: labelLen, inSource: true),
             consumedTo: contentStart
