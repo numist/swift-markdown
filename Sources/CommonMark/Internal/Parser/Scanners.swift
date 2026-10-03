@@ -28,9 +28,7 @@ extension BlockParser {
     internal func matchLinkLabel(_ chunk: Chunk) -> LinkLabelMatch? {
         let start = chunk.offset
         let end = chunk.range.upperBound
-        if start >= end {
-            return nil
-        }
+        precondition(start < end, "a link label scan starts on a content byte")
         if readByte(at: start, in: chunk) != UInt8(ascii: "[") {
             return nil
         }
@@ -231,9 +229,6 @@ extension BlockParser {
                 continue
             }
             if terminatesDestination(c) {
-                if i == start {
-                    return nil
-                }
                 break
             }
             i += 1
@@ -443,7 +438,7 @@ extension BlockParser {
         return i
     }
 
-    /// `spnl` from cmark: zero or more spaces/tabs, then *at most one* line end (`\n`, `\r\n`, or `\r`), then more spaces/tabs. Scans from `cursor` up to the end of `chunk`.
+    /// `spnl` from cmark: zero or more spaces/tabs, then *at most one* line end, then more spaces/tabs. Scans from `cursor` up to the end of `chunk`.
     internal func skipSpacesAndOneLineEnd(from cursor: Int, in chunk: Chunk) -> Int {
         let end = chunk.range.upperBound
         var i = skipSpacesTabs(from: cursor, in: chunk)
@@ -451,33 +446,22 @@ extension BlockParser {
             return i
         }
         let c = readByte(at: i, in: chunk)
-        if c == UInt8(ascii: "\r") {
-            i += 1
-            if i < end && readByte(at: i, in: chunk) == UInt8(ascii: "\n") {
-                i += 1
-            }
-            i = skipSpacesTabs(from: i, in: chunk)
-        } else if c == UInt8(ascii: "\n") {
+        precondition(c != UInt8(ascii: "\r"), "definition content holds no carriage return: lines split on CR and join with LF")
+        if c == UInt8(ascii: "\n") {
             i += 1
             i = skipSpacesTabs(from: i, in: chunk)
         }
         return i
     }
 
-    /// Match `\r\n`, `\n`, `\r`, or end-of-input at `cursor`. Returns the offset just past the line ending, or `nil` if `cursor` is neither at a line end nor at the end of `chunk`.
+    /// Match a line end or end-of-input at `cursor`. Returns the offset just past the line ending, or `nil` if `cursor` is neither at a line end nor at the end of `chunk`.
     internal func skipLineEndOrEOF(from cursor: Int, in chunk: Chunk) -> Int? {
         let end = chunk.range.upperBound
         if cursor >= end {
             return cursor
         }
         let c = readByte(at: cursor, in: chunk)
-        if c == UInt8(ascii: "\r") {
-            var i = cursor + 1
-            if i < end && readByte(at: i, in: chunk) == UInt8(ascii: "\n") {
-                i += 1
-            }
-            return i
-        }
+        precondition(c != UInt8(ascii: "\r"), "definition content holds no carriage return: lines split on CR and join with LF")
         if c == UInt8(ascii: "\n") {
             return cursor + 1
         }
