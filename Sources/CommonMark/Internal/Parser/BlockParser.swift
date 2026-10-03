@@ -94,7 +94,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Used by `addLine` to decide whether the bytes can be addressed lazily by source-range, deferring materialization until the paragraph spans multiple lines or otherwise transforms the content.
     var currentLineMapsToSource: Bool = false
 
-    /// For a tab-expanded (materialized) line, the buffer offset where `expandPrefixTabs`'s verbatim tail begins, and the corresponding original-line byte offset. Since the tail is copied byte-for-byte, every content offset in it maps back to source by the constant delta `currentLineSourceRange.lowerBound + materializedRestStart - materializedTailBufferStart`; offsets inside the expanded prefix are recovered by a column walk on the original line. Only meaningful while `!currentLineMapsToSource` (see `sourceOffset` for the positions path and `materializedSourceStart` for the positions-independent code-content path).
+    /// For a tab-expanded (materialized) line, the buffer offset where `expandPrefixTabs`'s verbatim tail begins, and the corresponding original-line byte offset. Since the tail is copied byte-for-byte, every content offset in it maps back to source by the constant delta `currentLineSourceRange.lowerBound + materializedRestStart - materializedTailBufferStart`; offsets inside the expanded prefix are recovered by a column walk on the original line. Only meaningful while `!currentLineMapsToSource` (see `sourceOffset` for the positions path, and `materializedSourceOffset` / `materializedSourceStart` for the positions-independent content paths).
     var materializedTailBufferStart: Int = 0
     var materializedRestStart: Int = 0
 
@@ -332,7 +332,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     storage.lineStarts.append(lineRangeInOriginalSource.lowerBound)
                     lastLineSourceEnd = currentLineSourceRange.upperBound
                 }
-                // Tracked unconditionally: recovering a materialized code/HTML body line's literal source bytes (`appendMaterializedCodeContent`) needs the current line's source range even when positions are off, since code content must preserve tabs regardless of `.sourcePosition`.
+                // Tracked unconditionally: recovering a materialized line's literal source bytes - a code/HTML body line (`appendMaterializedCodeContent`) or paragraph/heading text (`addLine`, `addLineSegment`) - needs the current line's source range even when positions are off, since content must preserve tabs regardless of `.sourcePosition`.
                 currentLineSourceRange = lineRangeInOriginalSource
                 
                 // Per-line materialized buffer used when a line's leading tabs need to be expanded into spaces so partial-tab consumption by container markers works correctly.
@@ -897,7 +897,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return addLineSegment(span: span, range: range, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
             case let other:
                 var buffer = unwrap(other)
-                // why: flag ON, a LAZY continuation keeps its residual whitespace in the content, exactly as `addLineSegment` does for a segment list (cmark's lazy `add_line` copies from where prefix matching stopped, blocks.c:1408), so a code span or link title spanning the line reads it. Such a line reaches this materialized buffer when the paragraph began as an orphan-led tasklist-retry line (`appendOrphanLedLine`).
+                // why: flag ON, a LAZY continuation keeps its residual whitespace in the content, exactly as `addLineSegment` does for a segment list (cmark's lazy `add_line` copies from where prefix matching stopped, blocks.c:1408), so a code span or link title spanning the line reads it. Such a line reaches this materialized buffer when, for example, the paragraph began as an orphan-led tasklist-retry line (`appendOrphanLedLine`).
                 let contentStart = keepsLazyResidual(before: range.lowerBound) ? currentLineContentCursor : range.lowerBound
                 // A tab-expanded current line (`!currentLineMapsToSource`) has `span` pointing at the per-line expanded buffer, not source - appending `span[range]` directly would bake the expanded-tab spaces into the arena as if they were literal content. Map back to the literal source range instead (same rule as the `.none` case above and `addLineSegment`'s materialized branch): cmark expands tabs only for block-structure indentation and keeps them literal in inline content. A kept residual that starts inside a tab an outer container partly consumed begins with that tab's leftover columns as spaces (cmark's `partially_consumed_tab`, blocks.c `add_line`).
                 if !currentLineMapsToSource {
@@ -2946,7 +2946,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // bridge repairs each one to its own U+FFFD. Materialize this first line into the arena with
                     // those replacements leading the rest of the line (from the byte after the orphans), so the
                     // content stays well-formed UTF-8 (`StorageView.string(of:)`). It stays a single-line
-                    // `.materialized` leaf, the first-line shape the pending-table checks expect.
+                    // `.materialized` leaf, marked table-visited, so table detection never inspects it.
                     let paragraphIdx = addChild(kind: .paragraph, parent: current, start: advance.orphanStart)
                     current = paragraphIdx
                     markOrphanLedParagraphTableVisited(paragraphIdx)
