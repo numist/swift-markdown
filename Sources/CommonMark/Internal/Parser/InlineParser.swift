@@ -1254,38 +1254,50 @@ extension BlockParser {
     }
 
     /// Build the byte-captured label for a raw byte-length cut `[start, cutEnd)`, reproducing cmark's
-    /// `cmark_chunk` truncation: the cut is a length-bounded slice oblivious to UTF-8 boundaries, so a
-    /// scalar split by the cut is replaced by a single U+FFFD (the reference's later `String(cString:)`
-    /// bridge repairing the truncated tail) instead of reading past the cut to complete it. Shared by both
-    /// footnote-shaped-bracket label captures (`collapseMultilineFootnote`, `emitEscapedCaretFootnote`).
+    /// `cmark_chunk` truncation: the cut is a length-bounded slice oblivious to UTF-8 boundaries, and a
+    /// scalar split by the cut is never completed by reading past it. The split scalar's bytes reach the
+    /// two uses of the capture differently, so each gets its own form:
+    /// - `display`, the bytes of an unresolved reconstruction, ends in a single U+FFFD for the truncated
+    ///   tail: the reference's later `String(cString:)` bridge repairs it as one maximal subpart.
+    /// - `lookupKey`, the label matched against definitions, ends in one U+FFFD per truncated byte:
+    ///   cmark's `cmark_map_lookup` case-folds the raw cut with `cmark_utf8proc_case_fold`, whose
+    ///   `cmark_utf8proc_iterate` rejects an incomplete sequence and advances a single byte at a time.
+    ///
+    /// Shared by both footnote-shaped-bracket label captures (`collapseMultilineFootnote`,
+    /// `emitEscapedCaretFootnote`).
     /// `overreadByte`, when non-nil, stands in for content at/past `content.endOffset` — the
     /// escaped-caret image form's one-byte over-read past the block's own content, into whatever cmark's
     /// buffer holds right there (its caller, `emitEscapedCaretFootnote`, picks the byte); callers
     /// that don't over-read never pass a `cutEnd` past `content.endOffset`, so it's never forced.
-    private static func capturedLabelBytes(content: borrowing ContentSpan, start: Int, cutEnd: Int, overreadByte: UInt8? = nil) -> [UInt8] {
+    private static func capturedLabelBytes(content: borrowing ContentSpan, start: Int, cutEnd: Int, overreadByte: UInt8? = nil) -> (display: [UInt8], lookupKey: [UInt8]) {
         let contentEnd = content.endOffset
-        var bytes: [UInt8] = []
+        let replacementCharacter: [UInt8] = [0xEF, 0xBF, 0xBD]
+        var display: [UInt8] = []
+        var lookupKey: [UInt8] = []
         var j = start
         while j < cutEnd {
             let b0 = j < contentEnd ? content[j] : overreadByte!
             let sequenceLength = b0.utf8SequenceLength
             if j + sequenceLength <= cutEnd {
                 for k in j..<(j + sequenceLength) {
-                    bytes.append(k < contentEnd ? content[k] : overreadByte!)
+                    display.append(k < contentEnd ? content[k] : overreadByte!)
                 }
                 j += sequenceLength
             } else {
                 // The cut lands inside this scalar's continuation bytes: cmark's raw slice ends here, so
-                // nothing beyond `cutEnd` is part of the capture. Emit the one U+FFFD the reference's
-                // later UTF-8 repair produces for the truncated tail, and stop.
-                bytes.append(contentsOf: [0xEF, 0xBF, 0xBD])
-                break
+                // nothing beyond `cutEnd` is part of the capture.
+                lookupKey = display
+                for _ in j..<cutEnd {
+                    lookupKey.append(contentsOf: replacementCharacter)
+                }
+                display.append(contentsOf: replacementCharacter)
+                return (display, lookupKey)
             }
         }
-        return bytes
+        return (display, display)
     }
 
-    /// The footnote definition a byte-captured label (`capturedLabelBytes`) resolves to, or `nil`, as
+    /// The footnote definition a byte-captured label's lookup key (`capturedLabelBytes`) resolves to, or `nil`, as
     /// cmark's `process_footnotes` looks up the captured reference literal. `labelRange` is the virtual
     /// range of `content` whose bytes cmark counts against the label-length cap (`footnoteDefinition`).
     private mutating func capturedFootnoteDefinition(_ labelBytes: [UInt8], measuredOver labelRange: Range<Int>, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
@@ -1312,8 +1324,9 @@ extension BlockParser {
     /// truncated tail to a single U+FFFD (Unicode's maximal-subpart replacement) — so a captured lead
     /// byte with no continuation bytes becomes `�`, not the rest of the (unrelated) character that
     /// happened to follow it in the buffer. Materialize that same replacement here rather than reading
-    /// past the cut to complete the scalar. cmark then RESOLVES that captured label if it matches a
-    /// definition (so a cross-line `[^abcdef<nl>xxxxx]` resolves to `abc`); otherwise the whole span reconstructs as
+    /// past the cut to complete the scalar. cmark then RESOLVES the raw captured bytes if they match a
+    /// definition (so a cross-line `[^abcdef<nl>xxxxx]` resolves to `abc`), looking up the truncated tail
+    /// as one U+FFFD per byte (`capturedLabelBytes`); otherwise the whole span reconstructs as
     /// `[^` + the captured bytes + `]` (`[^]` for an empty capture). The spec-correct default keeps the
     /// bracket literal with its soft break; see FINDINGS #146.
     private mutating func collapseMultilineFootnote(openerInl: DocumentStorage.Index, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan) {
@@ -1321,12 +1334,13 @@ extension BlockParser {
         // A cross-line reset can drive the length negative; cmark's underflow guard clamps it to empty.
         let x = max(0, footnoteCapturedLabelLength(content, open: open, close: close))
         var labelBytes: [UInt8] = []
+        var lookupKey: [UInt8] = []
         if x > 0 {
-            labelBytes = Self.capturedLabelBytes(content: content, start: labelStart, cutEnd: min(labelStart + x, close))
+            (labelBytes, lookupKey) = Self.capturedLabelBytes(content: content, start: labelStart, cutEnd: min(labelStart + x, close))
         }
         // cmark resolves the reference by its byte-captured label; a match emits a footnote reference.
-        // cmark measures the captured length `x`, not `labelBytes`, which a U+FFFD repair can lengthen.
-        if let defIdx = capturedFootnoteDefinition(labelBytes, measuredOver: labelStart..<min(labelStart + x, close), in: content) {
+        // cmark measures the captured length `x`, not `lookupKey`, which U+FFFD replacement can lengthen.
+        if let defIdx = capturedFootnoteDefinition(lookupKey, measuredOver: labelStart..<min(labelStart + x, close), in: content) {
             emitFootnoteReference(openerInl: openerInl, definition: defIdx)
             return
         }
@@ -1371,7 +1385,7 @@ extension BlockParser {
     /// mid-character the same way the plain `[^…]` capture does (`collapseMultilineFootnote`): cmark's
     /// `cmark_chunk` slice is UTF-8-oblivious, and its Swift bridge's later `String(cString:)` repairs a
     /// truncated tail to a single U+FFFD (`capturedLabelBytes`), rather than reading past the cut to complete
-    /// the scalar. cmark resolves the captured label if it matches a definition (a cross-line
+    /// the scalar. cmark resolves the captured label, keyed as `capturedLabelBytes` describes, if it matches a definition (a cross-line
     /// `[\^abcdef<nl>xxxxx]` captures `abc`); otherwise the reference reconstructs as `[^` + captured bytes +
     /// `]` - and that same `String(cString:)` bridge truncates the WHOLE reconstructed literal at the
     /// NUL-terminated case's embedded NUL, dropping it and the `]` appended after it.
@@ -1386,12 +1400,12 @@ extension BlockParser {
         let overreadByte: UInt8 = storage.nulTerminatedInlineContainers.contains(parent)
             ? 0
             : storage.trailingBlankAfterContent[parent] ?? UInt8(ascii: "\n")
-        let labelBytes = Self.capturedLabelBytes(
+        let (labelBytes, lookupKey) = Self.capturedLabelBytes(
             content: content, start: labelStart, cutEnd: labelStart + labelLength, overreadByte: overreadByte)
         // cmark resolves the captured label like any footnote reference. The measured range stops at the
         // content end: a capture reaching past it includes the closing `]`, which no definition's label
         // can contain, so the shortened measure never changes the outcome.
-        if let defIdx = capturedFootnoteDefinition(labelBytes, measuredOver: labelStart..<min(labelStart + labelLength, content.endOffset), in: content) {
+        if let defIdx = capturedFootnoteDefinition(lookupKey, measuredOver: labelStart..<min(labelStart + labelLength, content.endOffset), in: content) {
             // cmark frees the whole opener node, so a resolved `![\^…]` keeps no `!`: unlike `![^…`, the
             // `![\` opener is pushed as an image bracket.
             emitFootnoteReference(openerInl: openerInl, definition: defIdx)
