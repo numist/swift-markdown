@@ -14,32 +14,35 @@ import CommonMark
 /// A block-quoted paragraph made of a link reference definition followed by a setext underline `===`, then a table.
 /// cmark resolves the definition when it scans the underline, finds no content left, and keeps the underline as
 /// paragraph text (blocks.c, `resolve_reference_link_definitions`); the table then splits off that paragraph. With
-/// `.cmarkBugCompatibility` the rewrite reproduces that structure, here with source positions off.
+/// `.cmarkBugCompatibility` the rewrite reproduces that structure; without it, it drops the empty paragraph and starts
+/// a new one at the underline. Both give cmark's tree. Source positions are off.
 @Suite("Table after a definition-only setext paragraph")
 struct TableAfterSetextDefinitionTests {
 
     private let source = "> [a]: /u\n> ===\n> a|b\n> -|-\n"
 
-    @Test("the underline stays a paragraph before the table")
-    func underlineParagraphBeforeTable() throws {
-        #expect(try CmarkTreeDump.dump(source, options: [.tables, .cmarkBugCompatibility]) == """
+    private static let compatibilityModes: [MarkdownDocument.ParseOptions] = [[], [.cmarkBugCompatibility]]
+
+    @Test("the underline stays a paragraph before the table", arguments: compatibilityModes)
+    func underlineParagraphBeforeTable(mode: MarkdownDocument.ParseOptions) throws {
+        #expect(try CmarkTreeDump.dump(source, options: mode.union(.tables)) == """
             document
               block_quote
                 paragraph
                   text "==="
                 table
                   table_header
-                    table_cell colspan=1 rowspan=1
+                    table_cell align=none colspan=1 rowspan=1
                       text "a"
-                    table_cell colspan=1 rowspan=1
+                    table_cell align=none colspan=1 rowspan=1
                       text "b"
 
             """)
     }
 
-    @Test("without tables, the underline and table lines are one paragraph")
-    func oneParagraphWithoutTables() throws {
-        #expect(try CmarkTreeDump.dump(source, options: [.cmarkBugCompatibility]) == """
+    @Test("without tables, the underline and table lines are one paragraph", arguments: compatibilityModes)
+    func oneParagraphWithoutTables(mode: MarkdownDocument.ParseOptions) throws {
+        #expect(try CmarkTreeDump.dump(source, options: mode) == """
             document
               block_quote
                 paragraph

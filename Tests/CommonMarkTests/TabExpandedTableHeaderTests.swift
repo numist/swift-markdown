@@ -27,9 +27,9 @@ struct TabExpandedTableHeaderTests {
               block_quote
                 table
                   table_header
-                    table_cell colspan=1 rowspan=1
+                    table_cell align=none colspan=1 rowspan=1
                       text "a"
-                    table_cell colspan=1 rowspan=1
+                    table_cell align=none colspan=1 rowspan=1
                       text "b"
 
             """)

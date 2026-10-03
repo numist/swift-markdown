@@ -28,7 +28,7 @@ struct TaskListRetryTabExpandedLineTests {
     func taskItem(mode: MarkdownDocument.ParseOptions) throws {
         #expect(try CmarkTreeDump.dump(source, options: mode.union([.tasklist, .cmarkBugCompatibility])) == """
             document
-              list
+              list ordered start=10 delim=period tight
                 tasklist unchecked
                   paragraph
                     text "4567890. [ ] x"
@@ -40,7 +40,7 @@ struct TaskListRetryTabExpandedLineTests {
     func plainItemWithoutTasklist() throws {
         #expect(try CmarkTreeDump.dump(source, options: [.cmarkBugCompatibility]) == """
             document
-              list
+              list ordered start=10 delim=period tight
                 item
                   paragraph
                     text "1234567890. [ ] x"
@@ -53,7 +53,7 @@ struct TaskListRetryTabExpandedLineTests {
     func plainItemWithoutBugCompatibility() throws {
         #expect(try CmarkTreeDump.dump(source, options: [.tasklist]) == """
             document
-              list
+              list ordered start=10 delim=period tight
                 item
                   paragraph
                     text "1234567890. [ ] x"

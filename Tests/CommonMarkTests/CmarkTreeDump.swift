@@ -14,9 +14,10 @@ import CommonMark
 /// (`cmark_node_get_type_string`), so a test can compare the whole tree with a literal taken from cmark-gfm.
 ///
 /// Each line is the type name followed by the node's defining values: the literal of text-like nodes, the info string
-/// and body of a code block, the URL and title of a link or image, the heading level, the checkbox state of a task
-/// item, the span of a table cell, and the label of a footnote definition or the number of a footnote reference.
-/// Quoted values escape `\`, `"`, newline and tab, and write any other control byte as `\u{XX}`.
+/// and body of a code block, the URL and title of a link or image, the heading level, a list's marker, start,
+/// delimiter and tightness, the checkbox state of a task item, the alignment and span of a table cell, and the label of
+/// a footnote definition or the number of a footnote reference. Quoted values escape `\`, `"`, newline and tab, and
+/// write any other control character or DEL as `\u{XX}`.
 internal enum CmarkTreeDump {
 
     internal static func dump(_ source: String, options: MarkdownDocument.ParseOptions) throws -> String {
@@ -37,7 +38,20 @@ internal enum CmarkTreeDump {
         switch node.kind {
         case .document: return "document"
         case .blockQuote: return "block_quote"
-        case .list: return "list"
+        case .list(let info):
+            let tightness = info.tight ? "tight" : "loose"
+            switch info.kind {
+            case .bullet:
+                let marker = switch info.bulletMarker {
+                case .hyphen: "-"
+                case .plus: "+"
+                case .asterisk: "*"
+                }
+                return "list bullet '\(marker)' \(tightness)"
+            case .ordered:
+                let delimiter = info.orderedDelimiter == .paren ? "paren" : "period"
+                return "list ordered start=\(info.start) delim=\(delimiter) \(tightness)"
+            }
         case .item(let checked):
             guard let checked else { return "item" }
             return "tasklist " + (checked ? "checked" : "unchecked")
@@ -54,7 +68,8 @@ internal enum CmarkTreeDump {
             return "footnote_definition " + quoted(label)
         case .table: return "table"
         case .tableRow(let isHeader): return isHeader ? "table_header" : "table_row"
-        case .tableCell(_, let columns, let rows): return "table_cell colspan=\(columns) rowspan=\(rows)"
+        case .tableCell(let alignment, let columns, let rows):
+            return "table_cell align=\(alignment) colspan=\(columns) rowspan=\(rows)"
         case .text: return "text " + quotedText(content)
         case .softBreak: return "softbreak"
         case .lineBreak: return "linebreak"
@@ -93,7 +108,7 @@ internal enum CmarkTreeDump {
             case "\"": out += "\\\""
             case "\n": out += "\\n"
             case "\t": out += "\\t"
-            case "\u{0}"..."\u{1F}": out += "\\u{" + String(scalar.value, radix: 16, uppercase: true) + "}"
+            case "\u{0}"..."\u{1F}", "\u{7F}": out += "\\u{" + String(scalar.value, radix: 16, uppercase: true) + "}"
             default: out.unicodeScalars.append(scalar)
             }
         }

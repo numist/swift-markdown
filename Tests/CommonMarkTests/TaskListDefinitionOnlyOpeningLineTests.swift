@@ -24,7 +24,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
     func laterCheckboxStaysText(mode: MarkdownDocument.ParseOptions) throws {
         #expect(try CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x]\n", options: mode.union(.tasklist)) == """
             document
-              list
+              list bullet '-' tight
                 tasklist unchecked
                   paragraph
                     text "[x]"
@@ -36,7 +36,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
     func laterCheckboxWithoutTasklist(mode: MarkdownDocument.ParseOptions) throws {
         #expect(try CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x]\n", options: mode) == """
             document
-              list
+              list bullet '-' loose
                 item
                   paragraph
                     text "[ ] [a]: /u"
@@ -50,7 +50,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
     func laterCheckboxWithTextStaysText(mode: MarkdownDocument.ParseOptions) throws {
         #expect(try CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x] foo\n", options: mode.union(.tasklist)) == """
             document
-              list
+              list bullet '-' tight
                 tasklist unchecked
                   paragraph
                     text "[x] foo"
@@ -62,7 +62,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
     func laterCheckboxWithTextWithoutTasklist(mode: MarkdownDocument.ParseOptions) throws {
         #expect(try CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x] foo\n", options: mode) == """
             document
-              list
+              list bullet '-' loose
                 item
                   paragraph
                     text "[ ] [a]: /u"
@@ -76,7 +76,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
     func laterShortParagraph(mode: MarkdownDocument.ParseOptions) throws {
         #expect(try CmarkTreeDump.dump("- [ ] [a]: /u\n\n  ab\n", options: mode.union(.tasklist)) == """
             document
-              list
+              list bullet '-' tight
                 tasklist unchecked
                   paragraph
                     text "ab"
@@ -88,7 +88,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
     func laterShortParagraphWithoutTasklist(mode: MarkdownDocument.ParseOptions) throws {
         #expect(try CmarkTreeDump.dump("- [ ] [a]: /u\n\n  ab\n", options: mode) == """
             document
-              list
+              list bullet '-' loose
                 item
                   paragraph
                     text "[ ] [a]: /u"
@@ -108,15 +108,15 @@ struct TaskListDefinitionOnlyOpeningLineTests {
     func laterCheckboxBeforeTable(mode: MarkdownDocument.ParseOptions, source: String) throws {
         #expect(try CmarkTreeDump.dump(source, options: mode.union([.tasklist, .tables])) == """
             document
-              list
+              list bullet '-' tight
                 tasklist unchecked
                   paragraph
                     text "[x]"
                   table
                     table_header
-                      table_cell colspan=1 rowspan=1
+                      table_cell align=none colspan=1 rowspan=1
                         text "h"
-                      table_cell colspan=1 rowspan=1
+                      table_cell align=none colspan=1 rowspan=1
                         text "h"
 
             """)
@@ -132,7 +132,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
     func laterCheckboxBeforeTableWithoutTasklist(mode: MarkdownDocument.ParseOptions, source: String) throws {
         #expect(try CmarkTreeDump.dump(source, options: mode.union(.tables)) == """
             document
-              list
+              list bullet '-' loose
                 item
                   paragraph
                     text "[ ] [a]: /u"
@@ -140,9 +140,9 @@ struct TaskListDefinitionOnlyOpeningLineTests {
                     text "[x]"
                   table
                     table_header
-                      table_cell colspan=1 rowspan=1
+                      table_cell align=none colspan=1 rowspan=1
                         text "h"
-                      table_cell colspan=1 rowspan=1
+                      table_cell align=none colspan=1 rowspan=1
                         text "h"
 
             """)
