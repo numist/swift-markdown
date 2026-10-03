@@ -746,7 +746,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// The global original-source byte offset for a within-current-line offset.
     ///
-    /// When the line maps to source the passed offset is already a global source offset (the line was processed as a slice of `sourceBytes`). For a tab-expanded (materialized) line, the offset is a transient-buffer offset: `expandPrefixTabs` only rewrites the leading whitespace/marker prefix and copies the rest of the line verbatim, so a tail offset maps back by a constant delta and a prefix offset is recovered by re-walking the original line's prefix (see `originalPrefixSourceOffset`). Returns `nil` for a materialized line when positions are off, since the source-line coordinates it needs (`currentLineSourceRange`) are only tracked then.
+    /// When the line maps to source the passed offset is already a global source offset (the line was processed as a slice of `sourceBytes`). For a tab-expanded (materialized) line, the offset is a transient-buffer offset: `expandPrefixTabs` only rewrites the leading whitespace/marker prefix and copies the rest of the line verbatim, so a tail offset maps back by a constant delta and a prefix offset is recovered by re-walking the original line's prefix (see `originalPrefixSourceOffset`). Returns `nil` for a materialized line when positions are off, since its callers only stamp positions; content that must be read back from source uses `materializedSourceOffset`, which doesn't depend on `.sourcePosition`.
     private func sourceOffset(_ lineOffset: Int) -> Int? {
         if currentLineMapsToSource {
             return lineOffset
@@ -873,10 +873,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if currentLineMapsToSource, nodeKind.canAccumulateText {
                 return PendingLeaf(node: node, content: .lazy(range: range))
             }
-            // Tab-expanded line: map the first-line content back to its literal source range rather than copying the expanded buffer into the arena, so inline stamping recovers real source positions and any content tab stays literal. `expandPrefixTabs` rewrites only the consumed indentation and copies the rest verbatim, so the first non-space content byte maps to a genuine source byte (a marker byte or a tail byte, never inside an expanded tab's spaces) and the content end maps to the source line end. cmark expands tabs only for block-structure indentation and keeps them literal in inline content, so the source range - which carries any interior tab as one byte (one column) - is what matches the reference. This covers both content that maps 1:1 (e.g. the `*` of `*5*` after `*\t`/`>\t`) and content straddling an expanded tab (e.g. `**\tx`, whose doubled marker bytes are inline content that no block marker consumes, so the tab lands inside the paragraph). Gated on positions (the source mapping `sourceOffset` needs is only tracked then).
-            if positionsEnabled, nodeKind.canAccumulateText,
-               let sourceLow = sourceOffset(range.lowerBound), let sourceHigh = sourceOffset(range.upperBound) {
-                return PendingLeaf(node: node, content: .lazy(range: sourceLow..<sourceHigh))
+            // Tab-expanded line: map the first-line content back to its literal source range rather than copying the expanded buffer into the arena, so inline stamping recovers real source positions and any content tab stays literal. `expandPrefixTabs` rewrites only the consumed indentation and copies the rest verbatim, so the first non-space content byte maps to a genuine source byte (a marker byte or a tail byte, never inside an expanded tab's spaces) and the content end maps to the source line end. cmark expands tabs only for block-structure indentation and keeps them literal in inline content, so the source range - which carries any interior tab as one byte (one column) - is what matches the reference. This covers both content that maps 1:1 (e.g. the `*` of `*5*` after `*\t`/`>\t`) and content straddling an expanded tab (e.g. `**\tx`, whose doubled marker bytes are inline content that no block marker consumes, so the tab lands inside the paragraph). The mapping reads only unconditionally tracked line state, so the content is the same whether or not `.sourcePosition` is set.
+            if nodeKind.canAccumulateText {
+                return PendingLeaf(node: node, content: .lazy(range: materializedSourceOffset(range.lowerBound)..<materializedSourceOffset(range.upperBound)))
             }
             let buffer = UniqueArray(capacity: range.count) { buffer in
                 for i in range {
@@ -908,7 +907,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // why: flag ON, a LAZY continuation keeps its residual whitespace in the content, exactly as `addLineSegment` does for a segment list (cmark's lazy `add_line` copies from where prefix matching stopped, blocks.c:1408), so a code span or link title spanning the line reads it. With positions on, such a line reaches this materialized buffer when the paragraph began as an orphan-led tasklist-retry line (`appendOrphanLedLine`).
                 let contentStart = keepsLazyResidual(before: range.lowerBound) ? currentLineContentCursor : range.lowerBound
                 // A tab-expanded current line (`!currentLineMapsToSource`) has `span` pointing at the per-line expanded buffer, not source - appending `span[range]` directly would bake the expanded-tab spaces into the arena as if they were literal content. Map back to the literal source range instead (same rule as the `.none` case above and `addLineSegment`'s materialized branch): cmark expands tabs only for block-structure indentation and keeps them literal in inline content. A kept residual that starts inside a tab an outer container partly consumed begins with that tab's leftover columns as spaces (cmark's `partially_consumed_tab`, blocks.c `add_line`).
-                if !currentLineMapsToSource, positionsEnabled, let sourceHigh = sourceOffset(range.upperBound) {
+                if !currentLineMapsToSource {
+                    let sourceHigh = materializedSourceOffset(range.upperBound)
                     let (sourceLow, splitTabSpaces) = materializedSourceStart(bufferStart: contentStart)
                     buffer.reserveCapacity(buffer.count + splitTabSpaces + (sourceHigh - sourceLow))
                     for _ in 0..<splitTabSpaces {
