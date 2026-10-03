@@ -60,10 +60,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// Single-line paragraphs/headings parsed from the original source stay `.lazy` until `materializePendingContent` emits them as a `Chunk(inSource: true)`.
     ///
-    /// `.lazyNewline` is the deferred-separator state: a continuation `\n` was requested after a `.lazy` span but not yet committed, so that if the *next* line turns out to be contiguous in source (single-LF terminated, no stripped prefix) the whole multi-line run can stay a single zero-copy source range - the embedded `\n` comes from the source itself rather than a synthesized copy.
+    /// A `.lazy` span with `joinPending` set holds a deferred separator: a continuation `\n` was requested after the span but not yet committed, so that if the *next* line turns out to be contiguous in source (single-LF terminated, no stripped prefix) the whole multi-line run can stay a single zero-copy source range - the embedded `\n` comes from the source itself rather than a synthesized copy. Only `appendNewline` sets it, and the next `addLine` (or `addLazyLineAfterTasklistAdvance`) always clears it, so content that is drained or inspected between lines never has it set.
     enum PendingContent : ~Copyable {
-        case lazy(range: Range<Int>)
-        case lazyNewline(range: Range<Int>)
+        case lazy(range: Range<Int>, joinPending: Bool = false)
         case materialized(UniqueArray<UInt8>)
         /// An ordered segment list.
         ///
@@ -829,8 +828,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return UniqueArray()
         case .lazy?:
             preconditionFailure("source-backed content is extended in place, never copied into a buffer")
-        case .lazyNewline?:
-            preconditionFailure("source-backed content is extended in place, never copied into a buffer")
         case .materialized(let existing)?:
             return existing
         case .segments?:
@@ -888,17 +885,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             return PendingLeaf(node: node, content: .materialized(buffer))
         case .some(let existing):
-            // Contiguity fast path: a `\n` separator was deferred after a `.lazy` span (`appendNewline` left it as `.lazyNewline`). If this line is also source-backed and immediately follows the previous span in the source - i.e. it starts one byte past the previous span and that byte is a single `\n` - then the join needs no synthesized separator: the embedded `\n` already lives in the source, so we keep the whole run as one zero-copy `.lazy` range. This holds for top-level paragraphs with LF line endings and no stripped container prefix; blockquote/list continuation (prefix stripped → non-adjacent range), CRLF/CR (separator isn't a lone `\n` at `prev.upperBound`), and tab-expanded lines (`!currentLineMapsToSource`) all fall through to materialization below.
+            // Contiguity fast path: a `\n` separator was deferred after a `.lazy` span (`appendNewline` set its `joinPending`). If this line is also source-backed and immediately follows the previous span in the source - i.e. it starts one byte past the previous span and that byte is a single `\n` - then the join needs no synthesized separator: the embedded `\n` already lives in the source, so we keep the whole run as one zero-copy `.lazy` range. This holds for top-level paragraphs with LF line endings and no stripped container prefix; blockquote/list continuation (prefix stripped → non-adjacent range), CRLF/CR (separator isn't a lone `\n` at `prev.upperBound`), and tab-expanded lines (`!currentLineMapsToSource`) all fall through to materialization below.
             //
             // A LAZY continuation line into an indented container (a blockquote/list paragraph with no marker on the continuation line) IS source-contiguous, so it would collapse here and map to its true column. That equals cmark's output only at the top level, where the block-content column is 1; inside an indented container cmark re-indents every continuation line relative to the fixed block-content column (`currentContentIndent`) - the Quirk E re-indent (matched continuations to that column, lazy blockquote continuations to `true_col + block_offset`; see `addLineSegment`). Either target differs from the plain true column the collapse would produce, so flag-ON with a positive content indent is excluded from the collapse and falls through to the segment path below, which re-indents each continuation line via `addLineSegment` (the first line stays a plain source segment at its true column). Flag-OFF and the top-level `currentContentIndent == 0` case keep the zero-copy collapse (spec-correct there anyway).
             switch consume existing {
-            case .lazyNewline(let prev) where currentLineMapsToSource
+            case .lazy(let prev, joinPending: true) where currentLineMapsToSource
                     && range.lowerBound == prev.upperBound + 1
                     && prev.upperBound < sourceBytes.count
                     && sourceBytes[prev.upperBound] == UInt8(ascii: "\n")
                     && !(storage.options.contains(.cmarkBugCompatibility) && currentContentIndent > 0):
                 return PendingLeaf(node: node, content: .lazy(range: prev.lowerBound..<range.upperBound))
-            case .lazyNewline(let prev):
+            case .lazy(let prev, joinPending: true):
                 // Non-contiguous continuation (block-quote/list prefix stripped, CRLF, tab): switch to a source-segment list rather than copying bytes - the previous span becomes a zero-copy source segment, joined to this line by the shared interned `\n`.
                 var segs = UniqueArray<Segment>()
                 segs.append(Segment(offset: Int32(prev.lowerBound), length: Int32(prev.count), inSource: true))
@@ -966,15 +963,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Append a single `\n` to `pending` for `node`, returning the updated leaf.
     ///
-    /// Used to rejoin lines during paragraph continuation, since `LineReader` returns ranges without their line terminators. When the current content is a `.lazy` source span, the separator is *deferred* into `.lazyNewline` so the next `addLine` can keep the run zero-copy if it's source-contiguous; otherwise the `\n` is committed into a materialized buffer immediately.
+    /// Used to rejoin lines during paragraph continuation, since `LineReader` returns ranges without their line terminators. When the current content is a `.lazy` source span, the separator is *deferred* by setting its `joinPending` so the next `addLine` can keep the run zero-copy if it's source-contiguous; otherwise the `\n` is committed into a materialized buffer immediately.
     private mutating func appendNewline(to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         let nodeKind = storage[node].kind
         if nodeKind.isCodeBlock || nodeKind == .htmlBlock {
             return appendSegment(storage.newlineSegment, to: node, pending: pending)
         }
         switch take(pending, ifNode: node) {
-        case .lazy(let range)?:
-            return PendingLeaf(node: node, content: .lazyNewline(range: range))
+        case .lazy(let range, joinPending: false)?:
+            return PendingLeaf(node: node, content: .lazy(range: range, joinPending: true))
         case .segments(let segs)?:
             // A multi-line paragraph already accumulating as segments: the line join is the shared interned `\n` segment (zero-copy), not a byte appended to a materialized buffer.
             return appendSegment(storage.newlineSegment, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
@@ -1366,10 +1363,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let leaf = pending!
         precondition(leaf.node == node, "the pending leaf is the open paragraph's")
         switch consume leaf.content {
-        case .lazy(let range):
+        case .lazy(let range, let joinPending):
+            precondition(!joinPending, "a deferred line join is always consumed by the next line")
             return LeafMaterialization(chunk: Chunk(offset: range.lowerBound, length: range.count, inSource: true), pending: nil)
-        case .lazyNewline:
-            preconditionFailure("a deferred line join is always consumed by the next line")
         case .materialized(let content):
             let offset = storage.strings.count
             content.span.withUnsafeBufferPointer { buffer in
@@ -1399,12 +1395,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func recordTablePending(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf) {
         let scratchStart = storage.strings.count
         switch pending.content {
-        case .lazy(let r):
+        case .lazy(let r, let joinPending):
+            precondition(!joinPending, "a deferred line join is always consumed by the next line")
             for i in r { storage.strings.append(sourceBytes[i]) }
         case .materialized(let buffer):
             for i in 0..<buffer.count { storage.strings.append(buffer[i]) }
-        case .lazyNewline:
-            preconditionFailure("a single-line table header is a source range or a materialized buffer")
         case .segments:
             preconditionFailure("a single-line table header is a source range or a materialized buffer")
         }
@@ -1468,10 +1463,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         switch pending.content {
-        case .lazy(let r):
+        case .lazy(let r, let joinPending):
+            precondition(!joinPending, "a deferred line join is always consumed by the next line")
             return lastNewline(in: r).map { .multiContiguous(range: r, lastNewline: $0) } ?? .single
-        case .lazyNewline:
-            preconditionFailure("a deferred line join is always consumed by the next line")
         case .materialized(let buffer):
             for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
                 return .multiOther
@@ -1601,10 +1595,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         guard storage.options.contains(.cmarkBugCompatibility) else { return false }
         let scratchStart = storage.strings.count
         switch pending.content {
-        case .lazy(let r):
+        case .lazy(let r, let joinPending):
+            precondition(!joinPending, "a deferred line join is always consumed by the next line")
             for i in r { storage.strings.append(sourceBytes[i]) }
-        case .lazyNewline:
-            preconditionFailure("a deferred line join is always consumed by the next line")
         case .materialized(let buffer):
             for i in 0..<buffer.count { storage.strings.append(buffer[i]) }
         case .segments(let segs):
@@ -1723,8 +1716,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         case .lazy:
             preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
-        case .lazyNewline:
-            preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
         }
         storage.strings.append(UInt8(ascii: "\n"))
         for i in delimRange {
@@ -1751,8 +1742,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .materialized(let buffer):
             return splitMaterializedHeader(node, buffer: buffer)
         case .lazy:
-            preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
-        case .lazyNewline:
             preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
         }
     }
@@ -3011,7 +3000,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     // MARK: Segment-content finalize (segment model)
 
-    /// Drained leaf content: either one contiguous `Chunk` (`.lazy`/`.lazyNewline`/`.materialized`) or a multi-line segment list (`.segments`, kept zero-copy).
+    /// Drained leaf content: either one contiguous `Chunk` (`.lazy`/`.materialized`) or a multi-line segment list (`.segments`, kept zero-copy).
     ///
     /// Lets paragraph/heading finalize decide whether to keep segments or run the chunk-based matchers without consuming `pending` twice.
     private enum DrainedLeaf: ~Copyable {
@@ -3048,12 +3037,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
                 }
                 return LeafDrainResult(content: .segments(segs), pending: nil)
-            case .lazy(let range):
+            case .lazy(let range, let joinPending):
+                precondition(!joinPending, "a deferred line join is always consumed by the next line")
                 var map: [ArenaRun] = []
                 let replaced = replacingNUL(Chunk(offset: range.lowerBound, length: range.count, inSource: true), map: &map)
                 return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
-            case .lazyNewline:
-                preconditionFailure("a deferred line join is always consumed by the next line")
             case .materialized(let content):
                 let offset = storage.strings.count
                 content.span.withUnsafeBufferPointer { storage.strings.append(copying: $0) }
@@ -5183,7 +5171,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             switch take(pending, ifNode: current) {
             case .segments(let existing)?:
                 segs = existing
-            case .lazyNewline(let prev)?:
+            case .lazy(let prev, joinPending: true)?:
                 // Keep the borrowed earlier lines zero-copy, as `addLine` does for a non-contiguous continuation.
                 segs = UniqueArray<Segment>()
                 segs.append(Segment(offset: Int32(prev.lowerBound), length: Int32(prev.count), inSource: true))
