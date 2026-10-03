@@ -123,7 +123,7 @@ extension BlockParser {
     internal mutating func classifyTableOpen(chunk: Chunk) -> TableOpenClassification {
         let lines = splitLines(chunk: chunk)
         precondition(lines.count >= 2, "a table candidate holds a header line and a delimiter-candidate line")
-        guard let alignments = parseDelimRow(line: lines[1]), !alignments.isEmpty else {
+        guard let alignments = parseDelimRow(line: lines[1]) else {
             return .notDelimiterRow
         }
         return splitCells(line: lines[0]).cells.count == alignments.count ? .opens : .headerMismatch

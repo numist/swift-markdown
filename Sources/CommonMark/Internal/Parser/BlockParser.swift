@@ -5483,7 +5483,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let attrsStart = i
         while i < end {
             let b = readByte(at: i, in: chunk)
-            if b == UInt8(ascii: "\n") || b == UInt8(ascii: "\r") {
+            if b == UInt8(ascii: "\n") {
                 break
             }
             i += 1
