@@ -271,9 +271,7 @@ internal struct ContentSpan: ~Escapable {
             return Chunk(offset: offset, length: length, inSource: inSource)
         }
         let i = segmentIndex(covering: offset)
-        if i == segments.count {
-            return .empty
-        }
+        precondition(i < segments.count, "a content chunk starts on a content byte")
         let seg = segments[i]
         let local = offset - segmentStart(i)
         return Chunk(offset: Int(seg.offset) + local, length: length, inSource: seg.inSource)
@@ -296,9 +294,7 @@ internal struct ContentSpan: ~Escapable {
             return Chunk(offset: offset, length: limit - offset, inSource: inSource)
         }
         let i = segmentIndex(covering: offset)
-        if i == segments.count {
-            return nil
-        }
+        precondition(i < segments.count, "a scan limit lies within the content, so a scan start below it lies on a content byte")
         let seg = segments[i]
         if !seg.inSource {
             return nil
@@ -317,9 +313,6 @@ internal struct ContentSpan: ~Escapable {
         }
         let n = span.count
         let startIdx = globalCursor - base
-        if startIdx >= n {
-            return endOffset
-        }
         let found = span.withUnsafeBufferPointer { buf -> Int in
             guard let p = buf.baseAddress else { return n }
             return Self.scanSignificant(p, from: startIdx, to: n, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
@@ -330,9 +323,6 @@ internal struct ContentSpan: ~Escapable {
     /// Multi-segment `nextSignificant`: walk the segment list, SIMD-scanning each source segment's contiguous source sub-range via `scanSignificant`. The interned `"\n"` joining two lines is itself in the significant set (the dispatch emits a soft/hard break for it), so a newline segment's first byte is reported immediately without scanning; a synthetic filler run (arena-backed, non-newline: split-tab spaces or orphaned-byte U+FFFDs) carries no significant byte and is skipped. Cost is `SIMD(content bytes)` plus a tiny per-segment fixed cost - the same order as the single-segment fast path, not an O(bytes × segments) scalar walk.
     private func multiNextSignificant(from globalCursor: Int, strikethrough: Bool, gfmAutolink: Bool, smart: Bool) -> Int {
         let end = multiVirtualLength
-        if globalCursor >= end {
-            return end
-        }
         let count = segments.count
         let si = segmentIndex(covering: globalCursor)
         let segVStart = segmentStart(si)
