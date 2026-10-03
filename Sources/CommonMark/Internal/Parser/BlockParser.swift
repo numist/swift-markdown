@@ -870,19 +870,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     + tasklistContentIndentBump(node: node, span: span, range: range)
             }
             // Fast path: first content for this node and the current line maps directly into `self.source` - store the range lazily and skip the byte copy.
-            if currentLineMapsToSource, nodeKind.canAccumulateText {
+            precondition(nodeKind.canAccumulateText, "only paragraphs and headings accumulate text lines")
+            if currentLineMapsToSource {
                 return PendingLeaf(node: node, content: .lazy(range: range))
             }
             // Tab-expanded line: map the first-line content back to its literal source range rather than copying the expanded buffer into the arena, so inline stamping recovers real source positions and any content tab stays literal. `expandPrefixTabs` rewrites only the consumed indentation and copies the rest verbatim, so the first non-space content byte maps to a genuine source byte (a marker byte or a tail byte, never inside an expanded tab's spaces) and the content end maps to the source line end. cmark expands tabs only for block-structure indentation and keeps them literal in inline content, so the source range - which carries any interior tab as one byte (one column) - is what matches the reference. This covers both content that maps 1:1 (e.g. the `*` of `*5*` after `*\t`/`>\t`) and content straddling an expanded tab (e.g. `**\tx`, whose doubled marker bytes are inline content that no block marker consumes, so the tab lands inside the paragraph). The mapping reads only unconditionally tracked line state, so the content is the same whether or not `.sourcePosition` is set.
-            if nodeKind.canAccumulateText {
-                return PendingLeaf(node: node, content: .lazy(range: materializedSourceOffset(range.lowerBound)..<materializedSourceOffset(range.upperBound)))
-            }
-            let buffer = UniqueArray(capacity: range.count) { buffer in
-                for i in range {
-                    buffer.append(span[i])
-                }
-            }
-            return PendingLeaf(node: node, content: .materialized(buffer))
+            return PendingLeaf(node: node, content: .lazy(range: materializedSourceOffset(range.lowerBound)..<materializedSourceOffset(range.upperBound)))
         case .some(let existing):
             // Contiguity fast path: a `\n` separator was deferred after a `.lazy` span (`appendNewline` set its `joinPending`). If this line is also source-backed and immediately follows the previous span in the source - i.e. it starts one byte past the previous span and that byte is a single `\n` - then the join needs no synthesized separator: the embedded `\n` already lives in the source, so we keep the whole run as one zero-copy `.lazy` range. This holds for top-level paragraphs with LF line endings and no stripped container prefix; blockquote/list continuation (prefix stripped → non-adjacent range), CRLF/CR (separator isn't a lone `\n` at `prev.upperBound`), and tab-expanded lines (`!currentLineMapsToSource`) all fall through to the segment-list arm below.
             //
@@ -904,7 +897,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return addLineSegment(span: span, range: range, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
             case let other:
                 var buffer = unwrap(other)
-                // why: flag ON, a LAZY continuation keeps its residual whitespace in the content, exactly as `addLineSegment` does for a segment list (cmark's lazy `add_line` copies from where prefix matching stopped, blocks.c:1408), so a code span or link title spanning the line reads it. With positions on, such a line reaches this materialized buffer when the paragraph began as an orphan-led tasklist-retry line (`appendOrphanLedLine`).
+                // why: flag ON, a LAZY continuation keeps its residual whitespace in the content, exactly as `addLineSegment` does for a segment list (cmark's lazy `add_line` copies from where prefix matching stopped, blocks.c:1408), so a code span or link title spanning the line reads it. Such a line reaches this materialized buffer when the paragraph began as an orphan-led tasklist-retry line (`appendOrphanLedLine`).
                 let contentStart = keepsLazyResidual(before: range.lowerBound) ? currentLineContentCursor : range.lowerBound
                 // A tab-expanded current line (`!currentLineMapsToSource`) has `span` pointing at the per-line expanded buffer, not source - appending `span[range]` directly would bake the expanded-tab spaces into the arena as if they were literal content. Map back to the literal source range instead (same rule as the `.none` case above and `addLineSegment`'s materialized branch): cmark expands tabs only for block-structure indentation and keeps them literal in inline content. A kept residual that starts inside a tab an outer container partly consumed begins with that tab's leftover columns as spaces (cmark's `partially_consumed_tab`, blocks.c `add_line`).
                 if !currentLineMapsToSource {
@@ -1398,10 +1391,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .lazy(let r, let joinPending):
             precondition(!joinPending, "a deferred line join is always consumed by the next line")
             for i in r { storage.strings.append(sourceBytes[i]) }
-        case .materialized(let buffer):
-            for i in 0..<buffer.count { storage.strings.append(buffer[i]) }
+        case .materialized:
+            preconditionFailure("a single-line materialized paragraph has already resolved its table fate")
         case .segments:
-            preconditionFailure("a single-line table header is a source range or a materialized buffer")
+            preconditionFailure("a single-line table header is a source range")
         }
         // cmark's tasklist extension consumes a task item's checkbox at ITEM-OPEN time
         // (`open_tasklist_item`), before the paragraph text exists at all - so when this header line is a
@@ -1470,7 +1463,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
                 return .multiOther
             }
-            return .single
+            // A single-line materialized paragraph is a table-header re-seed (`splitMaterializedHeader`) or an
+            // orphan-led first line (`markOrphanLedParagraphTableVisited`); both set `paragraphTablePending`, so
+            // table detection never runs on one.
+            preconditionFailure("a single-line materialized paragraph has already resolved its table fate")
         case .segments:
             return .multiOther
         }
@@ -1823,10 +1819,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return (Int(first.offset), Int(last.offset) + Int(last.length))
     }
 
-    /// Split a materialized paragraph (a byte buffer with embedded newlines, produced only with source
-    /// positions OFF) into a preceding paragraph plus a header-only re-seed. The preceding bytes are copied
-    /// into the arena; no source stamping is needed (a materialized multi-line paragraph only arises with
-    /// positions off - the positions-on paths map tab-expanded lines back to source segments instead).
+    /// Split a materialized paragraph (a byte buffer with embedded newlines, such as a definition-only setext
+    /// paragraph whose flattened content is restored under `.cmarkBugCompatibility`) into a preceding paragraph
+    /// plus a header-only re-seed. The preceding bytes are copied into the arena without a source map, so the
+    /// preceding paragraph's inlines carry no source ranges.
     /// The buffer carries no orphan replacement (`materializedOrphanReplacements`): an orphan-led paragraph
     /// never opens a table (`markOrphanLedParagraphTableVisited`).
     private mutating func splitMaterializedHeader(_ node: DocumentStorage.Index, buffer: consuming UniqueArray<UInt8>) -> PendingLeaf? {
@@ -1853,8 +1849,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if !precedingChunk.isEmpty {
             let precedingNode = insertTablePrecedingParagraph(before: node)
             // Apply cmark's table `unescape_pipes` (`\|`→`|`) after NUL→U+FFFD, matching the source-backed
-            // preceding-paragraph split. Materialized content only arises with positions off, so no source
-            // map is threaded.
+            // preceding-paragraph split. The buffer has no source map to thread.
             pendingInlines.append((precedingNode, storage.intern(unescapingPipes(replacingNUL(precedingChunk)))))
         }
         var header = UniqueArray<UInt8>()

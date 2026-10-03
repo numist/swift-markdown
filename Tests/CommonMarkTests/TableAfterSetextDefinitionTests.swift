@@ -15,7 +15,7 @@ import CommonMark
 /// cmark resolves the definition when it scans the underline, finds no content left, and keeps the underline as
 /// paragraph text (blocks.c, `resolve_reference_link_definitions`); the table then splits off that paragraph. With
 /// `.cmarkBugCompatibility` the rewrite reproduces that structure; without it, it drops the empty paragraph and starts
-/// a new one at the underline. Both give cmark's tree. Source positions are off.
+/// a new one at the underline. Both give cmark's tree. Source positions are off unless a test runs both modes.
 @Suite("Table after a definition-only setext paragraph")
 struct TableAfterSetextDefinitionTests {
 
@@ -36,6 +36,24 @@ struct TableAfterSetextDefinitionTests {
                       text "a"
                     table_cell align=none colspan=1 rowspan=1
                       text "b"
+
+            """)
+    }
+
+    @Test("a definition spanning two quoted lines leaves the underline before the table",
+          arguments: compatibilityModes, [[], [.sourcePosition]] as [MarkdownDocument.ParseOptions])
+    func multiLineDefinitionBeforeTable(mode: MarkdownDocument.ParseOptions, positions: MarkdownDocument.ParseOptions) throws {
+        #expect(try CmarkTreeDump.dump("> [a]:\n> u\n> ===\n> b|c\n> -|-\n", options: mode.union(positions).union(.tables)) == """
+            document
+              block_quote
+                paragraph
+                  text "==="
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "b"
+                    table_cell align=none colspan=1 rowspan=1
+                      text "c"
 
             """)
     }
