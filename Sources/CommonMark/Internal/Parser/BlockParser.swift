@@ -159,7 +159,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// re-indent bump in `tasklistContentIndentBump`, neither of which can tell an opening line from a
     /// continuation line - so an ineligible item keeps its `[ ]`/`[x]` as literal paragraph text and
     /// re-indents like a plain bullet. (Empty task items are consumed at open time in
-    /// `emptyTaskItemChecked`; this set carries the content-bearing case to finalize.)
+    /// `emptyTaskItemChecked`; this set carries the content-bearing case to finalize, and the strip removes the
+    /// item once it consumes the checkbox.)
     var lineAnchoredTaskItems: Set<DocumentStorage.Index> = []
 
     /// The indent, in columns, of each paragraph's SECOND physical line — its first continuation line —
@@ -4949,6 +4950,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         guard let mark = eligibleTasklistMarker(node: node, content: content) else {
             return content
         }
+        // cmark consumes an item's checkbox once, as the item opens. Once consumed here, a later leaf that
+        // becomes the item's first child - because this one held only reference definitions and is unlinked -
+        // keeps its own leading `[ ]`/`[x]` as text.
+        lineAnchoredTaskItems.remove(mark.parent)
         var checked = mark.checked
         // why: cmark-gfm's tasklist extension (`open_tasklist_item`) sets the checked state with
         // `strstr(input, "[x]") || strstr(input, "[X]")` over the checkbox's own line, NOT from the
