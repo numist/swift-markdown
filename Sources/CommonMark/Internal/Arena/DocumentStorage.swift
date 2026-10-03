@@ -247,6 +247,8 @@ internal struct DocumentStorage: ~Copyable {
         let parent = nodes[childIndex].parent!
         let prev = nodes[childIndex].previous
         let next = nodes[childIndex].next
+        assert(prev != nil || nodes[parent].firstChild == childIndex, "unlinkChild on a node that isn't linked into its parent's child list")
+        assert(next != nil || nodes[parent].lastChild == childIndex, "unlinkChild on a node that isn't linked into its parent's child list")
         if let prev {
             nodes[prev].next = next
         } else {
