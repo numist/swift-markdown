@@ -200,11 +200,9 @@ internal struct DocumentStorage: ~Copyable {
 
     /// Read a single-segment `ContentRef` back as a `Chunk`.
     ///
-    /// Valid only when `ref.count <= 1` - used by parser code (emphasis trimming, link-opener offset lookup) that operates on leaf content, which is always single-segment because soft breaks split text at newlines.
+    /// Used for footnote labels, which are never empty and always one segment.
     internal func chunk(of ref: ContentRef) -> Chunk {
-        if ref.count == 0 {
-            return .empty
-        }
+        precondition(ref.count == 1, "a footnote label is a single non-empty segment")
         return segments[Int(ref.first)].chunk
     }
 
@@ -213,7 +211,7 @@ internal struct DocumentStorage: ~Copyable {
     /// Drop `trimStart` bytes off the front and set the byte length to `newLength`. Allocation-free - each leaf owns a unique pooled segment, so mutating it doesn't alias another node. Used by emphasis/strong resolution, which trims delimiter runs off the surrounding text nodes.
     internal mutating func trimLiteral(of node: Index, trimStart: Int, newLength: Int) {
         guard case .literal(let ref) = nodes[node].data, ref.count == 1 else {
-            return
+            preconditionFailure("a delimiter run's text node is a single-segment literal")
         }
         let i = Int(ref.first)
         segments[i].offset += Int32(trimStart)
@@ -246,7 +244,7 @@ internal struct DocumentStorage: ~Copyable {
     /// The detached node's `parent` pointer is preserved so that paragraph finalize can still bubble `state.current` back up via `parent` after dropping the empty paragraph.
     internal mutating func unlinkChild(_ childIndex: Index) {
         guard let parent = nodes[childIndex].parent else {
-            return
+            preconditionFailure("only the document node has no parent, and it is never unlinked")
         }
         let prev = nodes[childIndex].previous
         let next = nodes[childIndex].next

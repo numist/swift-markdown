@@ -76,22 +76,6 @@ internal struct StorageView: ~Escapable, Copyable {
     // MARK: - Content bytes (always available)
 
     @_lifetime(borrow self)
-    internal func bytes(of segment: Segment) -> Span<UInt8> {
-        bytes(of: segment.chunk)
-    }
-
-    /// Resolve a single-segment `ContentRef` to a borrowed byte span.
-    ///
-    /// Empty content yields an empty span. For multi-segment content (count > 1) this returns only the first segment - callers that can see multi-segment content (code/HTML block bodies) must iterate the segments instead.
-    @_lifetime(borrow self)
-    internal func bytes(of ref: ContentRef) -> Span<UInt8> {
-        if ref.count == 0 {
-            return strings.extracting(0..<0)
-        }
-        return bytes(of: segments[Int(ref.first)])
-    }
-
-    @_lifetime(borrow self)
     internal func bytes(of chunk: Chunk) -> Span<UInt8> {
         let start = Int(chunk.offset)
         let length = Int(chunk.length)
