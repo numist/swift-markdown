@@ -112,8 +112,10 @@ struct MarkupTreeDumper: MarkupWalker {
     private var lineIndentPrefix: String {
         var prefix = ""
         for (depth, element) in path.enumerated().reversed() {
-            guard let lastChildIndex = element.parent?.children.reversed().first?.indexInParent,
-                lastChildIndex != element.indexInParent else {
+            // The last child's index is `childCount - 1` (O(1)). `children.reversed()` has no `.first`, so
+            // `children.reversed().first` resolves to the standard library's copying `Sequence.reversed()`.
+            guard let parent = element.parent,
+                parent.childCount - 1 != element.indexInParent else {
                     if depth > 0 {
                         prefix.append("   ")
                     }
@@ -146,10 +148,10 @@ struct MarkupTreeDumper: MarkupWalker {
 
         result += lineIndentPrefix
 
-        guard let lastChildIndex = markup.parent?.children.reversed().first?.indexInParent else {
+        guard let parent = markup.parent else {
             return
         }
-        let treeMarker = markup.indexInParent == lastChildIndex ? "└─ " : "├─ "
+        let treeMarker = markup.indexInParent == parent.childCount - 1 ? "└─ " : "├─ "
         result.append(treeMarker)
     }
 
