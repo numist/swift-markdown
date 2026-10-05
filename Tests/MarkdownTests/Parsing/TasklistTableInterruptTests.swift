@@ -153,7 +153,9 @@ class TasklistTableInterruptTests: XCTestCase {
     func testSplitOffParagraphPositions() {
         func paragraphLines(_ markdown: String) -> [String] {
             let dump = Document(parsing: markdown, options: []).debugDescription(options: [.printSourceLocations])
-            return dump.split(separator: "\n").map(String.init).filter { $0.contains("Paragraph") || $0.contains("Text @") }
+            // The paragraph's lines precede the table, whose cells hold text of their own.
+            let beforeTable = dump.split(separator: "\n").map(String.init).prefix { !$0.contains("Table") }
+            return beforeTable.filter { $0.contains("Paragraph") || $0.contains("Text @") }
         }
         XCTAssertEqual([
             "      ├─ Paragraph @1:7-1:8",

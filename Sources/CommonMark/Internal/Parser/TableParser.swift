@@ -232,17 +232,17 @@ extension BlockParser {
         storage.appendChild(rowIdx, to: parent)
         // The row spans its whole source line. cmark sets a table row's end column to the parent table's end column (`try_opening_table_row`): the full source line INCLUDING trailing whitespace. Interior rows already reach their line-terminating newline via `splitLines`, but the paragraph→table content chunk had its outermost whitespace trimmed (`runParagraphMatchers`), so the LAST line stops one or more bytes short of the source line end. Recover the untrimmed end from the table node's own end (the paragraph extent, stamped before this runs).
         // `nil` when positions are off, leaving the row unstamped.
-        let proj = projection.map { RowProjection(table: $0, rowStartArena: line.lowerBound) }
+        // `sourceRanges` is populated only when positions are on, which a non-`nil` projection guarantees. Last row: the paragraph→table chunk trimmed this line's trailing whitespace, so its untrimmed physical extent ends at the table node's own end.
+        let untrimmedLineEnd = isLastLine ? projection.map { _ in Int(storage.sourceRanges[parent].end) } : nil
+        let proj = projection.map { RowProjection(table: $0, row: line, physicalLineEnd: untrimmedLineEnd) }
         // The untrimmed row-content extent's re-based source end, reused for the row end and the rightmost-no-closing-pipe cell.
         var rowContentEnd: Int? = nil
         if let proj {
-            // `sourceRanges` is populated only when positions are on, which `proj != nil` guarantees (an unmapped table yields `nil`).
-            let tableEnd = storage.sourceRanges[parent].end
             stampStart(rowIdx, arena: line.lowerBound, proj)
-            if isLastLine && tableEnd >= 0 {
-                // Last row: the paragraph→table chunk trimmed this line's trailing whitespace, so recover the untrimmed extent from the table node's physical end. The row NODE ends at that physical end; the rightmost cell below re-bases the same extent by the row's re-indent shift.
-                rowContentEnd = Int(tableEnd) + proj.reindent
-                storage.setSourceEnd(rowIdx, tableEnd)
+            if let untrimmedLineEnd {
+                // The row NODE ends at the line's physical end; the rightmost cell below re-bases the same extent by the row's re-indent shift.
+                rowContentEnd = proj.clamped(untrimmedLineEnd + proj.reindent)
+                storage.setSourceEnd(rowIdx, untrimmedLineEnd)
             } else {
                 rowContentEnd = proj.end(arena: line.upperBound)
                 stampEnd(rowIdx, arena: line.upperBound, proj)
@@ -482,28 +482,44 @@ extension BlockParser {
 
     /// A single row's arena→source projection.
     ///
-    /// A table row occupies one physical source line, whose content images source runs (split only where a U+FFFD images its NUL) that share one re-indent shift: `reindent` is a run's re-based `sourceOffset` (cmark's escape-oblivious / re-based column) minus its byte-read `physicalOffset` (the row's true physical line, used to place the row's content end).
+    /// A table row occupies one physical source line, whose content images source runs (split where a U+FFFD images its NUL, or where a split tab's leftover columns image the tab) that share one re-indent shift: `reindent` is the re-based `sourceOffset` (cmark's escape-oblivious / re-based column) of the run holding the row's last byte, minus its byte-read `physicalOffset` (the row's true physical line, used to place the row's content end).
+    ///
+    /// A re-indent can shift a re-based offset past the end of the row's physical line; every projected offset is clamped to `lineEnd`, the line's terminator (or the source end), so no row or cell range runs onto the next line.
     private struct RowProjection {
         let table: TableProjection
         let reindent: Int
+        let lineEnd: Int
 
-        init(table: TableProjection, rowStartArena: Int) {
-            let (run, _) = table.run(covering: rowStartArena)
-            precondition(run.sourceOffset >= 0 && run.physicalOffset >= 0, "a table row's first byte images its source")
+        /// `row` is the row's arena line. `physicalLineEnd` is the physical end of the row's source line when its content was trimmed short of it (the last row); otherwise the row's content runs to its line's terminator.
+        init(table: TableProjection, row: Range<Int>, physicalLineEnd: Int?) {
+            precondition(!row.isEmpty, "a table row holds at least one byte")
+            let (run, runStart) = table.run(covering: row.upperBound - 1)
+            precondition(run.sourceOffset >= 0 && run.physicalOffset >= 0, "a table row's last byte images its source")
             self.table = table
             reindent = Int(run.sourceOffset) - Int(run.physicalOffset)
+            lineEnd = physicalLineEnd ?? Int(run.physicalOffset) + (row.upperBound - 1 - table.chunkOffset - runStart) + 1
         }
 
-        /// The re-based source offset imaged by the content byte at arena offset `arena`.
-        func start(arena: Int) -> Int {
+        /// `offset`, cut off at the end of the row's physical line.
+        func clamped(_ offset: Int) -> Int {
+            min(offset, lineEnd)
+        }
+
+        /// The re-based source offset imaged by the content byte at arena offset `arena`, before clamping.
+        private func unclampedStart(arena: Int) -> Int {
             let (run, runStart) = table.run(covering: arena)
             precondition(run.sourceOffset >= 0, "a table row or cell boundary byte images its source")
             return Int(run.sourceOffset) + (arena - table.chunkOffset - runStart)
         }
 
+        /// The re-based source offset imaged by the content byte at arena offset `arena`.
+        func start(arena: Int) -> Int {
+            clamped(unclampedStart(arena: arena))
+        }
+
         /// The re-based half-open source end for a range of content ending at arena offset `arena`: just past the source byte its last byte images, so a range ending in a U+FFFD ends just past its NUL.
         func end(arena: Int) -> Int {
-            start(arena: arena - 1) + 1
+            clamped(unclampedStart(arena: arena - 1) + 1)
         }
     }
 

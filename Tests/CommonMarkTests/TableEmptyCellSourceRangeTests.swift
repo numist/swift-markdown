@@ -121,14 +121,15 @@ struct TableEmptyCellSourceRangeTests {
         #expect(bodyRow.cells.map { [$0.startColumn, $0.endColumn] } == plainRow.cells.map { [$0.startColumn, $0.endColumn] })
 
         // A leading-whitespace HEADER sets the table start column that every row re-bases to (col 2 here),
-        // shifting even the unindented body row's cells right onto it.
+        // shifting even the unindented body row's cells right onto it. The shift pushes `y` past the body
+        // line's end at column 4, so its cell is cut off there.
         let hdr = try tableRows(" a|b\n-|-\nx|y", options: opts)
         try #require(hdr.count == 2, "fixture: expected a header row and a body row")
         try #require(hdr[0].cells.count == 2 && hdr[1].cells.count == 2, "fixture: two cells per row")
         #expect((hdr[0].cells[0].startColumn, hdr[0].cells[0].endColumn, hdr[0].cells[0].text) == (2, 3, "a"))
         #expect((hdr[0].cells[1].startColumn, hdr[0].cells[1].endColumn, hdr[0].cells[1].text) == (4, 5, "b"))
         #expect((hdr[1].cells[0].startColumn, hdr[1].cells[0].endColumn, hdr[1].cells[0].text) == (2, 3, "x"))
-        #expect((hdr[1].cells[1].startColumn, hdr[1].cells[1].endColumn, hdr[1].cells[1].text) == (4, 5, "y"))
+        #expect((hdr[1].cells[1].startColumn, hdr[1].cells[1].endColumn, hdr[1].cells[1].text) == (4, 4, "y"))
     }
 
     /// The deliverable (without `.cmarkBugCompatibility`) is spec-correct: a leading-whitespace row's

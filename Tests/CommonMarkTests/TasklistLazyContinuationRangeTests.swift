@@ -25,6 +25,10 @@ import Testing
 /// deeper-indent case is reasoned from cmark's single re-indent rule (every continuation line lands
 /// at the fixed content column), validated by the oracle-backed cases here.
 /// The flag-off assertions are the guardrail proving the shipped default keeps TRUE physical columns.
+///
+/// A re-based line's bytes are reported to the right of where they sit, so its end lies past the end of its
+/// physical line; no range may run past that line, so the end is cut off there. Each flag-ON continuation line is
+/// ten bytes long, so its re-based start still lies on the line while its end is cut off at the line's end.
 @Suite("Task-list item lazy-continuation source ranges (Quirk E)")
 struct TasklistLazyContinuationRangeTests {
 
@@ -71,74 +75,76 @@ struct TasklistLazyContinuationRangeTests {
 
     @Test("unchecked task item: lazy continuation re-bases to the checkbox-adjusted content column")
     func uncheckedContinuation() throws {
-        // "- [ ] x" then "y" (no indent, lazy). The checkbox `[ ] ` (cols 3-6) shifts the paragraph
-        // content to column 7, so cmark re-bases the lazy continuation `y` there: @2:7-2:8 (four
-        // columns right of a plain bullet's @2:3). Oracle: `tasklazy-unchecked`.
-        let ranges = try ranges(in: "- [ ] x\ny", options: Self.quirkOptions)
+        // "- [ ] x" then "yyyyyyyyyy" (no indent, lazy). The checkbox `[ ] ` (cols 3-6) shifts the paragraph
+        // content to column 7, so cmark re-bases the lazy continuation there: it starts @2:7 (four
+        // columns right of a plain bullet's @2:3), and its end is cut off at the line's end, column 11.
+        let ranges = try ranges(in: "- [ ] x\nyyyyyyyyyy", options: Self.quirkOptions)
         try #require(itemChecked(in: ranges) == .some(.some(false)))  // a task item, unchecked
         let texts = texts(in: ranges)
         try #require(texts.count == 2)
 
         #expect(texts[0]?.lowerBound == Pos(line: 1, column: 7))   // "x"
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 8))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 7))   // "y" re-based to content col 7
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 8))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 7))   // re-based to content col 7
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 11))  // cut off at the line's end
     }
 
     @Test("checked task item: lazy continuation re-bases to the checkbox-adjusted content column")
     func checkedContinuation() throws {
-        // "- [x] x" then "y". `[x] ` is the same four columns as `[ ] `, so `y` re-bases to @2:7-2:8.
-        // Oracle: `tasklazy-checked`.
-        let ranges = try ranges(in: "- [x] x\ny", options: Self.quirkOptions)
+        // "- [x] x" then "yyyyyyyyyy". `[x] ` is the same four columns as `[ ] `, so the continuation re-bases
+        // to start @2:7, and its end is cut off at the line's end, column 11.
+        let ranges = try ranges(in: "- [x] x\nyyyyyyyyyy", options: Self.quirkOptions)
         try #require(itemChecked(in: ranges) == .some(.some(true)))   // a task item, checked
         let texts = texts(in: ranges)
         try #require(texts.count == 2)
 
         #expect(texts[0]?.lowerBound == Pos(line: 1, column: 7))   // "x"
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 8))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 7))   // "y" re-based to content col 7
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 8))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 7))   // re-based to content col 7
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 11))  // cut off at the line's end
     }
 
     @Test("task item lazy continuation preserves one leading space on top of the checkbox base")
     func oneSpaceContinuation() throws {
-        // "- [ ] x" then " y" (one leading space, lazy). cmark keeps a lazy line's residual whitespace,
-        // so `y` lands at residual(1) + content col 7 = @2:8-2:9. Oracle: `tasklazy-1sp`.
-        let ranges = try ranges(in: "- [ ] x\n y", options: Self.quirkOptions)
+        // "- [ ] x" then " yyyyyyyyyy" (one leading space, lazy). cmark keeps a lazy line's residual whitespace,
+        // so the text starts at residual(1) + content col 7 = @2:8, and its end is cut off at the line's
+        // end, column 12.
+        let ranges = try ranges(in: "- [ ] x\n yyyyyyyyyy", options: Self.quirkOptions)
         try #require(itemChecked(in: ranges) == .some(.some(false)))
         let texts = texts(in: ranges)
         try #require(texts.count == 2)
 
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 8))   // "y" at residual + col 7
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 9))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 8))   // residual + col 7
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 12))  // cut off at the line's end
     }
 
     @Test("deeper-indent matched task-item continuation re-bases to the checkbox-adjusted column")
     func deeperIndentContinuation() throws {
-        // "- [ ] x" then "    y" (four leading spaces). Indent 4 matches the item, so cmark discards the
-        // line's leading whitespace and re-bases `y` to the fixed content column 7: @2:7-2:8. No minted
-        // oracle for this shape; reasoned from cmark's re-indent rule (matched continuation → content col).
-        let ranges = try ranges(in: "- [ ] x\n    y", options: Self.quirkOptions)
+        // "- [ ] x" then "    yyyyyyyyyy" (four leading spaces). Indent 4 matches the item, so cmark discards the
+        // line's leading whitespace and re-bases the text to the fixed content column 7, so it starts @2:7;
+        // its re-based end, column 17, is cut off at the line's end, column 15. Reasoned from cmark's
+        // re-indent rule (matched continuation → content col).
+        let ranges = try ranges(in: "- [ ] x\n    yyyyyyyyyy", options: Self.quirkOptions)
         try #require(itemChecked(in: ranges) == .some(.some(false)))
         let texts = texts(in: ranges)
         try #require(texts.count == 2)
 
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 7))   // "y" re-based to content col 7
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 8))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 7))   // re-based to content col 7
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 15))  // cut off at the line's end
     }
 
     @Test("plain bullet continuation re-bases to the plain content column (no checkbox width added)")
     func plainBulletUsesPlainContentColumn() throws {
-        // "- x" then "y": a plain bullet, no checkbox. The continuation re-bases to the plain content
-        // column 3, NOT 7 - the fix must not add a checkbox width where there is no checkbox.
-        // Oracle: `tasklazy-plain-ctl`.
-        let ranges = try ranges(in: "- x\ny", options: Self.quirkOptions)
+        // "- x" then "yyyyyyyyyy": a plain bullet, no checkbox. The continuation re-bases to the plain content
+        // column 3, NOT 7 - no checkbox width is added where there is no checkbox. Its end is cut off at
+        // the line's end, column 11.
+        let ranges = try ranges(in: "- x\nyyyyyyyyyy", options: Self.quirkOptions)
         try #require(itemChecked(in: ranges) == .some(Bool?.none))   // an ordinary (non-task) item
         let texts = texts(in: ranges)
         try #require(texts.count == 2)
 
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 3))   // "y" at plain content col 3
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 4))
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 3))   // plain content col 3
+        #expect(texts[1]?.upperBound == Pos(line: 2, column: 11))  // cut off at the line's end
     }
 
     @Test("flag-off: task-item continuation keeps its TRUE physical column")

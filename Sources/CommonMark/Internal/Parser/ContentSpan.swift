@@ -222,12 +222,12 @@ internal struct ContentSpan: ~Escapable {
         return nil
     }
 
-    /// The original-source byte offset for `offset`, or `nil` if it maps to a synthetic/arena byte. Single-segment source content maps identity (the offset already IS a source offset); single-segment arena content resolves through its arena→source run map (`nil` when unmapped); multi-segment resolves through the segment list.
+    /// The original-source byte offsets for the content byte at `offset`, or `nil` if it maps to a synthetic/arena byte: `source` is the offset it is stamped at, and `physical` the offset of the byte as read, which sits on the byte's own source line. They differ only for a re-indented continuation line, whose `source` is moved to its block-content column (and may then lie past the end of its line). Single-segment source content maps identity (the offset already IS a source offset); single-segment arena content resolves through its arena→source run map (`nil` when unmapped); multi-segment resolves through the segment list.
     @inlinable
-    func sourceOffset(ofVirtual offset: Int) -> Int? {
+    func sourceOffsets(ofVirtual offset: Int) -> (source: Int, physical: Int)? {
         if !isMultiSegment {
             if inSource {
-                return offset
+                return (offset, offset)
             }
             // Arena content with a source pre-image carries an arena→source run map, content-relative (keyed from the first content byte). Resolve it exactly like the multi-segment segment list below: a run whose `sourceOffset < 0` is a synthetic gap (the interned `\n` line-join) and yields `nil`; arena content with no map (`arenaRuns` empty) has no source image and also yields `nil`. cmark maps a `\|`-unescaped table cell's bytes back to source by a constant shift (it does NOT re-widen for the removed backslash), which the degenerate single-run case reproduces exactly.
             let k = offset - base
@@ -235,7 +235,7 @@ internal struct ContentSpan: ~Escapable {
             if i < arenaRuns.count {
                 let run = arenaRuns[i]
                 let v = i == 0 ? 0 : arenaRunEnds[i - 1]
-                return run.sourceOffset < 0 ? nil : Int(run.sourceOffset) + (k - v)
+                return run.sourceOffset < 0 ? nil : (Int(run.sourceOffset) + (k - v), Int(run.physicalOffset) + (k - v))
             }
             precondition(arenaRuns.count == 0, "an inline node's source range lies inside its content's arena run map")
             return nil
@@ -243,8 +243,12 @@ internal struct ContentSpan: ~Escapable {
         let i = segmentIndex(covering: offset)
         precondition(i < segments.count, "an inline node's source range lies inside its multi-segment content")
         let seg = segments[i]
-        // Map through `sourceOffset` (re-indents a continuation line to its block-content column), not the byte-read `offset`; they coincide except for a re-indented continuation segment.
-        return seg.inSource ? Int(seg.sourceOffset) + (offset - segmentStart(i)) : nil
+        // Map through `sourceOffset` (re-indents a continuation line to its block-content column); the byte-read `offset` is the physical image. An arena segment's bytes all stand for its one source byte, if it has one.
+        if !seg.inSource {
+            return seg.sourceOffset < 0 ? nil : (Int(seg.sourceOffset), Int(seg.sourceOffset))
+        }
+        let local = offset - segmentStart(i)
+        return (Int(seg.sourceOffset) + local, Int(seg.offset) + local)
     }
 
     /// Build a `Chunk` for a sub-range of this content. Single-segment: a direct sub-chunk. Multi-segment: valid only when the range lies within one segment (the common case - most inline nodes don't straddle a line join); callers whose range can straddle (a code span, or a text run that keeps a flag-ON synthetic filler segment) materialize via `InlineParser.materializedChunk` themselves.

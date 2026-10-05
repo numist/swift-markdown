@@ -13,8 +13,9 @@ import CommonMark
 
 /// A table whose header line is indented, `  a|b`, followed by a body row `x` at column 1. cmark re-bases body-row
 /// columns to the header's indent, so it reports the row as starting at 3:3 but ending at 3:1 (inclusive), an inverted
-/// range. With `.cmarkBugCompatibility` the rewrite reproduces the re-based start, and because a `Range` can't be
-/// inverted it reports no source range for the row. Without it the rewrite reports the row's true extent.
+/// range. With `.cmarkBugCompatibility` the rewrite re-bases the row's start too, but no range may run past the end of
+/// the row's line at column 2, so the start is cut off there and the row collapses to 3:2-3:2. Without it the rewrite
+/// reports the row's true extent.
 @Suite("Table body row with an inverted re-based range")
 struct TableBodyRowInvertedRangeTests {
 
@@ -34,9 +35,10 @@ struct TableBodyRowInvertedRangeTests {
         }
     }
 
-    @Test("cmark bug compatibility leaves the row without a source range")
-    func noRangeWithBugCompatibility() throws {
-        #expect(try bodyRowRange(options: [.tables, .sourcePosition, .cmarkBugCompatibility]) == .some(nil))
+    @Test("with cmark bug compatibility the row's re-based start is cut off at its line's end")
+    func lineEndRangeWithBugCompatibility() throws {
+        let end = MarkdownNode.SourcePosition(line: 3, column: 2)
+        #expect(try bodyRowRange(options: [.tables, .sourcePosition, .cmarkBugCompatibility]) == .some(end..<end))
     }
 
     @Test("without cmark bug compatibility the row spans its own line")

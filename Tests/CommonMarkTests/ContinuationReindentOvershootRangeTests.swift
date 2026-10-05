@@ -14,10 +14,10 @@ import Testing
 /// Source-position stamping for a paragraph continuation line under the Quirk-E re-indent.
 ///
 /// `- e\nc`: the list item's paragraph content column is 3 (the `- ` marker is 2 columns). Flag-ON,
-/// cmark re-indents the continuation line `c` to the block content column 3 and reports it at `@2:3`.
-/// The rewrite stamps source positions as byte offsets; where the re-indented offset stays on the
-/// line's own physical bytes (a last line with no following line to spill onto) the byte projection
-/// lands correctly at `@2:3-2:4`.
+/// cmark re-indents the continuation line `c` to the block content column 3 and reports it at `@2:3-2:4`.
+/// The rewrite stamps the re-indented byte offsets too, but no range may run past the end of the
+/// physical line its content is on: `c`'s line ends at column 2, so its range is cut off there and
+/// collapses to `@2:2-2:2`.
 ///
 /// Flag-OFF (the shipped default) is spec-correct: every continuation line keeps its TRUE physical
 /// column, so `c` is `@2:1-2:2`.
@@ -50,13 +50,35 @@ struct ContinuationReindentOvershootRangeTests {
         #expect(texts[2] == Pos(line: 3, column: 1)..<Pos(line: 3, column: 2))   // "g"
     }
 
-    /// Guardrail: a 1-char continuation as the LAST line has no following physical line to overshoot
-    /// onto, so its byte projection already lands correctly at `@2:3-2:4`.
-    @Test("flag-ON: 1-char last continuation is @2:3-2:4")
+    /// A 1-char continuation as the LAST line: its re-indented column 3 lies past the line's end at
+    /// column 2 (the source's end), so the range is cut off there. cmark-gfm reports `@2:3-2:4`.
+    @Test("flag-ON: 1-char last continuation is cut off at its line's end, @2:2-2:2")
     func quirkLastContinuation() throws {
         let texts = try textRanges("- e\nc", options: Self.quirkOptions)
         try #require(texts.count == 2)
-        #expect(texts[1] == Pos(line: 2, column: 3)..<Pos(line: 2, column: 4))   // "c"
+        #expect(texts[1] == Pos(line: 2, column: 2)..<Pos(line: 2, column: 2))   // "c"
+    }
+
+    /// A 1-char continuation in the MIDDLE: its re-indented column 3 is past its line's newline at
+    /// column 2, so the range is cut off there rather than running onto line 3. cmark-gfm reports
+    /// `@2:3-2:4` for `c` and `@3:3-3:4` for `g`.
+    @Test("flag-ON: 1-char middle continuation is cut off at its line's end, @2:2-2:2")
+    func quirkMiddleContinuation() throws {
+        let texts = try textRanges("- e\nc\ng", options: Self.quirkOptions)
+        try #require(texts.count == 3)
+        #expect(texts[0] == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // "e"
+        #expect(texts[1] == Pos(line: 2, column: 2)..<Pos(line: 2, column: 2))   // "c"
+        #expect(texts[2] == Pos(line: 3, column: 2)..<Pos(line: 3, column: 2))   // "g"
+    }
+
+    /// A 2-char lazy continuation of a block quote: cmark re-indents `bc` to column 3, its line's
+    /// newline, so the range starts there and its end, column 5, is cut off to column 3. cmark-gfm
+    /// reports `@2:3-2:5`.
+    @Test("flag-ON: a re-indented lazy line's end is cut off at its newline")
+    func quirkLazyContinuationEnd() throws {
+        let texts = try textRanges("> a\nbc\n", options: Self.quirkOptions)
+        try #require(texts.count == 2)
+        #expect(texts[1] == Pos(line: 2, column: 3)..<Pos(line: 2, column: 3))   // "bc"
     }
 
     /// Twin of `quirkLastContinuation`: the deliverable (flag-OFF) keeps the last continuation line `c`

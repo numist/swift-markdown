@@ -90,9 +90,9 @@ class RefDefSetextTableStructureTests: XCTestCase {
         Document @1:1-3:5
         └─ BlockQuote @1:1-3:5
            └─ Table @2:3-3:5 alignments: |-|
-              ├─ Head
-              │  └─ Cell
-              │     └─ Text "="
+              ├─ Head @2:3-2:4
+              │  └─ Cell @2:3-2:4
+              │     └─ Text @2:3-2:4 "="
               └─ Body
         """
 

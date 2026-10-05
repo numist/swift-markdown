@@ -3949,18 +3949,49 @@ extension BlockParser {
         return Chunk(offset: outOffset, length: storage.strings.count - outOffset, inSource: false)
     }
 
-    /// Stamp `node`'s source range from *virtual* content offsets, resolving each through `content.sourceOffset(ofVirtual:)`.
+    /// Stamp `node`'s source range from *virtual* content offsets, resolving each through `content.sourceOffsets(ofVirtual:)`.
     ///
     /// This is the only stamping path, shared by every inline node (leaf and wrapper - matching cmark, whose `S_insert_emph` derives a wrapper's range from its child columns in the same buffer map): a single-segment source span maps identity (byte offsets pass through unchanged), single-segment arena maps to nil (skipped) unless its arena→source run map resolves it, and a multi-segment span walks its segment list - so a construct inside a multi-line blockquote/list paragraph gets real source positions. `end` is *exclusive* (one past the last byte), so the last content byte `end - 1` is resolved and incremented; this also maps an `end` that lands on the synthetic line-join newline back to just past the preceding source byte.
     @inline(__always)
     mutating func stampInline(_ node: DocumentStorage.Index, _ start: Int, _ end: Int, content: borrowing ContentSpan) {
         guard positionsEnabled, end > start,
-              let s = content.sourceOffset(ofVirtual: start),
-              let lastByte = content.sourceOffset(ofVirtual: end - 1) else {
+              let first = content.sourceOffsets(ofVirtual: start),
+              let last = content.sourceOffsets(ofVirtual: end - 1) else {
             return
         }
-        storage.setSourceStart(node, s)
-        storage.setSourceEnd(node, lastByte + 1)
+        storage.setSourceStart(node, clampedToLine(first.source, ofByte: first.physical))
+        storage.setSourceEnd(node, clampedToLine(last.source + 1, ofByte: last.physical))
+    }
+
+    /// `offset`, a position stamped for the content byte read at source offset `physical`, cut off at the end of that byte's source line. A re-indented continuation line's bytes are stamped at its block-content column, which can lie past the end of the line; no range may run onto the next line.
+    private func clampedToLine(_ offset: Int, ofByte physical: Int) -> Int {
+        // A position at or just past its own byte is on the byte's line.
+        offset <= physical + 1 ? offset : min(offset, physicalLineEnd(containing: physical))
+    }
+
+    /// The offset of the terminator of the source line holding byte `offset`, or the source's end for an unterminated last line.
+    private func physicalLineEnd(containing offset: Int) -> Int {
+        // The last line start at or before `offset` (`lineStarts` is ascending).
+        var lo = 0
+        var hi = storage.lineStarts.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if storage.lineStarts[mid] <= offset {
+                lo = mid + 1
+            } else {
+                hi = mid
+            }
+        }
+        precondition(lo > 0, "a stamped byte lies on a line the parser read")
+        let lineStart = storage.lineStarts[lo - 1]
+        var end = lo < storage.lineStarts.count ? storage.lineStarts[lo] : sourceBytes.count
+        if end > lineStart && sourceBytes[end - 1] == UInt8(ascii: "\n") {
+            end -= 1
+        }
+        if end > lineStart && sourceBytes[end - 1] == UInt8(ascii: "\r") {
+            end -= 1
+        }
+        return end
     }
 
     /// Merge runs of adjacent `.text` children into single nodes, recursing into containers.
@@ -4310,7 +4341,8 @@ extension BlockParser {
                 offset: seg.offset + localOffset,
                 length: pieceLen,
                 inSource: seg.inSource,
-                sourceOffset: seg.sourceOffset + localOffset
+                // An arena piece keeps the one source byte its whole segment stands for (or none).
+                sourceOffset: seg.inSource ? seg.sourceOffset + localOffset : seg.sourceOffset
             ))
             count += 1
             total += pieceLen
@@ -4351,7 +4383,7 @@ extension BlockParser {
         guard firstSeg.inSource, lastSeg.inSource else {
             return
         }
-        storage.setSourceStart(node, Int(firstSeg.sourceOffset))
-        storage.setSourceEnd(node, Int(lastSeg.sourceOffset) + Int(lastSeg.length))
+        storage.setSourceStart(node, clampedToLine(Int(firstSeg.sourceOffset), ofByte: Int(firstSeg.offset)))
+        storage.setSourceEnd(node, clampedToLine(Int(lastSeg.sourceOffset) + Int(lastSeg.length), ofByte: Int(lastSeg.offset) + Int(lastSeg.length) - 1))
     }
 }

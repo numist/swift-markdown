@@ -235,4 +235,51 @@ struct ContainerTableSourceRangeTests {
 
             """)
     }
+
+    // MARK: - With `.cmarkBugCompatibility`
+
+    private func compatibilityTree(_ source: String) throws -> String {
+        try CmarkTreeDump.dump(source, options: Self.opts.union(.cmarkBugCompatibility), sourceRanges: true)
+    }
+
+    /// The header line ` \t|` is a lazy continuation of the quote's paragraph. The list item's two-column indent takes
+    /// the space and one column of the tab, so the header row keeps the tab's two leftover columns as spaces ahead of
+    /// the `|`. Those spaces stand for the tab byte at column 2, so the table and the row start there. The cell's leading
+    /// whitespace isn't cell content, so the whitespace-only cell spans just its closing `|`. cmark-gfm places the table
+    /// and its header on line 1 (`@1:4-1:9` for the row, `@1:6-1:8` for the cell) because it counts columns in the joined
+    /// paragraph text.
+    @Test("a header row that starts with a split tab's leftover columns starts at the tab")
+    func splitTabHeader() throws {
+        #expect(try compatibilityTree("- >x\n \t|\n  >-|\n") == """
+            document @1:1-3:6
+              list bullet '-' tight @1:1-3:6
+                item @1:1-3:6
+                  block_quote @1:3-3:6
+                    paragraph @1:4-1:5
+                      text "x" @1:4-1:5
+                    table @2:2-3:6
+                      table_header @2:2-2:4
+                        table_cell align=none colspan=1 rowspan=1 @2:3-2:4
+
+            """)
+    }
+
+    /// The header line `  |` is a lazy continuation of the quote's paragraph. With `.cmarkBugCompatibility` it keeps
+    /// its leading spaces and is reported one column right of its bytes, the quote's content column, as cmark-gfm
+    /// does. That pushes the header row's end and its empty cell past the line's end at column 4, so both are cut off
+    /// there. cmark-gfm places the table and its header on line 1 (`@1:2-1:7` for the row, `@1:4-1:6` for the cell)
+    /// because it counts columns in the joined paragraph text.
+    @Test("a re-indented lazy header row ends at its line's end")
+    func reindentedLazyHeaderEndsAtLineEnd() throws {
+        #expect(try compatibilityTree(">x\n  |\n>-|\n") == """
+            document @1:1-3:4
+              block_quote @1:1-3:4
+                paragraph @1:2-1:3
+                  text "x" @1:2-1:3
+                table @2:1-3:4
+                  table_header @2:2-2:4
+                    table_cell align=none colspan=1 rowspan=1 @2:4-2:4
+
+            """)
+    }
 }

@@ -54,7 +54,7 @@ class NULParagraphSourcePositionTests: XCTestCase {
     }
 
     func testNestedTablePrecedingParagraph() {
-        XCTAssertEqual("Document @1:1-4:8\n└─ BlockQuote @1:1-4:8\n   ├─ Paragraph @1:3-2:5\n   │  ├─ Text @1:3-1:4 \"p\"\n   │  ├─ SoftBreak\n   │  └─ Text @2:3-2:5 \"q\u{fffd}\"\n   └─ Table @3:3-4:8 alignments: |-|\n      ├─ Head\n      │  └─ Cell\n      │     └─ Text \"a\"\n      └─ Body", positions("> p\n> q\u{0}\n> | a |\n> |---|"))
+        XCTAssertEqual("Document @1:1-4:8\n└─ BlockQuote @1:1-4:8\n   ├─ Paragraph @1:3-2:5\n   │  ├─ Text @1:3-1:4 \"p\"\n   │  ├─ SoftBreak\n   │  └─ Text @2:3-2:5 \"q\u{fffd}\"\n   └─ Table @3:3-4:8 alignments: |-|\n      ├─ Head @3:3-3:8\n      │  └─ Cell @3:4-3:7\n      │     └─ Text @3:5-3:6 \"a\"\n      └─ Body", positions("> p\n> q\u{0}\n> | a |\n> |---|"))
     }
 
     func testMultiLineParagraph() {
@@ -99,6 +99,6 @@ class NULParagraphSourcePositionTests: XCTestCase {
     }
 
     func testNestedTablePrecedingParagraphWithNULAfterEscapedPipe() {
-        XCTAssertEqual("Document @1:1-4:6\n└─ BlockQuote @1:1-4:6\n   ├─ Paragraph @1:3-2:5\n   │  ├─ Text @1:3-1:6 \"x|\u{fffd}\"\n   │  ├─ SoftBreak\n   │  └─ Text @2:3-2:5 \"y\u{fffd}\"\n   └─ Table @3:3-4:6 alignments: |-|\n      ├─ Head\n      │  └─ Cell\n      │     └─ Text \"a\"\n      └─ Body", positions("> x\\|\u{0}\n> y\u{0}\n> | a |\n> |-|"))
+        XCTAssertEqual("Document @1:1-4:6\n└─ BlockQuote @1:1-4:6\n   ├─ Paragraph @1:3-2:5\n   │  ├─ Text @1:3-1:6 \"x|\u{fffd}\"\n   │  ├─ SoftBreak\n   │  └─ Text @2:3-2:5 \"y\u{fffd}\"\n   └─ Table @3:3-4:6 alignments: |-|\n      ├─ Head @3:3-3:8\n      │  └─ Cell @3:4-3:7\n      │     └─ Text @3:5-3:6 \"a\"\n      └─ Body", positions("> x\\|\u{0}\n> y\u{0}\n> | a |\n> |-|"))
     }
 }

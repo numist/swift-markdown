@@ -1027,8 +1027,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let keepResidual = keepsLazyResidual(before: range.lowerBound)
         let residualMap = keepResidual ? materializedSourceStart(bufferStart: currentLineContentCursor) : (sourceStart: sourceStart, splitTabSpaces: 0)
         if keepResidual && residualMap.splitTabSpaces > 0 {
-            // Split-tab residual: emit the leftover columns as synthetic arena spaces, then the literal content from just past the split tab. The synthetic spaces are position-less (like the newline join); the literal content maps to its own source bytes (the exact flag-ON column is unobservable - positions are off on the fuzzer surface and the flag-ON positions path is not unit-gated).
-            let afterSpaces = appendSyntheticResidualSpaces(residualMap.splitTabSpaces, to: node, pending: pending)
+            // Split-tab residual: emit the leftover columns as synthetic arena spaces standing for the split tab (the byte just before `residualMap.sourceStart`), then the literal content from just past the split tab, which maps to its own source bytes.
+            let afterSpaces = appendSyntheticResidualSpaces(residualMap.splitTabSpaces, standingFor: residualMap.sourceStart - 1, to: node, pending: pending)
             return appendSegment(
                 Segment(offset: Int32(residualMap.sourceStart), length: Int32(lineEnd - residualMap.sourceStart), inSource: true),
                 to: node, pending: afterSpaces)
@@ -1084,16 +1084,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// slice (`add_line`, blocks.c:236). Unlike `appendSplitTabCodeContent` (code/HTML bodies, one segment
     /// per line), the paragraph's literal content is a *separate* source segment, so this appends only the
     /// spaces - the caller follows it with the zero-copy source segment. A multi-segment inline `ContentSpan`
-    /// reads this arena segment through its arena snapshot (`ContentSpan.multiByte`); the synthetic spaces are
-    /// position-less like the interned newline join.
-    private mutating func appendSyntheticResidualSpaces(_ count: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
+    /// reads this arena segment through its arena snapshot (`ContentSpan.multiByte`); each synthetic space stands for
+    /// the split tab, source byte `tab`, so a range that starts on one starts at the tab.
+    private mutating func appendSyntheticResidualSpaces(_ count: Int, standingFor tab: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
         let offset = storage.strings.count
         storage.strings.reserveCapacity(offset + count)
         for _ in 0..<count {
             storage.strings.append(UInt8(ascii: " "))
         }
         return appendSegment(
-            Segment(offset: Int32(offset), length: Int32(count), inSource: false),
+            Segment(offset: Int32(offset), length: Int32(count), inSource: false, sourceOffset: Int32(tab)),
             to: node, pending: pending)
     }
 
@@ -1816,7 +1816,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         precondition(segs.count > 0, "a paragraph's split-off lines and header line are never empty")
         let first = segs[0]
         let last = segs[segs.count - 1]
-        return (Int(first.offset), Int(last.offset) + Int(last.length))
+        // A line that starts with a split tab's leftover columns starts at the tab they stand for.
+        let start = first.inSource ? Int(first.offset) : Int(first.sourceOffset)
+        precondition(start >= 0 && last.inSource, "a paragraph's lines start on a source byte or a split tab's columns, and end on a source byte")
+        return (start, Int(last.offset) + Int(last.length))
     }
 
     /// Split a materialized paragraph (a byte buffer with embedded newlines, such as a definition-only setext
@@ -3172,11 +3175,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 for j in Int(seg.offset)..<end { buf.append(storage.strings[j]) }
             }
             if len > 0 {
-                // A source segment images its (re-indented) source range - `sourceOffset` re-indents a continuation line to its block-content column; otherwise it equals `offset`. `physicalOffset` (the segment's byte-read `offset`) stays on the run's physical source line so inline stamping can anchor a re-indented run there. A non-source segment (the interned `\n` join, or an arena-only line) is a synthetic gap.
-                map.append(ArenaRun(
-                    length: Int32(len),
-                    sourceOffset: seg.inSource ? seg.sourceOffset : -1,
-                    physicalOffset: seg.inSource ? seg.offset : -1))
+                if seg.inSource {
+                    // A source segment images its (re-indented) source range - `sourceOffset` re-indents a continuation line to its block-content column; otherwise it equals `offset`. `physicalOffset` (the segment's byte-read `offset`) stays on the run's physical source line so inline stamping can anchor a re-indented run there.
+                    map.append(ArenaRun(length: Int32(len), sourceOffset: seg.sourceOffset, physicalOffset: seg.offset))
+                } else if seg.sourceOffset >= 0 {
+                    // Synthetic bytes standing for one source byte (a split tab's leftover columns) each image that byte.
+                    for _ in 0..<len {
+                        Self.appendContentByte(imaging: Int(seg.sourceOffset), to: &map)
+                    }
+                } else {
+                    // The interned `\n` join, or an arena-only line: a synthetic gap.
+                    map.append(ArenaRun(length: Int32(len), sourceOffset: -1, physicalOffset: -1))
+                }
             }
         }
         buf.span.withUnsafeBufferPointer { storage.strings.append(copying: $0) }
