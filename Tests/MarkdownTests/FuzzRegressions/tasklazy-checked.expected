@@ -4,4 +4,4 @@ Document @1:1-2:2
       └─ Paragraph @1:7-2:2
          ├─ Text @1:7-1:8 "x"
          ├─ SoftBreak
-         └─ Text @2:7-2:8 "y"
+         └─ Text @2:2 "y"

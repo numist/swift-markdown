@@ -2,8 +2,8 @@ Document @1:1-4:6
 └─ UnorderedList @1:1-4:6
    └─ ListItem @1:1-4:6 checkbox: [x]
       └─ Paragraph @2:4-4:6
-         ├─ Text "� [x] a|b"
+         ├─ Text @2:4-2:13 "� [x] a|b"
          ├─ SoftBreak
-         ├─ Text "-|-"
+         ├─ Text @3:3-3:6 "-|-"
          ├─ SoftBreak
-         └─ Text "c|d"
+         └─ Text @4:3-4:6 "c|d"
