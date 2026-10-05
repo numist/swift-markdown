@@ -1922,7 +1922,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The physical source extent imaged by the run map of trimmed paragraph content: from its first run's byte as
     /// read to just past its last run's.
     private func sourceSpan(of map: [ArenaRun]) -> (start: Int, end: Int) {
-        precondition(map.first.map { $0.physicalOffset >= 0 } ?? false && map.last!.physicalOffset >= 0, "trimmed paragraph content starts and ends on source bytes")
+        precondition(!map.isEmpty && map.first!.physicalOffset >= 0 && map.last!.physicalOffset >= 0, "trimmed paragraph content starts and ends on source bytes")
         return (Int(map.first!.physicalOffset), Int(map.last!.physicalOffset) + Int(map.last!.length))
     }
 

@@ -16,8 +16,8 @@ import CommonMark
 ///
 /// A nested table's lines aren't contiguous in the source (each carries its container's prefix), so the table is
 /// built from a copy of its lines, and every row, cell and cell inline is placed back on its source line through that
-/// copy's map to the source. Columns are 1-based UTF-8 byte offsets and each end is half-open. Unless a test says
-/// otherwise, every range equals cmark-gfm's.
+/// copy's map to the source. Columns are 1-based UTF-8 byte offsets and each end is half-open. A test's doc comment
+/// notes where cmark-gfm's range differs.
 ///
 /// A short row's padded filler cell has no source text, so it has no range here, and cmark-gfm gives it column 0,
 /// which swift-markdown also reads as no range.
