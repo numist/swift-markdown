@@ -92,4 +92,44 @@ struct GFMAutolinkSourceRangeTests {
 
             """)
     }
+
+    /// A NUL makes the paragraph's text a copy with the NUL replaced by U+FFFD; the address is still placed on its
+    /// source bytes, and the U+FFFD before it on the NUL.
+    @Test("an email autolink after a NUL spans the address")
+    func emailAfterNUL() throws {
+        #expect(try tree("\u{0}a@b.co") == """
+            document @1:1-1:8
+              paragraph @1:1-1:8
+                text "\u{FFFD}" @1:1-1:2
+                link "mailto:a@b.co" "" @1:2-1:8
+                  text "a@b.co" @1:2-1:8
+
+            """)
+    }
+
+    /// The curly quote that replaces `'` isn't a source byte, but the text holding it still spans the `'`.
+    @Test("the text before an email autolink spans a smart quote")
+    func smartQuoteBeforeEmail() throws {
+        #expect(try tree("'a@b.co", options: Self.opts.union(.smart)) == """
+            document @1:1-1:8
+              paragraph @1:1-1:8
+                text "\u{2019}" @1:1-1:2
+                link "mailto:a@b.co" "" @1:2-1:8
+                  text "a@b.co" @1:2-1:8
+
+            """)
+    }
+
+    @Test("with cmark bug compatibility, the text after an email autolink spans a NUL")
+    func nulAfterEmail() throws {
+        #expect(try tree("a@b.co\u{0}", options: Self.opts.union(.cmarkBugCompatibility)) == """
+            document @1:1-1:8
+              paragraph @1:1-1:8
+                text "" @1:1-1:1
+                link "mailto:a@b.co" "" @1:1-1:7
+                  text "a@b.co" @1:1-1:7
+                text "\u{FFFD}" @1:7-1:8
+
+            """)
+    }
 }

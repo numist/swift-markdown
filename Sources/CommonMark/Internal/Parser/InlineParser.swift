@@ -4140,12 +4140,13 @@ extension BlockParser {
     /// (`.cmarkBugCompatibility`) reproduces that boolean. Flag-OFF, since a link nested in a link is
     /// invalid HTML/CommonMark, the spec-correct deliverable never autolinks inside a link and skips its
     /// subtree.
-    mutating func gfmEmailAutolinkPass(_ parent: DocumentStorage.Index) {
+    /// `image` maps the leaf's arena content back to source, when its content is a single arena chunk with a source image.
+    mutating func gfmEmailAutolinkPass(_ parent: DocumentStorage.Index, image: ContentImage?) {
         var inLink = false
-        gfmEmailAutolinkPass(parent, inLink: &inLink)
+        gfmEmailAutolinkPass(parent, image: image, inLink: &inLink)
     }
 
-    private mutating func gfmEmailAutolinkPass(_ parent: DocumentStorage.Index, inLink: inout Bool) {
+    private mutating func gfmEmailAutolinkPass(_ parent: DocumentStorage.Index, image: ContentImage?, inLink: inout Bool) {
         let bugCompat = storage.options.contains(.cmarkBugCompatibility)
         var child = storage[parent].firstChild
         while let current = child {
@@ -4157,7 +4158,7 @@ extension BlockParser {
             case .text:
                 // Skip text inside a link (cmark's `!in_link`).
                 if !inLink {
-                    splitEmailsInTextNode(current, parent: parent)
+                    splitEmailsInTextNode(current, parent: parent, image: image)
                 }
             case .link:
                 // why: flag-ON reproduce cmark's `in_link` boolean by walking the link subtree with the
@@ -4165,11 +4166,11 @@ extension BlockParser {
                 // Flag-OFF skip the subtree outright (never re-scan link text), matching the old behavior.
                 if bugCompat {
                     inLink = true
-                    gfmEmailAutolinkPass(current, inLink: &inLink)
+                    gfmEmailAutolinkPass(current, image: image, inLink: &inLink)
                     inLink = false
                 }
             default:
-                gfmEmailAutolinkPass(current, inLink: &inLink)
+                gfmEmailAutolinkPass(current, image: image, inLink: &inLink)
             }
             child = next
         }
@@ -4185,7 +4186,11 @@ extension BlockParser {
     /// link-text are carved zero-copy from the node's existing segments (`subContentRef`); only the
     /// `mailto:` URL is materialized into the arena. Under `.cmarkBugCompatibility` an empty `before`/`after`
     /// is kept as an empty `Text` sibling (Quirk M); flag-OFF drops it for the spec-correct clean tree.
-    private mutating func splitEmailsInTextNode(_ node: DocumentStorage.Index, parent: DocumentStorage.Index) {
+    ///
+    /// The link and its text span the address's source bytes. Each text run keeps the part of the split node's range
+    /// on its side of the address, so a run whose bytes aren't all source bytes (a smart quote, a NUL's U+FFFD) is
+    /// still placed, and a kept empty run sits where the address starts or ends.
+    private mutating func splitEmailsInTextNode(_ node: DocumentStorage.Index, parent: DocumentStorage.Index, image: ContentImage?) {
         guard case .literal(let ref) = storage[node].data else {
             preconditionFailure("a text node holds a literal")
         }
@@ -4211,6 +4216,8 @@ extension BlockParser {
         var didSplit = false
         var i = 0
         var resumeAt = 0
+        // The split node's end, which the last text run keeps.
+        let nodeEnd = positionsEnabled ? storage.sourceRanges[node].end : -1
         while i < total {
             guard scratch[i] == UInt8(ascii: "@") else {
                 i += 1
@@ -4238,13 +4245,18 @@ extension BlockParser {
             // `current` becomes the text run before this email.
             let beforeRef = subContentRef(of: ref, from: segStart, to: auto.urlStart)
             storage[current].data = .literal(beforeRef)
+            let emailRef = subContentRef(of: ref, from: auto.urlStart, to: auto.urlEnd)
+            let email = positionsEnabled ? sourceSpan(of: emailRef, image: image) : nil
             if positionsEnabled {
+                let currentStart = storage.sourceRanges[current].start
                 storage.sourceRanges[current] = .unset
+                if let email {
+                    storage.setSourceStart(current, currentStart >= 0 ? min(currentStart, email.start) : email.start)
+                    storage.setSourceEnd(current, email.start)
+                }
             }
-            stampFromContentRef(current, beforeRef)
 
             // The link node and its single text child (the visible email address).
-            let emailRef = subContentRef(of: ref, from: auto.urlStart, to: auto.urlEnd)
             // A folded `mailto:`/`xmpp:` scheme means the destination IS the visible run (cmark suppresses
             // the synthetic `mailto:` and keeps `xmpp:`), so reuse the source-backed ref for the URL. A
             // plain email still gets `mailto:` synthesized into the arena.
@@ -4255,11 +4267,11 @@ extension BlockParser {
                 kind: .text, parent: linkIdx, data: .literal(emailRef)))
             storage.appendChild(childIdx, to: linkIdx)
             storage.insertChildAfter(linkIdx, after: current)
-            stampFromContentRef(linkIdx, emailRef)
-            stampFromContentRef(childIdx, emailRef)
-            if beforeRef.totalLength == 0 {
-                // A kept empty `before` run sits where the address starts.
-                stampEmpty(current, atStartOf: emailRef)
+            if let email {
+                for idx in [linkIdx, childIdx] {
+                    storage.setSourceStart(idx, email.start)
+                    storage.setSourceEnd(idx, email.end)
+                }
             }
 
             // A fresh text node spanning the remaining tail; it becomes the running run and is trimmed to
@@ -4268,11 +4280,9 @@ extension BlockParser {
             let tailIdx = storage.appendNode(NodeRecord(
                 kind: .text, parent: parent, data: .literal(tailRef)))
             storage.insertChildAfter(tailIdx, after: linkIdx)
-            if tailRef.totalLength == 0 {
-                // A kept empty `after` run sits where the address ends.
-                stampEmpty(tailIdx, atEndOf: emailRef)
-            } else {
-                stampFromContentRef(tailIdx, tailRef)
+            if let email {
+                storage.setSourceStart(tailIdx, email.end)
+                storage.setSourceEnd(tailIdx, max(nodeEnd, email.end))
             }
 
             // Flag-OFF: an empty `before` / `between` run is not a real text node, so drop it.
@@ -4391,48 +4401,28 @@ extension BlockParser {
         return storage.intern(Chunk(offset: offset, length: buf.count, inSource: false))
     }
 
-    /// Give `node` an empty source range just before the first byte of the source-backed `ref`.
-    private mutating func stampEmpty(_ node: DocumentStorage.Index, atStartOf ref: ContentRef) {
-        guard positionsEnabled, ref.count > 0 else {
-            return
-        }
-        let first = storage.segments[Int(ref.first)]
-        guard first.inSource else {
-            return
-        }
-        let position = clampedToLine(Int(first.sourceOffset), ofByte: Int(first.offset))
-        storage.setSourceStart(node, position)
-        storage.setSourceEnd(node, position)
-    }
-
-    /// Give `node` an empty source range just past the last byte of the source-backed `ref`.
-    private mutating func stampEmpty(_ node: DocumentStorage.Index, atEndOf ref: ContentRef) {
-        guard positionsEnabled, ref.count > 0 else {
-            return
-        }
-        let last = storage.segments[Int(ref.first) + Int(ref.count) - 1]
-        guard last.inSource else {
-            return
-        }
-        let position = clampedToLine(Int(last.sourceOffset) + Int(last.length), ofByte: Int(last.offset) + Int(last.length) - 1)
-        storage.setSourceStart(node, position)
-        storage.setSourceEnd(node, position)
-    }
-
-    /// Stamp `node`'s source range from a source-backed `ContentRef`, mirroring `stampInline`.
-    ///
-    /// Stamps only when both the first and last content bytes map to source (the carved segments are
-    /// `inSource`); an empty or arena-backed piece is left position-less, exactly as `stampInline` would.
-    private mutating func stampFromContentRef(_ node: DocumentStorage.Index, _ ref: ContentRef) {
-        guard positionsEnabled, ref.count > 0 else {
-            return
+    /// The source extent of `ref`'s bytes: from its first byte to just past its last, each resolved through `sourceOffsets(of:local:image:)` and cut off at the end of its line, or `nil` when either end has no source image.
+    private func sourceSpan(of ref: ContentRef, image: ContentImage?) -> (start: Int, end: Int)? {
+        guard ref.count > 0, ref.totalLength > 0 else {
+            return nil
         }
         let firstSeg = storage.segments[Int(ref.first)]
         let lastSeg = storage.segments[Int(ref.first) + Int(ref.count) - 1]
-        guard firstSeg.inSource, lastSeg.inSource else {
-            return
+        guard let first = sourceOffsets(of: firstSeg, local: 0, image: image),
+              let last = sourceOffsets(of: lastSeg, local: Int(lastSeg.length) - 1, image: image) else {
+            return nil
         }
-        storage.setSourceStart(node, clampedToLine(Int(firstSeg.sourceOffset), ofByte: Int(firstSeg.offset)))
-        storage.setSourceEnd(node, clampedToLine(Int(lastSeg.sourceOffset) + Int(lastSeg.length), ofByte: Int(lastSeg.offset) + Int(lastSeg.length) - 1))
+        return (clampedToLine(first.source, ofByte: first.physical), clampedToLine(last.source + 1, ofByte: last.physical))
+    }
+
+    /// The source offsets (stamped, and as read; see `ContentSpan.sourceOffsets(ofVirtual:)`) of byte `local` of `seg`: a source segment's own byte, the one source byte an arena segment stands for, or an arena byte of the leaf's content imaged by `image`.
+    private func sourceOffsets(of seg: Segment, local: Int, image: ContentImage?) -> (source: Int, physical: Int)? {
+        if seg.inSource {
+            return (Int(seg.sourceOffset) + local, Int(seg.offset) + local)
+        }
+        if seg.sourceOffset >= 0 {
+            return (Int(seg.sourceOffset), Int(seg.sourceOffset))
+        }
+        return image?.sourceOffsets(ofArenaByte: Int(seg.offset) + local)
     }
 }

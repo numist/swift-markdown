@@ -61,6 +61,48 @@ internal struct ArenaRun: Equatable {
     }
 }
 
+/// A single arena chunk's source image: its content-relative run map (`ArenaRun`), keyed from `base`, the chunk's first arena byte.
+internal struct ContentImage {
+    internal let base: Int
+    internal let runs: [ArenaRun]
+    /// `runEnds[i]` is the content-relative offset just past run `i`.
+    private let runEnds: [Int]
+
+    internal init(base: Int, runs: [ArenaRun]) {
+        self.base = base
+        self.runs = runs
+        var end = 0
+        runEnds = runs.map { run in
+            end += Int(run.length)
+            return end
+        }
+    }
+
+    /// The source offsets imaged by arena byte `offset` - the offset it is stamped at, and the offset it was read from (see `ArenaRun`) - or `nil` for a synthetic gap or a byte outside the chunk.
+    internal func sourceOffsets(ofArenaByte offset: Int) -> (source: Int, physical: Int)? {
+        let k = offset - base
+        guard k >= 0, let total = runEnds.last, k < total else {
+            return nil
+        }
+        var lo = 0
+        var hi = runEnds.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if runEnds[mid] > k {
+                hi = mid
+            } else {
+                lo = mid + 1
+            }
+        }
+        let run = runs[lo]
+        let local = k - (lo == 0 ? 0 : runEnds[lo - 1])
+        guard run.sourceOffset >= 0 else {
+            return nil
+        }
+        return (Int(run.sourceOffset) + local, Int(run.physicalOffset) + local)
+    }
+}
+
 /// A node's content, expressed as a contiguous slice `[first, first + count)` of `DocumentStorage.segments`.
 ///
 /// The overwhelmingly common case is `count == 1` (a single source range - most text runs, URLs, and labels), which costs the same as a single inline `Chunk`. `totalLength` caches the total byte length across the segments so length queries don't have to walk the pool.

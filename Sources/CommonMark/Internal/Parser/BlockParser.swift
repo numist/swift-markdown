@@ -509,7 +509,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
             }
 
-            finishInlines(node)
+            let image: ContentImage?
+            if positionsEnabled, ref.count == 1, case let chunk = storage.segments[Int(ref.first)].chunk, !chunk.inSource, let map = arenaSourceMaps[node] {
+                image = ContentImage(base: chunk.offset, runs: map)
+            } else {
+                image = nil
+            }
+            finishInlines(node, image: image)
         }
 
         // Footnote post-processing (mirrors cmark's `process_footnotes`, run after inline parsing):
@@ -662,6 +668,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             hasNUL = true
             break
         }
+        // The arena copy's source image, for the email autolink pass.
+        var image: ContentImage? = nil
         if !hasCR && !hasNUL {
             // Zero-copy: the paragraph content is a source slice; emitted text references the source in place.
             let rest = parseDefinitions(in: Chunk(offset: start, length: count - start, inSource: true))
@@ -730,8 +738,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 delimiters: &delimiters,
                 brackets: &brackets
             )
+            if positionsEnabled {
+                image = ContentImage(base: arenaStart, runs: runs)
+            }
         }
-        finishInlines(paragraph)
+        finishInlines(paragraph, image: image)
     }
 
     /// Extend an arena→source run map by one content byte that images source byte `sourceOffset` (read from physical byte `physicalOffset`, which defaults to `sourceOffset`; see `ArenaRun`), or by one synthetic gap byte when `sourceOffset < 0`: the last run grows when the byte continues it, otherwise a new run starts.
@@ -755,12 +766,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Post-process a leaf's freshly parsed inline children, mirroring cmark's `cmark_parser_finish` (consolidate, then extension postprocess).
     ///
     /// Consolidation runs unconditionally, in every parse mode including inline-only (swift-cmark `src/blocks.c` `cmark_parser_finish` calls `cmark_consolidate_text_nodes` with no option gate), so failed delimiters, entities and escapes merge with their neighbouring text.
-    private mutating func finishInlines(_ leaf: DocumentStorage.Index) {
+    ///
+    /// `image` maps the leaf's content back to source when it is one arena chunk with a source image.
+    private mutating func finishInlines(_ leaf: DocumentStorage.Index, image: ContentImage? = nil) {
         consolidateTextNodes(leaf)
         // GFM email autolinks are detected over the consolidated inline tree, matching cmark's autolink
         // `postprocess` (which runs after emphasis + `cmark_consolidate_text_nodes`).
         if storage.options.contains(.gfmAutolink) {
-            gfmEmailAutolinkPass(leaf)
+            gfmEmailAutolinkPass(leaf, image: image)
         }
         // A `[^[` footnote collapse (bug-compat) marked run-truncating nodes; their invisible tail is
         // dropped AFTER the autolink pass, so a trailing email in that tail still links.
