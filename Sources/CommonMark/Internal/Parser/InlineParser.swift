@@ -3615,13 +3615,18 @@ extension BlockParser {
 
     /// Emit a zero-length `.text` node at virtual offset `offset` as a child of `parent`.
     ///
-    /// Used flag-ON to reproduce the empty `before`/`after` siblings cmark-gfm's autolink extension leaves around a GFM autolink. The node carries no source range (its content is empty, so `stampInline` is a no-op) and positions are not part of the differential compare surface.
+    /// Used flag-ON to reproduce the empty `before`/`after` siblings cmark-gfm's autolink extension leaves around a GFM autolink. The node gets an empty source range where it sits, just before the content byte at `offset`.
     private mutating func emitEmptyText(at offset: Int, content: borrowing ContentSpan, into parent: DocumentStorage.Index) {
         let emptyRef = storage.intern(content.chunk(offset: offset, length: 0))
         let textIdx = storage.appendNode(
             NodeRecord(kind: .text, parent: parent, data: .literal(emptyRef))
         )
         storage.appendChild(textIdx, to: parent)
+        if positionsEnabled, let at = content.sourceOffsets(ofVirtual: offset) {
+            let position = clampedToLine(at.source, ofByte: at.physical)
+            storage.setSourceStart(textIdx, position)
+            storage.setSourceEnd(textIdx, position)
+        }
     }
 
     /// Emit a `.link` node + a single `.text` child for a GFM autolink match. `www.` and email forms get a synthetic scheme prefix (`http://` or `mailto:`) materialized into the string arena.
@@ -3656,6 +3661,8 @@ extension BlockParser {
             kind: .text, parent: linkIdx, data: .literal(textRef)
         ))
         storage.appendChild(textIdx, to: linkIdx)
+        stampInline(linkIdx, auto.urlStart, auto.urlEnd, content: content)
+        stampInline(textIdx, auto.urlStart, auto.urlEnd, content: content)
     }
 
     /// Append `prefix` + the content bytes of `start..<end` into `storage.strings`, returning a chunk pointing at the appended region.
@@ -4248,6 +4255,12 @@ extension BlockParser {
                 kind: .text, parent: linkIdx, data: .literal(emailRef)))
             storage.appendChild(childIdx, to: linkIdx)
             storage.insertChildAfter(linkIdx, after: current)
+            stampFromContentRef(linkIdx, emailRef)
+            stampFromContentRef(childIdx, emailRef)
+            if beforeRef.totalLength == 0 {
+                // A kept empty `before` run sits where the address starts.
+                stampEmpty(current, atStartOf: emailRef)
+            }
 
             // A fresh text node spanning the remaining tail; it becomes the running run and is trimmed to
             // the next `between` segment on a further match, or kept as the final `after` run.
@@ -4255,7 +4268,12 @@ extension BlockParser {
             let tailIdx = storage.appendNode(NodeRecord(
                 kind: .text, parent: parent, data: .literal(tailRef)))
             storage.insertChildAfter(tailIdx, after: linkIdx)
-            stampFromContentRef(tailIdx, tailRef)
+            if tailRef.totalLength == 0 {
+                // A kept empty `after` run sits where the address ends.
+                stampEmpty(tailIdx, atEndOf: emailRef)
+            } else {
+                stampFromContentRef(tailIdx, tailRef)
+            }
 
             // Flag-OFF: an empty `before` / `between` run is not a real text node, so drop it.
             if beforeRef.totalLength == 0, !keepEmpties {
@@ -4371,6 +4389,34 @@ extension BlockParser {
             storage.strings.append(buf[k])
         }
         return storage.intern(Chunk(offset: offset, length: buf.count, inSource: false))
+    }
+
+    /// Give `node` an empty source range just before the first byte of the source-backed `ref`.
+    private mutating func stampEmpty(_ node: DocumentStorage.Index, atStartOf ref: ContentRef) {
+        guard positionsEnabled, ref.count > 0 else {
+            return
+        }
+        let first = storage.segments[Int(ref.first)]
+        guard first.inSource else {
+            return
+        }
+        let position = clampedToLine(Int(first.sourceOffset), ofByte: Int(first.offset))
+        storage.setSourceStart(node, position)
+        storage.setSourceEnd(node, position)
+    }
+
+    /// Give `node` an empty source range just past the last byte of the source-backed `ref`.
+    private mutating func stampEmpty(_ node: DocumentStorage.Index, atEndOf ref: ContentRef) {
+        guard positionsEnabled, ref.count > 0 else {
+            return
+        }
+        let last = storage.segments[Int(ref.first) + Int(ref.count) - 1]
+        guard last.inSource else {
+            return
+        }
+        let position = clampedToLine(Int(last.sourceOffset) + Int(last.length), ofByte: Int(last.offset) + Int(last.length) - 1)
+        storage.setSourceStart(node, position)
+        storage.setSourceEnd(node, position)
     }
 
     /// Stamp `node`'s source range from a source-backed `ContentRef`, mirroring `stampInline`.
