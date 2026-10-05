@@ -390,6 +390,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if positionsEnabled, reader.lineNumber > 0 {
                 storage.setSourceStart(documentIndex, storage.lineStarts[0])
                 storage.setSourceEnd(documentIndex, currentLineSourceRange.upperBound)
+            } else if positionsEnabled, reader.nextStart > 0 {
+                // A BOM alone is still one empty line for cmark (`S_process_line` skips the BOM within it), so the document spans that empty line after the BOM.
+                storage.lineStarts.append(reader.nextStart)
+                storage.setSourceStart(documentIndex, reader.nextStart)
+                storage.setSourceEnd(documentIndex, reader.nextStart)
             }
         }
 

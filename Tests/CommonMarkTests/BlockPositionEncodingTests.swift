@@ -536,6 +536,15 @@ struct BlockPositionEncodingTests {
         #expect(out[4].range == r(2, 1, 2, 2))
     }
 
+    /// A BOM alone is one empty line, as in cmark-gfm, so the document spans that line from just after the BOM:
+    /// an empty range at 1:1. cmark-gfm reports `1:1-1:4`, counting the BOM's three bytes.
+    @Test("BOM-only input — the document is an empty range at 1:1")
+    func byteOrderMarkOnly() throws {
+        let out = try parse("\u{FEFF}")
+        try #require(shape(out) == ["document"])
+        #expect(out[0].range == r(1, 1, 1, 1))
+    }
+
     // MARK: - Collection / assertion helpers
 
     /// Build a source range from 1-based line/byte-column endpoints.
