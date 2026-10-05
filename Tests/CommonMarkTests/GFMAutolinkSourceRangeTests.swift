@@ -132,4 +132,21 @@ struct GFMAutolinkSourceRangeTests {
 
             """)
     }
+
+    /// With `.cmarkBugCompatibility` and footnotes, a footnote-shaped bracket whose `]` is on the next line collapses
+    /// into reconstructed text with no source image of its own, so the address found in it has none either. The
+    /// text before the address keeps where the bracket starts, as an empty range; the link and the text after it
+    /// have no range, as in cmark-gfm.
+    @Test("with cmark bug compatibility, the text before an email in a collapsed footnote bracket keeps its start")
+    func emailInCollapsedFootnoteBracket() throws {
+        #expect(try tree("![^b@.B\\\n]", options: Self.opts.union([.footnotes, .cmarkBugCompatibility])) == """
+            document @1:1-2:2
+              paragraph @1:1-2:2
+                text "![^" @1:1-1:1
+                link "mailto:b@.B" "" @-
+                  text "b@.B" @-
+                text "\\\\\\n]" @-
+
+            """)
+    }
 }

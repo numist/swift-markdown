@@ -4255,6 +4255,10 @@ extension BlockParser {
                 if let email {
                     storage.setSourceStart(current, currentStart >= 0 ? min(currentStart, email.start) : email.start)
                     storage.setSourceEnd(current, email.start)
+                } else if currentStart >= 0 {
+                    // An address in reconstructed text has no source image, so the run before it keeps only where it starts.
+                    storage.setSourceStart(current, currentStart)
+                    storage.setSourceEnd(current, currentStart)
                 }
             }
 
