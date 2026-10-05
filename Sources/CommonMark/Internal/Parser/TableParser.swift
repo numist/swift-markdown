@@ -21,8 +21,8 @@ extension BlockParser {
         let chunk: Chunk
         // How the flattened content maps back to source for stamping rows/cells/cell-text:
         //   - `.contiguous`: the arena copy below is a byte-for-byte image of an `inSource` range, so arena offset `A` maps to source `A + delta`. The common no-leading-whitespace table.
-        //   - `.flattened`: arena content carrying a run map - a top-level row had leading whitespace, so the paragraph arrived as a non-contiguous segment list, flattened with a re-indent run map that re-bases each row's content to the table's content column (cmark's cell-column re-base; see `runParagraphMatchers`), or NULs were replaced and the map images each U+FFFD back to its NUL. A table nested in a block quote / list (also non-contiguous, but not enrolled here) keeps `.none`, with or without NULs.
-        //   - `.none`: materialized content with no source image (block-quote/list/CRLF tables) - positions are left unstamped, as before.
+        //   - `.flattened`: arena content carrying a run map - the rows aren't source-contiguous (a container prefix, leading whitespace, or a CRLF separates them), so the paragraph arrived as a segment list, flattened with a run map that images each row's content on its source line (re-based to the table's content column for a re-indented row; see `runParagraphMatchers`), or NULs were replaced and the map images each U+FFFD back to its NUL.
+        //   - `.none`: positions are off, so nothing is stamped.
         let mode: TableSourceMode
         if inputChunk.inSource {
             let offset = storage.strings.count
@@ -33,10 +33,7 @@ extension BlockParser {
             mode = positionsEnabled ? .contiguous(delta: inputChunk.offset - offset) : .none
         } else {
             chunk = inputChunk
-            // A run map is threaded in only for a top-level flattened table (`runParagraphMatchers` gates on the parent); a nested/materialized table gets an empty map and stays unstamped.
-            precondition(storage[node].parent != nil, "a table-pending paragraph has a parent container")
-            let topLevel = storage[storage[node].parent!].kind == .document
-            mode = (positionsEnabled && topLevel && !sourceMap.isEmpty) ? .flattened(sourceMap) : .none
+            mode = (positionsEnabled && !sourceMap.isEmpty) ? .flattened(sourceMap) : .none
         }
         let lines = splitLines(chunk: chunk)
         precondition(lines.count >= 2, "a table-pending paragraph holds its header and delimiter lines")
@@ -234,7 +231,7 @@ extension BlockParser {
         ))
         storage.appendChild(rowIdx, to: parent)
         // The row spans its whole source line. cmark sets a table row's end column to the parent table's end column (`try_opening_table_row`): the full source line INCLUDING trailing whitespace. Interior rows already reach their line-terminating newline via `splitLines`, but the paragraph→table content chunk had its outermost whitespace trimmed (`runParagraphMatchers`), so the LAST line stops one or more bytes short of the source line end. Recover the untrimmed end from the table node's own end (the paragraph extent, stamped before this runs).
-        // `nil` when the table isn't source-mapped (or the row's content didn't image source), leaving the row unstamped as before.
+        // `nil` when positions are off, leaving the row unstamped.
         let proj = projection.map { RowProjection(table: $0, rowStartArena: line.lowerBound) }
         // The untrimmed row-content extent's re-based source end, reused for the row end and the rightmost-no-closing-pipe cell.
         var rowContentEnd: Int? = nil
@@ -393,8 +390,7 @@ extension BlockParser {
                         // table-cell inline positions track the reference's escape-oblivious / re-based columns
                         // unconditionally - this is NOT enrolled in `.cmarkBugCompatibility` (there was no prior
                         // spec-correct behavior to protect: these inlines were unstamped before), so there is no
-                        // flag split here. A non-source-mapped table (materialized content, no source image)
-                        // registers no mapping, so the cell stays unstamped as before.
+                        // flag split here. With positions off there is no projection, so no mapping is registered.
                         if let projection {
                             let cellMap = projection.runs(from: cellRange.lowerBound, length: cellRange.count, in: self)
                             arenaSourceMaps[cellIdx] = noEscape
@@ -413,11 +409,11 @@ extension BlockParser {
 
     /// How a source-mapped table projects flattened-content arena offsets back to source byte offsets.
     private enum TableSourceMode {
-        /// Not source-mapped: materialized content with no contiguous source image (block-quote/list/CRLF tables). Positions are left unstamped, as before.
+        /// Not source-mapped: positions are off.
         case none
         /// A contiguous `inSource` range copied into the arena: arena offset `A` maps to source `A + delta` (physical == re-based). The common no-leading-whitespace table.
         case contiguous(delta: Int)
-        /// A top-level row with leading whitespace: the paragraph arrived as a non-contiguous segment list, flattened with a content-relative arena→source run map that re-bases each row's content to the table's content column (cmark's cell-column re-base). Runs carry both the re-based `sourceOffset` and the physical byte-read `physicalOffset` (the latter places the row's content end on its true physical line).
+        /// Non-contiguous rows (a container prefix, leading whitespace, or a CRLF) or replaced NULs: the paragraph arrived as arena content with a content-relative arena→source run map that images each row's content on its source line, re-based to the table's content column for a re-indented row (cmark's cell-column re-base). Runs carry both the re-based `sourceOffset` and the physical byte-read `physicalOffset` (the latter places the row's content end on its true physical line).
         case flattened([ArenaRun])
     }
 

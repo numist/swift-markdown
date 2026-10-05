@@ -139,6 +139,56 @@ struct SourceRangeCompletenessTests {
         #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
     }
 
+    /// A container to nest every spec example in, by rewriting each of its lines.
+    enum Container: String, CaseIterable, Sendable {
+        /// Every line prefixed with `> `.
+        case blockQuote
+        /// The first line prefixed with `- `, the rest indented by two spaces.
+        case listItem
+        /// The first line prefixed with `> - `, the rest with `>   `.
+        case listItemInBlockQuote
+        /// Every line prefixed with `>` and a tab.
+        case tabAfterBlockQuoteMarker
+        /// The first line prefixed with `-` and a tab, the rest indented by a tab.
+        case tabIndentedListItem
+        /// A `> a` paragraph line first, then the example's first line unprefixed, so it is a lazy continuation of that
+        /// paragraph wherever it is paragraph text, and the rest prefixed with `> `. A table's header line is then lazy.
+        case lazyFirstLine
+
+        func nest(_ markdown: String) -> String {
+            var lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+            // The example's final newline ends its last line; it is not a line of its own to prefix.
+            let trailingNewline = lines.last == ""
+            if trailingNewline { lines.removeLast() }
+            let (first, rest): (String, String) = switch self {
+            case .blockQuote: ("> ", "> ")
+            case .listItem: ("- ", "  ")
+            case .listItemInBlockQuote: ("> - ", ">   ")
+            case .tabAfterBlockQuoteMarker: (">\t", ">\t")
+            case .tabIndentedListItem: ("-\t", "\t")
+            case .lazyFirstLine: ("", "> ")
+            }
+            let nested = lines.enumerated().map { ($0.offset == 0 ? first : rest) + $0.element }
+            let lead = self == .lazyFirstLine ? "> a\n" : ""
+            return lead + nested.joined(separator: "\n") + (trailingNewline ? "\n" : "")
+        }
+    }
+
+    /// The ratchet with every spec example nested in each `Container`, in the shipped configuration and with
+    /// `.cmarkBugCompatibility`. A nested block's lines aren't contiguous in the source (each carries its container's
+    /// prefix), so this covers content that maps back to source line by line: notably the GFM tables section's
+    /// tables, whose rows, cells and cell inlines must each be placed on their own source line.
+    @Test("every non-exempt node carries a valid source range when nested in a container", arguments: Container.allCases, [
+        MarkdownDocument.ParseOptions(), .cmarkBugCompatibility,
+    ])
+    func everyNonExemptNestedNodeHasValidRange(container: Container, compatibility: MarkdownDocument.ParseOptions) throws {
+        let audit = try Self.audit(options: Self.options.union(compatibility), rewrite: container.nest)
+
+        #expect(audit.totalNodes > 3000)
+        #expect(audit.exemptFillerCells == 2)
+        #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
+    }
+
     /// Parse every spec example with `options`, its markdown passed through `rewrite`, and collect each
     /// node that lacks a valid source range, skipping the exempt set documented on
     /// `everyNonExemptNodeHasValidRange`.

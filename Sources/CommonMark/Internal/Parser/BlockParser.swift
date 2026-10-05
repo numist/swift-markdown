@@ -3262,13 +3262,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let tableContent = strippedCheckbox
                 ? trimmed.trimmingTrailing(using: self)
                 : raw.trimmingTrailing(using: self)
-            // A top-level row with leading whitespace makes the paragraph non-contiguous, so its content
-            // reaches here flattened from a segment list carrying a re-indent run map (Quirk E): each row's
-            // surviving content is mapped to the table's content column, exactly cmark's re-based cell
-            // columns. Content whose NULs were replaced likewise carries a run map imaging each U+FFFD back
-            // to its NUL. Narrow that map to the content window the table parser sees. The contiguous fast path
-            // passes an empty map (the table parser maps by a constant source delta instead), and a table
-            // nested in a block quote / list keeps its cells unstamped as before (see `parseTable`).
+            // Rows that aren't source-contiguous (a container prefix, leading whitespace, or a CRLF between
+            // them) make the paragraph a segment list, so its content reaches here flattened with a run map
+            // imaging each row's content on its source line; a re-indented row's content is mapped to the
+            // table's content column (Quirk E), exactly cmark's re-based cell columns. Content whose NULs were
+            // replaced likewise carries a run map imaging each U+FFFD back to its NUL. Narrow that map to the
+            // content window the table parser sees. The contiguous fast path passes an empty map (the table
+            // parser maps by a constant source delta instead).
             let tableMap = (positionsEnabled && !map.isEmpty)
                 ? sliceRuns(map, from: tableContent.offset - raw.offset, length: tableContent.length)
                 : []

@@ -18,19 +18,30 @@ import CommonMark
 /// delimiter and tightness, the checkbox state of a task item, the alignment and span of a table cell, and the label of
 /// a footnote definition or the number of a footnote reference. Quoted values escape `\`, `"`, newline and tab, and
 /// write any other control character or DEL as `\u{XX}`.
+///
+/// With `sourceRanges`, each line ends with the node's source range as `@line:column-line:column` (the end is
+/// half-open), or `@-` for a node without one.
 internal enum CmarkTreeDump {
 
-    internal static func dump(_ source: String, options: MarkdownDocument.ParseOptions) throws -> String {
+    internal static func dump(_ source: String, options: MarkdownDocument.ParseOptions, sourceRanges: Bool = false) throws -> String {
         try MarkdownDocument.withParsedDocument(source, options: options) { doc in
             var out = ""
-            dump(doc.root, depth: 0, into: &out)
+            dump(doc.root, depth: 0, sourceRanges: sourceRanges, into: &out)
             return out
         }
     }
 
-    private static func dump(_ node: borrowing MarkdownNode, depth: Int, into out: inout String) {
-        out += String(repeating: "  ", count: depth) + line(node) + "\n"
-        node.children.forEach { dump($0, depth: depth + 1, into: &out) }
+    private static func dump(_ node: borrowing MarkdownNode, depth: Int, sourceRanges: Bool, into out: inout String) {
+        out += String(repeating: "  ", count: depth) + line(node)
+        if sourceRanges {
+            if let range = node.sourceRange {
+                out += " @\(range.lowerBound.line):\(range.lowerBound.column)-\(range.upperBound.line):\(range.upperBound.column)"
+            } else {
+                out += " @-"
+            }
+        }
+        out += "\n"
+        node.children.forEach { dump($0, depth: depth + 1, sourceRanges: sourceRanges, into: &out) }
     }
 
     private static func line(_ node: borrowing MarkdownNode) -> String {
