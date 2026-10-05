@@ -836,7 +836,7 @@ extension BlockParser {
             // Resolve emphasis inside the bracket first (clearing its delimiters from the stack) so
             // removing the inner nodes below doesn't leave stale delimiters for `processEmphasis`.
             processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
-            emitFootnoteReference(openerInl: openerInl, definition: defIdx)
+            emitFootnoteReference(openerInl: openerInl, definition: defIdx, span: footnoteBracketStart..<(cursor + 1), content: content)
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             return initialPos
         }
@@ -1040,7 +1040,9 @@ extension BlockParser {
     /// The opener node is removed whole: a `[` (`![^a]` never opens an image bracket, see the `!` dispatch,
     /// so it reaches here as a literal `!` followed by a `[` opener), or the `![` of an escaped-caret image
     /// opener (`emitEscapedCaretFootnote`), which cmark frees entirely.
-    private mutating func emitFootnoteReference(openerInl: DocumentStorage.Index, definition defIdx: DocumentStorage.Index) {
+    ///
+    /// The reference's source range is `span`, the virtual range of `content` it replaces: from its opener to just past its `]`.
+    private mutating func emitFootnoteReference(openerInl: DocumentStorage.Index, definition defIdx: DocumentStorage.Index, span: Range<Int>, content: borrowing ContentSpan) {
         guard case .footnoteDefinition(let defLabel, _) = storage[defIdx].data else {
             preconditionFailure("footnoteMap holds only footnote definitions")
         }
@@ -1051,6 +1053,7 @@ extension BlockParser {
             data: .footnoteReference(label: defLabel)
         ))
         storage.insertChildBefore(fnRefIdx, before: openerInl)
+        stampInline(fnRefIdx, span.lowerBound, span.upperBound, content: content)
         storage.unlinkChild(openerInl)
         // Detach inner-content text nodes (the `^label` part) that follow the reference. They aren't part of the reference's emitted text - the reference is rendered by the consumer based on its label and index.
         var sib = storage[fnRefIdx].next
@@ -1342,7 +1345,7 @@ extension BlockParser {
         // cmark resolves the reference by its byte-captured label; a match emits a footnote reference.
         // cmark measures the captured length `x`, not `lookupKey`, which U+FFFD replacement can lengthen.
         if let defIdx = capturedFootnoteDefinition(lookupKey, measuredOver: labelStart..<min(labelStart + x, close), in: content) {
-            emitFootnoteReference(openerInl: openerInl, definition: defIdx)
+            emitFootnoteReference(openerInl: openerInl, definition: defIdx, span: open..<(close + 1), content: content)
             return
         }
         // Unresolved: reconstruct `[^` + captured bytes + `]`.
@@ -1408,8 +1411,8 @@ extension BlockParser {
         // can contain, so the shortened measure never changes the outcome.
         if let defIdx = capturedFootnoteDefinition(lookupKey, measuredOver: labelStart..<min(labelStart + labelLength, content.endOffset), in: content) {
             // cmark frees the whole opener node, so a resolved `![\^…]` keeps no `!`: unlike `![^…`, the
-            // `![\` opener is pushed as an image bracket.
-            emitFootnoteReference(openerInl: openerInl, definition: defIdx)
+            // `![\` opener is pushed as an image bracket. The reference spans the freed `!` too.
+            emitFootnoteReference(openerInl: openerInl, definition: defIdx, span: (isImage ? open - 1 : open)..<(close + 1), content: content)
             return
         }
         var literal: [UInt8] = []
