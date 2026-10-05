@@ -33,7 +33,8 @@ extension BlockParser {
             mode = positionsEnabled ? .contiguous(delta: inputChunk.offset - offset) : .none
         } else {
             chunk = inputChunk
-            mode = (positionsEnabled && !sourceMap.isEmpty) ? .flattened(sourceMap) : .none
+            precondition(!positionsEnabled || !sourceMap.isEmpty, "with positions tracked, arena table content carries its run map to the source")
+            mode = positionsEnabled ? .flattened(sourceMap) : .none
         }
         let lines = splitLines(chunk: chunk)
         precondition(lines.count >= 2, "a table-pending paragraph holds its header and delimiter lines")

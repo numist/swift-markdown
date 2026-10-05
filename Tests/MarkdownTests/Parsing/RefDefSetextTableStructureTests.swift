@@ -70,9 +70,9 @@ class RefDefSetextTableStructureTests: XCTestCase {
         let expectedDump = """
         Document @1:1-4:3
         └─ Table @1:1-4:3 alignments: |-|
-           ├─ Head
-           │  └─ Cell
-           │     └─ Text "="
+           ├─ Head @3:1-3:2
+           │  └─ Cell @3:1-3:2
+           │     └─ Text @3:1-3:2 "="
            └─ Body
         """
 

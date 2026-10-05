@@ -63,11 +63,44 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// A `.lazy` span with `joinPending` set holds a deferred separator: a continuation `\n` was requested after the span but not yet committed, so that if the *next* line turns out to be contiguous in source (single-LF terminated, no stripped prefix) the whole multi-line run can stay a single zero-copy source range - the embedded `\n` comes from the source itself rather than a synthesized copy. Only `appendNewline` sets it, and the next `addLine` (or `addLazyLineAfterTasklistAdvance`) always clears it, so content that is drained or inspected between lines never has it set.
     enum PendingContent : ~Copyable {
         case lazy(range: Range<Int>, joinPending: Bool = false)
-        case materialized(UniqueArray<UInt8>)
+        case materialized(MaterializedText)
         /// An ordered segment list.
         ///
         /// Used for code/HTML block bodies: each body line is a zero-copy source `Segment` (or an arena copy for a non-source-mapped, e.g. tab-expanded, line) and each line join is the shared `newlineSegment`. Drained at finalize into a multi-segment `ContentRef` with no source bytes copied. Only produced for nodes that are never inline-parsed (`.codeBlock` / `.htmlBlock`).
         case segments(UniqueArray<Segment>)
+    }
+
+    /// A paragraph or heading's content copied into a byte buffer, with the content-relative arena→source run map (`ArenaRun`s tiling `bytes` from its first byte) that images each byte: a copied source byte its own offset, a synthetic byte the source byte it stands for, and a line join a gap.
+    struct MaterializedText : ~Copyable {
+        private(set) var bytes = UniqueArray<UInt8>()
+        private(set) var map: [ArenaRun] = []
+
+        init() {}
+
+        /// The bytes `bytes` imaged by the content-relative run map `map`, which tiles them.
+        init(bytes: consuming UniqueArray<UInt8>, map: [ArenaRun]) {
+            precondition(map.reduce(0) { $0 + Int($1.length) } == bytes.count, "a run map tiles its content")
+            self.bytes = bytes
+            self.map = map
+        }
+
+        var count: Int { bytes.count }
+
+        subscript(_ index: Int) -> UInt8 { bytes[index] }
+
+        /// Append `byte`, imaging source byte `sourceOffset` read at `physicalOffset` (see `ArenaRun`), or a synthetic gap when `sourceOffset < 0`.
+        mutating func append(_ byte: UInt8, imaging sourceOffset: Int, physicalOffset: Int? = nil) {
+            bytes.append(byte)
+            BlockParser.appendContentByte(imaging: sourceOffset, physicalOffset: physicalOffset, to: &map)
+        }
+
+        /// Append the source bytes `source[range]`, each imaging itself.
+        mutating func append(_ range: Range<Int>, of source: Span<UInt8>) {
+            bytes.reserveCapacity(bytes.count + range.count)
+            for i in range {
+                append(source[i], imaging: i)
+            }
+        }
     }
 
     /// Result of `materializePendingContent`: the materialized `Chunk` plus the (now-drained) leaf. `map` carries a content-relative arena→source run map when the content was flattened from a source-mapped segment list (empty otherwise).
@@ -127,7 +160,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Arena→source run maps for flattened inline content that has a source pre-image, keyed by the content's node.
     ///
-    /// Populated only for a non-contiguous setext heading (PHASE 2c): its content is flattened into one arena `Chunk` by `flattenSegments`, which drops the per-line source mapping the segments carried. The run map (content-relative, so it survives the re-seed's arena re-copy) lets the inline pass stamp the heading's text/emphasis with real source positions instead of leaving them unstamped. Consulted in the inline pass when building an arena single-segment `ContentSpan`.
+    /// Registered at finalize for paragraph, heading, table-cell and table-preceding-paragraph content that reaches inline parsing as one arena `Chunk` (flattened from segments, materialized, NUL-replaced or pipe-unescaped), which loses the per-line source mapping the content had. The content-relative run map lets the inline pass stamp the node's inlines with real source positions. Consulted in the inline pass when building an arena single-segment `ContentSpan`.
     var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
 
     /// The `storage.strings` byte ranges holding a U+FFFD that stands for an orphaned UTF-8 continuation byte
@@ -698,7 +731,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Extend an arena→source run map by one content byte that images source byte `sourceOffset` (read from physical byte `physicalOffset`, which defaults to `sourceOffset`; see `ArenaRun`), or by one synthetic gap byte when `sourceOffset < 0`: the last run grows when the byte continues it, otherwise a new run starts.
     @inline(__always)
-    private static func appendContentByte(imaging sourceOffset: Int, physicalOffset: Int? = nil, to runs: inout [ArenaRun]) {
+    fileprivate static func appendContentByte(imaging sourceOffset: Int, physicalOffset: Int? = nil, to runs: inout [ArenaRun]) {
         let physicalOffset = physicalOffset ?? sourceOffset
         if let last = runs.last {
             let length = Int(last.length)
@@ -819,13 +852,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         fatalError("pending content for node \(leaf.node) was not drained before node \(node) began accumulating")
     }
 
-    /// Consume `content` and materialize it into a `UniqueArray<UInt8>` ready for further appends.
+    /// Consume `content` and materialize it into a `MaterializedText` ready for further appends.
     ///
     /// A `.materialized` entry's buffer is *moved* out (no copy). `nil` yields an empty buffer.
-    private func unwrap(_ content: consuming PendingContent?) -> UniqueArray<UInt8> {
+    private func unwrap(_ content: consuming PendingContent?) -> MaterializedText {
         switch consume content {
         case .none:
-            return UniqueArray()
+            return MaterializedText()
         case .lazy?:
             preconditionFailure("source-backed content is extended in place, never copied into a buffer")
         case .materialized(let existing)?:
@@ -836,23 +869,28 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Append the bytes of the arena `chunk` to `pending` for `node`, returning the updated leaf.
+    /// Append the bytes of the arena `chunk`, imaged by its content-relative run map `map`, to `pending` for `node`, returning the updated leaf.
     ///
     /// Used when re-seeding a node's content after a transformation step (e.g. setext-heading content trimmed of leading ref-defs).
-    private mutating func addChunk(_ chunk: Chunk, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
+    private mutating func addChunk(_ chunk: Chunk, map: [ArenaRun], to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
         precondition(!chunk.inSource, "source-backed content re-seeds as a `.lazy` range, not through addChunk")
-        var buffer = unwrap(take(pending, ifNode: node))
-        buffer.reserveCapacity(buffer.count + chunk.length)
-        let end = chunk.offset + chunk.length
-        let shift = buffer.count - chunk.offset
+        precondition(map.reduce(0) { $0 + Int($1.length) } == chunk.length, "a run map tiles its content")
+        var text = unwrap(take(pending, ifNode: node))
+        let shift = text.count - chunk.offset
         let replacements = orphanReplacements(in: chunk.range)
         if !replacements.isEmpty {
             materializedOrphanReplacements[node, default: []] += replacements.map { ($0.lowerBound + shift)..<($0.upperBound + shift) }
         }
-        for i in chunk.offset..<end {
-            buffer.append(storage.strings[i])
+        var i = chunk.offset
+        for run in map {
+            for j in 0..<Int(run.length) {
+                let sourceOffset = run.sourceOffset < 0 ? -1 : Int(run.sourceOffset) + j
+                let physicalOffset = run.physicalOffset < 0 ? -1 : Int(run.physicalOffset) + j
+                text.append(storage.strings[i], imaging: sourceOffset, physicalOffset: physicalOffset)
+                i += 1
+            }
         }
-        return PendingLeaf(node: node, content: .materialized(buffer))
+        return PendingLeaf(node: node, content: .materialized(text))
     }
 
     /// Append the bytes from `span[range]` to `pending` for `node`, returning the updated leaf.
@@ -896,27 +934,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             case .segments(let segs):
                 return addLineSegment(span: span, range: range, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
             case let other:
-                var buffer = unwrap(other)
+                var text = unwrap(other)
                 // why: flag ON, a LAZY continuation keeps its residual whitespace in the content, exactly as `addLineSegment` does for a segment list (cmark's lazy `add_line` copies from where prefix matching stopped, blocks.c:1408), so a code span or link title spanning the line reads it. Such a line reaches this materialized buffer when, for example, the paragraph began as an orphan-led tasklist-retry line (`appendOrphanLedLine`).
                 let contentStart = keepsLazyResidual(before: range.lowerBound) ? currentLineContentCursor : range.lowerBound
                 // A tab-expanded current line (`!currentLineMapsToSource`) has `span` pointing at the per-line expanded buffer, not source - appending `span[range]` directly would bake the expanded-tab spaces into the arena as if they were literal content. Map back to the literal source range instead (same rule as the `.none` case above and `addLineSegment`'s materialized branch): cmark expands tabs only for block-structure indentation and keeps them literal in inline content. A kept residual that starts inside a tab an outer container partly consumed begins with that tab's leftover columns as spaces (cmark's `partially_consumed_tab`, blocks.c `add_line`).
                 if !currentLineMapsToSource {
                     let sourceHigh = materializedSourceOffset(range.upperBound)
                     let (sourceLow, splitTabSpaces) = materializedSourceStart(bufferStart: contentStart)
-                    buffer.reserveCapacity(buffer.count + splitTabSpaces + (sourceHigh - sourceLow))
+                    // The leftover columns stand for the split tab, the byte before `sourceLow`.
                     for _ in 0..<splitTabSpaces {
-                        buffer.append(UInt8(ascii: " "))
+                        text.append(UInt8(ascii: " "), imaging: sourceLow - 1)
                     }
-                    for i in sourceLow..<sourceHigh {
-                        buffer.append(sourceBytes[i])
-                    }
+                    text.append(sourceLow..<sourceHigh, of: sourceBytes)
                 } else {
-                    buffer.reserveCapacity(buffer.count + (range.upperBound - contentStart))
-                    for i in contentStart..<range.upperBound {
-                        buffer.append(span[i])
-                    }
+                    // A source-mapped line's `span` is the source itself.
+                    text.append(contentStart..<range.upperBound, of: span)
                 }
-                return PendingLeaf(node: node, content: .materialized(buffer))
+                return PendingLeaf(node: node, content: .materialized(text))
             }
         }
     }
@@ -969,9 +1003,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // A multi-line paragraph already accumulating as segments: the line join is the shared interned `\n` segment (zero-copy), not a byte appended to a materialized buffer.
             return appendSegment(storage.newlineSegment, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
         case let existing:
-            var buffer = unwrap(existing)
-            buffer.append(UInt8(ascii: "\n"))
-            return PendingLeaf(node: node, content: .materialized(buffer))
+            var text = unwrap(existing)
+            text.append(UInt8(ascii: "\n"), imaging: -1)
+            return PendingLeaf(node: node, content: .materialized(text))
         }
     }
 
@@ -1361,11 +1395,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return LeafMaterialization(chunk: Chunk(offset: range.lowerBound, length: range.count, inSource: true), pending: nil)
         case .materialized(let content):
             let offset = storage.strings.count
-            content.span.withUnsafeBufferPointer { buffer in
+            content.bytes.span.withUnsafeBufferPointer { buffer in
                 storage.strings.append(copying: buffer)
             }
             carryMaterializedOrphanReplacements(of: node, to: offset)
-            return LeafMaterialization(chunk: Chunk(offset: offset, length: content.count, inSource: false), pending: nil)
+            return LeafMaterialization(chunk: Chunk(offset: offset, length: content.count, inSource: false), pending: nil, map: content.map)
         case .segments(let segs):
             // Flatten a segment list to one arena chunk (used when a `Chunk` is required - e.g. a setext heading's paragraph re-seed, or matcher-eligible content). The common multi-line paragraph path keeps segments zero-copy via the finalize segment branch. Capture the arena→source run map so the re-seed can carry per-line source columns onto the heading's inlines.
             var map: [ArenaRun] = []
@@ -1459,8 +1493,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .lazy(let r, let joinPending):
             precondition(!joinPending, "a deferred line join is always consumed by the next line")
             return lastNewline(in: r).map { .multiContiguous(range: r, lastNewline: $0) } ?? .single
-        case .materialized(let buffer):
-            for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
+        case .materialized(let text):
+            for k in 0..<text.count where text[k] == UInt8(ascii: "\n") {
                 return .multiOther
             }
             // A single-line materialized paragraph is a table-header re-seed (`splitMaterializedHeader`) or an
@@ -1594,8 +1628,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .lazy(let r, let joinPending):
             precondition(!joinPending, "a deferred line join is always consumed by the next line")
             for i in r { storage.strings.append(sourceBytes[i]) }
-        case .materialized(let buffer):
-            for i in 0..<buffer.count { storage.strings.append(buffer[i]) }
+        case .materialized(let text):
+            for i in 0..<text.count { storage.strings.append(text[i]) }
         case .segments(let segs):
             for i in 0..<segs.count {
                 for j in 0..<Int(segs[i].length) {
@@ -1700,15 +1734,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     storage.strings.append(segmentByte(seg, j))
                 }
             }
-        case .materialized(let buffer):
+        case .materialized(let text):
             // The header is the bytes after the last embedded newline.
             var lastNewline = -1
-            for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
+            for k in 0..<text.count where text[k] == UInt8(ascii: "\n") {
                 lastNewline = k
             }
             precondition(lastNewline >= 0, "a multi-line materialized paragraph holds a line join")
-            for k in (lastNewline + 1)..<buffer.count {
-                storage.strings.append(buffer[k])
+            for k in (lastNewline + 1)..<text.count {
+                storage.strings.append(text[k])
             }
         case .lazy:
             preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
@@ -1735,8 +1769,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         switch consume leaf.content {
         case .segments(let segs):
             return splitSegmentHeader(node, segments: segs)
-        case .materialized(let buffer):
-            return splitMaterializedHeader(node, buffer: buffer)
+        case .materialized(let text):
+            return splitMaterializedHeader(node, text: text)
         case .lazy:
             preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
         }
@@ -1824,19 +1858,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Split a materialized paragraph (a byte buffer with embedded newlines, such as a definition-only setext
     /// paragraph whose flattened content is restored under `.cmarkBugCompatibility`) into a preceding paragraph
-    /// plus a header-only re-seed. The preceding bytes are copied into the arena without a source map, so the
-    /// preceding paragraph's inlines carry no source ranges.
+    /// plus a header-only re-seed, each carrying its part of the buffer's run map.
     /// The buffer carries no orphan replacement (`materializedOrphanReplacements`): an orphan-led paragraph
     /// never opens a table (`markOrphanLedParagraphTableVisited`).
-    private mutating func splitMaterializedHeader(_ node: DocumentStorage.Index, buffer: consuming UniqueArray<UInt8>) -> PendingLeaf? {
+    private mutating func splitMaterializedHeader(_ node: DocumentStorage.Index, text: consuming MaterializedText) -> PendingLeaf? {
         var lastNewline = -1
-        for k in 0..<buffer.count where buffer[k] == UInt8(ascii: "\n") {
+        for k in 0..<text.count where text[k] == UInt8(ascii: "\n") {
             lastNewline = k
         }
         precondition(lastNewline >= 0, "a multi-line materialized paragraph holds a line join")
         let precedingStart = storage.strings.count
         for k in 0..<lastNewline {
-            storage.strings.append(buffer[k])
+            storage.strings.append(text[k])
         }
         var precedingChunk = Chunk(offset: precedingStart, length: lastNewline, inSource: false).trimming(using: self)
         // The split-off lines carry any task-item checkbox and bypass finalize (see `stripTasklistCheckbox`).
@@ -1851,16 +1884,29 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         if !precedingChunk.isEmpty {
             let precedingNode = insertTablePrecedingParagraph(before: node)
-            // Apply cmark's table `unescape_pipes` (`\|`→`|`) after NUL→U+FFFD, matching the source-backed
-            // preceding-paragraph split. The buffer has no source map to thread.
-            pendingInlines.append((precedingNode, storage.intern(unescapingPipes(replacingNUL(precedingChunk)))))
+            let precedingMap = sliceRuns(text.map, from: precedingChunk.offset - precedingStart, length: precedingChunk.length)
+            if positionsEnabled, let span = sourceSpan(of: precedingMap) {
+                storage.setSourceStart(precedingNode, span.start)
+                storage.setSourceEnd(precedingNode, span.end)
+            }
+            enqueueTablePrecedingContent(precedingChunk, map: precedingMap, of: precedingNode)
         }
         var header = UniqueArray<UInt8>()
-        for k in (lastNewline + 1)..<buffer.count {
-            header.append(buffer[k])
+        for k in (lastNewline + 1)..<text.count {
+            header.append(text[k])
         }
+        let headerMap = sliceRuns(text.map, from: lastNewline + 1, length: text.count - lastNewline - 1)
         paragraphTablePending[node] = true
-        return PendingLeaf(node: node, content: .materialized(header))
+        return PendingLeaf(node: node, content: .materialized(MaterializedText(bytes: header, map: headerMap)))
+    }
+
+    /// The physical source extent imaged by a content-relative run map: from its first run's byte as read to just
+    /// past its last run's, or `nil` when either end is a synthetic gap.
+    private func sourceSpan(of map: [ArenaRun]) -> (start: Int, end: Int)? {
+        guard let first = map.first, let last = map.last, first.physicalOffset >= 0, last.physicalOffset >= 0 else {
+            return nil
+        }
+        return (Int(first.physicalOffset), Int(last.physicalOffset) + Int(last.length))
     }
 
     // MARK: - Per-line dispatcher
@@ -2022,7 +2068,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     let restored = checkboxConsumed ? afterCheckbox : raw
                     pending = restored.inSource
                         ? PendingLeaf(node: para, content: .lazy(range: restored.range))
-                        : addChunk(restored, to: para, pending: pending)
+                        : addChunk(restored, map: sliceRuns(flatMap, from: restored.offset - raw.offset, length: restored.length), to: para, pending: pending)
                     pending = appendNewline(to: para, pending: pending)
                     pending = addLine(span: source, range: firstNonSpace..<lineRange.upperBound, to: para, pending: pending)
                     return pending
@@ -2041,11 +2087,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 if stripped.inSource {
                     pending = PendingLeaf(node: para, content: .lazy(range: stripped.range))
                 } else {
-                    // Arena-backed (non-contiguous) content: `addChunk` re-copies the stripped bytes into a fresh arena buffer, so a plain arena chunk would reach inline parsing unmapped and leave the heading's text/emphasis unstamped (spec #12). The flattened content's run map is content-relative, so it survives the re-copy; narrow it to the re-seeded bytes and register it on the heading via `arenaSourceMaps`, where the heading's finalize takes it back to carry it through NUL replacement and its own trim.
-                    if positionsEnabled, !flatMap.isEmpty, !stripped.isEmpty {
-                        arenaSourceMaps[para] = sliceRuns(flatMap, from: stripped.offset - raw.offset, length: stripped.length)
-                    }
-                    pending = addChunk(stripped, to: para, pending: pending)
+                    // Arena-backed (non-contiguous) content: `addChunk` re-copies the stripped bytes into a fresh buffer. The flattened content's run map is content-relative, so narrow it to the re-seeded bytes and carry it with them, so the heading's text/emphasis keep their source positions.
+                    pending = addChunk(stripped, map: sliceRuns(flatMap, from: stripped.offset - raw.offset, length: stripped.length), to: para, pending: pending)
                 }
                 storage[para].kind = .heading(level: Int(level))
                 // why: cmark finalizes a setext heading only when a later line or EOF closes it
@@ -2956,10 +2999,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     if positionsEnabled {
                         currentContentIndent = advance.orphanStart - currentLineSourceRange.lowerBound
                     }
-                    var buffer = UniqueArray<UInt8>()
-                    materializedOrphanReplacements[paragraphIdx] = Self.appendOrphanLedLine(orphanedBytes: advance.orphanedBytes, rest: advance.sourceOffset..<lineEnd, of: sourceBytes, to: &buffer)
+                    var text = MaterializedText()
+                    materializedOrphanReplacements[paragraphIdx] = appendOrphanLedLine(advance, lineEnd: lineEnd, to: &text)
                     _ = take(pending, ifNode: paragraphIdx)
-                    return PendingLeaf(node: paragraphIdx, content: .materialized(buffer))
+                    return PendingLeaf(node: paragraphIdx, content: .materialized(text))
                 }
                 let contentStart = indexOfFirstNonSpace(source: sourceBytes, range: advance.sourceOffset..<lineEnd)
                 let lineContentStart = currentLineMapsToSource ? contentStart : materializedBufferOffset(ofSource: contentStart)
@@ -2998,8 +3041,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Drain `node`'s pending content, tagging it as a flat chunk or a segment list (mirrors `materializePendingContent` for the chunk cases; returns `.segments` zero-copy instead of flattening).
     ///
-    /// `seededMap` is the content-relative arena→source run map of `.materialized` content that has one (a setext heading re-seeded from flattened content); the drained chunk's map is carried through NUL replacement so its inlines keep source positions.
-    private mutating func drainLeaf(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?, seededMap: [ArenaRun] = []) -> LeafDrainResult {
+    /// A `.materialized` content's run map is carried through NUL replacement so its inlines keep source positions.
+    private mutating func drainLeaf(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> LeafDrainResult {
         switch consume pending {
         case .none:
             return LeafDrainResult(content: .chunk(.empty), pending: nil)
@@ -3025,9 +3068,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
             case .materialized(let content):
                 let offset = storage.strings.count
-                content.span.withUnsafeBufferPointer { storage.strings.append(copying: $0) }
+                content.bytes.span.withUnsafeBufferPointer { storage.strings.append(copying: $0) }
                 carryMaterializedOrphanReplacements(of: node, to: offset)
-                var map = seededMap
+                var map = content.map
                 let replaced = replacingNUL(Chunk(offset: offset, length: content.count, inSource: false), map: &map)
                 return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
             }
@@ -3361,9 +3404,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
             }
         case .heading:
-            // A setext heading re-seeded from flattened content registered its content's run map (see the PHASE 2c re-seed); take it back so draining can carry it through NUL replacement.
-            let seededMap = arenaSourceMaps.removeValue(forKey: node) ?? []
-            let drained = drainLeaf(node, pending: pending, seededMap: seededMap)
+            let drained = drainLeaf(node, pending: pending)
             pending = drained.pending
             let map = drained.map
             switch consume drained.content {
@@ -5066,16 +5107,27 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return (p, p - orphanStart, orphanStart)
     }
 
-    /// Append a line that cmark's tasklist advance left starting with `orphanedBytes` orphaned continuation
-    /// bytes (`tasklistAdvanceEnd`): one U+FFFD per orphan, as the reference's String bridge repairs each, then
-    /// the source bytes `rest`. Returns the buffer ranges of the U+FFFDs, one per orphan.
-    private static func appendOrphanLedLine(orphanedBytes: Int, rest: Range<Int>, of source: Span<UInt8>, to buffer: inout UniqueArray<UInt8>) -> [Range<Int>] {
-        buffer.reserveCapacity(buffer.count + 3 * orphanedBytes + rest.count)
-        let replacements = appendOrphanReplacements(orphanedBytes, to: &buffer)
-        for i in rest {
-            buffer.append(source[i])
+    /// Append a line that cmark's tasklist `advance` left starting with orphaned continuation bytes
+    /// (`tasklistAdvanceEnd`): one U+FFFD per orphan, as the reference's String bridge repairs each, standing for
+    /// the source byte its orphan came from (`orphanImage`), then the source bytes from the advance's end to
+    /// `lineEnd`. Returns the buffer ranges of the U+FFFDs, one per orphan.
+    private func appendOrphanLedLine(_ advance: (sourceOffset: Int, orphanedBytes: Int, orphanStart: Int), lineEnd: Int, to text: inout MaterializedText) -> [Range<Int>] {
+        var replacements: [Range<Int>] = []
+        for k in 0..<advance.orphanedBytes {
+            let start = text.count
+            for byte: UInt8 in [0xEF, 0xBF, 0xBD] {
+                text.append(byte, imaging: orphanImage(k, of: advance))
+            }
+            replacements.append(start..<text.count)
         }
+        text.append(advance.sourceOffset..<lineEnd, of: sourceBytes)
         return replacements
+    }
+
+    /// The source byte the `k`th orphan of a tasklist `advance` came from: the NUL whose U+FFFD the advance
+    /// stopped inside, or the `k`th continuation byte of the multi-byte scalar it stopped inside.
+    private func orphanImage(_ k: Int, of advance: (sourceOffset: Int, orphanedBytes: Int, orphanStart: Int)) -> Int {
+        sourceBytes[advance.orphanStart] == 0 ? advance.orphanStart : advance.orphanStart + k
     }
 
     /// Append one U+FFFD per orphaned continuation byte (`tasklistAdvanceEnd`), as the reference's String
@@ -5165,20 +5217,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 segs.append(Segment(offset: Int32(prev.lowerBound), length: Int32(prev.count), inSource: true))
                 segs.append(storage.newlineSegment)
             case let other:
-                var buffer = unwrap(other)
-                let replacements = Self.appendOrphanLedLine(orphanedBytes: advance.orphanedBytes, rest: advance.sourceOffset..<lineEnd, of: sourceBytes, to: &buffer)
+                var text = unwrap(other)
+                let replacements = appendOrphanLedLine(advance, lineEnd: lineEnd, to: &text)
                 materializedOrphanReplacements[current, default: []] += replacements
-                return PendingLeaf(node: current, content: .materialized(buffer))
+                return PendingLeaf(node: current, content: .materialized(text))
             }
             // Only the replacements go to the arena; the rest of the line stays a zero-copy source segment.
             // A multi-segment inline span scans only source segments for inline syntax (a non-source segment
             // is the newline join or synthetic filler, `ContentSpan.multiNextSignificant`), so the line's
             // emphasis, links, entities, ... must not sit in the arena segment.
-            let offset = storage.strings.count
-            let replacementRanges = Self.appendOrphanReplacements(advance.orphanedBytes, to: &storage.strings)
-            registerOrphanReplacements(replacementRanges)
-            let replacements = Segment(offset: Int32(offset), length: Int32(storage.strings.count - offset), inSource: false)
-            let afterReplacements = appendSegment(replacements, to: current, pending: PendingLeaf(node: current, content: .segments(segs)))
+            // Each replacement is its own segment, standing for the source byte its orphan came from.
+            var afterReplacements = PendingLeaf(node: current, content: .segments(segs))
+            for k in 0..<advance.orphanedBytes {
+                let offset = storage.strings.count
+                let replacementRanges = Self.appendOrphanReplacements(1, to: &storage.strings)
+                registerOrphanReplacements(replacementRanges)
+                let replacement = Segment(offset: Int32(offset), length: Int32(storage.strings.count - offset), inSource: false, sourceOffset: Int32(orphanImage(k, of: advance)))
+                afterReplacements = appendSegment(replacement, to: current, pending: afterReplacements)
+            }
             let rest = Segment(offset: Int32(advance.sourceOffset), length: Int32(lineEnd - advance.sourceOffset), inSource: true)
             return appendSegment(rest, to: current, pending: afterReplacements)
         }
