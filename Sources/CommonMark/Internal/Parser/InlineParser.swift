@@ -4407,11 +4407,9 @@ extension BlockParser {
         return storage.intern(Chunk(offset: offset, length: buf.count, inSource: false))
     }
 
-    /// The source extent of `ref`'s bytes: from its first byte to just past its last, each resolved through `sourceOffsets(of:local:image:)` and cut off at the end of its line, or `nil` when either end has no source image.
+    /// The source extent of the non-empty `ref`'s bytes: from its first byte to just past its last, each resolved through `sourceOffsets(of:local:image:)` and cut off at the end of its line, or `nil` when either end has no source image.
     private func sourceSpan(of ref: ContentRef, image: ContentImage?) -> (start: Int, end: Int)? {
-        guard ref.count > 0, ref.totalLength > 0 else {
-            return nil
-        }
+        precondition(ref.count > 0 && ref.totalLength > 0, "an email address holds at least one byte")
         let firstSeg = storage.segments[Int(ref.first)]
         let lastSeg = storage.segments[Int(ref.first) + Int(ref.count) - 1]
         guard let first = sourceOffsets(of: firstSeg, local: 0, image: image),
@@ -4421,13 +4419,10 @@ extension BlockParser {
         return (clampedToLine(first.source, ofByte: first.physical), clampedToLine(last.source + 1, ofByte: last.physical))
     }
 
-    /// The source offsets (stamped, and as read; see `ContentSpan.sourceOffsets(ofVirtual:)`) of byte `local` of `seg`: a source segment's own byte, the one source byte an arena segment stands for, or an arena byte of the leaf's content imaged by `image`.
+    /// The source offsets (stamped, and as read; see `ContentSpan.sourceOffsets(ofVirtual:)`) of byte `local` of `seg`: a source segment's own byte, or an arena byte of the leaf's content imaged by `image`.
     private func sourceOffsets(of seg: Segment, local: Int, image: ContentImage?) -> (source: Int, physical: Int)? {
         if seg.inSource {
             return (Int(seg.sourceOffset) + local, Int(seg.offset) + local)
-        }
-        if seg.sourceOffset >= 0 {
-            return (Int(seg.sourceOffset), Int(seg.sourceOffset))
         }
         return image?.sourceOffsets(ofArenaByte: Int(seg.offset) + local)
     }

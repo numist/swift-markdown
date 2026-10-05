@@ -149,4 +149,20 @@ struct GFMAutolinkSourceRangeTests {
 
             """)
     }
+
+    /// The address's last byte comes from the entity `&#111;`, which has no source byte of its own, so the address
+    /// can't be placed: the text before it keeps only where it starts, and the link and the text after it have no
+    /// range, as in cmark-gfm.
+    @Test("an email autolink ending in an entity has no range")
+    func emailEndingInEntity() throws {
+        #expect(try tree("\u{0}a@b.c&#111; x") == """
+            document @1:1-1:15
+              paragraph @1:1-1:15
+                text "\u{FFFD}" @1:1-1:1
+                link "mailto:a@b.co" "" @-
+                  text "a@b.co" @-
+                text " x" @-
+
+            """)
+    }
 }

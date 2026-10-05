@@ -1903,7 +1903,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if !precedingChunk.isEmpty {
             let precedingNode = insertTablePrecedingParagraph(before: node)
             let precedingMap = sliceRuns(text.map, from: precedingChunk.offset - precedingStart, length: precedingChunk.length)
-            if positionsEnabled, let span = sourceSpan(of: precedingMap) {
+            if positionsEnabled {
+                let span = sourceSpan(of: precedingMap)
                 storage.setSourceStart(precedingNode, span.start)
                 storage.setSourceEnd(precedingNode, span.end)
             }
@@ -1918,13 +1919,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return PendingLeaf(node: node, content: .materialized(MaterializedText(bytes: header, map: headerMap)))
     }
 
-    /// The physical source extent imaged by a content-relative run map: from its first run's byte as read to just
-    /// past its last run's, or `nil` when either end is a synthetic gap.
-    private func sourceSpan(of map: [ArenaRun]) -> (start: Int, end: Int)? {
-        guard let first = map.first, let last = map.last, first.physicalOffset >= 0, last.physicalOffset >= 0 else {
-            return nil
-        }
-        return (Int(first.physicalOffset), Int(last.physicalOffset) + Int(last.length))
+    /// The physical source extent imaged by the run map of trimmed paragraph content: from its first run's byte as
+    /// read to just past its last run's.
+    private func sourceSpan(of map: [ArenaRun]) -> (start: Int, end: Int) {
+        precondition(map.first.map { $0.physicalOffset >= 0 } ?? false && map.last!.physicalOffset >= 0, "trimmed paragraph content starts and ends on source bytes")
+        return (Int(map.first!.physicalOffset), Int(map.last!.physicalOffset) + Int(map.last!.length))
     }
 
     // MARK: - Per-line dispatcher
