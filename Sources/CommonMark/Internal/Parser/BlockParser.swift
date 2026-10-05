@@ -434,7 +434,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                             scratch.append(copying: buffer)
                         }
                     }
-                    // Flattened content (a non-contiguous setext heading) carries an arena→source run map so its inlines still get source positions; plain arena content (no map) parses unmapped as before.
+                    // Arena content with a source image carries an arena→source run map so its inlines still get source positions; arena content without one (positions off) parses unmapped.
                     runScratch.removeAll(keepingCapacity: true)
                     runEndScratch.removeAll(keepingCapacity: true)
                     if let map = arenaSourceMaps[node] {
