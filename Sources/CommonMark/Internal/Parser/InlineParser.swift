@@ -406,6 +406,8 @@ extension BlockParser {
                         NodeRecord(kind: .text, parent: parent, data: .literal(textRef))
                     )
                     storage.appendChild(textIdx, to: parent)
+                    // An opener whose attribute never resolves survives as literal `^[` text; stamp it so it keeps its columns when it consolidates with neighbors.
+                    stampInline(textIdx, cursor, cursor + 2, content: content)
                     try pushBracket(
                         kind: .attribute,
                         inlText: textIdx,
