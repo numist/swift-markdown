@@ -65,7 +65,7 @@ internal struct StorageView: ~Escapable, Copyable {
         guard r.start >= 0, r.end >= 0 else { return nil }
         let start = position(ofByte: r.start)
         let end = position(ofByte: r.end)
-        guard start <= end else { return nil }
+        precondition(start <= end, "a stamped source range ends at or after its start")
         return start..<end
     }
 
