@@ -431,11 +431,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 } else {
                     // Arena-backed: copy the content region out of `storage.strings` so the read view is independent of the appends `parseInline` makes to that same array.
                     scratch.removeAll(keepingCapacity: true)
-                    do {
-                        storage.strings.span.extracting(chunk.range).withUnsafeBufferPointer { buffer in
-                            scratch.append(copying: buffer)
-                        }
-                    }
+                    scratch.append(copying: storage.strings.span.extracting(chunk.range))
                     // Arena content with a source image carries an arena→source run map so its inlines still get source positions; arena content without one (positions off) parses unmapped.
                     runScratch.removeAll(keepingCapacity: true)
                     runEndScratch.removeAll(keepingCapacity: true)
@@ -486,9 +482,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
                 if arenaExtent > 0 {
                     arenaScratch.removeAll(keepingCapacity: true)
-                    storage.strings.span.extracting(0..<arenaExtent).withUnsafeBufferPointer { buffer in
-                        arenaScratch.append(copying: buffer)
-                    }
+                    arenaScratch.append(copying: storage.strings.span.extracting(0..<arenaExtent))
                     // Already ascending, as `ContentSpan.orphanedContinuationByteLength`'s search needs: each
                     // arena segment was written at the arena's end when its line was added.
                     orphanScratch.removeAll()
@@ -723,9 +717,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let arenaEnd = storage.strings.count
             let rest = parseDefinitions(in: Chunk(offset: arenaStart, length: arenaEnd - arenaStart, inSource: false))
             var scratch = UniqueArray<UInt8>()
-            storage.strings.span.extracting(rest.range).withUnsafeBufferPointer { buffer in
-                scratch.append(copying: buffer)
-            }
+            scratch.append(copying: storage.strings.span.extracting(rest.range))
             var runScratch = UniqueArray<ArenaRun>()
             var runEndScratch = UniqueArray<Int>()
             if positionsEnabled {
@@ -1432,9 +1424,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return LeafMaterialization(chunk: Chunk(offset: range.lowerBound, length: range.count, inSource: true), pending: nil)
         case .materialized(let content):
             let offset = storage.strings.count
-            content.bytes.span.withUnsafeBufferPointer { buffer in
-                storage.strings.append(copying: buffer)
-            }
+            storage.strings.append(copying: content.bytes.span)
             carryMaterializedOrphanReplacements(of: node, to: offset)
             return LeafMaterialization(chunk: Chunk(offset: offset, length: content.count, inSource: false), pending: nil, map: content.map)
         case .segments(let segs):
@@ -3104,7 +3094,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
             case .materialized(let content):
                 let offset = storage.strings.count
-                content.bytes.span.withUnsafeBufferPointer { storage.strings.append(copying: $0) }
+                storage.strings.append(copying: content.bytes.span)
                 carryMaterializedOrphanReplacements(of: node, to: offset)
                 var map = content.map
                 let replaced = replacingNUL(Chunk(offset: offset, length: content.count, inSource: false), map: &map)
@@ -3268,7 +3258,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
             }
         }
-        buf.span.withUnsafeBufferPointer { storage.strings.append(copying: $0) }
+        storage.strings.append(copying: buf.span)
         return Chunk(offset: offset, length: total, inSource: false)
     }
 
@@ -3992,7 +3982,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Tag names that trigger an HTML block of type 6, sorted alphabetically for the binary-search lookup. CommonMark 0.31 §4.6.
-    private static let htmlBlockType6Tags: [StaticString] = [
+    private static let htmlBlockType6Tags: [String] = [
         "address", "article", "aside", "base", "basefont", "blockquote", "body",
         "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir",
         "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form",
@@ -4004,20 +3994,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ]
 
     /// Tag names that trigger an HTML block of type 1 (their *closing* tag also ends the block).
-    private static let htmlBlockType1Tags: [StaticString] = [
+    private static let htmlBlockType1Tags: [String] = [
         "pre", "script", "style", "textarea",
     ]
 
     /// Compare a byte range to an ASCII string case-insensitively (for tag matching).
-    private func bytesEqualASCIICaseInsensitive(span: Span<UInt8>, range: Range<Int>, target: StaticString) -> Bool {
+    private func bytesEqualASCIICaseInsensitive(span: Span<UInt8>, range: Range<Int>, target: String) -> Bool {
         let len = range.upperBound - range.lowerBound
-        if len != target.utf8CodeUnitCount {
+        if len != target.utf8.count {
             return false
         }
-        let pointer = target.utf8Start
-        for i in 0..<len {
+        for (i, targetByte) in target.utf8.enumerated() {
             var a = span[range.lowerBound + i]
-            var b = pointer[i]
+            var b = targetByte
             if a.isUppercaseASCIILetter {
                 a += 32
             }
@@ -4307,18 +4296,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Search `range` of `span` for the first occurrence of the ASCII bytes in `needle`. Caller must ensure the needle is non-empty.
-    private func findSubstring(span: Span<UInt8>, range: Range<Int>, needle: StaticString) -> Bool {
-        let len = needle.utf8CodeUnitCount
+    private func findSubstring(span: Span<UInt8>, range: Range<Int>, needle: String) -> Bool {
+        let len = needle.utf8.count
         if len == 0 || range.upperBound - range.lowerBound < len {
             return false
         }
-        let pointer = needle.utf8Start
         var i = range.lowerBound
         let limit = range.upperBound - len
         while i <= limit {
             var matched = true
-            for k in 0..<len {
-                if span[i + k] != pointer[k] {
+            for (k, needleByte) in needle.utf8.enumerated() {
+                if span[i + k] != needleByte {
                     matched = false
                     break
                 }
@@ -4332,14 +4320,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Search for `</tagname>` (case-insensitive) anywhere within `range`. `name` is one of the lowercase `htmlBlockType1Tags`.
-    private func findClosingTag(span: Span<UInt8>, range: Range<Int>, name: StaticString) -> Bool {
-        let nameLen = name.utf8CodeUnitCount
+    private func findClosingTag(span: Span<UInt8>, range: Range<Int>, name: String) -> Bool {
+        let nameLen = name.utf8.count
         // `</` + name + `>` length:
         let totalLen = nameLen + 3
         if range.upperBound - range.lowerBound < totalLen {
             return false
         }
-        let pointer = name.utf8Start
         var i = range.lowerBound
         let limit = range.upperBound - totalLen
         while i <= limit {
@@ -4347,12 +4334,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                span[i + 1] == UInt8(ascii: "/") {
                 let nameRange = (i + 2)..<(i + 2 + nameLen)
                 var matched = true
-                for k in 0..<nameLen {
+                for (k, nameByte) in name.utf8.enumerated() {
                     var a = span[nameRange.lowerBound + k]
                     if a.isUppercaseASCIILetter {
                         a += 32
                     }
-                    if a != pointer[k] {
+                    if a != nameByte {
                         matched = false
                         break
                     }

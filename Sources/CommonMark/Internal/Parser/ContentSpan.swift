@@ -301,10 +301,7 @@ internal struct ContentSpan: ~Escapable {
         }
         let n = span.count
         let startIdx = globalCursor - base
-        let found = span.withUnsafeBufferPointer { buf -> Int in
-            precondition(buf.baseAddress != nil, "the inline dispatch scans only non-empty content")
-            return Self.scanSignificant(buf.baseAddress!, from: startIdx, to: n, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
-        }
+        let found = Self.scanSignificant(span, from: startIdx, to: n, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
         return base + found
     }
 
@@ -314,39 +311,35 @@ internal struct ContentSpan: ~Escapable {
         let count = segments.count
         let si = segmentIndex(covering: globalCursor)
         let segVStart = segmentStart(si)
-        return span.withUnsafeBufferPointer { buf -> Int in
-            precondition(buf.baseAddress != nil, "multi-segment content borrows a non-empty source")
-            let p = buf.baseAddress!
-            var i = si
-            var vStart = segVStart
-            var cursor = globalCursor
-            while i < count {
-                let seg = segments[i]
-                let len = Int(seg.length)
-                if seg.inSource {
-                    let local = cursor - vStart                 // 0 once we advance past the entry segment
-                    let absLo = Int(seg.offset) + local
-                    let absHi = Int(seg.offset) + len
-                    let foundAbs = Self.scanSignificant(p, from: absLo, to: absHi, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
-                    if foundAbs < absHi {
-                        return vStart + (foundAbs - Int(seg.offset))
-                    }
-                } else if arena.count == 0 || arena[Int(seg.offset)] == UInt8(ascii: "\n") {
-                    // The interned "\n" join is always inline-significant (soft/hard break) - report its position directly.
-                    return cursor
+        var i = si
+        var vStart = segVStart
+        var cursor = globalCursor
+        while i < count {
+            let seg = segments[i]
+            let len = Int(seg.length)
+            if seg.inSource {
+                let local = cursor - vStart                 // 0 once we advance past the entry segment
+                let absLo = Int(seg.offset) + local
+                let absHi = Int(seg.offset) + len
+                let foundAbs = Self.scanSignificant(span, from: absLo, to: absHi, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
+                if foundAbs < absHi {
+                    return vStart + (foundAbs - Int(seg.offset))
                 }
-                // else: a synthetic filler run (arena-backed, non-newline) carries no inline-significant byte; fall through to advance past it.
-                vStart += len
-                cursor = vStart
-                i += 1
+            } else if arena.count == 0 || arena[Int(seg.offset)] == UInt8(ascii: "\n") {
+                // The interned "\n" join is always inline-significant (soft/hard break) - report its position directly.
+                return cursor
             }
-            return end
+            // else: a synthetic filler run (arena-backed, non-newline) carries no inline-significant byte; fall through to advance past it.
+            vStart += len
+            cursor = vStart
+            i += 1
         }
+        return end
     }
 
-    /// SIMD16 scan of `p[lo..<hi]` for the first inline-significant byte; returns that index, or `hi` if none. Shared by the single-segment and per-segment (multi) scan paths so both get the vector fast path. The significant set must stay a superset of the dispatch switch's cases - see `nextSignificant`.
+    /// SIMD16 scan of `span[lo..<hi]` for the first inline-significant byte; returns that index, or `hi` if none. Shared by the single-segment and per-segment (multi) scan paths so both get the vector fast path. The significant set must stay a superset of the dispatch switch's cases - see `nextSignificant`.
     @inline(__always)
-    private static func scanSignificant(_ p: UnsafePointer<UInt8>, from lo: Int, to hi: Int, strikethrough: Bool, gfmAutolink: Bool, smart: Bool) -> Int {
+    private static func scanSignificant(_ span: Span<UInt8>, from lo: Int, to hi: Int, strikethrough: Bool, gfmAutolink: Bool, smart: Bool) -> Int {
         let clusterLo = SIMD16<UInt8>(repeating: 91)    // '['
         let clusterHi = SIMD16<UInt8>(repeating: 96)    // '`'
         let nl = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
@@ -365,10 +358,11 @@ internal struct ContentSpan: ~Escapable {
         let period = SIMD16<UInt8>(repeating: UInt8(ascii: "."))
         let lanes = SIMD16<UInt8>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
         let noMatch = SIMD16<UInt8>(repeating: 16)
+        let bytes = span.bytes
 
         var i = lo
         while i + 16 <= hi {
-            let v = UnsafeRawPointer(p + i).loadUnaligned(as: SIMD16<UInt8>.self)
+            let v = bytes.load(fromByteOffset: i, as: SIMD16<UInt8>.self)
             var m = ((v .>= clusterLo) .& (v .<= clusterHi))
                 .| (v .== nl) .| (v .== bang) .| (v .== amp) .| (v .== star) .| (v .== lt)
             if strikethrough {
@@ -387,7 +381,7 @@ internal struct ContentSpan: ~Escapable {
             i += 16
         }
         while i < hi {
-            let b = p[i]
+            let b = span[i]
             let significant = (b >= 91 && b <= 96)
                 || b == UInt8(ascii: "\n") || b == UInt8(ascii: "!") || b == UInt8(ascii: "&")
                 || b == UInt8(ascii: "*") || b == UInt8(ascii: "<")

@@ -12,25 +12,17 @@ internal import BasicContainers
 
 /// A 3×5 `Int` matrix - rows indexed by `length % 3`, columns by delimiter-char index (`*_~'"`) - used as the emphasis `openersBottom` search-floor table.
 ///
-/// Tuple-backed with unsafe indexing so it back-deploys and stack-allocates (a nested `InlineArray` would be value-generic and require the anyAppleOS 26 runtime). Offsets are multiples of `Int` stride over an `Int`-aligned tuple, so loads are aligned.
+/// Backed by the first 15 lanes of a `SIMD16<Int>` (row-major, lane `row * 5 + col`), so it back-deploys and stack-allocates (a nested `InlineArray` would be value-generic and require the anyAppleOS 26 runtime). The 16th lane is unused.
 internal struct OpenersBottom {
-    private var storage: (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)
+    private var storage: SIMD16<Int>
 
     internal init(fill: Int) {
-        storage = (fill, fill, fill, fill, fill, fill, fill, fill, fill, fill, fill, fill, fill, fill, fill)
+        storage = SIMD16(repeating: fill)
     }
 
     internal subscript(_ row: Int, _ col: Int) -> Int {
-        get {
-            withUnsafeBytes(of: storage) {
-                $0.load(fromByteOffset: (row * 5 + col) * MemoryLayout<Int>.stride, as: Int.self)
-            }
-        }
-        set {
-            withUnsafeMutableBytes(of: &storage) {
-                $0.storeBytes(of: newValue, toByteOffset: (row * 5 + col) * MemoryLayout<Int>.stride, as: Int.self)
-            }
-        }
+        get { storage[row * 5 + col] }
+        set { storage[row * 5 + col] = newValue }
     }
 }
 
@@ -2134,24 +2126,23 @@ extension BlockParser {
     // MARK: - Smart punctuation
 
     /// UTF-8 bytes for the smart-punctuation replacement characters.
-    static let leftSingleQuote: StaticString = "\u{2018}"
-    static let rightSingleQuote: StaticString = "\u{2019}"
-    static let leftDoubleQuote: StaticString = "\u{201C}"
-    static let rightDoubleQuote: StaticString = "\u{201D}"
-    static let enDash: StaticString = "\u{2013}"
-    static let emDash: StaticString = "\u{2014}"
-    static let ellipsis: StaticString = "\u{2026}"
+    static let leftSingleQuote = "\u{2018}"
+    static let rightSingleQuote = "\u{2019}"
+    static let leftDoubleQuote = "\u{201C}"
+    static let rightDoubleQuote = "\u{201D}"
+    static let enDash = "\u{2013}"
+    static let emDash = "\u{2014}"
+    static let ellipsis = "\u{2026}"
 
     /// Append a constant UTF-8 byte sequence into the string arena.
-    private mutating func appendSmartConstant(_ s: StaticString) {
-        let ptr = s.utf8Start
-        for k in 0..<s.utf8CodeUnitCount {
-            storage.strings.append(ptr[k])
+    private mutating func appendSmartConstant(_ s: String) {
+        for b in s.utf8 {
+            storage.strings.append(b)
         }
     }
 
     /// Append a constant UTF-8 byte sequence into the string arena and intern it as a literal content ref.
-    private mutating func internSmartLiteral(_ s: StaticString) -> ContentRef {
+    private mutating func internSmartLiteral(_ s: String) -> ContentRef {
         let offset = storage.strings.count
         appendSmartConstant(s)
         let chunk = Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
@@ -2159,7 +2150,7 @@ extension BlockParser {
     }
 
     /// Replace a text node's literal with a constant smart-punctuation glyph.
-    private mutating func setSmartLiteral(of nodeIdx: DocumentStorage.Index, _ s: StaticString) {
+    private mutating func setSmartLiteral(of nodeIdx: DocumentStorage.Index, _ s: String) {
         let ref = internSmartLiteral(s)
         storage[nodeIdx].data = .literal(ref)
     }
@@ -2228,7 +2219,7 @@ extension BlockParser {
         let canOpen = leftFlanking && !rightFlanking && beforeChar != UInt8(ascii: "]") && beforeChar != UInt8(ascii: ")")
         let canClose = rightFlanking
         // Initial curly form: `'` is always a right single quote (apostrophe); `"` is a closing quote when it can close, otherwise an opening quote.
-        let literal: StaticString
+        let literal: String
         if char == UInt8(ascii: "'") {
             literal = Self.rightSingleQuote
         } else {
@@ -2683,11 +2674,8 @@ extension BlockParser {
         if auto.isEmail {
             // Build `mailto:` + interior into the string arena.
             let offset = storage.strings.count
-            let prefix: StaticString = "mailto:"
-            let prefixLen = prefix.utf8CodeUnitCount
-            let prefixPtr = prefix.utf8Start
-            for k in 0..<prefixLen {
-                storage.strings.append(prefixPtr[k])
+            for b in "mailto:".utf8 {
+                storage.strings.append(b)
             }
             for j in auto.interior {
                 storage.strings.append(content[j])
@@ -2918,12 +2906,11 @@ extension BlockParser {
         if start + prefixLen > end {
             return nil
         }
-        let prefix: StaticString = "<![CDATA["
-        let prefixPtr = prefix.utf8Start
+        let prefix = "<![CDATA["
         let letters = 3..<8
-        for k in 0..<prefixLen {
+        for (k, prefixByte) in prefix.utf8.enumerated() {
             var actual = content[start + k]
-            var expected = prefixPtr[k]
+            var expected = prefixByte
             if bugCompat, letters.contains(k) {
                 if actual.isUppercaseASCIILetter {
                     actual += 32
@@ -3089,18 +3076,20 @@ extension BlockParser {
     ///
     /// `misses` is the kind's stretch of scan starts already known to fail (`HTMLCloserMisses`): a `start` inside it returns `nil` without rescanning, and a failing scan replaces it with the stretch that scan rules out. Both are exact: a scan from any later start inside that stretch sees a subset of the same bytes, none of which begins `closer`, and then the same content end.
     private static func scanRawHTMLCloser(
-        _ closer: StaticString, from start: Int, end: Int, content: borrowing ContentSpan, misses: inout Range<Int>
+        _ closer: String, from start: Int, end: Int, content: borrowing ContentSpan, misses: inout Range<Int>
     ) -> Int? {
         if misses.contains(start) {
             return nil
         }
-        let closerBytes = closer.utf8Start
-        let width = closer.utf8CodeUnitCount
+        let width = closer.utf8.count
         var i = start
         while i + width <= end {
             assert(content[i] != 0, "inline content holds no NUL: the block parser replaces it with U+FFFD")
             var matched = 0
-            while matched < width, content[i + matched] == closerBytes[matched] {
+            for closerByte in closer.utf8 {
+                if content[i + matched] != closerByte {
+                    break
+                }
                 matched += 1
             }
             if matched == width {
@@ -3464,14 +3453,13 @@ extension BlockParser {
     /// A scheme qualifies when its bytes lie fully within the scan window `[localBound, colon]`, match the
     /// literal case-sensitively (cmark uses `memcmp`, so `MAILTO:` does NOT match), and either begin exactly
     /// at `localBound` or are preceded by a non-alphanumeric byte (`amailto:` - preceded by `a` - fails).
-    private func matchEmailScheme(_ scheme: StaticString, colon: Int, localBound: Int, content: borrowing ContentSpan) -> Int? {
-        let len = scheme.utf8CodeUnitCount
+    private func matchEmailScheme(_ scheme: String, colon: Int, localBound: Int, content: borrowing ContentSpan) -> Int? {
+        let len = scheme.utf8.count
         let schemeStart = colon + 1 - len
         if schemeStart < localBound {
             return nil
         }
-        let ptr = scheme.utf8Start
-        for k in 0..<len where content[schemeStart + k] != ptr[k] {
+        for (k, schemeByte) in scheme.utf8.enumerated() where content[schemeStart + k] != schemeByte {
             return nil
         }
         if schemeStart == localBound {
@@ -3685,12 +3673,10 @@ extension BlockParser {
     /// Append `prefix` + the content bytes of `start..<end` into `storage.strings`, returning a chunk pointing at the appended region.
     ///
     /// The bytes are read from `content` (the scratch/source view, independent of `storage.strings`) so the read region doesn't alias the buffer being appended to.
-    private mutating func materializeAutolinkURL(prefix: StaticString, start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
+    private mutating func materializeAutolinkURL(prefix: String, start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         let offset = storage.strings.count
-        let prefixLen = prefix.utf8CodeUnitCount
-        let prefixPtr = prefix.utf8Start
-        for k in 0..<prefixLen {
-            storage.strings.append(prefixPtr[k])
+        for b in prefix.utf8 {
+            storage.strings.append(b)
         }
         for j in start..<end {
             storage.strings.append(content[j])
@@ -3897,18 +3883,16 @@ extension BlockParser {
         }
     }
 
-    /// Compare bytes at `start..(start+target.utf8CodeUnitCount)` against the static-string target.
+    /// Compare bytes at `start..(start+target.utf8.count)` against the string target.
     /// `ignoringASCIICase` folds ASCII case on both sides (`| 0x20`) so a comparison mirrors cmark's
     /// `strncasecmp` — used for the `://`-scheme literals, which cmark validates case-insensitively
     /// (`sd_autolink_issafe`, `extensions/autolink.c`). The `www.` form stays exact (`memcmp` in cmark's
     /// `www_match`). Case-folding never touches the source bytes: only this comparison folds, so the
     /// matched destination/text keep the source case.
-    private func bytesEqual(at start: Int, target: StaticString, content: borrowing ContentSpan, ignoringASCIICase: Bool = false) -> Bool {
-        let len = target.utf8CodeUnitCount
-        let ptr = target.utf8Start
+    private func bytesEqual(at start: Int, target: String, content: borrowing ContentSpan, ignoringASCIICase: Bool = false) -> Bool {
         let mask: UInt8 = ignoringASCIICase ? 0x20 : 0
-        for k in 0..<len {
-            if (content[start + k] | mask) != (ptr[k] | mask) {
+        for (k, targetByte) in target.utf8.enumerated() {
+            if (content[start + k] | mask) != (targetByte | mask) {
                 return false
             }
         }
@@ -4410,10 +4394,8 @@ extension BlockParser {
     /// reading the arena while appending to it would alias the growing buffer), then flushed to the arena.
     private mutating func materializeMailtoURL(for emailRef: ContentRef) -> ContentRef {
         var buf = UniqueArray<UInt8>()
-        let prefix: StaticString = "mailto:"
-        let prefixPtr = prefix.utf8Start
-        for k in 0..<prefix.utf8CodeUnitCount {
-            buf.append(prefixPtr[k])
+        for b in "mailto:".utf8 {
+            buf.append(b)
         }
         materialize(emailRef, into: &buf)
         let offset = storage.strings.count

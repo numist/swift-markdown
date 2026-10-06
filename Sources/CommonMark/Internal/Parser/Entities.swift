@@ -14,7 +14,7 @@
 internal enum HTMLEntities {
 
     /// Sorted array of HTML named entity names. Index `i` corresponds to `entityValues[i]`.
-    internal static let entityNames: [StaticString] = [
+    internal static let entityNames: [String] = [
         "AElig",
         "AMP",
         "Aacute",

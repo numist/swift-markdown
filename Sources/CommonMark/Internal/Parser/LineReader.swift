@@ -72,43 +72,40 @@ internal struct LineReader: ~Escapable, ~Copyable {
         return result
     }
 
-    /// Index of the first `\n` or `\r` in `buf`, or `buf.count` if neither is present.
+    /// Index of the first `\n` or `\r` in `span`, or `span.count` if neither is present.
     ///
     /// Scans 16 bytes at a time with a SIMD compare against both terminators, recovering the first matching lane via a per-lane index reduce; the sub-16-byte remainder is scanned scalar.
     ///
     /// Shared with `BlockParser.parseInlineOnly`'s line-break scan so the vectorized terminator search lives in exactly one place.
     @inline(__always)
     internal static func firstLineTerminator(in span: Span<UInt8>) -> Int {
-        span.withUnsafeBufferPointer { buf in
-            let count = buf.count
-            precondition(buf.baseAddress != nil, "line scans run over a non-empty source buffer")
-            let base = buf.baseAddress!
-            
-            let nl = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
-            let cr = SIMD16<UInt8>(repeating: UInt8(ascii: "\r"))
-            // Lane index for matching lanes; non-matching lanes are forced to 16 so `.min()` yields the first matching lane (or 16 = "no match in this chunk").
-            let lanes = SIMD16<UInt8>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
-            let noMatch = SIMD16<UInt8>(repeating: 16)
-            
-            var i = 0
-            while i + 16 <= count {
-                let chunk = UnsafeRawPointer(base + i).loadUnaligned(as: SIMD16<UInt8>.self)
-                let matched = (chunk .== nl) .| (chunk .== cr)
-                if any(matched) {
-                    let lane = lanes.replacing(with: noMatch, where: .!matched).min()
-                    return i + Int(lane)
-                }
-                i += 16
+        let count = span.count
+        let bytes = span.bytes
+
+        let nl = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
+        let cr = SIMD16<UInt8>(repeating: UInt8(ascii: "\r"))
+        // Lane index for matching lanes; non-matching lanes are forced to 16 so `.min()` yields the first matching lane (or 16 = "no match in this chunk").
+        let lanes = SIMD16<UInt8>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
+        let noMatch = SIMD16<UInt8>(repeating: 16)
+
+        var i = 0
+        while i + 16 <= count {
+            let chunk = bytes.load(fromByteOffset: i, as: SIMD16<UInt8>.self)
+            let matched = (chunk .== nl) .| (chunk .== cr)
+            if any(matched) {
+                let lane = lanes.replacing(with: noMatch, where: .!matched).min()
+                return i + Int(lane)
             }
-            // Scalar tail (< 16 bytes).
-            while i < count {
-                let b = base[i]
-                if b == UInt8(ascii: "\n") || b == UInt8(ascii: "\r") {
-                    return i
-                }
-                i += 1
-            }
-            return count
+            i += 16
         }
+        // Scalar tail (< 16 bytes).
+        while i < count {
+            let b = span[i]
+            if b == UInt8(ascii: "\n") || b == UInt8(ascii: "\r") {
+                return i
+            }
+            i += 1
+        }
+        return count
     }
 }

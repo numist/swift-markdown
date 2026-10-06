@@ -10,15 +10,15 @@
 
 /// A fixed 8-byte inline buffer.
 ///
-/// A value generic like `InlineArray<8, UInt8>` requires the anyAppleOS 26 runtime; this is a plain homogeneous tuple with unsafe-byte indexing, so it back-deploys and still stack-allocates. Indices are `0..<8`.
+/// A value generic like `InlineArray<8, UInt8>` requires the anyAppleOS 26 runtime; this wraps a `SIMD8<UInt8>`, so it back-deploys and still stack-allocates. Indices are `0..<8`.
 internal struct Bytes8 {
-    private var storage: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8) = (0, 0, 0, 0, 0, 0, 0, 0)
+    private var storage = SIMD8<UInt8>()
 
     internal init() {}
 
     internal subscript(_ i: Int) -> UInt8 {
-        get { withUnsafeBytes(of: storage) { $0[i] } }
-        set { withUnsafeMutableBytes(of: &storage) { $0[i] = newValue } }
+        get { storage[i] }
+        set { storage[i] = newValue }
     }
 }
 
@@ -186,13 +186,11 @@ internal enum EntityParser {
     ///
     /// Returns negative if the table entry is less, 0 if equal, positive otherwise.
     private static func compareEntityName(index: Int, range: Range<Int>, source: Span<UInt8>) -> Int {
-        let name = HTMLEntities.entityNames[index]
-        let nameLen = name.utf8CodeUnitCount
-        let namePtr = name.utf8Start
+        let name = HTMLEntities.entityNames[index].utf8
+        let nameLen = name.count
         let inputLen = range.upperBound - range.lowerBound
         let minLen = nameLen < inputLen ? nameLen : inputLen
-        for k in 0..<minLen {
-            let a = namePtr[k]
+        for (k, a) in name.prefix(minLen).enumerated() {
             let b = source[range.lowerBound + k]
             if a != b {
                 return Int(a) - Int(b)

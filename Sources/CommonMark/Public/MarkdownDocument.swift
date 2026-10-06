@@ -68,14 +68,15 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
         var contiguous = copy source
         contiguous.makeContiguousUTF8()
         if let result = try contiguous.utf8.withContiguousStorageIfAvailable({ (buffer: UnsafeBufferPointer<UInt8>) throws -> R in
-            let document = MarkdownDocument(parsing: Span(_unsafeElements: buffer), options: options)
+            // SAFETY: `withContiguousStorageIfAvailable` lends `buffer` over `contiguous`'s UTF-8 for the duration of this closure, and the span over it backs a document that `body` borrows and can't escape, so no access outlives the buffer.
+            //         Before anyAppleOS 26 no API vends a `Span` over a `String`'s UTF-8 (`String.UTF8View.span` and `String.utf8Span` are anyAppleOS 26); the only safe alternative copies the whole source into an owned buffer, which defeats parsing the source in place.
+            let document = MarkdownDocument(parsing: unsafe Span(_unsafeElements: buffer), options: options)
             return try body(document)
         }) {
             return result
         }
         // Empty input has no contiguous storage; parse an empty document.
-        let empty = UnsafeBufferPointer<UInt8>(start: nil, count: 0)
-        let document = MarkdownDocument(parsing: Span(_unsafeElements: empty), options: options)
+        let document = MarkdownDocument(parsing: Span(), options: options)
         return try body(document)
     }
 
@@ -100,7 +101,8 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
     public var source: UTF8Span {
         @_lifetime(borrow self)
         borrowing get {
-            // The source is already known-valid UTF-8 - it came from a validated `String` or `UTF8Span` at construction - so skip re-validation with the unchecked initializer.
+            // SAFETY: The source is known-valid UTF-8 - it came from a validated `String` or `UTF8Span` at construction - which is `UTF8Span(unchecked:)`'s precondition.
+            //         The safe `UTF8Span(validating:)` rescans the whole source, which would make this O(1) accessor O(n) per call; no API builds a `UTF8Span` from bytes already known valid without that scan.
             unsafe UTF8Span(unchecked: _source)
         }
     }

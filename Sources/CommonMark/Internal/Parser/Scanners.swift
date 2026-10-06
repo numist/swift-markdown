@@ -505,8 +505,7 @@ extension BlockParser {
     /// that shared arena here would risk invalidating them. Sized generously (`span.count * 3`, the
     /// worst case if every byte were NUL) so the one-pass loop never needs to resize.
     private static func normalizeLabel(_ span: Span<UInt8>) -> String {
-        String(unsafeUninitializedCapacity: span.count * 3) { buffer in
-            var output = OutputSpan(buffer: buffer, initializedCount: 0)
+        let normalized = [UInt8](capacity: span.count * 3) { output in
             var pendingSpace = false
 
             for i in 0..<span.count {
@@ -533,8 +532,7 @@ extension BlockParser {
                     output.append(b)
                 }
             }
-
-            return output.finalize(for: buffer)
-        }.lowercased()
+        }
+        return String(decoding: normalized, as: UTF8.self).lowercased()
     }
 }

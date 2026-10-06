@@ -93,32 +93,21 @@ internal struct StorageView: ~Escapable, Copyable {
     internal func string(of ref: ContentRef) -> String {
         if ref.count == 0 {
             return ""
-        } else if ref.count == 1 {
-            let span = bytes(of: segments[Int(ref.first)].chunk)
-            if #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
-                let utf8 = UTF8Span(unchecked: span)
-                return String(copying: utf8)
-            } else {
-                return String(unsafeUninitializedCapacity: span.count) { buffer in
-                    var output = OutputSpan(buffer: buffer, initializedCount: 0)
-                    for b in 0..<span.count {
-                        output.append(span[b])
-                    }
-                    return output.count
+        }
+        // Content is well-formed UTF-8, so validation succeeds; the decoding path below would repair it otherwise.
+        if ref.count == 1, #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *),
+           let utf8 = try? UTF8Span(validating: bytes(of: segments[Int(ref.first)].chunk)) {
+            return String(copying: utf8)
+        }
+        let utf8 = [UInt8](capacity: Int(ref.totalLength)) { output in
+            for i in 0..<Int(ref.count) {
+                let span = bytes(of: segments[Int(ref.first) + i].chunk)
+                for b in 0..<span.count {
+                    output.append(span[b])
                 }
-            }
-        } else {
-            return String(unsafeUninitializedCapacity: Int(ref.totalLength)) { buffer in
-                var output = OutputSpan(buffer: buffer, initializedCount: 0)
-                for i in 0..<Int(ref.count) {
-                    let span = bytes(of: segments[Int(ref.first) + i].chunk)
-                    for b in 0..<span.count {
-                        output.append(span[b])
-                    }
-                }
-                return output.count
             }
         }
+        return String(decoding: utf8, as: UTF8.self)
     }
 
     // MARK: - Content as UTF8Span (anyAppleOS 26 only)
@@ -139,7 +128,7 @@ internal struct StorageView: ~Escapable, Copyable {
     @_lifetime(borrow self)
     internal func utf8Span(of ref: ContentRef) -> UTF8Span {
         if ref.count == 0 {
-            return unsafe UTF8Span(unchecked: strings.extracting(0..<0))
+            return utf8Span(of: Chunk(offset: 0, length: 0, inSource: false))
         }
         return utf8Span(of: segments[Int(ref.first)])
     }
@@ -147,7 +136,8 @@ internal struct StorageView: ~Escapable, Copyable {
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @_lifetime(borrow self)
     internal func utf8Span(of chunk: Chunk) -> UTF8Span {
-        // Content bytes are already known-valid UTF-8 (source-derived from validated input, or valid arena bytes) and cut on scalar boundaries, so skip re-validation.
+        // SAFETY: Content bytes are known-valid UTF-8 (source-derived from a validated `String` or `UTF8Span`, or arena bytes the parser writes as whole scalars) and cut on scalar boundaries, which is `UTF8Span(unchecked:)`'s precondition.
+        //         The safe `UTF8Span(validating:)` rescans every byte, which would make this O(1) zero-copy accessor O(n) per call; no API builds a `UTF8Span` from bytes already known valid without that scan.
         unsafe UTF8Span(unchecked: bytes(of: chunk))
     }
 }
