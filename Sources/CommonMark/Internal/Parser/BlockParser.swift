@@ -625,6 +625,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Count lines and detect whether any CR needs normalizing to LF, in a single pass that SIMD-skips the runs of content bytes between line breaks (`nextLineBreak`) rather than stepping one byte at a time. The count mirrors cmark's per-line `line_number` (`\r\n`, lone `\r`, and `\n` each count once; a final unterminated line counts as a line). Detecting CR in the same scan is what lets the common LF-only / break-free case stay zero-copy below, addressing the source directly - so line-counting costs no extra pass.
         var hasCR = false
         var lines = 0
+        // Where the last line's content ends: its terminator's first byte, or the end of input for an unterminated last line.
+        var contentEnd = count
         var i = start
         // A BOM-only input is still one (empty) line: cmark's `S_process_line` skips the BOM within that line, then opens the paragraph for what remains.
         repeat {
@@ -636,9 +638,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if brk == count {
                 // Trailing content with no terminator → one final unterminated line.
                 lines += 1
+                contentEnd = count
                 break
             }
             lines += 1
+            contentEnd = brk
             if sourceBytes[brk] == UInt8(ascii: "\r") {
                 hasCR = true
                 // A `\r` immediately followed by `\n` is a single CRLF terminator.
@@ -656,10 +660,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let paragraph = addChild(kind: .paragraph, parent: documentIndex, start: start)
         // cmark's inline-only buffer is neither newline-terminated nor trimmed - see `nulTerminatedInlineContainers`.
         storage.nulTerminatedInlineContainers.insert(paragraph)
-        // The paragraph's content is the whole post-BOM input, trailing line ending included (it is literal text here), and the document spans exactly its one paragraph.
+        // The paragraph's content is the whole post-BOM input, trailing line ending included (it is literal text here), and the document spans exactly its one paragraph. Both end where the last line's content ends, as in block mode, so a final line ending doesn't carry the range past the last line.
         storage.setSourceStart(documentIndex, start)
-        storage.setSourceEnd(documentIndex, count)
-        storage.setSourceEnd(paragraph, count)
+        storage.setSourceEnd(documentIndex, contentEnd)
+        storage.setSourceEnd(paragraph, contentEnd)
 
         var delimiters = UniqueArray<DelimiterRecord>()
         var brackets = UniqueArray<BracketRecord>()
@@ -745,6 +749,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
         finishInlines(paragraph, image: image)
+        if positionsEnabled {
+            endInlinesWithinLastLine(after: paragraph, contentEnd: contentEnd)
+        }
+    }
+
+    /// Pull back the range of every node created after `paragraph` that runs past `contentEnd`, the end of the inline-only input's last line content, to end there.
+    ///
+    /// Inline stamping ends a node one past the source byte its last content byte stands for. For a node holding the final line ending that is past the last line, because no line follows it to start at. A node that starts inside that line ending (a CRLF's `\n` stands for its LF) starts at `contentEnd` too, so it keeps an empty range where the line ending starts.
+    private mutating func endInlinesWithinLastLine(after paragraph: DocumentStorage.Index, contentEnd: Int) {
+        for node in (paragraph + 1)..<storage.nodes.count where storage.sourceRanges[node].end > contentEnd {
+            storage.sourceRanges[node].end = contentEnd
+            storage.sourceRanges[node].start = min(storage.sourceRanges[node].start, contentEnd)
+        }
     }
 
     /// Extend an arena→source run map by one content byte that images source byte `sourceOffset` (read from physical byte `physicalOffset`, which defaults to `sourceOffset`; see `ArenaRun`), or by one synthetic gap byte when `sourceOffset < 0`: the last run grows when the byte continues it, otherwise a new run starts.

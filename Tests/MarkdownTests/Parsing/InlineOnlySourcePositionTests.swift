@@ -72,18 +72,18 @@ class InlineOnlySourcePositionTests: XCTestCase {
         }
     }
 
-    /// A BOM-only input's empty paragraph sits at the start of line 1, past the BOM; a blank line after the BOM ends just past its line ending.
+    /// A BOM-only input's empty paragraph sits at the start of line 1, past the BOM; a blank line after the BOM ends where its line ending starts, so the ranges are empty.
     func testByteOrderMarkWithoutContent() {
         for mode: ParseOptions in [.inlineOnly, .preserveWhitespace] {
             XCTAssertEqual("Document @1:1\n└─ Paragraph @1:1", positions("\u{FEFF}", mode))
-            XCTAssertEqual("Document @1:1-1:2\n└─ Paragraph @1:1-1:2\n   └─ Text @1:1-1:2 \"\n\"", positions("\u{FEFF}\n", mode))
+            XCTAssertEqual("Document @1:1\n└─ Paragraph @1:1\n   └─ Text @1:1 \"\n\"", positions("\u{FEFF}\n", mode))
         }
     }
 
-    /// Blank lines and a trailing line ending are literal paragraph content, so the paragraph and document span them; the input's end sits just past the final line ending, on the last line.
+    /// Blank lines and a trailing line ending are literal paragraph content, so the paragraph and document span them, but every range ends where the final line ending starts, at the end of the last line.
     func testBlankLinesAndTrailingLineEnding() {
         for mode: ParseOptions in [.inlineOnly, .preserveWhitespace] {
-            XCTAssertEqual("Document @1:1-3:5\n└─ Paragraph @1:1-3:5\n   └─ Text @1:1-3:5 \"a\n\n  b\n\"", positions("a\n\n  b\n", mode))
+            XCTAssertEqual("Document @1:1-3:4\n└─ Paragraph @1:1-3:4\n   └─ Text @1:1-3:4 \"a\n\n  b\n\"", positions("a\n\n  b\n", mode))
         }
     }
 
