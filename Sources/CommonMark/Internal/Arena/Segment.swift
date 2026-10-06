@@ -22,7 +22,7 @@ internal struct Segment: Equatable {
     ///
     /// Equal to `offset` in the overwhelmingly common case - the content is stamped where its bytes physically sit. It diverges only for a re-indented paragraph continuation line: cmark strips a continuation line's leading whitespace but reports the surviving content at the block's content column (`block_offset`; column 1 at the top level), not at its true first-non-space column. Such a segment therefore reads its bytes from `offset` (past the stripped whitespace) while mapping its source positions from `sourceOffset` (the block-content column).
     ///
-    /// For an `inSource == false` segment, `sourceOffset` is the one source byte that every byte of the segment stands for - a split tab's leftover columns, emitted as spaces, stand for the tab byte - or `-1` when the segment has no source image (the interned `\n` join and other arena-only content, which map to `nil`).
+    /// For an `inSource == false` segment, `sourceOffset` is the one source byte that every byte of the segment stands for - a split tab's leftover columns, emitted as spaces, stand for the tab byte - or `-1` when the segment has no source image (the interned `\n` join and other arena-only content, which no inline node starts or ends on).
     internal var sourceOffset: Int32
 
     /// `sourceOffset` defaults to `offset` for a source segment (the content is stamped where it sits) and to `-1` (no source image) for an arena segment; pass it explicitly only to re-indent a continuation line's source mapping, or to name the source byte an arena segment stands for.
