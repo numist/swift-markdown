@@ -11,7 +11,7 @@
 extension MarkdownDocument {
     /// Options that control how a `MarkdownDocument` parses its source.
     ///
-    /// Pass a set of options when creating a document to enable GitHub Flavored Markdown extensions (tables, strikethrough, autolinks, task lists, and footnotes), to turn on source-position tracking, or to select an inline-only parsing mode. The default value (an empty set) parses plain CommonMark.
+    /// Pass a set of options when creating a document to enable GitHub Flavored Markdown extensions (tables, strikethrough, autolinks, task lists, and footnotes) or inline attributes, to turn on source-position tracking, or to select an inline-only parsing mode. The default value (an empty set) parses plain CommonMark.
     ///
     ///     let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .footnotes]
     ///     MarkdownDocument.withParsedDocument(source, options: options) { doc in
