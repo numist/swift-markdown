@@ -130,13 +130,14 @@ let gfmFeatureFile = PreparedFile(
 //   smart punctuation    .smart                      CMARK_OPT_SMART
 //   table col/row spans  .tableSpans                 CMARK_OPT_TABLE_SPANS
 //   ditto rowspan marker .tableRowspanDitto          CMARK_OPT_TABLE_ROWSPAN_DITTO
+//   inline attributes    .attributes                 always on
 //
 // The `tagfilter` extension is intentionally omitted: it's a render-time HTML sanitizer with
 // no effect on the parse tree, and these benchmarks only parse.
 
 let gfmSwiftOptions: MarkdownDocument.ParseOptions = [
     .tables, .strikethrough, .gfmAutolink, .tasklist, .footnotes,
-    .smart, .tableSpans, .tableRowspanDitto,
+    .smart, .tableSpans, .tableRowspanDitto, .attributes,
 ]
 
 // The cmark-gfm core/parser options that are NOT syntax extensions (those are attached separately

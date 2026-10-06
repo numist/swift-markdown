@@ -3157,7 +3157,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Cheap, over-approximate gate: could this segment content match a finalize-time matcher (ref-def / footnote / tasklist start with `[`, an attribute def starts with `^[`, or a GFM table)?
+    /// Cheap, over-approximate gate: could this segment content match a finalize-time matcher (ref-def / footnote / tasklist start with `[`, an attribute def starts with `^[` when `.attributes` is set, or a GFM table)?
     ///
     /// A false positive only costs an avoidable materialization; a false negative would skip a real matcher, so the checks must cover every matcher's necessary condition. The table necessary condition is on the DELIMITER (second) line, not the header: a single-column table's header need not contain a pipe (`a\n|-`, `a\n:-`), so the header-`|` check that once lived here would skip such tables. The segment list is isomorphic to `\n`-separated lines, so the second line is scanned directly.
     private func segmentsCouldMatchMatcher(_ segs: borrowing UniqueArray<Segment>) -> Bool {

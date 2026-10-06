@@ -244,7 +244,7 @@ extension MarkdownNode {
         case footnoteReference(index: Int)
         /// Struck-through text (`~text~` or `~~text~~`), produced when parsing with `MarkdownDocument.ParseOptions.strikethrough`.
         case strikethrough
-        /// An extended-attribute span (`^[…]`). The raw attribute string is available through the node's content.
+        /// An extended-attribute span (`^[…]`), produced when parsing with `MarkdownDocument.ParseOptions.attributes`. The raw attribute string is available through the node's content.
         case attribute
         
         /// A Boolean value that indicates whether this is a block-level kind.

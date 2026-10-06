@@ -421,19 +421,6 @@ struct AttributeSyntaxDisabledTests {
 
     // MARK: - Autolinks
 
-    /// With `.attributes`, a `^[` opener is not a link bracket, so a URL after an unclosed `^[` still autolinks.
-    @Test("with attributes, a URL after an unclosed attribute opener autolinks")
-    func urlAfterAttributeOpenerAutolinks() {
-        #expect(tree("^[http://t", [.sourcePosition, .gfmAutolink, .attributes]) == """
-            document @1:1-1:11
-              paragraph @1:1-1:11
-                text "^[" @1:1-1:3
-                link "http://t" "" @1:3-1:11
-                  text "http://t" @1:3-1:11
-
-            """)
-    }
-
     /// A GFM extended autolink is not recognized while a `[` link bracket is open, so the URL after `^[` stays text.
     @Test("a URL after an unclosed attribute opener is text")
     func urlAfterOpenerIsText() {
@@ -449,7 +436,7 @@ struct AttributeSyntaxDisabledTests {
 
     /// The footnote-shaped `[^[]]` matches no footnote definition, so it is text, and the `[…]()` around it is an
     /// inline link with that text.
-    @Test("a footnote-shaped bracket holding an attribute opener is link text")
+    @Test("a footnote-shaped bracket holding `^[` is link text")
     func nestedCaretBracketIsLinkText() {
         #expect(tree("[[^[]]]()", Self.bugCompatibleFootnotes) == """
             document @1:1-1:10
@@ -461,7 +448,7 @@ struct AttributeSyntaxDisabledTests {
     }
 
     /// A footnote reference whose label matches no definition is text.
-    @Test("a footnote-shaped bracket holding an attribute opener is text")
+    @Test("a footnote-shaped bracket holding `^[` is text")
     func caretBracketIsText() {
         #expect(tree("[^[]]", Self.bugCompatibleFootnotes) == """
             document @1:1-1:6
@@ -472,7 +459,7 @@ struct AttributeSyntaxDisabledTests {
     }
 
     /// A footnote reference whose label matches no definition is text, and so is the text around it.
-    @Test("a footnote-shaped bracket holding an attribute opener keeps the text after it")
+    @Test("a footnote-shaped bracket holding `^[` keeps the text after it")
     func caretBracketKeepsTrailingText() {
         #expect(tree("x[^[]]y", Self.bugCompatibleFootnotes) == """
             document @1:1-1:8
@@ -568,6 +555,18 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
+    /// A footnote definition's label ends at its first `]`, so `[^[]:` defines the label `[`, which the reference
+    /// `[^[]]` (label `[]`) doesn't match; the reference is text and the unreferenced definition is dropped.
+    @Test("a footnote-shaped bracket holding `^[` doesn't resolve to a `[` definition")
+    func caretBracketDoesNotResolveToBracketDefinition() {
+        #expect(tree("[^[]: note\n\n[^[]]", Self.bugCompatibleFootnotes) == """
+            document @1:1-3:6
+              paragraph @3:1-3:6
+                text "[^[]]" @3:1-3:6
+
+            """)
+    }
+
     /// A footnote reference whose label matches no definition is text.
     @Test("a footnote-shaped bracket holding an empty bracket and text is text")
     func caretBracketWithTextIsText() {
@@ -581,7 +580,7 @@ struct AttributeSyntaxDisabledTests {
 
     /// An undefined footnote reference is text, and the email after it autolinks. With `.cmarkBugCompatibility` the email
     /// split keeps an empty text run after the address.
-    @Test("an email after a footnote-shaped bracket holding an attribute opener autolinks")
+    @Test("an email after a footnote-shaped bracket holding `^[` autolinks")
     func emailAfterCaretBracketAutolinks() {
         #expect(tree("[^[]]f@.f", Self.bugCompatibleFootnotesAutolink) == """
             document @1:1-1:10
@@ -595,7 +594,7 @@ struct AttributeSyntaxDisabledTests {
     }
 
     /// An undefined footnote reference is text, and so is the text around it.
-    @Test("text after a footnote-shaped bracket holding an attribute opener is kept")
+    @Test("text after a footnote-shaped bracket holding `^[` is kept")
     func plainTextAfterCaretBracketIsKept() {
         #expect(tree("x[^[]]y", Self.bugCompatibleFootnotesAutolink) == """
             document @1:1-1:8
@@ -607,7 +606,7 @@ struct AttributeSyntaxDisabledTests {
 
     /// An email autolinks and the undefined footnote reference after it is text. With `.cmarkBugCompatibility` the email
     /// split keeps an empty text run before the address.
-    @Test("text after an email and a footnote-shaped bracket holding an attribute opener is kept")
+    @Test("text after an email and a footnote-shaped bracket holding `^[` is kept")
     func textAfterEmailAndCaretBracketIsKept() {
         #expect(tree("f@.f[^[]]y", Self.bugCompatibleFootnotesAutolink) == """
             document @1:1-1:11

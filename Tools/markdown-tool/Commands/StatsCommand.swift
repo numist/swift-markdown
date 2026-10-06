@@ -40,7 +40,7 @@ extension MarkdownCommand {
         var gfm = true
 
         func run() throws {
-            var options: MarkdownDocument.ParseOptions = []
+            var options: MarkdownDocument.ParseOptions = [.attributes]
             if gfm {
                 options.formUnion([.tables, .strikethrough, .gfmAutolink, .tasklist, .footnotes])
             }
@@ -477,6 +477,7 @@ private func describe(_ options: MarkdownDocument.ParseOptions) -> String {
     if options.contains(.gfmAutolink) { names.append("autolinks") }
     if options.contains(.tasklist) { names.append("tasklist") }
     if options.contains(.footnotes) { names.append("footnotes") }
+    if options.contains(.attributes) { names.append("attributes") }
     return names.isEmpty ? "(none)" : names.joined(separator: ", ")
 }
 
