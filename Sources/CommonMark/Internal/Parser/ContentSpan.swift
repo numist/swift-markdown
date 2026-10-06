@@ -27,7 +27,7 @@ internal struct ContentSpan: ~Escapable {
     /// Single-segment: which buffer `span` is (`true` = source, `false` = arena scratch). Multi-segment: unused.
     @usableFromInline let inSource: Bool
 
-    /// Single-segment arena content that images a source range: an arena→source run map, content-relative (keyed from the first content byte). `sourceOffset` resolves through it to recover per-line source columns for reconstructed content - a flattened non-contiguous setext heading, or (as a single constant-shift run) a `\|`-unescaped table cell. Empty (`count == 0`) for source-backed content, and for arena content parsed with positions off, which is never stamped. Only consulted for `!inSource` single-segment content.
+    /// Single-segment arena content that images a source range: an arena→source run map, content-relative (keyed from the first content byte). `sourceOffset` resolves through it to recover per-line source columns for reconstructed content - a flattened non-contiguous setext heading, or (as a single constant-shift run) a `\|`-unescaped table cell. Empty (`count == 0`) for source-backed content, for arena content parsed with positions off, and for the email-autolink scan's scratch copy; none of these is resolved through it. Only consulted for `!inSource` single-segment content.
     @usableFromInline let arenaRuns: Span<ArenaRun>
 
     /// `arenaRunEnds[i]` is the content-relative offset just past run `i` of `arenaRuns` (the running total of run lengths), held in stable storage alongside it; empty when `arenaRuns` is. Non-decreasing, so the run covering an offset is found by binary search (`firstIndex(endingAfter:in:)`) - a flattened heading has a run per line, and positions are resolved once per inline node.
@@ -231,7 +231,7 @@ internal struct ContentSpan: ~Escapable {
             if inSource {
                 return (offset, offset)
             }
-            // Arena content carries an arena→source run map, content-relative (keyed from the first content byte): inline nodes are stamped only with positions on, and with positions on every single-segment arena content is parsed with a run map that tiles it. Resolve it exactly like the multi-segment segment list below. cmark maps a `\|`-unescaped table cell's bytes back to source by a constant shift (it does NOT re-widen for the removed backslash), which the degenerate single-run case reproduces exactly.
+            // Arena content carries an arena→source run map, content-relative (keyed from the first content byte): inline nodes are stamped only with positions on, and every single-segment arena content inline-parsed with positions on carries a run map that tiles it. Resolve it exactly like the multi-segment segment list below. cmark maps a `\|`-unescaped table cell's bytes back to source by a constant shift (it does NOT re-widen for the removed backslash), which the degenerate single-run case reproduces exactly.
             let k = offset - base
             let i = Self.firstIndex(endingAfter: k, in: arenaRunEnds)
             precondition(i < arenaRuns.count, "an inline node's source range lies inside its content's arena run map")

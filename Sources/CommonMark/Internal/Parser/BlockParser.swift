@@ -1272,7 +1272,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// `replacingNUL(_:)` that also rewrites `map`, `chunk`'s content-relative arena→source run map, to image the replaced content.
     ///
-    /// Each of a U+FFFD's three bytes images the one NUL byte it replaces, so an inline node starting or ending at it covers exactly that source byte; every other byte keeps its image. An empty `map` on a source-backed `chunk` means the chunk images itself (see `sourceImage(of:map:)`). Arena content with no map has no source image and keeps an empty map. With positions off, `map` is left untouched.
+    /// Each of a U+FFFD's three bytes images the one NUL byte it replaces, so an inline node starting or ending at it covers exactly that source byte; every other byte keeps its image. An empty `map` on a source-backed `chunk` means the chunk images itself (see `sourceImage(of:map:)`). With positions off, `map` is left untouched.
     private mutating func replacingNUL(_ chunk: Chunk, map: inout [ArenaRun]) -> Chunk {
         guard positionsEnabled, containsNUL(chunk) else { return replacingNUL(chunk) }
         let image = sourceImage(of: chunk, map: map)
