@@ -134,9 +134,9 @@ struct GFMAutolinkSourceRangeTests {
     }
 
     /// With `.cmarkBugCompatibility` and footnotes, a footnote-shaped bracket whose `]` is on the next line collapses
-    /// into reconstructed text with no source image of its own, so the address found in it has none either. The
-    /// text before the address keeps where the bracket starts, as an empty range; the link and the text after it
-    /// have no range, as in cmark-gfm.
+    /// into reconstructed text with no source image of its own, so neither the address found in it nor the text
+    /// before the address can be placed. That text keeps where the bracket starts, as an empty range; the link and the
+    /// text after it have no range, as in cmark-gfm.
     @Test("with cmark bug compatibility, the text before an email in a collapsed footnote bracket keeps its start")
     func emailInCollapsedFootnoteBracket() throws {
         #expect(try tree("![^b@.B\\\n]", options: Self.opts.union([.footnotes, .cmarkBugCompatibility])) == """
@@ -151,15 +151,15 @@ struct GFMAutolinkSourceRangeTests {
     }
 
     /// The first address's last byte comes from the entity `&#111;`, which has no source byte of its own, so that
-    /// address can't be placed: the text before it keeps only where it starts, and its link has no range, as in
-    /// cmark-gfm. The second address is placed; the text between the two, whose start isn't known, starts where the
-    /// second address does.
+    /// address can't be placed and its link has no range, as in cmark-gfm; the text before it is placed by its own
+    /// byte, the NUL. The second address is placed; the text between the two, whose start isn't known, starts where the
+    /// second address does. cmark-gfm gives the text before the first address the whole paragraph, `@1:1-1:22`, counting the NUL as three columns.
     @Test("an email autolink ending in an entity has no range")
     func emailEndingInEntity() throws {
         #expect(try tree("\u{0}a@b.c&#111; x@y.zz") == """
             document @1:1-1:20
               paragraph @1:1-1:20
-                text "\u{FFFD}" @1:1-1:1
+                text "\u{FFFD}" @1:1-1:2
                 link "mailto:a@b.co" "" @-
                   text "a@b.co" @-
                 text " " @1:14-1:14

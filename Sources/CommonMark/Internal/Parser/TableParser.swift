@@ -375,8 +375,8 @@ extension BlockParser {
                     // source-mapped table with no escapes, the cell content is a contiguous source slice, so
                     // enqueue a source-backed chunk and inline stamping lands real source positions on the cell's
                     // text/code/etc. A flattened (re-based) or escaped cell instead parses from its arena copy
-                    // carrying an arena→source run map (registered on `arenaSourceMaps`); a non-source-mapped table
-                    // registers no map (inline positions left unstamped).
+                    // carrying an arena→source run map (registered on `arenaSourceMaps`); with positions off no map
+                    // is registered.
                     let noEscape = cellChunk.offset == cellRange.lowerBound && cellChunk.length == cellRange.count
                     if case .contiguous(let sourceDelta) = mode, noEscape {
                         let srcLo = cellRange.lowerBound + sourceDelta
@@ -389,9 +389,8 @@ extension BlockParser {
                         // in the unescaped buffer added to the cell start, ignoring any stripped `\|` backslash
                         // (`unescapedPipesMap`). why:
                         // table-cell inline positions track the reference's escape-oblivious / re-based columns
-                        // unconditionally - this is NOT enrolled in `.cmarkBugCompatibility` (there was no prior
-                        // spec-correct behavior to protect: these inlines were unstamped before), so there is no
-                        // flag split here. With positions off there is no projection, so no mapping is registered.
+                        // unconditionally - this is NOT enrolled in `.cmarkBugCompatibility`, so there is no flag
+                        // split here. With positions off there is no projection, so no mapping is registered.
                         if let projection {
                             let cellMap = projection.runs(from: cellRange.lowerBound, length: cellRange.count, in: self)
                             arenaSourceMaps[cellIdx] = noEscape

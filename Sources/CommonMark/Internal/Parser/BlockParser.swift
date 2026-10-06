@@ -71,6 +71,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// A paragraph or heading's content copied into a byte buffer, with the content-relative arena→source run map (`ArenaRun`s tiling `bytes` from its first byte) that images each byte: a copied source byte its own offset, a synthetic byte the source byte it stands for, and a line join a gap.
+    ///
+    /// The map is kept whether or not positions are tracked: it costs one run per contiguous source stretch, and the content it re-seeds must arrive with a map that tiles it (`addChunk`).
     struct MaterializedText : ~Copyable {
         private(set) var bytes = UniqueArray<UInt8>()
         private(set) var map: [ArenaRun] = []

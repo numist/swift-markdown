@@ -78,7 +78,7 @@ internal struct ContentImage {
         }
     }
 
-    /// The source offsets imaged by arena byte `offset` - the offset it is stamped at, and the offset it was read from (see `ArenaRun`) - or `nil` for a byte outside the chunk. A byte inside the chunk is a content byte, never a synthetic gap.
+    /// The source offsets imaged by arena byte `offset` - the offset it is stamped at, and the offset it was read from (see `ArenaRun`) - or `nil` for a byte outside the chunk. Callers resolve only bytes that aren't line joins, the chunk's one kind of synthetic gap.
     internal func sourceOffsets(ofArenaByte offset: Int) -> (source: Int, physical: Int)? {
         let k = offset - base
         guard k >= 0, let total = runEnds.last, k < total else {
@@ -96,7 +96,7 @@ internal struct ContentImage {
         }
         let run = runs[lo]
         let local = k - (lo == 0 ? 0 : runEnds[lo - 1])
-        precondition(run.sourceOffset >= 0, "a resolved content byte images a source byte")
+        precondition(run.sourceOffset >= 0, "a resolved byte is not a line join")
         return (Int(run.sourceOffset) + local, Int(run.physicalOffset) + local)
     }
 }
