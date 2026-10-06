@@ -50,6 +50,7 @@ let package = Package(
                 "CMakeLists.txt"
             ],
             swiftSettings: commonMarkSwiftSettings + [
+                .strictMemorySafety(),
                 // Built with library evolution so a separate package does not see the BasicContainers dependency.
                 .unsafeFlags(["-enable-library-evolution"]),
             ]
