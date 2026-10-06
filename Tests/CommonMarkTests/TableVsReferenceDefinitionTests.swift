@@ -68,7 +68,7 @@ struct TableVsReferenceDefinitionTests {
     private func blocks(
         _ source: String,
         options: MarkdownDocument.ParseOptions = [.tables]
-    ) throws -> [Block] {
+    ) -> [Block] {
         MarkdownDocument.withParsedDocument(source, options: options) { doc -> [Block] in
             var out: [Block] = []
             doc.root.children.forEach { child in
@@ -99,7 +99,7 @@ struct TableVsReferenceDefinitionTests {
     private func firstLinkURL(
         _ source: String,
         options: MarkdownDocument.ParseOptions = [.tables]
-    ) throws -> String? {
+    ) -> String? {
         MarkdownDocument.withParsedDocument(source, options: options) { doc -> String? in
             var found: String? = nil
             func walk(_ n: borrowing MarkdownNode) {
@@ -115,7 +115,7 @@ struct TableVsReferenceDefinitionTests {
     func delimiterRowBeatsReferenceDefinition() throws {
         // `[\n|-\n]:/`: label `[<nl>|-<nl>]`, then `: /` — a valid (output-free) ref-def shape. But line 2
         // `|-` is a delimiter row, so cmark forms a table; the ref-def is never extracted.
-        let doc = try blocks("[\n|-\n]:/")
+        let doc = blocks("[\n|-\n]:/")
         let table = try #require(doc.first, "expected a block, got an empty document")
         try #require(table.kind == .table, "expected a table, got \(table.kind)")
         #expect(table.alignments == [.none])
@@ -128,7 +128,7 @@ struct TableVsReferenceDefinitionTests {
     func delimiterRowControlWithoutColon() throws {
         // `[\n|-\n]a`: last line `]a` never looks like a ref-def destination (no `:` after `]`), so this
         // matched cmark even under ref-def-first ordering. Pin it so the reorder does not regress it.
-        let doc = try blocks("[\n|-\n]a")
+        let doc = blocks("[\n|-\n]a")
         let table = try #require(doc.first, "expected a block, got an empty document")
         try #require(table.kind == .table, "expected a table, got \(table.kind)")
         #expect(table.alignments == [.none])
@@ -143,14 +143,14 @@ struct TableVsReferenceDefinitionTests {
         // row, so cmark makes `[foo]: /bar` the table's header cell and registers NO definition. The old
         // ref-def-first ordering registered `foo` -> /bar and made `|-\n|x` a paragraph — the strongest
         // discriminator that the table now wins.
-        let doc = try blocks("[foo]: /bar\n|-\n|x")
+        let doc = blocks("[foo]: /bar\n|-\n|x")
         let table = try #require(doc.first, "expected a block, got an empty document")
         try #require(table.kind == .table, "expected a table, got \(table.kind)")
         #expect(table.headerCells == ["[foo]: /bar"])
         #expect(table.bodyRows == [["x"]])
         #expect(doc.count == 1)
         // The definition must NOT have been registered: a trailing `[foo]` reference stays literal.
-        #expect(try firstLinkURL("[foo]: /bar\n|-\n|x\n\n[foo]") == nil, "the ref-def must not be registered")
+        #expect(firstLinkURL("[foo]: /bar\n|-\n|x\n\n[foo]") == nil, "the ref-def must not be registered")
     }
 
     @Test("a genuine multi-line ref-def without a delimiter row is still a ref-def")
@@ -158,11 +158,11 @@ struct TableVsReferenceDefinitionTests {
         // `[a\nb]: /u` spans two lines but its second line `b]: /u` is NOT a delimiter row, so no table
         // forms and the definition must still be extracted: the def paragraph is dropped and `[a b]`
         // resolves to a link. Guards the reorder against breaking real multi-line ref-defs.
-        let doc = try blocks("[a\nb]: /u\n\n[a b]")
+        let doc = blocks("[a\nb]: /u\n\n[a b]")
         // Exactly one surviving block (the `[a b]` reference paragraph); the ref-def paragraph is dropped.
         try #require(doc.count == 1, "expected the ref-def to be consumed, leaving one block; got \(doc.count)")
         #expect(doc[0].kind == .paragraph, "expected a paragraph, got \(doc[0].kind)")
-        let url = try #require(try firstLinkURL("[a\nb]: /u\n\n[a b]"), "expected `[a b]` to resolve to a link")
+        let url = try #require(firstLinkURL("[a\nb]: /u\n\n[a b]"), "expected `[a b]` to resolve to a link")
         #expect(url == "/u")
     }
 
@@ -184,7 +184,7 @@ struct TableVsReferenceDefinitionTests {
         // `[o]:o\n-`: line 1 is a COMPLETE ref-def; line 2 `-` is a bare (pipe-less) delimiter row. cmark
         // resolves the ref-def at the setext branch (no header left → no heading) and the `-` becomes a
         // paragraph. #134's table-first ordering wrongly formed a table with header `[o]:o`.
-        let doc = try blocks("[o]:o\n-", options: [.tables, .cmarkBugCompatibility])
+        let doc = blocks("[o]:o\n-", options: [.tables, .cmarkBugCompatibility])
         try #require(doc.count == 1, "expected the ref-def to be extracted, leaving one paragraph; got \(doc.count)")
         try #require(doc[0].kind == .paragraph, "expected a paragraph, got \(doc[0].kind)")
         #expect(doc[0].text == "-")
@@ -193,7 +193,7 @@ struct TableVsReferenceDefinitionTests {
     @Test("a bare `-` delimiter row after a ref-def with a space before the destination is a ref-def + paragraph")
     func bareDelimiterAfterCompleteReferenceDefinitionWithSpace() throws {
         // `[o]: o\n-`: same shape with a space after the label colon — still a complete ref-def + bare `-`.
-        let doc = try blocks("[o]: o\n-", options: [.tables, .cmarkBugCompatibility])
+        let doc = blocks("[o]: o\n-", options: [.tables, .cmarkBugCompatibility])
         try #require(doc.count == 1, "expected the ref-def to be extracted, leaving one paragraph; got \(doc.count)")
         try #require(doc[0].kind == .paragraph, "expected a paragraph, got \(doc[0].kind)")
         #expect(doc[0].text == "-")
@@ -204,7 +204,7 @@ struct TableVsReferenceDefinitionTests {
         // `[o]:o\n|-`: line 2 `|-` has a pipe, so it does NOT match the setext scanner; cmark's table
         // extension opens a table using the raw paragraph string `[o]:o` as the header cell (the ref-def is
         // never resolved). Both implementations already agreed here; pin it so the fix keeps it a table.
-        let doc = try blocks("[o]:o\n|-", options: [.tables, .cmarkBugCompatibility])
+        let doc = blocks("[o]:o\n|-", options: [.tables, .cmarkBugCompatibility])
         let table = try #require(doc.first, "expected a block, got an empty document")
         try #require(table.kind == .table, "expected a table, got \(table.kind)")
         #expect(table.headerCells == ["[o]:o"])
@@ -216,7 +216,7 @@ struct TableVsReferenceDefinitionTests {
     func incompleteHeaderDelimiterStaysTableUnderBugCompat() throws {
         // `[\n|-\n]:/` (the #134 case) under `.cmarkBugCompatibility`: line 2 `|-` is a pipe delimiter, so
         // the table opens with header `[` and body `]:/`. The bare-delimiter fix must not regress this.
-        let doc = try blocks("[\n|-\n]:/", options: [.tables, .cmarkBugCompatibility])
+        let doc = blocks("[\n|-\n]:/", options: [.tables, .cmarkBugCompatibility])
         let table = try #require(doc.first, "expected a block, got an empty document")
         try #require(table.kind == .table, "expected a table, got \(table.kind)")
         #expect(table.headerCells == ["["])
@@ -229,7 +229,7 @@ struct TableVsReferenceDefinitionTests {
         // `[a\nb]: /u\n\n[a b]`: no delimiter row, so no table pends; the multi-line ref-def is extracted
         // and `[a b]` resolves to a link. Guards the fix against breaking real ref-defs under the fuzzer's
         // option set.
-        let url = try #require(try firstLinkURL("[a\nb]: /u\n\n[a b]", options: [.tables, .cmarkBugCompatibility]),
+        let url = try #require(firstLinkURL("[a\nb]: /u\n\n[a b]", options: [.tables, .cmarkBugCompatibility]),
                                "expected `[a b]` to resolve to a link")
         #expect(url == "/u")
     }

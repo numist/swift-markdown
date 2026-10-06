@@ -20,8 +20,8 @@ struct TabExpandedParagraphContentTests {
     private static let positionModes: [MarkdownDocument.ParseOptions] = [[], [.sourcePosition]]
 
     @Test("emphasis characters before a tab stay literal", arguments: positionModes)
-    func emphasisCharactersBeforeTab(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump("**\tx", options: mode) == """
+    func emphasisCharactersBeforeTab(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump("**\tx", options: mode) == """
             document
               paragraph
                 text "**\\tx"
@@ -30,8 +30,8 @@ struct TabExpandedParagraphContentTests {
     }
 
     @Test("an ordered-marker-like run before a tab stays literal", arguments: positionModes)
-    func orderedMarkerRunBeforeTab(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump("3)1.\tz", options: mode) == """
+    func orderedMarkerRunBeforeTab(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump("3)1.\tz", options: mode) == """
             document
               paragraph
                 text "3)1.\\tz"
@@ -40,8 +40,8 @@ struct TabExpandedParagraphContentTests {
     }
 
     @Test("a smart dash before a tab keeps the tab", arguments: positionModes)
-    func smartDashBeforeTab(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump("--\ta", options: mode.union(.smart)) == """
+    func smartDashBeforeTab(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump("--\ta", options: mode.union(.smart)) == """
             document
               paragraph
                 text "\u{2013}\\ta"
@@ -50,8 +50,8 @@ struct TabExpandedParagraphContentTests {
     }
 
     @Test("a trailing tab ends the line with a soft break", arguments: positionModes)
-    func trailingTabIsSoftBreak(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump("**\t\nb", options: mode) == """
+    func trailingTabIsSoftBreak(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump("**\t\nb", options: mode) == """
             document
               paragraph
                 text "**"
@@ -62,8 +62,8 @@ struct TabExpandedParagraphContentTests {
     }
 
     @Test("consecutive tab-expanded lines keep their tabs", arguments: positionModes)
-    func consecutiveTabExpandedLines(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump("**\tx\n**\ty", options: mode) == """
+    func consecutiveTabExpandedLines(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump("**\tx\n**\ty", options: mode) == """
             document
               paragraph
                 text "**\\tx"
@@ -74,8 +74,8 @@ struct TabExpandedParagraphContentTests {
     }
 
     @Test("inside a block quote whose prefix is followed by a tab", arguments: positionModes)
-    func insideTabbedBlockQuote(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump(">\t**\tx", options: mode) == """
+    func insideTabbedBlockQuote(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump(">\t**\tx", options: mode) == """
             document
               block_quote
                 paragraph
@@ -85,8 +85,8 @@ struct TabExpandedParagraphContentTests {
     }
 
     @Test("a tab-expanded line after a setext underline left as text keeps its tab", arguments: positionModes)
-    func afterUnderlineLeftAsText(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump("[a\n ]:b\n=\n**\tx", options: mode.union(.cmarkBugCompatibility)) == """
+    func afterUnderlineLeftAsText(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump("[a\n ]:b\n=\n**\tx", options: mode.union(.cmarkBugCompatibility)) == """
             document
               paragraph
                 text "="
@@ -97,8 +97,8 @@ struct TabExpandedParagraphContentTests {
     }
 
     @Test("a list item continuation line keeps its tabs", arguments: positionModes)
-    func listItemContinuation(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump("- a\n  **\tb\tc", options: mode) == """
+    func listItemContinuation(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump("- a\n  **\tb\tc", options: mode) == """
             document
               list bullet '-' tight
                 item

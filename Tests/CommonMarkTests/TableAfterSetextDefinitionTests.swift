@@ -24,8 +24,8 @@ struct TableAfterSetextDefinitionTests {
     private static let compatibilityModes: [MarkdownDocument.ParseOptions] = [[], [.cmarkBugCompatibility]]
 
     @Test("the underline stays a paragraph before the table", arguments: compatibilityModes)
-    func underlineParagraphBeforeTable(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump(source, options: mode.union(.tables)) == """
+    func underlineParagraphBeforeTable(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump(source, options: mode.union(.tables)) == """
             document
               block_quote
                 paragraph
@@ -42,8 +42,8 @@ struct TableAfterSetextDefinitionTests {
 
     @Test("a definition spanning two quoted lines leaves the underline before the table",
           arguments: compatibilityModes, [[], [.sourcePosition]] as [MarkdownDocument.ParseOptions])
-    func multiLineDefinitionBeforeTable(mode: MarkdownDocument.ParseOptions, positions: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump("> [a]:\n> u\n> ===\n> b|c\n> -|-\n", options: mode.union(positions).union(.tables)) == """
+    func multiLineDefinitionBeforeTable(mode: MarkdownDocument.ParseOptions, positions: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump("> [a]:\n> u\n> ===\n> b|c\n> -|-\n", options: mode.union(positions).union(.tables)) == """
             document
               block_quote
                 paragraph
@@ -59,8 +59,8 @@ struct TableAfterSetextDefinitionTests {
     }
 
     @Test("without tables, the underline and table lines are one paragraph", arguments: compatibilityModes)
-    func oneParagraphWithoutTables(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump(source, options: mode) == """
+    func oneParagraphWithoutTables(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump(source, options: mode) == """
             document
               block_quote
                 paragraph

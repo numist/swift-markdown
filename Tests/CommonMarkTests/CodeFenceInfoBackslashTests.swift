@@ -20,8 +20,8 @@ struct CodeFenceInfoBackslashTests {
         "a backslash before a letter stays literal and the entity decodes",
         arguments: [MarkdownDocument.ParseOptions(), [.cmarkBugCompatibility]]
     )
-    func literalBackslash(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump("```\\a&amp;\nx\n```\n", options: mode) == """
+    func literalBackslash(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump("```\\a&amp;\nx\n```\n", options: mode) == """
             document
               code_block "\\\\a&" "x\\n"
 

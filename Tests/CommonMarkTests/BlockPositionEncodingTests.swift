@@ -46,7 +46,7 @@ struct BlockPositionEncodingTests {
     }
 
     /// DFS pre-order collect of every node.
-    private func parse(_ src: String) throws -> [Collected] {
+    private func parse(_ src: String) -> [Collected] {
         var out: [Collected] = []
         MarkdownDocument.withParsedDocument(src, options: Self.opts) { doc in
             collect(doc.root, into: &out)
@@ -60,7 +60,7 @@ struct BlockPositionEncodingTests {
     func paragraph() throws {
         // ASCII baseline: 11 bytes → end column 12 (last byte column + 1).
         do {
-            let out = try parse("hello world")
+            let out = parse("hello world")
             try #require(shape(out) == ["document", "paragraph", "text"])
             #expect(out[0].range == r(1, 1, 1, 12))
             #expect(out[1].range == r(1, 1, 1, 12))
@@ -86,7 +86,7 @@ struct BlockPositionEncodingTests {
         // Multi-line paragraph: the second line's columns reset to line-relative byte offsets.
         // "é" (2 bytes, @1:1-1:3), softbreak, "€" (3 bytes, @2:1-2:4).
         do {
-            let out = try parse("\u{E9}\n\u{20AC}")
+            let out = parse("\u{E9}\n\u{20AC}")
             try #require(shape(out) == ["document", "paragraph", "text", "softBreak", "text"])
             #expect(out[0].range == r(1, 1, 2, 4))   // document
             #expect(out[1].range == r(1, 1, 2, 4))   // paragraph
@@ -100,7 +100,7 @@ struct BlockPositionEncodingTests {
 
     /// A single-line paragraph whose sole text run spans the whole line (`@1:1-1:<endColumn>`).
     private func oneLineParagraph(_ src: String, endColumn: Int) throws {
-        let out = try parse(src)
+        let out = parse(src)
         try #require(shape(out) == ["document", "paragraph", "text"])
         #expect(out[1].range == r(1, 1, 1, endColumn))
         #expect(out[2].range == r(1, 1, 1, endColumn))
@@ -113,7 +113,7 @@ struct BlockPositionEncodingTests {
     func atxHeading() throws {
         // "# hi": content "hi" at columns 3-4 → text @1:3-1:5; heading spans @1:1-1:5.
         do {
-            let out = try parse("# hi")
+            let out = parse("# hi")
             try #require(shape(out) == ["document", "heading", "text"])
             #expect(out[1].kind == .heading(level: 1))
             #expect(out[1].range == r(1, 1, 1, 5))
@@ -135,7 +135,7 @@ struct BlockPositionEncodingTests {
         // Closing "#" sequence is not part of the content range: "# hi #" → text @1:3-1:5,
         // heading @1:1-1:5 (the trailing " #" is excluded on both sides).
         do {
-            let out = try parse("# hi #")
+            let out = parse("# hi #")
             try #require(shape(out) == ["document", "heading", "text"])
             #expect(out[1].range == r(1, 1, 1, 5))
             #expect(out[2].range == r(1, 3, 1, 5))
@@ -145,7 +145,7 @@ struct BlockPositionEncodingTests {
 
     /// An ATX heading `# <content>` whose text run is `@1:3-1:<textEnd>` and heading `@1:1-1:<textEnd>`.
     private func atx(_ src: String, literal: String, textEnd: Int) throws {
-        let out = try parse(src)
+        let out = parse(src)
         try #require(shape(out) == ["document", "heading", "text"])
         #expect(out[1].range == r(1, 1, 1, textEnd))
         #expect(out[2].range == r(1, 3, 1, textEnd))
@@ -158,7 +158,7 @@ struct BlockPositionEncodingTests {
     func setextHeading() throws {
         // "hi\n===": level 1, text @1:1-1:3, heading extends to end of underline @1:1-2:4.
         do {
-            let out = try parse("hi\n===")
+            let out = parse("hi\n===")
             try #require(shape(out) == ["document", "heading", "text"])
             #expect(out[1].kind == .heading(level: 1))
             #expect(out[1].range == r(1, 1, 2, 4))
@@ -167,7 +167,7 @@ struct BlockPositionEncodingTests {
         }
         // "ab\n---": level 2 (dash underline), text @1:1-1:3, heading @1:1-2:4.
         do {
-            let out = try parse("ab\n---")
+            let out = parse("ab\n---")
             try #require(shape(out) == ["document", "heading", "text"])
             #expect(out[1].kind == .heading(level: 2))
             #expect(out[1].range == r(1, 1, 2, 4))
@@ -176,7 +176,7 @@ struct BlockPositionEncodingTests {
         }
         // é content (2 bytes): text @1:1-1:3, heading @1:1-2:4, level 1.
         do {
-            let out = try parse("\u{E9}\n===")
+            let out = parse("\u{E9}\n===")
             try #require(shape(out) == ["document", "heading", "text"])
             #expect(out[1].kind == .heading(level: 1))
             #expect(out[1].range == r(1, 1, 2, 4))
@@ -185,7 +185,7 @@ struct BlockPositionEncodingTests {
         }
         // "€ x" content (3 + 1 + 1 bytes) with dash underline: text @1:1-1:6, level 2.
         do {
-            let out = try parse("\u{20AC} x\n---")
+            let out = parse("\u{20AC} x\n---")
             try #require(shape(out) == ["document", "heading", "text"])
             #expect(out[1].kind == .heading(level: 2))
             #expect(out[1].range == r(1, 1, 2, 4))
@@ -194,7 +194,7 @@ struct BlockPositionEncodingTests {
         }
         // Combining content "e" + U+0301 (3 bytes): text @1:1-1:4.
         do {
-            let out = try parse("e\u{301}\n===")
+            let out = parse("e\u{301}\n===")
             try #require(shape(out) == ["document", "heading", "text"])
             #expect(out[1].range == r(1, 1, 2, 4))
             #expect(out[2].range == r(1, 1, 1, 4))
@@ -203,7 +203,7 @@ struct BlockPositionEncodingTests {
         // Multi-line setext content: "a\nb\n===" → two text runs joined by a soft break, heading
         // extends over the underline on line 3 (@1:1-3:4).
         do {
-            let out = try parse("a\nb\n===")
+            let out = parse("a\nb\n===")
             try #require(shape(out) == ["document", "heading", "text", "softBreak", "text"])
             #expect(out[1].range == r(1, 1, 3, 4))
             #expect(out[2].range == r(1, 1, 1, 2))   // "a"
@@ -217,7 +217,7 @@ struct BlockPositionEncodingTests {
     @Test("thematic break — full-marker span across the three marker styles")
     func thematicBreak() throws {
         for marker in ["***", "---", "___"] {
-            let out = try parse(marker)
+            let out = parse(marker)
             try #require(shape(out) == ["document", "thematicBreak"])
             #expect(out[1].kind == .thematicBreak)
             #expect(out[1].range == r(1, 1, 1, 4))   // 3 marker bytes → end column 4
@@ -230,7 +230,7 @@ struct BlockPositionEncodingTests {
     func blockQuote() throws {
         // "> hi": blockquote @1:1-1:5, paragraph/text at content column 3.
         do {
-            let out = try parse("> hi")
+            let out = parse("> hi")
             try #require(shape(out) == ["document", "blockQuote", "paragraph", "text"])
             #expect(out[1].range == r(1, 1, 1, 5))
             #expect(out[2].range == r(1, 3, 1, 5))
@@ -239,7 +239,7 @@ struct BlockPositionEncodingTests {
         }
         // "> é x" (content 3 bytes + " x"): text @1:3-1:7.
         do {
-            let out = try parse("> \u{E9} x")
+            let out = parse("> \u{E9} x")
             try #require(shape(out) == ["document", "blockQuote", "paragraph", "text"])
             #expect(out[1].range == r(1, 1, 1, 7))
             #expect(out[3].range == r(1, 3, 1, 7))
@@ -247,14 +247,14 @@ struct BlockPositionEncodingTests {
         }
         // "> €" (3-byte content only): text @1:3-1:6.
         do {
-            let out = try parse("> \u{20AC}")
+            let out = parse("> \u{20AC}")
             try #require(shape(out) == ["document", "blockQuote", "paragraph", "text"])
             #expect(out[3].range == r(1, 3, 1, 6))
             #expect(out[3].literal == "\u{20AC}")
         }
         // Nested "> > hi": inner content column 5.
         do {
-            let out = try parse("> > hi")
+            let out = parse("> > hi")
             try #require(shape(out) == ["document", "blockQuote", "blockQuote", "paragraph", "text"])
             #expect(out[1].range == r(1, 1, 1, 7))
             #expect(out[2].range == r(1, 3, 1, 7))
@@ -264,14 +264,14 @@ struct BlockPositionEncodingTests {
         }
         // Nested with multibyte "> > é": text @1:5-1:7.
         do {
-            let out = try parse("> > \u{E9}")
+            let out = parse("> > \u{E9}")
             try #require(shape(out) == ["document", "blockQuote", "blockQuote", "paragraph", "text"])
             #expect(out[4].range == r(1, 5, 1, 7))
             #expect(out[4].literal == "\u{E9}")
         }
         // Matched multi-line "> a\n> b": both continuation lines keep content column 3.
         do {
-            let out = try parse("> a\n> b")
+            let out = parse("> a\n> b")
             try #require(shape(out) == ["document", "blockQuote", "paragraph", "text", "softBreak", "text"])
             #expect(out[1].range == r(1, 1, 2, 4))
             #expect(out[2].range == r(1, 3, 2, 4))
@@ -281,7 +281,7 @@ struct BlockPositionEncodingTests {
         }
         // Matched multi-line with multibyte "> é\n> €".
         do {
-            let out = try parse("> \u{E9}\n> \u{20AC}")
+            let out = parse("> \u{E9}\n> \u{20AC}")
             try #require(shape(out) == ["document", "blockQuote", "paragraph", "text", "softBreak", "text"])
             #expect(out[1].range == r(1, 1, 2, 6))
             #expect(out[3].range == r(1, 3, 1, 5))   // "é" (2 bytes) line 1
@@ -298,7 +298,7 @@ struct BlockPositionEncodingTests {
         // cmark differs: reports "b" @2:3-2:4, re-indenting the continuation to the blockquote's
         // content column (a phantom column past line 2's single byte) — quirk E (paragraph
         // continuation-line re-indent), reproduced only under .cmarkBugCompatibility.
-        let out = try parse("> a\nb")
+        let out = parse("> a\nb")
         try #require(shape(out) == ["document", "blockQuote", "paragraph", "text", "softBreak", "text"])
         #expect(out[3].range == r(1, 3, 1, 4))   // "a"
         #expect(out[5].range == r(2, 1, 2, 2))   // "b" at its true column 1
@@ -313,7 +313,7 @@ struct BlockPositionEncodingTests {
         for (marker, bullet) in [("-", MarkdownNode.ListInfo.BulletMarker.hyphen),
                                  ("*", .asterisk),
                                  ("+", .plus)] {
-            let out = try parse("\(marker) x")
+            let out = parse("\(marker) x")
             try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
             #expect(asList(out[1].kind)?.kind == .bullet)
             #expect(asList(out[1].kind)?.bulletMarker == bullet)
@@ -325,7 +325,7 @@ struct BlockPositionEncodingTests {
         }
         // "- é" (2-byte content): text @1:3-1:5, list @1:1-1:5.
         do {
-            let out = try parse("- \u{E9}")
+            let out = parse("- \u{E9}")
             try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
             #expect(out[1].range == r(1, 1, 1, 5))
             #expect(out[4].range == r(1, 3, 1, 5))
@@ -333,7 +333,7 @@ struct BlockPositionEncodingTests {
         }
         // "- € x" (3 + 1 + 1 bytes): text @1:3-1:8.
         do {
-            let out = try parse("- \u{20AC} x")
+            let out = parse("- \u{20AC} x")
             try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
             #expect(out[1].range == r(1, 1, 1, 8))
             #expect(out[4].range == r(1, 3, 1, 8))
@@ -341,7 +341,7 @@ struct BlockPositionEncodingTests {
         }
         // TAB inside content is one byte: "- a\tb" → text @1:3-1:6.
         do {
-            let out = try parse("- a\tb")
+            let out = parse("- a\tb")
             try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
             #expect(out[4].range == r(1, 3, 1, 6))
             #expect(out[4].literal == "a\tb")
@@ -354,7 +354,7 @@ struct BlockPositionEncodingTests {
     func orderedList() throws {
         // "1. x": start 1, period delimiter, content column 4.
         do {
-            let out = try parse("1. x")
+            let out = parse("1. x")
             try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
             #expect(asList(out[1].kind)?.kind == .ordered)
             #expect(asList(out[1].kind)?.start == 1)
@@ -366,7 +366,7 @@ struct BlockPositionEncodingTests {
         }
         // "2) x": start 2, paren delimiter.
         do {
-            let out = try parse("2) x")
+            let out = parse("2) x")
             try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
             #expect(asList(out[1].kind)?.start == 2)
             #expect(asList(out[1].kind)?.orderedDelimiter == .paren)
@@ -376,7 +376,7 @@ struct BlockPositionEncodingTests {
         }
         // "1. 😀 z" (4 + 1 + 1 bytes content): text @1:4-1:10.
         do {
-            let out = try parse("1. \u{1F600} z")
+            let out = parse("1. \u{1F600} z")
             try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
             #expect(out[1].range == r(1, 1, 1, 10))
             #expect(out[4].range == r(1, 4, 1, 10))
@@ -390,7 +390,7 @@ struct BlockPositionEncodingTests {
         // deliverable stamps it at its true byte position @2:1-2:2. cmark differs: reports "b"
         // @2:3-2:4, re-indenting to the list content column — quirk E, reproduced only under
         // .cmarkBugCompatibility.
-        let out = try parse("- a\nb")
+        let out = parse("- a\nb")
         try #require(shape(out) == ["document", "list", "item", "paragraph", "text", "softBreak", "text"])
         #expect(out[4].range == r(1, 3, 1, 4))   // "a"
         #expect(out[6].range == r(2, 1, 2, 2))   // "b" at its true column 1
@@ -403,7 +403,7 @@ struct BlockPositionEncodingTests {
     func taskList() throws {
         // "- [ ] x": unchecked item, content after "[ ] " at column 7.
         do {
-            let out = try parse("- [ ] x")
+            let out = parse("- [ ] x")
             try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
             #expect(out[2].kind == .item(checked: false))
             #expect(out[1].range == r(1, 1, 1, 8))
@@ -413,7 +413,7 @@ struct BlockPositionEncodingTests {
         }
         // "- [x] x": checked item.
         do {
-            let out = try parse("- [x] x")
+            let out = parse("- [x] x")
             try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
             #expect(out[2].kind == .item(checked: true))
             #expect(out[4].range == r(1, 7, 1, 8))
@@ -421,7 +421,7 @@ struct BlockPositionEncodingTests {
         }
         // "- [ ] é" (2-byte content): text @1:7-1:9.
         do {
-            let out = try parse("- [ ] \u{E9}")
+            let out = parse("- [ ] \u{E9}")
             try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
             #expect(out[2].kind == .item(checked: false))
             #expect(out[1].range == r(1, 1, 1, 9))
@@ -436,7 +436,7 @@ struct BlockPositionEncodingTests {
     func indentedCode() throws {
         // "    code": indented code block, content @1:5-1:9, body "code\n".
         do {
-            let out = try parse("    code")
+            let out = parse("    code")
             try #require(shape(out) == ["document", "codeBlock"])
             let cb = try #require(asCode(out[1].kind))
             #expect(cb.isFenced == false)
@@ -449,7 +449,7 @@ struct BlockPositionEncodingTests {
         }
         // "    é code": multibyte body (é = 2 bytes) → line-1 end column 12 (11 bytes + 1).
         do {
-            let out = try parse("    \u{E9} code")
+            let out = parse("    \u{E9} code")
             try #require(shape(out) == ["document", "codeBlock"])
             #expect(asCode(out[1].kind)?.isFenced == false)
             #expect(out[1].range == r(1, 5, 1, 12))
@@ -464,7 +464,7 @@ struct BlockPositionEncodingTests {
         // "```swift\nlet x = 1\n```": backtick fence, length 3, info "swift", body "let x = 1\n".
         // The code block spans fence-to-fence (@1:1-3:4).
         do {
-            let out = try parse("```swift\nlet x = 1\n```")
+            let out = parse("```swift\nlet x = 1\n```")
             try #require(shape(out) == ["document", "codeBlock"])
             let cb = try #require(asCode(out[1].kind))
             #expect(cb.isFenced == true)
@@ -477,7 +477,7 @@ struct BlockPositionEncodingTests {
         }
         // Multibyte info string "```é": info "é", body "code\n".
         do {
-            let out = try parse("```\u{E9}\ncode\n```")
+            let out = parse("```\u{E9}\ncode\n```")
             try #require(shape(out) == ["document", "codeBlock"])
             #expect(asCode(out[1].kind)?.isFenced == true)
             #expect(out[1].range == r(1, 1, 3, 4))
@@ -486,7 +486,7 @@ struct BlockPositionEncodingTests {
         }
         // Multibyte body with a combining sequence: empty info, body "e␁ code\n".
         do {
-            let out = try parse("```\ne\u{301} code\n```")
+            let out = parse("```\ne\u{301} code\n```")
             try #require(shape(out) == ["document", "codeBlock"])
             #expect(out[1].range == r(1, 1, 3, 4))
             #expect(out[1].info == "")
@@ -494,7 +494,7 @@ struct BlockPositionEncodingTests {
         }
         // Multibyte in both info (€) and body (😀): info "€", body "😀\n".
         do {
-            let out = try parse("```\u{20AC}\n\u{1F600}\n```")
+            let out = parse("```\u{20AC}\n\u{1F600}\n```")
             try #require(shape(out) == ["document", "codeBlock"])
             #expect(out[1].range == r(1, 1, 3, 4))
             #expect(out[1].info == "\u{20AC}")
@@ -508,7 +508,7 @@ struct BlockPositionEncodingTests {
     func htmlBlock() throws {
         // "<div>\n</div>": HTML block @1:1-2:7, body includes both lines and a trailing newline.
         do {
-            let out = try parse("<div>\n</div>")
+            let out = parse("<div>\n</div>")
             try #require(shape(out) == ["document", "htmlBlock"])
             #expect(out[1].kind == .htmlBlock)
             #expect(out[1].range == r(1, 1, 2, 7))
@@ -517,7 +517,7 @@ struct BlockPositionEncodingTests {
         // Multibyte in the first line "<div>é": body carries the multibyte bytes; span unchanged
         // (the block range is line-based, so the second-line end column 7 is stable).
         do {
-            let out = try parse("<div>\u{E9}\n</div>")
+            let out = parse("<div>\u{E9}\n</div>")
             try #require(shape(out) == ["document", "htmlBlock"])
             #expect(out[1].range == r(1, 1, 2, 7))
             #expect(out[1].literal == "<div>\u{E9}\n</div>\n")
@@ -528,7 +528,7 @@ struct BlockPositionEncodingTests {
 
     @Test("leading BOM — line 1 columns, including the document's start, count from after the BOM")
     func leadingByteOrderMark() throws {
-        let out = try parse("\u{FEFF}a\nb")
+        let out = parse("\u{FEFF}a\nb")
         try #require(shape(out) == ["document", "paragraph", "text", "softBreak", "text"])
         #expect(out[0].range == r(1, 1, 2, 2))
         #expect(out[1].range == r(1, 1, 2, 2))
@@ -540,7 +540,7 @@ struct BlockPositionEncodingTests {
     /// an empty range at 1:1. cmark-gfm reports `1:1-1:4`, counting the BOM's three bytes.
     @Test("BOM-only input — the document is an empty range at 1:1")
     func byteOrderMarkOnly() throws {
-        let out = try parse("\u{FEFF}")
+        let out = parse("\u{FEFF}")
         try #require(shape(out) == ["document"])
         #expect(out[0].range == r(1, 1, 1, 1))
     }

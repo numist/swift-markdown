@@ -28,7 +28,7 @@ struct UnmatchedStrikethroughRangeTests {
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
     /// The source range of the first text node, in DFS order, when `src` is parsed spec-correct.
-    private func firstTextRange(in src: String) throws -> Range<Pos>? {
+    private func firstTextRange(in src: String) -> Range<Pos>? {
         let ranges = MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -39,27 +39,27 @@ struct UnmatchedStrikethroughRangeTests {
     }
 
     @Test("standalone unmatched ~ gets a normal, width-bearing range")
-    func standaloneSingleTilde() throws {
+    func standaloneSingleTilde() {
         // A lone `~` is one byte at column 1; spec-correct it spans its own character (@1:1-1:2),
         // not cmark's zero-width @1:1.
-        let range = try firstTextRange(in: "~")
+        let range = firstTextRange(in: "~")
         #expect(range?.lowerBound == Pos(line: 1, column: 1))
         #expect(range?.upperBound == Pos(line: 1, column: 2))
     }
 
     @Test("standalone unmatched ~~ gets a normal, width-bearing range")
-    func standaloneDoubleTilde() throws {
+    func standaloneDoubleTilde() {
         // `~~` is two bytes; spec-correct it spans both (@1:1-1:3), not cmark's zero-width @1:1.
-        let range = try firstTextRange(in: "~~")
+        let range = firstTextRange(in: "~~")
         #expect(range?.lowerBound == Pos(line: 1, column: 1))
         #expect(range?.upperBound == Pos(line: 1, column: 3))
     }
 
     @Test("trailing unmatched ~ merges into a normally-ranged text run")
-    func trailingTilde() throws {
+    func trailingTilde() {
         // `a~`: the `a` and the trailing `~` consolidate into one text node. Spec-correct the merged
         // run ends past the `~` (@1:1-1:3); cmark's zero-width `~` collapses the merge to @1:1.
-        let range = try firstTextRange(in: "a~")
+        let range = firstTextRange(in: "a~")
         #expect(range?.lowerBound == Pos(line: 1, column: 1))
         #expect(range?.upperBound == Pos(line: 1, column: 3))
     }

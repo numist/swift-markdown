@@ -59,7 +59,7 @@ struct ContentTaskItemStructureTests {
 
     private func analyze(
         _ src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> (checks: [Bool?], texts: [String?]) {
+    ) -> (checks: [Bool?], texts: [String?]) {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> (checks: [Bool?], texts: [String?]) in
             var checks: [Bool?] = []
@@ -75,7 +75,7 @@ struct ContentTaskItemStructureTests {
     @Test("top-level content task item is recognized (marker stripped, checkbox set)")
     func topLevelContentTaskRecognized() throws {
         // `- [ ] x`: top-level, so the checkbox is recognized and stripped; the paragraph text is `x`.
-        let (checks, texts) = try analyze("- [ ] x", options: Self.options)
+        let (checks, texts) = analyze("- [ ] x", options: Self.options)
         try #require(checks.count == 1, "expected exactly one list item, got \(checks)")
         #expect(checks[0] == .some(false))                 // recognized, UNCHECKED
         #expect(texts.contains("x"))                        // marker stripped
@@ -86,7 +86,7 @@ struct ContentTaskItemStructureTests {
     func indentedTopLevelContentTaskRecognized() throws {
         // `   - [ ] x` (3-space indent, the max before a list marker becomes code): still a top-level
         // item (leading spaces are `scan_tasklist`'s `spacechar*` prefix), so the checkbox is recognized.
-        let (checks, texts) = try analyze("   - [ ] x", options: Self.options)
+        let (checks, texts) = analyze("   - [ ] x", options: Self.options)
         try #require(checks.count == 1, "expected exactly one list item, got \(checks)")
         #expect(checks[0] == .some(false))
         #expect(texts.contains("x"))
@@ -95,7 +95,7 @@ struct ContentTaskItemStructureTests {
 
     @Test("top-level checked content task item is recognized")
     func topLevelCheckedContentTaskRecognized() throws {
-        let (checks, texts) = try analyze("- [x] x", options: Self.options)
+        let (checks, texts) = analyze("- [x] x", options: Self.options)
         try #require(checks.count == 1, "expected exactly one list item, got \(checks)")
         #expect(checks[0] == .some(true))                  // recognized, CHECKED
         #expect(texts.contains("x"))
@@ -105,7 +105,7 @@ struct ContentTaskItemStructureTests {
     func topLevelTabSeparatorContentTaskRecognized() throws {
         // `- [ ]\tx`: still a top-level checkbox (the marker's separator may be a space OR a tab). Only
         // the STRUCTURAL recognition is asserted here; the tab column-width is a separate deferred class.
-        let (checks, _) = try analyze("- [ ]\tx", options: Self.options)
+        let (checks, _) = analyze("- [ ]\tx", options: Self.options)
         try #require(checks.count == 1, "expected exactly one list item, got \(checks)")
         #expect(checks[0] == .some(false))
     }
@@ -116,7 +116,7 @@ struct ContentTaskItemStructureTests {
     func blockQuotedContentTaskNotRecognized() throws {
         // `> - [ ] x`: the `>` breaks `scan_tasklist`, so the item is ordinary and its paragraph keeps
         // the literal `[ ] x`. Oracle: `nesttask-bq`.
-        let (checks, texts) = try analyze("> - [ ] x", options: Self.options)
+        let (checks, texts) = analyze("> - [ ] x", options: Self.options)
         try #require(checks.count == 1, "expected exactly one list item, got \(checks)")
         #expect(checks[0] == nil)                          // ordinary item, NOT a task item
         #expect(texts.contains("[ ] x"))                    // marker survives as literal text
@@ -125,7 +125,7 @@ struct ContentTaskItemStructureTests {
     @Test("outer-list-nested content task item is NOT recognized (a second marker breaks scan_tasklist)")
     func nestedContentTaskNotRecognized() throws {
         // `- - [ ] x`: the inner marker is preceded by the OUTER marker. Oracle: `nesttask-list`.
-        let (checks, texts) = try analyze("- - [ ] x", options: Self.options)
+        let (checks, texts) = analyze("- - [ ] x", options: Self.options)
         try #require(checks.count == 2, "expected outer + inner items, got \(checks)")
         #expect(!checks.contains { $0 != nil })            // no checkbox at any nesting level
         #expect(texts.contains("[ ] x"))
@@ -135,7 +135,7 @@ struct ContentTaskItemStructureTests {
     func threeDeepNestedContentTaskNotRecognized() throws {
         // `- - - [ ] x`: the innermost marker is preceded by two outer markers. Only the innermost item
         // holds the `[ ] x` paragraph; the outer items hold nested lists (never a checkbox paragraph).
-        let (checks, texts) = try analyze("- - - [ ] x", options: Self.options)
+        let (checks, texts) = analyze("- - - [ ] x", options: Self.options)
         try #require(checks.count == 3, "expected three nested items, got \(checks)")
         #expect(!checks.contains { $0 != nil })
         #expect(texts.contains("[ ] x"))
@@ -145,7 +145,7 @@ struct ContentTaskItemStructureTests {
     func taskInBlockQuoteInListNotRecognized() throws {
         // `- > - [ ] x`: list item > block quote > list item. The innermost marker is preceded by
         // `- > `, a non-space prefix, so `scan_tasklist` fails.
-        let (checks, texts) = try analyze("- > - [ ] x", options: Self.options)
+        let (checks, texts) = analyze("- > - [ ] x", options: Self.options)
         try #require(checks.count == 2, "expected outer + inner items, got \(checks)")
         #expect(!checks.contains { $0 != nil })
         #expect(texts.contains("[ ] x"))
@@ -154,7 +154,7 @@ struct ContentTaskItemStructureTests {
     @Test("content task item nested in an ORDERED item is NOT recognized")
     func orderedNestedContentTaskNotRecognized() throws {
         // `1. - [ ] x`: the inner bullet marker is preceded by the ordered `1. ` marker.
-        let (checks, texts) = try analyze("1. - [ ] x", options: Self.options)
+        let (checks, texts) = analyze("1. - [ ] x", options: Self.options)
         try #require(checks.count == 2, "expected outer ordered + inner bullet items, got \(checks)")
         #expect(!checks.contains { $0 != nil })
         #expect(texts.contains("[ ] x"))
@@ -168,7 +168,7 @@ struct ContentTaskItemStructureTests {
         // on its physical line preceded only by spaces, so `scan_tasklist` matches from offset 0 and the
         // checkbox IS recognized. This pins the PHYSICAL-LINE semantics: recognition does not depend on
         // block-nesting depth. `a` is an ordinary item (nil); `b` is an unchecked task item.
-        let (checks, texts) = try analyze("- a\n  - [ ] b", options: Self.options)
+        let (checks, texts) = analyze("- a\n  - [ ] b", options: Self.options)
         try #require(checks.count == 2, "expected outer `a` + nested `b` items, got \(checks)")
         #expect(checks == [nil, false])                    // `a` ordinary, `b` recognized unchecked task
         #expect(texts.contains("b"))                        // `b`'s marker stripped

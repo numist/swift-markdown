@@ -53,7 +53,7 @@ struct LinkLabelLengthCapTests {
     /// literal text. The presence/absence of that paragraph isolates the block reference-definition
     /// label scanner (`parseOneLinkDefinition` → the contiguous `matchLinkLabel`).
     @Test("reference definition registers at the cap but not one past it")
-    func referenceDefinitionLabelCap() throws {
+    func referenceDefinitionLabelCap() {
         for (options, cap) in Self.modes {
             // At the cap: the definition is valid, so the line is consumed and no block remains.
             MarkdownDocument.withParsedDocument("[\(label(cap))]: /u", options: options) { doc in
@@ -79,7 +79,7 @@ struct LinkLabelLengthCapTests {
     /// length) resolves to a link only at or below the cap; one past it the reference stays literal
     /// text. Exercises the inline reference label scanner together with the definition scanner.
     @Test("shortcut reference resolves at the cap but not one past it")
-    func shortcutReferenceLabelCap() throws {
+    func shortcutReferenceLabelCap() {
         for (options, cap) in Self.modes {
             MarkdownDocument.withParsedDocument("[\(label(cap))]: /u\n\n[\(label(cap))]", options: options) { doc in
                 #expect(linkURLs(doc) == ["/u"],
@@ -104,7 +104,7 @@ struct LinkLabelLengthCapTests {
     /// The definition normalizes to the same key as the reference (interior whitespace collapses to
     /// one space), which is why both labels must be the same length.
     @Test("cross-line full reference respects the gated cap")
-    func multiSegmentReferenceLabelCap() throws {
+    func multiSegmentReferenceLabelCap() {
         // 500 + newline + 499 = 1000 scanned bytes; normalizes to a 500-a / space / 499-a key.
         let left = label(500)
         let right = label(499)

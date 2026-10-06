@@ -25,8 +25,8 @@ struct TaskListRetryTabExpandedLineTests {
         "cmark bug compatibility makes a task item",
         arguments: [MarkdownDocument.ParseOptions(), [.sourcePosition]]
     )
-    func taskItem(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump(source, options: mode.union([.tasklist, .cmarkBugCompatibility])) == """
+    func taskItem(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump(source, options: mode.union([.tasklist, .cmarkBugCompatibility])) == """
             document
               list ordered start=10 delim=period tight
                 tasklist unchecked
@@ -37,8 +37,8 @@ struct TaskListRetryTabExpandedLineTests {
     }
 
     @Test("without tasklist, the item stays a plain item")
-    func plainItemWithoutTasklist() throws {
-        #expect(try CmarkTreeDump.dump(source, options: [.cmarkBugCompatibility]) == """
+    func plainItemWithoutTasklist() {
+        #expect(CmarkTreeDump.dump(source, options: [.cmarkBugCompatibility]) == """
             document
               list ordered start=10 delim=period tight
                 item
@@ -50,8 +50,8 @@ struct TaskListRetryTabExpandedLineTests {
 
     /// cmark gives the task item that `taskItem` expects; the rewrite intentionally keeps the plain item.
     @Test("without cmark bug compatibility, the item stays a plain item")
-    func plainItemWithoutBugCompatibility() throws {
-        #expect(try CmarkTreeDump.dump(source, options: [.tasklist]) == """
+    func plainItemWithoutBugCompatibility() {
+        #expect(CmarkTreeDump.dump(source, options: [.tasklist]) == """
             document
               list ordered start=10 delim=period tight
                 item

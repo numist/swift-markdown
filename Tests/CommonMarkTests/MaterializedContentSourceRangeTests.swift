@@ -23,8 +23,8 @@ struct MaterializedContentSourceRangeTests {
     private static let opts: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans, .cmarkBugCompatibility]
 
-    private func tree(_ source: String) throws -> String {
-        try CmarkTreeDump.dump(source, options: Self.opts, sourceRanges: true)
+    private func tree(_ source: String) -> String {
+        CmarkTreeDump.dump(source, options: Self.opts, sourceRanges: true)
     }
 
     /// The setext underline `=` resolves the definition `[b\n ]:o` and stays in the paragraph, and the delimiter row
@@ -32,8 +32,8 @@ struct MaterializedContentSourceRangeTests {
     /// places the header on line 1 (`@1:1-1:2`), the paragraph's first line, because it counts columns in the
     /// paragraph text that is left once the definition is resolved.
     @Test("a table from a definition-only paragraph left open by a setext underline")
-    func tableAfterResolvedDefinition() throws {
-        #expect(try tree("[b\n ]:o\n=\n-|\na") == """
+    func tableAfterResolvedDefinition() {
+        #expect(tree("[b\n ]:o\n=\n-|\na") == """
             document @1:1-5:2
               table @1:1-5:2
                 table_header @3:1-3:2
@@ -51,8 +51,8 @@ struct MaterializedContentSourceRangeTests {
     /// U+FFFD that stands for the NUL at column 4. The text runs from there to the space before `*u*` at column 9;
     /// cmark-gfm counts the NUL as three columns, placing it at `@2:6-2:12` and the emphasis at `@2:12-2:15`.
     @Test("a task item line that starts inside a NUL's replacement")
-    func lineStartingInsideNULReplacement() throws {
-        #expect(try tree("+\n  2\u{0} [x] *u*") == """
+    func lineStartingInsideNULReplacement() {
+        #expect(tree("+\n  2\u{0} [x] *u*") == """
             document @1:1-2:13
               list bullet '+' tight @1:1-2:13
                 tasklist checked @1:1-2:13

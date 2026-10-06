@@ -44,7 +44,7 @@ struct AutolinkBracketOpenerTests {
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
+    ) -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?, url: String?)] = []
@@ -56,10 +56,10 @@ struct AutolinkBracketOpenerTests {
     // MARK: - The fix: an unclosed `[` opener suppresses the scheme autolink
 
     @Test("unclosed `[` before a scheme URL leaves it as plain text (no link)")
-    func openBracketSuppressesSchemeAutolink() throws {
+    func openBracketSuppressesSchemeAutolink() {
         // The fuzzer finding: `[http://t` — the `[` pushes a LINK opener that never closes, so cmark's
         // autolink extension declines. The whole run is one plain text node; NO link is produced.
-        let ns = try nodes(in: "[http://t", options: Self.flagOff)
+        let ns = nodes(in: "[http://t", options: Self.flagOff)
         // Fixture sanity: a degenerate/empty tree (e.g. just `[.document]`) must not pass vacuously.
         #expect(ns.count == 3)
         #expect(!ns.map(\.kind).contains(.link))
@@ -69,9 +69,9 @@ struct AutolinkBracketOpenerTests {
     }
 
     @Test("unclosed `![` image opener also suppresses the scheme autolink")
-    func openImageBracketSuppressesSchemeAutolink() throws {
+    func openImageBracketSuppressesSchemeAutolink() {
         // `![` pushes an IMAGE opener; cmark checks `in_bracket(IMAGE)` too.
-        let ns = try nodes(in: "![http://t", options: Self.flagOff)
+        let ns = nodes(in: "![http://t", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "![http://t"])
         #expect(ns.compactMap(\.url) == [])
@@ -80,26 +80,26 @@ struct AutolinkBracketOpenerTests {
     // MARK: - Controls: the fix must not kill legitimate autolinks
 
     @Test("control: a bare scheme URL with no leading `[` still autolinks")
-    func bareSchemeStillAutolinks() throws {
-        let ns = try nodes(in: "http://t", options: Self.flagOff)
+    func bareSchemeStillAutolinks() {
+        let ns = nodes(in: "http://t", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "http://t"])
         #expect(ns.compactMap(\.url) == ["http://t"])
     }
 
     @Test("control: a normal closed link `[x](http://t)` still parses as a link")
-    func closedLinkStillParses() throws {
-        let ns = try nodes(in: "[x](http://t)", options: Self.flagOff)
+    func closedLinkStillParses() {
+        let ns = nodes(in: "[x](http://t)", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "x"])
         #expect(ns.compactMap(\.url) == ["http://t"])
     }
 
     @Test("control: once the `[…]` closes, a following scheme URL autolinks again")
-    func afterClosedBracketAutolinks() throws {
+    func afterClosedBracketAutolinks() {
         // `[a] http://t` — the bracket closes (as literal `[a]`, no matching def), so the opener is popped
         // before the `:` is reached and the autolink is no longer suppressed.
-        let ns = try nodes(in: "[a] http://t", options: Self.flagOff)
+        let ns = nodes(in: "[a] http://t", options: Self.flagOff)
         #expect(ns.map(\.kind).contains(.link))
         #expect(ns.compactMap(\.url) == ["http://t"])
     }

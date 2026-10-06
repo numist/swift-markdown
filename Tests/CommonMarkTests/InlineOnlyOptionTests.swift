@@ -55,7 +55,7 @@ struct InlineOnlyOptionTests {
     // MARK: - inlineOnly
 
     @Test("inlineOnly suppresses all block structure into one paragraph")
-    func inlineOnlySuppressesBlocks() throws {
+    func inlineOnlySuppressesBlocks() {
         let source = "# heading\n\n* item"
         MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
 
@@ -71,7 +71,7 @@ struct InlineOnlyOptionTests {
     }
 
     @Test("inlineOnly still parses inline emphasis and code spans")
-    func inlineOnlyKeepsInlineSyntax() throws {
+    func inlineOnlyKeepsInlineSyntax() {
         let source = "# *em* and `code`"
         MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
 
@@ -96,7 +96,7 @@ struct InlineOnlyOptionTests {
     }
 
     @Test("inlineOnly still parses links")
-    func inlineOnlyParsesLinks() throws {
+    func inlineOnlyParsesLinks() {
         let source = "see [text](http://example.com) ok"
         MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
 
@@ -118,7 +118,7 @@ struct InlineOnlyOptionTests {
     }
 
     @Test("inlineOnly does not turn a 4-space indent into a code block")
-    func inlineOnlyNoIndentedCodeBlock() throws {
+    func inlineOnlyNoIndentedCodeBlock() {
         let source = "    indented code"
         MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
 
@@ -131,7 +131,7 @@ struct InlineOnlyOptionTests {
     }
 
     @Test("inlineOnly leaves a blockquote marker as literal text")
-    func inlineOnlyNoBlockQuote() throws {
+    func inlineOnlyNoBlockQuote() {
         let source = "> not a quote"
         MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
 
@@ -149,7 +149,7 @@ struct InlineOnlyOptionTests {
             ("a&amp;b", "a&b"),
         ]
     )
-    func inlineOnlyConsolidatesText(source: String, merged: String) throws {
+    func inlineOnlyConsolidatesText(source: String, merged: String) {
         for options in [MarkdownDocument.ParseOptions.inlineOnly, .preserveWhitespace] {
             MarkdownDocument.withParsedDocument(source, options: options) { doc in
                 let inlines = inlines(doc)
@@ -168,7 +168,7 @@ struct InlineOnlyOptionTests {
     }
 
     @Test("preserveWhitespace keeps leading/trailing whitespace and blank lines")
-    func preserveWhitespaceKeepsWhitespace() throws {
+    func preserveWhitespaceKeepsWhitespace() {
         let source = "   leading   spaces\n\n\ntrailing  "
         MarkdownDocument.withParsedDocument(source, options: .preserveWhitespace) { doc in
 
@@ -184,7 +184,7 @@ struct InlineOnlyOptionTests {
     }
 
     @Test("preserveWhitespace and inlineOnly produce an identical parser AST")
-    func preserveWhitespaceMatchesInlineOnlyAST() throws {
+    func preserveWhitespaceMatchesInlineOnlyAST() {
         // The whitespace-collapsing that distinguishes Foundation's two interpreted-syntax modes happens above the parser; at the AST level the two options are equivalent.
         let source = "  # x\n\n  *y*  \n\n> z"
         MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { inlineOnly in

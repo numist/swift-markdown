@@ -43,7 +43,7 @@ struct FootnoteEscapedCaretReconstructionTests {
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [(kind: MarkdownNode.Kind, text: String?)] {
+    ) -> [(kind: MarkdownNode.Kind, text: String?)] {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [(kind: MarkdownNode.Kind, text: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?)] = []
@@ -54,8 +54,8 @@ struct FootnoteEscapedCaretReconstructionTests {
 
     /// Bug-compat ON reproduces cmark's over-read: `[\^x]` -> the text `[^x]]` with a doubled `]`.
     @Test("bug-compat ON: `[\\^x]` reconstructs to the text `[^x]]`")
-    func escapedCaretDoublesCloseBracket() throws {
-        let ns = try nodes(in: "[\\^x]", options: [.sourcePosition, .cmarkBugCompatibility, .footnotes])
+    func escapedCaretDoublesCloseBracket() {
+        let ns = nodes(in: "[\\^x]", options: [.sourcePosition, .cmarkBugCompatibility, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["[^x]]"])
     }
@@ -63,8 +63,8 @@ struct FootnoteEscapedCaretReconstructionTests {
     /// The shipped deliverable (bug-compat OFF) stays spec-correct: the escape is processed and the
     /// bracket keeps a single `]` (`[^x]`), never the doubled `]`.
     @Test("bug-compat OFF: `[\\^x]` stays spec-correct text `[^x]`")
-    func escapedCaretStaysSpecCorrect() throws {
-        let ns = try nodes(in: "[\\^x]", options: [.sourcePosition, .footnotes])
+    func escapedCaretStaysSpecCorrect() {
+        let ns = nodes(in: "[\\^x]", options: [.sourcePosition, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["[^x]"])
     }
@@ -73,8 +73,8 @@ struct FootnoteEscapedCaretReconstructionTests {
     /// second byte past the `]` into the paragraph's trailing newline and drops the `!`: `![\^x]` ->
     /// the text `[^x]\n]`.
     @Test("bug-compat ON: `![\\^x]` reconstructs to the text `[^x]\\n]`")
-    func escapedCaretImageDropsBangAndOverReadsNewline() throws {
-        let ns = try nodes(in: "![\\^x]", options: [.sourcePosition, .cmarkBugCompatibility, .footnotes])
+    func escapedCaretImageDropsBangAndOverReadsNewline() {
+        let ns = nodes(in: "![\\^x]", options: [.sourcePosition, .cmarkBugCompatibility, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["[^x]\n]"])
     }
@@ -82,8 +82,8 @@ struct FootnoteEscapedCaretReconstructionTests {
     /// The shipped deliverable (bug-compat OFF) stays spec-correct: the `!` is kept, the escape is
     /// processed, and the bracket keeps a single `]` (`![^x]`).
     @Test("bug-compat OFF: `![\\^x]` stays spec-correct text `![^x]`")
-    func escapedCaretImageStaysSpecCorrect() throws {
-        let ns = try nodes(in: "![\\^x]", options: [.sourcePosition, .footnotes])
+    func escapedCaretImageStaysSpecCorrect() {
+        let ns = nodes(in: "![\\^x]", options: [.sourcePosition, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["![^x]"])
     }
@@ -92,8 +92,8 @@ struct FootnoteEscapedCaretReconstructionTests {
     /// length so the whole span collapses to the text `[^]` — the inner content and the soft break are
     /// dropped: `[\^\nx]` -> `[^]`.
     @Test("bug-compat ON: `[\\^\\nx]` collapses to the text `[^]`")
-    func escapedCaretCrossLineCollapses() throws {
-        let ns = try nodes(in: "[\\^\nx]", options: [.sourcePosition, .cmarkBugCompatibility, .footnotes])
+    func escapedCaretCrossLineCollapses() {
+        let ns = nodes(in: "[\\^\nx]", options: [.sourcePosition, .cmarkBugCompatibility, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["[^]"])
     }
@@ -101,8 +101,8 @@ struct FootnoteEscapedCaretReconstructionTests {
     /// The shipped deliverable (bug-compat OFF) stays spec-correct: the escape is processed and the soft
     /// break is preserved, so the span stays `[^` + soft break + `x]`.
     @Test("bug-compat OFF: `[\\^\\nx]` keeps the soft break (`[^` + break + `x]`)")
-    func escapedCaretCrossLineStaysSpecCorrect() throws {
-        let ns = try nodes(in: "[\\^\nx]", options: [.sourcePosition, .footnotes])
+    func escapedCaretCrossLineStaysSpecCorrect() {
+        let ns = nodes(in: "[\\^\nx]", options: [.sourcePosition, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .softBreak, .text])
         #expect(ns.compactMap(\.text) == ["[^", "x]"])
     }

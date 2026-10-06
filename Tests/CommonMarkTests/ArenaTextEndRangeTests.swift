@@ -28,7 +28,7 @@ struct ArenaTextEndRangeTests {
         [.sourcePosition, .smart]
 
     /// DFS-collect every text node's literal and source range.
-    private func textNodes(in src: String) throws -> [(literal: String?, range: Range<Pos>?)] {
+    private func textNodes(in src: String) -> [(literal: String?, range: Range<Pos>?)] {
         var out: [(literal: String?, range: Range<Pos>?)] = []
         MarkdownDocument.withParsedDocument(src, options: Self.specOptions) { doc in
             collectText(doc.root, into: &out)
@@ -41,7 +41,7 @@ struct ArenaTextEndRangeTests {
         // " - b" then "   c" (3-space MATCHED continuation, no smart-punct rewrite → a single plain
         // source text node) then "  d". The matched continuation `c` sits at the block content column,
         // so it byte-projects to its true @2:4-2:5 on its own physical line.
-        let texts = try textNodes(in: " - b\n   c\n  d")
+        let texts = textNodes(in: " - b\n   c\n  d")
         try #require(texts.count == 3, "expected b / c / d text nodes")
         try #require(texts[1].literal == "c", "expected a plain `c` text node, got \(String(describing: texts[1].literal))")
 

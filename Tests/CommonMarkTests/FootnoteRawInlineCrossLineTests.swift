@@ -46,7 +46,7 @@ struct FootnoteRawInlineCrossLineTests {
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [(kind: MarkdownNode.Kind, text: String?)] {
+    ) -> [(kind: MarkdownNode.Kind, text: String?)] {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [(kind: MarkdownNode.Kind, text: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?)] = []
@@ -59,8 +59,8 @@ struct FootnoteRawInlineCrossLineTests {
     /// reset the cursor, so the interior stays in the raw byte capture — `` [^`\n`] `` reconstructs as one
     /// verbatim text node, backticks and newline included.
     @Test("bug-compat ON, sourcepos OFF: code-span interior kept verbatim (`` [^`\\n`] ``)")
-    func codeSpanSourcePosOffKeepsRawInterior() throws {
-        let ns = try nodes(
+    func codeSpanSourcePosOffKeepsRawInterior() {
+        let ns = nodes(
             in: "[^`\n`]",
             options: [.sourcePosition, .cmarkBugCompatibility, .cmarkSourcePositionsDisabled, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
@@ -71,8 +71,8 @@ struct FootnoteRawInlineCrossLineTests {
     /// newline resets the per-line column and the captured label underflows to empty, collapsing the whole
     /// span to `[^]`. The `.cmarkSourcePositionsDisabled` fix must NOT change this regime.
     @Test("bug-compat ON, sourcepos ON: code-span span collapses to `[^]`")
-    func codeSpanSourcePosOnCollapses() throws {
-        let ns = try nodes(
+    func codeSpanSourcePosOnCollapses() {
+        let ns = nodes(
             in: "[^`\n`]",
             options: [.sourcePosition, .cmarkBugCompatibility, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
@@ -82,8 +82,8 @@ struct FootnoteRawInlineCrossLineTests {
     /// The shipped deliverable (bug-compat off) stays spec-correct: the interior is a real code span, so
     /// the paragraph is `[^` + a code span + `]` (the span's single newline normalizes to one space).
     @Test("bug-compat OFF: code-span interior parses as a real code span")
-    func codeSpanBugCompatOffStaysSpecCorrect() throws {
-        let ns = try nodes(in: "[^`\n`]", options: [.sourcePosition, .footnotes])
+    func codeSpanBugCompatOffStaysSpecCorrect() {
+        let ns = nodes(in: "[^`\n`]", options: [.sourcePosition, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .codeInline(backtickCount: 1), .text])
         #expect(ns.compactMap(\.text) == ["[^", " ", "]"])
     }
@@ -93,8 +93,8 @@ struct FootnoteRawInlineCrossLineTests {
     /// positions off a comment's interior newline stays in the raw capture — `[^<!--\n-->]` reconstructs
     /// verbatim.
     @Test("bug-compat ON, sourcepos OFF: raw-HTML interior kept verbatim (`[^<!--\\n-->]`)")
-    func rawHTMLSourcePosOffKeepsRawInterior() throws {
-        let ns = try nodes(
+    func rawHTMLSourcePosOffKeepsRawInterior() {
+        let ns = nodes(
             in: "[^<!--\n-->]",
             options: [.sourcePosition, .cmarkBugCompatibility, .cmarkSourcePositionsDisabled, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
@@ -104,8 +104,8 @@ struct FootnoteRawInlineCrossLineTests {
     /// The shipped deliverable (bug-compat off) stays spec-correct: the interior is a real inline-HTML
     /// comment, so the paragraph is `[^` + the comment + `]`.
     @Test("bug-compat OFF: raw-HTML interior parses as a real inline-HTML comment")
-    func rawHTMLBugCompatOffStaysSpecCorrect() throws {
-        let ns = try nodes(in: "[^<!--\n-->]", options: [.sourcePosition, .footnotes])
+    func rawHTMLBugCompatOffStaysSpecCorrect() {
+        let ns = nodes(in: "[^<!--\n-->]", options: [.sourcePosition, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .htmlInline, .text])
         #expect(ns.compactMap(\.text) == ["[^", "<!--\n-->", "]"])
     }
@@ -114,8 +114,8 @@ struct FootnoteRawInlineCrossLineTests {
     /// comment's newline resets the per-line column; the captured label reads just the one byte past the
     /// `^` (`<`), reconstructing `[^<]`. The `.cmarkSourcePositionsDisabled` fix must NOT change this.
     @Test("bug-compat ON, sourcepos ON: raw-HTML span reconstructs to `[^<]`")
-    func rawHTMLSourcePosOnResetsColumn() throws {
-        let ns = try nodes(
+    func rawHTMLSourcePosOnResetsColumn() {
+        let ns = nodes(
             in: "[^<!--\n-->]",
             options: [.sourcePosition, .cmarkBugCompatibility, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
@@ -129,8 +129,8 @@ struct FootnoteRawInlineCrossLineTests {
     /// (`footnoteCapturedLabelLength`) when both kinds of newline occur in one span: `` [^x\n`y\nz`] `` ->
     /// `` [^x\n`] ``.
     @Test("bug-compat ON, sourcepos OFF: bare break resets, code-span break does not (`` [^x\\n`] ``)")
-    func mixedBareAndSwallowedNewlines() throws {
-        let ns = try nodes(
+    func mixedBareAndSwallowedNewlines() {
+        let ns = nodes(
             in: "[^x\n`y\nz`]",
             options: [.sourcePosition, .cmarkBugCompatibility, .cmarkSourcePositionsDisabled, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])

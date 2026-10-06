@@ -77,7 +77,7 @@ struct TableDelimiterWhitespaceTests {
 
     /// The first top-level block of `source`, classified as paragraph / heading / table.
     /// Parsed with `.tables` but WITHOUT `.cmarkBugCompatibility`.
-    private func firstBlock(_ source: String) throws -> Block {
+    private func firstBlock(_ source: String) -> Block {
         MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> Block in
             var blocks: [Block] = []
             doc.root.children.forEach { child in
@@ -95,7 +95,7 @@ struct TableDelimiterWhitespaceTests {
     }
 
     /// The first `.table` anywhere in `source`, or `nil`.
-    private func firstTable(_ source: String) throws -> Block? {
+    private func firstTable(_ source: String) -> Block? {
         MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> Block? in
             firstTableShape(in: doc.root)
         }
@@ -110,7 +110,7 @@ struct TableDelimiterWhitespaceTests {
     @Test("a trailing form-feed in the delimiter cell still forms a table")
     func trailingFormFeed() throws {
         // `d\n-\f` — the FF pads the marker (cmark's spacechar), so `-\f` is a valid `-` cell.
-        let block = try firstBlock("d\n-\(Self.ff)")
+        let block = firstBlock("d\n-\(Self.ff)")
         try #require(block.kind == .table, "expected a table, got \(block.kind)")
         #expect(block.headerCells == ["d"])
         #expect(block.alignments == [.none])
@@ -118,7 +118,7 @@ struct TableDelimiterWhitespaceTests {
 
     @Test("a trailing vertical-tab in the delimiter cell still forms a table")
     func trailingVerticalTab() throws {
-        let block = try firstBlock("d\n-\(Self.vt)")
+        let block = firstBlock("d\n-\(Self.vt)")
         try #require(block.kind == .table, "expected a table, got \(block.kind)")
         #expect(block.headerCells == ["d"])
         #expect(block.alignments == [.none])
@@ -126,7 +126,7 @@ struct TableDelimiterWhitespaceTests {
 
     @Test("a leading-pipe delimiter cell with a trailing form-feed still forms a table")
     func leadingPipeTrailingFormFeed() throws {
-        let block = try firstBlock("d\n|-\(Self.ff)")
+        let block = firstBlock("d\n|-\(Self.ff)")
         try #require(block.kind == .table, "expected a table, got \(block.kind)")
         #expect(block.headerCells == ["d"])
         #expect(block.alignments == [.none])
@@ -134,7 +134,7 @@ struct TableDelimiterWhitespaceTests {
 
     @Test("a leading form-feed in the delimiter cell still forms a table")
     func leadingFormFeed() throws {
-        let block = try firstBlock("d\n\(Self.ff)-")
+        let block = firstBlock("d\n\(Self.ff)-")
         try #require(block.kind == .table, "expected a table, got \(block.kind)")
         #expect(block.headerCells == ["d"])
         #expect(block.alignments == [.none])
@@ -144,7 +144,7 @@ struct TableDelimiterWhitespaceTests {
     func segmentPathFormFeed() throws {
         // A leading space on the delimiter line makes the paragraph non-contiguous, so it reaches table
         // detection as a segment list — exercising the segment-gate, not the contiguous fast-path gate.
-        let block = try firstBlock("d\n -\(Self.ff)")
+        let block = firstBlock("d\n -\(Self.ff)")
         try #require(block.kind == .table, "expected a table, got \(block.kind)")
         #expect(block.headerCells == ["d"])
         #expect(block.alignments == [.none])
@@ -153,7 +153,7 @@ struct TableDelimiterWhitespaceTests {
     @Test("a form-feed delimiter cell forms a table nested in a block quote (segment path)")
     func nestedBlockQuoteFormFeed() throws {
         // Nested content is a materialized segment list; the same gate must admit the FF-padded marker.
-        let table = try #require(try firstTable("> d\n> -\(Self.ff)"), "expected a nested table")
+        let table = try #require(firstTable("> d\n> -\(Self.ff)"), "expected a nested table")
         #expect(table.headerCells == ["d"])
         #expect(table.alignments == [.none])
     }
@@ -165,7 +165,7 @@ struct TableDelimiterWhitespaceTests {
         // `d\n-:\f`: the marker `-:\f` is structurally valid (right-aligned shape) and forms a table,
         // but cmark reads alignment from the `cmark_strbuf_trim`'d buffer, which keeps the trailing FF,
         // so the colon at buf[size-2] is not the last byte — alignment is NONE, not right.
-        let block = try firstBlock("d\n-:\(Self.ff)")
+        let block = firstBlock("d\n-:\(Self.ff)")
         try #require(block.kind == .table, "expected a table, got \(block.kind)")
         #expect(block.alignments == [.none])
     }
@@ -173,7 +173,7 @@ struct TableDelimiterWhitespaceTests {
     @Test("a leading colon before the dash is still seen as left alignment despite a trailing form-feed")
     func leadingColonStillLeft() throws {
         // `d\n:-\f`: the leading colon is at buf[0], unaffected by the trailing FF, so it is left-aligned.
-        let block = try firstBlock("d\n:-\(Self.ff)")
+        let block = firstBlock("d\n:-\(Self.ff)")
         try #require(block.kind == .table, "expected a table, got \(block.kind)")
         #expect(block.alignments == [.left])
     }
@@ -181,26 +181,26 @@ struct TableDelimiterWhitespaceTests {
     // MARK: - LEAVE: guards that must NOT become tables
 
     @Test("a carriage return after the dash is a line terminator, not cell whitespace (stays a heading)")
-    func trailingCarriageReturnStaysHeading() throws {
+    func trailingCarriageReturnStaysHeading() {
         // CR ends the line, leaving a bare `-` setext underline: a heading, never a table.
-        #expect(try firstBlock("d\n-\(Self.cr)").kind == .heading)
+        #expect(firstBlock("d\n-\(Self.cr)").kind == .heading)
     }
 
     @Test("an interior form-feed invalidates the delimiter cell (stays a paragraph)")
-    func interiorFormFeedStaysParagraph() throws {
+    func interiorFormFeedStaysParagraph() {
         // `d\n-\f-`: FF between dashes is interior, not trimmed; the cell is not `:?-+:?`, so no table.
-        #expect(try firstBlock("d\n-\(Self.ff)-").kind == .paragraph)
+        #expect(firstBlock("d\n-\(Self.ff)-").kind == .paragraph)
     }
 
     @Test("a column-count mismatch with a form-feed delimiter stays a paragraph")
-    func columnMismatchStaysParagraph() throws {
+    func columnMismatchStaysParagraph() {
         // `a|b\n-\f`: header has 2 columns, the FF-padded delimiter has 1 — mismatch, so not a table.
-        #expect(try firstBlock("a|b\n-\(Self.ff)").kind == .paragraph)
+        #expect(firstBlock("a|b\n-\(Self.ff)").kind == .paragraph)
     }
 
     @Test("a plain dash second line stays a setext heading")
-    func plainDashStaysHeading() throws {
+    func plainDashStaysHeading() {
         // No FF/VT: `-` is a setext underline resolved before table detection.
-        #expect(try firstBlock("d\n-").kind == .heading)
+        #expect(firstBlock("d\n-").kind == .heading)
     }
 }

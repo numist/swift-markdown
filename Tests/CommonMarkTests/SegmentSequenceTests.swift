@@ -15,7 +15,7 @@ import Testing
 struct SegmentsTests {
 
     @Test("literalSegments concatenation equals literal() for inline text and code")
-    func inlineTextMatches() throws {
+    func inlineTextMatches() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "hello *world* and `code`"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -59,7 +59,7 @@ struct SegmentsTests {
     }
 
     @Test("literalSegments equals literal() across a multi-line paragraph")
-    func multiLineParagraph() throws {
+    func multiLineParagraph() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         // A multi-line paragraph exercises the contiguity fast path: its text runs are source ranges; the iterator must still reproduce literal().
         let source = "first line\nsecond line\nthird line"
@@ -87,7 +87,7 @@ struct SegmentsTests {
     }
 
     @Test("literalSegments equals literal() for a fenced code block body")
-    func codeBlockBody() throws {
+    func codeBlockBody() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "```\nline one\nline two\n```"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -112,7 +112,7 @@ struct SegmentsTests {
     }
 
     @Test("literalSegments is empty for non-literal kinds")
-    func emptyForNonLiteral() throws {
+    func emptyForNonLiteral() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "text"
         MarkdownDocument.withParsedDocument(source) { doc in

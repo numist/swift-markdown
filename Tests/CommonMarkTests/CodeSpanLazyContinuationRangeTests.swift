@@ -28,7 +28,7 @@ struct CodeSpanLazyContinuationRangeTests {
     /// The source ranges of every `.codeInline` node, in document order.
     private func codeSpanRanges(
         _ source: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [Range<Pos>?] {
+    ) -> [Range<Pos>?] {
         var out: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         MarkdownDocument.withParsedDocument(source, options: options) { doc in
             dfsRanges(doc.root, into: &out)
@@ -45,7 +45,7 @@ struct CodeSpanLazyContinuationRangeTests {
     /// column 1 -> `@2:1-3:2`. No overshoot.
     @Test("flag-OFF: code span opening on a bq lazy line keeps its true column @2:1-3:2")
     func specBlockQuoteLazy() throws {
-        let spans = try codeSpanRanges("> o\n`\n`", options: Self.specOptions)
+        let spans = codeSpanRanges("> o\n`\n`", options: Self.specOptions)
         try #require(spans.count == 1)
         #expect(spans[0] == Pos(line: 2, column: 1)..<Pos(line: 3, column: 2))
     }
@@ -55,7 +55,7 @@ struct CodeSpanLazyContinuationRangeTests {
     /// Flag-OFF (deliverable): true physical column 1 -> `@2:1-4:2`.
     @Test("flag-OFF: 3-line code span on bq lazy continuations is @2:1-4:2")
     func specThreeLineBlockQuoteLazy() throws {
-        let spans = try codeSpanRanges("> o\n`\nx\n`", options: Self.specOptions)
+        let spans = codeSpanRanges("> o\n`\nx\n`", options: Self.specOptions)
         try #require(spans.count == 1)
         #expect(spans[0] == Pos(line: 2, column: 1)..<Pos(line: 4, column: 2))
     }
@@ -65,7 +65,7 @@ struct CodeSpanLazyContinuationRangeTests {
     /// Flag-OFF (deliverable): true physical column 1 -> `@2:1-3:2`.
     @Test("flag-OFF: code span on a list-item lazy line keeps its true column @2:1-3:2")
     func specListItemLazy() throws {
-        let spans = try codeSpanRanges("- o\n`\n`", options: Self.specOptions)
+        let spans = codeSpanRanges("- o\n`\n`", options: Self.specOptions)
         try #require(spans.count == 1)
         #expect(spans[0] == Pos(line: 2, column: 1)..<Pos(line: 3, column: 2))
     }
@@ -78,7 +78,7 @@ struct CodeSpanLazyContinuationRangeTests {
     /// line 3.
     @Test("matched-then-lazy code span is @2:3-3:2")
     func matchedThenLazy() throws {
-        let spans = try codeSpanRanges("> o\n> `\n`", options: Self.specOptions)
+        let spans = codeSpanRanges("> o\n> `\n`", options: Self.specOptions)
         try #require(spans.count == 1)
         #expect(spans[0] == Pos(line: 2, column: 3)..<Pos(line: 3, column: 2))
     }
@@ -90,7 +90,7 @@ struct CodeSpanLazyContinuationRangeTests {
     @Test("top-level multi-line code span is @2:1-3:2 both flags")
     func topLevelControl() throws {
         for options in [Self.quirkOptions, Self.specOptions] {
-            let spans = try codeSpanRanges("o\n`\n`", options: options)
+            let spans = codeSpanRanges("o\n`\n`", options: options)
             try #require(spans.count == 1)
             #expect(spans[0] == Pos(line: 2, column: 1)..<Pos(line: 3, column: 2))
         }

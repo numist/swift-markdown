@@ -47,7 +47,7 @@ struct AutolinkEmailInLinkTextTests {
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
+    ) -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?, url: String?)] = []
@@ -59,11 +59,11 @@ struct AutolinkEmailInLinkTextTests {
     // MARK: - Flag OFF: spec-correct, the bare email stays text
 
     @Test("flag-OFF: bare email inside link text is NOT autolinked")
-    func bareEmailInLinkTextFlagOff() throws {
+    func bareEmailInLinkTextFlagOff() {
         // `[<M@C>B@.B]()` - the outer link contains the angle autolink `<M@C>` and the bare email `B@.B`.
         // The deliverable leaves `B@.B` as a Text node (a link inside a link is invalid), so the only
         // autolink is the angle one.
-        let ns = try nodes(in: "[<M@C>B@.B]()", options: Self.flagOff)
+        let ns = nodes(in: "[<M@C>B@.B]()", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, nil, "M@C", "B@.B"])
         // The angle autolink is recognized; the bare `B@.B` is NOT (no `mailto:B@.B` link exists).
@@ -74,10 +74,10 @@ struct AutolinkEmailInLinkTextTests {
     // MARK: - Flag ON: reproduce cmark's nested email link
 
     @Test("flag-ON: bare email inside link text IS autolinked (cmark's in_link boolean)")
-    func bareEmailInLinkTextFlagOn() throws {
+    func bareEmailInLinkTextFlagOn() {
         // Exiting the nested `<M@C>` autolink clears cmark's `in_link` boolean, so `B@.B` is autolinked
         // inside the outer link with empty `before`/`after` Text siblings.
-        let ns = try nodes(in: "[<M@C>B@.B]()", options: Self.flagOn)
+        let ns = nodes(in: "[<M@C>B@.B]()", options: Self.flagOn)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .link, .text, .text, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, nil, "M@C", "", nil, "B@.B", ""])
         #expect(ns.compactMap(\.url) == ["", "mailto:M@C", "mailto:B@.B"])
@@ -86,12 +86,12 @@ struct AutolinkEmailInLinkTextTests {
     // MARK: - Both modes: a bare email in plain text (no enclosing link) is unchanged
 
     @Test("bare email in plain paragraph text autolinks identically in BOTH modes")
-    func bareEmailInPlainTextBothModes() throws {
+    func bareEmailInPlainTextBothModes() {
         // `x B@.B y` - the email is NOT inside a link; genuine text on both sides means no empty siblings,
         // so the tree is identical flag-ON and flag-OFF. This is the control: the in-link traversal change
         // must not perturb ordinary email autolinking.
         for options in [Self.flagOn, Self.flagOff] {
-            let ns = try nodes(in: "x B@.B y", options: options)
+            let ns = nodes(in: "x B@.B y", options: options)
             #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
             #expect(ns.map(\.text) == [nil, nil, "x ", nil, "B@.B", " y"])
             #expect(ns.compactMap(\.url) == ["mailto:B@.B"])

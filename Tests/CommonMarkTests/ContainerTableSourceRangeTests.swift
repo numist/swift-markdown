@@ -28,13 +28,13 @@ struct ContainerTableSourceRangeTests {
     static let opts: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]
 
-    private func tree(_ source: String) throws -> String {
-        try CmarkTreeDump.dump(source, options: Self.opts, sourceRanges: true)
+    private func tree(_ source: String) -> String {
+        CmarkTreeDump.dump(source, options: Self.opts, sourceRanges: true)
     }
 
     @Test("a table in a list item")
-    func listItem() throws {
-        #expect(try tree("- b|c\n  -|-\n  d|e") == """
+    func listItem() {
+        #expect(tree("- b|c\n  -|-\n  d|e") == """
             document @1:1-3:6
               list bullet '-' tight @1:1-3:6
                 item @1:1-3:6
@@ -54,8 +54,8 @@ struct ContainerTableSourceRangeTests {
     }
 
     @Test("a table in a block quote")
-    func blockQuote() throws {
-        #expect(try tree("> b|c\n> -|-\n> d|e") == """
+    func blockQuote() {
+        #expect(tree("> b|c\n> -|-\n> d|e") == """
             document @1:1-3:6
               block_quote @1:1-3:6
                 table @1:3-3:6
@@ -74,8 +74,8 @@ struct ContainerTableSourceRangeTests {
     }
 
     @Test("a table in a list item in a block quote")
-    func nestedContainers() throws {
-        #expect(try tree("> - b|c\n>   -|-\n>   d|e") == """
+    func nestedContainers() {
+        #expect(tree("> - b|c\n>   -|-\n>   d|e") == """
             document @1:1-3:8
               block_quote @1:1-3:8
                 list bullet '-' tight @1:3-3:8
@@ -97,8 +97,8 @@ struct ContainerTableSourceRangeTests {
 
     /// The `>` prefix and the tab after it are each one byte, so every row's content starts at byte column 3.
     @Test("a table in a block quote whose prefix ends in a tab")
-    func tabAfterBlockQuoteMarker() throws {
-        #expect(try tree(">\tb|c\n>\t-|-\n>\td|e") == """
+    func tabAfterBlockQuoteMarker() {
+        #expect(tree(">\tb|c\n>\t-|-\n>\td|e") == """
             document @1:1-3:6
               block_quote @1:1-3:6
                 table @1:3-3:6
@@ -121,8 +121,8 @@ struct ContainerTableSourceRangeTests {
     /// (`@3:3-3:5` for the row, `@3:3-3:4` and `@3:5-3:6` for the cells and their text). The row's end is the line's
     /// end in both.
     @Test("a table in a list item whose continuation lines are indented by a tab")
-    func tabIndentedListItem() throws {
-        #expect(try tree("-\tb|c\n\t-|-\n\td|e") == """
+    func tabIndentedListItem() {
+        #expect(tree("-\tb|c\n\t-|-\n\td|e") == """
             document @1:1-3:5
               list bullet '-' tight @1:1-3:5
                 item @1:1-3:5
@@ -146,8 +146,8 @@ struct ContainerTableSourceRangeTests {
     /// bytes within the joined paragraph text (`@1:3-3:6` for the table, `@1:3-1:8` for the header row, `@1:5-1:6` and
     /// `@1:7-1:8` for the cells and their text), and gives the paragraph `a` no range.
     @Test("a table in a block quote whose header is a lazy continuation line")
-    func lazyHeader() throws {
-        #expect(try tree("> a\nb|c\n> -|-") == """
+    func lazyHeader() {
+        #expect(tree("> a\nb|c\n> -|-") == """
             document @1:1-3:6
               block_quote @1:1-3:6
                 paragraph @1:3-1:4
@@ -167,8 +167,8 @@ struct ContainerTableSourceRangeTests {
     /// table, `@1:3-1:8` for the header row, `@1:5-1:6` and `@1:7-1:8` for the cells and their text), and gives the
     /// paragraph `a` no range.
     @Test("a table in a list item after a paragraph line")
-    func listItemWithPrecedingParagraph() throws {
-        #expect(try tree("- a\n  b|c\n  -|-") == """
+    func listItemWithPrecedingParagraph() {
+        #expect(tree("- a\n  b|c\n  -|-") == """
             document @1:1-3:6
               list bullet '-' tight @1:1-3:6
                 item @1:1-3:6
@@ -187,8 +187,8 @@ struct ContainerTableSourceRangeTests {
     /// The cell spans its source bytes `b\|x`. Its text `b|x` drops the backslash, so the text's range starts with the
     /// cell's and is one byte shorter, as in cmark-gfm.
     @Test("a table in a block quote with an escaped pipe in a cell")
-    func escapedPipe() throws {
-        #expect(try tree("> b\\|x|c\n> -|-") == """
+    func escapedPipe() {
+        #expect(tree("> b\\|x|c\n> -|-") == """
             document @1:1-2:6
               block_quote @1:1-2:6
                 table @1:3-2:6
@@ -203,8 +203,8 @@ struct ContainerTableSourceRangeTests {
 
     /// The NUL is one source byte, so the U+FFFD that replaces it in the text maps back onto that byte.
     @Test("a table in a block quote with a NUL in a cell")
-    func nulInCell() throws {
-        #expect(try tree("> b\u{0}|c\n> -|-") == """
+    func nulInCell() {
+        #expect(tree("> b\u{0}|c\n> -|-") == """
             document @1:1-2:6
               block_quote @1:1-2:6
                 table @1:3-2:6
@@ -218,8 +218,8 @@ struct ContainerTableSourceRangeTests {
     }
 
     @Test("a short row in a block-quoted table pads a filler cell with no range")
-    func shortRow() throws {
-        #expect(try tree("> b|c\n> -|-\n> d|") == """
+    func shortRow() {
+        #expect(tree("> b|c\n> -|-\n> d|") == """
             document @1:1-3:5
               block_quote @1:1-3:5
                 table @1:3-3:5
@@ -238,8 +238,8 @@ struct ContainerTableSourceRangeTests {
 
     // MARK: - With `.cmarkBugCompatibility`
 
-    private func compatibilityTree(_ source: String) throws -> String {
-        try CmarkTreeDump.dump(source, options: Self.opts.union(.cmarkBugCompatibility), sourceRanges: true)
+    private func compatibilityTree(_ source: String) -> String {
+        CmarkTreeDump.dump(source, options: Self.opts.union(.cmarkBugCompatibility), sourceRanges: true)
     }
 
     /// The header line ` \t|` is a lazy continuation of the quote's paragraph. The list item's two-column indent takes
@@ -249,8 +249,8 @@ struct ContainerTableSourceRangeTests {
     /// and its header on line 1 (`@1:4-1:9` for the row, `@1:6-1:8` for the cell) because it counts columns in the joined
     /// paragraph text.
     @Test("a header row that starts with a split tab's leftover columns starts at the tab")
-    func splitTabHeader() throws {
-        #expect(try compatibilityTree("- >x\n \t|\n  >-|\n") == """
+    func splitTabHeader() {
+        #expect(compatibilityTree("- >x\n \t|\n  >-|\n") == """
             document @1:1-3:6
               list bullet '-' tight @1:1-3:6
                 item @1:1-3:6
@@ -270,8 +270,8 @@ struct ContainerTableSourceRangeTests {
     /// there. cmark-gfm places the table and its header on line 1 (`@1:2-1:7` for the row, `@1:4-1:6` for the cell)
     /// because it counts columns in the joined paragraph text.
     @Test("a re-indented lazy header row ends at its line's end")
-    func reindentedLazyHeaderEndsAtLineEnd() throws {
-        #expect(try compatibilityTree(">x\n  |\n>-|\n") == """
+    func reindentedLazyHeaderEndsAtLineEnd() {
+        #expect(compatibilityTree(">x\n  |\n>-|\n") == """
             document @1:1-3:4
               block_quote @1:1-3:4
                 paragraph @1:2-1:3

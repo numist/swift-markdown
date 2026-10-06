@@ -32,7 +32,7 @@ struct InlineHTMLMultilineEndTests {
     private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition]
 
     /// The source range of the first `.htmlInline` node when `src` is parsed spec-correct.
-    private func inlineHTMLRange(in src: String) throws -> Range<Pos>? {
+    private func inlineHTMLRange(in src: String) -> Range<Pos>? {
         MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> Range<Pos>? in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -49,7 +49,7 @@ struct InlineHTMLMultilineEndTests {
         // `<foo` on line 1 (the `<` at col 1), `bar>` on line 2. Spec-correct, the end is half-open:
         // the closing `>` is at line 2 col 4 (b=1, a=2, r=3, >=4), so the end is one past it, @2:5.
         // cmark's quirk reports the `>`'s own column, @1:1-2:4 (the `htmlml-basic` fuzzer pair, flag-on).
-        let range = try #require(try inlineHTMLRange(in: "<foo\nbar>"))
+        let range = try #require(inlineHTMLRange(in: "<foo\nbar>"))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 2, column: 5))
     }
@@ -59,7 +59,7 @@ struct InlineHTMLMultilineEndTests {
         // `x<a` on line 1 (the `<` at col 2), `b>y` on line 2. Spec-correct, the closing `>` is at
         // line 2 col 2 (b=1, >=2), so the half-open end is one past it, @2:3. cmark's quirk reports
         // the `>`'s own column, @1:2-2:2 (the `htmlml-midtext` fuzzer pair, flag-on).
-        let range = try #require(try inlineHTMLRange(in: "x<a\nb>y"))
+        let range = try #require(inlineHTMLRange(in: "x<a\nb>y"))
         #expect(range.lowerBound == Pos(line: 1, column: 2))
         #expect(range.upperBound == Pos(line: 2, column: 3))
     }
@@ -69,7 +69,7 @@ struct InlineHTMLMultilineEndTests {
         // `a <foo> b`: the span carries no interior newline, so cmark's newline adjustment never
         // fires and the end is the ordinary half-open column both flag-off and flag-on. The `<` is at
         // col 3, the `>` at col 7, so the half-open end is @1:8 (the `htmlml-sl-ctl` control pair).
-        let range = try #require(try inlineHTMLRange(in: "a <foo> b"))
+        let range = try #require(inlineHTMLRange(in: "a <foo> b"))
         #expect(range.lowerBound == Pos(line: 1, column: 3))
         #expect(range.upperBound == Pos(line: 1, column: 8))
     }

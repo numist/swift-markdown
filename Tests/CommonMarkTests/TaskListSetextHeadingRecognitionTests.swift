@@ -51,7 +51,7 @@ struct TaskListSetextHeadingRecognitionTests {
 
     private func shape(
         _ source: String, options: MarkdownDocument.ParseOptions
-    ) throws -> Shape {
+    ) -> Shape {
         MarkdownDocument.withParsedDocument(source, options: options) { doc -> Shape in
             var result = Shape(itemChecked: nil, headingLevel: nil, headingText: nil, allTexts: [])
             // Collect a heading's own text (its direct/indirect text descendants) once we enter it.
@@ -85,7 +85,7 @@ struct TaskListSetextHeadingRecognitionTests {
 
     @Test("flag ON: `- [ ] v\\n  -` is an UNCHECKED task item whose content is a level-2 heading `v`")
     func taskItemSetextHeadingRecognized() throws {
-        let shape = try shape("- [ ] v\n  -", options: Self.flagOn)
+        let shape = shape("- [ ] v\n  -", options: Self.flagOn)
         // Fixture-sanity: a list item AND a heading must exist, so the assertions can't pass vacuously
         // against a tree that has neither.
         let checked = try #require(shape.itemChecked, "no list item parsed")
@@ -98,7 +98,7 @@ struct TaskListSetextHeadingRecognitionTests {
 
     @Test("flag ON: `- [x] v\\n  -` is a CHECKED task item whose content is a level-2 heading `v`")
     func checkedTaskItemSetextHeadingRecognized() throws {
-        let shape = try shape("- [x] v\n  -", options: Self.flagOn)
+        let shape = shape("- [x] v\n  -", options: Self.flagOn)
         let checked = try #require(shape.itemChecked, "no list item parsed")
         try #require(shape.headingLevel != nil, "no heading parsed")
         #expect(checked == .some(true))                     // recognized, CHECKED
@@ -111,7 +111,7 @@ struct TaskListSetextHeadingRecognitionTests {
 
     @Test("flag OFF: `- [ ] v\\n  -` is an UNCHECKED task item with a level-2 heading `v` (unconditional)")
     func taskItemSetextHeadingRecognizedFlagOff() throws {
-        let shape = try shape("- [ ] v\n  -", options: Self.flagOff)
+        let shape = shape("- [ ] v\n  -", options: Self.flagOff)
         let checked = try #require(shape.itemChecked, "no list item parsed")
         try #require(shape.headingLevel != nil, "no heading parsed")
         #expect(checked == .some(false))
@@ -124,7 +124,7 @@ struct TaskListSetextHeadingRecognitionTests {
 
     @Test("control: `- [ ] v` (no underline) is an UNCHECKED task item with a paragraph `v`")
     func openingLineOnlyIsStillTask() throws {
-        let shape = try shape("- [ ] v", options: Self.flagOn)
+        let shape = shape("- [ ] v", options: Self.flagOn)
         let checked = try #require(shape.itemChecked, "no list item parsed")
         #expect(checked == .some(false))                    // still a recognized task item
         #expect(shape.headingLevel == nil)                  // content is a paragraph, not a heading
@@ -134,7 +134,7 @@ struct TaskListSetextHeadingRecognitionTests {
 
     @Test("control: `- v\\n  -` is an ORDINARY item with a level-2 heading `v` (no spurious checkbox)")
     func plainItemSetextHeadingNotTask() throws {
-        let shape = try shape("- v\n  -", options: Self.flagOn)
+        let shape = shape("- v\n  -", options: Self.flagOn)
         let checked = try #require(shape.itemChecked, "no list item parsed")
         try #require(shape.headingLevel != nil, "no heading parsed")
         #expect(checked == .some(nil))                      // ordinary bullet, NOT a task item

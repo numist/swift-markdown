@@ -48,7 +48,7 @@ struct FlankingUnicodePunctuationTests {
         return out
     }
 
-    private func render(_ source: String, options: MarkdownDocument.ParseOptions = []) throws -> String {
+    private func render(_ source: String, options: MarkdownDocument.ParseOptions = []) -> String {
         MarkdownDocument.withParsedDocument(source, options: options) { doc in
             render(doc)
         }
@@ -57,10 +57,10 @@ struct FlankingUnicodePunctuationTests {
     /// Fixture sanity: the renderer must actually distinguish a paired emphasis run from literal text
     /// and a smart quote from a straight one, or every assertion below could pass vacuously.
     @Test("renderer distinguishes structure and smart rewrites")
-    func rendererSanity() throws {
-        #expect(try render("*a*") == "<em>a</em>")
-        #expect(try render("plain") == "plain")
-        #expect(try render("'x'", options: .smart) == "\u{2018}x\u{2019}")
+    func rendererSanity() {
+        #expect(render("*a*") == "<em>a</em>")
+        #expect(render("plain") == "plain")
+        #expect(render("'x'", options: .smart) == "\u{2018}x\u{2019}")
     }
 
     // MARK: - Smart quotes
@@ -68,43 +68,43 @@ struct FlankingUnicodePunctuationTests {
     /// A quote run adjacent to a non-ASCII Unicode punctuation character must classify that neighbour
     /// as punctuation, so the trailing quote becomes a closer (right curly) and pairs with the opener.
     @Test("single-quote run before Unicode punctuation opens then closes")
-    func singleQuoteBeforeUnicodePunct() throws {
+    func singleQuoteBeforeUnicodePunct() {
         // U+055E (Armenian question mark, Po), U+00A1 (inverted exclamation, Po), U+2014 (em dash, Pd).
-        #expect(try render("''\u{055E}", options: .smart) == "\u{2018}\u{2019}\u{055E}")
-        #expect(try render("''\u{00A1}", options: .smart) == "\u{2018}\u{2019}\u{00A1}")
-        #expect(try render("''\u{2014}", options: .smart) == "\u{2018}\u{2019}\u{2014}")
+        #expect(render("''\u{055E}", options: .smart) == "\u{2018}\u{2019}\u{055E}")
+        #expect(render("''\u{00A1}", options: .smart) == "\u{2018}\u{2019}\u{00A1}")
+        #expect(render("''\u{2014}", options: .smart) == "\u{2018}\u{2019}\u{2014}")
     }
 
     @Test("a further trailing quote after Unicode punctuation stays a right curly")
-    func trailingQuoteAfterUnicodePunct() throws {
-        #expect(try render("''\u{055E}'", options: .smart) == "\u{2018}\u{2019}\u{055E}\u{2019}")
+    func trailingQuoteAfterUnicodePunct() {
+        #expect(render("''\u{055E}'", options: .smart) == "\u{2018}\u{2019}\u{055E}\u{2019}")
     }
 
     @Test("double-quote run before Unicode punctuation opens then closes")
-    func doubleQuoteBeforeUnicodePunct() throws {
-        #expect(try render("\"\"\u{055E}", options: .smart) == "\u{201C}\u{201D}\u{055E}")
+    func doubleQuoteBeforeUnicodePunct() {
+        #expect(render("\"\"\u{055E}", options: .smart) == "\u{201C}\u{201D}\u{055E}")
     }
 
     // MARK: - Smart-quote controls (must not regress)
 
     @Test("quote run before a letter stays two right curlies")
-    func quoteRunBeforeLetter() throws {
-        #expect(try render("''a", options: .smart) == "\u{2019}\u{2019}a")
+    func quoteRunBeforeLetter() {
+        #expect(render("''a", options: .smart) == "\u{2019}\u{2019}a")
     }
 
     @Test("lone single quote before Unicode punctuation stays a right curly")
-    func loneQuoteBeforeUnicodePunct() throws {
-        #expect(try render("'\u{055E}", options: .smart) == "\u{2019}\u{055E}")
+    func loneQuoteBeforeUnicodePunct() {
+        #expect(render("'\u{055E}", options: .smart) == "\u{2019}\u{055E}")
     }
 
     @Test("letter-preceded quote run before Unicode punctuation stays two right curlies")
-    func letterPrecededQuoteRun() throws {
-        #expect(try render("x''\u{055E}", options: .smart) == "x\u{2019}\u{2019}\u{055E}")
+    func letterPrecededQuoteRun() {
+        #expect(render("x''\u{055E}", options: .smart) == "x\u{2019}\u{2019}\u{055E}")
     }
 
     @Test("quote run before ASCII punctuation across a space opens then closes")
-    func quoteRunBeforeASCIIPunct() throws {
-        #expect(try render("'' .", options: .smart) == "\u{2018}\u{2019} .")
+    func quoteRunBeforeASCIIPunct() {
+        #expect(render("'' .", options: .smart) == "\u{2018}\u{2019} .")
     }
 
     // MARK: - Emphasis (shares the flanking machinery)
@@ -115,35 +115,35 @@ struct FlankingUnicodePunctuationTests {
     /// continuation/lead byte of the multibyte punctuation as a non-punct, non-space byte, which made
     /// the inner `*` right-flanking and spuriously formed emphasis.
     @Test("emphasis does not form around Unicode punctuation with an outer letter")
-    func emphasisAroundUnicodePunctNoPair() throws {
-        #expect(try render("*\u{055E}*a") == "*\u{055E}*a")
-        #expect(try render("a*\u{055E}*") == "a*\u{055E}*")
+    func emphasisAroundUnicodePunctNoPair() {
+        #expect(render("*\u{055E}*a") == "*\u{055E}*a")
+        #expect(render("a*\u{055E}*") == "a*\u{055E}*")
     }
 
     // MARK: - Emphasis controls (must not regress)
 
     @Test("emphasis forms when a Unicode punctuation char precedes the whole run")
-    func emphasisWithUnicodePunctBefore() throws {
-        #expect(try render("\u{055E} *a*") == "\u{055E} <em>a</em>")
+    func emphasisWithUnicodePunctBefore() {
+        #expect(render("\u{055E} *a*") == "\u{055E} <em>a</em>")
     }
 
     @Test("underscore run around Unicode punctuation with an outer letter does not pair")
-    func underscoreAroundUnicodePunctNoPair() throws {
-        #expect(try render("_\u{055E}_a") == "_\u{055E}_a")
+    func underscoreAroundUnicodePunctNoPair() {
+        #expect(render("_\u{055E}_a") == "_\u{055E}_a")
     }
 
     @Test("emphasis forms around an em dash followed by a space")
-    func emphasisAroundEmDash() throws {
-        #expect(try render("*\u{2014}* x") == "<em>\u{2014}</em> x")
+    func emphasisAroundEmDash() {
+        #expect(render("*\u{2014}* x") == "<em>\u{2014}</em> x")
     }
 
     @Test("strong forms around Unicode punctuation")
-    func strongAroundUnicodePunct() throws {
-        #expect(try render("**\u{055E}**") == "<strong>\u{055E}</strong>")
+    func strongAroundUnicodePunct() {
+        #expect(render("**\u{055E}**") == "<strong>\u{055E}</strong>")
     }
 
     @Test("emphasis does not form around ASCII punctuation with an outer letter")
-    func emphasisAroundASCIIPunctNoPair() throws {
-        #expect(try render("*.*a") == "*.*a")
+    func emphasisAroundASCIIPunctNoPair() {
+        #expect(render("*.*a") == "*.*a")
     }
 }

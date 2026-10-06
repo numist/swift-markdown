@@ -21,7 +21,7 @@ import Testing
 @Suite("Table lazy-continuation delimiter row")
 struct TableLazyDelimiterTests {
 
-    private func nodeKinds(_ source: String) throws -> (hasTable: Bool, hasHeading: Bool, hasParagraph: Bool) {
+    private func nodeKinds(_ source: String) -> (hasTable: Bool, hasHeading: Bool, hasParagraph: Bool) {
         MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> (Bool, Bool, Bool) in
             var hasTable = false, hasHeading = false, hasParagraph = false
             func walk(_ n: borrowing MarkdownNode) {
@@ -41,54 +41,54 @@ struct TableLazyDelimiterTests {
     // MARK: - FIX: a lazy-continuation delimiter row does NOT form a table
 
     @Test("lazy `--` continuation in a block quote stays a paragraph")
-    func lazyDashDash() throws {
-        let k = try nodeKinds(">o\n--")
+    func lazyDashDash() {
+        let k = nodeKinds(">o\n--")
         #expect(!k.hasTable && k.hasParagraph)
     }
 
     @Test("lazy pipe delimiter continuation in a block quote stays a paragraph")
-    func lazyPipeDelim() throws {
-        let k = try nodeKinds(">o\n|-")
+    func lazyPipeDelim() {
+        let k = nodeKinds(">o\n|-")
         #expect(!k.hasTable && k.hasParagraph)
     }
 
     @Test("lazy colon delimiter continuation in a block quote stays a paragraph")
-    func lazyColonDelim() throws {
-        let k = try nodeKinds(">o\n:-")
+    func lazyColonDelim() {
+        let k = nodeKinds(">o\n:-")
         #expect(!k.hasTable && k.hasParagraph)
     }
 
     @Test("lazy pipe delimiter continuation in a LIST ITEM stays a paragraph")
-    func lazyPipeDelimInList() throws {
+    func lazyPipeDelimInList() {
         // The signal is container-agnostic (`!allMatched`): a list-item lazy continuation (the `|-` is
         // not indented to the item's content column) is not a delimiter row either. cmark: list › paragraph.
-        let k = try nodeKinds("- o\n|-")
+        let k = nodeKinds("- o\n|-")
         #expect(!k.hasTable && k.hasParagraph)
     }
 
     // MARK: - LEAVE: prefixed continuation and plain paragraphs still form tables / setext
 
     @Test("a prefixed pipe delimiter in a block quote still forms a table")
-    func prefixedPipeFormsTable() throws {
-        let k = try nodeKinds(">o\n>|-")
+    func prefixedPipeFormsTable() {
+        let k = nodeKinds(">o\n>|-")
         #expect(k.hasTable)
     }
 
     @Test("a prefixed `--` in a block quote is still a setext heading")
-    func prefixedDashDashIsHeading() throws {
-        let k = try nodeKinds(">o\n>--")
+    func prefixedDashDashIsHeading() {
+        let k = nodeKinds(">o\n>--")
         #expect(k.hasHeading && !k.hasTable)
     }
 
     @Test("a plain (non-quoted) pipe delimiter still forms a table")
-    func plainPipeFormsTable() throws {
-        let k = try nodeKinds("o\n|-")
+    func plainPipeFormsTable() {
+        let k = nodeKinds("o\n|-")
         #expect(k.hasTable)
     }
 
     @Test("a plain `--` is still a setext heading")
-    func plainDashDashIsHeading() throws {
-        let k = try nodeKinds("o\n--")
+    func plainDashDashIsHeading() {
+        let k = nodeKinds("o\n--")
         #expect(k.hasHeading && !k.hasTable)
     }
 }

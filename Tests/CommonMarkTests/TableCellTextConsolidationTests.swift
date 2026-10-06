@@ -41,7 +41,7 @@ struct TableCellTextConsolidationTests {
     /// Rows of cells of direct inline children for the first table in `source`.
     private func tableCellChildren(
         _ source: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [[[Child]]] {
+    ) -> [[[Child]]] {
         MarkdownDocument.withParsedDocument(source, options: options) { doc -> [[[Child]]] in
             var rows: [[[Child]]] = []
             var found = false
@@ -89,7 +89,7 @@ struct TableCellTextConsolidationTests {
     /// positions on. Header cell `[t` of `[t\n|-` → one `Text "[t"` at 1:1–1:3.
     @Test("a bracket literal merges with adjacent text in a cell (positions on)")
     func bracketMergesWithText() throws {
-        let rows = try tableCellChildren("[t\n|-", options: Self.posOpts)
+        let rows = tableCellChildren("[t\n|-", options: Self.posOpts)
         try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
         let cell = rows[0][0]
         try #require(cell.count == 1, "fixture: cell must have exactly one inline child, got \(cell.map(\.kind))")
@@ -102,7 +102,7 @@ struct TableCellTextConsolidationTests {
     /// (the entity's raw source width, 5 bytes, is preserved in the range even though it decodes to `&`).
     @Test("a decoded entity merges with surrounding text in a cell")
     func entityMergesWithText() throws {
-        let rows = try tableCellChildren("a&amp;t\n|-", options: Self.posOpts)
+        let rows = tableCellChildren("a&amp;t\n|-", options: Self.posOpts)
         try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
         let cell = rows[0][0]
         try #require(cell.count == 1, "fixture: cell must have exactly one inline child, got \(cell.map(\.kind))")
@@ -120,7 +120,7 @@ struct TableCellTextConsolidationTests {
     func entityBracketSmartQuoteMerge() throws {
         // Cell content `["&amp;` (7 source bytes → columns 1–7, half-open end 8): `[` bracket literal,
         // `"` smart-quote glyph, `&amp;` decoded entity — three separate text nodes before consolidation.
-        let rows = try tableCellChildren("[\"&amp;\n|-", options: [.tables, .sourcePosition, .smart])
+        let rows = tableCellChildren("[\"&amp;\n|-", options: [.tables, .sourcePosition, .smart])
         try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
         let cell = rows[0][0]
         try #require(cell.count == 1, "fixture: cell must coalesce to one inline child, got \(cell.map(\.kind))")
@@ -138,7 +138,7 @@ struct TableCellTextConsolidationTests {
     /// Plain contiguous text in a cell is already a single node (nothing to merge) — the boundary control.
     @Test("plain cell text is a single node")
     func plainCellTextSingleNode() throws {
-        let rows = try tableCellChildren("ab\n|-", options: Self.posOpts)
+        let rows = tableCellChildren("ab\n|-", options: Self.posOpts)
         try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
         let cell = rows[0][0]
         #expect(cell.count == 1)
@@ -150,7 +150,7 @@ struct TableCellTextConsolidationTests {
     /// "c"` (three children), with the emphasis wrapping its own `Text "b"`.
     @Test("emphasis is not merged into adjacent cell text")
     func emphasisBoundaryNotMerged() throws {
-        let rows = try tableCellChildren("a*b*c\n|-", options: Self.posOpts)
+        let rows = tableCellChildren("a*b*c\n|-", options: Self.posOpts)
         try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
         let cell = rows[0][0]
         try #require(cell.map(\.kind).contains(.emphasis), "fixture: the `*b*` run must parse as emphasis")
@@ -168,7 +168,7 @@ struct TableCellTextConsolidationTests {
     /// and `m[|n]`: each two-column body cell coalesces its bracket-literal + text into one node.
     @Test("each row's cells consolidate independently")
     func multiRowConsolidation() throws {
-        let rows = try tableCellChildren("a|b\n-|-\n[x|]y\nm[|n]", options: Self.posOpts)
+        let rows = tableCellChildren("a|b\n-|-\n[x|]y\nm[|n]", options: Self.posOpts)
         try #require(rows.count == 3, "fixture: expected a header row and two body rows, got \(rows.count)")
         try #require(rows[1].count == 2 && rows[2].count == 2, "fixture: two cells per body row")
         #expect(rows[1][0].count == 1 && rows[1][0][0].literal == "[x")
@@ -182,7 +182,7 @@ struct TableCellTextConsolidationTests {
     /// text `x`, text `|`, bracket `[`, text `y` — four nodes that merge to one `Text "x|[y"`.
     @Test("an escaped-pipe (arena-copy) cell consolidates its text runs")
     func escapedPipeCellConsolidates() throws {
-        let rows = try tableCellChildren("x\\|[y\n|-", options: Self.posOpts)
+        let rows = tableCellChildren("x\\|[y\n|-", options: Self.posOpts)
         try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
         let cell = rows[0][0]
         try #require(cell.count == 1, "fixture: escaped-pipe cell must coalesce to one node, got \(cell.map(\.kind))")
@@ -202,7 +202,7 @@ struct TableCellTextConsolidationTests {
     /// consolidation only unions the pre-stamped ranges, so the re-base is preserved.
     @Test("a flattened (leading-whitespace re-based) cell consolidates its text runs")
     func flattenedCellConsolidates() throws {
-        let rows = try tableCellChildren("a|b\n-|-\n [x|y", options: [.tables, .sourcePosition, .cmarkBugCompatibility])
+        let rows = tableCellChildren("a|b\n-|-\n [x|y", options: [.tables, .sourcePosition, .cmarkBugCompatibility])
         try #require(rows.count == 2, "fixture: expected a header row and a body row, got \(rows.count)")
         try #require(rows[1].count == 2, "fixture: expected two body cells, got \(rows[1].count)")
         let cell = rows[1][0]
@@ -218,7 +218,7 @@ struct TableCellTextConsolidationTests {
     /// `[x` sits at cols 2–4 rather than the flag-ON re-based cols 1–3.
     @Test("flag-OFF: a flattened (leading-whitespace) cell consolidates and keeps its physical column")
     func flattenedCellConsolidatesSpecCorrect() throws {
-        let rows = try tableCellChildren("a|b\n-|-\n [x|y", options: Self.posOpts)
+        let rows = tableCellChildren("a|b\n-|-\n [x|y", options: Self.posOpts)
         try #require(rows.count == 2, "fixture: expected a header row and a body row, got \(rows.count)")
         try #require(rows[1].count == 2, "fixture: expected two body cells, got \(rows[1].count)")
         let cell = rows[1][0]

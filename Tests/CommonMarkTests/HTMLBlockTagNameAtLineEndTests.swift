@@ -17,8 +17,8 @@ import CommonMark
 struct HTMLBlockTagNameAtLineEndTests {
 
     @Test("a tag name ending the line opens an HTML block")
-    func opensHTMLBlock() throws {
-        #expect(try CmarkTreeDump.dump("<div\n", options: []) == """
+    func opensHTMLBlock() {
+        #expect(CmarkTreeDump.dump("<div\n", options: []) == """
             document
               html_block "<div\\n"
 

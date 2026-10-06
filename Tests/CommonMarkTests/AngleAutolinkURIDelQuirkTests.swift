@@ -60,7 +60,7 @@ struct AngleAutolinkURIDelQuirkTests {
 
     private func linkURL(
         _ src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> String? {
+    ) -> String? {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> String? in
             firstLinkURL(doc.root) ?? nil
         }
@@ -68,7 +68,7 @@ struct AngleAutolinkURIDelQuirkTests {
 
     private func text(
         _ src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> String {
+    ) -> String {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> String in
             collectText(doc.root)
         }
@@ -78,59 +78,59 @@ struct AngleAutolinkURIDelQuirkTests {
 
     @Test("flag ON: `<tp:\\u{7F}>` is a link (DEL admitted)")
     func flagOnDelIsLink() throws {
-        let url = try #require(try linkURL("<tp:\u{7F}>", options: Self.flagOn), "expected an autolink")
+        let url = try #require(linkURL("<tp:\u{7F}>", options: Self.flagOn), "expected an autolink")
         #expect(url == "tp:\u{7F}")
     }
 
     @Test("flag ON: `<tp:\\u{7F}>` link text carries the DEL")
-    func flagOnDelLinkText() throws {
-        #expect(try text("<tp:\u{7F}>", options: Self.flagOn) == "tp:\u{7F}")
+    func flagOnDelLinkText() {
+        #expect(text("<tp:\u{7F}>", options: Self.flagOn) == "tp:\u{7F}")
     }
 
     @Test("flag ON: `<tp:aDELb>` is a link (DEL mid-body)")
     func flagOnDelMidBody() throws {
-        let url = try #require(try linkURL("<tp:a\u{7F}b>", options: Self.flagOn), "expected an autolink")
+        let url = try #require(linkURL("<tp:a\u{7F}b>", options: Self.flagOn), "expected an autolink")
         #expect(url == "tp:a\u{7F}b")
     }
 
     @Test("flag ON: `<http://aDEL>` is a link (DEL in URL)")
     func flagOnDelInHttpURL() throws {
-        let url = try #require(try linkURL("<http://a\u{7F}>", options: Self.flagOn), "expected an autolink")
+        let url = try #require(linkURL("<http://a\u{7F}>", options: Self.flagOn), "expected an autolink")
         #expect(url == "http://a\u{7F}")
     }
 
     // MARK: Flag OFF — the deliverable stays spec-correct (DEL rejected → literal text)
 
     @Test("flag OFF: `<tp:\\u{7F}>` is NOT a link (literal text)")
-    func flagOffDelNotLink() throws {
-        #expect(try linkURL("<tp:\u{7F}>", options: Self.flagOff) == nil)
+    func flagOffDelNotLink() {
+        #expect(linkURL("<tp:\u{7F}>", options: Self.flagOff) == nil)
         // Fixture-sanity: the literal source survives as text, so the "not a link" claim isn't vacuous.
-        #expect(try text("<tp:\u{7F}>", options: Self.flagOff) == "<tp:\u{7F}>")
+        #expect(text("<tp:\u{7F}>", options: Self.flagOff) == "<tp:\u{7F}>")
     }
 
     @Test("flag OFF: `<http://aDEL>` is NOT a link (literal text)")
-    func flagOffDelInHttpNotLink() throws {
-        #expect(try linkURL("<http://a\u{7F}>", options: Self.flagOff) == nil)
-        #expect(try text("<http://a\u{7F}>", options: Self.flagOff) == "<http://a\u{7F}>")
+    func flagOffDelInHttpNotLink() {
+        #expect(linkURL("<http://a\u{7F}>", options: Self.flagOff) == nil)
+        #expect(text("<http://a\u{7F}>", options: Self.flagOff) == "<http://a\u{7F}>")
     }
 
     // MARK: Agreeing controls — guard against over-broadening (only 0x7F changes under the flag)
 
     @Test("both flags: `<tp:x>` is a link (ordinary URI)")
-    func bothPlainURILinks() throws {
-        #expect(try linkURL("<tp:x>", options: Self.flagOff) == "tp:x")
-        #expect(try linkURL("<tp:x>", options: Self.flagOn) == "tp:x")
+    func bothPlainURILinks() {
+        #expect(linkURL("<tp:x>", options: Self.flagOff) == "tp:x")
+        #expect(linkURL("<tp:x>", options: Self.flagOn) == "tp:x")
     }
 
     @Test("both flags: `<tp:\\u{1F}>` is NOT a link (0x1F C0 control rejected either way)")
-    func bothC0ControlNotLink() throws {
-        #expect(try linkURL("<tp:\u{1F}>", options: Self.flagOff) == nil)
-        #expect(try linkURL("<tp:\u{1F}>", options: Self.flagOn) == nil)
+    func bothC0ControlNotLink() {
+        #expect(linkURL("<tp:\u{1F}>", options: Self.flagOff) == nil)
+        #expect(linkURL("<tp:\u{1F}>", options: Self.flagOn) == nil)
     }
 
     @Test("both flags: `<tp:\\u{0B}>` is NOT a link (VT control rejected either way)")
-    func bothVTControlNotLink() throws {
-        #expect(try linkURL("<tp:\u{0B}>", options: Self.flagOff) == nil)
-        #expect(try linkURL("<tp:\u{0B}>", options: Self.flagOn) == nil)
+    func bothVTControlNotLink() {
+        #expect(linkURL("<tp:\u{0B}>", options: Self.flagOff) == nil)
+        #expect(linkURL("<tp:\u{0B}>", options: Self.flagOn) == nil)
     }
 }

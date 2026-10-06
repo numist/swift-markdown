@@ -59,7 +59,7 @@ struct InlineHTMLScanSkipQuirkTests {
 
     private func htmlCount(
         _ src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> Int {
+    ) -> Int {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> Int in
             inlineHTMLCount(doc.root)
         }
@@ -68,113 +68,113 @@ struct InlineHTMLScanSkipQuirkTests {
     // MARK: Flag ON — reproduce cmark's overrun-skip (all-literal, no `.htmlInline`)
 
     @Test("flag ON: `x<?<??>` — PI overrun makes the later `<?` stay literal")
-    func flagOnPIOverrunSkipsLater() throws {
+    func flagOnPIOverrunSkipsLater() {
         // The first `<?` greedily consumes `<??>` (cmark's PI body admits a lone `>` and pairs each `?`
         // with its following byte), leaving no room for the framing `?>`, so it overruns EOF and sets the
         // PI skip flag. The second `<?` is then skipped; all bytes stay literal.
-        #expect(try htmlCount("x<?<??>", options: Self.flagOn) == 0)
+        #expect(htmlCount("x<?<??>", options: Self.flagOn) == 0)
     }
 
     @Test("flag ON: `x<!--<!--->` — comment overrun makes the later empty comment stay literal")
-    func flagOnCommentOverrunSkipsLater() throws {
+    func flagOnCommentOverrunSkipsLater() {
         // The first `<!--` body scans to EOF without a valid `-->` closer (strict grammar), setting the
         // comment skip flag. The later empty comment `<!--->` (which needs no `-->`) is then suppressed.
-        #expect(try htmlCount("x<!--<!--->", options: Self.flagOn) == 0)
+        #expect(htmlCount("x<!--<!--->", options: Self.flagOn) == 0)
     }
 
     @Test("flag ON: `x<!--<![CDATA[y]]>` — comment overrun suppresses the later CDATA (bang gate)")
-    func flagOnCommentOverrunSuppressesCDATA() throws {
+    func flagOnCommentOverrunSuppressesCDATA() {
         // The comment overrun sets the comment skip flag, which gates the whole `<!` dispatch, so the
         // otherwise-well-formed `<![CDATA[y]]>` is never attempted.
-        #expect(try htmlCount("x<!--<![CDATA[y]]>", options: Self.flagOn) == 0)
+        #expect(htmlCount("x<!--<![CDATA[y]]>", options: Self.flagOn) == 0)
     }
 
     @Test("flag ON: `x<!--<!DOCTYPE html>` — comment overrun suppresses the later declaration (bang gate)")
-    func flagOnCommentOverrunSuppressesDeclaration() throws {
-        #expect(try htmlCount("x<!--<!DOCTYPE html>", options: Self.flagOn) == 0)
+    func flagOnCommentOverrunSuppressesDeclaration() {
+        #expect(htmlCount("x<!--<!DOCTYPE html>", options: Self.flagOn) == 0)
     }
 
     // MARK: Flag ON controls — a well-formed construct is recognized; skip fires only AFTER an overrun
 
     @Test("flag ON control: a single well-formed PI is recognized")
-    func flagOnControlSinglePI() throws {
-        #expect(try htmlCount("x<?php?>", options: Self.flagOn) == 1)
+    func flagOnControlSinglePI() {
+        #expect(htmlCount("x<?php?>", options: Self.flagOn) == 1)
     }
 
     @Test("flag ON control: two well-formed PIs (no overrun) are BOTH recognized")
-    func flagOnControlTwoPIs() throws {
-        #expect(try htmlCount("x<?a?><?b?>", options: Self.flagOn) == 2)
+    func flagOnControlTwoPIs() {
+        #expect(htmlCount("x<?a?><?b?>", options: Self.flagOn) == 2)
     }
 
     @Test("flag ON control: a single well-formed comment is recognized")
-    func flagOnControlSingleComment() throws {
-        #expect(try htmlCount("x<!--y-->", options: Self.flagOn) == 1)
+    func flagOnControlSingleComment() {
+        #expect(htmlCount("x<!--y-->", options: Self.flagOn) == 1)
     }
 
     @Test("flag ON control: a single well-formed CDATA is recognized")
-    func flagOnControlSingleCDATA() throws {
-        #expect(try htmlCount("x<![CDATA[y]]>", options: Self.flagOn) == 1)
+    func flagOnControlSingleCDATA() {
+        #expect(htmlCount("x<![CDATA[y]]>", options: Self.flagOn) == 1)
     }
 
     @Test("flag ON control: a single well-formed declaration is recognized")
-    func flagOnControlSingleDeclaration() throws {
-        #expect(try htmlCount("x<!DOCTYPE html>", options: Self.flagOn) == 1)
+    func flagOnControlSingleDeclaration() {
+        #expect(htmlCount("x<!DOCTYPE html>", options: Self.flagOn) == 1)
     }
 
     // MARK: CDATA / declaration own-flag paths — inert on output (identical under both flags)
 
     @Test("own-flag: `x<![CDATA[a <![CDATA[b` — CDATA overrun, later CDATA stays literal (flag ON)")
-    func cdataOverrunOwnFlagOn() throws {
+    func cdataOverrunOwnFlagOn() {
         // No `]]>` exists through EOF, so neither CDATA can close. Exercises the CDATA skip-flag SET path.
-        #expect(try htmlCount("x<![CDATA[a <![CDATA[b", options: Self.flagOn) == 0)
+        #expect(htmlCount("x<![CDATA[a <![CDATA[b", options: Self.flagOn) == 0)
     }
 
     @Test("own-flag: `x<![CDATA[a <![CDATA[b` — literal under flag OFF too (inert)")
-    func cdataOverrunOwnFlagOff() throws {
-        #expect(try htmlCount("x<![CDATA[a <![CDATA[b", options: Self.flagOff) == 0)
+    func cdataOverrunOwnFlagOff() {
+        #expect(htmlCount("x<![CDATA[a <![CDATA[b", options: Self.flagOff) == 0)
     }
 
     @Test("own-flag: `x<!A x <!B y` — declaration overrun, later declaration stays literal (flag ON)")
-    func declarationOverrunOwnFlagOn() throws {
+    func declarationOverrunOwnFlagOn() {
         // No `>` exists through EOF, so neither declaration can close. Exercises the declaration
         // skip-flag SET path.
-        #expect(try htmlCount("x<!A x <!B y", options: Self.flagOn) == 0)
+        #expect(htmlCount("x<!A x <!B y", options: Self.flagOn) == 0)
     }
 
     @Test("own-flag: `x<!A x <!B y` — literal under flag OFF too (inert)")
-    func declarationOverrunOwnFlagOff() throws {
-        #expect(try htmlCount("x<!A x <!B y", options: Self.flagOff) == 0)
+    func declarationOverrunOwnFlagOff() {
+        #expect(htmlCount("x<!A x <!B y", options: Self.flagOff) == 0)
     }
 
     // MARK: Flag OFF — the deliverable stays spec-correct (each construct attempted independently)
 
     @Test("flag OFF: `x<?<??>` is recognized as one PI (no skip)")
-    func flagOffPINoSkip() throws {
-        #expect(try htmlCount("x<?<??>", options: Self.flagOff) == 1)
+    func flagOffPINoSkip() {
+        #expect(htmlCount("x<?<??>", options: Self.flagOff) == 1)
     }
 
     @Test("flag OFF: `x<!--<!--->` is recognized as one comment (no skip)")
-    func flagOffCommentNoSkip() throws {
-        #expect(try htmlCount("x<!--<!--->", options: Self.flagOff) == 1)
+    func flagOffCommentNoSkip() {
+        #expect(htmlCount("x<!--<!--->", options: Self.flagOff) == 1)
     }
 
     @Test("flag OFF: `x<!--<![CDATA[y]]>` — the later CDATA is recognized (no bang gate)")
-    func flagOffCDATANotSuppressed() throws {
-        #expect(try htmlCount("x<!--<![CDATA[y]]>", options: Self.flagOff) == 1)
+    func flagOffCDATANotSuppressed() {
+        #expect(htmlCount("x<!--<![CDATA[y]]>", options: Self.flagOff) == 1)
     }
 
     @Test("flag OFF: `x<!--<!DOCTYPE html>` — the later declaration is recognized (no bang gate)")
-    func flagOffDeclarationNotSuppressed() throws {
-        #expect(try htmlCount("x<!--<!DOCTYPE html>", options: Self.flagOff) == 1)
+    func flagOffDeclarationNotSuppressed() {
+        #expect(htmlCount("x<!--<!DOCTYPE html>", options: Self.flagOff) == 1)
     }
 
     @Test("flag OFF control: a single well-formed PI is recognized")
-    func flagOffControlSinglePI() throws {
-        #expect(try htmlCount("x<?php?>", options: Self.flagOff) == 1)
+    func flagOffControlSinglePI() {
+        #expect(htmlCount("x<?php?>", options: Self.flagOff) == 1)
     }
 
     @Test("flag OFF control: two well-formed PIs are BOTH recognized")
-    func flagOffControlTwoPIs() throws {
-        #expect(try htmlCount("x<?a?><?b?>", options: Self.flagOff) == 2)
+    func flagOffControlTwoPIs() {
+        #expect(htmlCount("x<?a?><?b?>", options: Self.flagOff) == 2)
     }
 }

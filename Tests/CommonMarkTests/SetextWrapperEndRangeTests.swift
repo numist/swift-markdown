@@ -31,7 +31,7 @@ struct SetextWrapperEndRangeTests {
     private static let specOptions: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
-    private func ranges(in src: String) throws -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] {
+    private func ranges(in src: String) -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] {
         MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -54,7 +54,7 @@ struct SetextWrapperEndRangeTests {
         // its closer `*` is the 4th byte of line 2, so spec-correct it is at TRUE column 4 and the
         // wrapper's half-open end is @2:5 - NOT the re-indented @2:7, and NOT a line-3 overshoot onto
         // the `====` underline (the flag-on `setextwrap-notab` fuzzer pair).
-        let ranges = try ranges(in: "  Foo *bar\nbaz*\n====")
+        let ranges = ranges(in: "  Foo *bar\nbaz*\n====")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 3, "expected Foo / bar / baz text nodes")
 
@@ -74,7 +74,7 @@ struct SetextWrapperEndRangeTests {
     func strongWrapperEnd() throws {
         // As above with `**bar\nbaz**`: the closer `**` occupies true cols 4-5 of line 2, so the
         // wrapper's half-open end is @2:6 - NOT the re-indented @2:8, and NOT a line-3 overshoot.
-        let ranges = try ranges(in: "  Foo **bar\nbaz**\n====")
+        let ranges = ranges(in: "  Foo **bar\nbaz**\n====")
         try #require(ranges.contains { $0.kind == .strong })
 
         let strong = try #require(firstRange(.strong, in: ranges))
@@ -87,7 +87,7 @@ struct SetextWrapperEndRangeTests {
         // As above with `[bar\nbaz](/u)`: the closer `)` is the 8th byte of line 2, so the wrapper's
         // half-open end is @2:9 - NOT the re-indented @2:11, and NOT a line-3 overshoot. Also proves the
         // arena-backed destination `/u` unescapes without indexing the source buffer at an arena offset.
-        let ranges = try ranges(in: "  Foo [bar\nbaz](/u)\n====")
+        let ranges = ranges(in: "  Foo [bar\nbaz](/u)\n====")
         try #require(ranges.contains { $0.kind == .link })
 
         let link = try #require(firstRange(.link, in: ranges))

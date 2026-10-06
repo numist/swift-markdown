@@ -63,7 +63,7 @@ struct FootnoteNestedBracketLinkTests {
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [(kind: MarkdownNode.Kind, text: String?)] {
+    ) -> [(kind: MarkdownNode.Kind, text: String?)] {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [(kind: MarkdownNode.Kind, text: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?)] = []
@@ -74,7 +74,7 @@ struct FootnoteNestedBracketLinkTests {
 
     private func depthNodes(
         in src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [(depth: Int, kind: MarkdownNode.Kind, text: String?)] {
+    ) -> [(depth: Int, kind: MarkdownNode.Kind, text: String?)] {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [(depth: Int, kind: MarkdownNode.Kind, text: String?)] in
             var out: [(depth: Int, kind: MarkdownNode.Kind, text: String?)] = []
@@ -86,8 +86,8 @@ struct FootnoteNestedBracketLinkTests {
     // MARK: - The finding
 
     @Test("`[[^[]]]()`: the inner `[^[` collapses to link text and the outer `[…]()` forms the link")
-    func nestedCaretBracketFormsLink() throws {
-        let ns = try nodes(in: "[[^[]]]()", options: Self.fuzzOptions)
+    func nestedCaretBracketFormsLink() {
+        let ns = nodes(in: "[[^[]]]()", options: Self.fuzzOptions)
         // Fixture sanity: a degenerate/empty tree must not pass vacuously.
         #expect(ns.count == 4)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
@@ -97,22 +97,22 @@ struct FootnoteNestedBracketLinkTests {
     // MARK: - Controls: the collapse fires with no enclosing link that forms
 
     @Test("control: `[^[]]` (no enclosing bracket) collapses to literal `[^[`")
-    func caretBracketTopLevelCollapse() throws {
-        let ns = try nodes(in: "[^[]]", options: Self.fuzzOptions)
+    func caretBracketTopLevelCollapse() {
+        let ns = nodes(in: "[^[]]", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["[^["])
     }
 
     @Test("control: `x[^[]]y` collapses to `x[^[`, dropping the swallowed trailing text")
-    func caretBracketCollapseDropsTrailingText() throws {
-        let ns = try nodes(in: "x[^[]]y", options: Self.fuzzOptions)
+    func caretBracketCollapseDropsTrailingText() {
+        let ns = nodes(in: "x[^[]]y", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["x[^["])
     }
 
     @Test("control: `[[^[]]]` (no `()`) stays literal `[[^[`")
-    func nestedCaretBracketWithoutParens() throws {
-        let ns = try nodes(in: "[[^[]]]", options: Self.fuzzOptions)
+    func nestedCaretBracketWithoutParens() {
+        let ns = nodes(in: "[[^[]]]", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["[[^["])
     }
@@ -120,15 +120,15 @@ struct FootnoteNestedBracketLinkTests {
     // MARK: - Controls: the inner `]` is immediately followed by `()`, so no collapse
 
     @Test("control: `[^[]]()` forms a link whose text is `^[]` (no collapse)")
-    func caretBracketImmediateParensFormsLink() throws {
-        let ns = try nodes(in: "[^[]]()", options: Self.fuzzOptions)
+    func caretBracketImmediateParensFormsLink() {
+        let ns = nodes(in: "[^[]]()", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.compactMap(\.text) == ["^[]"])
     }
 
     @Test("control: `[[^[]]()` is literal `[` plus a link whose text is `^[]`")
-    func caretBracketPrefixedLink() throws {
-        let ns = try nodes(in: "[[^[]]()", options: Self.fuzzOptions)
+    func caretBracketPrefixedLink() {
+        let ns = nodes(in: "[[^[]]()", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.compactMap(\.text) == ["[", "^[]"])
     }
@@ -136,15 +136,15 @@ struct FootnoteNestedBracketLinkTests {
     // MARK: - Controls: neighbouring shapes with no `()` and no full close
 
     @Test("control: `[^[]` stays literal `[^[]`")
-    func caretBracketUnclosedStaysLiteral() throws {
-        let ns = try nodes(in: "[^[]", options: Self.fuzzOptions)
+    func caretBracketUnclosedStaysLiteral() {
+        let ns = nodes(in: "[^[]", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["[^[]"])
     }
 
     @Test("control: `[^[]()` is literal `[` plus an empty inline attribute (attribute path, unaffected)")
-    func caretBracketSingleCloseIsAttribute() throws {
-        let ns = try nodes(in: "[^[]()", options: Self.fuzzOptions)
+    func caretBracketSingleCloseIsAttribute() {
+        let ns = nodes(in: "[^[]()", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .attribute])
         #expect(ns.compactMap(\.text) == ["["])
     }
@@ -152,8 +152,8 @@ struct FootnoteNestedBracketLinkTests {
     // MARK: - The inner `^[…]()` / `^[…](…)` forms an attribute, so the collapse must NOT fire
 
     @Test("`[^[]()]`: the inner `^[]()` is an empty attribute, so `[` + attribute + `]` (no collapse)")
-    func caretBracketAttributeInsideOuterBracket() throws {
-        let ns = try nodes(in: "[^[]()]", options: Self.fuzzOptions)
+    func caretBracketAttributeInsideOuterBracket() {
+        let ns = nodes(in: "[^[]()]", options: Self.fuzzOptions)
         // Fixture sanity: a degenerate/empty tree must not pass vacuously.
         #expect(ns.count == 5)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .attribute, .text])
@@ -161,8 +161,8 @@ struct FootnoteNestedBracketLinkTests {
     }
 
     @Test("`[^[x](y)]`: the inner `^[x](y)` is a non-empty attribute wrapping `x`, so `[` + attribute[`x`] + `]`")
-    func caretBracketNonEmptyAttributeInsideOuterBracket() throws {
-        let ns = try depthNodes(in: "[^[x](y)]", options: Self.fuzzOptions)
+    func caretBracketNonEmptyAttributeInsideOuterBracket() {
+        let ns = depthNodes(in: "[^[x](y)]", options: Self.fuzzOptions)
         #expect(ns.count == 6)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .attribute, .text, .text])
         // Depths pin the nesting: `x` (depth 3) is the attribute's child, while `[` and `]` (depth 2)
@@ -172,8 +172,8 @@ struct FootnoteNestedBracketLinkTests {
     }
 
     @Test("control: `[^[]y]`: `^[]y` is not an attribute (no `(`/`[` after `]`), so the collapse fires to `[^[`")
-    func caretBracketNonAttributeInsideOuterBracketStillCollapses() throws {
-        let ns = try nodes(in: "[^[]y]", options: Self.fuzzOptions)
+    func caretBracketNonAttributeInsideOuterBracketStillCollapses() {
+        let ns = nodes(in: "[^[]y]", options: Self.fuzzOptions)
         #expect(ns.count == 3)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["[^["])

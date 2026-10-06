@@ -19,8 +19,8 @@ struct EmptyLinkContentTests {
     private let source = "[a]()"
 
     @Test("the tree holds a link with an empty URL and title")
-    func tree() throws {
-        #expect(try CmarkTreeDump.dump(source, options: []) == """
+    func tree() {
+        #expect(CmarkTreeDump.dump(source, options: []) == """
             document
               paragraph
                 link "" ""
@@ -30,7 +30,7 @@ struct EmptyLinkContentTests {
     }
 
     @Test("content vends empty URL and title spans")
-    func borrowedContent() throws {
+    func borrowedContent() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let (url, title) = MarkdownDocument.withParsedDocument(source) { doc -> (String?, String?) in
             var url: String?

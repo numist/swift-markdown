@@ -16,13 +16,13 @@ import CommonMark
 @Suite("Source ranges of an unclosed inline-attribute opener")
 struct AttributeOpenerSourceRangeTests {
 
-    private func tree(_ source: String) throws -> String {
-        try CmarkTreeDump.dump(source, options: [.sourcePosition], sourceRanges: true)
+    private func tree(_ source: String) -> String {
+        CmarkTreeDump.dump(source, options: [.sourcePosition], sourceRanges: true)
     }
 
     @Test("a lone opener's text spans it")
-    func loneOpener() throws {
-        #expect(try tree("^[") == """
+    func loneOpener() {
+        #expect(tree("^[") == """
             document @1:1-1:3
               paragraph @1:1-1:3
                 text "^[" @1:1-1:3
@@ -31,8 +31,8 @@ struct AttributeOpenerSourceRangeTests {
     }
 
     @Test("text that starts with an opener starts at it")
-    func textStartingWithOpener() throws {
-        #expect(try tree("^[x") == """
+    func textStartingWithOpener() {
+        #expect(tree("^[x") == """
             document @1:1-1:4
               paragraph @1:1-1:4
                 text "^[x" @1:1-1:4

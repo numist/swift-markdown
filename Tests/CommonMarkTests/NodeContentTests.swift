@@ -15,7 +15,7 @@ import Testing
 struct NodeContentTests {
 
     @Test("link content in one switch - single-segment spans")
-    func linkContent() throws {
+    func linkContent() {
         if #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
             let source = "[text](/url \"title\")"
             MarkdownDocument.withParsedDocument(source) { doc in
@@ -39,7 +39,7 @@ struct NodeContentTests {
     }
 
     @Test("code block body is vended as multi-segment, not a materialized span")
-    func codeBlockContent() throws {
+    func codeBlockContent() {
         if #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
             let source = "```swift\na\nb\n```\n"
             MarkdownDocument.withParsedDocument(source) { doc in
@@ -66,7 +66,7 @@ struct NodeContentTests {
     }
 
     @Test("inline text content via content")
-    func textContent() throws {
+    func textContent() {
         if #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
             let source = "hello"
             MarkdownDocument.withParsedDocument(source) { doc in

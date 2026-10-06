@@ -47,7 +47,7 @@ struct AutolinkSchemePrecedingCharTests {
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
+    ) -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?, url: String?)] = []
@@ -58,8 +58,8 @@ struct AutolinkSchemePrecedingCharTests {
 
     /// Assert that `src` parses to a leading `.text` node with literal `prefix` followed by a
     /// `Link(http://e)` whose visible text is `http://e`.
-    private func expectPrefixThenLink(_ src: String, prefix: String) throws {
-        let ns = try nodes(in: src, options: Self.flagOff)
+    private func expectPrefixThenLink(_ src: String, prefix: String) {
+        let ns = nodes(in: src, options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, prefix, nil, "http://e"])
         #expect(ns.compactMap(\.url) == ["http://e"])
@@ -68,66 +68,66 @@ struct AutolinkSchemePrecedingCharTests {
     // MARK: - The fix: any non-alpha char before the scheme still autolinks
 
     @Test("scheme autolinks after `!`")
-    func afterBang() throws {
-        try expectPrefixThenLink("!http://e", prefix: "!")
+    func afterBang() {
+        expectPrefixThenLink("!http://e", prefix: "!")
     }
 
     @Test("scheme autolinks after `.`")
-    func afterDot() throws {
-        try expectPrefixThenLink(".http://e", prefix: ".")
+    func afterDot() {
+        expectPrefixThenLink(".http://e", prefix: ".")
     }
 
     @Test("scheme autolinks after a digit")
-    func afterDigit() throws {
+    func afterDigit() {
         // A digit is non-alpha, so it ends the scheme rewind — cmark links.
-        try expectPrefixThenLink("9http://e", prefix: "9")
+        expectPrefixThenLink("9http://e", prefix: "9")
     }
 
     @Test("scheme autolinks after `-`")
-    func afterHyphen() throws {
-        try expectPrefixThenLink("-http://e", prefix: "-")
+    func afterHyphen() {
+        expectPrefixThenLink("-http://e", prefix: "-")
     }
 
     @Test("scheme autolinks after `/`")
-    func afterSlash() throws {
-        try expectPrefixThenLink("/http://e", prefix: "/")
+    func afterSlash() {
+        expectPrefixThenLink("/http://e", prefix: "/")
     }
 
     @Test("scheme autolinks after a non-ASCII letter")
-    func afterNonASCIILetter() throws {
+    func afterNonASCIILetter() {
         // cmark's `cmark_isalpha` is ASCII-only, so the non-ASCII bytes of `é` end the scheme rewind.
-        try expectPrefixThenLink("éhttp://e", prefix: "é")
+        expectPrefixThenLink("éhttp://e", prefix: "é")
     }
 
     @Test("scheme autolinks after a NUL (replaced with U+FFFD)")
-    func afterNUL() throws {
+    func afterNUL() {
         // NUL → U+FFFD before inline scanning; U+FFFD's last byte is non-alpha, so the rewind stops and the
         // autolink fires. The `before` text node carries the replacement character.
-        try expectPrefixThenLink("\u{0}http://e", prefix: "\u{FFFD}")
+        expectPrefixThenLink("\u{0}http://e", prefix: "\u{FFFD}")
     }
 
     // MARK: - Guards: an ASCII letter before the scheme still blocks the match
 
     @Test("guard: an ASCII letter before the scheme does NOT autolink")
-    func alphaBeforeSchemeNoLink() throws {
+    func alphaBeforeSchemeNoLink() {
         // `xhttp://e` — the `x` is ASCII-alpha, so cmark's rewind swallows it into the scheme (`xhttp`),
         // which is not a safe scheme, so no link. Whole thing stays plain text.
-        let ns = try nodes(in: "xhttp://e", options: Self.flagOff)
+        let ns = nodes(in: "xhttp://e", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "xhttp://e"])
         #expect(ns.compactMap(\.url) == [])
     }
 
     @Test("guard: scheme autolinks after `(` (was already allowed)")
-    func afterParen() throws {
-        try expectPrefixThenLink("(http://e", prefix: "(")
+    func afterParen() {
+        expectPrefixThenLink("(http://e", prefix: "(")
     }
 
     @Test("guard: scheme autolinks after a leading space (was already allowed)")
-    func afterLeadingSpace() throws {
+    func afterLeadingSpace() {
         // The paragraph's leading space is stripped, so the scheme sits at the content start (no `before`
         // text node). It must still link.
-        let ns = try nodes(in: " http://e", options: Self.flagOff)
+        let ns = nodes(in: " http://e", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "http://e"])
         #expect(ns.compactMap(\.url) == ["http://e"])
@@ -136,18 +136,18 @@ struct AutolinkSchemePrecedingCharTests {
     // MARK: - Guard: the `www.` form keeps its narrow preceding-char restriction
 
     @Test("guard: `www.` form does not autolink after `!` (only the scheme form relaxed)")
-    func wwwAfterBangUnchanged() throws {
+    func wwwAfterBangUnchanged() {
         // `!www.e.f` — `www_match` restricts its preceding char to the `*_~(`/whitespace set, so `!` blocks
         // the `www.` autolink. This must be untouched by relaxing the scheme form.
-        let ns = try nodes(in: "!www.e.f", options: Self.flagOff)
+        let ns = nodes(in: "!www.e.f", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "!www.e.f"])
         #expect(ns.compactMap(\.url) == [])
     }
 
     @Test("guard: `www.` form still autolinks after `(`")
-    func wwwAfterParenUnchanged() throws {
-        let ns = try nodes(in: "(www.e.f", options: Self.flagOff)
+    func wwwAfterParenUnchanged() {
+        let ns = nodes(in: "(www.e.f", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "(", nil, "www.e.f"])
         #expect(ns.compactMap(\.url) == ["http://www.e.f"])

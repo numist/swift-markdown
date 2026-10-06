@@ -14,7 +14,7 @@ import Testing
 /// A compact, indented structural dump of a parsed document (kinds + literal text + table shape). Used
 /// to assert the full nested tree, since these cases live inside block quotes / list items where a
 /// top-level-only block classifier can't see the split.
-fileprivate func dumpTree(_ source: String, options: MarkdownDocument.ParseOptions = [.tables]) throws -> String {
+fileprivate func dumpTree(_ source: String, options: MarkdownDocument.ParseOptions = [.tables]) -> String {
     MarkdownDocument.withParsedDocument(source, options: options) { doc -> String in
         var out = ""
         func label(_ n: borrowing MarkdownNode) -> String {
@@ -59,9 +59,9 @@ struct TablePrecedingParagraphNoncontiguousTests {
     // MARK: - FIX: the split now works for non-contiguous paragraph representations
 
     @Test("nested block quote: preceding line splits off, header is the last line")
-    func nestedBlockQuote() throws {
+    func nestedBlockQuote() {
         // `> x\n> a\n> |-` : inside the block quote, `x` becomes a paragraph and `a`+`|-` a table.
-        #expect(try dumpTree("> x\n> a\n> |-") == """
+        #expect(dumpTree("> x\n> a\n> |-") == """
         Document
           BlockQuote
             Paragraph
@@ -75,9 +75,9 @@ struct TablePrecedingParagraphNoncontiguousTests {
     }
 
     @Test("nested list item: preceding line splits off, header is the last line")
-    func nestedListItem() throws {
+    func nestedListItem() {
         // `- x\n  a\n  |-` : inside the list item, `x` becomes a paragraph and `a`+`|-` a table.
-        #expect(try dumpTree("- x\n  a\n  |-") == """
+        #expect(dumpTree("- x\n  a\n  |-") == """
         Document
           List
             Item
@@ -92,9 +92,9 @@ struct TablePrecedingParagraphNoncontiguousTests {
     }
 
     @Test("CRLF line endings: preceding line splits off, header is the last line")
-    func crlfLineEndings() throws {
+    func crlfLineEndings() {
         // `x\r\na\r\n|-` : CRLF joins accumulate as a non-contiguous segment list; the split is the same.
-        #expect(try dumpTree("x\r\na\r\n|-") == """
+        #expect(dumpTree("x\r\na\r\n|-") == """
         Document
           Paragraph
             Text "x"
@@ -107,8 +107,8 @@ struct TablePrecedingParagraphNoncontiguousTests {
     }
 
     @Test("nested block quote: a following body row joins the table")
-    func nestedBlockQuoteBodyRow() throws {
-        #expect(try dumpTree("> x\n> a\n> |-\n> b") == """
+    func nestedBlockQuoteBodyRow() {
+        #expect(dumpTree("> x\n> a\n> |-\n> b") == """
         Document
           BlockQuote
             Paragraph
@@ -125,8 +125,8 @@ struct TablePrecedingParagraphNoncontiguousTests {
     }
 
     @Test("CRLF: a following body row joins the table")
-    func crlfBodyRow() throws {
-        #expect(try dumpTree("x\r\na\r\n|-\r\nb") == """
+    func crlfBodyRow() {
+        #expect(dumpTree("x\r\na\r\n|-\r\nb") == """
         Document
           Paragraph
             Text "x"
@@ -144,8 +144,8 @@ struct TablePrecedingParagraphNoncontiguousTests {
     // MARK: - GUARD: bare 2-line nested headers keep working (no preceding paragraph)
 
     @Test("bare block-quote header: no preceding paragraph")
-    func bareNestedBlockQuoteTable() throws {
-        #expect(try dumpTree("> a\n> |-") == """
+    func bareNestedBlockQuoteTable() {
+        #expect(dumpTree("> a\n> |-") == """
         Document
           BlockQuote
             Table
@@ -157,8 +157,8 @@ struct TablePrecedingParagraphNoncontiguousTests {
     }
 
     @Test("bare list-item header: no preceding paragraph")
-    func bareNestedListTable() throws {
-        #expect(try dumpTree("- a\n  |-") == """
+    func bareNestedListTable() {
+        #expect(dumpTree("- a\n  |-") == """
         Document
           List
             Item
@@ -173,11 +173,11 @@ struct TablePrecedingParagraphNoncontiguousTests {
     // MARK: - GUARD: cases that must NOT split
 
     @Test("lazy block-quote continuation: the delimiter is lazy, so no table and no split")
-    func lazyBlockQuoteNoSplit() throws {
+    func lazyBlockQuoteNoSplit() {
         // `> x\na\n|-` : `a` and `|-` are lazy continuations (no `>`). cmark opens table blocks against
         // an ancestor on a lazy line, so `try_opening_table_block` never sees a paragraph parent — no
         // table opens, and the whole thing stays one lazy block-quote paragraph.
-        #expect(try dumpTree("> x\na\n|-") == """
+        #expect(dumpTree("> x\na\n|-") == """
         Document
           BlockQuote
             Paragraph
@@ -191,10 +191,10 @@ struct TablePrecedingParagraphNoncontiguousTests {
     }
 
     @Test("nested header column mismatch poisons the paragraph (no table)")
-    func nestedHeaderMismatchStaysParagraph() throws {
+    func nestedHeaderMismatchStaysParagraph() {
         // `> x\n> a|b\n> |-` : header `a|b` has two cells but the delimiter one column — a mismatch, so
         // cmark marks the paragraph never-a-table (TABLE_VISITED). It stays one paragraph.
-        #expect(try dumpTree("> x\n> a|b\n> |-") == """
+        #expect(dumpTree("> x\n> a|b\n> |-") == """
         Document
           BlockQuote
             Paragraph
@@ -210,8 +210,8 @@ struct TablePrecedingParagraphNoncontiguousTests {
     // MARK: - GUARD: the contiguous split (4adf7f9) still works
 
     @Test("contiguous: multiple preceding lines split off as one paragraph")
-    func contiguousMultiPreceding() throws {
-        #expect(try dumpTree("x\ny\na\n|-") == """
+    func contiguousMultiPreceding() {
+        #expect(dumpTree("x\ny\na\n|-") == """
         Document
           Paragraph
             Text "x"
@@ -228,7 +228,7 @@ struct TablePrecedingParagraphNoncontiguousTests {
     // MARK: - Positions: the top-level CRLF split carries valid (present, non-inverted) source ranges
 
     @Test("CRLF split nodes carry valid source ranges")
-    func crlfSplitNodesHaveValidRanges() throws {
+    func crlfSplitNodesHaveValidRanges() {
         // The top-level CRLF split is fully position-stamped (the table's rows/cells map back through
         // the flattened segment run map). Assert every node carries a present, non-inverted range —
         // breaks are legitimately position-less (see SourceRangeCompletenessTests).
@@ -256,7 +256,7 @@ struct TablePrecedingParagraphNoncontiguousTests {
     // MARK: - Materialized representation: a tab-expanded first line splits the same way
 
     @Test("tab-prefixed lines split identically whether positions are on or off")
-    func materializedTabPrefixSplit() throws {
+    func materializedTabPrefixSplit() {
         // `>\tx\n> y\n> |-` : the block-quote marker's tab makes the paragraph's first line tab-expanded.
         // With positions OFF the paragraph accumulates as a materialized byte buffer; with positions ON it
         // accumulates as a source-mapped segment list. The split must reconstruct the same structure from
@@ -272,14 +272,14 @@ struct TablePrecedingParagraphNoncontiguousTests {
                   Text "y"
 
         """
-        #expect(try dumpTree(">\tx\n> y\n> |-", options: [.tables]) == expected)                    // materialized
-        #expect(try dumpTree(">\tx\n> y\n> |-", options: [.tables, .sourcePosition]) == expected)    // segments
+        #expect(dumpTree(">\tx\n> y\n> |-", options: [.tables]) == expected)                    // materialized
+        #expect(dumpTree(">\tx\n> y\n> |-", options: [.tables, .sourcePosition]) == expected)    // segments
     }
 
     // MARK: - The delimiter, not the original second line, gates the table after a multi-line split
 
     @Test("an indented earlier line does not veto the split table")
-    func indentedEarlierLineStillFormsTable() throws {
+    func indentedEarlierLineStillFormsTable() {
         // `x\n    a\n|-` : the second physical line `    a` is indented 4 columns (stripped, so the
         // paragraph is a non-contiguous segment list), but the DELIMITER line `|-` is unindented. cmark
         // gates the table on the delimiter line's indent (`try_opening_table_block`'s `!indented`), so the
@@ -294,9 +294,9 @@ struct TablePrecedingParagraphNoncontiguousTests {
                 Text "a"
 
         """
-        #expect(try dumpTree("x\n    a\n|-") == expected)
+        #expect(dumpTree("x\n    a\n|-") == expected)
         // Nested: the same, inside a block quote (matched continuation indented 4 within the quote).
-        #expect(try dumpTree("> x\n>     a\n> |-") == """
+        #expect(dumpTree("> x\n>     a\n> |-") == """
         Document
           BlockQuote
             Paragraph
@@ -310,12 +310,12 @@ struct TablePrecedingParagraphNoncontiguousTests {
     }
 
     @Test("a lazy earlier line does not veto the split table when the delimiter is matched")
-    func lazyEarlierLineStillFormsTable() throws {
+    func lazyEarlierLineStillFormsTable() {
         // `> x\ny\n> |-` : the second line `y` is a LAZY block-quote continuation, but the delimiter line
         // `> |-` is a MATCHED (non-lazy) continuation. cmark opens the table on the matched delimiter line,
         // so `x` splits off and `y`+`|-` forms the table. (Contrast `> x\na\n|-`, where the delimiter ITSELF
         // is lazy and no table opens.)
-        #expect(try dumpTree("> x\ny\n> |-") == """
+        #expect(dumpTree("> x\ny\n> |-") == """
         Document
           BlockQuote
             Paragraph

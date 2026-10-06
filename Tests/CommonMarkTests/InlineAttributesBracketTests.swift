@@ -51,7 +51,7 @@ struct InlineAttributesBracketTests {
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [(kind: MarkdownNode.Kind, text: String?, attrs: String?)] {
+    ) -> [(kind: MarkdownNode.Kind, text: String?, attrs: String?)] {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [(kind: MarkdownNode.Kind, text: String?, attrs: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?, attrs: String?)] = []
@@ -64,7 +64,7 @@ struct InlineAttributesBracketTests {
 
     @Test("`^[](` newline `)` forms one attribute whose text is the newline")
     func attributeTextSpansSoftBreak() throws {
-        let ns = try nodes(in: " ^[](\n)", options: Self.fuzzOptions)
+        let ns = nodes(in: " ^[](\n)", options: Self.fuzzOptions)
         // Fixture sanity: a degenerate/empty tree must not pass vacuously.
         #expect(ns.count == 3)
         #expect(ns.map(\.kind) == [.document, .paragraph, .attribute])
@@ -75,22 +75,22 @@ struct InlineAttributesBracketTests {
     }
 
     @Test("control: `^[](x)` still forms an attribute (single line, unchanged)")
-    func inlineAttributeSingleLine() throws {
-        let ns = try nodes(in: "^[](x)", options: Self.fuzzOptions)
+    func inlineAttributeSingleLine() {
+        let ns = nodes(in: "^[](x)", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .attribute])
         #expect(ns.compactMap(\.attrs) == ["x"])
     }
 
     @Test("control: ` ^[](x)` (leading space, no newline) still forms an attribute")
-    func inlineAttributeLeadingSpace() throws {
-        let ns = try nodes(in: " ^[](x)", options: Self.fuzzOptions)
+    func inlineAttributeLeadingSpace() {
+        let ns = nodes(in: " ^[](x)", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .attribute])
         #expect(ns.compactMap(\.attrs) == ["x"])
     }
 
     @Test("control: `^[x](/u)` keeps its inner text child and attribute string")
-    func inlineAttributeWithInnerText() throws {
-        let ns = try nodes(in: "^[x](/u)", options: Self.fuzzOptions)
+    func inlineAttributeWithInnerText() {
+        let ns = nodes(in: "^[x](/u)", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .attribute, .text])
         #expect(ns.compactMap(\.attrs) == ["/u"])
         #expect(ns.compactMap(\.text) == ["x"])
@@ -99,30 +99,30 @@ struct InlineAttributesBracketTests {
     // MARK: - Finding 2: `^[]` followed by `[]`
 
     @Test("`^[][]` drops the trailing `[]`, leaving literal `^[]`")
-    func emptyAttributeFollowedByEmptyBrackets() throws {
-        let ns = try nodes(in: "^[][]", options: Self.fuzzOptions)
+    func emptyAttributeFollowedByEmptyBrackets() {
+        let ns = nodes(in: "^[][]", options: Self.fuzzOptions)
         #expect(ns.count == 3)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["^[]"])
     }
 
     @Test("control: `[][]` (no caret) stays literal `[][]`")
-    func plainEmptyBracketsUnchanged() throws {
-        let ns = try nodes(in: "[][]", options: Self.fuzzOptions)
+    func plainEmptyBracketsUnchanged() {
+        let ns = nodes(in: "[][]", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["[][]"])
     }
 
     @Test("control: `^[]` alone stays literal `^[]`")
-    func emptyAttributeAloneUnchanged() throws {
-        let ns = try nodes(in: "^[]", options: Self.fuzzOptions)
+    func emptyAttributeAloneUnchanged() {
+        let ns = nodes(in: "^[]", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["^[]"])
     }
 
     @Test("control: `^[]x` keeps the trailing text")
-    func emptyAttributeFollowedByTextUnchanged() throws {
-        let ns = try nodes(in: "^[]x", options: Self.fuzzOptions)
+    func emptyAttributeFollowedByTextUnchanged() {
+        let ns = nodes(in: "^[]x", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["^[]x"])
     }
@@ -134,23 +134,23 @@ struct InlineAttributesBracketTests {
     // a resolved attribute reference overwrites the inline attributes (`ref->is_attributes_reference`).
 
     @Test("`^[](x)[undef]` consumes the unresolved label, keeping the inline attributes")
-    func inlineAttributeThenUnresolvedLabel() throws {
-        let ns = try nodes(in: "^[](x)[undef]", options: Self.fuzzOptions)
+    func inlineAttributeThenUnresolvedLabel() {
+        let ns = nodes(in: "^[](x)[undef]", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .attribute])
         #expect(ns.compactMap(\.attrs) == ["x"])
     }
 
     @Test("`^[](x)[undef]y` consumes the label but keeps text after it")
-    func inlineAttributeThenUnresolvedLabelThenText() throws {
-        let ns = try nodes(in: "^[](x)[undef]y", options: Self.fuzzOptions)
+    func inlineAttributeThenUnresolvedLabelThenText() {
+        let ns = nodes(in: "^[](x)[undef]y", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .attribute, .text])
         #expect(ns.compactMap(\.attrs) == ["x"])
         #expect(ns.compactMap(\.text) == ["y"])
     }
 
     @Test("a resolved attribute reference following an inline form overwrites its attributes")
-    func inlineAttributeThenResolvedReference() throws {
-        let ns = try nodes(in: "^[lbl]: color: blue\n\n^[](x)[lbl]", options: Self.fuzzOptions)
+    func inlineAttributeThenResolvedReference() {
+        let ns = nodes(in: "^[lbl]: color: blue\n\n^[](x)[lbl]", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .attribute])
         #expect(ns.compactMap(\.attrs) == ["color: blue"])
     }

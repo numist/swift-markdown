@@ -19,7 +19,7 @@ import Testing
 @Suite("Lone-pipe table row column count")
 struct TableLonePipeHeaderTests {
 
-    private func firstKind(_ source: String) throws -> String {
+    private func firstKind(_ source: String) -> String {
         MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> String in
             var kinds: [String] = []
             doc.root.children.forEach {
@@ -37,42 +37,42 @@ struct TableLonePipeHeaderTests {
     // MARK: - FIX: a lone-pipe header is 0 columns, so no table forms
 
     @Test("lone-pipe header vs a 1-column delimiter is not a table")
-    func lonePipeHeaderTrailingDelim() throws {
-        #expect(try firstKind("|\n-|") == "paragraph")
+    func lonePipeHeaderTrailingDelim() {
+        #expect(firstKind("|\n-|") == "paragraph")
     }
 
     @Test("lone-pipe header vs a leading-pipe delimiter is not a table")
-    func lonePipeHeaderLeadingDelim() throws {
-        #expect(try firstKind("|\n|-") == "paragraph")
+    func lonePipeHeaderLeadingDelim() {
+        #expect(firstKind("|\n|-") == "paragraph")
     }
 
     @Test("a lone pipe followed by a form-feed is still zero columns (spacechar includes FF)")
-    func lonePipeFormFeed() throws {
+    func lonePipeFormFeed() {
         // cmark's `scan_table_cell_end` spacechar is [ \t\v\f], so `|\f` is a consumed pipe + whitespace →
         // 0 columns. FF passes the fuzzer's input filter, so this must not spuriously form a table.
-        #expect(try firstKind("|\u{0C}\n-|") == "paragraph")
+        #expect(firstKind("|\u{0C}\n-|") == "paragraph")
     }
 
     @Test("a lone pipe followed by a space is still zero columns")
-    func lonePipeSpace() throws {
-        #expect(try firstKind("| \n-|") == "paragraph")
+    func lonePipeSpace() {
+        #expect(firstKind("| \n-|") == "paragraph")
     }
 
     // MARK: - LEAVE guards
 
     @Test("a 1-column header with a 1-column delimiter still forms a table")
-    func oneColumnStillTable() throws {
-        #expect(try firstKind("a\n-|") == "table")
+    func oneColumnStillTable() {
+        #expect(firstKind("a\n-|") == "table")
     }
 
     @Test("a leading+trailing pipe (one empty cell) vs a 2-column delimiter stays a paragraph")
-    func doublePipeMismatch() throws {
+    func doublePipeMismatch() {
         // `||` is ONE empty cell (the cell between the pipes); a 2-column delimiter mismatches → paragraph.
-        #expect(try firstKind("||\n-|-") == "paragraph")
+        #expect(firstKind("||\n-|-") == "paragraph")
     }
 
     @Test("an ordinary two-column table is unaffected")
-    func ordinaryTable() throws {
-        #expect(try firstKind("a|b\n-|-") == "table")
+    func ordinaryTable() {
+        #expect(firstKind("a|b\n-|-") == "table")
     }
 }

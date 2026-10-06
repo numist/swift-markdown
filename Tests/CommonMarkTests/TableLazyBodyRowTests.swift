@@ -63,7 +63,7 @@ struct TableLazyBodyRowTests {
         node.children.forEach { recordFirstTable($0, insideBlockQuote: nowInBQ, shape: &shape) }
     }
 
-    private func analyze(_ source: String) throws -> Shape {
+    private func analyze(_ source: String) -> Shape {
         MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> Shape in
             var shape = Shape()
             doc.root.children.forEach { block in
@@ -85,7 +85,7 @@ struct TableLazyBodyRowTests {
 
     @Test("a lazy body row closes the table + block quote and starts a document paragraph")
     func lazyBodyRowBreaksOut() throws {
-        let s = try analyze(">a|b\n>-|-\nc|d")
+        let s = analyze(">a|b\n>-|-\nc|d")
         // Fixture sanity: a table did form inside the block quote.
         try #require(s.hasTable && s.blockQuoteContainsTable, "fixture: expected a table inside the block quote")
         try #require(s.tableHeaderRows == 1, "fixture: expected exactly one header row")
@@ -97,7 +97,7 @@ struct TableLazyBodyRowTests {
 
     @Test("two lazy lines after the delimiter form ONE document paragraph")
     func twoLazyLinesFormOneParagraph() throws {
-        let s = try analyze(">a|b\n>-|-\nc|d\ne|f")
+        let s = analyze(">a|b\n>-|-\nc|d\ne|f")
         try #require(s.hasTable && s.blockQuoteContainsTable, "fixture: expected a table inside the block quote")
         #expect(s.tableBodyRows == 0)
         #expect(s.topKinds == [.blockQuote, .paragraph])
@@ -108,7 +108,7 @@ struct TableLazyBodyRowTests {
 
     @Test("lazy non-table text after the delimiter breaks out to a document paragraph")
     func lazyNonTableTextBreaksOut() throws {
-        let s = try analyze(">a|b\n>-|-\nxy")
+        let s = analyze(">a|b\n>-|-\nxy")
         try #require(s.hasTable && s.blockQuoteContainsTable, "fixture: expected a table inside the block quote")
         #expect(s.tableBodyRows == 0)
         #expect(s.topKinds == [.blockQuote, .paragraph])
@@ -120,7 +120,7 @@ struct TableLazyBodyRowTests {
         // The break-out signal is `currentLineIsLazyContinuation` (some open container's prefix failed),
         // not block-quote-specific: `c|d` is not indented to the item's content column, so it is a lazy
         // continuation and breaks out. cmark: List › Item › Table(header only) + document Paragraph "c|d".
-        let s = try analyze("- a|b\n  -|-\nc|d")
+        let s = analyze("- a|b\n  -|-\nc|d")
         try #require(s.hasTable, "fixture: expected a table to have formed in the list item")
         #expect(s.tableBodyRows == 0)
         // The list is the first top-level block; the broken-out paragraph is a second top-level block.
@@ -135,7 +135,7 @@ struct TableLazyBodyRowTests {
         // `>c|d` is a prefix-matched body row (stays in the table); the later un-prefixed `e|f` is a lazy
         // continuation that breaks out. cmark: BlockQuote › Table(header + body "c","d") + document
         // Paragraph "e|f".
-        let s = try analyze(">a|b\n>-|-\n>c|d\ne|f")
+        let s = analyze(">a|b\n>-|-\n>c|d\ne|f")
         try #require(s.hasTable && s.blockQuoteContainsTable, "fixture: expected a table inside the block quote")
         #expect(s.tableBodyRows == 1)
         #expect(s.topKinds == [.blockQuote, .paragraph])
@@ -146,7 +146,7 @@ struct TableLazyBodyRowTests {
 
     @Test("a PREFIXED body row still becomes a table body row inside the block quote")
     func prefixedBodyRowStaysInTable() throws {
-        let s = try analyze(">a|b\n>-|-\n>c|d")
+        let s = analyze(">a|b\n>-|-\n>c|d")
         try #require(s.hasTable && s.blockQuoteContainsTable, "fixture: expected a table inside the block quote")
         #expect(s.tableBodyRows == 1)
         // No break-out: the block quote is the sole top-level block, no stray paragraph.
@@ -156,7 +156,7 @@ struct TableLazyBodyRowTests {
 
     @Test("a plain (no-container) table still gets its body row")
     func plainTableStillGetsBodyRow() throws {
-        let s = try analyze("a|b\n-|-\nc|d")
+        let s = analyze("a|b\n-|-\nc|d")
         try #require(s.hasTable && !s.blockQuoteContainsTable, "fixture: expected a top-level table")
         #expect(s.tableBodyRows == 1)
         #expect(s.topKinds == [.table])

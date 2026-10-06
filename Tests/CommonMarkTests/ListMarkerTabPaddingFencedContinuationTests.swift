@@ -25,7 +25,7 @@ struct ListMarkerTabPaddingFencedContinuationTests {
     // is an INDENTED code block whose split second tab leaves two leading content spaces. The rewrite
     // previously consumed both tabs as padding and re-dispatched the trailing `-` as a nested list.
     @Test("double-tab list continuation opens a sibling item with indented code")
-    func doubleTabSiblingIndentedCode() throws {
+    func doubleTabSiblingIndentedCode() {
         MarkdownDocument.withParsedDocument("- ```\n-\t\t-") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [
@@ -38,7 +38,7 @@ struct ListMarkerTabPaddingFencedContinuationTests {
 
     // FIX: same shape with `x` as the content byte — the two split-tab columns precede it.
     @Test("double-tab list continuation with content keeps the split-tab spaces")
-    func doubleTabSiblingIndentedCodeContent() throws {
+    func doubleTabSiblingIndentedCodeContent() {
         MarkdownDocument.withParsedDocument("- ```\n-\t\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [
@@ -53,7 +53,7 @@ struct ListMarkerTabPaddingFencedContinuationTests {
     // column of the tab (column 1 → 2); the tab's remaining columns plus the two spaces reach exactly
     // four columns of code indent, so the tail (`-`) is an indented code block with no leading space.
     @Test("tab-then-spaces list continuation opens a sibling item with indented code")
-    func tabThenSpacesSiblingIndentedCode() throws {
+    func tabThenSpacesSiblingIndentedCode() {
         MarkdownDocument.withParsedDocument("*\t~~~\n*\t  -") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [
@@ -68,7 +68,7 @@ struct ListMarkerTabPaddingFencedContinuationTests {
     // tab is padding and the content column is four. The tail (`x`) sits AT the item's content column,
     // so it is an ordinary paragraph, not an indented code block and not a nested list.
     @Test("single-tab list continuation opens a sibling item with a paragraph")
-    func singleTabSiblingParagraph() throws {
+    func singleTabSiblingParagraph() {
         MarkdownDocument.withParsedDocument("- ```\n-\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [
@@ -84,7 +84,7 @@ struct ListMarkerTabPaddingFencedContinuationTests {
     // optional column of the first tab (column 2 → 3); the run reaches six columns (≥ 5 reset), so the
     // tail (`x`) is an indented code block whose split second tab leaves one leading content space.
     @Test("double-tab ordered-list continuation opens a sibling item with indented code")
-    func orderedMarkerDoubleTabSiblingIndentedCode() throws {
+    func orderedMarkerDoubleTabSiblingIndentedCode() {
         MarkdownDocument.withParsedDocument("1. ```\n1.\t\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [

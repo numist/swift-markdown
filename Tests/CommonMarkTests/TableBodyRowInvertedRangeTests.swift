@@ -21,7 +21,7 @@ struct TableBodyRowInvertedRangeTests {
 
     private let source = "  a|b\n-|-\nx\n"
 
-    private func bodyRowRange(options: MarkdownDocument.ParseOptions) throws -> Range<MarkdownNode.SourcePosition>?? {
+    private func bodyRowRange(options: MarkdownDocument.ParseOptions) -> Range<MarkdownNode.SourcePosition>?? {
         MarkdownDocument.withParsedDocument(source, options: options) { doc in
             var range: Range<MarkdownNode.SourcePosition>?? = .none
             func walk(_ node: borrowing MarkdownNode) {
@@ -36,15 +36,15 @@ struct TableBodyRowInvertedRangeTests {
     }
 
     @Test("with cmark bug compatibility the row's re-based start is cut off at its line's end")
-    func lineEndRangeWithBugCompatibility() throws {
+    func lineEndRangeWithBugCompatibility() {
         let end = MarkdownNode.SourcePosition(line: 3, column: 2)
-        #expect(try bodyRowRange(options: [.tables, .sourcePosition, .cmarkBugCompatibility]) == .some(end..<end))
+        #expect(bodyRowRange(options: [.tables, .sourcePosition, .cmarkBugCompatibility]) == .some(end..<end))
     }
 
     @Test("without cmark bug compatibility the row spans its own line")
-    func trueRangeWithoutBugCompatibility() throws {
+    func trueRangeWithoutBugCompatibility() {
         let start = MarkdownNode.SourcePosition(line: 3, column: 1)
         let end = MarkdownNode.SourcePosition(line: 3, column: 2)
-        #expect(try bodyRowRange(options: [.tables, .sourcePosition]) == .some(start..<end))
+        #expect(bodyRowRange(options: [.tables, .sourcePosition]) == .some(start..<end))
     }
 }

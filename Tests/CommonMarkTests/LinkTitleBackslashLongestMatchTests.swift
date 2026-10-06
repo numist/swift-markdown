@@ -35,7 +35,7 @@ struct LinkTitleBackslashLongestMatchTests {
     /// inline children (link text).
     private func firstLink(
         _ source: String
-    ) throws -> (found: Bool, url: String?, title: String?, hasText: Bool) {
+    ) -> (found: Bool, url: String?, title: String?, hasText: Bool) {
         MarkdownDocument.withParsedDocument(source) { doc in
             var found = false
             var url: String? = nil
@@ -60,7 +60,7 @@ struct LinkTitleBackslashLongestMatchTests {
     /// Top-level block kinds followed by the first paragraph's inline kinds.
     private func structure(
         _ source: String
-    ) throws -> (top: [MarkdownNode.Kind], inlines: [MarkdownNode.Kind]) {
+    ) -> (top: [MarkdownNode.Kind], inlines: [MarkdownNode.Kind]) {
         MarkdownDocument.withParsedDocument(source) { doc in
             var top: [MarkdownNode.Kind] = []
             doc.root.children.forEach { top.append($0.kind) }
@@ -73,13 +73,13 @@ struct LinkTitleBackslashLongestMatchTests {
     @Test("empty-text link whose title backslash precedes the closing quote")
     func findingBackslashBeforeCloseQuote() throws {
         let source = "[]((\n'\\')"
-        let (top, inlines) = try structure(source)
+        let (top, inlines) = structure(source)
         #expect(top == [.paragraph])
         // Fixture sanity: the whole construct collapses to a single inline link (not the buggy
         // text / soft-break / text split).
         #expect(inlines == [.link])
 
-        let link = try firstLink(source)
+        let link = firstLink(source)
         try #require(link.found)  // fixture sanity: a link must exist
         #expect(link.url == "(")
         #expect(link.title == "\\")
@@ -90,7 +90,7 @@ struct LinkTitleBackslashLongestMatchTests {
 
     @Test("plain single-char destination")
     func plainDestination() throws {
-        let link = try firstLink("[](a)")
+        let link = firstLink("[](a)")
         try #require(link.found)
         #expect(link.url == "a")
         #expect(link.title == "")
@@ -99,7 +99,7 @@ struct LinkTitleBackslashLongestMatchTests {
 
     @Test("balanced parenthesized destination")
     func balancedParenDestination() throws {
-        let link = try firstLink("[]((a))")
+        let link = firstLink("[]((a))")
         try #require(link.found)
         #expect(link.url == "(a)")
         #expect(link.title == "")
@@ -110,7 +110,7 @@ struct LinkTitleBackslashLongestMatchTests {
     func openParenDestinationStoppedBySpace() throws {
         // `[](( )`: the destination scan stops at the space (`(`), the spacechars skip it, and the `)`
         // closes the link — destination `(`, no title.
-        let link = try firstLink("[](( )")
+        let link = firstLink("[](( )")
         try #require(link.found)
         #expect(link.url == "(")
         #expect(link.title == "")
@@ -121,7 +121,7 @@ struct LinkTitleBackslashLongestMatchTests {
     func emptyDestinationAcrossNewline() throws {
         // `[](` + newline + `)`: the newline is skipped as spacechars before the destination scan, so
         // the destination is empty and the `)` closes the link.
-        let link = try firstLink("[](\n)")
+        let link = firstLink("[](\n)")
         try #require(link.found)
         #expect(link.url == "")
         #expect(link.title == "")
@@ -133,7 +133,7 @@ struct LinkTitleBackslashLongestMatchTests {
         // `[](a '\'')`: the `\'` escapes the first inner quote, so the title `'\''` closes on the
         // LAST quote (interior `\'` → `'`). This is the case where escaping DOES yield the longest
         // match, and must keep working.
-        let link = try firstLink("[](a '\\'')")
+        let link = firstLink("[](a '\\'')")
         try #require(link.found)
         #expect(link.url == "a")
         #expect(link.title == "'")

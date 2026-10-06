@@ -29,7 +29,7 @@ struct BackslashHardBreakRangeTests {
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
     /// The source ranges of every text node, in DFS order, when `src` is parsed spec-correct.
-    private func textRanges(in src: String) throws -> [Range<Pos>?] {
+    private func textRanges(in src: String) -> [Range<Pos>?] {
         let ranges = MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -44,7 +44,7 @@ struct BackslashHardBreakRangeTests {
         // `foo\` on line 1 (the `\` is the hard break), `bar` on line 2. Spec-correct, `bar` resets to
         // its own physical position @2:1-2:4 (b=1, a=2, r=3, half-open end one past r). cmark's quirk
         // keeps counting flat from line 1 and reports @1:6-1:9.
-        let texts = try textRanges(in: "foo\\\nbar")
+        let texts = textRanges(in: "foo\\\nbar")
         try #require(texts.count == 2)
         #expect(texts[0]?.lowerBound == Pos(line: 1, column: 1))   // "foo"
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 4))
@@ -56,7 +56,7 @@ struct BackslashHardBreakRangeTests {
     func multipleBreaksEachReset() throws {
         // `a\` line 1, `b\` line 2, `c` line 3. Spec-correct, each text resets to column 1 of its own
         // physical line; cmark flattens all three onto line 1 (@1:1, @1:4, @1:7).
-        let texts = try textRanges(in: "a\\\nb\\\nc")
+        let texts = textRanges(in: "a\\\nb\\\nc")
         try #require(texts.count == 3)
         #expect(texts[0]?.lowerBound == Pos(line: 1, column: 1))   // "a"
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 2))
@@ -71,7 +71,7 @@ struct BackslashHardBreakRangeTests {
         // `a\` line 1, a lone `~` line 2. The `~` is ordinary literal text, so it gets a normal
         // width-bearing range on its own physical line @2:1-2:2. cmark flattens it and, via
         // strikethrough.c's unset end column, reports no position.
-        let texts = try textRanges(in: "a\\\n~")
+        let texts = textRanges(in: "a\\\n~")
         try #require(texts.count == 2)
         #expect(texts[0]?.lowerBound == Pos(line: 1, column: 1))   // "a"
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 2))
@@ -90,7 +90,7 @@ struct BackslashHardBreakRangeTests {
         // it multi-segment). Spec-correct, `bar` resets to its true physical position: line 2 starts
         // at the space, so `b`=col 2, `a`=3, `r`=4, half-open end one past r = col 5. cmark's quirk
         // keeps counting flat from line 1 and reports @1:6-1:9.
-        let texts = try textRanges(in: "foo\\\n bar")
+        let texts = textRanges(in: "foo\\\n bar")
         try #require(texts.count == 2)
         #expect(texts[0]?.lowerBound == Pos(line: 1, column: 1))   // "foo"
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 4))
@@ -104,7 +104,7 @@ struct BackslashHardBreakRangeTests {
         // line 2 starts at the first space, so `b`=col 6, half-open end = col 9. cmark's flat cursor is
         // indent-independent and reports @1:6-1:9 regardless of the indent width; here the spec-correct
         // columns differ.
-        let texts = try textRanges(in: "foo\\\n     bar")
+        let texts = textRanges(in: "foo\\\n     bar")
         try #require(texts.count == 2)
         #expect(texts[0]?.lowerBound == Pos(line: 1, column: 1))   // "foo"
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 4))
@@ -118,7 +118,7 @@ struct BackslashHardBreakRangeTests {
         // content is multi-segment. Spec-correct, both texts sit at their true content column (3, after
         // `> `): `a` @1:3-1:4 and `b` @2:3-2:4. cmark's quirk keeps counting flat across the break and
         // reports `b` @1:6-1:7, NOT counting the stripped `> ` prefix.
-        let texts = try textRanges(in: "> a\\\n> b")
+        let texts = textRanges(in: "> a\\\n> b")
         try #require(texts.count == 2)
         #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "a"
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 4))
@@ -135,7 +135,7 @@ struct BackslashHardBreakRangeTests {
         // survives in its buffer, reports `c` one column past the residual-free position: @2:6-2:7. A
         // two-space continuation is instead a MATCHED continuation whose residual is discarded, so its
         // flat column has no such shift (@2:5-2:6).
-        let texts = try textRanges(in: "- b\n \\\nc")
+        let texts = textRanges(in: "- b\n \\\nc")
         try #require(texts.count == 2)
         #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "b"
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 4))

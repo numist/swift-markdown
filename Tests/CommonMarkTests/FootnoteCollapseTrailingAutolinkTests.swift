@@ -53,7 +53,7 @@ struct FootnoteCollapseTrailingAutolinkTests {
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
+    ) -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?, url: String?)] = []
@@ -65,9 +65,9 @@ struct FootnoteCollapseTrailingAutolinkTests {
     // MARK: - The finding
 
     @Test("flag-ON: `[^[]]f@.f` collapses to `[^[` and the trailing email still autolinks")
-    func collapseThenEmailFlagOn() throws {
+    func collapseThenEmailFlagOn() {
         // Reconstructed text `[^[`, then the email split into a Link (Quirk M's empty `after` sibling stays).
-        let ns = try nodes(in: "[^[]]f@.f", options: Self.flagOn)
+        let ns = nodes(in: "[^[]]f@.f", options: Self.flagOn)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, "[^[", nil, "f@.f", ""])
         #expect(ns.compactMap(\.url) == ["mailto:f@.f"])
@@ -76,10 +76,10 @@ struct FootnoteCollapseTrailingAutolinkTests {
     // MARK: - Control: the shipped deliverable stays spec-correct
 
     @Test("flag-OFF: `[^[]]f@.f` keeps the bracket literal and still autolinks the email")
-    func collapseThenEmailFlagOff() throws {
+    func collapseThenEmailFlagOff() {
         // No collapse (bug-compat off): the bracket is literal `[^[]]` and the email autolinks with no
         // trailing empty sibling (spec-correct clean tree).
-        let ns = try nodes(in: "[^[]]f@.f", options: Self.flagOff)
+        let ns = nodes(in: "[^[]]f@.f", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "[^[]]", nil, "f@.f"])
         #expect(ns.compactMap(\.url) == ["mailto:f@.f"])
@@ -88,9 +88,9 @@ struct FootnoteCollapseTrailingAutolinkTests {
     // MARK: - Guard: trailing plain text (no email) is still dropped by the truncation
 
     @Test("guard: flag-ON `x[^[]]y` still collapses to `x[^[`, dropping the plain trailing text")
-    func collapseDropsPlainTrailingText() throws {
+    func collapseDropsPlainTrailingText() {
         // With no email in the tail, the invisible tail (`y`) is dropped and nothing autolinks.
-        let ns = try nodes(in: "x[^[]]y", options: Self.flagOn)
+        let ns = nodes(in: "x[^[]]y", options: Self.flagOn)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "x[^["])
         #expect(ns.compactMap(\.url).isEmpty)
@@ -99,12 +99,12 @@ struct FootnoteCollapseTrailingAutolinkTests {
     // MARK: - Guard: an email BEFORE the collapse still drops the plain text after it
 
     @Test("guard: flag-ON `f@.f[^[]]y` links the leading email and drops the plain trailing text")
-    func emailBeforeCollapseDropsTrailingText() throws {
+    func emailBeforeCollapseDropsTrailingText() {
         // The email merges into the run-truncating node (`f@.f[^[`); the autolink split carves out the Link
         // and leaves the `[^[` residual as the run tail. The mark follows that tail, so the trailing `y`
         // (after the NUL) is still dropped - matching cmark's C-string truncation of the split's `after`
         // node. Quirk M's empty `before` sibling precedes the Link.
-        let ns = try nodes(in: "f@.f[^[]]y", options: Self.flagOn)
+        let ns = nodes(in: "f@.f[^[]]y", options: Self.flagOn)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, "", nil, "f@.f", "[^["])
         #expect(ns.compactMap(\.url) == ["mailto:f@.f"])

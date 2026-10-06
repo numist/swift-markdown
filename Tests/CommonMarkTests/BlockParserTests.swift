@@ -78,7 +78,7 @@ extension MarkdownNode.Kind {
 struct ParagraphTests {
 
     @Test("single-line paragraph")
-    func singleLine() throws {
+    func singleLine() {
         let source = "hello world"
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -91,7 +91,7 @@ struct ParagraphTests {
     }
 
     @Test("multi-line paragraph splits into text + softBreak nodes")
-    func multiLine() throws {
+    func multiLine() {
         let source = "first line\nsecond line\nthird"
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -103,7 +103,7 @@ struct ParagraphTests {
     }
 
     @Test("blank line separates paragraphs")
-    func blankLineSeparates() throws {
+    func blankLineSeparates() {
         let source = "first paragraph\n\nsecond paragraph"
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -115,7 +115,7 @@ struct ParagraphTests {
     }
 
     @Test("multiple blank lines collapse to one separator")
-    func multipleBlankLines() throws {
+    func multipleBlankLines() {
         let source = "one\n\n\n\ntwo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -124,7 +124,7 @@ struct ParagraphTests {
     }
 
     @Test("trailing newline doesn't produce extra empty paragraph")
-    func trailingNewline() throws {
+    func trailingNewline() {
         let source = "alone\n"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -133,7 +133,7 @@ struct ParagraphTests {
     }
 
     @Test("CRLF and lone CR are treated as line terminators inline")
-    func crlfHandling() throws {
+    func crlfHandling() {
         let source = "one\r\ntwo\rthree"
         MarkdownDocument.withParsedDocument(source) { doc in
         let texts = dfs(doc).compactMap { $0.literal }
@@ -143,7 +143,7 @@ struct ParagraphTests {
     }
 
     @Test("BOM is stripped at the start")
-    func bomStripping() throws {
+    func bomStripping() {
         let source = "\u{FEFF}text"
         MarkdownDocument.withParsedDocument(source) { doc in
         let texts = dfs(doc).compactMap { $0.literal }
@@ -152,7 +152,7 @@ struct ParagraphTests {
     }
 
     @Test("empty input yields just the document node")
-    func emptyInput() throws {
+    func emptyInput() {
         let source = ""
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -161,7 +161,7 @@ struct ParagraphTests {
     }
 
     @Test("whitespace-only input yields just the document node")
-    func whitespaceOnly() throws {
+    func whitespaceOnly() {
         let source = "   \n\t\n   "
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -174,7 +174,7 @@ struct ParagraphTests {
 struct ATXHeadingTests {
 
     @Test("levels 1 through 6")
-    func levels() throws {
+    func levels() {
         for level in 1...6 {
             let prefix = String(repeating: "#", count: level)
             let source = "\(prefix) heading\n"
@@ -188,7 +188,7 @@ struct ATXHeadingTests {
     }
 
     @Test("seven hashes is a paragraph, not a heading")
-    func sevenHashes() throws {
+    func sevenHashes() {
         let source = "####### too many"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -197,7 +197,7 @@ struct ATXHeadingTests {
     }
 
     @Test("hash without trailing space is a paragraph")
-    func hashWithoutSpace() throws {
+    func hashWithoutSpace() {
         let source = "#hashtag"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -206,7 +206,7 @@ struct ATXHeadingTests {
     }
 
     @Test("up to 3 leading spaces still parses as heading")
-    func leadingSpaces() throws {
+    func leadingSpaces() {
         let source = "   ### heading"
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -216,7 +216,7 @@ struct ATXHeadingTests {
     }
 
     @Test("4+ leading spaces is indented code, not a heading")
-    func fourLeadingSpaces() throws {
+    func fourLeadingSpaces() {
         let source = "    # not a heading"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -225,7 +225,7 @@ struct ATXHeadingTests {
     }
 
     @Test("trailing closing hashes are stripped")
-    func closingHashes() throws {
+    func closingHashes() {
         let source = "## heading ##\n"
         MarkdownDocument.withParsedDocument(source) { doc in
         let texts = dfs(doc).compactMap { $0.literal }
@@ -234,7 +234,7 @@ struct ATXHeadingTests {
     }
 
     @Test("closing hashes without preceding space are part of content")
-    func closingHashesNoSpace() throws {
+    func closingHashesNoSpace() {
         let source = "## foo#bar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let texts = dfs(doc).compactMap { $0.literal }
@@ -243,7 +243,7 @@ struct ATXHeadingTests {
     }
 
     @Test("empty heading is fine")
-    func emptyHeading() throws {
+    func emptyHeading() {
         let source = "##\n"
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -253,7 +253,7 @@ struct ATXHeadingTests {
     }
 
     @Test("heading interrupts a paragraph")
-    func interruptsParagraph() throws {
+    func interruptsParagraph() {
         let source = "paragraph text\n# heading\nnext paragraph"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -271,7 +271,7 @@ struct ATXHeadingTests {
 struct ThematicBreakTests {
 
     @Test("three dashes")
-    func threeDashes() throws {
+    func threeDashes() {
         let source = "---"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -280,7 +280,7 @@ struct ThematicBreakTests {
     }
 
     @Test("three asterisks")
-    func threeAsterisks() throws {
+    func threeAsterisks() {
         let source = "***"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -289,7 +289,7 @@ struct ThematicBreakTests {
     }
 
     @Test("three underscores")
-    func threeUnderscores() throws {
+    func threeUnderscores() {
         let source = "___"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -298,7 +298,7 @@ struct ThematicBreakTests {
     }
 
     @Test("more than three markers are still a single thematic break")
-    func manyMarkers() throws {
+    func manyMarkers() {
         let source = "------------"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -307,7 +307,7 @@ struct ThematicBreakTests {
     }
 
     @Test("markers may be separated by spaces or tabs")
-    func spacedMarkers() throws {
+    func spacedMarkers() {
         let source = "- - -"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -316,7 +316,7 @@ struct ThematicBreakTests {
     }
 
     @Test("up to 3 leading spaces still parses as thematic break")
-    func leadingSpaces() throws {
+    func leadingSpaces() {
         let source = "   ---"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -325,7 +325,7 @@ struct ThematicBreakTests {
     }
 
     @Test("4+ leading spaces is indented code, not a thematic break")
-    func fourLeadingSpaces() throws {
+    func fourLeadingSpaces() {
         let source = "    ---"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -334,7 +334,7 @@ struct ThematicBreakTests {
     }
 
     @Test("only two markers is not a thematic break")
-    func twoMarkers() throws {
+    func twoMarkers() {
         let source = "--"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -343,7 +343,7 @@ struct ThematicBreakTests {
     }
 
     @Test("mixed markers are not a thematic break")
-    func mixedMarkers() throws {
+    func mixedMarkers() {
         let source = "-*-"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -353,7 +353,7 @@ struct ThematicBreakTests {
     }
 
     @Test("non-whitespace, non-marker characters disqualify the line")
-    func extraCharacters() throws {
+    func extraCharacters() {
         let source = "--- and more"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -362,7 +362,7 @@ struct ThematicBreakTests {
     }
 
     @Test("thematic break separates paragraphs")
-    func separatesParagraphs() throws {
+    func separatesParagraphs() {
         // A `---` on its own line (surrounded by blank lines, with no paragraph directly above) is a thematic break, not a setext H2 underline.
         let source = "before\n\n---\n\nafter"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -377,7 +377,7 @@ struct ThematicBreakTests {
     }
 
     @Test("consecutive thematic breaks produce multiple nodes")
-    func consecutive() throws {
+    func consecutive() {
         let source = "---\n***\n___"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -395,7 +395,7 @@ struct ThematicBreakTests {
 struct SetextHeadingTests {
 
     @Test("equals underline produces level 1")
-    func equalsIsLevel1() throws {
+    func equalsIsLevel1() {
         let source = "Title\n====="
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -406,7 +406,7 @@ struct SetextHeadingTests {
     }
 
     @Test("dash underline produces level 2")
-    func dashIsLevel2() throws {
+    func dashIsLevel2() {
         let source = "Title\n-----"
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -416,7 +416,7 @@ struct SetextHeadingTests {
     }
 
     @Test("single marker character is sufficient")
-    func singleMarker() throws {
+    func singleMarker() {
         let source = "Title\n="
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -426,7 +426,7 @@ struct SetextHeadingTests {
     }
 
     @Test("multi-line paragraph above is all part of heading content")
-    func multiLineContent() throws {
+    func multiLineContent() {
         let source = "first\nsecond\n==="
         MarkdownDocument.withParsedDocument(source) { doc in
         let texts = dfs(doc).compactMap { $0.literal }
@@ -435,7 +435,7 @@ struct SetextHeadingTests {
     }
 
     @Test("underline may have ≤3 leading spaces")
-    func leadingSpacesOnUnderline() throws {
+    func leadingSpacesOnUnderline() {
         let source = "Title\n   ==="
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -444,7 +444,7 @@ struct SetextHeadingTests {
     }
 
     @Test("underline with 4+ leading spaces is paragraph continuation")
-    func tooManyLeadingSpaces() throws {
+    func tooManyLeadingSpaces() {
         let source = "Title\n    ==="
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -456,7 +456,7 @@ struct SetextHeadingTests {
     }
 
     @Test("trailing spaces/tabs after the underline are allowed")
-    func trailingSpaces() throws {
+    func trailingSpaces() {
         let source = "Title\n===   \t  "
         MarkdownDocument.withParsedDocument(source) { doc in
         #expect(dfs(doc)[1].kind == .heading(level: 1))
@@ -464,7 +464,7 @@ struct SetextHeadingTests {
     }
 
     @Test("blank line between content and underline breaks the heading")
-    func blankLineBetween() throws {
+    func blankLineBetween() {
         let source = "Title\n\n==="
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -474,7 +474,7 @@ struct SetextHeadingTests {
     }
 
     @Test("dash underline takes precedence over thematic break when paragraph open")
-    func dashOverridesThematic() throws {
+    func dashOverridesThematic() {
         let source = "Title\n---"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -484,7 +484,7 @@ struct SetextHeadingTests {
     }
 
     @Test("mixed markers on underline are not setext")
-    func mixedMarkers() throws {
+    func mixedMarkers() {
         let source = "Title\n=-="
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -494,7 +494,7 @@ struct SetextHeadingTests {
     }
 
     @Test("setext underline is not valid with no preceding paragraph")
-    func noPrecedingParagraph() throws {
+    func noPrecedingParagraph() {
         let source = "==="
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -508,7 +508,7 @@ struct SetextHeadingTests {
 struct IndentedCodeTests {
 
     @Test("4 spaces of indent opens an indented code block")
-    func basic() throws {
+    func basic() {
         let source = "    foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -519,7 +519,7 @@ struct IndentedCodeTests {
     }
 
     @Test("trailing newline on a code block is always present")
-    func trailingNewline() throws {
+    func trailingNewline() {
         let source = "    foo\n"
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -528,7 +528,7 @@ struct IndentedCodeTests {
     }
 
     @Test("multiple indented lines join with newlines")
-    func multipleLines() throws {
+    func multipleLines() {
         let source = "    foo\n    bar\n    baz"
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -538,7 +538,7 @@ struct IndentedCodeTests {
     }
 
     @Test("blank lines within indented code are preserved")
-    func interiorBlankLines() throws {
+    func interiorBlankLines() {
         let source = "    foo\n\n    bar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -548,7 +548,7 @@ struct IndentedCodeTests {
     }
 
     @Test("trailing blank lines are stripped from indented code")
-    func trailingBlankLines() throws {
+    func trailingBlankLines() {
         let source = "    foo\n\n\n"
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -558,7 +558,7 @@ struct IndentedCodeTests {
     }
 
     @Test("non-indented non-blank line closes the code block")
-    func paragraphAfter() throws {
+    func paragraphAfter() {
         let source = "    code\nparagraph"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -567,7 +567,7 @@ struct IndentedCodeTests {
     }
 
     @Test("indented code cannot interrupt a paragraph")
-    func cannotInterruptParagraph() throws {
+    func cannotInterruptParagraph() {
         let source = "paragraph\n    not code"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -578,7 +578,7 @@ struct IndentedCodeTests {
     }
 
     @Test("more than 4 spaces - extras are part of the content")
-    func extraIndent() throws {
+    func extraIndent() {
         let source = "        deeper"
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -588,7 +588,7 @@ struct IndentedCodeTests {
     }
 
     @Test("only 3 spaces is not a code block")
-    func threeSpaces() throws {
+    func threeSpaces() {
         let source = "   foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -597,7 +597,7 @@ struct IndentedCodeTests {
     }
 
     @Test("a four-space indent produces an indented (non-fenced) code block")
-    func fourSpacesIsIndentedCodeBlock() throws {
+    func fourSpacesIsIndentedCodeBlock() {
         let source = "    let x = 1"
         MarkdownDocument.withParsedDocument(source) { doc in
         let shape = dfs(doc)
@@ -638,7 +638,7 @@ struct FencedCodeTests {
     }
 
     @Test("backtick fence")
-    func backtickFence() throws {
+    func backtickFence() {
         let source = "```\nfoo\n```"
         MarkdownDocument.withParsedDocument(source) { doc in
         let (literal, info, fenced) = Self.codeInfo(doc)
@@ -649,7 +649,7 @@ struct FencedCodeTests {
     }
 
     @Test("tilde fence")
-    func tildeFence() throws {
+    func tildeFence() {
         let source = "~~~\nfoo\n~~~"
         MarkdownDocument.withParsedDocument(source) { doc in
         let (literal, info, fenced) = Self.codeInfo(doc)
@@ -660,7 +660,7 @@ struct FencedCodeTests {
     }
 
     @Test("info string after backtick fence")
-    func infoString() throws {
+    func infoString() {
         let source = "```swift\nlet x = 1\n```"
         MarkdownDocument.withParsedDocument(source) { doc in
         let (literal, info, _) = Self.codeInfo(doc)
@@ -670,7 +670,7 @@ struct FencedCodeTests {
     }
 
     @Test("info string in a tab-indented list item")
-    func infoStringInTabIndentedListItem() throws {
+    func infoStringInTabIndentedListItem() {
         // A list marker followed by a tab is tab-materialized (`*\t` expands to `*   `), so the fence
         // matcher measures the info-string bounds against a transient per-line buffer, not the source.
         // Those bounds must be mapped back to source or the language tag reads the wrong bytes. The
@@ -683,7 +683,7 @@ struct FencedCodeTests {
     }
 
     @Test("unclosed info string in a tab-indented list item does not crash")
-    func unclosedInfoStringInTabIndentedListItem() throws {
+    func unclosedInfoStringInTabIndentedListItem() {
         // Regression: the tab-materialized buffer is longer than the source, so the mismeasured info
         // offset ran past the source buffer and trapped with "Index range out of bounds". The rewrite
         // must never crash, and the language tag must still read correctly.
@@ -695,7 +695,7 @@ struct FencedCodeTests {
     }
 
     @Test("escaped info string in a tab-indented list item is decoded")
-    func escapedInfoStringInTabIndentedListItem() throws {
+    func escapedInfoStringInTabIndentedListItem() {
         // The info bounds are measured against the materialized buffer, then remapped to source and
         // fed to the escape/entity decoder against `sourceBytes`. A backslash escape (`\+`) must
         // decode to the canonical language tag, reading the correct source bytes throughout.
@@ -707,7 +707,7 @@ struct FencedCodeTests {
     }
 
     @Test("info string with trailing whitespace is trimmed")
-    func infoTrimmed() throws {
+    func infoTrimmed() {
         let source = "```   swift   \nbody\n```"
         MarkdownDocument.withParsedDocument(source) { doc in
         let (_, info, _) = Self.codeInfo(doc)
@@ -716,7 +716,7 @@ struct FencedCodeTests {
     }
 
     @Test("backtick fence info may not contain backticks")
-    func backticksInInfoRejected() throws {
+    func backticksInInfoRejected() {
         // The opening fence with a backtick in its info is rejected; line is paragraph text. (A bare `` ``` `` on a later line would still start a fresh fence - that's why this test uses a single line with no follow-up.)
         let source = "```foo`bar"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -726,7 +726,7 @@ struct FencedCodeTests {
     }
 
     @Test("tilde fence info may contain backticks")
-    func backticksInTildeInfo() throws {
+    func backticksInTildeInfo() {
         let source = "~~~ foo`bar\nbody\n~~~"
         MarkdownDocument.withParsedDocument(source) { doc in
         let (_, info, _) = Self.codeInfo(doc)
@@ -735,7 +735,7 @@ struct FencedCodeTests {
     }
 
     @Test("4+ backticks are required to fence over a backtick info")
-    func longerFence() throws {
+    func longerFence() {
         let source = "````\n```\n````"
         MarkdownDocument.withParsedDocument(source) { doc in
         let (literal, _, fenced) = Self.codeInfo(doc)
@@ -745,7 +745,7 @@ struct FencedCodeTests {
     }
 
     @Test("closing fence must be at least as long as opening")
-    func closingFenceLength() throws {
+    func closingFenceLength() {
         // Closing `` ``` `` is too short for opening ` ```` `; body continues.
         let source = "````\nfoo\n```\nbar\n````"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -755,7 +755,7 @@ struct FencedCodeTests {
     }
 
     @Test("missing closing fence is allowed (EOF closes the block)")
-    func missingClosingFence() throws {
+    func missingClosingFence() {
         let source = "```\nfoo\nbar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let (literal, _, fenced) = Self.codeInfo(doc)
@@ -765,7 +765,7 @@ struct FencedCodeTests {
     }
 
     @Test("up to 3 leading spaces on opening fence")
-    func leadingSpaces() throws {
+    func leadingSpaces() {
         let source = "   ```\nfoo\n```"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -774,7 +774,7 @@ struct FencedCodeTests {
     }
 
     @Test("4+ leading spaces on opening fence becomes indented code")
-    func tooManyLeadingSpaces() throws {
+    func tooManyLeadingSpaces() {
         let source = "    ```\nfoo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let (literal, _, fenced) = Self.codeInfo(doc)
@@ -785,7 +785,7 @@ struct FencedCodeTests {
     }
 
     @Test("empty body produces empty literal")
-    func emptyBody() throws {
+    func emptyBody() {
         let source = "```\n```"
         MarkdownDocument.withParsedDocument(source) { doc in
         let (literal, _, fenced) = Self.codeInfo(doc)
@@ -796,7 +796,7 @@ struct FencedCodeTests {
     }
 
     @Test("fenced code interrupts a paragraph")
-    func interruptsParagraph() throws {
+    func interruptsParagraph() {
         let source = "paragraph\n```\ncode\n```"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -805,7 +805,7 @@ struct FencedCodeTests {
     }
 
     @Test("blank lines inside fenced code are preserved")
-    func interiorBlanks() throws {
+    func interiorBlanks() {
         let source = "```\nfoo\n\n\nbar\n```"
         MarkdownDocument.withParsedDocument(source) { doc in
         let (literal, _, _) = Self.codeInfo(doc)
@@ -814,7 +814,7 @@ struct FencedCodeTests {
     }
 
     @Test("indent stripping: body lines lose up to opening-fence offset of leading space")
-    func indentStripping() throws {
+    func indentStripping() {
         let source = "  ```\n  foo\n  bar\n  ```"
         MarkdownDocument.withParsedDocument(source) { doc in
         let (literal, _, _) = Self.codeInfo(doc)
@@ -827,7 +827,7 @@ struct FencedCodeTests {
 struct BlockQuoteTests {
 
     @Test("single quoted line")
-    func single() throws {
+    func single() {
         let source = "> foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -838,7 +838,7 @@ struct BlockQuoteTests {
     }
 
     @Test("multiple quoted lines join into one paragraph")
-    func multipleLines() throws {
+    func multipleLines() {
         let source = "> foo\n> bar\n> baz"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -849,7 +849,7 @@ struct BlockQuoteTests {
     }
 
     @Test("optional space after `>` is consumed")
-    func spaceConsumed() throws {
+    func spaceConsumed() {
         let source = ">foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let texts = dfs(doc).compactMap { $0.literal }
@@ -858,7 +858,7 @@ struct BlockQuoteTests {
     }
 
     @Test("up to 3 leading spaces before `>` are allowed")
-    func leadingSpaces() throws {
+    func leadingSpaces() {
         let source = "   > foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -867,7 +867,7 @@ struct BlockQuoteTests {
     }
 
     @Test("4+ leading spaces is indented code, not block quote")
-    func fourLeadingSpaces() throws {
+    func fourLeadingSpaces() {
         let source = "    > foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -876,7 +876,7 @@ struct BlockQuoteTests {
     }
 
     @Test("lazy continuation: no `>` on subsequent paragraph line")
-    func lazyContinuation() throws {
+    func lazyContinuation() {
         let source = "> foo\nbar\nbaz"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -887,7 +887,7 @@ struct BlockQuoteTests {
     }
 
     @Test("thematic break interrupts a quoted paragraph and closes the quote")
-    func thematicBreakInterrupts() throws {
+    func thematicBreakInterrupts() {
         let source = "> foo\n---"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -901,7 +901,7 @@ struct BlockQuoteTests {
     }
 
     @Test("blank line without `>` closes the quote")
-    func blankClosesQuote() throws {
+    func blankClosesQuote() {
         let source = "> foo\n\n> bar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -915,7 +915,7 @@ struct BlockQuoteTests {
     }
 
     @Test("blank line with `>` keeps the quote open")
-    func blankWithMarkerKeepsOpen() throws {
+    func blankWithMarkerKeepsOpen() {
         let source = "> foo\n>\n> bar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -930,7 +930,7 @@ struct BlockQuoteTests {
     }
 
     @Test("nested block quotes")
-    func nested() throws {
+    func nested() {
         let source = "> > foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -944,7 +944,7 @@ struct BlockQuoteTests {
     }
 
     @Test("block quote can contain a heading")
-    func containsHeading() throws {
+    func containsHeading() {
         let source = "> # foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -957,7 +957,7 @@ struct BlockQuoteTests {
     }
 
     @Test("setext heading inside a quote when underline is also quoted")
-    func setextInside() throws {
+    func setextInside() {
         let source = "> Title\n> ---"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -970,7 +970,7 @@ struct BlockQuoteTests {
     }
 
     @Test("block quote can contain a fenced code block")
-    func containsFencedCode() throws {
+    func containsFencedCode() {
         let source = "> ```\n> foo\n> ```"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -979,7 +979,7 @@ struct BlockQuoteTests {
     }
 
     @Test("quote followed by separate paragraph at document level")
-    func separateParagraphAfter() throws {
+    func separateParagraphAfter() {
         let source = "> foo\n\nbar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -996,7 +996,7 @@ struct BlockQuoteTests {
 struct ListTests {
 
     @Test("single bullet item with hyphen")
-    func bulletHyphen() throws {
+    func bulletHyphen() {
         let source = "- foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1007,7 +1007,7 @@ struct ListTests {
     }
 
     @Test("a block quote after list items closes the list (block quotes can't be list children)")
-    func blockQuoteInterruptsList() throws {
+    func blockQuoteInterruptsList() {
         let source = "1. eggs\n1. milk\n> quote\n1. flour\n"
         MarkdownDocument.withParsedDocument(source) { doc in
         // The block quote is a top-level sibling between two separate lists, not nested in the first.
@@ -1019,7 +1019,7 @@ struct ListTests {
     }
 
     @Test("single bullet item with plus")
-    func bulletPlus() throws {
+    func bulletPlus() {
         let source = "+ foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1028,7 +1028,7 @@ struct ListTests {
     }
 
     @Test("single bullet item with asterisk")
-    func bulletAsterisk() throws {
+    func bulletAsterisk() {
         let source = "* foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1037,7 +1037,7 @@ struct ListTests {
     }
 
     @Test("ordered item with period")
-    func orderedPeriod() throws {
+    func orderedPeriod() {
         let source = "1. foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1057,7 +1057,7 @@ struct ListTests {
     }
 
     @Test("ordered item with paren")
-    func orderedParen() throws {
+    func orderedParen() {
         let source = "1) foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1072,7 +1072,7 @@ struct ListTests {
     }
 
     @Test("ordered list starting at non-1")
-    func orderedStart() throws {
+    func orderedStart() {
         let source = "5. foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         var listStart: Int?
@@ -1085,7 +1085,7 @@ struct ListTests {
     }
 
     @Test("multiple bullet items in one list")
-    func multipleItems() throws {
+    func multipleItems() {
         let source = "- foo\n- bar\n- baz"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1100,7 +1100,7 @@ struct ListTests {
     }
 
     @Test("bullet markers of different chars start separate lists")
-    func differentMarkers() throws {
+    func differentMarkers() {
         let source = "- foo\n+ bar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1113,7 +1113,7 @@ struct ListTests {
     }
 
     @Test("ordered after bullet starts new list")
-    func bulletThenOrdered() throws {
+    func bulletThenOrdered() {
         let source = "- foo\n1. bar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1126,7 +1126,7 @@ struct ListTests {
     }
 
     @Test("indented continuation line stays in the item")
-    func indentedContinuation() throws {
+    func indentedContinuation() {
         let source = "- foo\n  bar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1141,7 +1141,7 @@ struct ListTests {
     }
 
     @Test("nested list via deeper indent")
-    func nested() throws {
+    func nested() {
         let source = "- a\n  - b"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1157,7 +1157,7 @@ struct ListTests {
     }
 
     @Test("`- - -` is a thematic break, not nested lists")
-    func dashSpaceDashIsThematic() throws {
+    func dashSpaceDashIsThematic() {
         let source = "- - -"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1166,7 +1166,7 @@ struct ListTests {
     }
 
     @Test("list marker without content is a valid empty item")
-    func emptyItem() throws {
+    func emptyItem() {
         let source = "-"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1175,7 +1175,7 @@ struct ListTests {
     }
 
     @Test("list interrupts a paragraph (only when first ordered start is 1)")
-    func interruptsParagraph() throws {
+    func interruptsParagraph() {
         let source = "paragraph\n- bullet"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1188,7 +1188,7 @@ struct ListTests {
     }
 
     @Test("ordered list with start != 1 does NOT interrupt a paragraph")
-    func orderedNon1DoesNotInterrupt() throws {
+    func orderedNon1DoesNotInterrupt() {
         let source = "paragraph\n5. not a list"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1201,7 +1201,7 @@ struct ListTests {
 struct HTMLBlockTests {
 
     @Test("type 1: pre tag")
-    func type1Pre() throws {
+    func type1Pre() {
         let source = "<pre>\nfoo\n</pre>"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1212,7 +1212,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 1: script tag, end on closing tag")
-    func type1Script() throws {
+    func type1Script() {
         let source = "<script>\nvar x = 1;\n</script>\n\nparagraph"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1221,7 +1221,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 2: HTML comment")
-    func type2Comment() throws {
+    func type2Comment() {
         let source = "<!-- comment -->\nnext paragraph"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1232,7 +1232,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 2: multi-line comment")
-    func type2MultilineComment() throws {
+    func type2MultilineComment() {
         let source = "<!--\nline 1\nline 2\n-->"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1243,7 +1243,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 3: processing instruction")
-    func type3PI() throws {
+    func type3PI() {
         let source = "<?php echo 1; ?>"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1252,7 +1252,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 4: declaration")
-    func type4Declaration() throws {
+    func type4Declaration() {
         let source = "<!DOCTYPE html>"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1261,7 +1261,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 4: requires an uppercase ASCII letter after `<!`")
-    func type4RequiresUppercaseLetter() throws {
+    func type4RequiresUppercaseLetter() {
         // Start condition 4 is `<!` followed by an *uppercase* ASCII letter (cmark
         // scanners.re: `'<!' [A-Z]`). A lowercase letter does not open a type-4 block,
         // so the line is an ordinary paragraph.
@@ -1276,7 +1276,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 5: CDATA")
-    func type5CDATA() throws {
+    func type5CDATA() {
         let source = "<![CDATA[\nfoo\n]]>"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1285,7 +1285,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 6: standard block tag, ends on blank line")
-    func type6BlockTag() throws {
+    func type6BlockTag() {
         let source = "<div>\nfoo\n</div>\n\nparagraph"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1296,7 +1296,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 6: closing tag form")
-    func type6ClosingTag() throws {
+    func type6ClosingTag() {
         let source = "</div>\nfoo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1305,7 +1305,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 6: self-closing form")
-    func type6SelfClosing() throws {
+    func type6SelfClosing() {
         let source = "<hr/>"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1314,7 +1314,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 6 with up to 3 leading spaces")
-    func type6LeadingSpaces() throws {
+    func type6LeadingSpaces() {
         let source = "   <div>\nbody\n</div>"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1323,7 +1323,7 @@ struct HTMLBlockTests {
     }
 
     @Test("4+ leading spaces is indented code, not HTML block")
-    func tooManyLeadingSpaces() throws {
+    func tooManyLeadingSpaces() {
         let source = "    <div>"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1332,7 +1332,7 @@ struct HTMLBlockTests {
     }
 
     @Test("non-block-tag like <foo> does not start a type-6 block")
-    func nonBlockTagIsParagraph() throws {
+    func nonBlockTagIsParagraph() {
         let source = "<foo>\nbar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1342,7 +1342,7 @@ struct HTMLBlockTests {
     }
 
     @Test("HTML block interrupts a paragraph")
-    func interruptsParagraph() throws {
+    func interruptsParagraph() {
         let source = "paragraph\n<div>\nbody\n</div>"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1351,7 +1351,7 @@ struct HTMLBlockTests {
     }
 
     @Test("HTML block start and end on the same line")
-    func sameLineEnd() throws {
+    func sameLineEnd() {
         let source = "<!-- foo -->"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1366,7 +1366,7 @@ struct HTMLBlockTests {
     // space and tab. A tag whose name is followed by VT/FF is still a valid HTML-block start.
 
     @Test("type 1: form feed after a raw-text tag name starts an HTML block")
-    func type1FormFeedWhitespace() throws {
+    func type1FormFeedWhitespace() {
         let source = "<pre\u{0C}>"
         MarkdownDocument.withParsedDocument(source) { doc in
             let kinds = dfs(doc).map { $0.kind }
@@ -1375,7 +1375,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 6: vertical tab / form feed after a block tag name starts an HTML block")
-    func type6VerticalTabFormFeed() throws {
+    func type6VerticalTabFormFeed() {
         for source in ["<div\u{0C}>", "<div\u{0B}>"] {
             MarkdownDocument.withParsedDocument(source) { doc in
                 let kinds = dfs(doc).map { $0.kind }
@@ -1385,7 +1385,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 7: form feed as intra-tag whitespace starts an HTML block")
-    func type7FormFeedWhitespace() throws {
+    func type7FormFeedWhitespace() {
         let source = "<a\u{0C}ref=\"x\">"
         MarkdownDocument.withParsedDocument(source) { doc in
             let kinds = dfs(doc).map { $0.kind }
@@ -1398,7 +1398,7 @@ struct HTMLBlockTests {
     // that class, even though it IS a `spacechar` inside the tag. The two classes differ, so this is
     // asserted separately from the intra-tag cases above.
     @Test("type 7: form feed trailing the tag still starts an HTML block")
-    func type7TrailingFormFeed() throws {
+    func type7TrailingFormFeed() {
         MarkdownDocument.withParsedDocument("<a>\u{0C}") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [.document, .htmlBlock])
@@ -1406,7 +1406,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 7: vertical tab trailing the tag does not start an HTML block")
-    func type7TrailingVerticalTabIsParagraph() throws {
+    func type7TrailingVerticalTabIsParagraph() {
         MarkdownDocument.withParsedDocument("<a>\u{0B}") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds.contains(.paragraph) && !kinds.contains(.htmlBlock))
@@ -1418,7 +1418,7 @@ struct HTMLBlockTests {
     // tag invalid and the line is NOT an HTML block. An empty *quoted* value (`""`/`''`) is still valid.
     // This mirrors the inline HTML scanner's non-empty guard so block and inline HTML agree.
     @Test("type 7: empty unquoted attribute value does not start an HTML block")
-    func type7EmptyUnquotedValueIsParagraph() throws {
+    func type7EmptyUnquotedValueIsParagraph() {
         for source in ["<a b=>", "<a b= >"] {
             MarkdownDocument.withParsedDocument(source) { doc in
                 let kinds = dfs(doc).map { $0.kind }
@@ -1429,7 +1429,7 @@ struct HTMLBlockTests {
     }
 
     @Test("type 7: non-empty unquoted and empty quoted attribute values start an HTML block")
-    func type7NonEmptyAndQuotedValueIsHTMLBlock() throws {
+    func type7NonEmptyAndQuotedValueIsHTMLBlock() {
         for source in ["<a b=c>", "<a b=\"\">"] {
             MarkdownDocument.withParsedDocument(source) { doc in
                 let kinds = dfs(doc).map { $0.kind }
@@ -1526,7 +1526,7 @@ struct ReferenceDefinitionTests {
     }
 
     @Test("multiple definitions in a row, no surviving paragraph")
-    func multipleDefs() throws {
+    func multipleDefs() {
         let source = "[a]: /1\n[b]: /2 \"two\"\n[c]: /3"
         MarkdownDocument.withParsedDocument(source) { doc in
         #expect(dfs(doc).map(\.kind) == [.document])
@@ -1539,7 +1539,7 @@ struct ReferenceDefinitionTests {
     }
 
     @Test("definition followed by paragraph content")
-    func defThenParagraph() throws {
+    func defThenParagraph() {
         let source = "[foo]: /url\n\nhello"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map(\.kind)
@@ -1552,7 +1552,7 @@ struct ReferenceDefinitionTests {
     }
 
     @Test("definition then paragraph with no blank line between")
-    func defThenInlineParagraph() throws {
+    func defThenInlineParagraph() {
         let source = "[foo]: /url\nhello"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map(\.kind)
@@ -1571,7 +1571,7 @@ struct ReferenceDefinitionTests {
     }
 
     @Test("label normalization: case-fold and collapse whitespace")
-    func labelNormalization() throws {
+    func labelNormalization() {
         let source = "[Foo Bar]: /url"
         MarkdownDocument.withParsedDocument(source) { doc in
         // Stored under normalized key.
@@ -1582,7 +1582,7 @@ struct ReferenceDefinitionTests {
     }
 
     @Test("invalid definition: empty label stays as paragraph")
-    func invalidEmptyLabel() throws {
+    func invalidEmptyLabel() {
         let source = "[]: /url"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map(\.kind)
@@ -1592,7 +1592,7 @@ struct ReferenceDefinitionTests {
     }
 
     @Test("invalid definition: missing destination stays as paragraph")
-    func invalidMissingDestination() throws {
+    func invalidMissingDestination() {
         let source = "[foo]:"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map(\.kind)
@@ -1602,7 +1602,7 @@ struct ReferenceDefinitionTests {
     }
 
     @Test("def with title on same line but trailing junk fails the title")
-    func titleWithTrailingJunk() throws {
+    func titleWithTrailingJunk() {
         // Per cmark: if a title is found but the line doesn't end cleanly afterwards, the parser rewinds to the no-title commit. The dest's line must then end cleanly itself.
         let source = "[foo]: /url \"title\" extra\n\nhello"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -1659,7 +1659,7 @@ struct TasklistTests {
     }
 
     @Test("default-disabled: [ ] stays as text in item")
-    func defaultDisabled() throws {
+    func defaultDisabled() {
         let source = "- [ ] foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstItem(doc)
@@ -1669,7 +1669,7 @@ struct TasklistTests {
     }
 
     @Test("unchecked: - [ ] foo")
-    func uncheckedItem() throws {
+    func uncheckedItem() {
         let source = "- [ ] foo"
         MarkdownDocument.withParsedDocument(source, options: .tasklist) { doc in
         let info = Self.firstItem(doc)
@@ -1679,7 +1679,7 @@ struct TasklistTests {
     }
 
     @Test("checked: - [x] foo")
-    func checkedItemLowercase() throws {
+    func checkedItemLowercase() {
         let source = "- [x] foo"
         MarkdownDocument.withParsedDocument(source, options: .tasklist) { doc in
         let info = Self.firstItem(doc)
@@ -1689,7 +1689,7 @@ struct TasklistTests {
     }
 
     @Test("checked: - [X] foo")
-    func checkedItemUppercase() throws {
+    func checkedItemUppercase() {
         let source = "- [X] foo"
         MarkdownDocument.withParsedDocument(source, options: .tasklist) { doc in
         let info = Self.firstItem(doc)
@@ -1699,7 +1699,7 @@ struct TasklistTests {
     }
 
     @Test("checked: ordered list 1. [x] foo")
-    func checkedOrderedItem() throws {
+    func checkedOrderedItem() {
         let source = "1. [x] foo"
         MarkdownDocument.withParsedDocument(source, options: .tasklist) { doc in
         let info = Self.firstItem(doc)
@@ -1708,7 +1708,7 @@ struct TasklistTests {
     }
 
     @Test("non-marker [ y ] stays as paragraph text")
-    func notATaskMarker() throws {
+    func notATaskMarker() {
         let source = "- [y] foo"
         MarkdownDocument.withParsedDocument(source, options: .tasklist) { doc in
         let info = Self.firstItem(doc)
@@ -1717,7 +1717,7 @@ struct TasklistTests {
     }
 
     @Test("multiple task items in one list")
-    func multipleItems() throws {
+    func multipleItems() {
         let source = "- [ ] one\n- [x] two\n- [ ] three"
         MarkdownDocument.withParsedDocument(source, options: .tasklist) { doc in
         var states: [Bool?] = []
@@ -1734,7 +1734,7 @@ struct TasklistTests {
     }
 
     @Test("non-first paragraph in item is not a task marker")
-    func nonFirstParagraphIsNotMarker() throws {
+    func nonFirstParagraphIsNotMarker() {
         // The second paragraph in the same item shouldn't be treated as a task marker even if it starts with [ ] .
         let source = "- foo\n\n  [ ] bar"
         MarkdownDocument.withParsedDocument(source, options: .tasklist) { doc in
@@ -1780,7 +1780,7 @@ struct TableTests {
     }
 
     @Test("default-disabled: pipe lines stay as paragraph")
-    func defaultDisabled() throws {
+    func defaultDisabled() {
         let source = "| a | b |\n|---|---|\n| 1 | 2 |"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map(\.kind)
@@ -1789,7 +1789,7 @@ struct TableTests {
     }
 
     @Test("simple table with delim row")
-    func simpleTable() throws {
+    func simpleTable() {
         let source = "| a | b |\n|---|---|\n| 1 | 2 |"
         MarkdownDocument.withParsedDocument(source, options: .tables) { doc in
         let rows = Self.firstTable(doc)
@@ -1800,7 +1800,7 @@ struct TableTests {
     }
 
     @Test("alignments: left, right, center, none")
-    func alignments() throws {
+    func alignments() {
         let source = "| a | b | c | d |\n|:--|---|--:|:-:|\n| 1 | 2 | 3 | 4 |"
         MarkdownDocument.withParsedDocument(source, options: .tables) { doc in
         let rows = Self.firstTable(doc)
@@ -1811,7 +1811,7 @@ struct TableTests {
     }
 
     @Test("optional outer pipes")
-    func noPipesOnEnds() throws {
+    func noPipesOnEnds() {
         let source = "a | b\n---|---\n1 | 2"
         MarkdownDocument.withParsedDocument(source, options: .tables) { doc in
         let rows = Self.firstTable(doc)
@@ -1822,7 +1822,7 @@ struct TableTests {
     }
 
     @Test("missing trailing cells are filled empty")
-    func missingCells() throws {
+    func missingCells() {
         let source = "| a | b | c |\n|---|---|---|\n| 1 | 2 |"
         MarkdownDocument.withParsedDocument(source, options: .tables) { doc in
         let rows = Self.firstTable(doc)
@@ -1832,7 +1832,7 @@ struct TableTests {
     }
 
     @Test("extra cells are dropped")
-    func extraCells() throws {
+    func extraCells() {
         let source = "| a | b |\n|---|---|\n| 1 | 2 | 3 | 4 |"
         MarkdownDocument.withParsedDocument(source, options: .tables) { doc in
         let rows = Self.firstTable(doc)
@@ -1842,7 +1842,7 @@ struct TableTests {
     }
 
     @Test("malformed delim row stays as paragraph")
-    func malformedDelim() throws {
+    func malformedDelim() {
         let source = "| a | b |\n| not | delim |\n| 1 | 2 |"
         MarkdownDocument.withParsedDocument(source, options: .tables) { doc in
         let kinds = dfs(doc).map(\.kind)
@@ -1851,7 +1851,7 @@ struct TableTests {
     }
 
     @Test("inline content in cells is parsed")
-    func inlineInCells() throws {
+    func inlineInCells() {
         let source = "| *em* | **strong** |\n|---|---|\n| `code` | text |"
         MarkdownDocument.withParsedDocument(source, options: .tables) { doc in
         var sawEmphasis = false
@@ -1878,7 +1878,7 @@ struct TableTests {
     }
 
     @Test("header-only table (no body rows) is valid")
-    func headerOnly() throws {
+    func headerOnly() {
         let source = "| a | b |\n|---|---|"
         MarkdownDocument.withParsedDocument(source, options: .tables) { doc in
         let rows = Self.firstTable(doc)
@@ -1888,7 +1888,7 @@ struct TableTests {
     }
 
     @Test("table column count is recorded")
-    func columnCount() throws {
+    func columnCount() {
         let source = "| a | b | c |\n|---|---|---|"
         MarkdownDocument.withParsedDocument(source, options: .tables) { doc in
         var foundCols: Int?

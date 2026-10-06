@@ -20,15 +20,15 @@ struct GFMAutolinkSourceRangeTests {
 
     private static let opts: MarkdownDocument.ParseOptions = [.sourcePosition, .gfmAutolink]
 
-    private func tree(_ source: String, options: MarkdownDocument.ParseOptions = opts) throws -> String {
-        try CmarkTreeDump.dump(source, options: options, sourceRanges: true)
+    private func tree(_ source: String, options: MarkdownDocument.ParseOptions = opts) -> String {
+        CmarkTreeDump.dump(source, options: options, sourceRanges: true)
     }
 
     /// cmark-gfm stretches the `(` to `@1:1-1:6` and starts the link at `@1:1`, because it rewinds over the scheme
     /// after emitting it as text.
     @Test("a URL autolink spans the URL")
-    func url() throws {
-        #expect(try tree("(http://e") == """
+    func url() {
+        #expect(tree("(http://e") == """
             document @1:1-1:10
               paragraph @1:1-1:10
                 text "(" @1:1-1:2
@@ -40,8 +40,8 @@ struct GFMAutolinkSourceRangeTests {
 
     /// cmark-gfm starts the link at `@1:1`, the paragraph's line start.
     @Test("a www autolink spans the domain")
-    func www() throws {
-        #expect(try tree(" www.w") == """
+    func www() {
+        #expect(tree(" www.w") == """
             document @1:1-1:7
               paragraph @1:2-1:7
                 link "http://www.w" "" @1:2-1:7
@@ -51,8 +51,8 @@ struct GFMAutolinkSourceRangeTests {
     }
 
     @Test("an email autolink spans the address")
-    func email() throws {
-        #expect(try tree("x a@b.co y") == """
+    func email() {
+        #expect(tree("x a@b.co y") == """
             document @1:1-1:11
               paragraph @1:1-1:11
                 text "x " @1:1-1:3
@@ -66,8 +66,8 @@ struct GFMAutolinkSourceRangeTests {
     /// The empty text before the URL sits where the URL starts. cmark-gfm gives it the scheme's columns,
     /// `@1:1-1:5`, and leaves the link without a range.
     @Test("with cmark bug compatibility, the empty text before a URL autolink has an empty range")
-    func emptyTextBeforeURL() throws {
-        #expect(try tree("http://a", options: Self.opts.union(.cmarkBugCompatibility)) == """
+    func emptyTextBeforeURL() {
+        #expect(tree("http://a", options: Self.opts.union(.cmarkBugCompatibility)) == """
             document @1:1-1:9
               paragraph @1:1-1:9
                 text "" @1:1-1:1
@@ -81,8 +81,8 @@ struct GFMAutolinkSourceRangeTests {
     /// ends. cmark-gfm gives the first `@1:1-1:7`, and leaves the link, its text and the empty text after it
     /// without a range.
     @Test("with cmark bug compatibility, the empty texts beside an email autolink have empty ranges")
-    func emptyTextsBesideEmail() throws {
-        #expect(try tree("a@b.co", options: Self.opts.union(.cmarkBugCompatibility)) == """
+    func emptyTextsBesideEmail() {
+        #expect(tree("a@b.co", options: Self.opts.union(.cmarkBugCompatibility)) == """
             document @1:1-1:7
               paragraph @1:1-1:7
                 text "" @1:1-1:1
@@ -96,8 +96,8 @@ struct GFMAutolinkSourceRangeTests {
     /// A NUL makes the paragraph's text a copy with the NUL replaced by U+FFFD; the address is still placed on its
     /// source bytes, and the U+FFFD before it on the NUL.
     @Test("an email autolink after a NUL spans the address")
-    func emailAfterNUL() throws {
-        #expect(try tree("\u{0}a@b.co") == """
+    func emailAfterNUL() {
+        #expect(tree("\u{0}a@b.co") == """
             document @1:1-1:8
               paragraph @1:1-1:8
                 text "\u{FFFD}" @1:1-1:2
@@ -109,8 +109,8 @@ struct GFMAutolinkSourceRangeTests {
 
     /// The curly quote that replaces `'` isn't a source byte, but the text holding it still spans the `'`.
     @Test("the text before an email autolink spans a smart quote")
-    func smartQuoteBeforeEmail() throws {
-        #expect(try tree("'a@b.co", options: Self.opts.union(.smart)) == """
+    func smartQuoteBeforeEmail() {
+        #expect(tree("'a@b.co", options: Self.opts.union(.smart)) == """
             document @1:1-1:8
               paragraph @1:1-1:8
                 text "\u{2019}" @1:1-1:2
@@ -121,8 +121,8 @@ struct GFMAutolinkSourceRangeTests {
     }
 
     @Test("with cmark bug compatibility, the text after an email autolink spans a NUL")
-    func nulAfterEmail() throws {
-        #expect(try tree("a@b.co\u{0}", options: Self.opts.union(.cmarkBugCompatibility)) == """
+    func nulAfterEmail() {
+        #expect(tree("a@b.co\u{0}", options: Self.opts.union(.cmarkBugCompatibility)) == """
             document @1:1-1:8
               paragraph @1:1-1:8
                 text "" @1:1-1:1
@@ -138,8 +138,8 @@ struct GFMAutolinkSourceRangeTests {
     /// before the address can be placed. That text keeps where the bracket starts, as an empty range; the link and the
     /// text after it have no range, as in cmark-gfm.
     @Test("with cmark bug compatibility, the text before an email in a collapsed footnote bracket keeps its start")
-    func emailInCollapsedFootnoteBracket() throws {
-        #expect(try tree("![^b@.B\\\n]", options: Self.opts.union([.footnotes, .cmarkBugCompatibility])) == """
+    func emailInCollapsedFootnoteBracket() {
+        #expect(tree("![^b@.B\\\n]", options: Self.opts.union([.footnotes, .cmarkBugCompatibility])) == """
             document @1:1-2:2
               paragraph @1:1-2:2
                 text "![^" @1:1-1:1
@@ -155,8 +155,8 @@ struct GFMAutolinkSourceRangeTests {
     /// byte, the NUL. The second address is placed; the text between the two, whose start isn't known, starts where the
     /// second address does. cmark-gfm gives the text before the first address the whole paragraph, `@1:1-1:22`, counting the NUL as three columns.
     @Test("an email autolink ending in an entity has no range")
-    func emailEndingInEntity() throws {
-        #expect(try tree("\u{0}a@b.c&#111; x@y.zz") == """
+    func emailEndingInEntity() {
+        #expect(tree("\u{0}a@b.c&#111; x@y.zz") == """
             document @1:1-1:20
               paragraph @1:1-1:20
                 text "\u{FFFD}" @1:1-1:2

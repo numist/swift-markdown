@@ -33,7 +33,7 @@ struct EmptyTextBeforeHardBreakTests {
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
     /// The `(kind, text)` of every node in DFS order when `src` is parsed spec-correct.
-    private func nodes(in src: String) throws -> [(kind: MarkdownNode.Kind, text: String?)] {
+    private func nodes(in src: String) -> [(kind: MarkdownNode.Kind, text: String?)] {
         MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> [(kind: MarkdownNode.Kind, text: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?)] = []
@@ -43,7 +43,7 @@ struct EmptyTextBeforeHardBreakTests {
     }
 
     /// The source ranges of every text node, in DFS order, when `src` is parsed spec-correct.
-    private func textRanges(in src: String) throws -> [Range<Pos>?] {
+    private func textRanges(in src: String) -> [Range<Pos>?] {
         let ranges = MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -59,30 +59,30 @@ struct EmptyTextBeforeHardBreakTests {
         // after the `]` is dropped: the first `]` keeps its 1-character range @1:1-1:2, NOT extended over
         // the trailing spaces. (Flag-on the `brkhb-min` pair asserts cmark's @1:1-1:4, the `]` merged with
         // the empty stripped-whitespace node.)
-        let ns = try nodes(in: "]  \n]")
+        let ns = nodes(in: "]  \n]")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .lineBreak, .text])
         #expect(ns.compactMap(\.text) == ["]", "]"])
-        let texts = try textRanges(in: "]  \n]")
+        let texts = textRanges(in: "]  \n]")
         try #require(texts.count == 2)
         #expect(texts[0]?.lowerBound == Pos(line: 1, column: 1))   // first "]"
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 2))   // 1-char end, spaces excluded
     }
 
     @Test("emphasis + trailing spaces + hard break: no empty text node")
-    func emphasis() throws {
+    func emphasis() {
         // `*x*` then two trailing spaces then a hard break then `y`. Spec-correct: Emphasis, LineBreak,
         // Text "y" - no empty Text in between. (Flag-on the `brkhb-emph` pair asserts the empty
         // `Text @1:4-1:6` between the emphasis and the break.)
-        let ns = try nodes(in: "*x*  \ny")
+        let ns = nodes(in: "*x*  \ny")
         #expect(ns.map(\.kind) == [.document, .paragraph, .emphasis, .text, .lineBreak, .text])
         #expect(ns.compactMap(\.text) == ["x", "y"])
     }
 
     @Test("inline code + trailing spaces + hard break: no empty text node")
-    func inlineCode() throws {
+    func inlineCode() {
         // `` `c` `` then two trailing spaces then a hard break then `y`. Spec-correct: InlineCode,
         // LineBreak, Text "y" - no empty Text. (Flag-on the `brkhb-code` pair asserts the empty node.)
-        let ns = try nodes(in: "`c`  \ny")
+        let ns = nodes(in: "`c`  \ny")
         #expect(ns.map(\.kind) == [.document, .paragraph, .codeInline(backtickCount: 1), .lineBreak, .text])
         // `literal()` reads inline-code content as text too, so the code "c" appears alongside "y";
         // the point is that no empty "" run survives between the code span and the break.
@@ -90,11 +90,11 @@ struct EmptyTextBeforeHardBreakTests {
     }
 
     @Test("link + trailing spaces + hard break: no empty text node")
-    func link() throws {
+    func link() {
         // A `[foo]` shortcut-reference link, two trailing spaces, a hard break, then `[]` on line 2.
         // Spec-correct: Link (with its "foo" text), LineBreak, Text "[]" - no empty Text after the link.
         // (Flag-on the `brkhb-link` pair asserts the empty `Text @1:6-1:8` after the link.)
-        let ns = try nodes(in: "[foo]  \n[]\n\n[foo]: /url \"title\"")
+        let ns = nodes(in: "[foo]  \n[]\n\n[foo]: /url \"title\"")
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .lineBreak, .text])
         #expect(ns.compactMap(\.text) == ["foo", "[]"])
     }

@@ -72,14 +72,14 @@ struct StrikethroughRunLengthCapQuirkTests {
     private static let flagOn: MarkdownDocument.ParseOptions = [.strikethrough, .cmarkBugCompatibility]
 
     /// The concatenated inner text of the first `.strikethrough` node, or nil if none forms.
-    private func strikeText(_ src: String, options: MarkdownDocument.ParseOptions) throws -> String? {
+    private func strikeText(_ src: String, options: MarkdownDocument.ParseOptions) -> String? {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> String? in
             firstStrikethroughText(doc.root)
         }
     }
 
     /// The number of `.strikethrough` nodes formed.
-    private func strikeCount(_ src: String, options: MarkdownDocument.ParseOptions) throws -> Int {
+    private func strikeCount(_ src: String, options: MarkdownDocument.ParseOptions) -> Int {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> Int in
             strikethroughCount(doc.root)
         }
@@ -97,25 +97,25 @@ struct StrikethroughRunLengthCapQuirkTests {
     @Test("flag ON: L=1, N=101 forms (101 mod 100 == 1); content is `)` + 100 tildes")
     func flagOnL1N101() throws {
         let src = input(openerLen: 1, tailCount: 101)
-        let content = try #require(try strikeText(src, options: Self.flagOn), "strikethrough must form")
+        let content = try #require(strikeText(src, options: Self.flagOn), "strikethrough must form")
         #expect(content == ")" + String(repeating: "~", count: 100))
-        #expect(try strikeCount(src, options: Self.flagOn) == 1)
+        #expect(strikeCount(src, options: Self.flagOn) == 1)
     }
 
     @Test("flag ON: L=1, N=201 forms (201 mod 100 == 1); content is `)` + 200 tildes")
     func flagOnL1N201() throws {
         let src = input(openerLen: 1, tailCount: 201)
-        let content = try #require(try strikeText(src, options: Self.flagOn), "strikethrough must form")
+        let content = try #require(strikeText(src, options: Self.flagOn), "strikethrough must form")
         #expect(content == ")" + String(repeating: "~", count: 200))
-        #expect(try strikeCount(src, options: Self.flagOn) == 1)
+        #expect(strikeCount(src, options: Self.flagOn) == 1)
     }
 
     @Test("flag ON: L=2, N=102 forms (102 mod 100 == 2); content is `)` + 100 tildes")
     func flagOnL2N102() throws {
         let src = input(openerLen: 2, tailCount: 102)
-        let content = try #require(try strikeText(src, options: Self.flagOn), "strikethrough must form")
+        let content = try #require(strikeText(src, options: Self.flagOn), "strikethrough must form")
         #expect(content == ")" + String(repeating: "~", count: 100))
-        #expect(try strikeCount(src, options: Self.flagOn) == 1)
+        #expect(strikeCount(src, options: Self.flagOn) == 1)
     }
 
     @Test("flag ON: the OPENER run is capped too (101-tilde opener → length-1 opener + closer)")
@@ -123,70 +123,70 @@ struct StrikethroughRunLengthCapQuirkTests {
         // `**` + 101 `~` + `)` + `~`. The 101-tilde opener chunks into a length-100 literal token (not a
         // delimiter) + a final length-1 opener, which pairs with the trailing length-1 closer around `)`.
         let src = "**" + String(repeating: "~", count: 101) + ")~"
-        let content = try #require(try strikeText(src, options: Self.flagOn), "strikethrough must form")
+        let content = try #require(strikeText(src, options: Self.flagOn), "strikethrough must form")
         #expect(content == ")")
-        #expect(try strikeCount(src, options: Self.flagOn) == 1)
+        #expect(strikeCount(src, options: Self.flagOn) == 1)
     }
 
     // Non-forming boundaries flag ON (N mod 100 != L): no strikethrough, all literal.
 
     @Test("flag ON: L=1, N=100 does NOT form (100 mod 100 == 0)")
-    func flagOnL1N100() throws {
-        #expect(try strikeText(input(openerLen: 1, tailCount: 100), options: Self.flagOn) == nil)
+    func flagOnL1N100() {
+        #expect(strikeText(input(openerLen: 1, tailCount: 100), options: Self.flagOn) == nil)
     }
 
     @Test("flag ON: L=1, N=102 does NOT form (102 mod 100 == 2 != 1)")
-    func flagOnL1N102() throws {
-        #expect(try strikeText(input(openerLen: 1, tailCount: 102), options: Self.flagOn) == nil)
+    func flagOnL1N102() {
+        #expect(strikeText(input(openerLen: 1, tailCount: 102), options: Self.flagOn) == nil)
     }
 
     @Test("flag ON: L=1, N=200 does NOT form (200 mod 100 == 0)")
-    func flagOnL1N200() throws {
-        #expect(try strikeText(input(openerLen: 1, tailCount: 200), options: Self.flagOn) == nil)
+    func flagOnL1N200() {
+        #expect(strikeText(input(openerLen: 1, tailCount: 200), options: Self.flagOn) == nil)
     }
 
     // MARK: Flag OFF — the deliverable stays spec-correct (a length ≥ 3 run is never a delimiter)
 
     @Test("flag OFF: L=1, N=101 stays literal (no 100-cap in the spec)")
-    func flagOffL1N101() throws {
-        #expect(try strikeText(input(openerLen: 1, tailCount: 101), options: Self.flagOff) == nil)
+    func flagOffL1N101() {
+        #expect(strikeText(input(openerLen: 1, tailCount: 101), options: Self.flagOff) == nil)
     }
 
     @Test("flag OFF: L=1, N=201 stays literal")
-    func flagOffL1N201() throws {
-        #expect(try strikeText(input(openerLen: 1, tailCount: 201), options: Self.flagOff) == nil)
+    func flagOffL1N201() {
+        #expect(strikeText(input(openerLen: 1, tailCount: 201), options: Self.flagOff) == nil)
     }
 
     @Test("flag OFF: L=2, N=102 stays literal")
-    func flagOffL2N102() throws {
-        #expect(try strikeText(input(openerLen: 2, tailCount: 102), options: Self.flagOff) == nil)
+    func flagOffL2N102() {
+        #expect(strikeText(input(openerLen: 2, tailCount: 102), options: Self.flagOff) == nil)
     }
 
     @Test("flag OFF: the non-forming boundaries stay literal too")
-    func flagOffBoundaries() throws {
-        #expect(try strikeText(input(openerLen: 1, tailCount: 100), options: Self.flagOff) == nil)
-        #expect(try strikeText(input(openerLen: 1, tailCount: 102), options: Self.flagOff) == nil)
-        #expect(try strikeText(input(openerLen: 1, tailCount: 200), options: Self.flagOff) == nil)
+    func flagOffBoundaries() {
+        #expect(strikeText(input(openerLen: 1, tailCount: 100), options: Self.flagOff) == nil)
+        #expect(strikeText(input(openerLen: 1, tailCount: 102), options: Self.flagOff) == nil)
+        #expect(strikeText(input(openerLen: 1, tailCount: 200), options: Self.flagOff) == nil)
     }
 
     // MARK: Ordinary controls — unchanged under BOTH flags
 
     @Test("controls: short runs pair (or not) identically under both flags")
-    func ordinaryControls() throws {
+    func ordinaryControls() {
         for options in [Self.flagOff, Self.flagOn] {
             // `~x~` and `~~x~~` form a strikethrough with content "x".
-            #expect(try strikeText("~x~", options: options) == "x")
-            #expect(try strikeCount("~x~", options: options) == 1)
-            #expect(try strikeText("~~x~~", options: options) == "x")
-            #expect(try strikeCount("~~x~~", options: options) == 1)
+            #expect(strikeText("~x~", options: options) == "x")
+            #expect(strikeCount("~x~", options: options) == 1)
+            #expect(strikeText("~~x~~", options: options) == "x")
+            #expect(strikeCount("~~x~~", options: options) == 1)
             // A length-3 run is not a valid delimiter, so `~~~x~~~` never forms.
-            #expect(try strikeText("~~~x~~~", options: options) == nil)
+            #expect(strikeText("~~~x~~~", options: options) == nil)
             // The N=1 / N=2 base cases of the run-length family: the final token IS the whole run, so
             // `**~)~` (L=1, N=1) and `**~~)~~` (L=2, N=2) form with content "`)`".
-            #expect(try strikeText("**~)~", options: options) == ")")
-            #expect(try strikeCount("**~)~", options: options) == 1)
-            #expect(try strikeText("**~~)~~", options: options) == ")")
-            #expect(try strikeCount("**~~)~~", options: options) == 1)
+            #expect(strikeText("**~)~", options: options) == ")")
+            #expect(strikeCount("**~)~", options: options) == 1)
+            #expect(strikeText("**~~)~~", options: options) == ")")
+            #expect(strikeCount("**~~)~~", options: options) == 1)
         }
     }
 
@@ -199,9 +199,9 @@ struct StrikethroughRunLengthCapQuirkTests {
         // L=2/N=102 forms (final token length 2), while L=1/N=101 (final token length 1) does not.
         let options: MarkdownDocument.ParseOptions = [.strikethrough, .strikethroughDoubleTilde, .cmarkBugCompatibility]
         let formed = try #require(
-            try strikeText(input(openerLen: 2, tailCount: 102), options: options),
+            strikeText(input(openerLen: 2, tailCount: 102), options: options),
             "L=2/N=102 must form under doubleTilde")
         #expect(formed == ")" + String(repeating: "~", count: 100))
-        #expect(try strikeText(input(openerLen: 1, tailCount: 101), options: options) == nil)
+        #expect(strikeText(input(openerLen: 1, tailCount: 101), options: options) == nil)
     }
 }

@@ -26,7 +26,7 @@ struct RedispatchPartialTabIndentTests {
     // columns plus two spaces reach four columns of indent, so `x` re-dispatches as an INDENTED code
     // block, not a paragraph.
     @Test("block-quote straddle: leftover tab columns reach the code indent")
-    func blockQuoteStraddleUnderCountTwoSpaces() throws {
+    func blockQuoteStraddleUnderCountTwoSpaces() {
         MarkdownDocument.withParsedDocument(">>```\n>\t  x") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode(), .indentedCode])
@@ -37,7 +37,7 @@ struct RedispatchPartialTabIndentTests {
     // FIX: five columns of indent (two leftover tab columns + three spaces); four are stripped as the
     // code indent, leaving one leading content space before `x`.
     @Test("block-quote straddle: one leftover space survives into the code content")
-    func blockQuoteStraddleUnderCountThreeSpaces() throws {
+    func blockQuoteStraddleUnderCountThreeSpaces() {
         MarkdownDocument.withParsedDocument(">>```\n>\t   x") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode(), .indentedCode])
@@ -51,7 +51,7 @@ struct RedispatchPartialTabIndentTests {
     // indent. The second tab's remaining two columns (6-8) surface as leading content spaces with its
     // byte dropped (cmark's `partially_consumed_tab`), then `x` — code content `  x`.
     @Test("block-quote straddle: a re-dispatched straddling tab surfaces leftover spaces in code content")
-    func blockQuoteStraddleRedispatchSplitTab() throws {
+    func blockQuoteStraddleRedispatchSplitTab() {
         MarkdownDocument.withParsedDocument(">>```\n>\t\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode(), .indentedCode])
@@ -63,7 +63,7 @@ struct RedispatchPartialTabIndentTests {
     // columns do NOT reach the four-column code indent; `x` re-dispatches as a PARAGRAPH, not an
     // indented code block.
     @Test("list-item straddle: leftover tab columns fall short of the code indent (bare tab)")
-    func listItemStraddleOverCountBareTab() throws {
+    func listItemStraddleOverCountBareTab() {
         MarkdownDocument.withParsedDocument("- >```\n\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .bulletList(), .item(checked: nil), .blockQuote, .fencedCode(), .paragraph, .text])
@@ -75,7 +75,7 @@ struct RedispatchPartialTabIndentTests {
     // FIX: one leading space then the tab; the item still consumes two columns and the leftover falls
     // short of the code indent.
     @Test("list-item straddle: one leading space then tab stays a paragraph")
-    func listItemStraddleOverCountSpaceTab() throws {
+    func listItemStraddleOverCountSpaceTab() {
         MarkdownDocument.withParsedDocument("- >```\n \tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .bulletList(), .item(checked: nil), .blockQuote, .fencedCode(), .paragraph, .text])
@@ -87,7 +87,7 @@ struct RedispatchPartialTabIndentTests {
     // FIX: two leading spaces exactly satisfy the item content column, so the following tab is fully
     // leftover; its four columns from column 2 still fall short (only two reach), staying a paragraph.
     @Test("list-item straddle: two leading spaces then tab stays a paragraph")
-    func listItemStraddleOverCountTwoSpacesTab() throws {
+    func listItemStraddleOverCountTwoSpacesTab() {
         MarkdownDocument.withParsedDocument("- >```\n  \tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .bulletList(), .item(checked: nil), .blockQuote, .fencedCode(), .paragraph, .text])
@@ -99,7 +99,7 @@ struct RedispatchPartialTabIndentTests {
     // GUARD: the block-quote straddle boundary. `>\tx` leaves two columns of indent (< 4), a paragraph.
     // Must stay a paragraph.
     @Test("block-quote straddle boundary: bare tab stays a paragraph (unchanged)")
-    func blockQuoteStraddleBoundaryBareTab() throws {
+    func blockQuoteStraddleBoundaryBareTab() {
         MarkdownDocument.withParsedDocument(">>```\n>\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode(), .paragraph, .text])
@@ -110,7 +110,7 @@ struct RedispatchPartialTabIndentTests {
 
     // GUARD: `>\t x` leaves three columns of indent (< 4), a paragraph. Must stay a paragraph.
     @Test("block-quote straddle boundary: tab then one space stays a paragraph (unchanged)")
-    func blockQuoteStraddleBoundaryTabSpace() throws {
+    func blockQuoteStraddleBoundaryTabSpace() {
         MarkdownDocument.withParsedDocument(">>```\n>\t x") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode(), .paragraph, .text])
@@ -122,7 +122,7 @@ struct RedispatchPartialTabIndentTests {
     // GUARD: the list-item boundary with no leading whitespace at all. `x` is below the item content
     // column, so the list closes and `x` is a top-level paragraph. Must stay a paragraph.
     @Test("list-item boundary: unindented tail closes the list into a paragraph (unchanged)")
-    func listItemBoundaryUnindented() throws {
+    func listItemBoundaryUnindented() {
         MarkdownDocument.withParsedDocument("- >```\nx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .bulletList(), .item(checked: nil), .blockQuote, .fencedCode(), .paragraph, .text])

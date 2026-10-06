@@ -72,7 +72,7 @@ struct LinkDestinationControlCharQuirkTests {
 
     private func linkURL(
         _ src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> String? {
+    ) -> String? {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> String? in
             firstLinkURL(doc.root)
         }
@@ -81,40 +81,40 @@ struct LinkDestinationControlCharQuirkTests {
     // MARK: Facet A — inline bare destination (VT/FF kept as content flag ON)
 
     @Test("flag ON: `[](\\u{FFFD}\\u{0B})` keeps the VT — dest is `\u{FFFD}\u{0B}`")
-    func flagOnInlineFacetA() throws {
+    func flagOnInlineFacetA() {
         // The fuzzer artifact was `[](` + 0xE2 (repaired to U+FFFD) + VT + `)`.
-        #expect(try linkURL("[](\u{FFFD}\u{0B})", options: Self.flagOn) == "\u{FFFD}\u{0B}")
+        #expect(linkURL("[](\u{FFFD}\u{0B})", options: Self.flagOn) == "\u{FFFD}\u{0B}")
     }
 
     @Test("flag ON: `[](a\\u{0B}b)` keeps the interior VT — dest is `a\u{0B}b`")
-    func flagOnInlineInteriorVT() throws {
-        #expect(try linkURL("[](a\u{0B}b)", options: Self.flagOn) == "a\u{0B}b")
+    func flagOnInlineInteriorVT() {
+        #expect(linkURL("[](a\u{0B}b)", options: Self.flagOn) == "a\u{0B}b")
     }
 
     @Test("flag ON: `[](a\\u{0B})` keeps the trailing VT — dest is `a\u{0B}`")
-    func flagOnInlineTrailingVT() throws {
-        #expect(try linkURL("[](a\u{0B})", options: Self.flagOn) == "a\u{0B}")
+    func flagOnInlineTrailingVT() {
+        #expect(linkURL("[](a\u{0B})", options: Self.flagOn) == "a\u{0B}")
     }
 
     @Test("flag ON: `[](a\\u{0C}b)` keeps the interior FF — dest is `a\u{0C}b`")
-    func flagOnInlineInteriorFF() throws {
-        #expect(try linkURL("[](a\u{0C}b)", options: Self.flagOn) == "a\u{0C}b")
+    func flagOnInlineInteriorFF() {
+        #expect(linkURL("[](a\u{0C}b)", options: Self.flagOn) == "a\u{0C}b")
     }
 
     @Test("flag OFF: `[](\\u{FFFD}\\u{0B})` drops the VT — dest is `\u{FFFD}` (spec-correct)")
-    func flagOffInlineFacetA() throws {
-        #expect(try linkURL("[](\u{FFFD}\u{0B})", options: Self.flagOff) == "\u{FFFD}")
+    func flagOffInlineFacetA() {
+        #expect(linkURL("[](\u{FFFD}\u{0B})", options: Self.flagOff) == "\u{FFFD}")
     }
 
     @Test("flag OFF: `[](a\\u{0B}b)` forms NO link — the VT terminates the dest so `b)` fails the close")
-    func flagOffInlineInteriorVT() throws {
-        #expect(try linkURL("[](a\u{0B}b)", options: Self.flagOff) == nil)
+    func flagOffInlineInteriorVT() {
+        #expect(linkURL("[](a\u{0B}b)", options: Self.flagOff) == nil)
     }
 
     // MARK: Facet B — reference-definition bare destination (VT forms the dest flag ON)
 
     @Test("flag ON: `[?]:\\u{0B}` forms a valid (unused) ref-def — document has no blocks")
-    func flagOnRefDefFacetB() throws {
+    func flagOnRefDefFacetB() {
         let count = MarkdownDocument.withParsedDocument("[?]:\u{0B}", options: Self.flagOn) { doc in
             childCount(doc.root)
         }
@@ -139,20 +139,20 @@ struct LinkDestinationControlCharQuirkTests {
     // MARK: Agreeing controls — space/tab still terminate under BOTH flags (guard over-broadening)
 
     @Test("`[](a b)` forms no link under either flag (space terminates the dest)")
-    func spaceTerminatesBothFlags() throws {
-        #expect(try linkURL("[](a b)", options: Self.flagOn) == nil)
-        #expect(try linkURL("[](a b)", options: Self.flagOff) == nil)
+    func spaceTerminatesBothFlags() {
+        #expect(linkURL("[](a b)", options: Self.flagOn) == nil)
+        #expect(linkURL("[](a b)", options: Self.flagOff) == nil)
     }
 
     @Test("`[](a\tb)` forms no link under either flag (tab terminates the dest)")
-    func tabTerminatesBothFlags() throws {
-        #expect(try linkURL("[](a\tb)", options: Self.flagOn) == nil)
-        #expect(try linkURL("[](a\tb)", options: Self.flagOff) == nil)
+    func tabTerminatesBothFlags() {
+        #expect(linkURL("[](a\tb)", options: Self.flagOn) == nil)
+        #expect(linkURL("[](a\tb)", options: Self.flagOff) == nil)
     }
 
     @Test("`[](ab)` is a link with dest `ab` under both flags (positive control)")
-    func plainDestBothFlags() throws {
-        #expect(try linkURL("[](ab)", options: Self.flagOn) == "ab")
-        #expect(try linkURL("[](ab)", options: Self.flagOff) == "ab")
+    func plainDestBothFlags() {
+        #expect(linkURL("[](ab)", options: Self.flagOn) == "ab")
+        #expect(linkURL("[](ab)", options: Self.flagOff) == "ab")
     }
 }

@@ -17,13 +17,13 @@ import CommonMark
 @Suite("Source ranges of smart punctuation")
 struct SmartPunctuationSourceRangeTests {
 
-    private func tree(_ source: String) throws -> String {
-        try CmarkTreeDump.dump(source, options: [.smart, .sourcePosition], sourceRanges: true)
+    private func tree(_ source: String) -> String {
+        CmarkTreeDump.dump(source, options: [.smart, .sourcePosition], sourceRanges: true)
     }
 
     @Test("an ellipsis that starts a text spans its three dots")
-    func leadingEllipsis() throws {
-        #expect(try tree("...a") == """
+    func leadingEllipsis() {
+        #expect(tree("...a") == """
             document @1:1-1:5
               paragraph @1:1-1:5
                 text "…a" @1:1-1:5
@@ -32,8 +32,8 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     @Test("an ellipsis that ends a text spans its three dots")
-    func trailingEllipsis() throws {
-        #expect(try tree("a...") == """
+    func trailingEllipsis() {
+        #expect(tree("a...") == """
             document @1:1-1:5
               paragraph @1:1-1:5
                 text "a…" @1:1-1:5
@@ -42,8 +42,8 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     @Test("an ellipsis alone in emphasis spans its three dots")
-    func ellipsisInEmphasis() throws {
-        #expect(try tree("*...*") == """
+    func ellipsisInEmphasis() {
+        #expect(tree("*...*") == """
             document @1:1-1:6
               paragraph @1:1-1:6
                 emph @1:1-1:6
@@ -53,8 +53,8 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     @Test("an en dash spans its two hyphens")
-    func enDash() throws {
-        #expect(try tree("a--b") == """
+    func enDash() {
+        #expect(tree("a--b") == """
             document @1:1-1:5
               paragraph @1:1-1:5
                 text "a–b" @1:1-1:5
@@ -63,8 +63,8 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     @Test("an em dash spans its three hyphens")
-    func emDash() throws {
-        #expect(try tree("a---b") == """
+    func emDash() {
+        #expect(tree("a---b") == """
             document @1:1-1:6
               paragraph @1:1-1:6
                 text "a—b" @1:1-1:6
@@ -73,8 +73,8 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     @Test("curly double quotes span their straight quotes")
-    func doubleQuotes() throws {
-        #expect(try tree("\"q\"") == """
+    func doubleQuotes() {
+        #expect(tree("\"q\"") == """
             document @1:1-1:4
               paragraph @1:1-1:4
                 text "“q”" @1:1-1:4
@@ -83,8 +83,8 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     @Test("curly single quotes span their straight quotes")
-    func singleQuotes() throws {
-        #expect(try tree("'q'") == """
+    func singleQuotes() {
+        #expect(tree("'q'") == """
             document @1:1-1:4
               paragraph @1:1-1:4
                 text "‘q’" @1:1-1:4
@@ -93,8 +93,8 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     @Test("an ellipsis that starts a list item's text spans its three dots")
-    func leadingEllipsisInListItem() throws {
-        #expect(try tree("- ...a") == """
+    func leadingEllipsisInListItem() {
+        #expect(tree("- ...a") == """
             document @1:1-1:7
               list bullet '-' tight @1:1-1:7
                 item @1:1-1:7
@@ -105,8 +105,8 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     @Test("an ellipsis that ends a list item's text spans its three dots")
-    func trailingEllipsisInListItem() throws {
-        #expect(try tree("- a...") == """
+    func trailingEllipsisInListItem() {
+        #expect(tree("- a...") == """
             document @1:1-1:7
               list bullet '-' tight @1:1-1:7
                 item @1:1-1:7
@@ -117,8 +117,8 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     @Test("an ellipsis alone in emphasis in a list item spans its three dots")
-    func ellipsisInEmphasisInListItem() throws {
-        #expect(try tree("- *...*") == """
+    func ellipsisInEmphasisInListItem() {
+        #expect(tree("- *...*") == """
             document @1:1-1:8
               list bullet '-' tight @1:1-1:8
                 item @1:1-1:8
@@ -130,8 +130,8 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     @Test("an en dash in a list item spans its two hyphens")
-    func enDashInListItem() throws {
-        #expect(try tree("- a--b") == """
+    func enDashInListItem() {
+        #expect(tree("- a--b") == """
             document @1:1-1:7
               list bullet '-' tight @1:1-1:7
                 item @1:1-1:7
@@ -142,8 +142,8 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     @Test("an em dash in a list item spans its three hyphens")
-    func emDashInListItem() throws {
-        #expect(try tree("- a---b") == """
+    func emDashInListItem() {
+        #expect(tree("- a---b") == """
             document @1:1-1:8
               list bullet '-' tight @1:1-1:8
                 item @1:1-1:8
@@ -154,8 +154,8 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     @Test("curly double quotes in a list item span their straight quotes")
-    func doubleQuotesInListItem() throws {
-        #expect(try tree("- \"q\"") == """
+    func doubleQuotesInListItem() {
+        #expect(tree("- \"q\"") == """
             document @1:1-1:6
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
@@ -166,8 +166,8 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     @Test("curly single quotes in a list item span their straight quotes")
-    func singleQuotesInListItem() throws {
-        #expect(try tree("- 'q'") == """
+    func singleQuotesInListItem() {
+        #expect(tree("- 'q'") == """
             document @1:1-1:6
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
@@ -179,8 +179,8 @@ struct SmartPunctuationSourceRangeTests {
 
     /// The second line is a block-quote continuation, so the paragraph's lines are not contiguous in the source.
     @Test("an ellipsis on a block quote's continuation line spans its three dots")
-    func ellipsisOnContinuationLine() throws {
-        #expect(try tree("> a\n> ...b") == """
+    func ellipsisOnContinuationLine() {
+        #expect(tree("> a\n> ...b") == """
             document @1:1-2:7
               block_quote @1:1-2:7
                 paragraph @1:3-2:7
@@ -193,8 +193,8 @@ struct SmartPunctuationSourceRangeTests {
 
     /// A NUL makes the paragraph's content an arena copy, read back to the source through its run map.
     @Test("an ellipsis in content holding a NUL spans its three dots")
-    func ellipsisInArenaContent() throws {
-        #expect(try tree("\u{0} *...*") == """
+    func ellipsisInArenaContent() {
+        #expect(tree("\u{0} *...*") == """
             document @1:1-1:8
               paragraph @1:1-1:8
                 text "\u{FFFD} " @1:1-1:3

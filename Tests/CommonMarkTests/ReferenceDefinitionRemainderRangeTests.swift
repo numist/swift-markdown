@@ -32,7 +32,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
     /// DFS-collect every node's kind and source range when `src` is parsed spec-correct.
-    private func ranges(in src: String) throws -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] {
+    private func ranges(in src: String) -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] {
         MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -55,7 +55,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         // Spec-correct, `bar` keeps its TRUE line: @2:1-2:4 - the physical line it occupies, consistent
         // with the paragraph end @2:4. cmark strips the def and stamps `bar` one line up at @1:1-1:4.
         // The block-level paragraph range is @1:1-2:4 in both configurations - only the inline content shifts.
-        let ranges = try ranges(in: "[foo]: /url\nbar")
+        let ranges = ranges(in: "[foo]: /url\nbar")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 1)
 
@@ -76,7 +76,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         // @1:1-1:4 - the same reference-definition line-shift as a plain paragraph, applied to heading
         // content. The block-level heading range is @1:1-3:4 in both configurations; only the inline
         // content shifts.
-        let ranges = try ranges(in: "[foo]: /url\nbar\n===")
+        let ranges = ranges(in: "[foo]: /url\nbar\n===")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 1)
 
@@ -94,7 +94,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         // @4:1-4:4, consistent with the paragraph end @4:4. cmark drops all three ref-def lines from
         // the buffer and stamps `bar` three lines up at @1:1-1:4 - a text line (1) that sits at the
         // paragraph's own start line. Block-level paragraph range is @1:1-4:4 in both configurations.
-        let ranges = try ranges(in: "[\nfoo\n]: /url\nbar")
+        let ranges = ranges(in: "[\nfoo\n]: /url\nbar")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 1)
 
@@ -114,7 +114,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         // paragraph end @3:4. cmark shifts BOTH up one line (`bar` @1:1, `baz` @2:1), proving the shift
         // is per-line, not a constant byte offset. Block-level paragraph range is @1:1-3:4 in both
         // configurations.
-        let ranges = try ranges(in: "[foo]: /url\nbar\nbaz")
+        let ranges = ranges(in: "[foo]: /url\nbar\nbaz")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 2)
 
@@ -137,7 +137,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         // the whole subtree up one line - Text @1:1, Emphasis @1:3, inner Text @1:4, Text @1:6 - proving
         // the shift applies to non-text inlines and through nesting, not just top-level text. Block-level
         // paragraph range is @1:1-2:8 both ways.
-        let ranges = try ranges(in: "[foo]: /url\na *b* c")
+        let ranges = ranges(in: "[foo]: /url\na *b* c")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 3)
 
@@ -160,7 +160,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         // former ref-def paragraph, so `bar` is its OWN paragraph with no leading def to strip - there
         // is nothing to shift. Both configurations report `bar` @3:1-3:4. This proves the shift is
         // scoped to content that shares a paragraph with the stripped defs.
-        let ranges = try ranges(in: "[foo]: /url\n\nbar")
+        let ranges = ranges(in: "[foo]: /url\n\nbar")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 1)
 
@@ -181,7 +181,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         // the paragraph end @4:3. cmark strips the two def lines and stamps the surviving content two
         // lines up (`c` @1, `d` @2), extending the reference-definition line-shift to a non-contiguous
         // but source-backed remainder. Block-level paragraph range is @1:1-4:3 in both configurations.
-        let ranges = try ranges(in: "[a]:\n/b\n c\n d")
+        let ranges = ranges(in: "[a]:\n/b\n c\n d")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 2)
 

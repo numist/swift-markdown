@@ -16,7 +16,7 @@ import Testing
 struct AppleOS26InitializerTests {
 
     @Test("returning String initializer parses the expected tree")
-    func stringInitializer() throws {
+    func stringInitializer() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "# Title\n\nA paragraph with *emphasis*."
         let doc = MarkdownDocument(parsing: source)
@@ -28,7 +28,7 @@ struct AppleOS26InitializerTests {
     }
 
     @Test("UTF8Span initializer parses the same tree as the String initializer")
-    func utf8SpanInitializer() throws {
+    func utf8SpanInitializer() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "one `code` two"
         let viaString = MarkdownDocument(parsing: source)
@@ -40,7 +40,7 @@ struct AppleOS26InitializerTests {
     }
 
     @Test("source accessor round-trips the original bytes (incl. multi-byte scalars)")
-    func sourceAccessorRoundTrips() throws {
+    func sourceAccessorRoundTrips() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "l\u{ED}ne one\nline two"   // `í` is a 2-byte scalar
         let doc = MarkdownDocument(parsing: source)

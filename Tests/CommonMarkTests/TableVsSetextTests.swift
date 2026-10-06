@@ -20,7 +20,7 @@ import Testing
 @Suite("Table-pending paragraph vs setext underline")
 struct TableVsSetextTests {
 
-    private func kinds(_ source: String) throws -> (hasTable: Bool, hasHeading: Bool, hasList: Bool, bodyCellTexts: [String]) {
+    private func kinds(_ source: String) -> (hasTable: Bool, hasHeading: Bool, hasList: Bool, bodyCellTexts: [String]) {
         MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> (Bool, Bool, Bool, [String]) in
             var hasTable = false, hasHeading = false, hasList = false
             var bodyCells: [String] = []
@@ -48,23 +48,23 @@ struct TableVsSetextTests {
     // MARK: - FIX: a table-pending paragraph is not underlined into a heading
 
     @Test("dash underline after a table delimiter forms a table + a bullet list, not a heading")
-    func dashAfterDelimiter() throws {
+    func dashAfterDelimiter() {
         // `r\n|-\n-` : `r`+`|-` open a table; `-` is a bullet list, not a setext underline.
-        let k = try kinds("r\n|-\n-")
+        let k = kinds("r\n|-\n-")
         #expect(k.hasTable && k.hasList && !k.hasHeading)
     }
 
     @Test("equals line after a table delimiter is a table body row, not a heading")
-    func equalsAfterDelimiter() throws {
+    func equalsAfterDelimiter() {
         // `r\n|-\n=` : `=` isn't a block start, so it's absorbed as a body row "=" of the table.
-        let k = try kinds("r\n|-\n=")
+        let k = kinds("r\n|-\n=")
         #expect(k.hasTable && !k.hasHeading)
         #expect(k.bodyCellTexts == ["="])
     }
 
     @Test("multi-column table then an equals line keeps a table (body row), not a heading")
-    func multiColumnEquals() throws {
-        let k = try kinds("a|b\n-|-\n=")
+    func multiColumnEquals() {
+        let k = kinds("a|b\n-|-\n=")
         #expect(k.hasTable && !k.hasHeading)
         #expect(k.bodyCellTexts.first == "=")
     }
@@ -72,14 +72,14 @@ struct TableVsSetextTests {
     // MARK: - LEAVE: real setext headings and bare tables unaffected
 
     @Test("a dash underline with no delimiter row is still a setext heading")
-    func plainSetextUnchanged() throws {
-        let k = try kinds("r\n-")
+    func plainSetextUnchanged() {
+        let k = kinds("r\n-")
         #expect(k.hasHeading && !k.hasTable)
     }
 
     @Test("a header + delimiter with no third line is still just a table")
-    func bareTableUnchanged() throws {
-        let k = try kinds("r\n|-")
+    func bareTableUnchanged() {
+        let k = kinds("r\n|-")
         #expect(k.hasTable && !k.hasHeading)
     }
 }

@@ -38,20 +38,20 @@ struct TaskListRetryOrphanPositionsOffTests {
         [.cmarkBugCompatibility, .tasklist, .sourcePosition],
     ]
 
-    private func htmlLiterals(_ src: String, options: MarkdownDocument.ParseOptions) throws -> [String] {
+    private func htmlLiterals(_ src: String, options: MarkdownDocument.ParseOptions) -> [String] {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> [String] in
             inlineHTMLLiterals(doc.root)
         }
     }
 
     @Test("an orphan-led line appended to a tab-expanded first line", arguments: positionStates)
-    func orphanAfterTabExpandedFirstLine(options: MarkdownDocument.ParseOptions) throws {
-        #expect(try htmlLiterals("- >\ta<?\n  2\u{0} [x] \n", options: options) == ["<?\n\u{FFFD} "])
+    func orphanAfterTabExpandedFirstLine(options: MarkdownDocument.ParseOptions) {
+        #expect(htmlLiterals("- >\ta<?\n  2\u{0} [x] \n", options: options) == ["<?\n\u{FFFD} "])
     }
 
     @Test("an orphan-led line in a paragraph flattened for a NUL", arguments: positionStates)
-    func orphanInFlattenedParagraph(options: MarkdownDocument.ParseOptions) throws {
-        #expect(try htmlLiterals("- >\ta\u{0}<?\n  2\u{0} [x] \n", options: options) == ["<?\n\u{FFFD} "])
-        #expect(try htmlLiterals("- >a\u{0}<?\n  2\u{0} [x] \n", options: options) == ["<?\n\u{FFFD} "])
+    func orphanInFlattenedParagraph(options: MarkdownDocument.ParseOptions) {
+        #expect(htmlLiterals("- >\ta\u{0}<?\n  2\u{0} [x] \n", options: options) == ["<?\n\u{FFFD} "])
+        #expect(htmlLiterals("- >a\u{0}<?\n  2\u{0} [x] \n", options: options) == ["<?\n\u{FFFD} "])
     }
 }

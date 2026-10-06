@@ -28,7 +28,7 @@ struct PartialPairingEmphasisRangeTests {
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
     /// The source range of the first node of `kind`, in DFS order, when `src` is parsed spec-correct.
-    private func firstRange(of kind: MarkdownNode.Kind, in src: String) throws -> Range<Pos>? {
+    private func firstRange(of kind: MarkdownNode.Kind, in src: String) -> Range<Pos>? {
         let ranges = MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -39,18 +39,18 @@ struct PartialPairingEmphasisRangeTests {
     }
 
     @Test("partial pairing emphasis uses spec-correct (non-overlapping) range")
-    func partialPairingEmphasisUsesSpecCorrectRange() throws {
+    func partialPairingEmphasisUsesSpecCorrectRange() {
         // `**o*`: opener run `**`, closer run `*`. The emphasis consumes the opener's SECOND `*`
         // (col 2) and the closer `*` (col 4); the first `*` is leftover text. Spec-correct
         // emphasis starts at col 2, excluding that leftover (cmark's quirk starts at col 1).
-        let leadingLeftover = try firstRange(of: .emphasis, in: "**o*")
+        let leadingLeftover = firstRange(of: .emphasis, in: "**o*")
         #expect(leadingLeftover?.lowerBound == Pos(line: 1, column: 2))
         #expect(leadingLeftover?.upperBound == Pos(line: 1, column: 5))
 
         // `*o**`: opener run `*`, closer run `**`. The emphasis consumes the opener `*` (col 1) and
         // the closer's FIRST `*` (col 3); the trailing `*` is leftover. Spec-correct emphasis ends
         // at col 4, excluding that leftover (cmark's quirk ends at col 5).
-        let trailingLeftover = try firstRange(of: .emphasis, in: "*o**")
+        let trailingLeftover = firstRange(of: .emphasis, in: "*o**")
         #expect(trailingLeftover?.lowerBound == Pos(line: 1, column: 1))
         #expect(trailingLeftover?.upperBound == Pos(line: 1, column: 4))
 
@@ -58,10 +58,10 @@ struct PartialPairingEmphasisRangeTests {
         // own), so its range spans the whole run. The inner strong consumes cols 2-3 and 5-6 only,
         // so spec-correct it is @1:2-1:7, excluding the outer `*` on each side (cmark's quirk
         // stretches the strong to the full @1:1-1:8, overlapping those outer delimiters).
-        let outer = try firstRange(of: .emphasis, in: "***o***")
+        let outer = firstRange(of: .emphasis, in: "***o***")
         #expect(outer?.lowerBound == Pos(line: 1, column: 1))
         #expect(outer?.upperBound == Pos(line: 1, column: 8))
-        let inner = try firstRange(of: .strong, in: "***o***")
+        let inner = firstRange(of: .strong, in: "***o***")
         #expect(inner?.lowerBound == Pos(line: 1, column: 2))
         #expect(inner?.upperBound == Pos(line: 1, column: 7))
     }

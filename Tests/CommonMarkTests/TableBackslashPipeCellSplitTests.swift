@@ -30,7 +30,7 @@ struct TableBackslashPipeCellSplitTests {
     /// `(columns, rows, text)` for each cell of each row of the first table in `source`.
     private func tableCells(
         _ source: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [[(columns: Int, rows: Int, text: String)]] {
+    ) -> [[(columns: Int, rows: Int, text: String)]] {
         MarkdownDocument.withParsedDocument(source, options: options) { doc in
             var rows: [[(columns: Int, rows: Int, text: String)]] = []
             var found = false
@@ -60,7 +60,7 @@ struct TableBackslashPipeCellSplitTests {
     /// The rewrite used to split the pipe off (colspan 2, text `\`).
     @Test("two backslashes before a pipe keep it in a single cell")
     func twoBackslashesEscapePipe() throws {
-        let rows = try tableCells("o\n|-\n\\\\|", options: [.tables, .tableSpans])
+        let rows = tableCells("o\n|-\n\\\\|", options: [.tables, .tableSpans])
         try #require(rows.count == 2, "fixture: expected a header row and a body row, got \(rows.count)")
         try #require(rows[1].count == 1, "fixture: body row must be a single cell, got \(rows[1].count)")
         #expect(rows[1][0].columns == 1)
@@ -70,7 +70,7 @@ struct TableBackslashPipeCellSplitTests {
     /// Control that already matched: a single backslash escapes the pipe (`\|` → one cell, text `|`).
     @Test("one backslash before a pipe keeps it in a single cell")
     func oneBackslashEscapesPipe() throws {
-        let rows = try tableCells("o\n|-\n\\|", options: [.tables, .tableSpans])
+        let rows = tableCells("o\n|-\n\\|", options: [.tables, .tableSpans])
         try #require(rows.count == 2, "fixture: expected a header row and a body row, got \(rows.count)")
         try #require(rows[1].count == 1, "fixture: body row must be a single cell, got \(rows[1].count)")
         #expect(rows[1][0].columns == 1)
@@ -83,7 +83,7 @@ struct TableBackslashPipeCellSplitTests {
     /// text is `\|` (backslash then pipe).
     @Test("four backslashes before a pipe keep it in a single cell")
     func fourBackslashesEscapePipe() throws {
-        let rows = try tableCells("o\n|-\n\\\\\\\\|", options: [.tables, .tableSpans])
+        let rows = tableCells("o\n|-\n\\\\\\\\|", options: [.tables, .tableSpans])
         try #require(rows.count == 2, "fixture: expected a header row and a body row, got \(rows.count)")
         try #require(rows[1].count == 1, "fixture: body row must be a single cell, got \(rows[1].count)")
         #expect(rows[1][0].columns == 1)
@@ -93,7 +93,7 @@ struct TableBackslashPipeCellSplitTests {
     /// Control: an UNescaped pipe still splits the row into two cells (no backslash before it).
     @Test("an unescaped pipe still splits a body row into two cells")
     func unescapedPipeSplits() throws {
-        let rows = try tableCells("x|y\n-|-\na|b", options: [.tables, .tableSpans])
+        let rows = tableCells("x|y\n-|-\na|b", options: [.tables, .tableSpans])
         try #require(rows.count == 2, "fixture: expected a header row and a body row, got \(rows.count)")
         try #require(rows[1].count == 2, "fixture: body row must split into two cells, got \(rows[1].count)")
         #expect(rows[1].map(\.columns) == [1, 1])

@@ -35,7 +35,7 @@ struct ContinuationReindentRangeTests {
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
     /// DFS-collect every node's kind and source range when `src` is parsed spec-correct.
-    private func ranges(in src: String) throws -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] {
+    private func ranges(in src: String) -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] {
         MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -59,7 +59,7 @@ struct ContinuationReindentRangeTests {
         // (after the three spaces) and ends at 7 - consistent with the paragraph/document end @2:7.
         // cmark re-indents `bar` to content column 0 and reports @2:1-2:4, an end (2:4) that sits
         // before the paragraph end (2:7) - the `s560-indented-continuation` fuzzer pair, flag-on.
-        let ranges = try ranges(in: "foo\n   bar")
+        let ranges = ranges(in: "foo\n   bar")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 2)
 
@@ -81,7 +81,7 @@ struct ContinuationReindentRangeTests {
         // column: `>` is col 1, the four spaces are cols 2-5, so `bar` starts at column 6 and ends
         // at 9 - consistent with the paragraph/block-quote end @2:9. cmark re-indents `bar` to the
         // fixed content column 3, discarding line 2's four leading spaces, and reports @2:3-2:6.
-        let ranges = try ranges(in: "> foo\n>    bar")
+        let ranges = ranges(in: "> foo\n>    bar")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 2)
 
@@ -106,7 +106,7 @@ struct ContinuationReindentRangeTests {
         // paragraph/block-quote end @2:4. cmark re-indents `baz` to the fixed content column 3 and
         // reports @2:3-2:6, an end (2:6) past the paragraph end (2:4) - the `s24-lazy-bq` fuzzer pair,
         // flag-on. This case is the flag-off guardrail for the lazy-contiguity re-indent path.
-        let ranges = try ranges(in: "> bar\nbaz")
+        let ranges = ranges(in: "> bar\nbaz")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 2)
 
@@ -130,7 +130,7 @@ struct ContinuationReindentRangeTests {
         // `baz` @2:3-2:6 and `qux` @3:3-3:6 (the `s24-lazy-multi` fuzzer pair, flag-on). This case guards
         // the flag-off multi-line path where a re-indented MIDDLE line's end would otherwise cross a
         // physical line boundary flag-on.
-        let ranges = try ranges(in: "> bar\nbaz\nqux")
+        let ranges = ranges(in: "> bar\nbaz\nqux")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 3)
 
@@ -157,7 +157,7 @@ struct ContinuationReindentRangeTests {
         // (unlike a matched continuation), so it reports `baz` at `true_col + block_offset` = @2:5-2:8
         // (the `bqlazy-2sp` fuzzer pair). This is the flag-off guardrail proving the flag-on
         // preserve-leading-whitespace base is quarantined behind `.cmarkBugCompatibility`.
-        let ranges = try ranges(in: "> foo\n  baz")
+        let ranges = ranges(in: "> foo\n  baz")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 2)
 
@@ -182,7 +182,7 @@ struct ContinuationReindentRangeTests {
         // lazy line's leading whitespace, so it reports `bar` at `residual + block_offset` = @2:4-2:7 (the
         // `llg-list-1sp` fuzzer pair). This is the flag-off guardrail for the generalized lazy re-indent
         // over LIST containers.
-        let ranges = try ranges(in: "- foo\n bar")
+        let ranges = ranges(in: "- foo\n bar")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 2)
 
@@ -208,7 +208,7 @@ struct ContinuationReindentRangeTests {
         // matched outer prefix (one space, between the consumed `> ` and `baz`) and reports `baz` at
         // `residual + block_offset` = @2:6-2:9 (the `llg-nest-bq` fuzzer pair). This is the flag-off
         // guardrail for the generalized lazy re-indent when an OUTER container consumed columns first.
-        let ranges = try ranges(in: "> > foo\n>  baz")
+        let ranges = ranges(in: "> > foo\n>  baz")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         let quotes = ranges.filter { $0.kind == .blockQuote }.map { $0.range }
         try #require(texts.count == 2)

@@ -50,7 +50,7 @@ struct SourcePositionTests {
     }
 
     @Test("off by default - sourceRange is nil without .sourcePosition")
-    func offByDefault() throws {
+    func offByDefault() {
         let src = "# Hi\n\nHello\n"
         MarkdownDocument.withParsedDocument(src) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -60,7 +60,7 @@ struct SourcePositionTests {
     }
 
     @Test("heading + paragraph start/end positions")
-    func headingParagraph() throws {
+    func headingParagraph() {
         // "# Hi" on line 1, blank line 2, "Hello world" on line 3.
         let src = "# Hi\n\nHello world\n"
         MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
@@ -83,7 +83,7 @@ struct SourcePositionTests {
     }
 
     @Test("block quote start/end")
-    func blockQuote() throws {
+    func blockQuote() {
         let src = "> quote\n"
         MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -95,7 +95,7 @@ struct SourcePositionTests {
     }
 
     @Test("list item start columns")
-    func listItems() throws {
+    func listItems() {
         let src = "- a\n- b\n"
         MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -205,7 +205,7 @@ struct SourcePositionTests {
     }
 
     @Test("columns are 1-based UTF-8 byte offsets (non-ASCII)")
-    func byteColumns() throws {
+    func byteColumns() {
         // "aé b": a(1 byte) é(2 bytes) space(1) b(1) = 5 bytes.
         let src = "aé b\n"
         MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
@@ -219,7 +219,7 @@ struct SourcePositionTests {
     }
 
     @Test("indented code block start column accounts for indentation")
-    func indentedCodeStart() throws {
+    func indentedCodeStart() {
         let src = "    code\n"
         MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []

@@ -48,7 +48,7 @@ struct HTMLBlockType1TagFallthroughTests {
     /// compare a block's meaningful content against the source it was given, uniformly across kinds.
     private func blocks(
         _ src: String, options: MarkdownDocument.ParseOptions = []
-    ) throws -> [(kind: MarkdownNode.Kind, text: String)] {
+    ) -> [(kind: MarkdownNode.Kind, text: String)] {
         let found: [(MarkdownNode.Kind, String)] =
             MarkdownDocument.withParsedDocument(src, options: options) { doc in
                 var out: [(MarkdownNode.Kind, String)] = []
@@ -67,7 +67,7 @@ struct HTMLBlockType1TagFallthroughTests {
 
     @Test("`<script/>` opens an HTML block")
     func scriptSelfClosing() throws {
-        let blocks = try blocks("<script/>")
+        let blocks = blocks("<script/>")
         let first = try #require(blocks.first, "fixture vacuous: no block parsed")
         #expect(blocks.count == 1)
         #expect(first.kind == .htmlBlock)
@@ -79,7 +79,7 @@ struct HTMLBlockType1TagFallthroughTests {
         "<pre/>", "<style/>", "<textarea/>",
     ])
     func otherType1TagsSelfClosing(_ src: String) throws {
-        let blocks = try blocks(src)
+        let blocks = blocks(src)
         let first = try #require(blocks.first, "fixture vacuous: no block parsed for \(src.debugDescription)")
         #expect(blocks.count == 1)
         #expect(first.kind == .htmlBlock)
@@ -92,7 +92,7 @@ struct HTMLBlockType1TagFallthroughTests {
         "<script>", "<pre>", "<style>", "<textarea>",
     ])
     func bareType1Tags(_ src: String) throws {
-        let blocks = try blocks(src)
+        let blocks = blocks(src)
         let first = try #require(blocks.first, "fixture vacuous: no block parsed for \(src.debugDescription)")
         #expect(first.kind == .htmlBlock)
         #expect(first.text == src)
@@ -101,7 +101,7 @@ struct HTMLBlockType1TagFallthroughTests {
     /// `<script ` — a space after the tag name — is the canonical type-1 follow char.
     @Test("`<script ` (trailing space) opens an HTML block (type 1)")
     func scriptTrailingSpace() throws {
-        let blocks = try blocks("<script ")
+        let blocks = blocks("<script ")
         let first = try #require(blocks.first, "fixture vacuous: no block parsed")
         #expect(first.kind == .htmlBlock)
         #expect(first.text == "<script ")
@@ -115,7 +115,7 @@ struct HTMLBlockType1TagFallthroughTests {
     /// fix — a guard that the fix did not narrow type-7 detection for near-miss tag names.
     @Test("`<scripting>` opens an HTML block (type 7, tag name is not `script`)")
     func scriptingNearMiss() throws {
-        let blocks = try blocks("<scripting>")
+        let blocks = blocks("<scripting>")
         let first = try #require(blocks.first, "fixture vacuous: no block parsed")
         #expect(blocks.count == 1)
         #expect(first.kind == .htmlBlock)
@@ -130,7 +130,7 @@ struct HTMLBlockType1TagFallthroughTests {
     /// to accept `/` would wrongly interrupt the paragraph here.
     @Test("`<script/>` does NOT interrupt a paragraph (stays inline)")
     func selfClosingDoesNotInterruptParagraph() throws {
-        let blocks = try blocks("foo\n<script/>")
+        let blocks = blocks("foo\n<script/>")
         #expect(blocks.count == 1)
         let first = try #require(blocks.first, "fixture vacuous: no block parsed")
         #expect(first.kind == .paragraph)
@@ -141,8 +141,8 @@ struct HTMLBlockType1TagFallthroughTests {
     /// The positive counterpart: a bare `<script>` IS a type-1 start, and type 1 DOES interrupt a
     /// paragraph, so `foo` then `<script>` is a paragraph followed by a separate HTML block.
     @Test("bare `<script>` DOES interrupt a paragraph (type 1)")
-    func bareTagInterruptsParagraph() throws {
-        let blocks = try blocks("foo\n<script>")
+    func bareTagInterruptsParagraph() {
+        let blocks = blocks("foo\n<script>")
         #expect(blocks.count == 2)
         #expect(blocks.first?.kind == .paragraph)
         #expect(blocks.last?.kind == .htmlBlock)

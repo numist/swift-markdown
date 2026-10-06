@@ -18,7 +18,7 @@ struct FootnoteDefinitionTests {
     ///
     /// `wrapInFootnoteDefinition` must not `assert(label.inSource)` and then read the label from `sourceBytes` unconditionally - for materialized content that's a debug trap (and, in release, a garbage `footnoteMap` key read from source bytes at strings offsets). This input is valid CommonMark, so the parser must register the definition from the correct buffer and let the reference resolve against it.
     @Test("footnote definition with materialized (CRLF) content registers and resolves")
-    func materializedFootnoteDefinitionResolves() throws {
+    func materializedFootnoteDefinitionResolves() {
         // CRLF between the definition's two lines forces materialization of the def's content.
         let source = "[^a]: first line\r\nsecond line\n\nsee [^a]\n"
         MarkdownDocument.withParsedDocument(source, options: [.footnotes]) { doc in

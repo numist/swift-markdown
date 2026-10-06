@@ -20,14 +20,14 @@ struct InlineOnlyFinalLineEndRangeTests {
 
     private static let modes: [MarkdownDocument.ParseOptions] = [.inlineOnly, .preserveWhitespace]
 
-    private func tree(_ source: String, _ mode: MarkdownDocument.ParseOptions, _ extra: MarkdownDocument.ParseOptions = []) throws -> String {
-        try CmarkTreeDump.dump(source, options: mode.union(.sourcePosition).union(extra), sourceRanges: true)
+    private func tree(_ source: String, _ mode: MarkdownDocument.ParseOptions, _ extra: MarkdownDocument.ParseOptions = []) -> String {
+        CmarkTreeDump.dump(source, options: mode.union(.sourcePosition).union(extra), sourceRanges: true)
     }
 
     /// cmark-gfm ends the text at `@1:3`, a column past the line, because it counts the line ending the text holds.
     @Test("a final line feed ends the text where the line feed starts", arguments: modes)
-    func finalLineFeed(_ mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try tree("a\n", mode) == """
+    func finalLineFeed(_ mode: MarkdownDocument.ParseOptions) {
+        #expect(tree("a\n", mode) == """
             document @1:1-1:2
               paragraph @1:1-1:2
                 text "a\\n" @1:1-1:2
@@ -37,8 +37,8 @@ struct InlineOnlyFinalLineEndRangeTests {
 
     /// cmark-gfm ends the text at `@1:3`, a column past the line, because it counts the line ending the text holds.
     @Test("a final carriage return and line feed end the text where the carriage return starts", arguments: modes)
-    func finalCRLF(_ mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try tree("a\r\n", mode) == """
+    func finalCRLF(_ mode: MarkdownDocument.ParseOptions) {
+        #expect(tree("a\r\n", mode) == """
             document @1:1-1:2
               paragraph @1:1-1:2
                 text "a\\n" @1:1-1:2
@@ -48,8 +48,8 @@ struct InlineOnlyFinalLineEndRangeTests {
 
     /// cmark-gfm ends the text at `@1:3`, a column past the line, because it counts the line ending the text holds.
     @Test("a final lone carriage return ends the text where it starts", arguments: modes)
-    func finalCR(_ mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try tree("a\r", mode) == """
+    func finalCR(_ mode: MarkdownDocument.ParseOptions) {
+        #expect(tree("a\r", mode) == """
             document @1:1-1:2
               paragraph @1:1-1:2
                 text "a\\n" @1:1-1:2
@@ -60,8 +60,8 @@ struct InlineOnlyFinalLineEndRangeTests {
     /// A blank last line is a line of the input, so the ranges end at its start. cmark-gfm ends the text at `@1:4`,
     /// because it counts both line endings on the first line.
     @Test("a final blank line ends the text at the start of that line", arguments: modes)
-    func finalBlankLine(_ mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try tree("a\n\n", mode) == """
+    func finalBlankLine(_ mode: MarkdownDocument.ParseOptions) {
+        #expect(tree("a\n\n", mode) == """
             document @1:1-2:1
               paragraph @1:1-2:1
                 text "a\\n\\n" @1:1-2:1
@@ -71,8 +71,8 @@ struct InlineOnlyFinalLineEndRangeTests {
 
     /// cmark-gfm ends the text at `@1:5`, because it counts the whole text on its first line.
     @Test("a line ending before the last line still ends the text at the start of the next line", arguments: modes)
-    func interiorLineFeed(_ mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try tree("a\nb\n", mode) == """
+    func interiorLineFeed(_ mode: MarkdownDocument.ParseOptions) {
+        #expect(tree("a\nb\n", mode) == """
             document @1:1-2:2
               paragraph @1:1-2:2
                 text "a\\nb\\n" @1:1-2:2
@@ -83,8 +83,8 @@ struct InlineOnlyFinalLineEndRangeTests {
     /// The text holds only the final line ending, so its range is empty where the line ending starts. cmark-gfm ends it
     /// at `@1:5`, a column past the line.
     @Test("text holding only the final line feed has an empty range", arguments: modes)
-    func lineFeedOnlyText(_ mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try tree("*a*\n", mode) == """
+    func lineFeedOnlyText(_ mode: MarkdownDocument.ParseOptions) {
+        #expect(tree("*a*\n", mode) == """
             document @1:1-1:4
               paragraph @1:1-1:4
                 emph @1:1-1:4
@@ -97,8 +97,8 @@ struct InlineOnlyFinalLineEndRangeTests {
     /// The text stands for the whole carriage return and line feed, so it starts with the carriage return. cmark-gfm
     /// gives it `@1:4-1:5`, a column past the line.
     @Test("text holding only a final carriage return and line feed has an empty range at the carriage return", arguments: modes)
-    func crlfOnlyText(_ mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try tree("*a*\r\n", mode) == """
+    func crlfOnlyText(_ mode: MarkdownDocument.ParseOptions) {
+        #expect(tree("*a*\r\n", mode) == """
             document @1:1-1:4
               paragraph @1:1-1:4
                 emph @1:1-1:4
@@ -110,8 +110,8 @@ struct InlineOnlyFinalLineEndRangeTests {
 
     /// cmark-gfm ends the text at `@1:2`, a column past the line.
     @Test("input that is a single line feed has empty ranges at its start", arguments: modes)
-    func lineFeedOnlyInput(_ mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try tree("\n", mode) == """
+    func lineFeedOnlyInput(_ mode: MarkdownDocument.ParseOptions) {
+        #expect(tree("\n", mode) == """
             document @1:1-1:1
               paragraph @1:1-1:1
                 text "\\n" @1:1-1:1
@@ -121,8 +121,8 @@ struct InlineOnlyFinalLineEndRangeTests {
 
     /// The line break has no range, so the paragraph's end comes from the final line ending, not from any inline node.
     @Test("a backslash hard break before the final line feed leaves the paragraph ending at the line feed", arguments: modes)
-    func backslashHardBreak(_ mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try tree("a\\\n", mode) == """
+    func backslashHardBreak(_ mode: MarkdownDocument.ParseOptions) {
+        #expect(tree("a\\\n", mode) == """
             document @1:1-1:3
               paragraph @1:1-1:3
                 text "a" @1:1-1:2
@@ -132,8 +132,8 @@ struct InlineOnlyFinalLineEndRangeTests {
     }
 
     @Test("a paragraph left empty by a reference definition ends where the final line feed starts", arguments: modes)
-    func definitionOnly(_ mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try tree("[x]: /u\n", mode) == """
+    func definitionOnly(_ mode: MarkdownDocument.ParseOptions) {
+        #expect(tree("[x]: /u\n", mode) == """
             document @1:1-1:8
               paragraph @1:1-1:8
 
@@ -143,8 +143,8 @@ struct InlineOnlyFinalLineEndRangeTests {
     /// The NUL takes the arena path; its replacement character stands for the one NUL byte at column 2. cmark-gfm ends
     /// the document at `@1:5` and the text at `@1:6`, because it counts the replacement character's three bytes.
     @Test("text with a replaced NUL ends where the final line feed starts", arguments: modes)
-    func replacedNUL(_ mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try tree("a\u{0}\n", mode) == """
+    func replacedNUL(_ mode: MarkdownDocument.ParseOptions) {
+        #expect(tree("a\u{0}\n", mode) == """
             document @1:1-1:3
               paragraph @1:1-1:3
                 text "a\u{FFFD}\\n" @1:1-1:3
@@ -154,8 +154,8 @@ struct InlineOnlyFinalLineEndRangeTests {
 
     /// cmark-gfm gives the link, its text and the text after it no range.
     @Test("the text after an email autolink ends where the final line feed starts", arguments: modes)
-    func afterEmailAutolink(_ mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try tree("a@b.co\n", mode, [.gfmAutolink, .cmarkBugCompatibility]) == """
+    func afterEmailAutolink(_ mode: MarkdownDocument.ParseOptions) {
+        #expect(tree("a@b.co\n", mode, [.gfmAutolink, .cmarkBugCompatibility]) == """
             document @1:1-1:7
               paragraph @1:1-1:7
                 text "" @1:1-1:1

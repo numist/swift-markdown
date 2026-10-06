@@ -26,7 +26,7 @@ struct TrailingTextAfterMultiLineInlineTests {
 
     private func textRanges(
         _ source: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [Range<Pos>?] {
+    ) -> [Range<Pos>?] {
         var out: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         MarkdownDocument.withParsedDocument(source, options: options) { doc in
             dfsRanges(doc.root, into: &out)
@@ -38,7 +38,7 @@ struct TrailingTextAfterMultiLineInlineTests {
     /// blockquote paragraph carries its true byte-projected position on its own physical line (`@2:2-2:3`).
     @Test("flag-OFF: text after a multi-line code span is stamped on its own line")
     func specTrailingTextStamped() throws {
-        let texts = try textRanges("> `\n`o\nx", options: Self.specOptions)
+        let texts = textRanges("> `\n`o\nx", options: Self.specOptions)
         try #require(texts.count == 2)
         #expect(texts[0] == Pos(line: 2, column: 2)..<Pos(line: 2, column: 3))   // "o"
         #expect(texts[1] == Pos(line: 3, column: 1)..<Pos(line: 3, column: 2))   // "x"

@@ -27,7 +27,7 @@ import Testing
 struct LinkDestinationTrailingBackslashTests {
 
     /// (destination url, title) of the first `.link` node in DFS order; nil fields if no link exists.
-    private func firstLink(_ source: String) throws -> (url: String?, title: String?) {
+    private func firstLink(_ source: String) -> (url: String?, title: String?) {
         MarkdownDocument.withParsedDocument(source) { doc -> (String?, String?) in
             var found = false
             var url: String? = nil
@@ -48,7 +48,7 @@ struct LinkDestinationTrailingBackslashTests {
     /// Top-level block kinds followed by the inline `(kind, literal)` list of the first block.
     private func blocksAndInlines(
         _ source: String
-    ) throws -> (top: [MarkdownNode.Kind], inlines: [(kind: MarkdownNode.Kind, literal: String?)]) {
+    ) -> (top: [MarkdownNode.Kind], inlines: [(kind: MarkdownNode.Kind, literal: String?)]) {
         MarkdownDocument.withParsedDocument(source) { doc in
             var top: [MarkdownNode.Kind] = []
             doc.root.children.forEach { top.append($0.kind) }
@@ -59,38 +59,38 @@ struct LinkDestinationTrailingBackslashTests {
     // MARK: - FIX: an odd trailing backslash does not carry the destination past the line ending
 
     @Test("ref-def bare trailing backslash consumes only its own line")
-    func refDefBareTrailingBackslash() throws {
+    func refDefBareTrailingBackslash() {
         // `[b]:\` + newline + `]`: the ref-def destination is a literal `\` (line 1 only); the `]` is
         // a separate paragraph. The bug consumed the `]` line into the destination → empty document.
-        let (top, inlines) = try blocksAndInlines("[b]:\\\n]")
+        let (top, inlines) = blocksAndInlines("[b]:\\\n]")
         #expect(top == [.paragraph])
         #expect(inlines.map(\.kind) == [.text])
         #expect(inlines.map(\.literal) == ["]"])
     }
 
     @Test("ref-def trailing backslash after text consumes only its own line")
-    func refDefTrailingBackslashAfterText() throws {
+    func refDefTrailingBackslashAfterText() {
         // `[b]:a\` + newline + `x`: destination `a\` (line 1); line 2 is its own paragraph `x`.
-        let (top, inlines) = try blocksAndInlines("[b]:a\\\nx")
+        let (top, inlines) = blocksAndInlines("[b]:a\\\nx")
         #expect(top == [.paragraph])
         #expect(inlines.map(\.kind) == [.text])
         #expect(inlines.map(\.literal) == ["x"])
     }
 
     @Test("ref-def trailing backslash after a slash path consumes only its own line")
-    func refDefTrailingBackslashSlashPath() throws {
+    func refDefTrailingBackslashSlashPath() {
         // `[b]:/u\` + newline + `y`: destination `/u\` (line 1); line 2 is its own paragraph `y`.
-        let (top, inlines) = try blocksAndInlines("[b]:/u\\\ny")
+        let (top, inlines) = blocksAndInlines("[b]:/u\\\ny")
         #expect(top == [.paragraph])
         #expect(inlines.map(\.kind) == [.text])
         #expect(inlines.map(\.literal) == ["y"])
     }
 
     @Test("inline-link trailing backslash fails the link and yields a hard break")
-    func inlineTrailingBackslash() throws {
+    func inlineTrailingBackslash() {
         // `[a](/u\` + newline + `x)`: the destination scan stops at the line ending, so the `(` never
         // closes and the link fails. The literal text plus the trailing `\` hard break survive.
-        let (top, inlines) = try blocksAndInlines("[a](/u\\\nx)")
+        let (top, inlines) = blocksAndInlines("[a](/u\\\nx)")
         #expect(top == [.paragraph])
         #expect(inlines.map(\.kind) == [.text, .lineBreak, .text])
         #expect(inlines.map(\.literal) == ["[a](/u", nil, "x)"])
@@ -99,42 +99,42 @@ struct LinkDestinationTrailingBackslashTests {
     // MARK: - GUARD: unchanged behaviors
 
     @Test("ref-def even trailing backslashes still escape (dest ends in a literal backslash)")
-    func refDefEvenTrailingBackslashes() throws {
+    func refDefEvenTrailingBackslashes() {
         // `[b]:a\\` + newline + `]`: the two backslashes are an escaped `\`, so nothing dangles; the
         // destination is `a\` (line 1) and the `]` is its own paragraph.
-        let (top, inlines) = try blocksAndInlines("[b]:a\\\\\n]")
+        let (top, inlines) = blocksAndInlines("[b]:a\\\\\n]")
         #expect(top == [.paragraph])
         #expect(inlines.map(\.literal) == ["]"])
     }
 
     @Test("ref-def backslash mid-destination is unchanged")
-    func refDefBackslashMidDestination() throws {
+    func refDefBackslashMidDestination() {
         // `[b]:a\b` + newline + `]`: the `\b` is interior; destination is `a\b` (line 1), `]` is its
         // own paragraph.
-        let (top, inlines) = try blocksAndInlines("[b]:a\\b\n]")
+        let (top, inlines) = blocksAndInlines("[b]:a\\b\n]")
         #expect(top == [.paragraph])
         #expect(inlines.map(\.literal) == ["]"])
     }
 
     @Test("ref-def with a plain destination is unchanged")
-    func refDefPlainDestination() throws {
+    func refDefPlainDestination() {
         // `[b]: x` + newline + `]`: destination `x` (line 1), `]` is its own paragraph.
-        let (top, inlines) = try blocksAndInlines("[b]: x\n]")
+        let (top, inlines) = blocksAndInlines("[b]: x\n]")
         #expect(top == [.paragraph])
         #expect(inlines.map(\.literal) == ["]"])
     }
 
     @Test("ref-def with a lone trailing backslash and no next line is a valid definition")
-    func refDefLoneTrailingBackslash() throws {
+    func refDefLoneTrailingBackslash() {
         // `[b]:\` with no following line: a valid ref-def (destination `\`) with no visible output.
-        let (top, _) = try blocksAndInlines("[b]:\\")
+        let (top, _) = blocksAndInlines("[b]:\\")
         #expect(top == [])
     }
 
     @Test("inline link whose destination line ends in a backslash then a bare close paren")
-    func inlineTrailingBackslashThenCloseParen() throws {
+    func inlineTrailingBackslashThenCloseParen() {
         // `[a](/u\` + newline + `)`: the destination stops at the line ending (`/u\`), the following
         // spacechars skip the newline, and the `)` closes the link — a link with destination `/u\`.
-        #expect(try firstLink("[a](/u\\\n)").url == "/u\\")
+        #expect(firstLink("[a](/u\\\n)").url == "/u\\")
     }
 }

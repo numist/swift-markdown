@@ -35,7 +35,7 @@ struct TablePrecedingParagraphTests {
     private func blocks(
         _ source: String,
         options: MarkdownDocument.ParseOptions = [.tables]
-    ) throws -> [Block] {
+    ) -> [Block] {
         MarkdownDocument.withParsedDocument(source, options: options) { doc -> [Block] in
             func inlineText(_ node: borrowing MarkdownNode) -> String {
                 var text = ""
@@ -152,22 +152,22 @@ struct TablePrecedingParagraphTests {
     }
 
     @Test("a dash-only line after preceding text is a setext heading, not a table")
-    func setextNotTable() throws {
+    func setextNotTable() {
         // `x\na\n-` : `-` is a setext underline (dash-only), which precedes table detection, so the
         // whole `x\na` becomes a level-2 heading (`x` + soft break + `a`, so the joined literal is "xa").
-        #expect(try blocks("x\na\n-") == [.heading("xa")])
+        #expect(blocks("x\na\n-") == [.heading("xa")])
     }
 
     @Test("an ordinary multi-line paragraph with no delimiter stays one paragraph")
-    func ordinaryParagraphUnchanged() throws {
-        #expect(try blocks("x\ny\nz") == [.paragraph("xyz")])
-        #expect(try blocks("a|b\nc|d") == [.paragraph("a|bc|d")])
+    func ordinaryParagraphUnchanged() {
+        #expect(blocks("x\ny\nz") == [.paragraph("xyz")])
+        #expect(blocks("a|b\nc|d") == [.paragraph("a|bc|d")])
     }
 
     // MARK: - Positions: the split nodes must carry valid (present, non-inverted) source ranges
 
     @Test("split-off paragraph and table carry valid source ranges")
-    func splitNodesHaveValidRanges() throws {
+    func splitNodesHaveValidRanges() {
         // The split creates a new preceding-paragraph node and re-stamps the table's start to the header
         // line. Both must carry present, non-inverted ranges (the qualified position surface). Positions are
         // unit-gated, not fuzzer-compared, so this is a presence/ordering guard, not a column check.

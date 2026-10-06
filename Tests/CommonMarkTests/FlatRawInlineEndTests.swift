@@ -37,7 +37,7 @@ struct FlatRawInlineEndTests {
         matching match: @escaping (MarkdownNode.Kind) -> Bool,
         in src: String,
         options: MarkdownDocument.ParseOptions
-    ) throws -> Range<Pos>? {
+    ) -> Range<Pos>? {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> Range<Pos>? in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)
@@ -48,18 +48,18 @@ struct FlatRawInlineEndTests {
         }
     }
 
-    private func codeSpanRange(options: MarkdownDocument.ParseOptions) throws -> Range<Pos>? {
-        try firstRange(matching: { if case .codeInline = $0 { return true } else { return false } },
+    private func codeSpanRange(options: MarkdownDocument.ParseOptions) -> Range<Pos>? {
+        firstRange(matching: { if case .codeInline = $0 { return true } else { return false } },
                        in: Self.codeSpanSource, options: options)
     }
 
-    private func leadingSpaceCodeSpanRange(options: MarkdownDocument.ParseOptions) throws -> Range<Pos>? {
-        try firstRange(matching: { if case .codeInline = $0 { return true } else { return false } },
+    private func leadingSpaceCodeSpanRange(options: MarkdownDocument.ParseOptions) -> Range<Pos>? {
+        firstRange(matching: { if case .codeInline = $0 { return true } else { return false } },
                        in: Self.leadingSpaceCodeSpanSource, options: options)
     }
 
     /// Every text node's range in DFS order, parsing `src` with `options`.
-    private func textRanges(in src: String, options: MarkdownDocument.ParseOptions) throws -> [Range<Pos>?] {
+    private func textRanges(in src: String, options: MarkdownDocument.ParseOptions) -> [Range<Pos>?] {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> [Range<Pos>?] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)
@@ -69,7 +69,7 @@ struct FlatRawInlineEndTests {
 
     @Test("a two-line code span keeps its precise end (positions on)")
     func codeSpanPrecise() throws {
-        let range = try #require(try codeSpanRange(options: [.sourcePosition]))
+        let range = try #require(codeSpanRange(options: [.sourcePosition]))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 2, column: 3))
     }
@@ -78,7 +78,7 @@ struct FlatRawInlineEndTests {
     func codeSpanLeadingSpacePrecise() throws {
         // The code span's end is one past its closing backtick's real column on line 2. The closing
         // line ` `x` puts the backtick at column 2, so the half-open end is @2:3.
-        let range = try #require(try leadingSpaceCodeSpanRange(options: [.sourcePosition]))
+        let range = try #require(leadingSpaceCodeSpanRange(options: [.sourcePosition]))
         #expect(range.lowerBound == Pos(line: 1, column: 2))
         #expect(range.upperBound == Pos(line: 2, column: 3))
     }
@@ -87,7 +87,7 @@ struct FlatRawInlineEndTests {
 
     @Test("text after a two-line code span keeps its physical position (positions on)")
     func followingTextPreciseNoQuirk() throws {
-        let texts = try textRanges(in: Self.codeSpanFollowSource, options: [.sourcePosition])
+        let texts = textRanges(in: Self.codeSpanFollowSource, options: [.sourcePosition])
         let range = try #require(texts.first ?? nil, "fixture must have a text node after the code span")
         #expect(texts.count == 1)  // fixture sanity: exactly the trailing `8`
         // Physical: `8` is on line 2 (` `8`), one past the closing backtick at column 1.

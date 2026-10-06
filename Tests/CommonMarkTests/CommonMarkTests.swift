@@ -15,7 +15,7 @@ import Testing
 struct BasicTests {
 
     @Test("empty document parses to a single .document node with no children")
-    func emptyDocument() throws {
+    func emptyDocument() {
         let source = ""
         MarkdownDocument.withParsedDocument(source) { doc in
         let root = doc.root
@@ -33,7 +33,7 @@ struct BasicTests {
     }
 
     @Test("non-empty source produces stub paragraph + text (placeholder behavior)")
-    func stubParagraph() throws {
+    func stubParagraph() {
         let source = "hello"
         MarkdownDocument.withParsedDocument(source) { doc in
         let root = doc.root
@@ -58,7 +58,7 @@ struct BasicTests {
     }
 
     @Test("parent/sibling navigation links work")
-    func navigation() throws {
+    func navigation() {
         let source = "abc"
         MarkdownDocument.withParsedDocument(source) { doc in
         let root = doc.root
@@ -101,7 +101,7 @@ struct BasicTests {
     }
 
     @Test("options are exposed on the parsed document")
-    func optionsRoundTrip() throws {
+    func optionsRoundTrip() {
         let source = "x"
         MarkdownDocument.withParsedDocument(source, options: [.smart, .footnotes]) { doc in
         let opts = doc.options
@@ -112,7 +112,7 @@ struct BasicTests {
     }
     
     @Test("reasonably sized markdown document example - performance")
-    func performanceExample() throws {
+    func performanceExample() {
         // This is the basic markdown doc from the performance tests. We have a test here that parses it as well, for easy debugging when looking into performance improvements.
         let sample = """
         # Hello, World

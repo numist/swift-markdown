@@ -23,7 +23,7 @@ struct OrderedMarkerTabExpansionTests {
     // FIX: `1.` occupies columns 0-1, so the tab at column 2 expands to 2 columns and the three
     // trailing spaces bring the gap to 5 columns - crossing the code-block threshold. Content is `z`.
     @Test("period marker: tab then spaces reaching the code threshold is a code block")
-    func periodMarkerTabIsCodeBlock() throws {
+    func periodMarkerTabIsCodeBlock() {
         MarkdownDocument.withParsedDocument("1.\t   z") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [.document, .orderedList(), .item(checked: nil), .indentedCode])
@@ -32,7 +32,7 @@ struct OrderedMarkerTabExpansionTests {
     }
 
     @Test("paren marker: tab then spaces reaching the code threshold is a code block")
-    func parenMarkerTabIsCodeBlock() throws {
+    func parenMarkerTabIsCodeBlock() {
         MarkdownDocument.withParsedDocument("1)\t   z") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [.document, .orderedList(.paren), .item(checked: nil), .indentedCode])
@@ -43,7 +43,7 @@ struct OrderedMarkerTabExpansionTests {
     // GUARD: the literal-spaces spelling of the same content already parses as a code block; the fix
     // must leave it untouched (the tab case materializes to exactly this line).
     @Test("period marker: five literal spaces is a code block (unchanged)")
-    func periodMarkerLiteralSpacesIsCodeBlock() throws {
+    func periodMarkerLiteralSpacesIsCodeBlock() {
         MarkdownDocument.withParsedDocument("1.     z") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [.document, .orderedList(), .item(checked: nil), .indentedCode])
@@ -54,7 +54,7 @@ struct OrderedMarkerTabExpansionTests {
     // GUARD: a tab-only gap after `1.` expands to just 2 columns - below the >=5-column threshold - so
     // the content stays a paragraph.
     @Test("period marker: tab-only gap stays a paragraph")
-    func periodMarkerTabOnlyIsParagraph() throws {
+    func periodMarkerTabOnlyIsParagraph() {
         MarkdownDocument.withParsedDocument("1.\tz") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [.document, .orderedList(), .item(checked: nil), .paragraph, .text])
@@ -64,7 +64,7 @@ struct OrderedMarkerTabExpansionTests {
     // GUARD: a wider marker (`12.`, columns 0-2) expands its tab to a single column, so `12.` + tab +
     // two spaces totals 3 columns - still below the threshold - and stays a paragraph.
     @Test("wide marker: tab plus two spaces stays a paragraph")
-    func wideMarkerTabStaysParagraph() throws {
+    func wideMarkerTabStaysParagraph() {
         MarkdownDocument.withParsedDocument("12.\t  z") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [.document, .orderedList(start: 12), .item(checked: nil), .paragraph, .text])
@@ -74,7 +74,7 @@ struct OrderedMarkerTabExpansionTests {
     // GUARD: a bullet marker already expands the following tab; this pins that behavior so the fix is
     // demonstrably aligning the ordered path with the bullet path.
     @Test("bullet marker: tab then spaces is a code block (unchanged)")
-    func bulletMarkerTabIsCodeBlock() throws {
+    func bulletMarkerTabIsCodeBlock() {
         MarkdownDocument.withParsedDocument("-\t   z") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [.document, .bulletList(), .item(checked: nil), .indentedCode])
@@ -85,7 +85,7 @@ struct OrderedMarkerTabExpansionTests {
     // so a bullet marker in the content opens a nested bullet list rather than being defeated by the
     // literal tab.
     @Test("edge: ordered marker, tab, then nested bullet marker opens a nested list")
-    func orderedMarkerTabThenNestedBullet() throws {
+    func orderedMarkerTabThenNestedBullet() {
         MarkdownDocument.withParsedDocument("1.\t- x") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [
@@ -104,7 +104,7 @@ struct OrderedMarkerTabExpansionTests {
     // back to `z`'s TRUE source byte (column 7), not to a materialized-buffer column - proving the
     // re-walk stayed in lockstep with the fixed `expandPrefixTabs` expansion.
     @Test("positions: tab-expanded ordered item maps content back to true source bytes")
-    func positionsMapBackToSource() throws {
+    func positionsMapBackToSource() {
         typealias Pos = MarkdownNode.SourcePosition
         MarkdownDocument.withParsedDocument("1.\t   z", options: .sourcePosition) { doc in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []

@@ -22,8 +22,8 @@ struct TaskListRetryAfterSetextDefinitionTests {
     private static let positionModes: [MarkdownDocument.ParseOptions] = [[], [.sourcePosition]]
 
     @Test("the lazy line keeps its replacement character after the underline", arguments: positionModes)
-    func lazyLineAfterUnderline(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump("- > [a]:\n  > u\n  > ===\n  1\u{0} [x] b\n", options: mode.union([.tasklist, .cmarkBugCompatibility])) == """
+    func lazyLineAfterUnderline(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump("- > [a]:\n  > u\n  > ===\n  1\u{0} [x] b\n", options: mode.union([.tasklist, .cmarkBugCompatibility])) == """
             document
               list bullet '-' tight
                 tasklist checked

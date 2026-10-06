@@ -23,7 +23,7 @@ import CommonMark
 /// half-open), or `@-` for a node without one.
 internal enum CmarkTreeDump {
 
-    internal static func dump(_ source: String, options: MarkdownDocument.ParseOptions, sourceRanges: Bool = false) throws -> String {
+    internal static func dump(_ source: String, options: MarkdownDocument.ParseOptions, sourceRanges: Bool = false) -> String {
         MarkdownDocument.withParsedDocument(source, options: options) { doc in
             var out = ""
             dump(doc.root, depth: 0, sourceRanges: sourceRanges, into: &out)

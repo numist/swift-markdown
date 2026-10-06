@@ -81,7 +81,7 @@ struct InlineProcessingInstructionQuestionMarkQuirkTests {
 
     private func inlineHTML(
         _ src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> String? {
+    ) -> String? {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> String? in
             firstInlineHTML(doc.root)
         }
@@ -89,7 +89,7 @@ struct InlineProcessingInstructionQuestionMarkQuirkTests {
 
     private func text(
         _ src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> String {
+    ) -> String {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> String in
             collectText(doc.root)
         }
@@ -98,69 +98,69 @@ struct InlineProcessingInstructionQuestionMarkQuirkTests {
     // MARK: Flag ON — reproduce cmark rejecting `<???>` inline (literal text)
 
     @Test("flag ON: `f<???>` is literal text (inline PI rejected)")
-    func flagOnFindingLiteral() throws {
-        #expect(try inlineHTML("f<???>", options: Self.flagOn) == nil)
+    func flagOnFindingLiteral() {
+        #expect(inlineHTML("f<???>", options: Self.flagOn) == nil)
         // Fixture-sanity: the literal source survives as text, so the "no inline HTML" claim isn't
         // vacuous against an empty tree.
-        #expect(try text("f<???>", options: Self.flagOn) == "f<???>")
+        #expect(text("f<???>", options: Self.flagOn) == "f<???>")
     }
 
     @Test("flag ON: `\\u{0000}<???>` is literal text (NUL→U+FFFD, then PI rejected)")
-    func flagOnFindingWithNUL() throws {
-        #expect(try inlineHTML("\u{0000}<???>", options: Self.flagOn) == nil)
-        #expect(try text("\u{0000}<???>", options: Self.flagOn) == "\u{FFFD}<???>")
+    func flagOnFindingWithNUL() {
+        #expect(inlineHTML("\u{0000}<???>", options: Self.flagOn) == nil)
+        #expect(text("\u{0000}<???>", options: Self.flagOn) == "\u{FFFD}<???>")
     }
 
     // MARK: Flag OFF — the deliverable stays spec-correct (`<???>` is a valid inline PI)
 
     @Test("flag OFF: `f<???>` recognizes the inline PI")
-    func flagOffFindingRecognized() throws {
-        #expect(try inlineHTML("f<???>", options: Self.flagOff) == "<???>")
-        #expect(try text("f<???>", options: Self.flagOff) == "f")
+    func flagOffFindingRecognized() {
+        #expect(inlineHTML("f<???>", options: Self.flagOff) == "<???>")
+        #expect(text("f<???>", options: Self.flagOff) == "f")
     }
 
     @Test("flag OFF: `\\u{0000}<???>` recognizes the inline PI")
-    func flagOffFindingWithNUL() throws {
-        #expect(try inlineHTML("\u{0000}<???>", options: Self.flagOff) == "<???>")
-        #expect(try text("\u{0000}<???>", options: Self.flagOff) == "\u{FFFD}")
+    func flagOffFindingWithNUL() {
+        #expect(inlineHTML("\u{0000}<???>", options: Self.flagOff) == "<???>")
+        #expect(text("\u{0000}<???>", options: Self.flagOff) == "\u{FFFD}")
     }
 
     // MARK: Agreeing controls — inline PIs both parsers still recognize (must not regress)
 
     @Test("both flags: `f<?x?>` recognizes the inline PI (body `x`)")
-    func bothInlinePIBodyX() throws {
-        #expect(try inlineHTML("f<?x?>", options: Self.flagOff) == "<?x?>")
-        #expect(try inlineHTML("f<?x?>", options: Self.flagOn) == "<?x?>")
+    func bothInlinePIBodyX() {
+        #expect(inlineHTML("f<?x?>", options: Self.flagOff) == "<?x?>")
+        #expect(inlineHTML("f<?x?>", options: Self.flagOn) == "<?x?>")
     }
 
     @Test("both flags: `a<?b?>c` recognizes the inline PI mid-text")
-    func bothInlinePIMidText() throws {
-        #expect(try inlineHTML("a<?b?>c", options: Self.flagOff) == "<?b?>")
-        #expect(try inlineHTML("a<?b?>c", options: Self.flagOn) == "<?b?>")
-        #expect(try text("a<?b?>c", options: Self.flagOff) == "ac")
-        #expect(try text("a<?b?>c", options: Self.flagOn) == "ac")
+    func bothInlinePIMidText() {
+        #expect(inlineHTML("a<?b?>c", options: Self.flagOff) == "<?b?>")
+        #expect(inlineHTML("a<?b?>c", options: Self.flagOn) == "<?b?>")
+        #expect(text("a<?b?>c", options: Self.flagOff) == "ac")
+        #expect(text("a<?b?>c", options: Self.flagOn) == "ac")
     }
 
     @Test("both flags: `f<? ?>` recognizes the inline PI (space body)")
-    func bothInlinePISpaceBody() throws {
-        #expect(try inlineHTML("f<? ?>", options: Self.flagOff) == "<? ?>")
-        #expect(try inlineHTML("f<? ?>", options: Self.flagOn) == "<? ?>")
+    func bothInlinePISpaceBody() {
+        #expect(inlineHTML("f<? ?>", options: Self.flagOff) == "<? ?>")
+        #expect(inlineHTML("f<? ?>", options: Self.flagOn) == "<? ?>")
     }
 
     @Test("both flags: `f<??>` recognizes the empty inline PI")
-    func bothInlinePIEmptyBody() throws {
-        #expect(try inlineHTML("f<??>", options: Self.flagOff) == "<??>")
-        #expect(try inlineHTML("f<??>", options: Self.flagOn) == "<??>")
+    func bothInlinePIEmptyBody() {
+        #expect(inlineHTML("f<??>", options: Self.flagOff) == "<??>")
+        #expect(inlineHTML("f<??>", options: Self.flagOn) == "<??>")
     }
 
     @Test("both flags: `f<????>` recognizes the inline PI (one more `?` than the finding)")
-    func bothInlinePIFourQuestionMarks() throws {
+    func bothInlinePIFourQuestionMarks() {
         // Parity crux of the quirk: `<???>` rejects flag-ON because the body scan of `??>` pairs `??`
         // then swallows `>`, leaving no closer. `<????>` scans `???>` — it pairs `??`, stops at the
         // next `?` (which precedes `>`), and leaves the closing `?>` intact, so cmark accepts it, as
         // does the spec. So one extra `?` flips the flag-ON result from reject back to accept.
-        #expect(try inlineHTML("f<????>", options: Self.flagOff) == "<????>")
-        #expect(try inlineHTML("f<????>", options: Self.flagOn) == "<????>")
+        #expect(inlineHTML("f<????>", options: Self.flagOff) == "<????>")
+        #expect(inlineHTML("f<????>", options: Self.flagOn) == "<????>")
     }
 
     // MARK: Agreeing control — `<???>` alone is an HTML block (type 3), not inline, either way
@@ -168,7 +168,7 @@ struct InlineProcessingInstructionQuestionMarkQuirkTests {
     @Test("both flags: `<???>` alone is an HTML block, not inline")
     func bothStandaloneIsHTMLBlock() throws {
         for options in [Self.flagOff, Self.flagOn] {
-            #expect(try inlineHTML("<???>", options: options) == nil)
+            #expect(inlineHTML("<???>", options: options) == nil)
             let block = MarkdownDocument.withParsedDocument("<???>", options: options) { doc -> String? in
                 firstHTMLBlock(doc.root)
             }

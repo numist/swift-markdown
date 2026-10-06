@@ -49,11 +49,11 @@ struct TableEmptyCellSourceRangeTests {
 
     /// Rows (with per-cell columns, colspan, and text) of the first table in `source`, parsed with
     /// spans + source positions. `nil` cell entries mark cells with no source range (autocompleted).
-    private func tableRows(_ source: String) throws -> [Row] {
-        try tableRows(source, options: [.tables, .tableSpans, .sourcePosition])
+    private func tableRows(_ source: String) -> [Row] {
+        tableRows(source, options: [.tables, .tableSpans, .sourcePosition])
     }
 
-    private func tableRows(_ source: String, options: MarkdownDocument.ParseOptions) throws -> [Row] {
+    private func tableRows(_ source: String, options: MarkdownDocument.ParseOptions) -> [Row] {
         MarkdownDocument.withParsedDocument(
             source, options: options
         ) { doc -> [Row] in
@@ -109,21 +109,21 @@ struct TableEmptyCellSourceRangeTests {
         let opts: MarkdownDocument.ParseOptions = [.tables, .tableSpans, .sourcePosition, .cmarkBugCompatibility]
 
         // Body-row leading space: `x` is physically at col 2 but re-bases to col 1.
-        let body = try tableRows("a|b\n-|-\n x|y", options: opts)
+        let body = tableRows("a|b\n-|-\n x|y", options: opts)
         let bodyRow = try #require(body.last, "expected a body row")
         try #require(bodyRow.cells.count == 2, "fixture: expected two body cells, got \(bodyRow.cells.count)")
         try #require(bodyRow.cells.allSatisfy { $0.startColumn > 0 }, "fixture: leading-space cells must be positioned, not dropped")
         #expect((bodyRow.cells[0].startColumn, bodyRow.cells[0].endColumn, bodyRow.cells[0].text) == (1, 2, "x"))
         #expect((bodyRow.cells[1].startColumn, bodyRow.cells[1].endColumn, bodyRow.cells[1].text) == (3, 4, "y"))
         // Leading whitespace is invisible: the re-based columns equal an unindented row's.
-        let plain = try tableRows("a|b\n-|-\nx|y", options: opts)
+        let plain = tableRows("a|b\n-|-\nx|y", options: opts)
         let plainRow = try #require(plain.last, "expected a body row")
         #expect(bodyRow.cells.map { [$0.startColumn, $0.endColumn] } == plainRow.cells.map { [$0.startColumn, $0.endColumn] })
 
         // A leading-whitespace HEADER sets the table start column that every row re-bases to (col 2 here),
         // shifting even the unindented body row's cells right onto it. The shift pushes `y` past the body
         // line's end at column 4, so its cell is cut off there.
-        let hdr = try tableRows(" a|b\n-|-\nx|y", options: opts)
+        let hdr = tableRows(" a|b\n-|-\nx|y", options: opts)
         try #require(hdr.count == 2, "fixture: expected a header row and a body row")
         try #require(hdr[0].cells.count == 2 && hdr[1].cells.count == 2, "fixture: two cells per row")
         #expect((hdr[0].cells[0].startColumn, hdr[0].cells[0].endColumn, hdr[0].cells[0].text) == (2, 3, "a"))
@@ -139,7 +139,7 @@ struct TableEmptyCellSourceRangeTests {
     @Test("spec: a leading-whitespace row's cells keep their physical columns and are positioned")
     func leadingWhitespacePhysicalCellsSpecCorrect() throws {
         // Default helper: no `.cmarkBugCompatibility`.
-        let body = try tableRows("a|b\n-|-\n x|y")
+        let body = tableRows("a|b\n-|-\n x|y")
         let bodyRow = try #require(body.last, "expected a body row")
         try #require(bodyRow.cells.count == 2, "fixture: expected two body cells, got \(bodyRow.cells.count)")
         try #require(bodyRow.cells.allSatisfy { $0.startColumn > 0 }, "fixture: cells must be positioned, not dropped")
@@ -153,7 +153,7 @@ struct TableEmptyCellSourceRangeTests {
     @Test("a whitespace-only cell ends one column past its closing pipe")
     func whitespaceCellEndColumn() throws {
         // `|x| |y`: x at col 2, empty cell is the space at col 4 with its closing pipe at col 5.
-        let rows = try tableRows("a|b|c\n-|-|-\n|x| |y")
+        let rows = tableRows("a|b|c\n-|-|-\n|x| |y")
         let body = try #require(rows.last, "expected a body row")
         try #require(body.cells.count == 3, "expected three body cells, got \(body.cells.count)")
         // Content cell `x`: ends at its closing pipe (col 3), unchanged.
@@ -171,7 +171,7 @@ struct TableEmptyCellSourceRangeTests {
     /// A multi-space empty cell widens accordingly: `|   |c` empty cell spans col 2 through col 6.
     @Test("a multi-space empty cell spans its whole untrimmed width plus the closing pipe")
     func multiSpaceEmptyCellEndColumn() throws {
-        let rows = try tableRows("a|b\n-|-\n|   |c")
+        let rows = tableRows("a|b\n-|-\n|   |c")
         let body = try #require(rows.last, "expected a body row")
         try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
         #expect(body.cells[0].text == "")
@@ -184,7 +184,7 @@ struct TableEmptyCellSourceRangeTests {
     @Test("a zero-width first cell is a colspan filler (colspan 0)")
     func zeroWidthFirstCellColspan() throws {
         // Body row `||c`: leading empty cell between the two pipes.
-        let bodyRows = try tableRows("a|b\n-|-\n||c")
+        let bodyRows = tableRows("a|b\n-|-\n||c")
         let body = try #require(bodyRows.last, "expected a body row")
         try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
         #expect(body.cells[0].colspan == 0)
@@ -192,7 +192,7 @@ struct TableEmptyCellSourceRangeTests {
         #expect((body.cells[0].startColumn, body.cells[0].endColumn) == (2, 3))
 
         // The same holds for a zero-width cell in the HEADER row.
-        let headerRows = try tableRows("||b\n-|-\nx|y")
+        let headerRows = tableRows("||b\n-|-\nx|y")
         let header = try #require(headerRows.first, "expected a header row")
         try #require(header.cells.count == 2, "expected two header cells, got \(header.cells.count)")
         #expect(header.cells[0].colspan == 0)
@@ -204,7 +204,7 @@ struct TableEmptyCellSourceRangeTests {
     @Test("the last row's end column includes trailing whitespace")
     func lastRowEndIncludesTrailingWhitespace() throws {
         // Body row `|c| ` (trailing space): the real cell `c`, then an autocompleted (positionless) cell.
-        let rows = try tableRows("a|b\n-|-\n|c| ")
+        let rows = tableRows("a|b\n-|-\n|c| ")
         let body = try #require(rows.last, "expected a body row")
         #expect(body.line == 3)
         // `|c| ` occupies columns 1–4; the row spans through the trailing space, ending at col 5.
@@ -218,7 +218,7 @@ struct TableEmptyCellSourceRangeTests {
     func contentCellWithSpacesUnchanged() throws {
         // `| x |c`: the ` x ` cell spans col 2 (leading space) through col 5 (its closing pipe), and its
         // inner Text `x` sits at cols 3–4.
-        let rows = try tableRows("a|b\n-|-\n| x |c")
+        let rows = tableRows("a|b\n-|-\n| x |c")
         let body = try #require(rows.last, "expected a body row")
         try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
         #expect(body.cells[0].text == "x")
@@ -233,7 +233,7 @@ struct TableEmptyCellSourceRangeTests {
     func rightmostBodyCellTrailingWhitespaceExtends() throws {
         // `x|y ` (one trailing space, no closing pipe): Text `y` at cols 3–4, but the cell reaches the
         // row's untrimmed end at col 5.
-        let rows = try tableRows("a|b\n-|-\nx|y ")
+        let rows = tableRows("a|b\n-|-\nx|y ")
         let body = try #require(rows.last, "expected a body row")
         try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
         #expect(body.cells[1].text == "y")
@@ -246,7 +246,7 @@ struct TableEmptyCellSourceRangeTests {
     @Test("a rightmost header cell with trailing whitespace and no closing pipe extends to the line end")
     func rightmostHeaderCellTrailingWhitespaceExtends() throws {
         // Header `a|b  ` (two trailing spaces): Text `b` at cols 3–4, cell reaches the line end at col 6.
-        let rows = try tableRows("a|b  \n-|-\nx|y")
+        let rows = tableRows("a|b  \n-|-\nx|y")
         let header = try #require(rows.first, "expected a header row")
         try #require(header.cells.count == 2, "expected two header cells, got \(header.cells.count)")
         #expect(header.cells[1].text == "b")
@@ -260,7 +260,7 @@ struct TableEmptyCellSourceRangeTests {
     @Test("a rightmost cell capped by a closing pipe keeps its at-pipe end, below the row end")
     func rightmostCellClosingPipeNotExtended() throws {
         // `x|y |`: the cell `y ` ends at the pipe (col 5) while the row spans through it to col 6.
-        let rows = try tableRows("a|b\n-|-\nx|y |")
+        let rows = tableRows("a|b\n-|-\nx|y |")
         let body = try #require(rows.last, "expected a body row")
         try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
         #expect(body.cells[1].text == "y")
@@ -273,7 +273,7 @@ struct TableEmptyCellSourceRangeTests {
     @Test("a rightmost cell with no trailing whitespace is not over-extended")
     func rightmostCellNoTrailingWhitespaceUnchanged() throws {
         // `x|y` (no trailing whitespace, no closing pipe): cell end sits flush with the content at col 4.
-        let rows = try tableRows("a|b\n-|-\nx|y")
+        let rows = tableRows("a|b\n-|-\nx|y")
         let body = try #require(rows.last, "expected a body row")
         try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
         #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (3, 4))

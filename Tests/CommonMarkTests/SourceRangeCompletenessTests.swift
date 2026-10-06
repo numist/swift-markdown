@@ -96,7 +96,7 @@ struct SourceRangeCompletenessTests {
     /// that NUL-bearing content maps back to source through an arena run map.
     @Test("a NUL projects onto its one source byte")
     func nulReplacementPreservesRanges() throws {
-        func nodes(_ markdown: String) throws -> [(kind: String, range: String)] {
+        func nodes(_ markdown: String) -> [(kind: String, range: String)] {
             var nodes: [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)] = []
             MarkdownDocument.withParsedDocument(markdown, options: Self.options) { doc in
                 dfsCompleteness(doc.root, into: &nodes)
@@ -107,8 +107,8 @@ struct SourceRangeCompletenessTests {
         var compared = 0
         var failures: [String] = []
         for ex in try Self.loadSpec() {
-            let original = try nodes(ex.markdown)
-            let withNUL = try nodes(ex.markdown.replacingOccurrences(of: "o", with: "\u{0}"))
+            let original = nodes(ex.markdown)
+            let withNUL = nodes(ex.markdown.replacingOccurrences(of: "o", with: "\u{0}"))
             // A NUL can change structure (an `o` in an entity or HTML tag name, U+FFFD's emphasis flanking), and then its ranges aren't comparable.
             guard ex.markdown.contains("o"), original.map(\.kind) == withNUL.map(\.kind) else { continue }
             compared += 1

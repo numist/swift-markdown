@@ -39,7 +39,7 @@ struct AutolinkSchemeCaseTests {
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
+    ) -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?, url: String?)] = []
@@ -50,8 +50,8 @@ struct AutolinkSchemeCaseTests {
 
     /// Assert that `src` parses to a lone `Link(link)` at the paragraph level whose visible text is `link`
     /// (no preceding `.text` node), i.e. the whole source is one autolink with case preserved.
-    private func expectWholeSourceLinks(_ src: String, link: String) throws {
-        let ns = try nodes(in: src, options: Self.flagOff)
+    private func expectWholeSourceLinks(_ src: String, link: String) {
+        let ns = nodes(in: src, options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, link])
         #expect(ns.compactMap(\.url) == [link])
@@ -60,52 +60,52 @@ struct AutolinkSchemeCaseTests {
     // MARK: - The fix: the scheme literal matches case-insensitively, source case preserved
 
     @Test("upper-case `HTTP://` links, preserving case")
-    func upperHTTP() throws {
-        try expectWholeSourceLinks("HTTP://e", link: "HTTP://e")
+    func upperHTTP() {
+        expectWholeSourceLinks("HTTP://e", link: "HTTP://e")
     }
 
     @Test("title-case `Http://` links, preserving case")
-    func titleHTTP() throws {
-        try expectWholeSourceLinks("Http://e", link: "Http://e")
+    func titleHTTP() {
+        expectWholeSourceLinks("Http://e", link: "Http://e")
     }
 
     @Test("mixed-case `hTTp://` links, preserving case")
-    func mixedHTTP() throws {
-        try expectWholeSourceLinks("hTTp://e", link: "hTTp://e")
+    func mixedHTTP() {
+        expectWholeSourceLinks("hTTp://e", link: "hTTp://e")
     }
 
     @Test("upper-case `HTTPS://` links, preserving case")
-    func upperHTTPS() throws {
-        try expectWholeSourceLinks("HTTPS://x.io", link: "HTTPS://x.io")
+    func upperHTTPS() {
+        expectWholeSourceLinks("HTTPS://x.io", link: "HTTPS://x.io")
     }
 
     @Test("upper-case `FTP://` links, preserving case")
-    func upperFTP() throws {
-        try expectWholeSourceLinks("FTP://x.io", link: "FTP://x.io")
+    func upperFTP() {
+        expectWholeSourceLinks("FTP://x.io", link: "FTP://x.io")
     }
 
     // MARK: - Guards
 
     @Test("guard: lower-case `http://` still links")
-    func lowerHTTP() throws {
-        try expectWholeSourceLinks("http://e", link: "http://e")
+    func lowerHTTP() {
+        expectWholeSourceLinks("http://e", link: "http://e")
     }
 
     @Test("guard: an unrecognized scheme (`xttp://`) does NOT link, case aside")
-    func unrecognizedSchemeNoLink() throws {
+    func unrecognizedSchemeNoLink() {
         // `xttp` is not `http`/`https`/`ftp` in any case, so the scheme is unsafe and nothing links.
-        let ns = try nodes(in: "xttp://e", options: Self.flagOff)
+        let ns = nodes(in: "xttp://e", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "xttp://e"])
         #expect(ns.compactMap(\.url) == [])
     }
 
     @Test("guard: the `www.` form stays case-SENSITIVE (`WWW.` does not link)")
-    func wwwStaysCaseSensitive() throws {
+    func wwwStaysCaseSensitive() {
         // Only the `://`-scheme literal folds case. cmark's `www_match` matches `"www."` with `memcmp`
         // (case-sensitive), so upper-case `WWW.e.f` must NOT autolink even though `www.e.f` does. This
         // pins the asymmetry the fix preserves: `bytesEqual`'s default stays exact for the `www.` caller.
-        let ns = try nodes(in: "WWW.e.f", options: Self.flagOff)
+        let ns = nodes(in: "WWW.e.f", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "WWW.e.f"])
         #expect(ns.compactMap(\.url) == [])

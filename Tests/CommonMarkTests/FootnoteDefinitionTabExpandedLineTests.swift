@@ -20,8 +20,8 @@ struct FootnoteDefinitionTabExpandedLineTests {
     private static let positionModes: [MarkdownDocument.ParseOptions] = [[], [.sourcePosition]]
 
     @Test("the definition keeps its label and resolves a reference", arguments: positionModes)
-    func labelResolves(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump(">\t[^ab]: x\n\nc[^ab]\n", options: mode.union(.footnotes)) == """
+    func labelResolves(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump(">\t[^ab]: x\n\nc[^ab]\n", options: mode.union(.footnotes)) == """
             document
               block_quote
               paragraph
@@ -35,8 +35,8 @@ struct FootnoteDefinitionTabExpandedLineTests {
     }
 
     @Test("without footnotes, the definition is a link reference definition", arguments: positionModes)
-    func linkDefinitionWithoutFootnotes(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump(">\t[^ab]: x\n\nc[^ab]\n", options: mode) == """
+    func linkDefinitionWithoutFootnotes(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump(">\t[^ab]: x\n\nc[^ab]\n", options: mode) == """
             document
               block_quote
               paragraph
@@ -48,8 +48,8 @@ struct FootnoteDefinitionTabExpandedLineTests {
     }
 
     @Test("an unreferenced empty definition at the end of nested quotes is dropped", arguments: positionModes)
-    func emptyDefinitionAtEnd(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump(">\t>\t[^z]:", options: mode.union(.footnotes)) == """
+    func emptyDefinitionAtEnd(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump(">\t>\t[^z]:", options: mode.union(.footnotes)) == """
             document
               block_quote
                 block_quote
@@ -58,8 +58,8 @@ struct FootnoteDefinitionTabExpandedLineTests {
     }
 
     @Test("without footnotes, an empty definition at the end of nested quotes is text", arguments: positionModes)
-    func emptyDefinitionAtEndWithoutFootnotes(mode: MarkdownDocument.ParseOptions) throws {
-        #expect(try CmarkTreeDump.dump(">\t>\t[^z]:", options: mode) == """
+    func emptyDefinitionAtEndWithoutFootnotes(mode: MarkdownDocument.ParseOptions) {
+        #expect(CmarkTreeDump.dump(">\t>\t[^z]:", options: mode) == """
             document
               block_quote
                 block_quote

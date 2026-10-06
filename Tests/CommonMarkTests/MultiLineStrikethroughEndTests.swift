@@ -28,7 +28,7 @@ struct MultiLineStrikethroughEndTests {
 
     /// The source range of the first `.strikethrough` node (DFS order) when `src` is parsed with
     /// `options`. Returns `nil` if no strikethrough forms, so callers can `#require` fixture sanity.
-    private func strikethroughRange(in src: String, options: MarkdownDocument.ParseOptions) throws -> Range<Pos>? {
+    private func strikethroughRange(in src: String, options: MarkdownDocument.ParseOptions) -> Range<Pos>? {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> Range<Pos>? in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -41,7 +41,7 @@ struct MultiLineStrikethroughEndTests {
     }
 
     /// Every node kind in DFS order (for fixture-sanity assertions about nesting).
-    private func kinds(in src: String, options: MarkdownDocument.ParseOptions) throws -> [MarkdownNode.Kind] {
+    private func kinds(in src: String, options: MarkdownDocument.ParseOptions) -> [MarkdownNode.Kind] {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [MarkdownNode.Kind] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -55,7 +55,7 @@ struct MultiLineStrikethroughEndTests {
         // `~~a` on line 1, `b~~` on line 2. Spec-correct the end is the closer run's half-open column
         // on its OWN line: the last `~` is at line 2 col 3 (b=1, ~=2, ~=3), so the half-open end is
         // @2:4 - the closer's real line.
-        let range = try #require(try strikethroughRange(in: "~~a\nb~~", options: Self.specOptions))
+        let range = try #require(strikethroughRange(in: "~~a\nb~~", options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 2, column: 4))
     }
@@ -63,7 +63,7 @@ struct MultiLineStrikethroughEndTests {
     @Test("flag-off: a three-line strikethrough ends on the closer's real line (spec-correct)")
     func threeLineSpecCorrect() throws {
         // `~~a` / `bb` / `cc~~`. The closer `~~` ends at line 3 col 5 (c=1, c=2, ~=3, ~=4, half-open 5).
-        let range = try #require(try strikethroughRange(in: "~~a\nbb\ncc~~", options: Self.specOptions))
+        let range = try #require(strikethroughRange(in: "~~a\nbb\ncc~~", options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 3, column: 5))
     }
@@ -71,7 +71,7 @@ struct MultiLineStrikethroughEndTests {
     @Test("flag-off: a two-line single-tilde strikethrough ends on the closer's real line")
     func singleTildeSpecCorrect() throws {
         // `~a` on line 1, `b~` on line 2. Closer `~` at line 2 col 2 (b=1, ~=2), half-open @2:3.
-        let range = try #require(try strikethroughRange(in: "~a\nb~", options: Self.specOptions))
+        let range = try #require(strikethroughRange(in: "~a\nb~", options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 2, column: 3))
     }
@@ -81,7 +81,7 @@ struct MultiLineStrikethroughEndTests {
         // `~~a~~`: opener and closer on line 1, so the byte-projected half-open end (@1:6) already sits
         // on the opener's line. (Single-line strikethroughs never crossed a line, so this was identical
         // flag-on/flag-off even before the position-override machinery was removed.)
-        let range = try #require(try strikethroughRange(in: "~~a~~", options: Self.specOptions))
+        let range = try #require(strikethroughRange(in: "~~a~~", options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 1, column: 6))
     }
@@ -90,7 +90,7 @@ struct MultiLineStrikethroughEndTests {
     func closesBeforeSoftBreakSpecCorrect() throws {
         // `~~ab~~\ncd`: the strikethrough closes on line 1 (the soft break follows it), so it never
         // crosses a line: @1:1-1:7.
-        let range = try #require(try strikethroughRange(in: "~~ab~~\ncd", options: Self.specOptions))
+        let range = try #require(strikethroughRange(in: "~~ab~~\ncd", options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 1, column: 7))
     }
@@ -99,10 +99,10 @@ struct MultiLineStrikethroughEndTests {
     func nestedInEmphasisSpecCorrect() throws {
         // `*~~a\nb~~*`: emphasis wraps a two-line strikethrough. Fixture sanity: both nodes must form.
         let src = "*~~a\nb~~*"
-        let allKinds = try kinds(in: src, options: Self.specOptions)
+        let allKinds = kinds(in: src, options: Self.specOptions)
         #expect(allKinds.contains(.emphasis), "fixture must form an emphasis wrapper")
         // The `~~` opener is at line 1 col 2 (after `*`); the closer `~~` ends at line 2 col 4 (half-open).
-        let range = try #require(try strikethroughRange(in: src, options: Self.specOptions))
+        let range = try #require(strikethroughRange(in: src, options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 2))
         #expect(range.upperBound == Pos(line: 2, column: 4))
     }
@@ -111,7 +111,7 @@ struct MultiLineStrikethroughEndTests {
     func backslashHardBreakSpecCorrect() throws {
         // `~~a\<newline>b~~`: a matched strikethrough spanning a backslash hard break. Flag-off (the
         // shipped default) byte-projects the closer onto its real physical line 2, half-open @2:4.
-        let range = try #require(try strikethroughRange(in: "~~a\\\nb~~", options: Self.specOptions))
+        let range = try #require(strikethroughRange(in: "~~a\\\nb~~", options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 2, column: 4))
     }

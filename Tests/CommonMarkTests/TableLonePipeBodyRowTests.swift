@@ -53,7 +53,7 @@ struct TableLonePipeBodyRowTests {
         node.children.forEach { recordFirstTable($0, shape: &shape) }
     }
 
-    private func analyze(_ source: String) throws -> Shape {
+    private func analyze(_ source: String) -> Shape {
         MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> Shape in
             var shape = Shape()
             doc.root.children.forEach { block in
@@ -75,7 +75,7 @@ struct TableLonePipeBodyRowTests {
     func lonePipeBodyRowSingleColumn() throws {
         // `f\n|-\n|` : header `f` (1 column) + delimiter `|-`, then a lone `|` body line. cmark:
         // Table(header "f", empty body) + Paragraph "|".
-        let s = try analyze("f\n|-\n|")
+        let s = analyze("f\n|-\n|")
         try #require(s.hasTable, "fixture: expected a table to form from the header + delimiter")
         try #require(s.tableHeaderRows == 1, "fixture: expected exactly one header row")
         #expect(s.tableBodyRows == 0)
@@ -87,7 +87,7 @@ struct TableLonePipeBodyRowTests {
     func lonePipeBodyRowMultiColumn() throws {
         // `a|b\n-|-\n|` : header `a|b` (2 columns) + delimiter `-|-`, then a lone `|` body line. cmark:
         // Table(header "a","b", empty body) + Paragraph "|". The class is column-count-agnostic.
-        let s = try analyze("a|b\n-|-\n|")
+        let s = analyze("a|b\n-|-\n|")
         try #require(s.hasTable, "fixture: expected a two-column table to form")
         try #require(s.tableHeaderRows == 1, "fixture: expected exactly one header row")
         #expect(s.tableBodyRows == 0)
@@ -100,7 +100,7 @@ struct TableLonePipeBodyRowTests {
     @Test("a leading+trailing pipe body row is one empty cell, kept as a table row")
     func doublePipeBodyRowStaysARow() throws {
         // `||` scans to ONE (empty) cell, so it continues the table as a body row - no break-out.
-        let s = try analyze("f\n|-\n||")
+        let s = analyze("f\n|-\n||")
         try #require(s.hasTable, "fixture: expected a table to form")
         #expect(s.tableBodyRows == 1)
         #expect(s.topKinds == [.table])
@@ -109,7 +109,7 @@ struct TableLonePipeBodyRowTests {
 
     @Test("an ordinary content body row is unaffected")
     func contentBodyRowStaysARow() throws {
-        let s = try analyze("a|b\n-|-\nc|d")
+        let s = analyze("a|b\n-|-\nc|d")
         try #require(s.hasTable, "fixture: expected a table to form")
         #expect(s.tableBodyRows == 1)
         #expect(s.topKinds == [.table])

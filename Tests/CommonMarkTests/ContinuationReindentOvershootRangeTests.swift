@@ -31,7 +31,7 @@ struct ContinuationReindentOvershootRangeTests {
 
     private func textRanges(
         _ source: String, options: MarkdownDocument.ParseOptions
-    ) throws -> [Range<Pos>?] {
+    ) -> [Range<Pos>?] {
         var out: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         MarkdownDocument.withParsedDocument(source, options: options) { doc in
             dfsRanges(doc.root, into: &out)
@@ -43,7 +43,7 @@ struct ContinuationReindentOvershootRangeTests {
     /// TRUE physical position `@2:1-2:2`.
     @Test("flag-OFF: 1-char middle continuation keeps its true column")
     func specMiddleContinuation() throws {
-        let texts = try textRanges("- e\nc\ng", options: Self.specOptions)
+        let texts = textRanges("- e\nc\ng", options: Self.specOptions)
         try #require(texts.count == 3)
         #expect(texts[0] == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // "e"
         #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 2))   // "c" true column
@@ -54,7 +54,7 @@ struct ContinuationReindentOvershootRangeTests {
     /// column 2 (the source's end), so the range is cut off there. cmark-gfm reports `@2:3-2:4`.
     @Test("flag-ON: 1-char last continuation is cut off at its line's end, @2:2-2:2")
     func quirkLastContinuation() throws {
-        let texts = try textRanges("- e\nc", options: Self.quirkOptions)
+        let texts = textRanges("- e\nc", options: Self.quirkOptions)
         try #require(texts.count == 2)
         #expect(texts[1] == Pos(line: 2, column: 2)..<Pos(line: 2, column: 2))   // "c"
     }
@@ -64,7 +64,7 @@ struct ContinuationReindentOvershootRangeTests {
     /// `@2:3-2:4` for `c` and `@3:3-3:4` for `g`.
     @Test("flag-ON: 1-char middle continuation is cut off at its line's end, @2:2-2:2")
     func quirkMiddleContinuation() throws {
-        let texts = try textRanges("- e\nc\ng", options: Self.quirkOptions)
+        let texts = textRanges("- e\nc\ng", options: Self.quirkOptions)
         try #require(texts.count == 3)
         #expect(texts[0] == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // "e"
         #expect(texts[1] == Pos(line: 2, column: 2)..<Pos(line: 2, column: 2))   // "c"
@@ -76,7 +76,7 @@ struct ContinuationReindentOvershootRangeTests {
     /// reports `@2:3-2:5`.
     @Test("flag-ON: a re-indented lazy line's end is cut off at its newline")
     func quirkLazyContinuationEnd() throws {
-        let texts = try textRanges("> a\nbc\n", options: Self.quirkOptions)
+        let texts = textRanges("> a\nbc\n", options: Self.quirkOptions)
         try #require(texts.count == 2)
         #expect(texts[1] == Pos(line: 2, column: 3)..<Pos(line: 2, column: 3))   // "bc"
     }
@@ -86,7 +86,7 @@ struct ContinuationReindentOvershootRangeTests {
     /// for this shape, so this twin pins the spec-correct default it diverges from.
     @Test("flag-OFF: 1-char last continuation keeps its true column @2:1-2:2")
     func specLastContinuation() throws {
-        let texts = try textRanges("- e\nc", options: Self.specOptions)
+        let texts = textRanges("- e\nc", options: Self.specOptions)
         try #require(texts.count == 2)
         #expect(texts[0] == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // "e"
         #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 2))   // "c" true column

@@ -51,7 +51,7 @@ struct ReferenceDefinitionForwardResolutionTests {
     // CommonMark and must not depend on either flag, so the whole family is exercised under them.
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .cmarkBugCompatibility]
 
-    private func tree(_ src: String) throws -> [String] {
+    private func tree(_ src: String) -> [String] {
         MarkdownDocument.withParsedDocument(src, options: Self.options) { doc -> [String] in
             var out: [String] = []
             describeTree(doc.root, depth: 0, into: &out)
@@ -65,7 +65,7 @@ struct ReferenceDefinitionForwardResolutionTests {
         // reference `[ar<nl>]` whose label `ar` spans the soft break. It resolves against the ref-def
         // `[ar]:[` (label `ar`, destination `[`) defined LATER, inside the list item. The link text is
         // `ar` + a soft break; a leading `]` stays as text.
-        let lines = try tree(" ][ar\n]\n- [ar]:[")
+        let lines = tree(" ][ar\n]\n- [ar]:[")
         // Fixture sanity: the list block must form regardless of whether the reference resolves.
         try #require(lines.contains("  list"), "fixture must form a list; got \(lines)")
         #expect(lines == [
@@ -85,7 +85,7 @@ struct ReferenceDefinitionForwardResolutionTests {
         // The single-line analog of the finding, isolating the multi-line-label aspect: ` ][ar]` is a
         // `]` text then a shortcut reference `[ar]` (label all on one line), resolving against the same
         // later, nested ref-def `[ar]:[`.
-        let lines = try tree(" ][ar]\n- [ar]:[")
+        let lines = tree(" ][ar]\n- [ar]:[")
         try #require(lines.contains("  list"), "fixture must form a list; got \(lines)")
         #expect(lines == [
             "document",
@@ -102,7 +102,7 @@ struct ReferenceDefinitionForwardResolutionTests {
     func referenceResolvesAgainstLaterTopLevelDefinition() throws {
         // The canonical forward reference: `[a]` on line 1, blank line, then the ref-def `[a]: /u`.
         // The definition paragraph is consumed, leaving one paragraph whose `[a]` is a resolved link.
-        let lines = try tree("[a]\n\n[a]: /u")
+        let lines = tree("[a]\n\n[a]: /u")
         try #require(lines.contains(where: { $0.contains("link:") }), "fixture must form a link; got \(lines)")
         #expect(lines == [
             "document",
@@ -117,7 +117,7 @@ struct ReferenceDefinitionForwardResolutionTests {
         // A forward reference whose definition is nested in a later list item: `[a]`, blank line, then
         // `- [a]: /u`. The item's only content is the ref-def, so it is consumed, leaving an empty item;
         // the leading `[a]` resolves to a link.
-        let lines = try tree("[a]\n\n- [a]: /u")
+        let lines = tree("[a]\n\n- [a]: /u")
         try #require(lines.contains("  list"), "fixture must form a list; got \(lines)")
         #expect(lines == [
             "document",

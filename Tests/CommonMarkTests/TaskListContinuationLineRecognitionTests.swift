@@ -80,7 +80,7 @@ struct TaskListContinuationLineRecognitionTests {
 
     private func hasTaskItem(
         _ src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> Bool {
+    ) -> Bool {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> Bool in
             anyTaskItem(doc.root)
         }
@@ -91,19 +91,19 @@ struct TaskListContinuationLineRecognitionTests {
     @Test("flag ON: `-\\n  [x] foo` is an ORDINARY item (checkbox token on continuation line)")
     func continuationCheckedNotRecognized() throws {
         #expect(try firstChecked("-\n  [x] foo", options: Self.flagOn) == nil)
-        #expect(try !hasTaskItem("-\n  [x] foo", options: Self.flagOn))
+        #expect(!hasTaskItem("-\n  [x] foo", options: Self.flagOn))
     }
 
     @Test("flag ON: `-\\n  [ ] foo` is an ORDINARY item (unchecked variant)")
     func continuationUncheckedNotRecognized() throws {
         #expect(try firstChecked("-\n  [ ] foo", options: Self.flagOn) == nil)
-        #expect(try !hasTaskItem("-\n  [ ] foo", options: Self.flagOn))
+        #expect(!hasTaskItem("-\n  [ ] foo", options: Self.flagOn))
     }
 
     @Test("flag ON: `- \\n  [x] foo` is an ORDINARY item (marker + trailing space, then continuation)")
     func continuationAfterTrailingSpaceNotRecognized() throws {
         #expect(try firstChecked("- \n  [x] foo", options: Self.flagOn) == nil)
-        #expect(try !hasTaskItem("- \n  [x] foo", options: Self.flagOn))
+        #expect(!hasTaskItem("- \n  [x] foo", options: Self.flagOn))
     }
 
     // MARK: Agreeing controls — token on the opening line IS a checkbox (guard against over-correction)
@@ -123,7 +123,7 @@ struct TaskListContinuationLineRecognitionTests {
     @Test("flag OFF: `-\\n  [x] foo` is an ORDINARY item (anchoring is unconditional, not a quirk)")
     func continuationNotRecognizedFlagOff() throws {
         #expect(try firstChecked("-\n  [x] foo", options: Self.flagOff) == nil)
-        #expect(try !hasTaskItem("-\n  [x] foo", options: Self.flagOff))
+        #expect(!hasTaskItem("-\n  [x] foo", options: Self.flagOff))
     }
 
     @Test("flag OFF control: `- [x] foo` IS a checked task item")
