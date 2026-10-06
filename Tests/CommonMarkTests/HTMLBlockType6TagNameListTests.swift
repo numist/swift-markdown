@@ -64,6 +64,39 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
+    @Test("cmark-compatible: `<source/>` interrupts a paragraph")
+    func selfClosingSourceInterruptsParagraph() {
+        #expect(CmarkTreeDump.dump("para\n<source/>\n", options: Self.cmarkCompatible, sourceRanges: true) == """
+            document @1:1-2:10
+              paragraph @1:1-1:5
+                text "para" @1:1-1:5
+              html_block "<source/>\\n" @2:1-2:10
+
+            """)
+    }
+
+    @Test("cmark-compatible: `<source` ends a block quote's paragraph instead of continuing it lazily")
+    func sourceEndsLazyContinuation() {
+        #expect(CmarkTreeDump.dump("> a\n<source\n", options: Self.cmarkCompatible, sourceRanges: true) == """
+            document @1:1-2:8
+              block_quote @1:1-1:4
+                paragraph @1:3-1:4
+                  text "a" @1:3-1:4
+              html_block "<source\\n" @2:1-2:8
+
+            """)
+    }
+
+    @Test("cmark-compatible: a longer name starting with `source` is paragraph text")
+    func longerNameIsParagraph() {
+        #expect(CmarkTreeDump.dump("<sources\n", options: Self.cmarkCompatible, sourceRanges: true) == """
+            document @1:1-1:9
+              paragraph @1:1-1:9
+                text "<sources" @1:1-1:9
+
+            """)
+    }
+
     @Test("cmark-compatible: `<Source` opens an HTML block inside a block quote")
     func sourceInBlockQuote() {
         #expect(CmarkTreeDump.dump("> <Source\n", options: Self.cmarkCompatible, sourceRanges: true) == """
@@ -124,6 +157,29 @@ struct HTMLBlockType6TagNameListTests {
         #expect(CmarkTreeDump.dump("<search\n", options: Self.specCompliant, sourceRanges: true) == """
             document @1:1-1:8
               html_block "<search\\n" @1:1-1:8
+
+            """)
+    }
+
+    @Test("spec-compliant: `<search>` interrupts a paragraph")
+    func specSearchInterruptsParagraph() {
+        #expect(CmarkTreeDump.dump("para\n<search>\n", options: Self.specCompliant, sourceRanges: true) == """
+            document @1:1-2:9
+              paragraph @1:1-1:5
+                text "para" @1:1-1:5
+              html_block "<search>\\n" @2:1-2:9
+
+            """)
+    }
+
+    @Test("spec-compliant: `<source>` doesn't interrupt a paragraph")
+    func specSourceContinuesParagraph() {
+        #expect(CmarkTreeDump.dump("para\n<source>\n", options: Self.specCompliant, sourceRanges: true) == """
+            document @1:1-2:9
+              paragraph @1:1-2:9
+                text "para" @1:1-1:5
+                softbreak @-
+                html_inline "<source>" @2:1-2:9
 
             """)
     }

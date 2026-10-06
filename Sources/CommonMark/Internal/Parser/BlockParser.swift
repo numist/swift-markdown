@@ -3996,7 +3996,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         "thead", "title", "tr", "track", "ul",
     ].map { Array($0.utf8) }
 
-    /// Tag names that trigger an HTML block of type 6 under `.cmarkBugCompatibility`: cmark-gfm's `blocktagname` list (swift-cmark `src/scanners.re`), which predates CommonMark 0.31 and so has `source` in place of `search`.
+    /// Tag names that trigger an HTML block of type 6 under `.cmarkBugCompatibility`: cmark-gfm's `blocktagname` list (swift-cmark `src/scanners.re`), which predates CommonMark 0.31 and so has `source` in place of `search`. Kept in the spec list's order, with `source` where `search` stands.
     private static let cmarkHTMLBlockType6Tags: [[UInt8]] =
         htmlBlockType6Tags.map { $0 == Array("search".utf8) ? Array("source".utf8) : $0 }
 
