@@ -564,6 +564,8 @@ extension BlockParser {
                         NodeRecord(kind: .text, parent: parent, data: .literal(ellipsisRef))
                     )
                     storage.appendChild(textIdx, to: parent)
+                    // The ellipsis glyph is arena-backed and its byte length differs from the `...` it replaces; stamp the three dots' source span so it keeps their columns.
+                    stampInline(textIdx, cursor, cursor + 3, content: content)
                     cursor += 3
                     pendingTextStart = cursor
                 } else {
