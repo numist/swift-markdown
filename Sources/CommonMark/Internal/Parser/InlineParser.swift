@@ -374,7 +374,7 @@ extension BlockParser {
                         NodeRecord(kind: .text, parent: parent, data: .literal(textRef))
                     )
                     storage.appendChild(textIdx, to: parent)
-                    // An opener whose image never resolves survives as literal `![` text; stamp its full 2-byte span so it keeps its start column when it consolidates with neighbors (a matched image unlinks this node first). Without the stamp the node stays `.unset` and `mergeTextNode` drops it, adopting the next node's start and losing the `![` prefix's columns.
+                    // An opener whose image never resolves survives as literal `![` text; stamp its full 2-byte span so it keeps its start column when it consolidates with neighbors (a matched image unlinks this node first).
                     stampInline(textIdx, cursor, cursor + 2, content: content)
                     try pushBracket(
                         kind: .image,
@@ -4011,7 +4011,7 @@ extension BlockParser {
 
     /// Merge runs of adjacent `.text` children into single nodes, recursing into containers.
     ///
-    /// Smart-punctuation / entity substitutions emit their replacement as a separate text node (e.g. `"Markdown"` + `"’"` + `"s "`); cmark coalesces them into one text run. The merged node's content is the concatenation of the runs' segments and its source range is their union.
+    /// Smart-punctuation / entity substitutions emit their replacement as a separate text node (e.g. `"Markdown"` + `"’"` + `"s "`); cmark coalesces them into one text run. The merged node's content is the concatenation of the runs' segments and its source range runs from the first run's start to the last run's end.
     mutating func consolidateTextNodes(_ parent: DocumentStorage.Index) {
         var child = storage[parent].firstChild
         while let current = child {
@@ -4075,7 +4075,7 @@ extension BlockParser {
         }
     }
 
-    /// Merge `source` into the preceding text node `dest`, unioning their source ranges and unlinking `source`.
+    /// Merge `source` into the preceding text node `dest`, giving `dest` its own start and `source`'s end, and unlink `source`.
     ///
     /// When the two runs are pool-contiguous (the common case for adjacent text) this just widens `dest`'s `ContentRef` - no new segments. Otherwise (e.g. a smart-punctuation glyph re-interned at the pool's end sits between them) it appends copies of both runs' segments as a fresh combined run, so consolidation still merges them.
     private mutating func mergeTextNode(_ source: DocumentStorage.Index, into dest: DocumentStorage.Index) {
@@ -4110,15 +4110,12 @@ extension BlockParser {
         if positionsEnabled {
             let a = storage.sourceRanges[dest]
             let b = storage.sourceRanges[source]
-            if a.start >= 0, b.start >= 0 {
-                // why: cmark's `cmark_consolidate_text_nodes` (swift-cmark `src/iterator.c`) sets the merged run's range from the FIRST node's start and the LAST node's end (`cur->end_column = tmp->end_column` on every iteration; `cur`'s start is never touched) - not a min/max union. In this pairwise left-to-right merge `dest` is the running-first node and `source` the next (last-so-far) sibling, so first-start = `dest.start` and last-end = `source.end`. This differs from a union only when a non-final node ends further right than the final node, where cmark collapses the run to the final node's end.
-                storage.sourceRanges[dest] = DocumentStorage.SourceByteRange(
-                    start: a.start,
-                    end: b.end
-                )
-            } else if a.start < 0 {
-                storage.sourceRanges[dest] = b
-            }
+            precondition(a.start >= 0 && b.start >= 0, "with positions tracked, every text node is stamped before it consolidates")
+            // why: cmark's `cmark_consolidate_text_nodes` (swift-cmark `src/iterator.c`) sets the merged run's range from the FIRST node's start and the LAST node's end (`cur->end_column = tmp->end_column` on every iteration; `cur`'s start is never touched) - not a min/max union. In this pairwise left-to-right merge `dest` is the running-first node and `source` the next (last-so-far) sibling, so first-start = `dest.start` and last-end = `source.end`. This differs from a union only when a non-final node ends further right than the final node, where cmark collapses the run to the final node's end.
+            storage.sourceRanges[dest] = DocumentStorage.SourceByteRange(
+                start: a.start,
+                end: b.end
+            )
         }
         storage.unlinkChild(source)
     }
