@@ -3981,8 +3981,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         )
     }
 
-    /// Tag names that trigger an HTML block of type 6, sorted alphabetically for the binary-search lookup. CommonMark 0.31 §4.6.
-    private static let htmlBlockType6Tags: [String] = [
+    /// Tag names that trigger an HTML block of type 6, sorted alphabetically for the binary-search lookup, as UTF-8 bytes. CommonMark 0.31 §4.6.
+    ///
+    /// The HTML-block matchers compare these byte by byte for every candidate line, so they're stored as arrays rather than strings, whose UTF-8 view is slower to index in those loops.
+    private static let htmlBlockType6Tags: [[UInt8]] = [
         "address", "article", "aside", "base", "basefont", "blockquote", "body",
         "caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir",
         "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form",
@@ -3991,22 +3993,30 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         "menuitem", "nav", "noframes", "ol", "optgroup", "option", "p", "param",
         "search", "section", "summary", "table", "tbody", "td", "tfoot", "th",
         "thead", "title", "tr", "track", "ul",
-    ]
+    ].map { Array($0.utf8) }
 
-    /// Tag names that trigger an HTML block of type 1 (their *closing* tag also ends the block).
-    private static let htmlBlockType1Tags: [String] = [
+    /// Tag names that trigger an HTML block of type 1 (their *closing* tag also ends the block), as UTF-8 bytes.
+    private static let htmlBlockType1Tags: [[UInt8]] = [
         "pre", "script", "style", "textarea",
-    ]
+    ].map { Array($0.utf8) }
+
+    /// The letters of an HTML block of type 5's `<![CDATA[` opener, as UTF-8 bytes.
+    private static let cdataLetters = Array("CDATA".utf8)
+
+    /// The end conditions of HTML blocks of types 2 (`-->`), 3 (`?>`) and 5 (`]]>`), as UTF-8 bytes.
+    private static let htmlCommentEnd = Array("-->".utf8)
+    private static let processingInstructionEnd = Array("?>".utf8)
+    private static let cdataEnd = Array("]]>".utf8)
 
     /// Compare a byte range to an ASCII string case-insensitively (for tag matching).
-    private func bytesEqualASCIICaseInsensitive(span: Span<UInt8>, range: Range<Int>, target: String) -> Bool {
+    private func bytesEqualASCIICaseInsensitive(span: Span<UInt8>, range: Range<Int>, target: [UInt8]) -> Bool {
         let len = range.upperBound - range.lowerBound
-        if len != target.utf8.count {
+        if len != target.count {
             return false
         }
-        for (i, targetByte) in target.utf8.enumerated() {
+        for i in 0..<len {
             var a = span[range.lowerBound + i]
-            var b = targetByte
+            var b = target[i]
             if a.isUppercaseASCIILetter {
                 a += 32
             }
@@ -4061,7 +4071,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let letters = (after + 2)..<(after + 7)
             let matched =
                 storage.options.contains(.cmarkBugCompatibility)
-                ? bytesEqualASCIICaseInsensitive(span: source, range: letters, target: "CDATA")
+                ? bytesEqualASCIICaseInsensitive(span: source, range: letters, target: Self.cdataLetters)
                 : source[after + 2] == UInt8(ascii: "C")
                     && source[after + 3] == UInt8(ascii: "D")
                     && source[after + 4] == UInt8(ascii: "A")
@@ -4273,13 +4283,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             return false
         case 2:
-            return findSubstring(span: source, range: range, needle: "-->")
+            return findSubstring(span: source, range: range, needle: Self.htmlCommentEnd)
         case 3:
-            return findSubstring(span: source, range: range, needle: "?>")
+            return findSubstring(span: source, range: range, needle: Self.processingInstructionEnd)
         case 4:
             return findByte(span: source, range: range, byte: UInt8(ascii: ">"))
         case 5:
-            return findSubstring(span: source, range: range, needle: "]]>")
+            return findSubstring(span: source, range: range, needle: Self.cdataEnd)
         default:
             return false
         }
@@ -4296,8 +4306,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Search `range` of `span` for the first occurrence of the ASCII bytes in `needle`. Caller must ensure the needle is non-empty.
-    private func findSubstring(span: Span<UInt8>, range: Range<Int>, needle: String) -> Bool {
-        let len = needle.utf8.count
+    private func findSubstring(span: Span<UInt8>, range: Range<Int>, needle: [UInt8]) -> Bool {
+        let len = needle.count
         if len == 0 || range.upperBound - range.lowerBound < len {
             return false
         }
@@ -4305,8 +4315,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let limit = range.upperBound - len
         while i <= limit {
             var matched = true
-            for (k, needleByte) in needle.utf8.enumerated() {
-                if span[i + k] != needleByte {
+            for k in 0..<len {
+                if span[i + k] != needle[k] {
                     matched = false
                     break
                 }
@@ -4320,8 +4330,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Search for `</tagname>` (case-insensitive) anywhere within `range`. `name` is one of the lowercase `htmlBlockType1Tags`.
-    private func findClosingTag(span: Span<UInt8>, range: Range<Int>, name: String) -> Bool {
-        let nameLen = name.utf8.count
+    // why: this scans every byte of every type-1 HTML block line once per tag; left to its own heuristics the optimizer calls it out of line, which costs about 2% of corpus parse instructions.
+    @inline(__always)
+    private func findClosingTag(span: Span<UInt8>, range: Range<Int>, name: [UInt8]) -> Bool {
+        let nameLen = name.count
         // `</` + name + `>` length:
         let totalLen = nameLen + 3
         if range.upperBound - range.lowerBound < totalLen {
@@ -4334,12 +4346,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                span[i + 1] == UInt8(ascii: "/") {
                 let nameRange = (i + 2)..<(i + 2 + nameLen)
                 var matched = true
-                for (k, nameByte) in name.utf8.enumerated() {
+                for k in 0..<nameLen {
                     var a = span[nameRange.lowerBound + k]
                     if a.isUppercaseASCIILetter {
                         a += 32
                     }
-                    if a != nameByte {
+                    if a != name[k] {
                         matched = false
                         break
                     }
