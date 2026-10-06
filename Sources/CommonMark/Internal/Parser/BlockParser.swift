@@ -3996,6 +3996,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         "thead", "title", "tr", "track", "ul",
     ].map { Array($0.utf8) }
 
+    /// Tag names that trigger an HTML block of type 6 under `.cmarkBugCompatibility`: cmark-gfm's `blocktagname` list (swift-cmark `src/scanners.re`), which predates CommonMark 0.31 and so has `source` in place of `search`.
+    private static let cmarkHTMLBlockType6Tags: [[UInt8]] =
+        htmlBlockType6Tags.map { $0 == Array("search".utf8) ? Array("source".utf8) : $0 }
+
     /// Tag names that trigger an HTML block of type 1 (their *closing* tag also ends the block), as UTF-8 bytes.
     private static let htmlBlockType1Tags: [[UInt8]] = [
         "pre", "script", "style", "textarea",
@@ -4128,7 +4132,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
 
         // Type 6: block-tag-name list.
-        for tag in Self.htmlBlockType6Tags {
+        let type6Tags = storage.options.contains(.cmarkBugCompatibility) ? Self.cmarkHTMLBlockType6Tags : Self.htmlBlockType6Tags
+        for tag in type6Tags {
             if bytesEqualASCIICaseInsensitive(span: source, range: nameRange, target: tag) {
                 // Must be followed by a spacechar (`[ \t\v\f\r\n]`), `>`, `/>`, or EOL (cmark's `(spacechar | [/]? [>])`).
                 if nameEnd >= range.upperBound { return 6 }
