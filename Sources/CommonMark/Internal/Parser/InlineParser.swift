@@ -846,7 +846,8 @@ extension BlockParser {
         }
         // cmark BUG (bug-compat only): a footnote-shaped opener whose caret is immediately followed by
         // another `[` (`[^[…`) has its inline footnote branch capture the label from the static `"^["`
-        // string, over-reading past the inner `[` into that string's NUL terminator (FINDINGS #146). The
+        // string, over-reading past the inner `[` into that string's NUL terminator (FINDINGS #146). That
+        // label resolves to a `[` definition when one exists. Otherwise the
         // unresolved reference reconstructs to `[^[` (`![^[` for an image opener) followed by a NUL, so
         // reading its consolidated run as a C-string truncates there. Emit the `[^[` text and mark it as
         // run-truncating (its invisible tail is dropped in `dropRunTruncatedTails`, after the autolink pass
@@ -864,6 +865,7 @@ extension BlockParser {
             collapseCaretBracket(
                 openerInl: openerInl,
                 footnoteBracketStart: footnoteBracketStart,
+                closeBracket: cursor,
                 content: content
             )
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
@@ -1230,14 +1232,23 @@ extension BlockParser {
 
     /// Collapse a footnote-shaped bracket whose caret is *immediately* followed by another `[`
     /// (`[^[…`) once its outer `]` closes, reproducing cmark's `.cmarkBugCompatibility` behavior:
-    /// cmark's inline footnote branch captures the label from the static `"^["` string, over-reading
-    /// past the inner `[` into its NUL terminator, so the unresolved reference reconstructs to `[^[`
+    /// cmark's inline footnote branch (`handle_close_bracket`) captures the label from the static `"^["`
+    /// string, over-reading past the inner `[` into its NUL terminator. `cmark_map_lookup` compares
+    /// normalized labels with `strcmp`, which stops at that NUL, so the captured label resolves to a
+    /// definition labelled `[` - subject only to the lookup's length cap on the captured length - and
+    /// the bracket becomes a reference to it. Otherwise the unresolved reference reconstructs to `[^[`
     /// followed by a NUL. Emit that `[^[` literal in place of the opener
     /// and its inner content, and mark it run-truncating so `dropRunTruncatedTails` (run after the autolink
     /// pass) drops the invisible tail the NUL would hide - while an email in that tail still links. The
     /// caller returns `initialPos` so parsing continues - an enclosing bracket can still form a link
-    /// around the `[^[`.
-    private mutating func collapseCaretBracket(openerInl: DocumentStorage.Index, footnoteBracketStart: Int, content: borrowing ContentSpan) {
+    /// around the `[^[` or the reference.
+    private mutating func collapseCaretBracket(openerInl: DocumentStorage.Index, footnoteBracketStart: Int, closeBracket: Int, content: borrowing ContentSpan) {
+        let labelStart = footnoteBracketStart + 2
+        let capturedLength = footnoteCapturedLabelLength(content, open: footnoteBracketStart, close: closeBracket)
+        if let defIdx = capturedFootnoteDefinition([UInt8(ascii: "[")], measuredOver: labelStart..<min(labelStart + capturedLength, closeBracket), in: content) {
+            emitFootnoteReference(openerInl: openerInl, definition: defIdx, span: footnoteBracketStart..<(closeBracket + 1), content: content)
+            return
+        }
         let parentIdx = storage[openerInl].parent
         var literal: [UInt8] = []
         literal.append(UInt8(ascii: "["))
