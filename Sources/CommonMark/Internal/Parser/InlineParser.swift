@@ -384,7 +384,9 @@ extension BlockParser {
                 }
                 
             case UInt8(ascii: "^"):
-                if cursor + 1 < endOffset,
+                // Without `.attributes`, `^` is ordinary text and a following `[` opens a link bracket.
+                if storage.options.contains(.attributes),
+                   cursor + 1 < endOffset,
                    content[cursor + 1] == UInt8(ascii: "[") {
                     flushPendingText(
                         start: pendingTextStart,
@@ -846,8 +848,11 @@ extension BlockParser {
         // so a trailing email still links), then continue parsing so an enclosing bracket can still close
         // (`[[^[]]]()` -> `Link[Text "[^["]`).
         // Checked before the cross-line case because a `[^[…` opener takes this shape even across lines.
+        // The static `"^["` string belongs to the `^[` attribute opener, so without `.attributes` the `^`
+        // is ordinary text, the label is read from the source, and the bracket takes the paths below.
         if storage.options.contains(.footnotes),
            storage.options.contains(.cmarkBugCompatibility),
+           storage.options.contains(.attributes),
            footnoteAfterOpenerIsText,
            footnoteBracketStart + 2 < end,
            content[footnoteBracketStart + 1] == UInt8(ascii: "^"),

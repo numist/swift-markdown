@@ -56,10 +56,10 @@ private func dfsDepthKind(
 struct FootnoteNestedBracketLinkTests {
 
     /// The differential fuzzer's configuration for this class: footnotes on, cmark bug-compatibility on,
-    /// source positions on (the Markdown layer always tracks them). The collapse is gated on both
-    /// footnotes and `.cmarkBugCompatibility`.
+    /// source positions on (the Markdown layer always tracks them), and inline attributes on. The collapse
+    /// is gated on footnotes, `.cmarkBugCompatibility`, and `.attributes`.
     private static let fuzzOptions: MarkdownDocument.ParseOptions =
-        [.sourcePosition, .cmarkBugCompatibility, .footnotes]
+        [.sourcePosition, .cmarkBugCompatibility, .footnotes, .attributes]
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions

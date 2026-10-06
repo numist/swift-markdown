@@ -45,9 +45,9 @@ private func dfsAttributeNodes(
 struct InlineAttributesBracketTests {
 
     /// The differential fuzzer's configuration: cmark bug-compatibility on, source positions on (the
-    /// Markdown layer always tracks them). Finding 1 only reproduces here — the multi-segment paragraph
-    /// path is gated on both.
-    private static let fuzzOptions: MarkdownDocument.ParseOptions = [.sourcePosition, .cmarkBugCompatibility]
+    /// Markdown layer always tracks them), and inline attributes on. Finding 1 only reproduces here — the
+    /// multi-segment paragraph path is gated on both bug-compatibility and source positions.
+    private static let fuzzOptions: MarkdownDocument.ParseOptions = [.sourcePosition, .cmarkBugCompatibility, .attributes]
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions

@@ -84,5 +84,10 @@ extension MarkdownDocument {
 
         /// Reproduce the content quirks cmark-gfm exhibits only when it parses with `CMARK_OPT_SOURCEPOS` off (for differential qualification). With source positions off, cmark's `adjust_subj_node_newlines` never runs, so a newline consumed inside a code span or raw HTML does NOT reset its per-line column cursor — unlike `handle_newline` (soft/space breaks), which always resets. That lengthens the raw byte capture of an unresolved cross-line footnote reference (`` [^`\n`] `` stays verbatim rather than collapsing to `[^]`). The Markdown layer forwards this only alongside `.cmarkBugCompatibility` when `disableSourcePosOpts` is set; the shipped parser never sets it and always tracks precise positions.
         public static let cmarkSourcePositionsDisabled = MarkdownDocument.ParseOptions(rawValue: 1 << 27)
+
+        /// Enables inline attributes, written as `^[text](key: value)`, and attribute definitions, written as `^[label]: key: value`.
+        ///
+        /// An inline attribute becomes an `.attribute` node whose children are the bracketed text; `^[text][label]` takes its attributes from the definition with that label. Without this option, `^` is ordinary text, the brackets after it follow the usual link rules, and a `^[label]:` line is ordinary paragraph content.
+        public static let attributes = MarkdownDocument.ParseOptions(rawValue: 1 << 28)
     }
 }

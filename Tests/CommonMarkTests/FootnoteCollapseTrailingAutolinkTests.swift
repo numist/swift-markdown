@@ -42,14 +42,15 @@ private func dfsCollapseNodes(
 @Suite("`[^[` footnote-collapse followed by an email autolink")
 struct FootnoteCollapseTrailingAutolinkTests {
 
-    /// The differential fuzzer's configuration for this finding: footnotes, GFM autolink, and cmark
-    /// bug-compatibility all on. The collapse is gated on footnotes + `.cmarkBugCompatibility`.
+    /// The differential fuzzer's configuration for this finding: footnotes, GFM autolink, inline attributes,
+    /// and cmark bug-compatibility all on. The collapse is gated on footnotes + `.cmarkBugCompatibility` +
+    /// `.attributes`.
     private static let flagOn: MarkdownDocument.ParseOptions =
-        [.footnotes, .gfmAutolink, .cmarkBugCompatibility]
+        [.footnotes, .gfmAutolink, .cmarkBugCompatibility, .attributes]
 
-    /// The shipped configuration: footnotes and GFM autolink on, bug-compatibility deliberately off, so the
-    /// collapse never fires and the bracket stays spec-correct literal text.
-    private static let flagOff: MarkdownDocument.ParseOptions = [.footnotes, .gfmAutolink]
+    /// The shipped configuration: footnotes, GFM autolink, and inline attributes on, bug-compatibility
+    /// deliberately off, so the collapse never fires and the bracket stays spec-correct literal text.
+    private static let flagOff: MarkdownDocument.ParseOptions = [.footnotes, .gfmAutolink, .attributes]
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions

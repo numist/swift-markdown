@@ -3162,11 +3162,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// A false positive only costs an avoidable materialization; a false negative would skip a real matcher, so the checks must cover every matcher's necessary condition. The table necessary condition is on the DELIMITER (second) line, not the header: a single-column table's header need not contain a pipe (`a\n|-`, `a\n:-`), so the header-`|` check that once lived here would skip such tables. The segment list is isomorphic to `\n`-separated lines, so the second line is scanned directly.
     private func segmentsCouldMatchMatcher(_ segs: borrowing UniqueArray<Segment>) -> Bool {
         // First content byte == '['  ⇒ possible ref-def / footnote def / tasklist marker.
-        // First content bytes == '^['  ⇒ possible attribute reference definition (`^[label]: attrs`).
+        // First content bytes == '^['  ⇒ possible attribute reference definition (`^[label]: attrs`), with `.attributes`.
         // The skip must tolerate a vertical-tab / form-feed gap too, not just space/tab/newline: a
         // tasklist checkbox's marker->checkbox separator is cmark's `spacechar` (`[ \t\v\f]`,
         // `matchTasklistMarker`'s own gap skip), so `- ` VT `[x] ` reaches its `[` past a VT this scan
         // must not stop at, or this pre-filter under-approximates and skips a real matcher.
+        let attributesEnabled = storage.options.contains(.attributes)
         outer: for i in 0..<segs.count {
             let seg = segs[i]
             for j in 0..<Int(seg.length) {
@@ -3176,7 +3177,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // An attribute def opens with a `^` immediately followed by `[` — the same contiguity
                 // cmark requires (`chunk.data[0] == '^' && chunk.data[1] == '['`), so a `^` split from its
                 // `[` by a line join is correctly not admitted (the `[` would fall in the next segment).
-                if b == UInt8(ascii: "^"), j + 1 < Int(seg.length),
+                if b == UInt8(ascii: "^"), attributesEnabled, j + 1 < Int(seg.length),
                    segmentByte(seg, j + 1) == UInt8(ascii: "[") {
                     return true
                 }
@@ -5379,11 +5380,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     //
     // ``` [label]: destination optional-title ```
     //
-    // The extended-attribute reference form `^[label]: attrs` is recognized in the same loop and stored separately on `DocumentStorage.attributeReferenceMap`.
+    // With `.attributes`, the extended-attribute reference form `^[label]: attrs` is recognized in the same loop and stored separately on `DocumentStorage.attributeReferenceMap`.
     //
     // Multiple definitions may stack consecutively at the start of a paragraph. After consuming all that match, the remaining (possibly blank) content is returned for the inline parser to handle. If everything was consumed, a block-mode caller is expected to detach the paragraph node from its parent (the inline-only path keeps it, as cmark does).
 
-    /// Repeatedly consume `[label]: dest "title"` and `^[label]: attrs` definitions from the start of `chunk`.
+    /// Repeatedly consume `[label]: dest "title"` definitions, and with `.attributes` `^[label]: attrs` definitions, from the start of `chunk`.
     ///
     /// Each successful match registers the entry in the appropriate refmap on `storage` (first definition wins per spec) and advances the cursor. Returns the remaining chunk after the last consumed def.
     private mutating func parseDefinitions(in chunk: Chunk) -> Chunk {
@@ -5399,6 +5400,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
                 i = after
             } else if b == UInt8(ascii: "^"),
+                      storage.options.contains(.attributes),
                       i + 1 < endOffset,
                       readByte(at: i + 1, in: chunk) == UInt8(ascii: "[") {
                 guard let after = parseOneAttributeDefinition(

@@ -263,7 +263,7 @@ struct NULReplacementTests {
 
     /// The first `.attribute` node's attributes string, or `nil`.
     private func firstAttributes(_ source: String) -> String? {
-        MarkdownDocument.withParsedDocument(source) { doc -> String? in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc -> String? in
             var found: String? = nil
             func walk(_ n: borrowing MarkdownNode) {
                 if found == nil, case .attribute = n.kind { found = n.attributes() }

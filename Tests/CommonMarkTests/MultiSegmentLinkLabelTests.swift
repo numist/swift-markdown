@@ -133,7 +133,7 @@ struct MultiSegmentLinkLabelTests {
     /// attribute is reconstructed - matching the reference - rather than deferred to literal text.
     @Test("cross-line attribute form reconstructs the attribute (block quote)")
     func crossLineAttributeBlockQuote() {
-        MarkdownDocument.withParsedDocument("> ^[a](\n> b)") { doc in
+        MarkdownDocument.withParsedDocument("> ^[a](\n> b)", options: [.attributes]) { doc in
             var isBlockQuote = false
             doc.root.children.forEach { block in
                 if block.kind == .blockQuote { isBlockQuote = true }
@@ -147,7 +147,7 @@ struct MultiSegmentLinkLabelTests {
 
     @Test("cross-line attribute form reconstructs the attribute (list item)")
     func crossLineAttributeListItem() {
-        MarkdownDocument.withParsedDocument("- ^[a](\n  b)") { doc in
+        MarkdownDocument.withParsedDocument("- ^[a](\n  b)", options: [.attributes]) { doc in
             let inlines = Self.firstParagraphInlines(doc)
             #expect(inlines.kinds == [.attribute])
             #expect(inlines.attributeStrings == ["\nb"])

@@ -17,7 +17,7 @@ import CommonMark
 struct AttributeOpenerSourceRangeTests {
 
     private func tree(_ source: String) -> String {
-        CmarkTreeDump.dump(source, options: [.sourcePosition], sourceRanges: true)
+        CmarkTreeDump.dump(source, options: [.sourcePosition, .attributes], sourceRanges: true)
     }
 
     @Test("a lone opener's text spans it")

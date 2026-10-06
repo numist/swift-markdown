@@ -1220,7 +1220,7 @@ struct ExtendedAttributeTests {
     @Test("inline form: ^[content](attrs)")
     func inlineForm() {
         let source = "^[hello](color: red)"
-        MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "color: red")
         #expect(info.text == "hello")
@@ -1230,7 +1230,7 @@ struct ExtendedAttributeTests {
     @Test("inline form: empty content")
     func emptyContent() {
         let source = "^[](attr)"
-        MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "attr")
         }
@@ -1239,7 +1239,7 @@ struct ExtendedAttributeTests {
     @Test("inline form: attrs with whitespace")
     func attrsWithWhitespace() {
         let source = "^[x](color: red, weight: bold)"
-        MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "color: red, weight: bold")
         }
@@ -1248,7 +1248,7 @@ struct ExtendedAttributeTests {
     @Test("inline form: attrs with balanced parens")
     func attrsWithParens() {
         let source = "^[x](rgb(255, 0, 0))"
-        MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "rgb(255, 0, 0)")
         }
@@ -1257,7 +1257,7 @@ struct ExtendedAttributeTests {
     @Test("inline form: attrs with backslash-escaped paren")
     func attrsWithEscapedParen() {
         let source = "^[x](a\\)b)"
-        MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         let info = Self.firstAttribute(doc)
         // The `\)` is an escape; cmark preserves the backslash in the chunk.
         #expect(info.attrs == "a\\)b")
@@ -1267,7 +1267,7 @@ struct ExtendedAttributeTests {
     @Test("inline form with surrounding text")
     func surroundingText() {
         let source = "before ^[middle](attr) after"
-        MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "attr")
         #expect(info.text == "middle")
@@ -1277,7 +1277,7 @@ struct ExtendedAttributeTests {
     @Test("emphasis inside attribute content")
     func emphasisInside() {
         let source = "^[*foo*](attr)"
-        MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         var hasEmph = false
         let root = doc.root
         root.children.forEach { block in
@@ -1296,7 +1296,7 @@ struct ExtendedAttributeTests {
     @Test("reference def + reference form")
     func referenceForm() {
         let source = "^[label]: color: blue\n\n^[content][label]"
-        MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "color: blue")
         #expect(info.text == "content")
@@ -1308,7 +1308,7 @@ struct ExtendedAttributeTests {
         // cmark scans the label over the paragraph's flat buffer, so a `^[..]:` definition whose label
         // straddles a soft break is captured normally (`la\nbel` → `la bel`) and produces no visible node.
         let source = "^[la\nbel]: color: blue\n\n^[content][la bel]"
-        MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         #expect(doc._storage.attributeReferenceMap["la bel"] != nil)
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "color: blue")
@@ -1319,7 +1319,7 @@ struct ExtendedAttributeTests {
     @Test("attribute ref defs do not collide with link ref defs")
     func separateRefMaps() {
         let source = "[foo]: /url\n^[foo]: color: red\n\n[foo] and ^[content][foo]"
-        MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         // Both should be registered.
         #expect(doc._storage.referenceMap["foo"] != nil)
         #expect(doc._storage.attributeReferenceMap["foo"] != nil)
@@ -1341,7 +1341,7 @@ struct ExtendedAttributeTests {
     @Test("invalid: ^[content] without (...) or [label] stays as text")
     func invalidNoFollowup() {
         let source = "^[content]"
-        MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         // No `.attribute` should be emitted.
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == nil)
@@ -1351,7 +1351,7 @@ struct ExtendedAttributeTests {
     @Test("invalid: unknown reference label fails")
     func invalidUnknownRef() {
         let source = "^[content][unknown]"
-        MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == nil)
         }
@@ -1360,7 +1360,7 @@ struct ExtendedAttributeTests {
     @Test("nested attribute is allowed")
     func nestedAttribute() {
         let source = "^[outer ^[inner](b)](a)"
-        MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         // Outer attribute matches; inner attribute also nests.
         var attrCount = 0
         let root = doc.root
