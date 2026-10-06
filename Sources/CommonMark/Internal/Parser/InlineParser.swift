@@ -847,7 +847,7 @@ extension BlockParser {
         // cmark BUG (bug-compat only): a footnote-shaped opener whose caret is immediately followed by
         // another `[` (`[^[…`) has its inline footnote branch capture the label from the static `"^["`
         // string, over-reading past the inner `[` into that string's NUL terminator (FINDINGS #146). That
-        // label resolves to a `[` definition when one exists. Otherwise the
+        // label resolves to a `[` definition when one exists (`collapseCaretBracket`). Otherwise the
         // unresolved reference reconstructs to `[^[` (`![^[` for an image opener) followed by a NUL, so
         // reading its consolidated run as a C-string truncates there. Emit the `[^[` text and mark it as
         // run-truncating (its invisible tail is dropped in `dropRunTruncatedTails`, after the autolink pass
@@ -1202,11 +1202,12 @@ extension BlockParser {
         return offsets
     }
 
-    /// Whether a footnote-shaped `[^[…` opener takes cmark's `[^[` collapse (literal `[^[`, dropping
-    /// the rest of the line) rather than the cross-line label reconstruction. The captured label starts
-    /// with the inner `[`; cmark produces the `[^[` garbage once that label is >= 2 bytes (the inner `[`
-    /// plus more). A length of 1 (just the inner `[`) reconstructs to `[^[]`, and <= 0 to `[^]`, both
-    /// handled by the cross-line branch.
+    /// Whether a footnote-shaped `[^[…` opener takes cmark's static-string label capture
+    /// (`collapseCaretBracket`: a reference to a `[` definition, else literal `[^[` dropping the rest of
+    /// the line) rather than the cross-line label reconstruction. The captured label starts with the
+    /// inner `[`; cmark reads it from the static `"^["` string once that label is >= 2 bytes (the inner
+    /// `[` plus more). A length of 1 (just the inner `[`) reconstructs to `[^[]`, and <= 0 to `[^]`,
+    /// both handled by the cross-line branch.
     private func caretBracketCollapses(_ content: borrowing ContentSpan, open: Int, outerClose: Int) -> Bool {
         return footnoteCapturedLabelLength(content, open: open, close: outerClose) >= 2
     }
@@ -1237,11 +1238,11 @@ extension BlockParser {
     /// normalized labels with `strcmp`, which stops at that NUL, so the captured label resolves to a
     /// definition labelled `[` - subject only to the lookup's length cap on the captured length - and
     /// the bracket becomes a reference to it. Otherwise the unresolved reference reconstructs to `[^[`
-    /// followed by a NUL. Emit that `[^[` literal in place of the opener
-    /// and its inner content, and mark it run-truncating so `dropRunTruncatedTails` (run after the autolink
-    /// pass) drops the invisible tail the NUL would hide - while an email in that tail still links. The
-    /// caller returns `initialPos` so parsing continues - an enclosing bracket can still form a link
-    /// around the `[^[` or the reference.
+    /// followed by a NUL. Emit that `[^[` literal in place of the opener and its inner content, and mark
+    /// it run-truncating so `dropRunTruncatedTails` (run after the autolink pass) drops the invisible
+    /// tail the NUL would hide - while an email in that tail still links. The caller returns
+    /// `initialPos` so parsing continues - an enclosing bracket can still form a link around the `[^[`
+    /// or the reference.
     private mutating func collapseCaretBracket(openerInl: DocumentStorage.Index, footnoteBracketStart: Int, closeBracket: Int, content: borrowing ContentSpan) {
         let labelStart = footnoteBracketStart + 2
         let capturedLength = footnoteCapturedLabelLength(content, open: footnoteBracketStart, close: closeBracket)
@@ -1315,7 +1316,7 @@ extension BlockParser {
         return (display, display)
     }
 
-    /// The footnote definition a byte-captured label's lookup key (`capturedLabelBytes`) resolves to,
+    /// The footnote definition a captured label's lookup key (as `capturedLabelBytes` builds it) resolves to,
     /// or `nil`, as cmark's `process_footnotes` looks up the captured reference literal. `labelRange` is
     /// the virtual range of `content` whose bytes cmark counts against the label-length cap
     /// (`footnoteDefinition`).

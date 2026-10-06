@@ -63,6 +63,18 @@ struct FootnoteCaretBracketResolutionTests {
             == "Document\n├─ Paragraph\n│  ├─ Text \"[\"\n│  ├─ FootnoteReference label: \"[\" index: 1\n│  └─ Text \"]\"\n└─ FootnoteDefinition label: \"[\"\n   └─ Paragraph\n      └─ Text \"n\"")
     }
 
+    @Test
+    func enclosingLinkHoldsTheReference() {
+        #expect(Self.surface("[[^[]]](/u)\n\n[^[]: n")
+            == "Document\n├─ Paragraph\n│  └─ Link destination: \"/u\"\n│     └─ FootnoteReference label: \"[\" index: 1\n└─ FootnoteDefinition label: \"[\"\n   └─ Paragraph\n      └─ Text \"n\"")
+    }
+
+    @Test
+    func numberedAfterAnEarlierReference() {
+        #expect(Self.surface("[^a] [^[x]]\n\n[^a]: m\n\n[^[]: n")
+            == "Document\n├─ Paragraph\n│  ├─ FootnoteReference label: \"a\" index: 1\n│  ├─ Text \" \"\n│  └─ FootnoteReference label: \"[\" index: 2\n├─ FootnoteDefinition label: \"a\"\n│  └─ Paragraph\n│     └─ Text \"m\"\n└─ FootnoteDefinition label: \"[\"\n   └─ Paragraph\n      └─ Text \"n\"")
+    }
+
     /// A definition whose own content is the only reference to it is still referenced, so it's kept.
     @Test
     func definitionReferencingItselfIsKept() {
