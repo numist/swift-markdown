@@ -16,7 +16,7 @@
 ///
 /// - **Multi-segment.** The content is an ordered list of `Segment`s - source-line ranges (zero-copy into `sourceBytes`) joined by the shared interned `"\n"` - addressed by flat *virtual* offsets (`0..<virtualLength`). Used for multi-line paragraph/heading bodies whose lines aren't source-contiguous (block-quote/list continuation, CRLF) so no source bytes are copied. Almost all non-source segments are the interned `"\n"` join, read as `\n` without touching the arena. The one exception is a lazy-continuation **split-tab residual** (Quirk E, flag-ON): an outer container's matched prefix partially consumes a tab, and the tab's leftover columns become *synthetic spaces*, each standing for the tab byte - materialized into the arena as one non-source segment interleaved among the source-backed ones (`BlockParser.appendSyntheticResidualSpaces`). A lazy tasklist-retry line whose advance stopped inside a scalar (a NUL's U+FFFD, or a multi-byte source scalar) likewise carries its orphaned-byte U+FFFD replacements, one segment each, standing for the source byte its orphan came from, ahead of the line's source segment (`BlockParser.addLazyLineAfterTasklistAdvance`). Either filler carries no inline-significant byte, so inline syntax only ever lives in source segments (`multiNextSignificant` skips non-newline arena segments whole). To read those bytes without holding the growing `storage.strings` across the inline loop's appends, the multi-segment span carries a stable snapshot of the arena (`arena`) taken before inline parsing; non-source segments then read `arena[offset]` (the interned `\n` sits at offset 0, so it resolves naturally too). When no synthetic segment is present the snapshot is empty and non-source segments synthesize `\n` directly, keeping the common multi-line-paragraph path zero-copy.
 ///
-/// `sourceOffsets(ofVirtual:)` maps a (virtual) offset back to its original-source byte offsets (or `nil` for arena content with no source image), which is how inline nodes get stamped with source ranges.
+/// `sourceOffsets(ofVirtual:)` maps a (virtual) offset back to its original-source byte offsets, which is how inline nodes get stamped with source ranges.
 internal struct ContentSpan: ~Escapable {
     /// Single-segment: the content bytes (0-based via `base`). Multi-segment: `sourceBytes` (the whole source), indexed directly by a segment's absolute source offset.
     @usableFromInline let span: Span<UInt8>
@@ -27,7 +27,7 @@ internal struct ContentSpan: ~Escapable {
     /// Single-segment: which buffer `span` is (`true` = source, `false` = arena scratch). Multi-segment: unused.
     @usableFromInline let inSource: Bool
 
-    /// Single-segment arena content that images a source range: an arena→source run map, content-relative (keyed from the first content byte). `sourceOffset` resolves through it to recover per-line source columns for reconstructed content - a flattened non-contiguous setext heading, or (as a single constant-shift run) a `\|`-unescaped table cell. Empty (`count == 0`) for source-backed content or arena content with no source image (in which case `sourceOffset` returns `nil`). Only consulted for `!inSource` single-segment content.
+    /// Single-segment arena content that images a source range: an arena→source run map, content-relative (keyed from the first content byte). `sourceOffset` resolves through it to recover per-line source columns for reconstructed content - a flattened non-contiguous setext heading, or (as a single constant-shift run) a `\|`-unescaped table cell. Empty (`count == 0`) for source-backed content, and for arena content parsed with positions off, which is never stamped. Only consulted for `!inSource` single-segment content.
     @usableFromInline let arenaRuns: Span<ArenaRun>
 
     /// `arenaRunEnds[i]` is the content-relative offset just past run `i` of `arenaRuns` (the running total of run lengths), held in stable storage alongside it; empty when `arenaRuns` is. Non-decreasing, so the run covering an offset is found by binary search (`firstIndex(endingAfter:in:)`) - a flattened heading has a run per line, and positions are resolved once per inline node.
@@ -222,26 +222,23 @@ internal struct ContentSpan: ~Escapable {
         return nil
     }
 
-    /// The original-source byte offsets for the content byte at `offset`, or `nil` for arena content with no source image: `source` is the offset it is stamped at, and `physical` the offset of the byte as read, which sits on the byte's own source line. They differ only for a re-indented continuation line, whose `source` is moved to its block-content column (and may then lie past the end of its line). Single-segment source content maps identity (the offset already IS a source offset); single-segment arena content resolves through its arena→source run map (`nil` when it has none); multi-segment resolves through the segment list.
+    /// The original-source byte offsets for the content byte at `offset`: `source` is the offset it is stamped at, and `physical` the offset of the byte as read, which sits on the byte's own source line. They differ only for a re-indented continuation line, whose `source` is moved to its block-content column (and may then lie past the end of its line). Single-segment source content maps identity (the offset already IS a source offset); single-segment arena content resolves through its arena→source run map; multi-segment resolves through the segment list.
     ///
     /// `offset` always images a source byte: callers resolve only an inline node's first and last bytes, and no inline node starts or ends on a byte without a source image, such as a line join (a soft or hard break is position-less, and the text before it ends at the join).
     @inlinable
-    func sourceOffsets(ofVirtual offset: Int) -> (source: Int, physical: Int)? {
+    func sourceOffsets(ofVirtual offset: Int) -> (source: Int, physical: Int) {
         if !isMultiSegment {
             if inSource {
                 return (offset, offset)
             }
-            // Arena content with a source pre-image carries an arena→source run map, content-relative (keyed from the first content byte). Resolve it exactly like the multi-segment segment list below; arena content with no map (`arenaRuns` empty) has no source image and yields `nil`. cmark maps a `\|`-unescaped table cell's bytes back to source by a constant shift (it does NOT re-widen for the removed backslash), which the degenerate single-run case reproduces exactly.
+            // Arena content carries an arena→source run map, content-relative (keyed from the first content byte): inline nodes are stamped only with positions on, and with positions on every single-segment arena content is parsed with a run map that tiles it. Resolve it exactly like the multi-segment segment list below. cmark maps a `\|`-unescaped table cell's bytes back to source by a constant shift (it does NOT re-widen for the removed backslash), which the degenerate single-run case reproduces exactly.
             let k = offset - base
             let i = Self.firstIndex(endingAfter: k, in: arenaRunEnds)
-            if i < arenaRuns.count {
-                let run = arenaRuns[i]
-                let v = i == 0 ? 0 : arenaRunEnds[i - 1]
-                precondition(run.sourceOffset >= 0, "an inline node's first and last bytes image source bytes")
-                return (Int(run.sourceOffset) + (k - v), Int(run.physicalOffset) + (k - v))
-            }
-            precondition(arenaRuns.count == 0, "an inline node's source range lies inside its content's arena run map")
-            return nil
+            precondition(i < arenaRuns.count, "an inline node's source range lies inside its content's arena run map")
+            let run = arenaRuns[i]
+            let v = i == 0 ? 0 : arenaRunEnds[i - 1]
+            precondition(run.sourceOffset >= 0, "an inline node's first and last bytes image source bytes")
+            return (Int(run.sourceOffset) + (k - v), Int(run.physicalOffset) + (k - v))
         }
         let i = segmentIndex(covering: offset)
         precondition(i < segments.count, "an inline node's source range lies inside its multi-segment content")

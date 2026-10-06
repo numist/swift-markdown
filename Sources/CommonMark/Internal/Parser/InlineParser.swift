@@ -3624,7 +3624,8 @@ extension BlockParser {
             NodeRecord(kind: .text, parent: parent, data: .literal(emptyRef))
         )
         storage.appendChild(textIdx, to: parent)
-        if positionsEnabled, let at = content.sourceOffsets(ofVirtual: offset) {
+        if positionsEnabled {
+            let at = content.sourceOffsets(ofVirtual: offset)
             let position = clampedToLine(at.source, ofByte: at.physical)
             storage.setSourceStart(textIdx, position)
             storage.setSourceEnd(textIdx, position)
@@ -3963,14 +3964,14 @@ extension BlockParser {
 
     /// Stamp `node`'s source range from *virtual* content offsets, resolving each through `content.sourceOffsets(ofVirtual:)`.
     ///
-    /// This is the only stamping path, shared by every inline node (leaf and wrapper - matching cmark, whose `S_insert_emph` derives a wrapper's range from its child columns in the same buffer map): a single-segment source span maps identity (byte offsets pass through unchanged), single-segment arena maps to nil (skipped) unless its arena→source run map resolves it, and a multi-segment span walks its segment list - so a construct inside a multi-line blockquote/list paragraph gets real source positions. `end` is *exclusive* (one past the last byte), so the last content byte `end - 1` is resolved and incremented; this also maps an `end` that lands on the synthetic line-join newline back to just past the preceding source byte.
+    /// This is the only stamping path, shared by every inline node (leaf and wrapper - matching cmark, whose `S_insert_emph` derives a wrapper's range from its child columns in the same buffer map): a single-segment source span maps identity (byte offsets pass through unchanged), single-segment arena content resolves through its arena→source run map, and a multi-segment span walks its segment list - so a construct inside a multi-line blockquote/list paragraph gets real source positions. `end` is *exclusive* (one past the last byte), so the last content byte `end - 1` is resolved and incremented; this also maps an `end` that lands on the synthetic line-join newline back to just past the preceding source byte.
     @inline(__always)
     mutating func stampInline(_ node: DocumentStorage.Index, _ start: Int, _ end: Int, content: borrowing ContentSpan) {
-        guard positionsEnabled, end > start,
-              let first = content.sourceOffsets(ofVirtual: start),
-              let last = content.sourceOffsets(ofVirtual: end - 1) else {
+        guard positionsEnabled, end > start else {
             return
         }
+        let first = content.sourceOffsets(ofVirtual: start)
+        let last = content.sourceOffsets(ofVirtual: end - 1)
         storage.setSourceStart(node, clampedToLine(first.source, ofByte: first.physical))
         storage.setSourceEnd(node, clampedToLine(last.source + 1, ofByte: last.physical))
     }
