@@ -689,7 +689,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             )
         } else {
             // Normalize `\r\n` and lone `\r` to `\n` and each NUL to U+FFFD into the string arena, then read from an independent scratch copy (the inline parser appends to `storage.strings` as it runs).
-            // With positions on, also record the arena→source run map (inline stamping resolves a node's first byte for its start and its last byte, plus one, for its end). Every byte copied as-is, or a lone `\r` → `\n`, images its own source byte. A CRLF's `\n` images its LF, so a node ending at the line break covers the whole CRLF and projects to the next line's start, as it does for LF input; the cost is that a node *starting* at that `\n` starts one byte late, after the CR. Each of a U+FFFD's three bytes images its one NUL byte, so a node starting or ending at it covers exactly that byte.
+            // With positions on, also record the arena→source run map (inline stamping resolves a node's first byte for its start and its last byte, plus one, for its end). Every byte copied as-is, or a lone `\r` → `\n`, images its own source byte. A CRLF's `\n` images its LF, so a node ending at the line break covers the whole CRLF and projects to the next line's start, as it does for LF input (a node ending at the final line ending is pulled back to the end of the last line by `endInlinesWithinLastLine`); the cost is that a node *starting* at that `\n` starts one byte late, after the CR. Each of a U+FFFD's three bytes images its one NUL byte, so a node starting or ending at it covers exactly that byte.
             let arenaStart = storage.strings.count
             var runs: [ArenaRun] = []
             var j = start
@@ -756,7 +756,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Pull back the range of every node created after `paragraph` that runs past `contentEnd`, the end of the inline-only input's last line content, to end there.
     ///
-    /// Inline stamping ends a node one past the source byte its last content byte stands for. For a node holding the final line ending that is past the last line, because no line follows it to start at. A node that starts inside that line ending (a CRLF's `\n` stands for its LF) starts at `contentEnd` too, so it keeps an empty range where the line ending starts.
+    /// Inline stamping ends a node one past the source byte its last content byte stands for. For a node holding the final line ending, that end lies past the last line, because no line follows it. A node that starts inside that line ending (a CRLF's `\n` stands for its LF) starts at `contentEnd` too, so it keeps an empty range where the line ending starts.
     private mutating func endInlinesWithinLastLine(after paragraph: DocumentStorage.Index, contentEnd: Int) {
         for node in (paragraph + 1)..<storage.nodes.count where storage.sourceRanges[node].end > contentEnd {
             storage.sourceRanges[node].end = contentEnd

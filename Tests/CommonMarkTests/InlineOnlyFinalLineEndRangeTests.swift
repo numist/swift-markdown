@@ -119,6 +119,18 @@ struct InlineOnlyFinalLineEndRangeTests {
             """)
     }
 
+    /// The line break has no range, so the paragraph's end comes from the final line ending, not from any inline node.
+    @Test("a backslash hard break before the final line feed leaves the paragraph ending at the line feed", arguments: modes)
+    func backslashHardBreak(_ mode: MarkdownDocument.ParseOptions) throws {
+        #expect(try tree("a\\\n", mode) == """
+            document @1:1-1:3
+              paragraph @1:1-1:3
+                text "a" @1:1-1:2
+                linebreak @-
+
+            """)
+    }
+
     @Test("a paragraph left empty by a reference definition ends where the final line feed starts", arguments: modes)
     func definitionOnly(_ mode: MarkdownDocument.ParseOptions) throws {
         #expect(try tree("[x]: /u\n", mode) == """
