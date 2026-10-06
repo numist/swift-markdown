@@ -41,7 +41,7 @@ struct AdversarialEncodingPositionTests {
 
     /// Parse `src` with the deliverable options and DFS-collect every node's kind and source range.
     private func collect(_ src: String) throws -> [Entry] {
-        try MarkdownDocument.withParsedDocument(src, options: Self.opts) { doc in
+        MarkdownDocument.withParsedDocument(src, options: Self.opts) { doc in
             var out: [Entry] = []
             dfsRanges(doc.root, into: &out)
             return out

@@ -60,7 +60,7 @@ struct ContentTaskItemStructureTests {
     private func analyze(
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> (checks: [Bool?], texts: [String?]) {
-        try MarkdownDocument.withParsedDocument(src, options: options) {
+        MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> (checks: [Bool?], texts: [String?]) in
             var checks: [Bool?] = []
             var texts: [String?] = []

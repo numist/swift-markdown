@@ -31,7 +31,7 @@ struct TableBackslashPipeCellSplitTests {
     private func tableCells(
         _ source: String, options: MarkdownDocument.ParseOptions
     ) throws -> [[(columns: Int, rows: Int, text: String)]] {
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc in
             var rows: [[(columns: Int, rows: Int, text: String)]] = []
             var found = false
             doc.root.children.forEach { block in

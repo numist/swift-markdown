@@ -38,7 +38,7 @@ struct FlatRawInlineEndTests {
         in src: String,
         options: MarkdownDocument.ParseOptions
     ) throws -> Range<Pos>? {
-        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> Range<Pos>? in
+        MarkdownDocument.withParsedDocument(src, options: options) { doc -> Range<Pos>? in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)
             for entry in ranges where match(entry.kind) {
@@ -60,7 +60,7 @@ struct FlatRawInlineEndTests {
 
     /// Every text node's range in DFS order, parsing `src` with `options`.
     private func textRanges(in src: String, options: MarkdownDocument.ParseOptions) throws -> [Range<Pos>?] {
-        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> [Range<Pos>?] in
+        MarkdownDocument.withParsedDocument(src, options: options) { doc -> [Range<Pos>?] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)
             return ranges.filter { $0.kind == .text }.map { $0.range }

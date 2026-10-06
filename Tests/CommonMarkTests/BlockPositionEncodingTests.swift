@@ -48,7 +48,7 @@ struct BlockPositionEncodingTests {
     /// DFS pre-order collect of every node.
     private func parse(_ src: String) throws -> [Collected] {
         var out: [Collected] = []
-        try MarkdownDocument.withParsedDocument(src, options: Self.opts) { doc in
+        MarkdownDocument.withParsedDocument(src, options: Self.opts) { doc in
             collect(doc.root, into: &out)
         }
         return out

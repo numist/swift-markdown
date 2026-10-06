@@ -85,7 +85,7 @@ struct SingleColumnTableTests {
         _ source: String,
         options: MarkdownDocument.ParseOptions = [.tables]
     ) throws -> Block {
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc -> Block in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc -> Block in
             var blocks: [Block] = []
             doc.root.children.forEach { child in
                 var block = Block()
@@ -110,7 +110,7 @@ struct SingleColumnTableTests {
         _ source: String,
         options: MarkdownDocument.ParseOptions = [.tables]
     ) throws -> Block? {
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc -> Block? in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc -> Block? in
             firstTableShape(in: doc.root)
         }
     }

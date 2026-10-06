@@ -25,7 +25,7 @@ struct TaskListMarkerWhitespaceTests {
 
     /// (found a list item?, its checked state — nil for a non-task item, first text literal in DFS order).
     private func parse(_ source: String) throws -> (foundItem: Bool, checked: Bool?, firstText: String?) {
-        try MarkdownDocument.withParsedDocument(source, options: Self.opts) { doc -> (Bool, Bool?, String?) in
+        MarkdownDocument.withParsedDocument(source, options: Self.opts) { doc -> (Bool, Bool?, String?) in
             var foundItem = false
             var checked: Bool? = nil
             var firstText: String? = nil
@@ -96,7 +96,7 @@ struct TaskListMarkerWhitespaceTests {
     func multiLineContinuation() throws {
         // `- [x]  a` / `     b` : line 1 content is "a" (all post-checkbox whitespace stripped); the
         // lazy continuation "b" is unaffected. cmark yields text nodes "a" and "b".
-        let texts = try MarkdownDocument.withParsedDocument("- [x]  a\n     b", options: Self.opts) { doc -> [String] in
+        let texts = MarkdownDocument.withParsedDocument("- [x]  a\n     b", options: Self.opts) { doc -> [String] in
             var out: [String] = []
             func walk(_ node: borrowing MarkdownNode) {
                 if node.kind == .text, let lit = node.literal() { out.append(lit) }

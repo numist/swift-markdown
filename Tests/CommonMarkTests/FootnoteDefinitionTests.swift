@@ -21,7 +21,7 @@ struct FootnoteDefinitionTests {
     func materializedFootnoteDefinitionResolves() throws {
         // CRLF between the definition's two lines forces materialization of the def's content.
         let source = "[^a]: first line\r\nsecond line\n\nsee [^a]\n"
-        try MarkdownDocument.withParsedDocument(source, options: [.footnotes]) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.footnotes]) { doc in
 
         var defLabel: String? = nil
         var refLabel: String? = nil

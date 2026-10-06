@@ -32,7 +32,7 @@ struct LinkDestinationTrimTests {
     private func firstLink(
         _ source: String, options: MarkdownDocument.ParseOptions = []
     ) throws -> (url: String?, title: String?) {
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc -> (String?, String?) in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc -> (String?, String?) in
             var found = false
             var url: String? = nil
             var title: String? = nil

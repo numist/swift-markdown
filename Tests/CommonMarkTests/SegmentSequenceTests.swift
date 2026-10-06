@@ -18,7 +18,7 @@ struct SegmentsTests {
     func inlineTextMatches() throws {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "hello *world* and `code`"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         var literals: [String] = []
         var joined: [String] = []
         let root = doc.root
@@ -63,7 +63,7 @@ struct SegmentsTests {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         // A multi-line paragraph exercises the contiguity fast path: its text runs are source ranges; the iterator must still reproduce literal().
         let source = "first line\nsecond line\nthird line"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         var pieces: [String] = []
         let root = doc.root
         root.children.forEach { paragraph in
@@ -90,7 +90,7 @@ struct SegmentsTests {
     func codeBlockBody() throws {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "```\nline one\nline two\n```"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         var bodies: [String] = []
         let root = doc.root
         root.children.forEach { block in
@@ -115,7 +115,7 @@ struct SegmentsTests {
     func emptyForNonLiteral() throws {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "text"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let root = doc.root
         root.children.forEach { paragraph in
             // A paragraph has no literal content of its own.

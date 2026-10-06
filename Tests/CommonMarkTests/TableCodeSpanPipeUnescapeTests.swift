@@ -30,7 +30,7 @@ struct TableCodeSpanPipeUnescapeTests {
     private func firstCodeSpanAndTable(
         _ source: String, options: MarkdownDocument.ParseOptions
     ) throws -> (codeSpan: String?, hasTable: Bool) {
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc in
             var acc = Walk(codeSpan: nil, hasTable: false)
             walk(doc.root, &acc)
             return (acc.codeSpan, acc.hasTable)

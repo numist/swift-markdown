@@ -22,7 +22,7 @@ struct TableBodyRowInvertedRangeTests {
     private let source = "  a|b\n-|-\nx\n"
 
     private func bodyRowRange(options: MarkdownDocument.ParseOptions) throws -> Range<MarkdownNode.SourcePosition>?? {
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc in
             var range: Range<MarkdownNode.SourcePosition>?? = .none
             func walk(_ node: borrowing MarkdownNode) {
                 if case .tableRow(isHeader: false) = node.kind {

@@ -52,7 +52,7 @@ struct ReferenceDefinitionForwardResolutionTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .cmarkBugCompatibility]
 
     private func tree(_ src: String) throws -> [String] {
-        try MarkdownDocument.withParsedDocument(src, options: Self.options) { doc -> [String] in
+        MarkdownDocument.withParsedDocument(src, options: Self.options) { doc -> [String] in
             var out: [String] = []
             describeTree(doc.root, depth: 0, into: &out)
             return out

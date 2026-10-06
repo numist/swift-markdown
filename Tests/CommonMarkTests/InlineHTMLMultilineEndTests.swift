@@ -33,7 +33,7 @@ struct InlineHTMLMultilineEndTests {
 
     /// The source range of the first `.htmlInline` node when `src` is parsed spec-correct.
     private func inlineHTMLRange(in src: String) throws -> Range<Pos>? {
-        try MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
+        MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> Range<Pos>? in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)

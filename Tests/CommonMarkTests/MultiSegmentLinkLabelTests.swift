@@ -81,7 +81,7 @@ struct MultiSegmentLinkLabelTests {
 
     @Test("block-quote lazy continuation with empty brackets is literal text (no crash)")
     func blockQuoteEmptyBrackets() throws {
-        try MarkdownDocument.withParsedDocument(">a\n[]b") { doc in
+        MarkdownDocument.withParsedDocument(">a\n[]b") { doc in
             let inlines = Self.firstParagraphInlines(doc)
             #expect(inlines.kinds == [.text, .softBreak, .text])
             #expect(inlines.texts == ["a", "[]b"])
@@ -91,7 +91,7 @@ struct MultiSegmentLinkLabelTests {
 
     @Test("list-item lazy continuation with empty brackets is literal text (no crash)")
     func listItemEmptyBrackets() throws {
-        try MarkdownDocument.withParsedDocument("- a\n[]b") { doc in
+        MarkdownDocument.withParsedDocument("- a\n[]b") { doc in
             let inlines = Self.firstParagraphInlines(doc)
             #expect(inlines.kinds == [.text, .softBreak, .text])
             #expect(inlines.texts == ["a", "[]b"])
@@ -101,7 +101,7 @@ struct MultiSegmentLinkLabelTests {
 
     @Test("block-quote lazy continuation with full brackets and no definition is literal text (no crash)")
     func blockQuoteFullBracketsNoDefinition() throws {
-        try MarkdownDocument.withParsedDocument(">a\n[x]b") { doc in
+        MarkdownDocument.withParsedDocument(">a\n[x]b") { doc in
             let inlines = Self.firstParagraphInlines(doc)
             #expect(inlines.kinds == [.text, .softBreak, .text])
             #expect(inlines.texts == ["a", "[x]b"])
@@ -115,7 +115,7 @@ struct MultiSegmentLinkLabelTests {
     /// resolves references, not merely avoids the crash.
     @Test("shortcut reference resolves inside multi-segment content")
     func shortcutReferenceResolvesMultiSegment() throws {
-        try MarkdownDocument.withParsedDocument("[x]: /u\n\n>a\n[x]b") { doc in
+        MarkdownDocument.withParsedDocument("[x]: /u\n\n>a\n[x]b") { doc in
             let inlines = Self.firstParagraphInlines(doc)
             #expect(inlines.kinds == [.text, .softBreak, .link, .text])
             #expect(inlines.texts == ["a", "b"])
@@ -133,7 +133,7 @@ struct MultiSegmentLinkLabelTests {
     /// attribute is reconstructed - matching the reference - rather than deferred to literal text.
     @Test("cross-line attribute form reconstructs the attribute (block quote)")
     func crossLineAttributeBlockQuote() throws {
-        try MarkdownDocument.withParsedDocument("> ^[a](\n> b)") { doc in
+        MarkdownDocument.withParsedDocument("> ^[a](\n> b)") { doc in
             var isBlockQuote = false
             doc.root.children.forEach { block in
                 if block.kind == .blockQuote { isBlockQuote = true }
@@ -147,7 +147,7 @@ struct MultiSegmentLinkLabelTests {
 
     @Test("cross-line attribute form reconstructs the attribute (list item)")
     func crossLineAttributeListItem() throws {
-        try MarkdownDocument.withParsedDocument("- ^[a](\n  b)") { doc in
+        MarkdownDocument.withParsedDocument("- ^[a](\n  b)") { doc in
             let inlines = Self.firstParagraphInlines(doc)
             #expect(inlines.kinds == [.attribute])
             #expect(inlines.attributeStrings == ["\nb"])
@@ -160,7 +160,7 @@ struct MultiSegmentLinkLabelTests {
     /// contiguous window can't image the straddling label, so this drives the cross-line label scan.
     @Test("cross-line full-reference label resolves and consumes the trailing bracket")
     func crossLineFullReferenceResolves() throws {
-        try MarkdownDocument.withParsedDocument("[la bel]: /u\n\n>[t][la\nbel]") { doc in
+        MarkdownDocument.withParsedDocument("[la bel]: /u\n\n>[t][la\nbel]") { doc in
             let inlines = Self.firstParagraphInlines(doc)
             #expect(inlines.kinds == [.link])
             #expect(inlines.hasLink)
@@ -174,7 +174,7 @@ struct MultiSegmentLinkLabelTests {
     /// the cross-line scan doesn't spuriously consume the trailing label when the reference is unknown.
     @Test("cross-line full-reference label with no definition stays literal")
     func crossLineFullReferenceNoDefinition() throws {
-        try MarkdownDocument.withParsedDocument(">[t][la\nbel]") { doc in
+        MarkdownDocument.withParsedDocument(">[t][la\nbel]") { doc in
             let inlines = Self.firstParagraphInlines(doc)
             #expect(inlines.kinds == [.text, .softBreak, .text])
             #expect(inlines.texts == ["[t][la", "bel]"])

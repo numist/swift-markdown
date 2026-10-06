@@ -36,7 +36,7 @@ struct TablePrecedingParagraphTests {
         _ source: String,
         options: MarkdownDocument.ParseOptions = [.tables]
     ) throws -> [Block] {
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc -> [Block] in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc -> [Block] in
             func inlineText(_ node: borrowing MarkdownNode) -> String {
                 var text = ""
                 func walk(_ n: borrowing MarkdownNode) {
@@ -173,7 +173,7 @@ struct TablePrecedingParagraphTests {
         // unit-gated, not fuzzer-compared, so this is a presence/ordering guard, not a column check.
         let options: MarkdownDocument.ParseOptions = [.tables, .sourcePosition]
         for source in ["x\na\n|-", "x\ny\na\n|-", "x\na\n|-\nb", "x\na|b\n-|-"] {
-            let nodes = try MarkdownDocument.withParsedDocument(source, options: options) {
+            let nodes = MarkdownDocument.withParsedDocument(source, options: options) {
                 doc -> [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)] in
                 var out: [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)] = []
                 dfsCompleteness(doc.root, into: &out)

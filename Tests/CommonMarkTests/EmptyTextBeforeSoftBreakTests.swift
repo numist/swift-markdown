@@ -42,7 +42,7 @@ struct EmptyTextBeforeSoftBreakTests {
 
     /// The `(kind, text)` of every node in DFS order when `src` is parsed spec-correct.
     private func nodes(in src: String) throws -> [(kind: MarkdownNode.Kind, text: String?)] {
-        try MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
+        MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> [(kind: MarkdownNode.Kind, text: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?)] = []
             dfsKindsAndText(doc.root, into: &out)

@@ -49,7 +49,7 @@ struct FlankingUnicodePunctuationTests {
     }
 
     private func render(_ source: String, options: MarkdownDocument.ParseOptions = []) throws -> String {
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc in
             render(doc)
         }
     }

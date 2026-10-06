@@ -59,7 +59,7 @@ struct EmptyTaskItemStructureTests {
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> (nodes: [(kind: MarkdownNode.Kind, range: Range<Pos>?)],
                  firstItem: (checked: Bool?, childCount: Int)?) {
-        try MarkdownDocument.withParsedDocument(src, options: options) {
+        MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> (nodes: [(kind: MarkdownNode.Kind, range: Range<Pos>?)],
                     firstItem: (checked: Bool?, childCount: Int)?) in
             var nodes: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []

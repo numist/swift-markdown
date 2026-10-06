@@ -22,7 +22,7 @@ import Testing
 struct TableLazyDelimiterTests {
 
     private func nodeKinds(_ source: String) throws -> (hasTable: Bool, hasHeading: Bool, hasParagraph: Bool) {
-        try MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> (Bool, Bool, Bool) in
+        MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> (Bool, Bool, Bool) in
             var hasTable = false, hasHeading = false, hasParagraph = false
             func walk(_ n: borrowing MarkdownNode) {
                 switch n.kind {

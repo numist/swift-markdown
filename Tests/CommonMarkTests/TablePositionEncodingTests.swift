@@ -65,7 +65,7 @@ struct TablePositionEncodingTests {
     /// parsed with the deliverable options. Each cell carries its span, range, literal text, and the
     /// range of its first inline Text run. Fixed table depth, so plain `.forEach` (no recursion).
     private func tableRows(_ source: String) throws -> [Row] {
-        try MarkdownDocument.withParsedDocument(source, options: Self.opts) { doc -> [Row] in
+        MarkdownDocument.withParsedDocument(source, options: Self.opts) { doc -> [Row] in
             var rows: [Row] = []
             var found = false
             doc.root.children.forEach { block in
@@ -95,7 +95,7 @@ struct TablePositionEncodingTests {
     /// DFS-collect every node's (kind, literal, range) in document order — used for the non-table
     /// arena/tab cases (list items, code blocks, paragraph continuations).
     private func nodes(_ source: String) throws -> [EncNode] {
-        try MarkdownDocument.withParsedDocument(source, options: Self.opts) { doc -> [EncNode] in
+        MarkdownDocument.withParsedDocument(source, options: Self.opts) { doc -> [EncNode] in
             var out: [EncNode] = []
             dfsEncNodes(doc.root, into: &out)
             return out

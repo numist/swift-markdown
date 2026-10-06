@@ -36,7 +36,7 @@ struct InlineHTMLCloserMissCacheTests {
     private static let bothFlagStates: [MarkdownDocument.ParseOptions] = [[], [.cmarkBugCompatibility]]
 
     private func htmlLiterals(_ src: String, options: MarkdownDocument.ParseOptions) throws -> [String] {
-        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> [String] in
+        MarkdownDocument.withParsedDocument(src, options: options) { doc -> [String] in
             inlineHTMLLiterals(doc.root)
         }
     }

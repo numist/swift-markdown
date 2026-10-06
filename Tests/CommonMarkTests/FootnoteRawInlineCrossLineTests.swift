@@ -47,7 +47,7 @@ struct FootnoteRawInlineCrossLineTests {
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
     ) throws -> [(kind: MarkdownNode.Kind, text: String?)] {
-        try MarkdownDocument.withParsedDocument(src, options: options) {
+        MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [(kind: MarkdownNode.Kind, text: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?)] = []
             dfsKindText(doc.root, into: &out)

@@ -15,7 +15,7 @@ import Testing
 /// to assert the full nested tree, since these cases live inside block quotes / list items where a
 /// top-level-only block classifier can't see the split.
 fileprivate func dumpTree(_ source: String, options: MarkdownDocument.ParseOptions = [.tables]) throws -> String {
-    try MarkdownDocument.withParsedDocument(source, options: options) { doc -> String in
+    MarkdownDocument.withParsedDocument(source, options: options) { doc -> String in
         var out = ""
         func label(_ n: borrowing MarkdownNode) -> String {
             switch n.kind {
@@ -233,7 +233,7 @@ struct TablePrecedingParagraphNoncontiguousTests {
         // the flattened segment run map). Assert every node carries a present, non-inverted range —
         // breaks are legitimately position-less (see SourceRangeCompletenessTests).
         let options: MarkdownDocument.ParseOptions = [.tables, .sourcePosition]
-        let nodes = try MarkdownDocument.withParsedDocument("x\r\na\r\n|-\r\nb", options: options) {
+        let nodes = MarkdownDocument.withParsedDocument("x\r\na\r\n|-\r\nb", options: options) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)] in
             var out: [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)] = []
             dfsCompleteness(doc.root, into: &out)

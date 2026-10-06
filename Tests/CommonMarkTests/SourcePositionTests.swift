@@ -52,7 +52,7 @@ struct SourcePositionTests {
     @Test("off by default - sourceRange is nil without .sourcePosition")
     func offByDefault() throws {
         let src = "# Hi\n\nHello\n"
-        try MarkdownDocument.withParsedDocument(src) { doc in
+        MarkdownDocument.withParsedDocument(src) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         dfsRanges(doc.root, into: &ranges)
         #expect(ranges.allSatisfy { $0.range == nil })
@@ -63,7 +63,7 @@ struct SourcePositionTests {
     func headingParagraph() throws {
         // "# Hi" on line 1, blank line 2, "Hello world" on line 3.
         let src = "# Hi\n\nHello world\n"
-        try MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
+        MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         dfsRanges(doc.root, into: &ranges)
 
@@ -85,7 +85,7 @@ struct SourcePositionTests {
     @Test("block quote start/end")
     func blockQuote() throws {
         let src = "> quote\n"
-        try MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
+        MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         dfsRanges(doc.root, into: &ranges)
         let bq = range(in: ranges) { $0 == .blockQuote }
@@ -97,7 +97,7 @@ struct SourcePositionTests {
     @Test("list item start columns")
     func listItems() throws {
         let src = "- a\n- b\n"
-        try MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
+        MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         dfsRanges(doc.root, into: &ranges)
 
@@ -208,7 +208,7 @@ struct SourcePositionTests {
     func byteColumns() throws {
         // "aé b": a(1 byte) é(2 bytes) space(1) b(1) = 5 bytes.
         let src = "aé b\n"
-        try MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
+        MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         dfsRanges(doc.root, into: &ranges)
         let para = range(in: ranges) { $0 == .paragraph }
@@ -221,7 +221,7 @@ struct SourcePositionTests {
     @Test("indented code block start column accounts for indentation")
     func indentedCodeStart() throws {
         let src = "    code\n"
-        try MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
+        MarkdownDocument.withParsedDocument(src, options: .sourcePosition) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         dfsRanges(doc.root, into: &ranges)
         let code = range(in: ranges) { if case .codeBlock = $0 { return true } else { return false } }

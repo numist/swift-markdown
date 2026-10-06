@@ -59,18 +59,10 @@ struct MarkupParser {
             }
         }
 
-        let raw: RawMarkup
-        do {
-            // cmark-swift borrows the source for the document's lifetime, so conversion happens inside
-            // the nonescaping `withParsedDocument` closure; only the fully-owned `RawMarkup` tree escapes.
-            raw = try MarkdownDocument.withParsedDocument(string, options: cmOptions) { document in
-                convert(document.root, source: source, options: options)
-            }
-        } catch {
-            // Defensive handling of the parser's declared throwing contract (an internal parsing
-            // limit): map any such error to an empty document. Block-quote nesting is uncapped, so the
-            // parser currently imposes no limit and this is unreachable in practice.
-            raw = .document(parsedRange: nil, [])
+        // cmark-swift borrows the source for the document's lifetime, so conversion happens inside
+        // the nonescaping `withParsedDocument` closure; only the fully-owned `RawMarkup` tree escapes.
+        let raw = MarkdownDocument.withParsedDocument(string, options: cmOptions) { document in
+            convert(document.root, source: source, options: options)
         }
 
         let data = _MarkupData(AbsoluteRawMarkup(markup: raw, metadata: MarkupMetadata(id: .newRoot(), indexInParent: 0)))

@@ -45,7 +45,7 @@ struct TasklistLazyContinuationRangeTests {
     private func ranges(
         in src: String, options: MarkdownDocument.ParseOptions
     ) throws -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] {
-        try MarkdownDocument.withParsedDocument(src, options: options) {
+        MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)

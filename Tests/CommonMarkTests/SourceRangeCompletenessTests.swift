@@ -98,7 +98,7 @@ struct SourceRangeCompletenessTests {
     func nulReplacementPreservesRanges() throws {
         func nodes(_ markdown: String) throws -> [(kind: String, range: String)] {
             var nodes: [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)] = []
-            try MarkdownDocument.withParsedDocument(markdown, options: Self.options) { doc in
+            MarkdownDocument.withParsedDocument(markdown, options: Self.options) { doc in
                 dfsCompleteness(doc.root, into: &nodes)
             }
             return nodes.map { ("\($0.kind)", String(describing: $0.range)) }
@@ -203,7 +203,7 @@ struct SourceRangeCompletenessTests {
         for ex in examples {
             var nodes: [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)] = []
             let markdown = rewrite(ex.markdown)
-            try MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
+            MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
                 dfsCompleteness(doc.root, into: &nodes)
             }
             totalNodes += nodes.count

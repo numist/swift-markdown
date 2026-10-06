@@ -21,7 +21,7 @@ import Testing
 struct TableVsSetextTests {
 
     private func kinds(_ source: String) throws -> (hasTable: Bool, hasHeading: Bool, hasList: Bool, bodyCellTexts: [String]) {
-        try MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> (Bool, Bool, Bool, [String]) in
+        MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> (Bool, Bool, Bool, [String]) in
             var hasTable = false, hasHeading = false, hasList = false
             var bodyCells: [String] = []
             func walk(_ n: borrowing MarkdownNode) {

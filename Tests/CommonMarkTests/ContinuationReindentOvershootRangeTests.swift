@@ -33,7 +33,7 @@ struct ContinuationReindentOvershootRangeTests {
         _ source: String, options: MarkdownDocument.ParseOptions
     ) throws -> [Range<Pos>?] {
         var out: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc in
             dfsRanges(doc.root, into: &out)
         }
         return out.filter { $0.kind == .text }.map(\.range)

@@ -48,7 +48,7 @@ struct TaskListCheckboxStrstrQuirkTests {
     private func checkedState(
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> Bool? {
-        let state: Bool?? = try MarkdownDocument.withParsedDocument(src, options: options) { doc -> Bool?? in
+        let state: Bool?? = MarkdownDocument.withParsedDocument(src, options: options) { doc -> Bool?? in
             firstItemChecked(doc.root)
         }
         // Fixture-sanity: a list item must exist, so a checked/unchecked claim can't pass vacuously

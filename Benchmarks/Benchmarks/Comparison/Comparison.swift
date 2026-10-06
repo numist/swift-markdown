@@ -180,7 +180,7 @@ let benchmarks: @Sendable () -> Void = {
 
     Benchmark("Parse small markdown sample (cmark-swift)") { benchmark in
         for _ in benchmark.scaledIterations {
-            try! MarkdownDocument.withParsedDocument(sample) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(sample) { document in blackHole(document.root.kind) }
         }
     }
 
@@ -199,7 +199,7 @@ let benchmarks: @Sendable () -> Void = {
     
     Benchmark("Parse 1 KB files (cmark-swift)") { benchmark in
         for file in files1KB {
-            try! MarkdownDocument.withParsedDocument(file.content) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(file.content) { document in blackHole(document.root.kind) }
         }
     }
     
@@ -215,7 +215,7 @@ let benchmarks: @Sendable () -> Void = {
     
     Benchmark("Parse 100 KB files (cmark-swift)") { benchmark in
         for file in files100KB {
-            try! MarkdownDocument.withParsedDocument(file.content) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(file.content) { document in blackHole(document.root.kind) }
         }
     }
     
@@ -231,7 +231,7 @@ let benchmarks: @Sendable () -> Void = {
     
     Benchmark("Parse 1 MB files (cmark-swift)") { benchmark in
         for file in files1MB {
-            try! MarkdownDocument.withParsedDocument(file.content) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(file.content) { document in blackHole(document.root.kind) }
         }
     }
     
@@ -250,7 +250,7 @@ let benchmarks: @Sendable () -> Void = {
     Benchmark("Parse inline strings (cmark-swift, inline-only)") { benchmark in
         for _ in benchmark.scaledIterations {
             for file in inlineFiles {
-                try! MarkdownDocument.withParsedDocument(file.content, options: .inlineOnly) { document in blackHole(document.root.kind) }
+                MarkdownDocument.withParsedDocument(file.content, options: .inlineOnly) { document in blackHole(document.root.kind) }
             }
         }
     }
@@ -273,7 +273,7 @@ let benchmarks: @Sendable () -> Void = {
 
     Benchmark("Parse GFM feature sample (cmark-swift, GFM)") { benchmark in
         for _ in benchmark.scaledIterations {
-            try! MarkdownDocument.withParsedDocument(gfmFeatureSample, options: gfmSwiftOptions) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(gfmFeatureSample, options: gfmSwiftOptions) { document in blackHole(document.root.kind) }
         }
     }
 
@@ -285,7 +285,7 @@ let benchmarks: @Sendable () -> Void = {
 
     Benchmark("Parse small markdown sample (cmark-swift, GFM)") { benchmark in
         for _ in benchmark.scaledIterations {
-            try! MarkdownDocument.withParsedDocument(sample, options: gfmSwiftOptions) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(sample, options: gfmSwiftOptions) { document in blackHole(document.root.kind) }
         }
     }
 
@@ -297,7 +297,7 @@ let benchmarks: @Sendable () -> Void = {
 
     Benchmark("Parse 1 KB files (cmark-swift, GFM)") { benchmark in
         for file in files1KB {
-            try! MarkdownDocument.withParsedDocument(file.content, options: gfmSwiftOptions) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(file.content, options: gfmSwiftOptions) { document in blackHole(document.root.kind) }
         }
     }
 
@@ -309,7 +309,7 @@ let benchmarks: @Sendable () -> Void = {
 
     Benchmark("Parse 100 KB files (cmark-swift, GFM)") { benchmark in
         for file in files100KB {
-            try! MarkdownDocument.withParsedDocument(file.content, options: gfmSwiftOptions) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(file.content, options: gfmSwiftOptions) { document in blackHole(document.root.kind) }
         }
     }
 
@@ -321,7 +321,7 @@ let benchmarks: @Sendable () -> Void = {
 
     Benchmark("Parse 1 MB files (cmark-swift, GFM)") { benchmark in
         for file in files1MB {
-            try! MarkdownDocument.withParsedDocument(file.content, options: gfmSwiftOptions) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(file.content, options: gfmSwiftOptions) { document in blackHole(document.root.kind) }
         }
     }
 

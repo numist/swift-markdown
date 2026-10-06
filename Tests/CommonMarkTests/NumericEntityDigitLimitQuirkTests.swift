@@ -49,7 +49,7 @@ struct NumericEntityDigitLimitQuirkTests {
     private func text(
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> String {
-        let (out, count): (String, Int) = try MarkdownDocument.withParsedDocument(src, options: options) { doc -> (String, Int) in
+        let (out, count): (String, Int) = MarkdownDocument.withParsedDocument(src, options: options) { doc -> (String, Int) in
             var out = ""
             var count = 0
             collectText(doc.root, into: &out, count: &count)

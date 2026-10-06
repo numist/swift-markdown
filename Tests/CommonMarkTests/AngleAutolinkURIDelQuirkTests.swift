@@ -61,7 +61,7 @@ struct AngleAutolinkURIDelQuirkTests {
     private func linkURL(
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> String? {
-        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> String? in
+        MarkdownDocument.withParsedDocument(src, options: options) { doc -> String? in
             firstLinkURL(doc.root) ?? nil
         }
     }
@@ -69,7 +69,7 @@ struct AngleAutolinkURIDelQuirkTests {
     private func text(
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> String {
-        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> String in
+        MarkdownDocument.withParsedDocument(src, options: options) { doc -> String in
             collectText(doc.root)
         }
     }

@@ -43,7 +43,7 @@ struct LazyContinuationResidualTests {
     private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition]
 
     private func content(_ src: String, _ options: MarkdownDocument.ParseOptions) throws -> [(kind: MarkdownNode.Kind, literal: String?)] {
-        try MarkdownDocument.withParsedDocument(src, options: options) { doc in
+        MarkdownDocument.withParsedDocument(src, options: options) { doc in
             var out: [(kind: MarkdownNode.Kind, literal: String?)] = []
             dfsContent(doc.root, into: &out)
             return out

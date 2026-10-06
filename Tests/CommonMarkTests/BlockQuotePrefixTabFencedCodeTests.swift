@@ -23,7 +23,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // optional column, leaving two columns that materialize as two content spaces.
     @Test("tab right after `>` leaves two content spaces")
     func tabAfterMarkerLeavesTwoSpaces() throws {
-        try MarkdownDocument.withParsedDocument(">```\n>\t") { doc in
+        MarkdownDocument.withParsedDocument(">```\n>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .fencedCode()])
             #expect(codeBlocks(doc).map(\.literal) == ["  \n"])
@@ -33,7 +33,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // FIX: the two leftover tab columns precede the literal `x`.
     @Test("tab right after `>` then content keeps the leftover spaces before the content")
     func tabAfterMarkerThenContent() throws {
-        try MarkdownDocument.withParsedDocument(">```\n>\tx") { doc in
+        MarkdownDocument.withParsedDocument(">```\n>\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .fencedCode()])
             #expect(codeBlocks(doc).map(\.literal) == ["  x\n"])
@@ -44,7 +44,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // (no space), so the tab still straddles the marker's optional column and leaves two spaces.
     @Test("opening fence with a trailing space, body tab still leaves two spaces")
     func openingFenceSpaceBodyTab() throws {
-        try MarkdownDocument.withParsedDocument("> ```\n>\t") { doc in
+        MarkdownDocument.withParsedDocument("> ```\n>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .fencedCode()])
             #expect(codeBlocks(doc).map(\.literal) == ["  \n"])
@@ -55,7 +55,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // wide); one optional column is consumed, leaving a single content space.
     @Test("tab after a doubly-nested `>>` leaves one content space")
     func tabAfterNestedMarkers() throws {
-        try MarkdownDocument.withParsedDocument(">>```\n>>\t") { doc in
+        MarkdownDocument.withParsedDocument(">>```\n>>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode()])
             #expect(codeBlocks(doc).map(\.literal) == [" \n"])
@@ -66,7 +66,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // then literal code content - not split. Must stay untouched.
     @Test("space then tab keeps the tab as literal code content")
     func spaceThenTabIsLiteral() throws {
-        try MarkdownDocument.withParsedDocument("> ```\n> \t") { doc in
+        MarkdownDocument.withParsedDocument("> ```\n> \t") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .fencedCode()])
             #expect(codeBlocks(doc).map(\.literal) == ["\t\n"])
@@ -78,7 +78,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // and leaving three content spaces.
     @Test("indented-fence body tab splits at the fence-indent boundary (unchanged)")
     func indentedFenceBodyTab() throws {
-        try MarkdownDocument.withParsedDocument(" ```\n\tx") { doc in
+        MarkdownDocument.withParsedDocument(" ```\n\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .fencedCode(offset: 1)])
             #expect(codeBlocks(doc).map(\.literal) == ["   x\n"])
@@ -90,7 +90,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // untouched.
     @Test("list-item fenced body tab stays literal after the content indent (unchanged)")
     func listItemFenceBodyTab() throws {
-        try MarkdownDocument.withParsedDocument("- ```\n  \tx") { doc in
+        MarkdownDocument.withParsedDocument("- ```\n  \tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .bulletList(), .item(checked: nil), .fencedCode()])
             #expect(codeBlocks(doc).map(\.literal) == ["\tx\n"])
@@ -101,7 +101,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // the leftover columns are stripped as paragraph leading whitespace (content is just `x`).
     @Test("tab after `>` in a paragraph strips to first content (unchanged)")
     func tabAfterMarkerParagraph() throws {
-        try MarkdownDocument.withParsedDocument(">\tx") { doc in
+        MarkdownDocument.withParsedDocument(">\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .paragraph, .text])
             #expect(dfs(doc).compactMap(\.literal) == ["x"])
@@ -112,7 +112,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // stripped; content is `h`.
     @Test("tab after `>` before an ATX heading strips to the heading text (unchanged)")
     func tabAfterMarkerHeading() throws {
-        try MarkdownDocument.withParsedDocument(">\t# h") { doc in
+        MarkdownDocument.withParsedDocument(">\t# h") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .heading(level: 1), .text])
             #expect(dfs(doc).compactMap(\.literal) == ["h"])
@@ -126,7 +126,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // becomes a Paragraph under the outer quote, never an indented code block.
     @Test("dropped inner `>` re-dispatches the tail as a paragraph, not indented code")
     func nestedInnerMarkerAbsentReDispatchesParagraph() throws {
-        try MarkdownDocument.withParsedDocument(">>```\n>\tx") { doc in
+        MarkdownDocument.withParsedDocument(">>```\n>\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode(), .paragraph, .text])
             #expect(codeBlocks(doc).map(\.literal) == [""])
@@ -138,7 +138,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // (the failed inner marker closes nothing else, and the blank line adds no content).
     @Test("dropped inner `>` with a blank tail keeps just the empty nested code block")
     func nestedInnerMarkerAbsentBlankTail() throws {
-        try MarkdownDocument.withParsedDocument(">>```\n>\t") { doc in
+        MarkdownDocument.withParsedDocument(">>```\n>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode()])
             #expect(codeBlocks(doc).map(\.literal) == [""])
@@ -154,7 +154,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // stripping the whole tab and dropping the content.
     @Test("tab after `>` on the opening fence line leaves one content space")
     func openingLineTabFenceOffsetLeavesOneSpace() throws {
-        try MarkdownDocument.withParsedDocument(">\t```\n>\t") { doc in
+        MarkdownDocument.withParsedDocument(">\t```\n>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .fencedCode(offset: 1)])
             #expect(codeBlocks(doc).map(\.literal) == [" \n"])
@@ -164,7 +164,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // FIX: the same opening-line tab, with content on the body line: one leftover column precedes `x`.
     @Test("tab after `>` on the opening fence line keeps one space before content")
     func openingLineTabFenceOffsetThenContent() throws {
-        try MarkdownDocument.withParsedDocument(">\t```\n>\tx") { doc in
+        MarkdownDocument.withParsedDocument(">\t```\n>\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds == [.document, .blockQuote, .fencedCode(offset: 1)])
             #expect(codeBlocks(doc).map(\.literal) == [" x\n"])

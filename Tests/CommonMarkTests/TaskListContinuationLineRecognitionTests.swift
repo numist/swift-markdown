@@ -70,7 +70,7 @@ struct TaskListContinuationLineRecognitionTests {
     private func firstChecked(
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> Bool? {
-        let state: Bool?? = try MarkdownDocument.withParsedDocument(src, options: options) { doc -> Bool?? in
+        let state: Bool?? = MarkdownDocument.withParsedDocument(src, options: options) { doc -> Bool?? in
             firstItemChecked(doc.root)
         }
         // Fixture-sanity: a list item must exist, so an "ordinary item" claim can't pass vacuously
@@ -81,7 +81,7 @@ struct TaskListContinuationLineRecognitionTests {
     private func hasTaskItem(
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> Bool {
-        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> Bool in
+        MarkdownDocument.withParsedDocument(src, options: options) { doc -> Bool in
             anyTaskItem(doc.root)
         }
     }

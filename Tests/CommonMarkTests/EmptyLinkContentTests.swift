@@ -32,7 +32,7 @@ struct EmptyLinkContentTests {
     @Test("content vends empty URL and title spans")
     func borrowedContent() throws {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        let (url, title) = try MarkdownDocument.withParsedDocument(source) { doc -> (String?, String?) in
+        let (url, title) = MarkdownDocument.withParsedDocument(source) { doc -> (String?, String?) in
             var url: String?
             var title: String?
             func walk(_ node: borrowing MarkdownNode) {

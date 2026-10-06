@@ -19,7 +19,7 @@ struct AppleOS26InitializerTests {
     func stringInitializer() throws {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "# Title\n\nA paragraph with *emphasis*."
-        let doc = try MarkdownDocument(parsing: source)
+        let doc = MarkdownDocument(parsing: source)
         let kinds = dfs(doc).map { $0.kind }
         #expect(kinds.first == .document)
         #expect(kinds.contains(.heading(level: 1)))
@@ -31,9 +31,9 @@ struct AppleOS26InitializerTests {
     func utf8SpanInitializer() throws {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "one `code` two"
-        let viaString = try MarkdownDocument(parsing: source)
+        let viaString = MarkdownDocument(parsing: source)
         let stringKinds = dfs(viaString).map { $0.kind }
-        let viaSpan = try MarkdownDocument(parsing: source.utf8Span)
+        let viaSpan = MarkdownDocument(parsing: source.utf8Span)
         let spanKinds = dfs(viaSpan).map { $0.kind }
         #expect(spanKinds == stringKinds)
         #expect(spanKinds.contains(where: { if case .codeInline = $0 { true } else { false } }))
@@ -43,7 +43,7 @@ struct AppleOS26InitializerTests {
     func sourceAccessorRoundTrips() throws {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "l\u{ED}ne one\nline two"   // `í` is a 2-byte scalar
-        let doc = try MarkdownDocument(parsing: source)
+        let doc = MarkdownDocument(parsing: source)
         #expect(String(copying: doc.source) == source)
     }
 }

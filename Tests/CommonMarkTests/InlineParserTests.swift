@@ -31,7 +31,7 @@ struct CodeSpanTests {
     @Test("simple single-backtick code span")
     func singleBacktick() throws {
         let source = "`foo`"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines.count == 1)
         #expect(inlines[0].kind == .codeInline(backtickCount: 1))
@@ -42,7 +42,7 @@ struct CodeSpanTests {
     @Test("multi-backtick fence allows interior backticks")
     func multiBacktick() throws {
         let source = "``foo `bar` baz``"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines.count == 1)
         #expect(inlines[0].kind == .codeInline(backtickCount: 2))
@@ -53,7 +53,7 @@ struct CodeSpanTests {
     @Test("text before and after the code span")
     func surroundingText() throws {
         let source = "foo `code` bar"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         let texts = inlines.map { $0.literal }
@@ -65,7 +65,7 @@ struct CodeSpanTests {
     @Test("unmatched opening backticks remain as text")
     func unmatchedBacktick() throws {
         let source = "`foo"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines.count == 1)
         #expect(inlines[0].kind == .text)
@@ -76,7 +76,7 @@ struct CodeSpanTests {
     @Test("mismatched fence lengths leave the line as text")
     func mismatchedLength() throws {
         let source = "`` foo `"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         // No close of length 2 → entire line stays as text.
         let kinds = inlines.map { $0.kind }
@@ -87,7 +87,7 @@ struct CodeSpanTests {
     @Test("single space stripped from both ends when content is bracketed by spaces")
     func singleSpaceStripping() throws {
         let source = "` foo `"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].kind == .codeInline(backtickCount: 1))
         #expect(inlines[0].literal == "foo")
@@ -97,7 +97,7 @@ struct CodeSpanTests {
     @Test("only ONE space stripped per side")
     func oneSpacePerSide() throws {
         let source = "`  foo  `"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].kind == .codeInline(backtickCount: 1))
         #expect(inlines[0].literal == " foo ")
@@ -107,7 +107,7 @@ struct CodeSpanTests {
     @Test("all-space content is preserved (no stripping)")
     func allSpacesPreserved() throws {
         let source = "`  `"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].kind == .codeInline(backtickCount: 1))
         #expect(inlines[0].literal == "  ")
@@ -117,7 +117,7 @@ struct CodeSpanTests {
     @Test("code span with trailing space but no leading space - no stripping")
     func asymmetricSpaces() throws {
         let source = "`foo `"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].literal == "foo ")
         }
@@ -126,7 +126,7 @@ struct CodeSpanTests {
     @Test("code span with three backticks each side")
     func threeBackticks() throws {
         let source = "```foo```"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].kind == .codeInline(backtickCount: 3))
         #expect(inlines[0].literal == "foo")
@@ -136,7 +136,7 @@ struct CodeSpanTests {
     @Test("multiple code spans in a paragraph")
     func multipleSpans() throws {
         let source = "a `b` c `d` e"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         #expect(kinds == [.text, .codeInline(backtickCount: 1), .text, .codeInline(backtickCount: 1), .text])
@@ -169,7 +169,7 @@ struct CodeSpanTests {
     @Test("code span inside a heading")
     func insideHeading() throws {
         let source = "# `foo` bar"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].kind == .codeInline(backtickCount: 1))
         #expect(inlines[0].literal == "foo")
@@ -189,7 +189,7 @@ struct CodeSpanTests {
         // the fix the span read a single-segment window and truncated to `x  ` (dropping `y`, keeping
         // the stripped continuation space).
         let source = "`x\n y`"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].kind == .codeInline(backtickCount: 1))
         #expect(inlines[0].literal == "x y")
@@ -203,7 +203,7 @@ struct LineBreakTests {
     @Test("plain newline becomes a soft break")
     func softBreak() throws {
         let source = "foo\nbar"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         #expect(kinds == [.text, .softBreak, .text])
@@ -213,7 +213,7 @@ struct LineBreakTests {
     @Test("two trailing spaces before newline produce a hard break")
     func hardBreakSpaces() throws {
         let source = "foo  \nbar"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         #expect(kinds == [.text, .lineBreak, .text])
@@ -225,7 +225,7 @@ struct LineBreakTests {
     @Test("backslash before newline produces a hard break")
     func hardBreakBackslash() throws {
         let source = "foo\\\nbar"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         #expect(kinds == [.text, .lineBreak, .text])
@@ -237,7 +237,7 @@ struct LineBreakTests {
     @Test("single trailing space is not a hard break")
     func singleSpaceIsSoft() throws {
         let source = "foo \nbar"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         #expect(kinds == [.text, .softBreak, .text])
@@ -249,7 +249,7 @@ struct LineBreakTests {
     @Test("3+ trailing spaces still produce a hard break")
     func manySpaces() throws {
         let source = "foo   \nbar"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         #expect(kinds == [.text, .lineBreak, .text])
@@ -260,7 +260,7 @@ struct LineBreakTests {
     @Test("multiple soft breaks in a paragraph")
     func multipleSoftBreaks() throws {
         let source = "a\nb\nc"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         #expect(kinds == [.text, .softBreak, .text, .softBreak, .text])
@@ -270,7 +270,7 @@ struct LineBreakTests {
     @Test("hard and soft breaks mixed")
     func mixed() throws {
         let source = "a  \nb\nc"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         #expect(kinds == [.text, .lineBreak, .text, .softBreak, .text])
@@ -284,7 +284,7 @@ struct EntityTests {
     @Test("named: amp")
     func amp() throws {
         let source = "foo &amp; bar"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         // Adjacent text is coalesced into one node (cmark's consolidate_text_nodes).
         #expect(inlines.count == 1)
@@ -295,7 +295,7 @@ struct EntityTests {
     @Test("named: lt and gt")
     func ltGt() throws {
         let source = "&lt;tag&gt;"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let texts = inlines.compactMap { $0.literal }
         #expect(texts == ["<tag>"])
@@ -305,7 +305,7 @@ struct EntityTests {
     @Test("named: copy → ©")
     func copyEntity() throws {
         let source = "&copy;"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].literal == "©")
         }
@@ -314,7 +314,7 @@ struct EntityTests {
     @Test("named: hellip → …")
     func hellip() throws {
         let source = "wait&hellip;"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let texts = inlines.compactMap { $0.literal }
         #expect(texts == ["wait…"])
@@ -324,7 +324,7 @@ struct EntityTests {
     @Test("named: unknown entity stays as literal text")
     func unknownNamed() throws {
         let source = "&qwerty;"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         // The whole sequence stays as one text node.
         #expect(inlines.count == 1)
@@ -335,7 +335,7 @@ struct EntityTests {
     @Test("numeric decimal")
     func numericDecimal() throws {
         let source = "&#42;"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].literal == "*")
         }
@@ -344,7 +344,7 @@ struct EntityTests {
     @Test("numeric hex lowercase")
     func numericHexLower() throws {
         let source = "&#x2a;"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].literal == "*")
         }
@@ -353,7 +353,7 @@ struct EntityTests {
     @Test("numeric hex uppercase X")
     func numericHexUpper() throws {
         let source = "&#X2A;"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].literal == "*")
         }
@@ -363,7 +363,7 @@ struct EntityTests {
     func numericNonASCII() throws {
         // &#x2026; → … (U+2026)
         let source = "&#x2026;"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].literal == "…")
         }
@@ -372,7 +372,7 @@ struct EntityTests {
     @Test("numeric NUL is replaced with U+FFFD")
     func numericNUL() throws {
         let source = "&#0;"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].literal == "\u{FFFD}")
         }
@@ -382,7 +382,7 @@ struct EntityTests {
     func numericOutOfRange() throws {
         // 0x110000 is 1 above U+10FFFF (the max valid codepoint).
         let source = "&#x110000;"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].literal == "\u{FFFD}")
         }
@@ -392,7 +392,7 @@ struct EntityTests {
     func numericTooManyDigits() throws {
         // 7 hex digits exceeds the spec's max of 6.
         let source = "&#x1100000;"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].literal == "&#x1100000;")
         }
@@ -401,7 +401,7 @@ struct EntityTests {
     @Test("missing semicolon → not an entity")
     func missingSemicolon() throws {
         let source = "&amp not entity"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].literal == "&amp not entity")
         }
@@ -410,7 +410,7 @@ struct EntityTests {
     @Test("entity at start, middle, and end")
     func entityPositions() throws {
         let source = "&amp; mid &amp; end&amp;"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let texts = inlines.compactMap { $0.literal }
         #expect(texts == ["& mid & end&"])
@@ -424,7 +424,7 @@ struct EntityTests {
     @Test("valid entity decodes on an indented lazy-continuation line (multi-segment)")
     func entityDecodesOnLazyContinuation() throws {
         let source = "k\n &amp;x"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
             let inlines = paragraphInlines(doc)
             let texts = inlines.compactMap { $0.literal }
             #expect(texts == ["k", "&x"])
@@ -437,7 +437,7 @@ struct EntityTests {
     @Test("non-entity `&` on an indented lazy-continuation line stays literal (multi-segment)")
     func nonEntityAmpersandOnLazyContinuation() throws {
         let source = "k\n &["
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
             let inlines = paragraphInlines(doc)
             let texts = inlines.compactMap { $0.literal }
             #expect(texts == ["k", "&["])
@@ -471,7 +471,7 @@ struct AutolinkTests {
     @Test("URI autolink: http")
     func uriHTTP() throws {
         let source = "<http://example.com>"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines.count == 1)
         #expect(inlines[0].kind == .link)
@@ -484,7 +484,7 @@ struct AutolinkTests {
     @Test("URI autolink: ftp")
     func uriFTP() throws {
         let source = "<ftp://files.example.org/foo>"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "ftp://files.example.org/foo")
         }
@@ -493,7 +493,7 @@ struct AutolinkTests {
     @Test("URI autolink: custom scheme")
     func customScheme() throws {
         let source = "<x-custom:bar>"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "x-custom:bar")
         }
@@ -502,7 +502,7 @@ struct AutolinkTests {
     @Test("URI autolink with surrounding text")
     func surroundingText() throws {
         let source = "before <https://swift.org> after"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         #expect(kinds == [.text, .link, .text])
@@ -512,7 +512,7 @@ struct AutolinkTests {
     @Test("autolink rejects whitespace in URI")
     func whitespaceRejected() throws {
         let source = "<http://example.com x>"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         #expect(!kinds.contains(.link))
@@ -522,7 +522,7 @@ struct AutolinkTests {
     @Test("scheme too short is not an autolink")
     func shortScheme() throws {
         let source = "<a:foo>"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         #expect(!kinds.contains(.link))
@@ -532,7 +532,7 @@ struct AutolinkTests {
     @Test("email autolink")
     func emailBasic() throws {
         let source = "<foo@bar.example.com>"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "mailto:foo@bar.example.com")
         #expect(info.text == "foo@bar.example.com")
@@ -542,7 +542,7 @@ struct AutolinkTests {
     @Test("email autolink with punctuation in local part")
     func emailWithPunct() throws {
         let source = "<f.o.o+bar@example.com>"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "mailto:f.o.o+bar@example.com")
         }
@@ -551,7 +551,7 @@ struct AutolinkTests {
     @Test("email autolink with hyphen in domain")
     func emailHyphenDomain() throws {
         let source = "<a@b-c.example>"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "mailto:a@b-c.example")
         }
@@ -560,7 +560,7 @@ struct AutolinkTests {
     @Test("invalid email: leading hyphen in domain label")
     func emailLeadingHyphenLabel() throws {
         let source = "<a@-bad.example>"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         #expect(!kinds.contains(.link))
@@ -570,7 +570,7 @@ struct AutolinkTests {
     @Test("`<` followed by non-autolink stays as text")
     func nonAutolink() throws {
         let source = "<not autolink"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         #expect(inlines[0].literal == "<not autolink")
         }
@@ -597,7 +597,7 @@ struct InlineHTMLTests {
     @Test("simple open tag")
     func simpleOpenTag() throws {
         let source = "a <b> c"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = paragraphInlines(doc).map { $0.kind }
         #expect(kinds == [.text, .htmlInline, .text])
         #expect(Self.firstHTMLInline(doc) == "<b>")
@@ -607,7 +607,7 @@ struct InlineHTMLTests {
     @Test("open tag with attribute")
     func openTagWithAttribute() throws {
         let source = "x <a href=\"x.html\">"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         #expect(Self.firstHTMLInline(doc) == "<a href=\"x.html\">")
         }
     }
@@ -615,7 +615,7 @@ struct InlineHTMLTests {
     @Test("open tag with multiple attributes (single, double, unquoted)")
     func openTagMultipleAttributes() throws {
         let source = "x <input type='text' name=foo value=\"v\">"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         #expect(Self.firstHTMLInline(doc) == "<input type='text' name=foo value=\"v\">")
         }
     }
@@ -623,7 +623,7 @@ struct InlineHTMLTests {
     @Test("self-closing open tag")
     func selfClosingTag() throws {
         let source = "x <br />"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         #expect(Self.firstHTMLInline(doc) == "<br />")
         }
     }
@@ -631,7 +631,7 @@ struct InlineHTMLTests {
     @Test("close tag")
     func closeTag() throws {
         let source = "x </span>"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         #expect(Self.firstHTMLInline(doc) == "</span>")
         }
     }
@@ -639,7 +639,7 @@ struct InlineHTMLTests {
     @Test("close tag with trailing whitespace")
     func closeTagTrailingSpaces() throws {
         let source = "x </span   >"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         #expect(Self.firstHTMLInline(doc) == "</span   >")
         }
     }
@@ -647,7 +647,7 @@ struct InlineHTMLTests {
     @Test("HTML comment")
     func htmlComment() throws {
         let source = "x <!-- a comment -->"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         #expect(Self.firstHTMLInline(doc) == "<!-- a comment -->")
         }
     }
@@ -655,7 +655,7 @@ struct InlineHTMLTests {
     @Test("empty comment <!-->")
     func emptyComment() throws {
         let source = "x <!-->"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         #expect(Self.firstHTMLInline(doc) == "<!-->")
         }
     }
@@ -663,7 +663,7 @@ struct InlineHTMLTests {
     @Test("near-empty comment <!--->")
     func nearEmptyComment() throws {
         let source = "x <!--->"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         #expect(Self.firstHTMLInline(doc) == "<!--->")
         }
     }
@@ -671,7 +671,7 @@ struct InlineHTMLTests {
     @Test("processing instruction")
     func processingInstruction() throws {
         let source = "x <?php echo 1; ?>"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         #expect(Self.firstHTMLInline(doc) == "<?php echo 1; ?>")
         }
     }
@@ -679,7 +679,7 @@ struct InlineHTMLTests {
     @Test("declaration")
     func declaration() throws {
         let source = "x <!DOCTYPE html>"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         #expect(Self.firstHTMLInline(doc) == "<!DOCTYPE html>")
         }
     }
@@ -687,7 +687,7 @@ struct InlineHTMLTests {
     @Test("CDATA section")
     func cdataSection() throws {
         let source = "x <![CDATA[ raw <stuff> ]]>"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         #expect(Self.firstHTMLInline(doc) == "<![CDATA[ raw <stuff> ]]>")
         }
     }
@@ -695,7 +695,7 @@ struct InlineHTMLTests {
     @Test("invalid: unclosed tag stays as text")
     func unclosedTag() throws {
         let source = "<a"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = paragraphInlines(doc).map { $0.kind }
         #expect(!kinds.contains(.htmlInline))
         }
@@ -704,7 +704,7 @@ struct InlineHTMLTests {
     @Test("invalid: unterminated comment stays as text")
     func unterminatedComment() throws {
         let source = "<!-- never closed"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = paragraphInlines(doc).map { $0.kind }
         #expect(!kinds.contains(.htmlInline))
         }
@@ -713,7 +713,7 @@ struct InlineHTMLTests {
     @Test("text + html + text mixes correctly")
     func mixedWithText() throws {
         let source = "before <em>x</em> after"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
         let kinds = inlines.map { $0.kind }
         #expect(kinds == [.text, .htmlInline, .text, .htmlInline, .text])
@@ -731,7 +731,7 @@ struct InlineHTMLTests {
         // The tag's bytes straddle the soft-break segment boundary, so the literal can't be a
         // zero-copy contiguous source slice; it must be materialized from the joined segments.
         let source = "<e\n e=\"\">"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = paragraphInlines(doc).map { $0.kind }
         #expect(kinds == [.htmlInline])
         #expect(Self.firstHTMLInline(doc) == "<e\ne=\"\">")
@@ -766,7 +766,7 @@ struct EmphasisTests {
     @Test("simple *emphasis*")
     func simpleStarEmph() throws {
         let source = "*foo*"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         #expect(inlines.map(\.0) == [.emphasis, .text])
         #expect(inlines[1].1 == "foo")
@@ -776,7 +776,7 @@ struct EmphasisTests {
     @Test("simple _emphasis_")
     func simpleUnderEmph() throws {
         let source = "_foo_"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         #expect(inlines.map(\.0) == [.emphasis, .text])
         #expect(inlines[1].1 == "foo")
@@ -786,7 +786,7 @@ struct EmphasisTests {
     @Test("simple **strong**")
     func simpleStarStrong() throws {
         let source = "**foo**"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         #expect(inlines.map(\.0) == [.strong, .text])
         #expect(inlines[1].1 == "foo")
@@ -796,7 +796,7 @@ struct EmphasisTests {
     @Test("simple __strong__")
     func simpleUnderStrong() throws {
         let source = "__foo__"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         #expect(inlines.map(\.0) == [.strong, .text])
         #expect(inlines[1].1 == "foo")
@@ -806,7 +806,7 @@ struct EmphasisTests {
     @Test("emphasis with surrounding text")
     func surroundingText() throws {
         let source = "a *foo* b"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         #expect(inlines.map(\.0) == [.text, .emphasis, .text, .text])
         #expect(inlines[0].1 == "a ")
@@ -818,7 +818,7 @@ struct EmphasisTests {
     @Test("nested *foo **bar** baz*")
     func nestedStrongInsideEmph() throws {
         let source = "*foo **bar** baz*"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         // emphasis containing: text "foo ", strong containing "bar", text " baz"
         let kinds = inlines.map(\.0)
@@ -832,7 +832,7 @@ struct EmphasisTests {
     @Test("multiple emphasis runs in one paragraph")
     func multipleRuns() throws {
         let source = "*a* and *b*"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         #expect(inlines.map(\.0) == [.emphasis, .text, .text, .emphasis, .text])
         #expect(inlines[1].1 == "a")
@@ -844,7 +844,7 @@ struct EmphasisTests {
     @Test("intraword underscore is not emphasis")
     func intrawordUnderscore() throws {
         let source = "foo_bar_baz"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         // No .emphasis node - _bar_ is intraword and rejected.
         #expect(!inlines.map(\.0).contains(.emphasis))
@@ -854,7 +854,7 @@ struct EmphasisTests {
     @Test("intraword asterisk IS emphasis")
     func intrawordAsterisk() throws {
         let source = "foo*bar*baz"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         #expect(inlines.map(\.0).contains(.emphasis))
         }
@@ -863,7 +863,7 @@ struct EmphasisTests {
     @Test("unmatched single * stays as text")
     func unmatchedStar() throws {
         let source = "*foo"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         #expect(!inlines.map(\.0).contains(.emphasis))
         #expect(!inlines.map(\.0).contains(.strong))
@@ -874,7 +874,7 @@ struct EmphasisTests {
     func asymmetricStarRun() throws {
         // Per CommonMark: should produce <strong><em>foo</em> bar</strong>
         let source = "***foo* bar**"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         // strong containing: emphasis(foo), text " bar"
         #expect(inlines.map(\.0) == [.strong, .emphasis, .text, .text])
@@ -886,7 +886,7 @@ struct EmphasisTests {
     @Test("flanking with punctuation: \"*\"foo\"*\"")
     func quotesAroundEmph() throws {
         let source = "\"*foo*\""
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         // text(`"`), emph(text(`foo`)), text(`"`)
         #expect(inlines.map(\.0) == [.text, .emphasis, .text, .text])
@@ -896,7 +896,7 @@ struct EmphasisTests {
     @Test("emphasis on first byte and last byte of paragraph")
     func boundaryFlanking() throws {
         let source = "*x*"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         #expect(inlines.map(\.0) == [.emphasis, .text])
         #expect(inlines[1].1 == "x")
@@ -906,7 +906,7 @@ struct EmphasisTests {
     @Test("emphasis with embedded code span")
     func emphWithCodeSpan() throws {
         let source = "*a `b` c*"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
         // emph: text "a ", code "b", text " c"
         #expect(inlines.map(\.0) == [.emphasis, .text, .codeInline(backtickCount: 1), .text])
@@ -949,7 +949,7 @@ struct LinkImageTests {
     @Test("inline link: [text](url)")
     func inlineLink() throws {
         let source = "[foo](/url)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLinkOrImage(doc)
         #expect(info.kind == .link)
         #expect(info.url == "/url")
@@ -961,7 +961,7 @@ struct LinkImageTests {
     @Test("inline link with double-quoted title")
     func inlineLinkWithTitle() throws {
         let source = "[foo](/url \"the title\")"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLinkOrImage(doc)
         #expect(info.url == "/url")
         #expect(info.title == "the title")
@@ -972,7 +972,7 @@ struct LinkImageTests {
     @Test("inline link with single-quoted title")
     func inlineLinkSingleQuoted() throws {
         let source = "[foo](/url 'title')"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLinkOrImage(doc)
         #expect(info.title == "title")
         }
@@ -981,7 +981,7 @@ struct LinkImageTests {
     @Test("inline link with paren title")
     func inlineLinkParenTitle() throws {
         let source = "[foo](/url (title))"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLinkOrImage(doc)
         #expect(info.title == "title")
         }
@@ -990,7 +990,7 @@ struct LinkImageTests {
     @Test("inline link with angle-bracketed destination")
     func inlineLinkAngleBracketed() throws {
         let source = "[foo](<http://example.com/path>)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLinkOrImage(doc)
         #expect(info.url == "http://example.com/path")
         }
@@ -999,7 +999,7 @@ struct LinkImageTests {
     @Test("inline link with empty link text")
     func inlineLinkEmptyText() throws {
         let source = "[](/url)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLinkOrImage(doc)
         #expect(info.kind == .link)
         #expect(info.url == "/url")
@@ -1009,7 +1009,7 @@ struct LinkImageTests {
     @Test("inline image: ![alt](src)")
     func inlineImage() throws {
         let source = "![alt](/img.png)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLinkOrImage(doc)
         #expect(info.kind == .image)
         #expect(info.url == "/img.png")
@@ -1020,7 +1020,7 @@ struct LinkImageTests {
     @Test("image with title")
     func imageWithTitle() throws {
         let source = "![alt](/img.png \"caption\")"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLinkOrImage(doc)
         #expect(info.kind == .image)
         #expect(info.title == "caption")
@@ -1030,7 +1030,7 @@ struct LinkImageTests {
     @Test("shortcut reference link")
     func shortcutReference() throws {
         let source = "[foo]: /url \"t\"\n\n[foo]"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLinkOrImage(doc)
         #expect(info.kind == .link)
         #expect(info.url == "/url")
@@ -1042,7 +1042,7 @@ struct LinkImageTests {
     @Test("collapsed reference link [foo][]")
     func collapsedReference() throws {
         let source = "[foo]: /url\n\n[foo][]"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLinkOrImage(doc)
         #expect(info.kind == .link)
         #expect(info.url == "/url")
@@ -1053,7 +1053,7 @@ struct LinkImageTests {
     @Test("full reference link [text][label]")
     func fullReference() throws {
         let source = "[label]: /url\n\n[link text][label]"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLinkOrImage(doc)
         #expect(info.kind == .link)
         #expect(info.url == "/url")
@@ -1064,7 +1064,7 @@ struct LinkImageTests {
     @Test("reference lookup is case-insensitive")
     func referenceCaseInsensitive() throws {
         let source = "[Foo]: /url\n\n[FOO]"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLinkOrImage(doc)
         #expect(info.url == "/url")
         }
@@ -1073,7 +1073,7 @@ struct LinkImageTests {
     @Test("unmatched [ stays as text")
     func unmatchedOpenBracket() throws {
         let source = "[foo"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         // No link/image; the [ remains in the inline tree as text.
         let kinds = paragraphInlines(doc).map(\.kind)
         #expect(!kinds.contains(.link))
@@ -1083,7 +1083,7 @@ struct LinkImageTests {
     @Test("unmatched ] stays as text")
     func unmatchedCloseBracket() throws {
         let source = "foo]"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = paragraphInlines(doc).map(\.kind)
         #expect(!kinds.contains(.link))
         }
@@ -1092,7 +1092,7 @@ struct LinkImageTests {
     @Test("[foo] without ref-def stays as text")
     func shortcutNoMatch() throws {
         let source = "[foo]"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = paragraphInlines(doc).map(\.kind)
         #expect(!kinds.contains(.link))
         }
@@ -1101,7 +1101,7 @@ struct LinkImageTests {
     @Test("emphasis inside link text")
     func emphasisInsideLink() throws {
         let source = "[*foo*](/url)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLinkOrImage(doc)
         #expect(info.kind == .link)
         #expect(info.url == "/url")
@@ -1126,7 +1126,7 @@ struct LinkImageTests {
     @Test("link with no title, simple")
     func multipleLinks() throws {
         let source = "[a](/1) and [b](/2)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         var urls: [String] = []
         let root = doc.root
         root.children.forEach { block in
@@ -1143,7 +1143,7 @@ struct LinkImageTests {
     @Test("nested links not allowed: outer [ becomes text")
     func nestedLinksDisallowed() throws {
         let source = "[outer [inner](/i)](/o)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         // Inner link matches; outer doesn't (no_link_openers).
         var linkUrls: [String] = []
         let root = doc.root
@@ -1161,7 +1161,7 @@ struct LinkImageTests {
     @Test("image can contain inner link")
     func imageContainsLink() throws {
         let source = "![alt with [link](/i)](/img.png)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         // Image matches; the inner link also matches because images don't disable the link opener.
         var hasImage = false
         var hasInnerLink = false
@@ -1220,7 +1220,7 @@ struct ExtendedAttributeTests {
     @Test("inline form: ^[content](attrs)")
     func inlineForm() throws {
         let source = "^[hello](color: red)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "color: red")
         #expect(info.text == "hello")
@@ -1230,7 +1230,7 @@ struct ExtendedAttributeTests {
     @Test("inline form: empty content")
     func emptyContent() throws {
         let source = "^[](attr)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "attr")
         }
@@ -1239,7 +1239,7 @@ struct ExtendedAttributeTests {
     @Test("inline form: attrs with whitespace")
     func attrsWithWhitespace() throws {
         let source = "^[x](color: red, weight: bold)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "color: red, weight: bold")
         }
@@ -1248,7 +1248,7 @@ struct ExtendedAttributeTests {
     @Test("inline form: attrs with balanced parens")
     func attrsWithParens() throws {
         let source = "^[x](rgb(255, 0, 0))"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "rgb(255, 0, 0)")
         }
@@ -1257,7 +1257,7 @@ struct ExtendedAttributeTests {
     @Test("inline form: attrs with backslash-escaped paren")
     func attrsWithEscapedParen() throws {
         let source = "^[x](a\\)b)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstAttribute(doc)
         // The `\)` is an escape; cmark preserves the backslash in the chunk.
         #expect(info.attrs == "a\\)b")
@@ -1267,7 +1267,7 @@ struct ExtendedAttributeTests {
     @Test("inline form with surrounding text")
     func surroundingText() throws {
         let source = "before ^[middle](attr) after"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "attr")
         #expect(info.text == "middle")
@@ -1277,7 +1277,7 @@ struct ExtendedAttributeTests {
     @Test("emphasis inside attribute content")
     func emphasisInside() throws {
         let source = "^[*foo*](attr)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         var hasEmph = false
         let root = doc.root
         root.children.forEach { block in
@@ -1296,7 +1296,7 @@ struct ExtendedAttributeTests {
     @Test("reference def + reference form")
     func referenceForm() throws {
         let source = "^[label]: color: blue\n\n^[content][label]"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "color: blue")
         #expect(info.text == "content")
@@ -1308,7 +1308,7 @@ struct ExtendedAttributeTests {
         // cmark scans the label over the paragraph's flat buffer, so a `^[..]:` definition whose label
         // straddles a soft break is captured normally (`la\nbel` → `la bel`) and produces no visible node.
         let source = "^[la\nbel]: color: blue\n\n^[content][la bel]"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         #expect(doc._storage.attributeReferenceMap["la bel"] != nil)
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == "color: blue")
@@ -1319,7 +1319,7 @@ struct ExtendedAttributeTests {
     @Test("attribute ref defs do not collide with link ref defs")
     func separateRefMaps() throws {
         let source = "[foo]: /url\n^[foo]: color: red\n\n[foo] and ^[content][foo]"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         // Both should be registered.
         #expect(doc._storage.referenceMap["foo"] != nil)
         #expect(doc._storage.attributeReferenceMap["foo"] != nil)
@@ -1341,7 +1341,7 @@ struct ExtendedAttributeTests {
     @Test("invalid: ^[content] without (...) or [label] stays as text")
     func invalidNoFollowup() throws {
         let source = "^[content]"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         // No `.attribute` should be emitted.
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == nil)
@@ -1351,7 +1351,7 @@ struct ExtendedAttributeTests {
     @Test("invalid: unknown reference label fails")
     func invalidUnknownRef() throws {
         let source = "^[content][unknown]"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstAttribute(doc)
         #expect(info.attrs == nil)
         }
@@ -1360,7 +1360,7 @@ struct ExtendedAttributeTests {
     @Test("nested attribute is allowed")
     func nestedAttribute() throws {
         let source = "^[outer ^[inner](b)](a)"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         // Outer attribute matches; inner attribute also nests.
         var attrCount = 0
         let root = doc.root
@@ -1415,7 +1415,7 @@ struct StrikethroughTests {
     @Test("default-disabled: ~text~ stays as text")
     func defaultDisabled() throws {
         let source = "~foo~"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         #expect(Self.firstStrikethrough(doc) == nil)
         }
     }
@@ -1423,7 +1423,7 @@ struct StrikethroughTests {
     @Test("single tilde with strikethrough enabled")
     func singleTilde() throws {
         let source = "~foo~"
-        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
         #expect(Self.firstStrikethrough(doc) == "foo")
         }
     }
@@ -1431,7 +1431,7 @@ struct StrikethroughTests {
     @Test("double tilde with strikethrough enabled")
     func doubleTilde() throws {
         let source = "~~foo~~"
-        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
         #expect(Self.firstStrikethrough(doc) == "foo")
         }
     }
@@ -1439,7 +1439,7 @@ struct StrikethroughTests {
     @Test("strikethrough with surrounding text")
     func surroundingText() throws {
         let source = "before ~foo~ after"
-        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
         #expect(Self.firstStrikethrough(doc) == "foo")
         }
     }
@@ -1447,7 +1447,7 @@ struct StrikethroughTests {
     @Test("doubleTilde flag rejects single tilde")
     func doubleTildeFlagRejects() throws {
         let source = "~foo~"
-        try MarkdownDocument.withParsedDocument(source, options: [.strikethrough, .strikethroughDoubleTilde]) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.strikethrough, .strikethroughDoubleTilde]) { doc in
         #expect(Self.firstStrikethrough(doc) == nil)
         }
     }
@@ -1455,7 +1455,7 @@ struct StrikethroughTests {
     @Test("doubleTilde flag accepts double tilde")
     func doubleTildeFlagAccepts() throws {
         let source = "~~foo~~"
-        try MarkdownDocument.withParsedDocument(source, options: [.strikethrough, .strikethroughDoubleTilde]) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.strikethrough, .strikethroughDoubleTilde]) { doc in
         #expect(Self.firstStrikethrough(doc) == "foo")
         }
     }
@@ -1463,7 +1463,7 @@ struct StrikethroughTests {
     @Test("mismatched tilde lengths don't pair")
     func mismatchedLengths() throws {
         let source = "~foo~~"
-        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
         #expect(Self.firstStrikethrough(doc) == nil)
         }
     }
@@ -1489,7 +1489,7 @@ struct StrikethroughTests {
     @Test("mismatched intervening run across a softbreak suppresses the far pairing")
     func mismatchedInterveningAcrossSoftbreak() throws {
         let source = "~a\n~~b~"
-        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
             #expect(Self.strikethroughCount(doc) == 0)
             #expect(Self.firstStrikethrough(doc) == nil)
         }
@@ -1513,7 +1513,7 @@ struct StrikethroughTests {
     @Test("matched-length pair forms across a softbreak")
     func matchedPairAcrossSoftbreak() throws {
         let source = "~a\nb~"
-        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
             #expect(Self.strikethroughCount(doc) == 1)
         }
     }
@@ -1537,7 +1537,7 @@ struct StrikethroughTests {
     @Test("mismatched run near the closer side forms nothing")
     func mismatchedRunNearCloser() throws {
         let source = "~~b~\n~a"
-        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
             #expect(Self.strikethroughCount(doc) == 0)
         }
     }
@@ -1548,7 +1548,7 @@ struct StrikethroughTests {
     @Test("mismatched intervening run suppresses pairing across a three-line span")
     func mismatchedInterveningThreeLines() throws {
         let source = "~a\nx\n~~b~"
-        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
             #expect(Self.strikethroughCount(doc) == 0)
         }
     }
@@ -1556,7 +1556,7 @@ struct StrikethroughTests {
     @Test("strikethrough nested inside emphasis")
     func nestedInEmphasis() throws {
         let source = "*foo ~bar~ baz*"
-        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
         // The strikethrough should be a child of the emphasis.
         var foundNested = false
         let root = doc.root
@@ -1597,7 +1597,7 @@ struct StrikethroughTests {
     // itself, which the debug surface renders invisibly (appearing as an "empty" strikethrough).
     @Test("VT between tildes pairs into a strikethrough")
     func verticalTabPairs() throws {
-        try MarkdownDocument.withParsedDocument("~\u{0B}~", options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument("~\u{0B}~", options: .strikethrough) { doc in
             #expect(Self.strikethroughCount(doc) == 1)
             #expect(Self.firstStrikethrough(doc) == "\u{0B}")
         }
@@ -1619,7 +1619,7 @@ struct StrikethroughTests {
 
     @Test("VT between double tildes pairs into a strikethrough")
     func verticalTabDoubleTildePairs() throws {
-        try MarkdownDocument.withParsedDocument("~~\u{0B}~~", options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument("~~\u{0B}~~", options: .strikethrough) { doc in
             #expect(Self.strikethroughCount(doc) == 1)
             #expect(Self.firstStrikethrough(doc) == "\u{0B}")
         }
@@ -1630,21 +1630,21 @@ struct StrikethroughTests {
     // and stay literal - no strikethrough forms.
     @Test("FF between tildes stays literal")
     func formFeedStaysLiteral() throws {
-        try MarkdownDocument.withParsedDocument("~\u{0C}~", options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument("~\u{0C}~", options: .strikethrough) { doc in
             #expect(Self.strikethroughCount(doc) == 0)
         }
     }
 
     @Test("space between tildes stays literal")
     func spaceStaysLiteral() throws {
-        try MarkdownDocument.withParsedDocument("~ ~", options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument("~ ~", options: .strikethrough) { doc in
             #expect(Self.strikethroughCount(doc) == 0)
         }
     }
 
     @Test("tab between tildes stays literal")
     func tabStaysLiteral() throws {
-        try MarkdownDocument.withParsedDocument("~\t~", options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument("~\t~", options: .strikethrough) { doc in
             #expect(Self.strikethroughCount(doc) == 0)
         }
     }
@@ -1652,7 +1652,7 @@ struct StrikethroughTests {
     // Fixture sanity: ordinary non-space content between tildes pairs into a strikethrough as always.
     @Test("non-space content between tildes still pairs")
     func contentBetweenTildesPairs() throws {
-        try MarkdownDocument.withParsedDocument("~x~", options: .strikethrough) { doc in
+        MarkdownDocument.withParsedDocument("~x~", options: .strikethrough) { doc in
             #expect(Self.strikethroughCount(doc) == 1)
             #expect(Self.firstStrikethrough(doc) == "x")
         }
@@ -1684,7 +1684,7 @@ struct GFMAutolinkTests {
     @Test("default-disabled: bare URL stays as text")
     func defaultDisabled() throws {
         let source = "visit http://example.com today"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == nil)
         }
@@ -1693,7 +1693,7 @@ struct GFMAutolinkTests {
     @Test("http URL")
     func httpURL() throws {
         let source = "visit http://example.com today"
-        try MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "http://example.com")
         #expect(info.text == "http://example.com")
@@ -1703,7 +1703,7 @@ struct GFMAutolinkTests {
     @Test("https URL")
     func httpsURL() throws {
         let source = "see https://example.com/path?q=1#frag"
-        try MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "https://example.com/path?q=1#frag")
         }
@@ -1712,7 +1712,7 @@ struct GFMAutolinkTests {
     @Test("www URL synthesizes http://")
     func wwwURL() throws {
         let source = "go to www.example.com please"
-        try MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "http://www.example.com")
         #expect(info.text == "www.example.com")
@@ -1722,7 +1722,7 @@ struct GFMAutolinkTests {
     @Test("email synthesizes mailto:")
     func emailURL() throws {
         let source = "mail me at foo@example.com please"
-        try MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "mailto:foo@example.com")
         #expect(info.text == "foo@example.com")
@@ -1732,7 +1732,7 @@ struct GFMAutolinkTests {
     @Test("trailing punctuation is peeled")
     func trailingPunct() throws {
         let source = "see http://example.com."
-        try MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "http://example.com")
         }
@@ -1741,7 +1741,7 @@ struct GFMAutolinkTests {
     @Test("trailing unbalanced ) is peeled")
     func trailingParen() throws {
         let source = "(see http://example.com/path)"
-        try MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "http://example.com/path")
         }
@@ -1750,7 +1750,7 @@ struct GFMAutolinkTests {
     @Test("balanced parens within URL are kept")
     func balancedParens() throws {
         let source = "see http://en.wikipedia.org/wiki/Markdown_(format) here"
-        try MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "http://en.wikipedia.org/wiki/Markdown_(format)")
         }
@@ -1759,7 +1759,7 @@ struct GFMAutolinkTests {
     @Test("URL preceded by word char is rejected")
     func wordCharBefore() throws {
         let source = "abchttp://example.com"
-        try MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == nil)
         }
@@ -1770,7 +1770,7 @@ struct GFMAutolinkTests {
         // cmark's `url_match` accepts a dotless scheme-URL host (`check_domain(..., allow_short: 1)`), so
         // `http://localhost` autolinks - unlike the `www.` form, which requires a dot in the host.
         let source = "look at http://localhost"
-        try MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "http://localhost")
         }
@@ -1779,7 +1779,7 @@ struct GFMAutolinkTests {
     @Test("multiple URLs in one paragraph")
     func multipleURLs() throws {
         let source = "first http://a.com then https://b.com"
-        try MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         var urls: [String] = []
         let root = doc.root
         root.children.forEach { block in
@@ -1796,7 +1796,7 @@ struct GFMAutolinkTests {
     @Test("URL terminates at whitespace")
     func terminatesAtWhitespace() throws {
         let source = "http://a.com foo"
-        try MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         let info = Self.firstLink(doc)
         #expect(info.url == "http://a.com")
         }
@@ -1838,7 +1838,7 @@ struct FootnoteTests {
     @Test("default-disabled: [^x] stays as text")
     func defaultDisabled() throws {
         let source = "ref [^x]"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = paragraphInlines(doc).map(\.kind)
         #expect(!kinds.contains { if case .footnoteReference = $0 { true } else { false } })
         }
@@ -1847,7 +1847,7 @@ struct FootnoteTests {
     @Test("definition followed by reference")
     func defThenRef() throws {
         let source = "[^a]: footnote body\n\nref [^a]"
-        try MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         let info = Self.firstFootnotes(doc)
         #expect(info.def?.label == "a")
         #expect(info.ref?.label == "a")
@@ -1858,7 +1858,7 @@ struct FootnoteTests {
     @Test("reference before definition still parses")
     func refThenDef() throws {
         let source = "ref [^a]\n\n[^a]: body"
-        try MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         let info = Self.firstFootnotes(doc)
         #expect(info.ref?.label == "a")
         #expect(info.ref?.index == 1)
@@ -1871,7 +1871,7 @@ struct FootnoteTests {
         // Indices are assigned in first-reference order, per label; repeat references reuse the index.
         // Definitions are required — an unresolved reference becomes literal text (see `unresolvedRef`).
         let source = "[^a] and [^b] and [^a] again\n\n[^a]: A\n[^b]: B"
-        try MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         var indices: [Int] = []
         var labels: [String] = []
         let root = doc.root
@@ -1894,7 +1894,7 @@ struct FootnoteTests {
         // cmark turns a `[^label]` with no matching definition back into literal text; the rewrite
         // matches by not emitting a reference node when the label doesn't resolve.
         let source = "see [^missing]"
-        try MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         let info = Self.firstFootnotes(doc)
         #expect(info.ref == nil)
         let text = paragraphInlines(doc).compactMap { $0.literal }.joined()
@@ -1906,7 +1906,7 @@ struct FootnoteTests {
     func definitionStructure() throws {
         // The definition must be referenced to survive — cmark drops unreferenced definitions.
         let source = "[^a]: hello world\n\nsee [^a]"
-        try MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         var found = false
         let root = doc.root
         root.children.forEach { block in
@@ -1927,7 +1927,7 @@ struct FootnoteTests {
     func noFootnoteWithoutCaret() throws {
         // `[x]` should still try as a shortcut ref link, fail, emit `]` text.
         let source = "[x]"
-        try MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         let kinds = paragraphInlines(doc).map(\.kind)
         #expect(!kinds.contains { if case .footnoteReference = $0 { true } else { false } })
         }
@@ -1942,7 +1942,7 @@ struct FootnoteTests {
 
         [^two]: Second note.
         """
-        try MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         var refLabels: [String] = []
         var defLabels: [String] = []
         let root = doc.root

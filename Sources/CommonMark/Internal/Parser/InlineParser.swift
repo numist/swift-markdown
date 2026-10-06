@@ -69,7 +69,7 @@ extension BlockParser {
         preserveWhitespace: Bool = false,
         delimiters: inout UniqueArray<DelimiterRecord>,
         brackets: inout UniqueArray<BracketRecord>
-    ) throws (MarkdownDocument.Error) {
+    ) {
         if content.isEmpty {
             return
         }
@@ -300,7 +300,7 @@ extension BlockParser {
                 cursor += 1
                 
             case UInt8(ascii: "*"), UInt8(ascii: "_"):
-                cursor = try handleDelimRun(
+                cursor = handleDelimRun(
                     char: byte,
                     start: cursor,
                     end: endOffset,
@@ -313,7 +313,7 @@ extension BlockParser {
 
             case UInt8(ascii: "~"):
                 if storage.options.contains(.strikethrough) {
-                    cursor = try handleDelimRun(
+                    cursor = handleDelimRun(
                         char: byte,
                         start: cursor,
                         end: endOffset,
@@ -342,7 +342,7 @@ extension BlockParser {
                 storage.appendChild(textIdx, to: parent)
                 // An opener whose link never resolves survives as literal `[` text; stamp it so it keeps its column when it consolidates with neighbors (a matched link unlinks this node first).
                 stampInline(textIdx, cursor, cursor + 1, content: content)
-                try pushBracket(
+                pushBracket(
                     kind: .link,
                     inlText: textIdx,
                     virtualStart: cursor,
@@ -376,7 +376,7 @@ extension BlockParser {
                     storage.appendChild(textIdx, to: parent)
                     // An opener whose image never resolves survives as literal `![` text; stamp its full 2-byte span so it keeps its start column when it consolidates with neighbors (a matched image unlinks this node first).
                     stampInline(textIdx, cursor, cursor + 2, content: content)
-                    try pushBracket(
+                    pushBracket(
                         kind: .image,
                         inlText: textIdx,
                         virtualStart: cursor,
@@ -408,7 +408,7 @@ extension BlockParser {
                     storage.appendChild(textIdx, to: parent)
                     // An opener whose attribute never resolves survives as literal `^[` text; stamp it so it keeps its columns when it consolidates with neighbors.
                     stampInline(textIdx, cursor, cursor + 2, content: content)
-                    try pushBracket(
+                    pushBracket(
                         kind: .attribute,
                         inlText: textIdx,
                         virtualStart: cursor,
@@ -519,7 +519,7 @@ extension BlockParser {
             case UInt8(ascii: "'"), UInt8(ascii: "\""):
                 // Smart quotes: push a quote delimiter (resolved to curly open/close in `processEmphasis`). Without `.smart`, the byte is ordinary text.
                 if smartEnabled {
-                    cursor = try handleQuoteDelim(
+                    cursor = handleQuoteDelim(
                         char: byte,
                         start: cursor,
                         end: endOffset,
@@ -620,7 +620,7 @@ extension BlockParser {
         var previous: Int?
     }
 
-    private func pushBracket(kind: BracketKind, inlText: DocumentStorage.Index, virtualStart: Int, delimPosition: Int, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?, noLinkOpeners: inout Bool) throws (MarkdownDocument.Error) {
+    private func pushBracket(kind: BracketKind, inlText: DocumentStorage.Index, virtualStart: Int, delimPosition: Int, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?, noLinkOpeners: inout Bool) {
         if let lastBracket {
             brackets[lastBracket].bracketAfter = true
         }
@@ -1822,7 +1822,7 @@ extension BlockParser {
     /// Scan a maximal run of `c` (`*` or `_`) starting at `start`, classify its left/right-flanking + can_open/can_close per CommonMark 0.31 §6.2, emit a `.text` node for the run, and (if it can open or close) push a delimiter record onto the stack. Returns the offset just past the run.
     ///
     /// The start of the content (`content.startOffset`) determines whether `start - 1` is a real "before" character or implicitly a newline (start of inline content acts like a line break).
-    private mutating func handleDelimRun(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, pendingTextStart: inout Int) throws (MarkdownDocument.Error) -> Int {
+    private mutating func handleDelimRun(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, pendingTextStart: inout Int) -> Int {
         // why: cmark-gfm's strikethrough `match` (`extensions/strikethrough.c`) scans a `~` run into a
         // fixed `char buffer[101]` via `cmark_inline_parser_scan_delimiters(inline_parser,
         // sizeof(buffer) - 1, '~', …)`, so it reads at most 100 consecutive `~` per delimiter token. A
@@ -2205,7 +2205,7 @@ extension BlockParser {
     /// Handle a `'` or `"` under `.smart`. Emits a text node carrying the initial curly form and, if the quote can open or close, pushes a delimiter so `processEmphasis` can resolve the open/close pairing.
     ///
     /// Returns the offset just past the quote.
-    private mutating func handleQuoteDelim(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, pendingTextStart: inout Int) throws (MarkdownDocument.Error) -> Int {
+    private mutating func handleQuoteDelim(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, pendingTextStart: inout Int) -> Int {
         // Quotes are limited to a single delimiter character (unlike `*`/`_`/`~` runs).
         let runEnd = start + 1
         let flanking = classifyFlanking(char: char, start: start, runEnd: runEnd, end: end, content: content)

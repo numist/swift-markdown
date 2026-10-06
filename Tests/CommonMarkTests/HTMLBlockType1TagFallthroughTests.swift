@@ -50,7 +50,7 @@ struct HTMLBlockType1TagFallthroughTests {
         _ src: String, options: MarkdownDocument.ParseOptions = []
     ) throws -> [(kind: MarkdownNode.Kind, text: String)] {
         let found: [(MarkdownNode.Kind, String)] =
-            try MarkdownDocument.withParsedDocument(src, options: options) { doc in
+            MarkdownDocument.withParsedDocument(src, options: options) { doc in
                 var out: [(MarkdownNode.Kind, String)] = []
                 doc.root.children.forEach { child in
                     out.append((child.kind, allText(child)))

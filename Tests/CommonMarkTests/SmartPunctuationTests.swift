@@ -30,14 +30,14 @@ struct SmartPunctuationTests {
 
     /// Parse with `.smart` and return the concatenated text.
     private func smart(_ source: String) throws -> String {
-        try MarkdownDocument.withParsedDocument(source, options: .smart) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .smart) { doc in
         return text(doc)
         }
     }
 
     /// Parse without `.smart` and return the concatenated text.
     private func plain(_ source: String) throws -> String {
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         return text(doc)
         }
     }

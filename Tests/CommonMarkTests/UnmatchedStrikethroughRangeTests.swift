@@ -29,7 +29,7 @@ struct UnmatchedStrikethroughRangeTests {
 
     /// The source range of the first text node, in DFS order, when `src` is parsed spec-correct.
     private func firstTextRange(in src: String) throws -> Range<Pos>? {
-        let ranges = try MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
+        let ranges = MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)

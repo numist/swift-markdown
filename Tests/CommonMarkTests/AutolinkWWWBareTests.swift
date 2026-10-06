@@ -47,7 +47,7 @@ struct AutolinkWWWBareTests {
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
     ) throws -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
-        try MarkdownDocument.withParsedDocument(src, options: options) {
+        MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?, url: String?)] = []
             dfsAutolinkNodes(doc.root, into: &out)

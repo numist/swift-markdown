@@ -57,7 +57,7 @@ struct InlineOnlyOptionTests {
     @Test("inlineOnly suppresses all block structure into one paragraph")
     func inlineOnlySuppressesBlocks() throws {
         let source = "# heading\n\n* item"
-        try MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
 
         let block = soleBlock(doc)
         #expect(block?.kind == .paragraph)
@@ -73,7 +73,7 @@ struct InlineOnlyOptionTests {
     @Test("inlineOnly still parses inline emphasis and code spans")
     func inlineOnlyKeepsInlineSyntax() throws {
         let source = "# *em* and `code`"
-        try MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
 
         #expect(soleBlock(doc)?.kind == .paragraph)
 
@@ -98,7 +98,7 @@ struct InlineOnlyOptionTests {
     @Test("inlineOnly still parses links")
     func inlineOnlyParsesLinks() throws {
         let source = "see [text](http://example.com) ok"
-        try MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
 
         #expect(soleBlock(doc)?.kind == .paragraph)
 
@@ -120,7 +120,7 @@ struct InlineOnlyOptionTests {
     @Test("inlineOnly does not turn a 4-space indent into a code block")
     func inlineOnlyNoIndentedCodeBlock() throws {
         let source = "    indented code"
-        try MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
 
         // A normal parse would make this a `.codeBlock`; inline-only keeps the leading spaces as literal paragraph text.
         #expect(soleBlock(doc)?.kind == .paragraph)
@@ -133,7 +133,7 @@ struct InlineOnlyOptionTests {
     @Test("inlineOnly leaves a blockquote marker as literal text")
     func inlineOnlyNoBlockQuote() throws {
         let source = "> not a quote"
-        try MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
 
         #expect(soleBlock(doc)?.kind == .paragraph)
         #expect(inlines(doc).first?.literal == "> not a quote")
@@ -151,7 +151,7 @@ struct InlineOnlyOptionTests {
     )
     func inlineOnlyConsolidatesText(source: String, merged: String) throws {
         for options in [MarkdownDocument.ParseOptions.inlineOnly, .preserveWhitespace] {
-            try MarkdownDocument.withParsedDocument(source, options: options) { doc in
+            MarkdownDocument.withParsedDocument(source, options: options) { doc in
                 let inlines = inlines(doc)
                 #expect(inlines.map(\.kind) == [.text])
                 #expect(inlines.first?.literal == merged)
@@ -170,7 +170,7 @@ struct InlineOnlyOptionTests {
     @Test("preserveWhitespace keeps leading/trailing whitespace and blank lines")
     func preserveWhitespaceKeepsWhitespace() throws {
         let source = "   leading   spaces\n\n\ntrailing  "
-        try MarkdownDocument.withParsedDocument(source, options: .preserveWhitespace) { doc in
+        MarkdownDocument.withParsedDocument(source, options: .preserveWhitespace) { doc in
 
         let block = soleBlock(doc)
         #expect(block?.kind == .paragraph)
@@ -187,8 +187,8 @@ struct InlineOnlyOptionTests {
     func preserveWhitespaceMatchesInlineOnlyAST() throws {
         // The whitespace-collapsing that distinguishes Foundation's two interpreted-syntax modes happens above the parser; at the AST level the two options are equivalent.
         let source = "  # x\n\n  *y*  \n\n> z"
-        try MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { inlineOnly in
-            try MarkdownDocument.withParsedDocument(source, options: .preserveWhitespace) { preserve in
+        MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { inlineOnly in
+            MarkdownDocument.withParsedDocument(source, options: .preserveWhitespace) { preserve in
                 #expect(dump(inlineOnly) == dump(preserve))
             }
         }

@@ -50,7 +50,7 @@ struct AutolinkEmailTrailingAtTests {
     private func nodes(
         in src: String
     ) throws -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
-        try MarkdownDocument.withParsedDocument(src, options: Self.options) {
+        MarkdownDocument.withParsedDocument(src, options: Self.options) {
             doc -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?, url: String?)] = []
             dfsAutolinkNodes(doc.root, into: &out)

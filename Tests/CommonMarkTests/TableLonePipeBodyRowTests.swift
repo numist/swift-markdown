@@ -54,7 +54,7 @@ struct TableLonePipeBodyRowTests {
     }
 
     private func analyze(_ source: String) throws -> Shape {
-        try MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> Shape in
+        MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> Shape in
             var shape = Shape()
             doc.root.children.forEach { block in
                 shape.topKinds.append(block.kind)

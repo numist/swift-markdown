@@ -24,7 +24,7 @@ struct OrderedMarkerTabExpansionTests {
     // trailing spaces bring the gap to 5 columns - crossing the code-block threshold. Content is `z`.
     @Test("period marker: tab then spaces reaching the code threshold is a code block")
     func periodMarkerTabIsCodeBlock() throws {
-        try MarkdownDocument.withParsedDocument("1.\t   z") { doc in
+        MarkdownDocument.withParsedDocument("1.\t   z") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [.document, .orderedList(), .item(checked: nil), .indentedCode])
             #expect(codeBlocks(doc).map(\.literal) == ["z\n"])
@@ -33,7 +33,7 @@ struct OrderedMarkerTabExpansionTests {
 
     @Test("paren marker: tab then spaces reaching the code threshold is a code block")
     func parenMarkerTabIsCodeBlock() throws {
-        try MarkdownDocument.withParsedDocument("1)\t   z") { doc in
+        MarkdownDocument.withParsedDocument("1)\t   z") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [.document, .orderedList(.paren), .item(checked: nil), .indentedCode])
             #expect(codeBlocks(doc).map(\.literal) == ["z\n"])
@@ -44,7 +44,7 @@ struct OrderedMarkerTabExpansionTests {
     // must leave it untouched (the tab case materializes to exactly this line).
     @Test("period marker: five literal spaces is a code block (unchanged)")
     func periodMarkerLiteralSpacesIsCodeBlock() throws {
-        try MarkdownDocument.withParsedDocument("1.     z") { doc in
+        MarkdownDocument.withParsedDocument("1.     z") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [.document, .orderedList(), .item(checked: nil), .indentedCode])
             #expect(codeBlocks(doc).map(\.literal) == ["z\n"])
@@ -55,7 +55,7 @@ struct OrderedMarkerTabExpansionTests {
     // the content stays a paragraph.
     @Test("period marker: tab-only gap stays a paragraph")
     func periodMarkerTabOnlyIsParagraph() throws {
-        try MarkdownDocument.withParsedDocument("1.\tz") { doc in
+        MarkdownDocument.withParsedDocument("1.\tz") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [.document, .orderedList(), .item(checked: nil), .paragraph, .text])
         }
@@ -65,7 +65,7 @@ struct OrderedMarkerTabExpansionTests {
     // two spaces totals 3 columns - still below the threshold - and stays a paragraph.
     @Test("wide marker: tab plus two spaces stays a paragraph")
     func wideMarkerTabStaysParagraph() throws {
-        try MarkdownDocument.withParsedDocument("12.\t  z") { doc in
+        MarkdownDocument.withParsedDocument("12.\t  z") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [.document, .orderedList(start: 12), .item(checked: nil), .paragraph, .text])
         }
@@ -75,7 +75,7 @@ struct OrderedMarkerTabExpansionTests {
     // demonstrably aligning the ordered path with the bullet path.
     @Test("bullet marker: tab then spaces is a code block (unchanged)")
     func bulletMarkerTabIsCodeBlock() throws {
-        try MarkdownDocument.withParsedDocument("-\t   z") { doc in
+        MarkdownDocument.withParsedDocument("-\t   z") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [.document, .bulletList(), .item(checked: nil), .indentedCode])
         }
@@ -86,7 +86,7 @@ struct OrderedMarkerTabExpansionTests {
     // literal tab.
     @Test("edge: ordered marker, tab, then nested bullet marker opens a nested list")
     func orderedMarkerTabThenNestedBullet() throws {
-        try MarkdownDocument.withParsedDocument("1.\t- x") { doc in
+        MarkdownDocument.withParsedDocument("1.\t- x") { doc in
             let kinds = dfs(doc).map { $0.kind }
             #expect(kinds == [
                 .document,
@@ -106,7 +106,7 @@ struct OrderedMarkerTabExpansionTests {
     @Test("positions: tab-expanded ordered item maps content back to true source bytes")
     func positionsMapBackToSource() throws {
         typealias Pos = MarkdownNode.SourcePosition
-        try MarkdownDocument.withParsedDocument("1.\t   z", options: .sourcePosition) { doc in
+        MarkdownDocument.withParsedDocument("1.\t   z", options: .sourcePosition) { doc in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)
             let kinds = ranges.map { $0.kind }

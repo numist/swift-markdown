@@ -36,7 +36,7 @@ struct LinkTitleBackslashLongestMatchTests {
     private func firstLink(
         _ source: String
     ) throws -> (found: Bool, url: String?, title: String?, hasText: Bool) {
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
             var found = false
             var url: String? = nil
             var title: String? = nil
@@ -61,7 +61,7 @@ struct LinkTitleBackslashLongestMatchTests {
     private func structure(
         _ source: String
     ) throws -> (top: [MarkdownNode.Kind], inlines: [MarkdownNode.Kind]) {
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
             var top: [MarkdownNode.Kind] = []
             doc.root.children.forEach { top.append($0.kind) }
             return (top, paragraphInlines(doc).map(\.kind))

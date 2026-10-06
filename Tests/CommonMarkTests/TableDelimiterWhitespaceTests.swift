@@ -78,7 +78,7 @@ struct TableDelimiterWhitespaceTests {
     /// The first top-level block of `source`, classified as paragraph / heading / table.
     /// Parsed with `.tables` but WITHOUT `.cmarkBugCompatibility`.
     private func firstBlock(_ source: String) throws -> Block {
-        try MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> Block in
+        MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> Block in
             var blocks: [Block] = []
             doc.root.children.forEach { child in
                 var block = Block()
@@ -96,7 +96,7 @@ struct TableDelimiterWhitespaceTests {
 
     /// The first `.table` anywhere in `source`, or `nil`.
     private func firstTable(_ source: String) throws -> Block? {
-        try MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> Block? in
+        MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> Block? in
             firstTableShape(in: doc.root)
         }
     }

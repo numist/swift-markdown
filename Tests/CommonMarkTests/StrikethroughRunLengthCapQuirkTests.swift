@@ -73,14 +73,14 @@ struct StrikethroughRunLengthCapQuirkTests {
 
     /// The concatenated inner text of the first `.strikethrough` node, or nil if none forms.
     private func strikeText(_ src: String, options: MarkdownDocument.ParseOptions) throws -> String? {
-        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> String? in
+        MarkdownDocument.withParsedDocument(src, options: options) { doc -> String? in
             firstStrikethroughText(doc.root)
         }
     }
 
     /// The number of `.strikethrough` nodes formed.
     private func strikeCount(_ src: String, options: MarkdownDocument.ParseOptions) throws -> Int {
-        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> Int in
+        MarkdownDocument.withParsedDocument(src, options: options) { doc -> Int in
             strikethroughCount(doc.root)
         }
     }

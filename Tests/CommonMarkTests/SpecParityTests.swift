@@ -115,7 +115,7 @@ struct SpecParityTests {
         #expect(examples.count > 600)
         for ex in examples {
             let source = ex.markdown
-            try MarkdownDocument.withParsedDocument(source, options: Self.options(forExtensions: ex.extensions)) { doc in
+            MarkdownDocument.withParsedDocument(source, options: Self.options(forExtensions: ex.extensions)) { doc in
             let actual = HTMLRenderer.render(doc, tagfilter: ex.extensions.contains("tagfilter"))
             if actual != ex.expectedHTML {
                 var debugOutput = "=== #\(ex.number) [\(ex.section)] ==="

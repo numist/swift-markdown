@@ -30,7 +30,7 @@ struct ArenaTextEndRangeTests {
     /// DFS-collect every text node's literal and source range.
     private func textNodes(in src: String) throws -> [(literal: String?, range: Range<Pos>?)] {
         var out: [(literal: String?, range: Range<Pos>?)] = []
-        try MarkdownDocument.withParsedDocument(src, options: Self.specOptions) { doc in
+        MarkdownDocument.withParsedDocument(src, options: Self.specOptions) { doc in
             collectText(doc.root, into: &out)
         }
         return out

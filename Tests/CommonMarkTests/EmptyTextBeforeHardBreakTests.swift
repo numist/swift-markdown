@@ -34,7 +34,7 @@ struct EmptyTextBeforeHardBreakTests {
 
     /// The `(kind, text)` of every node in DFS order when `src` is parsed spec-correct.
     private func nodes(in src: String) throws -> [(kind: MarkdownNode.Kind, text: String?)] {
-        try MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
+        MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> [(kind: MarkdownNode.Kind, text: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?)] = []
             dfsKindsAndText(doc.root, into: &out)
@@ -44,7 +44,7 @@ struct EmptyTextBeforeHardBreakTests {
 
     /// The source ranges of every text node, in DFS order, when `src` is parsed spec-correct.
     private func textRanges(in src: String) throws -> [Range<Pos>?] {
-        let ranges = try MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
+        let ranges = MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)

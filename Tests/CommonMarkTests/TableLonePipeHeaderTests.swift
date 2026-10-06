@@ -20,7 +20,7 @@ import Testing
 struct TableLonePipeHeaderTests {
 
     private func firstKind(_ source: String) throws -> String {
-        try MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> String in
+        MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> String in
             var kinds: [String] = []
             doc.root.children.forEach {
                 switch $0.kind {

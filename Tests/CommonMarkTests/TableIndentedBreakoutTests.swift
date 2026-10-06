@@ -44,7 +44,7 @@ struct TableIndentedBreakoutTests {
     func tabIndentBreakout() throws {
         // `a|b\n-|-\n\tx`: header `a|b` + delimiter `-|-` open a 2-column table, then a tab-indented `x`.
         // The tab reaches column 4, so `x` is indented code, not a body row.
-        try MarkdownDocument.withParsedDocument("a|b\n-|-\n\tx", options: [.tables]) { doc in
+        MarkdownDocument.withParsedDocument("a|b\n-|-\n\tx", options: [.tables]) { doc in
             #expect(topKinds(doc) == [.table, .indentedCode])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
@@ -56,7 +56,7 @@ struct TableIndentedBreakoutTests {
     @Test("a four-space-indented line after the delimiter row opens indented code")
     func fourSpaceIndentBreakout() throws {
         // `a|b\n-|-\n    x`: four spaces = column 4, so `x` is indented code.
-        try MarkdownDocument.withParsedDocument("a|b\n-|-\n    x", options: [.tables]) { doc in
+        MarkdownDocument.withParsedDocument("a|b\n-|-\n    x", options: [.tables]) { doc in
             #expect(topKinds(doc) == [.table, .indentedCode])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
@@ -68,7 +68,7 @@ struct TableIndentedBreakoutTests {
     @Test("a five-space-indented line keeps one leftover space in the code content")
     func fiveSpaceIndentBreakout() throws {
         // `a|b\n-|-\n     x`: five spaces; four are stripped as the code indent, one survives → ` x`.
-        try MarkdownDocument.withParsedDocument("a|b\n-|-\n     x", options: [.tables]) { doc in
+        MarkdownDocument.withParsedDocument("a|b\n-|-\n     x", options: [.tables]) { doc in
             #expect(topKinds(doc) == [.table, .indentedCode])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
@@ -80,7 +80,7 @@ struct TableIndentedBreakoutTests {
     @Test("pipes in an indented-code line are literal content, not cells")
     func tabIndentPipesAreLiteral() throws {
         // `a|b\n-|-\n\tx|y`: the tab makes `x|y` indented code, so the pipe is literal code content.
-        try MarkdownDocument.withParsedDocument("a|b\n-|-\n\tx|y", options: [.tables]) { doc in
+        MarkdownDocument.withParsedDocument("a|b\n-|-\n\tx|y", options: [.tables]) { doc in
             #expect(topKinds(doc) == [.table, .indentedCode])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
@@ -93,7 +93,7 @@ struct TableIndentedBreakoutTests {
     func indentBreakoutPreservesEarlierBodyRows() throws {
         // `a|b\n-|-\nc|d\n\tx`: `c|d` is a valid body row, absorbed before the tab-indented `x` breaks out.
         // The table closes carrying that one body row, then `x` opens indented code.
-        try MarkdownDocument.withParsedDocument("a|b\n-|-\nc|d\n\tx", options: [.tables]) { doc in
+        MarkdownDocument.withParsedDocument("a|b\n-|-\nc|d\n\tx", options: [.tables]) { doc in
             #expect(topKinds(doc) == [.table, .indentedCode])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
@@ -106,7 +106,7 @@ struct TableIndentedBreakoutTests {
     func indentBreakoutInsideBlockQuote() throws {
         // `> a|b\n> -|-\n>     x`: inside a block quote, `> ` consumes the marker + one space, leaving four
         // columns of indent before `x` — indented code, measured relative to the block-quote content column.
-        try MarkdownDocument.withParsedDocument("> a|b\n> -|-\n>     x", options: [.tables]) { doc in
+        MarkdownDocument.withParsedDocument("> a|b\n> -|-\n>     x", options: [.tables]) { doc in
             #expect(topKinds(doc) == [.blockQuote])
             var quoteChildren: [MarkdownNode.Kind] = []
             doc.root.children.forEach { block in
@@ -124,7 +124,7 @@ struct TableIndentedBreakoutTests {
 
     @Test("an unindented body row stays a table row")
     func zeroIndentBodyRow() throws {
-        try MarkdownDocument.withParsedDocument("a|b\n-|-\nx", options: [.tables]) { doc in
+        MarkdownDocument.withParsedDocument("a|b\n-|-\nx", options: [.tables]) { doc in
             #expect(topKinds(doc) == [.table])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
@@ -135,7 +135,7 @@ struct TableIndentedBreakoutTests {
 
     @Test("a one-space-indented body row stays a table row")
     func oneSpaceIndentBodyRow() throws {
-        try MarkdownDocument.withParsedDocument("a|b\n-|-\n x", options: [.tables]) { doc in
+        MarkdownDocument.withParsedDocument("a|b\n-|-\n x", options: [.tables]) { doc in
             #expect(topKinds(doc) == [.table])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
@@ -146,7 +146,7 @@ struct TableIndentedBreakoutTests {
 
     @Test("a three-space-indented body row stays a table row")
     func threeSpaceIndentBodyRow() throws {
-        try MarkdownDocument.withParsedDocument("a|b\n-|-\n   x", options: [.tables]) { doc in
+        MarkdownDocument.withParsedDocument("a|b\n-|-\n   x", options: [.tables]) { doc in
             #expect(topKinds(doc) == [.table])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
@@ -160,7 +160,7 @@ struct TableIndentedBreakoutTests {
     @Test("an ATX heading after the delimiter row still closes the table")
     func atxHeadingBreakout() throws {
         // `a|b\n-|-\n# h`: `# h` is a block start (`!indented`), which already breaks out of the table.
-        try MarkdownDocument.withParsedDocument("a|b\n-|-\n# h", options: [.tables]) { doc in
+        MarkdownDocument.withParsedDocument("a|b\n-|-\n# h", options: [.tables]) { doc in
             #expect(topKinds(doc) == [.table, .heading(level: 1)])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)

@@ -73,7 +73,7 @@ struct LinkDestinationControlCharQuirkTests {
     private func linkURL(
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> String? {
-        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> String? in
+        MarkdownDocument.withParsedDocument(src, options: options) { doc -> String? in
             firstLinkURL(doc.root)
         }
     }
@@ -115,12 +115,12 @@ struct LinkDestinationControlCharQuirkTests {
 
     @Test("flag ON: `[?]:\\u{0B}` forms a valid (unused) ref-def — document has no blocks")
     func flagOnRefDefFacetB() throws {
-        let count = try MarkdownDocument.withParsedDocument("[?]:\u{0B}", options: Self.flagOn) { doc in
+        let count = MarkdownDocument.withParsedDocument("[?]:\u{0B}", options: Self.flagOn) { doc in
             childCount(doc.root)
         }
         // Fixture-sanity: prove the input is meaningful (not a vacuous "empty tree passes anything")
         // by confirming the SAME input yields exactly one block (a paragraph) with the flag OFF.
-        let offCount = try MarkdownDocument.withParsedDocument("[?]:\u{0B}", options: Self.flagOff) { doc in
+        let offCount = MarkdownDocument.withParsedDocument("[?]:\u{0B}", options: Self.flagOff) { doc in
             childCount(doc.root)
         }
         #expect(offCount == 1, "flag-OFF should produce one paragraph block; got \(offCount)")
@@ -129,7 +129,7 @@ struct LinkDestinationControlCharQuirkTests {
 
     @Test("flag OFF: `[?]:\\u{0B}` is not a ref-def — paragraph text is `[?]:\u{0B}` (spec-correct)")
     func flagOffRefDefFacetB() throws {
-        let text = try MarkdownDocument.withParsedDocument("[?]:\u{0B}", options: Self.flagOff) { doc -> String? in
+        let text = MarkdownDocument.withParsedDocument("[?]:\u{0B}", options: Self.flagOff) { doc -> String? in
             firstText(doc.root)
         }
         // Fixture-sanity: a text node must exist, so the content claim can't pass against an empty tree.

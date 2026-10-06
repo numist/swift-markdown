@@ -42,7 +42,7 @@ struct TableCellTextConsolidationTests {
     private func tableCellChildren(
         _ source: String, options: MarkdownDocument.ParseOptions
     ) throws -> [[[Child]]] {
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc -> [[[Child]]] in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc -> [[[Child]]] in
             var rows: [[[Child]]] = []
             var found = false
             doc.root.children.forEach { block in

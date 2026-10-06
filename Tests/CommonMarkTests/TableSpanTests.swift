@@ -49,7 +49,7 @@ struct TableSpanTests {
         |---|---|---|
         | x || y |
         """
-        let rows = try MarkdownDocument.withParsedDocument(source, options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument(source, options: [.tables, .tableSpans]) { tableSpans($0) }
         // Header: three ordinary 1×1 cells.
         #expect(rows[0].map(\.columns) == [1, 1, 1])
         // Body: `x` spans two columns, the `||` cell is a 0-column filler, `y` is ordinary.
@@ -64,7 +64,7 @@ struct TableSpanTests {
         |---|---|---|
         | x |  | y |
         """
-        let rows = try MarkdownDocument.withParsedDocument(source, options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument(source, options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [1, 1, 1])
     }
 
@@ -77,37 +77,37 @@ struct TableSpanTests {
 
     @Test("one trailing `||` grows a single-column cell's colspan past the column count")
     func colspanExceedsColumnCountByOne() throws {
-        let rows = try MarkdownDocument.withParsedDocument("o\n|-\no||", options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument("o\n|-\no||", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [2])
     }
 
     @Test("two trailing `||` cells grow a single-column cell's colspan to three")
     func colspanExceedsColumnCountByTwo() throws {
-        let rows = try MarkdownDocument.withParsedDocument("o\n|-\no|||", options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument("o\n|-\no|||", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [3])
     }
 
     @Test("three trailing `||` cells grow a single-column cell's colspan to four")
     func colspanExceedsColumnCountByThree() throws {
-        let rows = try MarkdownDocument.withParsedDocument("o\n|-\no||||", options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument("o\n|-\no||||", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [4])
     }
 
     @Test("a leading pipe does not change the uncapped colspan")
     func colspanExceedsColumnCountWithLeadingPipe() throws {
-        let rows = try MarkdownDocument.withParsedDocument("o\n|-\n|o||", options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument("o\n|-\n|o||", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [2])
     }
 
     @Test("a two-column row grows its first cell's colspan past the column count")
     func colspanExceedsColumnCountTwoColumns() throws {
-        let rows = try MarkdownDocument.withParsedDocument("a|b\n-|-\no|||", options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument("a|b\n-|-\no|||", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [3, 0])
     }
 
     @Test("a two-column row grows its first cell's colspan to four")
     func colspanExceedsColumnCountTwoColumnsByTwo() throws {
-        let rows = try MarkdownDocument.withParsedDocument("a|b\n-|-\no||||", options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument("a|b\n-|-\no||||", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [4, 0])
     }
 
@@ -115,25 +115,25 @@ struct TableSpanTests {
 
     @Test("a single-column cell with a trailing pipe has no colspan")
     func singleColumnNoColspan() throws {
-        let rows = try MarkdownDocument.withParsedDocument("o\n|-\no|", options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument("o\n|-\no|", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [1])
     }
 
     @Test("a two-column row with one `||` filler caps at the column count")
     func twoColumnSingleFiller() throws {
-        let rows = try MarkdownDocument.withParsedDocument("a|b\n-|-\no||", options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument("a|b\n-|-\no||", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [2, 0])
     }
 
     @Test("a three-column row with two `||` fillers fills the row exactly")
     func threeColumnTwoFillers() throws {
-        let rows = try MarkdownDocument.withParsedDocument("a|b|c\n-|-|-\no|||", options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument("a|b|c\n-|-|-\no|||", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [3, 0, 0])
     }
 
     @Test("a lone `||` body row is a single colspan-0 filler")
     func lonePipePairFiller() throws {
-        let rows = try MarkdownDocument.withParsedDocument("o\n|-\n||", options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument("o\n|-\n||", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [0])
     }
 
@@ -147,7 +147,7 @@ struct TableSpanTests {
         | x | y |
         | ^ | z |
         """
-        let rows = try MarkdownDocument.withParsedDocument(source, options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument(source, options: [.tables, .tableSpans]) { tableSpans($0) }
         // First body row: `x` now spans two rows.
         #expect(rows[1].map(\.rows) == [2, 1])
         #expect(rows[1].map(\.text) == ["x", "y"])
@@ -164,7 +164,7 @@ struct TableSpanTests {
         | x | y |
         | " | z |
         """
-        let rows = try MarkdownDocument.withParsedDocument(source, options: [.tables, .tableSpans]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument(source, options: [.tables, .tableSpans]) { tableSpans($0) }
         // `"` is ordinary content (curly-quote smart is off): no span, text preserved.
         #expect(rows[1].map(\.rows) == [1, 1])
         #expect(rows[2].map(\.rows) == [1, 1])
@@ -179,7 +179,7 @@ struct TableSpanTests {
         | x | y |
         | " | z |
         """
-        let rows = try MarkdownDocument.withParsedDocument(source, options: [.tables, .tableSpans, .tableRowspanDitto]) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument(source, options: [.tables, .tableSpans, .tableRowspanDitto]) { tableSpans($0) }
         #expect(rows[1].map(\.rows) == [2, 1])
         #expect(rows[2].map(\.rows) == [0, 1])
         #expect(rows[2][0].text == "")
@@ -194,7 +194,7 @@ struct TableSpanTests {
         |---|---|---|
         | x || y |
         """
-        let rows = try MarkdownDocument.withParsedDocument(source, options: .tables) { tableSpans($0) }
+        let rows = MarkdownDocument.withParsedDocument(source, options: .tables) { tableSpans($0) }
         for row in rows {
             #expect(row.allSatisfy { $0.columns == 1 && $0.rows == 1 })
         }

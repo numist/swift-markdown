@@ -52,7 +52,7 @@ extension MarkdownCommand {
                 let path = inputPaths[0]
                 let content = try readContent(of: path)
                 let collector = StatsCollector()
-                try MarkdownDocument.withParsedDocument(content, options: options) { document in
+                MarkdownDocument.withParsedDocument(content, options: options) { document in
                     walk(document.root, depth: 0, into: collector)
                     printReport(name: name(of: path), source: content, document: document, options: options, collector: collector)
                 }
@@ -67,7 +67,7 @@ extension MarkdownCommand {
                 do {
                     let content = try readContent(of: path)
                     let collector = StatsCollector()
-                    let stats = try MarkdownDocument.withParsedDocument(content, options: options) { document -> FileStats in
+                    let stats = MarkdownDocument.withParsedDocument(content, options: options) { document -> FileStats in
                         walk(document.root, depth: 0, into: collector)
                         return FileStats(
                             collector: collector,

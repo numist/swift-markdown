@@ -339,10 +339,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     
     // MARK: - Parse
     
-    consuming func parse() throws (MarkdownDocument.Error) -> DocumentStorage {
+    consuming func parse() -> DocumentStorage {
         // Inline-only modes (`.inlineOnly` / `.preserveWhitespace`) bypass block structure entirely.
         if storage.options.contains(.inlineOnly) {
-            try parseInlineOnly()
+            parseInlineOnly()
             return storage
         }
 
@@ -376,16 +376,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     materializedTailBufferStart = materialized.tailBufferStart
                     materializedRestStart = materialized.restStart
                     let span = materialized.buffer.span
-                    pending = try processLine(source: span, lineRange: 0..<span.count, chain: &chain, pending: pending)
+                    pending = processLine(source: span, lineRange: 0..<span.count, chain: &chain, pending: pending)
                 } else {
                     currentLineMapsToSource = true
-                    pending = try processLine(source: sourceBytes, lineRange: lineRangeInOriginalSource, chain: &chain, pending: pending)
+                    pending = processLine(source: sourceBytes, lineRange: lineRangeInOriginalSource, chain: &chain, pending: pending)
                 }
             }
 
             // EOF: finalize all open blocks back up to the document root. Runs inside this closure (it doesn't touch `chain`) so `pending` stays local - by the end every leaf is drained and `pending` is `nil`.
             while current != documentIndex {
-                pending = try finalize(node: current, pending: pending, atEOF: true)
+                pending = finalize(node: current, pending: pending, atEOF: true)
             }
             
             // The document root is never passed to `finalize`; stamp its whole-source span here, from the first line's start (after any leading BOM, so it projects to 1:1) to the last line's content end. A truly-empty document (no lines) is left unstamped so it reports no source range - cmark emits `1:1-0:0` for empty input, which downstream treats as "no position".
@@ -422,7 +422,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let chunk = storage.segments[Int(ref.first)].chunk
                 if chunk.inSource {
                     // Source-backed: zero-copy slice of the source span.
-                    try parseInline(
+                    parseInline(
                         content: ContentSpan(span: sourceBytes.extracting(chunk.range), base: chunk.offset, inSource: true),
                         into: node,
                         delimiters: &delimiters,
@@ -451,7 +451,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     for replacement in orphanReplacements(in: chunk.range) {
                         orphanScratch.append(replacement)
                     }
-                    try parseInline(
+                    parseInline(
                         content: ContentSpan(span: scratch.span, base: chunk.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span, orphanReplacements: orphanScratch.span),
                         into: node,
                         delimiters: &delimiters,
@@ -495,14 +495,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     for replacement in replacements {
                         orphanScratch.append(replacement)
                     }
-                    try parseInline(
+                    parseInline(
                         content: ContentSpan(source: sourceBytes, segments: segScratch.span, segmentEnds: segEndScratch.span, virtualLength: Int(ref.totalLength), arena: arenaScratch.span, orphanReplacements: orphanScratch.span),
                         into: node,
                         delimiters: &delimiters,
                         brackets: &brackets
                     )
                 } else {
-                    try parseInline(
+                    parseInline(
                         content: ContentSpan(source: sourceBytes, segments: segScratch.span, segmentEnds: segEndScratch.span, virtualLength: Int(ref.totalLength)),
                         into: node,
                         delimiters: &delimiters,
@@ -608,7 +608,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Inline-only parse path for `.inlineOnly` / `.preserveWhitespace`.
     ///
     /// Bypasses block structure completely: any non-empty input (even a BOM-only one) becomes a single `.paragraph`, and empty input yields no paragraph. The paragraph's content is the source with a leading UTF-8 BOM skipped and line endings normalized to `\n`, but with every other byte preserved verbatim - leading indentation, interior space runs, trailing spaces, and all newlines (including a trailing one). Markers like `#`, `* `, `> `, fences and 4-space indents stay literal text; only *inline* syntax (emphasis, code spans, links, autolinks, …) is parsed, and even newlines remain literal text rather than becoming soft/hard breaks.
-    private mutating func parseInlineOnly() throws (MarkdownDocument.Error) {
+    private mutating func parseInlineOnly() {
         let count = sourceBytes.count
 
         // Empty input yields an empty document with no paragraph: cmark's `S_parser_feed` (src/blocks.c) processes no line for zero bytes, so no paragraph is ever opened.
@@ -680,7 +680,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // Zero-copy: the paragraph content is a source slice; emitted text references the source in place.
             let rest = parseDefinitions(in: Chunk(offset: start, length: count - start, inSource: true))
             let content = ContentSpan(span: sourceBytes.extracting(rest.range), base: rest.offset, inSource: true)
-            try parseInline(
+            parseInline(
                 content: content,
                 into: paragraph,
                 preserveWhitespace: true,
@@ -737,7 +737,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
             }
             let content = ContentSpan(span: scratch.span, base: rest.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span, orphanReplacements: Span<Range<Int>>())
-            try parseInline(
+            parseInline(
                 content: content,
                 into: paragraph,
                 preserveWhitespace: true,
@@ -1950,10 +1950,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Process a line of Markdown.
     ///  - source: The line content
     ///  - lineRange: The range of the line in the original source, in order to lazily reference it.
-    private mutating func processLine(source: Span<UInt8>, lineRange: Range<Int>, chain: inout UniqueArray<DocumentStorage.Index>, pending: consuming PendingLeaf?) throws(MarkdownDocument.Error) -> PendingLeaf? {
+    private mutating func processLine(source: Span<UInt8>, lineRange: Range<Int>, chain: inout UniqueArray<DocumentStorage.Index>, pending: consuming PendingLeaf?) -> PendingLeaf? {
         var pending = pending
         // PHASE 1: Walk the open-container chain, stripping each container's continuation prefix. `deepestMatched` is the deepest container whose continuation succeeded (always a container, never a leaf). `cursor` is the byte offset into the line after stripped prefixes.
-        let walk = try walkOpenContainers(source: source, lineRange: lineRange, chain: &chain)
+        let walk = walkOpenContainers(source: source, lineRange: lineRange, chain: &chain)
         let deepestMatched = walk.deepestMatched
         let cursor = walk.cursor
         let prefixColumns = walk.prefixColumns
@@ -1970,7 +1970,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         // PHASE 2a: Code-block / HTML-block continuation - only when the prefix walk reached the leaf. If the walk failed before that, the block must close.
         if openKind.isCodeBlock && allMatched {
-            let result = try handleCodeBlockContinuation(
+            let result = handleCodeBlockContinuation(
                 source: source,
                 lineRange: lineRange,
                 cursor: cursor,
@@ -1985,9 +1985,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // Fenced or indented code block ended on this line; fall through to dispatch the line content as a fresh block.
         } else if openKind.isCodeBlock && !allMatched {
             // Walk failed before reaching the code block - close it and any stale containers, then dispatch the line normally.
-            pending = try finalize(node: current, pending: pending)
+            pending = finalize(node: current, pending: pending)
         } else if openKind == .htmlBlock && allMatched {
-            let result = try handleHTMLBlockContinuation(
+            let result = handleHTMLBlockContinuation(
                 source: source,
                 lineRange: lineRange,
                 cursor: cursor,
@@ -2000,7 +2000,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             // The HTML block was closed by this line.
         } else if openKind == .htmlBlock && !allMatched {
-            pending = try finalize(node: current, pending: pending)
+            pending = finalize(node: current, pending: pending)
         }
 
         let scan = leadingScan(source: source, range: cursor..<lineRange.upperBound)
@@ -2014,12 +2014,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let blankLeaf = current
             let nowOpen = storage[current].kind
             if nowOpen.canAccumulateText {
-                pending = try finalize(node: current, pending: pending)
+                pending = finalize(node: current, pending: pending)
             }
             // If a container in the chain failed to continue, close it now.
             if !allMatched {
                 while current != deepestMatched {
-                    pending = try finalize(node: current, pending: pending)
+                    pending = finalize(node: current, pending: pending)
                 }
             }
             // Mark the leaf as having had a blank line. Then clear on all ancestors so the blank doesn't bubble up.
@@ -2241,11 +2241,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         // PHASE 3: Close stale containers down to deepestMatched.
         while current != deepestMatched {
-            pending = try finalize(node: current, pending: pending)
+            pending = finalize(node: current, pending: pending)
         }
 
         // PHASE 4: New-block dispatch. Containers (block quote) loop back so a single line like `> > foo` opens both quotes and then a paragraph.
-        return try dispatchNewBlocks(
+        return dispatchNewBlocks(
             source: source,
             lineRange: lineRange,
             startCursor: cursor,
@@ -2259,7 +2259,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Returns the deepest container whose prefix matched (always a container, never a leaf), the cursor into the line after stripped prefixes, the absolute column the prefix consumption *intended* to reach, and whether every container in the chain matched.
     ///
     /// `prefixColumns` normally equals the column width of `[lineRange.lowerBound, cursor)`, but exceeds it when a container advance consumed *columns* into a tab it could not drop byte-wise (a list item's content indent landing mid-tab): `cursor` still sits at that tab while `prefixColumns` records the column the strip reached. The leaf continuation folds the shortfall into its own strip so the straddling tab is split there (cmark's `partially_consumed_tab`).
-    private mutating func walkOpenContainers(source: Span<UInt8>, lineRange: Range<Int>, chain: inout UniqueArray<DocumentStorage.Index>) throws (MarkdownDocument.Error) -> (deepestMatched: DocumentStorage.Index, cursor: Int, prefixColumns: Int, allMatched: Bool) {
+    private mutating func walkOpenContainers(source: Span<UInt8>, lineRange: Range<Int>, chain: inout UniqueArray<DocumentStorage.Index>) -> (deepestMatched: DocumentStorage.Index, cursor: Int, prefixColumns: Int, allMatched: Bool) {
         var cursor = lineRange.lowerBound
         var deepestMatched = documentIndex
         var prefixColumns = 0
@@ -2462,7 +2462,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Continue an open HTML block. Returns `true` if the block remains open after handling this line; `false` if the line closed it (the line itself was already appended in either case for types 1–5; for type 6, blank lines close without being appended).
-    private mutating func handleHTMLBlockContinuation(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, pending: consuming PendingLeaf?) throws(MarkdownDocument.Error) -> LeafContinuation {
+    private mutating func handleHTMLBlockContinuation(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, pending: consuming PendingLeaf?) -> LeafContinuation {
         var pending = pending
         guard case .htmlBlock(let type, _) = storage[current].data else {
             preconditionFailure("an HTML block node always carries its block type")
@@ -2473,7 +2473,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if type == 6 || type == 7 {
             // Types 6 and 7 end on a blank line; the blank line is *not* part of the block content.
             if isBlank {
-                pending = try finalize(node: current, pending: pending)
+                pending = finalize(node: current, pending: pending)
                 return LeafContinuation(stillOpen: false, pending: pending)
             }
             pending = appendNewline(to: current, pending: pending)
@@ -2489,13 +2489,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             source: source,
             range: cursor..<lineRange.upperBound
         ) {
-            pending = try finalize(node: current, pending: pending)
+            pending = finalize(node: current, pending: pending)
         }
         return LeafContinuation(stillOpen: true, pending: pending)
     }
 
     /// Continue an open code block. Returns `stillOpen: true` if the block remains open after handling this line; `false` if the line closed it (or was a closing fence). When this returns `false` the caller should *not* dispatch the line content as a fresh block - the closing fence is fully consumed.
-    private mutating func handleCodeBlockContinuation(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, prefixColumns: Int, pending: consuming PendingLeaf?) throws(MarkdownDocument.Error) -> LeafContinuation {
+    private mutating func handleCodeBlockContinuation(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, prefixColumns: Int, pending: consuming PendingLeaf?) -> LeafContinuation {
         var pending = pending
         let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
         let isBlank = firstNonSpace == lineRange.upperBound
@@ -2517,7 +2517,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 expectedChar: info.fenceCharacter,
                 minimumLength: info.fenceLength
             ) {
-                pending = try finalize(node: current, pending: pending)
+                pending = finalize(node: current, pending: pending)
                 return LeafContinuation(stillOpen: true, pending: pending)
             }
             // Continuation: strip the code block's content indentation - the container prefixes'
@@ -2579,14 +2579,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return LeafContinuation(stillOpen: true, pending: pending)
         }
         // Non-indented, non-blank line ends the block.
-        pending = try finalize(node: current, pending: pending)
+        pending = finalize(node: current, pending: pending)
         return LeafContinuation(stillOpen: false, pending: pending)
     }
 
     /// Open a list item under `current`. If `current` is already a list of compatible kind/marker, the item is added as another child of that list. Otherwise a new list is opened first.
     ///
     /// On exit, `current` points at the newly-opened item.
-    private mutating func openListItem(marker: ListMarkerInfo, firstNonSpace: Int, pending: consuming PendingLeaf?) throws(MarkdownDocument.Error) -> PendingLeaf? {
+    private mutating func openListItem(marker: ListMarkerInfo, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         var pending = pending
         let start = sourceOffset(firstNonSpace)
         let parentList: DocumentStorage.Index
@@ -2597,7 +2597,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         } else {
             // Either there's no open list, or the marker style differs from the open list. In the latter case, finalize the open list so the new list opens as a sibling - `- foo\n+ bar` becomes two top-level lists, not a nested one (CommonMark §5.3).
             if storage[current].kind.isList {
-                pending = try finalize(node: current, pending: pending)
+                pending = finalize(node: current, pending: pending)
             }
             // Open a new list.
             parentList = addChild(
@@ -2646,7 +2646,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `parser->indent` - so the tab's already-consumed columns are not recounted from column 0 (which would
     /// under-count a block-quote straddle's dropped leftover, or over-count a list-item straddle's consumed
     /// columns, flipping the indented-code / paragraph decision).
-    private mutating func dispatchNewBlocks(source: Span<UInt8>, lineRange: Range<Int>, startCursor: Int, startColumn: Int, pending: consuming PendingLeaf?) throws(MarkdownDocument.Error) -> PendingLeaf? {
+    private mutating func dispatchNewBlocks(source: Span<UInt8>, lineRange: Range<Int>, startCursor: Int, startColumn: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         var pending = pending
         var cursor = startCursor
         var column = startColumn
@@ -2683,7 +2683,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             ) {
                 // A block quote can't be a direct child of a list (lists only contain items), so an enclosing list closes first - e.g. a `>` line after list items ends the list and starts a top-level quote, matching cmark's `add_child` ancestor-finalize rule.
                 if storage[current].kind.isList {
-                    pending = try finalize(node: current, pending: pending)
+                    pending = finalize(node: current, pending: pending)
                 }
                 let quoteIdx = addChild(
                     kind: .blockQuote,
@@ -2715,7 +2715,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if indent < 4, matchThematicBreak(source: source, range: cursor..<lineRange.upperBound, firstNonSpace: firstNonSpace) {
                 // Thematic breaks close any enclosing list - they don't become children of a list (lists can only contain items).
                 if storage[current].kind.isList {
-                    pending = try finalize(node: current, pending: pending)
+                    pending = finalize(node: current, pending: pending)
                 }
                 let breakIdx = addChild(
                     kind: .thematicBreak,
@@ -2745,7 +2745,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // A footnote definition can't be a direct child of a list (lists hold only items), so
                 // an enclosing list closes first, mirroring the block-quote / thematic-break openers.
                 if storage[current].kind.isList {
-                    pending = try finalize(node: current, pending: pending)
+                    pending = finalize(node: current, pending: pending)
                 }
                 let fnIdx = openFootnoteDefinition(label: fn.label, firstNonSpace: firstNonSpace)
                 current = fnIdx
@@ -2771,7 +2771,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 lineStart: lineRange.lowerBound,
                 indent: indent
             ) {
-                pending = try openListItem(marker: marker, firstNonSpace: firstNonSpace, pending: pending)
+                pending = openListItem(marker: marker, firstNonSpace: firstNonSpace, pending: pending)
                 openedListItemThisLine = true
                 cursor = marker.consumedTo
                 // The item content begins at `marker.contentStartColumn`, which exceeds the physical
@@ -2840,7 +2840,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
             // From this point on the line isn't a list item, so any open list at `current` must close before we attach the new block (lists can't have direct non-item children).
             if storage[current].kind.isList {
-                pending = try finalize(node: current, pending: pending)
+                pending = finalize(node: current, pending: pending)
             }
 
             // ATX heading. Gated `indent < 4` (COLUMNS), cmark's `!indented` in the ATX branch (`open_new_blocks`; blocks.c): a line whose indent reaches four columns is indented code, not a heading - see the fenced-code branch below for how a raw prefix tab reaches an opener unexpanded.
@@ -2860,7 +2860,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 if !heading.contentRange.isEmpty {
                     pending = addLine(span: source, range: heading.contentRange, to: headingIdx, pending: pending)
                 }
-                return try finalize(node: headingIdx, pending: pending, atxHeadingEnd: heading.end)
+                return finalize(node: headingIdx, pending: pending, atxHeadingEnd: heading.end)
             }
 
             // Fenced code block. Gated `indent < 4` (COLUMNS), cmark's `!indented` in the fence-opener
@@ -2954,7 +2954,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     source: source,
                     range: firstNonSpace..<lineRange.upperBound
                 ) {
-                    pending = try finalize(node: htmlIdx, pending: pending)
+                    pending = finalize(node: htmlIdx, pending: pending)
                 }
                 return pending
             }
@@ -3297,7 +3297,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Run the paragraph finalize-time matchers on a single flat content `Chunk`: footnote definition, reference-link definitions, GFM table detection, and tasklist marker - then queue the remaining content for inline parsing (or drop the node if it was entirely ref-defs).
     ///
     /// Factored out so both the flat-content path and the (eligibility-gated) segment path can reuse it. `map` is the content's arena→source run map (empty for source-backed content): when the content was flattened from a non-contiguous, re-indented segment list it carries per-line source columns, and when NULs were replaced it images each U+FFFD back to its NUL. It is sliced to the surviving `contentChunk` window and stamped on the node so the inline pass can stamp positions.
-    private mutating func runParagraphMatchers(node: DocumentStorage.Index, raw: Chunk, map: [ArenaRun] = []) throws(MarkdownDocument.Error) {
+    private mutating func runParagraphMatchers(node: DocumentStorage.Index, raw: Chunk, map: [ArenaRun] = []) {
         var trimmed = raw.trimming(using: self)
         precondition(!trimmed.isEmpty, "paragraph content always holds a non-blank line")
         // GFM tasklist: cmark's tasklist extension consumes the checkbox marker at item-OPEN time
@@ -3383,7 +3383,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Close `node`, materialize its accumulated content, and back the parser's `current` pointer up to `node`'s parent.
-    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, atEOF: Bool = false, atxHeadingEnd: Int? = nil) throws(MarkdownDocument.Error) -> PendingLeaf? {
+    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, atEOF: Bool = false, atxHeadingEnd: Int? = nil) -> PendingLeaf? {
         var pending = pending
         let kind = storage[node].kind
 
@@ -3421,7 +3421,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             switch consume drained.content {
             case .chunk(let raw):
                 recordTrailingBlank(of: node, chunk: raw)
-                try runParagraphMatchers(node: node, raw: raw, map: map)
+                runParagraphMatchers(node: node, raw: raw, map: map)
             case .segments(let segs):
                 recordTrailingBlank(of: node, segments: segs)
                 // Multi-line non-contiguous body held as zero-copy source segments. Trim, then only materialize (flatten) if it could match a finalize matcher; plain prose stays segments.
@@ -3434,7 +3434,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // Flatten for the chunk-based matchers, capturing the arena→source run map so a re-indented continuation line's inline content is still stamped (matchers that survive re-seed the map via `runParagraphMatchers`).
                     var map: [ArenaRun] = []
                     let raw = flattenSegments(trimmed, map: &map)
-                    try runParagraphMatchers(node: node, raw: raw, map: map)
+                    runParagraphMatchers(node: node, raw: raw, map: map)
                 } else {
                     pendingInlines.append((node, storage.intern(trimmed)))
                 }

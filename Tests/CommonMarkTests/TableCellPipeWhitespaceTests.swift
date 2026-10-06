@@ -29,7 +29,7 @@ struct TableCellPipeWhitespaceTests {
 
     /// Every row's cell texts, `[header, body1, ...]`, for the first `.table` in the tree; `nil` if none.
     private func tableRows(_ source: String) throws -> [[String]]? {
-        try MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> [[String]]? in
+        MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> [[String]]? in
             func firstTable(_ node: borrowing MarkdownNode) -> [[String]]? {
                 if case .table = node.kind {
                     var rows: [[String]] = []
@@ -56,7 +56,7 @@ struct TableCellPipeWhitespaceTests {
 
     /// The first top-level block's kind: "paragraph" / "heading" / "table" / "other".
     private func firstBlockKind(_ source: String) throws -> String {
-        try MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> String in
+        MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> String in
             var kinds: [String] = []
             doc.root.children.forEach { child in
                 switch child.kind {

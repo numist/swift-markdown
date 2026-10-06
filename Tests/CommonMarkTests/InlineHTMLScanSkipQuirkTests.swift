@@ -60,7 +60,7 @@ struct InlineHTMLScanSkipQuirkTests {
     private func htmlCount(
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> Int {
-        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> Int in
+        MarkdownDocument.withParsedDocument(src, options: options) { doc -> Int in
             inlineHTMLCount(doc.root)
         }
     }

@@ -56,14 +56,14 @@ struct LinkLabelLengthCapTests {
     func referenceDefinitionLabelCap() throws {
         for (options, cap) in Self.modes {
             // At the cap: the definition is valid, so the line is consumed and no block remains.
-            try MarkdownDocument.withParsedDocument("[\(label(cap))]: /u", options: options) { doc in
+            MarkdownDocument.withParsedDocument("[\(label(cap))]: /u", options: options) { doc in
                 let kinds = dfs(doc).map(\.kind)
                 #expect(!kinds.contains(.paragraph),
                         "options=\(options.rawValue): a \(cap)-char definition must be consumed")
             }
 
             // One past the cap: the label scan rewinds, so the line stays a literal paragraph.
-            try MarkdownDocument.withParsedDocument("[\(label(cap + 1))]: /u", options: options) { doc in
+            MarkdownDocument.withParsedDocument("[\(label(cap + 1))]: /u", options: options) { doc in
                 let nodes = dfs(doc)
                 #expect(nodes.map(\.kind).contains(.paragraph),
                         "options=\(options.rawValue): a \(cap + 1)-char definition must fall through to text")
@@ -81,12 +81,12 @@ struct LinkLabelLengthCapTests {
     @Test("shortcut reference resolves at the cap but not one past it")
     func shortcutReferenceLabelCap() throws {
         for (options, cap) in Self.modes {
-            try MarkdownDocument.withParsedDocument("[\(label(cap))]: /u\n\n[\(label(cap))]", options: options) { doc in
+            MarkdownDocument.withParsedDocument("[\(label(cap))]: /u\n\n[\(label(cap))]", options: options) { doc in
                 #expect(linkURLs(doc) == ["/u"],
                         "options=\(options.rawValue): a \(cap)-char reference must resolve")
             }
 
-            try MarkdownDocument.withParsedDocument("[\(label(cap + 1))]: /u\n\n[\(label(cap + 1))]", options: options) { doc in
+            MarkdownDocument.withParsedDocument("[\(label(cap + 1))]: /u\n\n[\(label(cap + 1))]", options: options) { doc in
                 #expect(linkURLs(doc).isEmpty,
                         "options=\(options.rawValue): a \(cap + 1)-char reference must stay literal")
             }
@@ -110,11 +110,11 @@ struct LinkLabelLengthCapTests {
         let right = label(499)
         let source = "[\(left) \(right)]: /u\n\n>[t][\(left)\n\(right)]"
 
-        try MarkdownDocument.withParsedDocument(source, options: [.cmarkBugCompatibility]) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.cmarkBugCompatibility]) { doc in
             #expect(linkURLs(doc) == ["/u"], "flag-ON: a 1000-length cross-line label must resolve")
         }
 
-        try MarkdownDocument.withParsedDocument(source, options: []) { doc in
+        MarkdownDocument.withParsedDocument(source, options: []) { doc in
             #expect(linkURLs(doc).isEmpty, "flag-OFF: the 1000-char definition is rejected, so nothing resolves")
         }
     }

@@ -18,7 +18,7 @@ struct NodeContentTests {
     func linkContent() throws {
         if #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
             let source = "[text](/url \"title\")"
-            try MarkdownDocument.withParsedDocument(source) { doc in
+            MarkdownDocument.withParsedDocument(source) { doc in
             var url: String?
             var title: String?
             func walk(_ node: borrowing MarkdownNode) {
@@ -42,7 +42,7 @@ struct NodeContentTests {
     func codeBlockContent() throws {
         if #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
             let source = "```swift\na\nb\n```\n"
-            try MarkdownDocument.withParsedDocument(source) { doc in
+            MarkdownDocument.withParsedDocument(source) { doc in
             var info: String?
             var bodyJoined = ""
             var segmentCount = 0
@@ -69,7 +69,7 @@ struct NodeContentTests {
     func textContent() throws {
         if #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
             let source = "hello"
-            try MarkdownDocument.withParsedDocument(source) { doc in
+            MarkdownDocument.withParsedDocument(source) { doc in
             var text: String?
             func walk(_ node: borrowing MarkdownNode) {
                 switch node.content {

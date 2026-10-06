@@ -52,7 +52,7 @@ struct TaskListSetextHeadingRecognitionTests {
     private func shape(
         _ source: String, options: MarkdownDocument.ParseOptions
     ) throws -> Shape {
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc -> Shape in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc -> Shape in
             var result = Shape(itemChecked: nil, headingLevel: nil, headingText: nil, allTexts: [])
             // Collect a heading's own text (its direct/indirect text descendants) once we enter it.
             func collectText(_ node: borrowing MarkdownNode, into out: inout String) {

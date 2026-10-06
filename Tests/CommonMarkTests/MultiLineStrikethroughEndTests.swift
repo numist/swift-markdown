@@ -29,7 +29,7 @@ struct MultiLineStrikethroughEndTests {
     /// The source range of the first `.strikethrough` node (DFS order) when `src` is parsed with
     /// `options`. Returns `nil` if no strikethrough forms, so callers can `#require` fixture sanity.
     private func strikethroughRange(in src: String, options: MarkdownDocument.ParseOptions) throws -> Range<Pos>? {
-        try MarkdownDocument.withParsedDocument(src, options: options) {
+        MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> Range<Pos>? in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)
@@ -42,7 +42,7 @@ struct MultiLineStrikethroughEndTests {
 
     /// Every node kind in DFS order (for fixture-sanity assertions about nesting).
     private func kinds(in src: String, options: MarkdownDocument.ParseOptions) throws -> [MarkdownNode.Kind] {
-        try MarkdownDocument.withParsedDocument(src, options: options) {
+        MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [MarkdownNode.Kind] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)

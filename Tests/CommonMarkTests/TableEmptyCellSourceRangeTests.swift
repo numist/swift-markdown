@@ -54,7 +54,7 @@ struct TableEmptyCellSourceRangeTests {
     }
 
     private func tableRows(_ source: String, options: MarkdownDocument.ParseOptions) throws -> [Row] {
-        try MarkdownDocument.withParsedDocument(
+        MarkdownDocument.withParsedDocument(
             source, options: options
         ) { doc -> [Row] in
             var rows: [Row] = []

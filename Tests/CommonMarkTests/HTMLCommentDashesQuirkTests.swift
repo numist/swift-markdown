@@ -36,7 +36,7 @@ struct HTMLCommentDashesQuirkTests {
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> (html: String?, text: String) {
         let inlines: [(kind: MarkdownNode.Kind, literal: String?)] =
-            try MarkdownDocument.withParsedDocument(src, options: options) { doc in
+            MarkdownDocument.withParsedDocument(src, options: options) { doc in
                 paragraphInlines(doc)
             }
         let text = inlines.filter { $0.kind == .text }.compactMap(\.literal).joined()

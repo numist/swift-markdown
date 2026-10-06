@@ -28,7 +28,7 @@ struct LinkDestinationTrailingBackslashTests {
 
     /// (destination url, title) of the first `.link` node in DFS order; nil fields if no link exists.
     private func firstLink(_ source: String) throws -> (url: String?, title: String?) {
-        try MarkdownDocument.withParsedDocument(source) { doc -> (String?, String?) in
+        MarkdownDocument.withParsedDocument(source) { doc -> (String?, String?) in
             var found = false
             var url: String? = nil
             var title: String? = nil
@@ -49,7 +49,7 @@ struct LinkDestinationTrailingBackslashTests {
     private func blocksAndInlines(
         _ source: String
     ) throws -> (top: [MarkdownNode.Kind], inlines: [(kind: MarkdownNode.Kind, literal: String?)]) {
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
             var top: [MarkdownNode.Kind] = []
             doc.root.children.forEach { top.append($0.kind) }
             return (top, paragraphInlines(doc))

@@ -42,7 +42,7 @@ struct NULReplacementTests {
         _ source: String,
         options: MarkdownDocument.ParseOptions = []
     ) throws -> String {
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc in
             allText(doc.root)
         }
     }
@@ -57,7 +57,7 @@ struct NULReplacementTests {
 
     @Test("NUL in a code span becomes U+FFFD")
     func codeSpan() throws {
-        let text = try MarkdownDocument.withParsedDocument("`\u{0}`") { doc -> String in
+        let text = MarkdownDocument.withParsedDocument("`\u{0}`") { doc -> String in
             var out = ""
             doc.root.children.forEach { p in
                 p.children.forEach { inline in
@@ -73,7 +73,7 @@ struct NULReplacementTests {
 
     @Test("NUL in a fenced code block body becomes U+FFFD")
     func fencedCodeBlock() throws {
-        let body = try MarkdownDocument.withParsedDocument("```\n\u{0}\n```") { doc -> String in
+        let body = MarkdownDocument.withParsedDocument("```\n\u{0}\n```") { doc -> String in
             var out = ""
             doc.root.children.forEach { if case .codeBlock = $0.kind, let b = $0.literal() { out += b } }
             return out
@@ -84,7 +84,7 @@ struct NULReplacementTests {
 
     @Test("NUL in an indented code block body becomes U+FFFD")
     func indentedCodeBlock() throws {
-        let body = try MarkdownDocument.withParsedDocument("    \u{0}") { doc -> String in
+        let body = MarkdownDocument.withParsedDocument("    \u{0}") { doc -> String in
             var out = ""
             doc.root.children.forEach { if case .codeBlock = $0.kind, let b = $0.literal() { out += b } }
             return out
@@ -95,7 +95,7 @@ struct NULReplacementTests {
 
     @Test("NUL in a fenced code block info string becomes U+FFFD")
     func codeBlockInfoString() throws {
-        let info = try MarkdownDocument.withParsedDocument("```\u{0}x\n\n```") { doc -> String in
+        let info = MarkdownDocument.withParsedDocument("```\u{0}x\n\n```") { doc -> String in
             var out = ""
             doc.root.children.forEach { if let i = $0.codeBlockInfoString() { out += i } }
             return out
@@ -107,7 +107,7 @@ struct NULReplacementTests {
 
     @Test("NUL in an HTML block body becomes U+FFFD")
     func htmlBlock() throws {
-        let body = try MarkdownDocument.withParsedDocument("<div>\n\u{0}\n</div>") { doc -> String in
+        let body = MarkdownDocument.withParsedDocument("<div>\n\u{0}\n</div>") { doc -> String in
             var out = ""
             doc.root.children.forEach { if case .htmlBlock = $0.kind, let b = $0.literal() { out += b } }
             return out
@@ -118,7 +118,7 @@ struct NULReplacementTests {
 
     @Test("NUL in an inline link destination becomes U+FFFD")
     func inlineLinkDestination() throws {
-        let url = try MarkdownDocument.withParsedDocument("[a](\u{0})") { doc -> String in
+        let url = MarkdownDocument.withParsedDocument("[a](\u{0})") { doc -> String in
             var out = ""
             doc.root.children.forEach { p in
                 p.children.forEach { inline in
@@ -134,7 +134,7 @@ struct NULReplacementTests {
 
     @Test("NUL in a reference-definition destination becomes U+FFFD")
     func referenceDefinitionDestination() throws {
-        let url = try MarkdownDocument.withParsedDocument("[a]\n\n[a]: \u{0}") { doc -> String in
+        let url = MarkdownDocument.withParsedDocument("[a]\n\n[a]: \u{0}") { doc -> String in
             var out = ""
             doc.root.children.forEach { p in
                 p.children.forEach { inline in
@@ -153,7 +153,7 @@ struct NULReplacementTests {
         // The whole first line is a ref-def; the `===` underline triggers `processLine`'s ref-def strip
         // over the paragraph's still-*source-backed* content (bypassing `drainLeaf`), so the definition
         // store is where the NUL must be replaced. cmark yields destination "/u<U+FFFD>".
-        let url = try MarkdownDocument.withParsedDocument("[a]: /u\u{0}\n===\n\n[a]") { doc -> String in
+        let url = MarkdownDocument.withParsedDocument("[a]: /u\u{0}\n===\n\n[a]") { doc -> String in
             var found: String? = nil
             func walk(_ n: borrowing MarkdownNode) {
                 if found == nil, case .link = n.kind { found = n.url() }
@@ -186,7 +186,7 @@ struct NULReplacementTests {
 
     @Test("NUL in an ATX heading becomes U+FFFD")
     func atxHeading() throws {
-        let text = try MarkdownDocument.withParsedDocument("# \u{0}") { doc -> String in
+        let text = MarkdownDocument.withParsedDocument("# \u{0}") { doc -> String in
             var out = ""
             doc.root.children.forEach { if case .heading = $0.kind { out += self.allText($0) } }
             return out
@@ -198,7 +198,7 @@ struct NULReplacementTests {
 
     @Test("NUL in a setext heading becomes U+FFFD")
     func setextHeading() throws {
-        let text = try MarkdownDocument.withParsedDocument("a\u{0}\n==") { doc -> String in
+        let text = MarkdownDocument.withParsedDocument("a\u{0}\n==") { doc -> String in
             var out = ""
             doc.root.children.forEach { if case .heading = $0.kind { out += self.allText($0) } }
             return out
@@ -235,7 +235,7 @@ struct NULReplacementTests {
 
     @Test("NUL in a GFM table cell becomes U+FFFD")
     func tableCell() throws {
-        let cells = try MarkdownDocument.withParsedDocument("h\u{0}\n|-", options: [.tables]) { doc -> [String] in
+        let cells = MarkdownDocument.withParsedDocument("h\u{0}\n|-", options: [.tables]) { doc -> [String] in
             var out: [String] = []
             func walk(_ n: borrowing MarkdownNode) {
                 if case .tableCell = n.kind {
@@ -263,7 +263,7 @@ struct NULReplacementTests {
 
     /// The first `.attribute` node's attributes string, or `nil`.
     private func firstAttributes(_ source: String) throws -> String? {
-        try MarkdownDocument.withParsedDocument(source) { doc -> String? in
+        MarkdownDocument.withParsedDocument(source) { doc -> String? in
             var found: String? = nil
             func walk(_ n: borrowing MarkdownNode) {
                 if found == nil, case .attribute = n.kind { found = n.attributes() }

@@ -37,7 +37,7 @@ struct InlinePositionEncodingTests {
 
     private func nodes(_ src: String) throws -> [InlineNodeInfo] {
         var out: [InlineNodeInfo] = []
-        try MarkdownDocument.withParsedDocument(src, options: Self.opts) { doc in
+        MarkdownDocument.withParsedDocument(src, options: Self.opts) { doc in
             collectInlineNodes(doc.root, into: &out)
         }
         return out

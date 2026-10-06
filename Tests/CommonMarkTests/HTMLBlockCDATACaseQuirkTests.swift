@@ -51,7 +51,7 @@ struct HTMLBlockCDATACaseQuirkTests {
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> (kind: MarkdownNode.Kind, text: String) {
         let found: (MarkdownNode.Kind, String)? =
-            try MarkdownDocument.withParsedDocument(src, options: options) { doc in
+            MarkdownDocument.withParsedDocument(src, options: options) { doc in
                 var first: (MarkdownNode.Kind, String)? = nil
                 doc.root.children.forEach { child in
                     if first == nil { first = (child.kind, allText(child)) }

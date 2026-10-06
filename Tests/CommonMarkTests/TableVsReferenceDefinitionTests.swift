@@ -69,7 +69,7 @@ struct TableVsReferenceDefinitionTests {
         _ source: String,
         options: MarkdownDocument.ParseOptions = [.tables]
     ) throws -> [Block] {
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc -> [Block] in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc -> [Block] in
             var out: [Block] = []
             doc.root.children.forEach { child in
                 var block = Block()
@@ -100,7 +100,7 @@ struct TableVsReferenceDefinitionTests {
         _ source: String,
         options: MarkdownDocument.ParseOptions = [.tables]
     ) throws -> String? {
-        try MarkdownDocument.withParsedDocument(source, options: options) { doc -> String? in
+        MarkdownDocument.withParsedDocument(source, options: options) { doc -> String? in
             var found: String? = nil
             func walk(_ n: borrowing MarkdownNode) {
                 if found == nil, case .link = n.kind { found = n.url() }

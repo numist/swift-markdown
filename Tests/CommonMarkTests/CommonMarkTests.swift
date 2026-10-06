@@ -17,7 +17,7 @@ struct BasicTests {
     @Test("empty document parses to a single .document node with no children")
     func emptyDocument() throws {
         let source = ""
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let root = doc.root
         let kind = root.kind
         let isLeaf = root.isLeaf
@@ -35,7 +35,7 @@ struct BasicTests {
     @Test("non-empty source produces stub paragraph + text (placeholder behavior)")
     func stubParagraph() throws {
         let source = "hello"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let root = doc.root
         let rootKind = root.kind
 
@@ -60,7 +60,7 @@ struct BasicTests {
     @Test("parent/sibling navigation links work")
     func navigation() throws {
         let source = "abc"
-        try MarkdownDocument.withParsedDocument(source) { doc in
+        MarkdownDocument.withParsedDocument(source) { doc in
         let root = doc.root
 
         var paragraphParentKind: MarkdownNode.Kind?
@@ -103,7 +103,7 @@ struct BasicTests {
     @Test("options are exposed on the parsed document")
     func optionsRoundTrip() throws {
         let source = "x"
-        try MarkdownDocument.withParsedDocument(source, options: [.smart, .footnotes]) { doc in
+        MarkdownDocument.withParsedDocument(source, options: [.smart, .footnotes]) { doc in
         let opts = doc.options
         #expect(opts.contains(.smart))
         #expect(opts.contains(.footnotes))
@@ -124,7 +124,7 @@ struct BasicTests {
         - Third item
         """
 
-        try MarkdownDocument.withParsedDocument(sample) { document in
+        MarkdownDocument.withParsedDocument(sample) { document in
         #expect(document.root.kind == .document)
         }
     }

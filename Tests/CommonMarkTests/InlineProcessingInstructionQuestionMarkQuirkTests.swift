@@ -82,7 +82,7 @@ struct InlineProcessingInstructionQuestionMarkQuirkTests {
     private func inlineHTML(
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> String? {
-        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> String? in
+        MarkdownDocument.withParsedDocument(src, options: options) { doc -> String? in
             firstInlineHTML(doc.root)
         }
     }
@@ -90,7 +90,7 @@ struct InlineProcessingInstructionQuestionMarkQuirkTests {
     private func text(
         _ src: String, options: MarkdownDocument.ParseOptions
     ) throws -> String {
-        try MarkdownDocument.withParsedDocument(src, options: options) { doc -> String in
+        MarkdownDocument.withParsedDocument(src, options: options) { doc -> String in
             collectText(doc.root)
         }
     }
@@ -169,7 +169,7 @@ struct InlineProcessingInstructionQuestionMarkQuirkTests {
     func bothStandaloneIsHTMLBlock() throws {
         for options in [Self.flagOff, Self.flagOn] {
             #expect(try inlineHTML("<???>", options: options) == nil)
-            let block = try MarkdownDocument.withParsedDocument("<???>", options: options) { doc -> String? in
+            let block = MarkdownDocument.withParsedDocument("<???>", options: options) { doc -> String? in
                 firstHTMLBlock(doc.root)
             }
             let body = try #require(block, "expected an HTML block")
