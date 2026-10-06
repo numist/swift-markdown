@@ -32,6 +32,7 @@ target_compile_options(CommonMark PRIVATE
   "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-enable-upcoming-feature ApproachableConcurrency>"
   "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-enable-experimental-feature LifetimeDependence>"
   "$<$<COMPILE_LANGUAGE:Swift>:SHELL:-enable-experimental-feature Lifetimes>"
+  "$<$<COMPILE_LANGUAGE:Swift>:-strict-memory-safety>"
   "$<$<COMPILE_LANGUAGE:Swift>:-enable-library-evolution>")
 
 # `_SM_BASIC_CONTAINERS` is set by the root CMakeLists to whichever swift-collections target name is available (namespaced `SwiftCollections::BasicContainers` from find_package, or the plain `BasicContainers` from a source build).
