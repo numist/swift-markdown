@@ -90,7 +90,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
 
         var i = 0
         while i + 16 <= count {
-            let chunk = bytes.load(fromByteOffset: i, as: SIMD16<UInt8>.self)
+            let chunk = bytes.loadSIMD16(fromByteOffset: i)
             let matched = (chunk .== nl) .| (chunk .== cr)
             if any(matched) {
                 let lane = lanes.replacing(with: noMatch, where: .!matched).min()
@@ -107,5 +107,19 @@ internal struct LineReader: ~Escapable, ~Copyable {
             i += 1
         }
         return count
+    }
+}
+
+extension RawSpan {
+    /// The 16 bytes at `offset ..< offset + 16`, which must lie within the span, as one vector. Shared by the SIMD byte scans.
+    @inline(__always)
+    internal func loadSIMD16(fromByteOffset offset: Int) -> SIMD16<UInt8> {
+        #if compiler(>=6.4)
+        return load(fromByteOffset: offset, as: SIMD16<UInt8>.self)
+        #else
+        // SAFETY: Every bit pattern is a valid `SIMD16<UInt8>`, and `unsafeLoadUnaligned(fromByteOffset:as:)` traps unless all 16 bytes lie within the span.
+        //         Before Swift 6.4 the standard library has no `ConvertibleFromBytes` protocol, so there is no safe `RawSpan.load(fromByteOffset:as:)` to load a vector from bytes.
+        return unsafe unsafeLoadUnaligned(fromByteOffset: offset, as: SIMD16<UInt8>.self)
+        #endif
     }
 }

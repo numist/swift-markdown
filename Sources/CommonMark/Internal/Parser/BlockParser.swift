@@ -3981,7 +3981,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         )
     }
 
-    /// Tag names that trigger an HTML block of type 6, sorted alphabetically for the binary-search lookup, as UTF-8 bytes. CommonMark 0.31 §4.6.
+    /// Tag names that trigger an HTML block of type 6, sorted alphabetically, as UTF-8 bytes. CommonMark 0.31 §4.6.
     ///
     /// The HTML-block matchers compare these byte by byte for every candidate line, so they're stored as arrays rather than strings, whose UTF-8 view is slower to index in those loops.
     private static let htmlBlockType6Tags: [[UInt8]] = [

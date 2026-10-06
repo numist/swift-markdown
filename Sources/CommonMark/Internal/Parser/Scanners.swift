@@ -506,7 +506,7 @@ extension BlockParser {
     /// worst case if every byte were NUL) so the one-pass loop never needs to resize.
     private static func normalizeLabel(_ span: Span<UInt8>) -> String {
         String(unsafeUninitializedCapacity: span.count * 3) { buffer in
-            // SAFETY: `buffer` is the string's uninitialized storage, valid for this closure only. `OutputSpan(buffer:initializedCount: 0)` claims none of it as initialized, every append is capacity-checked (`span.count * 3` covers the worst case), and `output.finalize(for: buffer)` checks that `output` still covers `buffer` before reporting its initialized count.
+            // SAFETY: `buffer` is the string's uninitialized storage, valid for this closure only. `OutputSpan(buffer:initializedCount: 0)` claims none of it as initialized, every append is capacity-checked (`span.count * 3` covers the worst case), `output.finalize(for: buffer)` checks that `output` still covers `buffer` before reporting its initialized count, and the initializer repairs any invalid UTF-8 in that prefix.
             //         No String initializer fills its UTF-8 storage through an `OutputSpan`; the safe route builds the bytes in an owned array and copies them with `String(decoding:as:)`, which measured about 1.2% more spec.txt parse instructions.
             var output = unsafe OutputSpan(buffer: buffer, initializedCount: 0)
             var pendingSpace = false

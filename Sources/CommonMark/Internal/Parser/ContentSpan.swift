@@ -362,7 +362,7 @@ internal struct ContentSpan: ~Escapable {
 
         var i = lo
         while i + 16 <= hi {
-            let v = bytes.load(fromByteOffset: i, as: SIMD16<UInt8>.self)
+            let v = bytes.loadSIMD16(fromByteOffset: i)
             var m = ((v .>= clusterLo) .& (v .<= clusterHi))
                 .| (v .== nl) .| (v .== bang) .| (v .== amp) .| (v .== star) .| (v .== lt)
             if strikethrough {

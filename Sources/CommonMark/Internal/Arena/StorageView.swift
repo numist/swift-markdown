@@ -94,13 +94,11 @@ internal struct StorageView: ~Escapable, Copyable {
         if ref.count == 0 {
             return ""
         }
-        // Content is well-formed UTF-8, so validation succeeds; the copy below would repair it otherwise.
-        if ref.count == 1, #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *),
-           let utf8 = try? UTF8Span(validating: bytes(of: segments[Int(ref.first)].chunk)) {
-            return String(copying: utf8)
+        if ref.count == 1, #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
+            return String(copying: utf8Span(of: segments[Int(ref.first)]))
         }
         return String(unsafeUninitializedCapacity: Int(ref.totalLength)) { buffer in
-            // SAFETY: `buffer` is the string's uninitialized storage, valid for this closure only. `OutputSpan(buffer:initializedCount: 0)` claims none of it as initialized, every append is capacity-checked (`ref.totalLength` is the sum of the segment lengths), and `output.finalize(for: buffer)` checks that `output` still covers `buffer` before reporting its initialized count.
+            // SAFETY: `buffer` is the string's uninitialized storage, valid for this closure only. `OutputSpan(buffer:initializedCount: 0)` claims none of it as initialized, every append is capacity-checked (`ref.totalLength` is the sum of the segment lengths), `output.finalize(for: buffer)` checks that `output` still covers `buffer` before reporting its initialized count, and the initializer repairs any invalid UTF-8 in that prefix.
             //         No String initializer fills its UTF-8 storage through an `OutputSpan`; the safe route builds the bytes in an owned array and copies them with `String(decoding:as:)`, which measured about 0.4% more corpus and 3% more spec.txt instructions to parse and read every node's content.
             var output = unsafe OutputSpan(buffer: buffer, initializedCount: 0)
             for i in 0..<Int(ref.count) {
