@@ -20,7 +20,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
     ]
 
     @Test func formFeedBeforeCaret() {
-        #expect(CmarkTreeDump.dump("a\n|-\n|\u{C}^", options: Self.options) == """
+        #expect(TreeDump.dump("a\n|-\n|\u{C}^", options: Self.options) == """
             document
               table
                 table_header
@@ -33,7 +33,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
     }
 
     @Test func mixedWhitespaceBeforeCaret() {
-        #expect(CmarkTreeDump.dump("a\n|-\n|\u{B}\u{C} ^", options: Self.options) == """
+        #expect(TreeDump.dump("a\n|-\n|\u{B}\u{C} ^", options: Self.options) == """
             document
               table
                 table_header
@@ -46,7 +46,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
     }
 
     @Test func verticalTabBeforeCaretInSecondColumn() {
-        #expect(CmarkTreeDump.dump("a|b\n-|-\nx|\u{B}^", options: Self.options) == """
+        #expect(TreeDump.dump("a|b\n-|-\nx|\u{B}^", options: Self.options) == """
             document
               table
                 table_header
@@ -63,7 +63,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
     }
 
     @Test func verticalTabBeforeCaretWithClosingPipe() {
-        #expect(CmarkTreeDump.dump("a\n|-\n|\u{B}^|", options: Self.options) == """
+        #expect(TreeDump.dump("a\n|-\n|\u{B}^|", options: Self.options) == """
             document
               table
                 table_header
@@ -76,7 +76,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
     }
 
     @Test func formFeedBeforeCaretWithPaddedClosingPipe() {
-        #expect(CmarkTreeDump.dump("a\n|-\n|\u{C}^ |", options: Self.options) == """
+        #expect(TreeDump.dump("a\n|-\n|\u{C}^ |", options: Self.options) == """
             document
               table
                 table_header
@@ -89,7 +89,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
     }
 
     @Test func verticalTabBeforeCaretInFirstColumnOfTwo() {
-        #expect(CmarkTreeDump.dump("a|b\n-|-\n|\u{B}^|x", options: Self.options) == """
+        #expect(TreeDump.dump("a|b\n-|-\n|\u{B}^|x", options: Self.options) == """
             document
               table
                 table_header
@@ -107,7 +107,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
 
     /// A header cell has no row above to span into, so it keeps its `^` text but still carries rowspan 0.
     @Test func verticalTabBeforeCaretInHeader() {
-        #expect(CmarkTreeDump.dump("|\u{B}^|\n|-|", options: Self.options) == """
+        #expect(TreeDump.dump("|\u{B}^|\n|-|", options: Self.options) == """
             document
               table
                 table_header
@@ -119,7 +119,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
 
     /// The row's first cell with no leading pipe is not pipe-preceded, so its leading VT is content, not padding.
     @Test func verticalTabBeforeCaretWithoutLeadingPipeStaysLiteral() {
-        #expect(CmarkTreeDump.dump("a|b\n-|-\n\u{B}^|x", options: Self.options) == """
+        #expect(TreeDump.dump("a|b\n-|-\n\u{B}^|x", options: Self.options) == """
             document
               table
                 table_header
@@ -138,7 +138,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
 
     /// A trailing VT is content (only a pipe's leading padding absorbs VT/FF), so `^<VT>` is not a marker.
     @Test func verticalTabAfterCaretStaysLiteral() {
-        #expect(CmarkTreeDump.dump("a\n|-\n|^\u{B}", options: Self.options) == """
+        #expect(TreeDump.dump("a\n|-\n|^\u{B}", options: Self.options) == """
             document
               table
                 table_header
@@ -152,7 +152,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
     }
 
     @Test func verticalTabBeforeCaretFlagOff() {
-        #expect(CmarkTreeDump.dump("a\n|-\n|\u{B}^", options: Self.options) == """
+        #expect(TreeDump.dump("a\n|-\n|\u{B}^", options: Self.options) == """
             document
               table
                 table_header

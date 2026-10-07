@@ -20,7 +20,7 @@ private let autolinkOptions: MarkdownDocument.ParseOptions = [.tables, .striketh
 @Suite("Extended autolink domains")
 struct AutolinkDomainSpecTests {
     private func tree(_ markdown: String) -> String {
-        CmarkTreeDump.dump(markdown, options: autolinkOptions, sourceRanges: true)
+        TreeDump.dump(markdown, options: autolinkOptions, sourceRanges: true)
     }
 
     private func text(_ literal: String) -> String {
@@ -116,7 +116,7 @@ struct AutolinkDomainSpecTests {
 @Suite("Autolinks in link text")
 struct AutolinkInLinkTextTests {
     private func tree(_ markdown: String) -> String {
-        CmarkTreeDump.dump(markdown, options: autolinkOptions, sourceRanges: true)
+        TreeDump.dump(markdown, options: autolinkOptions, sourceRanges: true)
     }
 
     @Test func uriAutolinkInLinkText() {

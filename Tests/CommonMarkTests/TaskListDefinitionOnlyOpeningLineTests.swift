@@ -20,7 +20,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
 
     @Test("without tasklist, both paragraphs are text")
     func laterCheckboxWithoutTasklist() {
-        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x]\n", options: []) == """
+        #expect(TreeDump.dump("- [ ] [a]: /u\n\n  [x]\n", options: []) == """
             document
               list bullet '-' loose
                 item
@@ -34,7 +34,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
 
     @Test("without tasklist, a later checkbox followed by text stays text")
     func laterCheckboxWithTextWithoutTasklist() {
-        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x] foo\n", options: []) == """
+        #expect(TreeDump.dump("- [ ] [a]: /u\n\n  [x] foo\n", options: []) == """
             document
               list bullet '-' loose
                 item
@@ -48,7 +48,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
 
     @Test("without tasklist, a later short paragraph is kept whole")
     func laterShortParagraphWithoutTasklist() {
-        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  ab\n", options: []) == """
+        #expect(TreeDump.dump("- [ ] [a]: /u\n\n  ab\n", options: []) == """
             document
               list bullet '-' loose
                 item
@@ -68,7 +68,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
         ]
     )
     func laterCheckboxBeforeTableWithoutTasklist(source: String) {
-        #expect(CmarkTreeDump.dump(source, options: .tables) == """
+        #expect(TreeDump.dump(source, options: .tables) == """
             document
               list bullet '-' loose
                 item
@@ -94,7 +94,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
 struct TaskListDefinitionShapedRemainderTests {
     @Test("a later paragraph's leading checkbox is text")
     func laterCheckboxIsText() {
-        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x] foo\n", options: .tasklist) == """
+        #expect(TreeDump.dump("- [ ] [a]: /u\n\n  [x] foo\n", options: .tasklist) == """
             document
               list bullet '-' loose
                 tasklist unchecked
@@ -108,7 +108,7 @@ struct TaskListDefinitionShapedRemainderTests {
 
     @Test("a later checkbox line before a table is a paragraph")
     func laterCheckboxBeforeTable() {
-        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x]\n  h|h\n  -|-\n", options: [.tasklist, .tables]) == """
+        #expect(TreeDump.dump("- [ ] [a]: /u\n\n  [x]\n  h|h\n  -|-\n", options: [.tasklist, .tables]) == """
             document
               list bullet '-' loose
                 tasklist unchecked

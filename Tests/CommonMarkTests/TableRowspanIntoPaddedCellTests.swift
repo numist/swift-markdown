@@ -24,7 +24,7 @@ struct TableRowspanIntoPaddedCellTests {
     /// Flag-off (shipped): the cell padded in after `x|`'s row-ending pipe absorbs the span below it like a
     /// parsed cell, where cmark gives a padded cell no span data.
     @Test func explicitEmptyCellAboveCaretGrowsFlagOff() {
-        #expect(CmarkTreeDump.dump("a|b\n-|-\nx|\ny|^", options: Self.options) == """
+        #expect(TreeDump.dump("a|b\n-|-\nx|\ny|^", options: Self.options) == """
             document
               table
                 table_header
@@ -45,7 +45,7 @@ struct TableRowspanIntoPaddedCellTests {
     }
 
     @Test func nonEmptyCellAboveCaretControl() {
-        #expect(CmarkTreeDump.dump("a|b\n-|-\nx|z\ny|^\nw|^", options: Self.options) == """
+        #expect(TreeDump.dump("a|b\n-|-\nx|z\ny|^\nw|^", options: Self.options) == """
             document
               table
                 table_header
@@ -73,7 +73,7 @@ struct TableRowspanIntoPaddedCellTests {
     /// Flag-off (shipped): the padded cell absorbs both spans below it like a parsed cell, where cmark
     /// gives a padded cell no span data.
     @Test func paddedCellAboveSeveralCaretsGrowsFlagOff() {
-        #expect(CmarkTreeDump.dump("a|b\n-|-\nx\ny|^\nw|^", options: Self.options) == """
+        #expect(TreeDump.dump("a|b\n-|-\nx\ny|^\nw|^", options: Self.options) == """
             document
               table
                 table_header
@@ -100,7 +100,7 @@ struct TableRowspanIntoPaddedCellTests {
     /// Flag-off (shipped): each padded cell absorbs the span below it like a parsed cell, where cmark gives
     /// a padded cell no span data.
     @Test func severalPaddedCellsAboveCaretsGrowFlagOff() {
-        #expect(CmarkTreeDump.dump("a|b|c\n-|-|-\nx\ny|^|^", options: Self.options) == """
+        #expect(TreeDump.dump("a|b|c\n-|-|-\nx\ny|^|^", options: Self.options) == """
             document
               table
                 table_header
@@ -126,7 +126,7 @@ struct TableRowspanIntoPaddedCellTests {
 
     /// A parsed cell that is empty (here whitespace-only, in the header) is a real cell, so it does grow.
     @Test func parsedEmptyHeaderCellAboveCaretGrows() {
-        #expect(CmarkTreeDump.dump("| |b\n-|-\n^|x", options: Self.options) == """
+        #expect(TreeDump.dump("| |b\n-|-\n^|x", options: Self.options) == """
             document
               table
                 table_header
@@ -143,7 +143,7 @@ struct TableRowspanIntoPaddedCellTests {
 
     /// Flag-off (shipped): the padded cell absorbs the span below it, as a parsed cell would.
     @Test func paddedCellAboveCaretGrowsFlagOff() {
-        #expect(CmarkTreeDump.dump("a|b\n-|-\nx\ny|^", options: Self.options) == """
+        #expect(TreeDump.dump("a|b\n-|-\nx\ny|^", options: Self.options) == """
             document
               table
                 table_header
@@ -165,7 +165,7 @@ struct TableRowspanIntoPaddedCellTests {
 
     /// Flag-off (shipped): a padded cell still stops the upward scan, and grows instead of the cell above it.
     @Test func paddedCellInterruptsEarlierSpanFlagOff() {
-        #expect(CmarkTreeDump.dump("a|b\n-|-\nx|z\ny|^\nw\nv|^", options: Self.options) == """
+        #expect(TreeDump.dump("a|b\n-|-\nx|z\ny|^\nw\nv|^", options: Self.options) == """
             document
               table
                 table_header
@@ -196,7 +196,7 @@ struct TableRowspanIntoPaddedCellTests {
 
     /// Flag-off (shipped): both the colspan filler and the padded cell beside it grow.
     @Test func colspanFillerAndPaddedCellAboveCaretsGrowFlagOff() {
-        #expect(CmarkTreeDump.dump("a|b|c\n-|-|-\nx||\ny|^|^", options: Self.options) == """
+        #expect(TreeDump.dump("a|b|c\n-|-|-\nx||\ny|^|^", options: Self.options) == """
             document
               table
                 table_header

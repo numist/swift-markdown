@@ -26,7 +26,7 @@ struct HTMLBlockType6TagNameListTests {
 
     @Test("spec-compliant: `<source` at the line end is paragraph text")
     func specSourceAtLineEnd() {
-        #expect(CmarkTreeDump.dump("<source\n", options: Self.specCompliant, sourceRanges: true) == """
+        #expect(TreeDump.dump("<source\n", options: Self.specCompliant, sourceRanges: true) == """
             document @1:1-1:8
               paragraph @1:1-1:8
                 text "<source" @1:1-1:8
@@ -36,7 +36,7 @@ struct HTMLBlockType6TagNameListTests {
 
     @Test("spec-compliant: `<search` at the line end opens an HTML block")
     func specSearchAtLineEnd() {
-        #expect(CmarkTreeDump.dump("<search\n", options: Self.specCompliant, sourceRanges: true) == """
+        #expect(TreeDump.dump("<search\n", options: Self.specCompliant, sourceRanges: true) == """
             document @1:1-1:8
               html_block "<search\\n" @1:1-1:8
 
@@ -45,7 +45,7 @@ struct HTMLBlockType6TagNameListTests {
 
     @Test("spec-compliant: `<search>` interrupts a paragraph")
     func specSearchInterruptsParagraph() {
-        #expect(CmarkTreeDump.dump("para\n<search>\n", options: Self.specCompliant, sourceRanges: true) == """
+        #expect(TreeDump.dump("para\n<search>\n", options: Self.specCompliant, sourceRanges: true) == """
             document @1:1-2:9
               paragraph @1:1-1:5
                 text "para" @1:1-1:5
@@ -56,7 +56,7 @@ struct HTMLBlockType6TagNameListTests {
 
     @Test("spec-compliant: `<source>` doesn't interrupt a paragraph")
     func specSourceContinuesParagraph() {
-        #expect(CmarkTreeDump.dump("para\n<source>\n", options: Self.specCompliant, sourceRanges: true) == """
+        #expect(TreeDump.dump("para\n<source>\n", options: Self.specCompliant, sourceRanges: true) == """
             document @1:1-2:9
               paragraph @1:1-2:9
                 text "para" @1:1-1:5
@@ -70,7 +70,7 @@ struct HTMLBlockType6TagNameListTests {
     /// an HTML block.
     @Test("spec-compliant: an uppercase `<SOURCE` followed by an attribute is paragraph text")
     func specUppercaseSourceWithAttribute() {
-        #expect(CmarkTreeDump.dump("<SOURCE x\n", options: Self.specCompliant, sourceRanges: true) == """
+        #expect(TreeDump.dump("<SOURCE x\n", options: Self.specCompliant, sourceRanges: true) == """
             document @1:1-1:10
               paragraph @1:1-1:10
                 text "<SOURCE x" @1:1-1:10
@@ -82,7 +82,7 @@ struct HTMLBlockType6TagNameListTests {
     /// HTML block.
     @Test("spec-compliant: a mixed-case closing `</soURce` is paragraph text")
     func specMixedCaseClosingSource() {
-        #expect(CmarkTreeDump.dump("</soURce\n", options: Self.specCompliant, sourceRanges: true) == """
+        #expect(TreeDump.dump("</soURce\n", options: Self.specCompliant, sourceRanges: true) == """
             document @1:1-1:9
               paragraph @1:1-1:9
                 text "</soURce" @1:1-1:9
@@ -94,7 +94,7 @@ struct HTMLBlockType6TagNameListTests {
     /// paragraph and stays inline HTML in it, where cmark-gfm opens an HTML block.
     @Test("spec-compliant: `<source/>` doesn't interrupt a paragraph")
     func specSelfClosingSourceContinuesParagraph() {
-        #expect(CmarkTreeDump.dump("para\n<source/>\n", options: Self.specCompliant, sourceRanges: true) == """
+        #expect(TreeDump.dump("para\n<source/>\n", options: Self.specCompliant, sourceRanges: true) == """
             document @1:1-2:10
               paragraph @1:1-2:10
                 text "para" @1:1-1:5
@@ -108,7 +108,7 @@ struct HTMLBlockType6TagNameListTests {
     /// quote's paragraph, where cmark-gfm ends the block quote with an HTML block.
     @Test("spec-compliant: `<source` continues a block quote's paragraph lazily")
     func specSourceContinuesLazily() {
-        #expect(CmarkTreeDump.dump("> a\n<source\n", options: Self.specCompliant, sourceRanges: true) == """
+        #expect(TreeDump.dump("> a\n<source\n", options: Self.specCompliant, sourceRanges: true) == """
             document @1:1-2:8
               block_quote @1:1-2:8
                 paragraph @1:3-2:8
@@ -121,7 +121,7 @@ struct HTMLBlockType6TagNameListTests {
 
     @Test("spec-compliant: a longer name starting with `source` is paragraph text")
     func specLongerNameIsParagraph() {
-        #expect(CmarkTreeDump.dump("<sources\n", options: Self.specCompliant, sourceRanges: true) == """
+        #expect(TreeDump.dump("<sources\n", options: Self.specCompliant, sourceRanges: true) == """
             document @1:1-1:9
               paragraph @1:1-1:9
                 text "<sources" @1:1-1:9
@@ -133,7 +133,7 @@ struct HTMLBlockType6TagNameListTests {
     /// cmark-gfm opens an HTML block.
     @Test("spec-compliant: `<Source` is paragraph text inside a block quote")
     func specSourceInBlockQuote() {
-        #expect(CmarkTreeDump.dump("> <Source\n", options: Self.specCompliant, sourceRanges: true) == """
+        #expect(TreeDump.dump("> <Source\n", options: Self.specCompliant, sourceRanges: true) == """
             document @1:1-1:10
               block_quote @1:1-1:10
                 paragraph @1:3-1:10
@@ -146,7 +146,7 @@ struct HTMLBlockType6TagNameListTests {
     /// `next` continues lazily, where cmark-gfm opens an HTML block and `next` starts a paragraph after the list.
     @Test("spec-compliant: `<source` is paragraph text inside a list item")
     func specSourceInListItem() {
-        #expect(CmarkTreeDump.dump("- <source\nnext\n", options: Self.specCompliant, sourceRanges: true) == """
+        #expect(TreeDump.dump("- <source\nnext\n", options: Self.specCompliant, sourceRanges: true) == """
             document @1:1-2:5
               list bullet '-' tight @1:1-2:5
                 item @1:1-2:5

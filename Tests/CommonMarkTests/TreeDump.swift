@@ -21,7 +21,7 @@ import CommonMark
 ///
 /// With `sourceRanges`, each line ends with the node's source range as `@line:column-line:column` (the end is
 /// half-open), or `@-` for a node without one.
-internal enum CmarkTreeDump {
+internal enum TreeDump {
 
     internal static func dump(_ source: String, options: MarkdownDocument.ParseOptions, sourceRanges: Bool = false) -> String {
         MarkdownDocument.withParsedDocument(source, options: options) { doc in

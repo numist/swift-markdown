@@ -19,7 +19,7 @@ struct AttributeDefinitionLineWhitespaceTests {
 
     @Test("a line tabulation before the attributes is skipped")
     func lineTabulation() {
-        #expect(CmarkTreeDump.dump("^[x][a]\n\n^[a]:\u{0B}b\n", options: .attributes) == """
+        #expect(TreeDump.dump("^[x][a]\n\n^[a]:\u{0B}b\n", options: .attributes) == """
             document
               paragraph
                 attribute "b"
@@ -30,7 +30,7 @@ struct AttributeDefinitionLineWhitespaceTests {
 
     @Test("form feeds around the line ending before the attributes are skipped")
     func formFeedsAroundLineEnding() {
-        #expect(CmarkTreeDump.dump("^[x][a]\n\n^[a]:\u{0C}\n\u{0C}b\n", options: .attributes) == """
+        #expect(TreeDump.dump("^[x][a]\n\n^[a]:\u{0C}\n\u{0C}b\n", options: .attributes) == """
             document
               paragraph
                 attribute "b"
@@ -41,7 +41,7 @@ struct AttributeDefinitionLineWhitespaceTests {
 
     @Test("without attributes, the definition is text")
     func withoutAttributes() {
-        #expect(CmarkTreeDump.dump("^[x][a]\n\n^[a]:\u{0B}b\n", options: []) == """
+        #expect(TreeDump.dump("^[x][a]\n\n^[a]:\u{0B}b\n", options: []) == """
             document
               paragraph
                 text "^[x][a]"

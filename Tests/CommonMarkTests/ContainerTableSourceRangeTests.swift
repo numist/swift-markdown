@@ -29,7 +29,7 @@ struct ContainerTableSourceRangeTests {
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]
 
     private func tree(_ source: String) -> String {
-        CmarkTreeDump.dump(source, options: Self.opts, sourceRanges: true)
+        TreeDump.dump(source, options: Self.opts, sourceRanges: true)
     }
 
     @Test("a table in a list item")

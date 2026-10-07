@@ -24,7 +24,7 @@ struct LazyLineFootnoteReferenceTests {
     /// items), so the item has no checkbox and the lazy line keeps its `2` prefix ahead of the footnote
     /// reference, where cmark's later-line checkbox retry checks the item and drops the advanced bytes.
     @Test func footnoteReferenceFlagOff() {
-        #expect(CmarkTreeDump.dump("- > a\n  2\u{0} [x] [^n]\n\n[^n]: z\n", options: Self.options) == """
+        #expect(TreeDump.dump("- > a\n  2\u{0} [x] [^n]\n\n[^n]: z\n", options: Self.options) == """
             document
               list bullet '-' tight
                 item

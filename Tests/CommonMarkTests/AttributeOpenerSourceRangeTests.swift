@@ -17,7 +17,7 @@ import CommonMark
 struct AttributeOpenerSourceRangeTests {
 
     private func tree(_ source: String) -> String {
-        CmarkTreeDump.dump(source, options: [.sourcePosition, .attributes], sourceRanges: true)
+        TreeDump.dump(source, options: [.sourcePosition, .attributes], sourceRanges: true)
     }
 
     @Test("a lone opener's text spans it")
@@ -43,7 +43,7 @@ struct AttributeOpenerSourceRangeTests {
     /// The opener is not a link bracket, so a GFM extended autolink after it is still recognized.
     @Test("a URL after an opener autolinks")
     func urlAfterOpener() {
-        #expect(CmarkTreeDump.dump("^[http://t.t", options: [.sourcePosition, .gfmAutolink, .attributes], sourceRanges: true) == """
+        #expect(TreeDump.dump("^[http://t.t", options: [.sourcePosition, .gfmAutolink, .attributes], sourceRanges: true) == """
             document @1:1-1:13
               paragraph @1:1-1:13
                 text "^[" @1:1-1:3

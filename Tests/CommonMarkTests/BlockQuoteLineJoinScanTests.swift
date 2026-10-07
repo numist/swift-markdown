@@ -20,7 +20,7 @@ struct BlockQuoteLineJoinScanTests {
     /// onto the next line and matches the definition whose label is the same after normalization.
     @Test("an inline attribute's reference label continues onto the next line")
     func attributeReferenceLabel() {
-        #expect(CmarkTreeDump.dump("> x ^[a][b\n> c]\n\n^[b c]: k", options: [.attributes, .sourcePosition], sourceRanges: true) == """
+        #expect(TreeDump.dump("> x ^[a][b\n> c]\n\n^[b c]: k", options: [.attributes, .sourcePosition], sourceRanges: true) == """
             document @1:1-4:10
               block_quote @1:1-2:5
                 paragraph @1:3-2:5
@@ -35,7 +35,7 @@ struct BlockQuoteLineJoinScanTests {
     /// "Backslash escapes").
     @Test("a link title with an escaped quote continues onto the next line")
     func linkTitleWithEscape() {
-        #expect(CmarkTreeDump.dump("> x [a](b \"c\n> d\\\"e\")", options: [.sourcePosition], sourceRanges: true) == """
+        #expect(TreeDump.dump("> x [a](b \"c\n> d\\\"e\")", options: [.sourcePosition], sourceRanges: true) == """
             document @1:1-2:9
               block_quote @1:1-2:9
                 paragraph @1:3-2:9
@@ -49,7 +49,7 @@ struct BlockQuoteLineJoinScanTests {
     /// A link title that is never closed is no title (spec "Links"), so the bracket and parenthesis stay text.
     @Test("an unclosed link title continuing onto the next line forms no link")
     func unclosedLinkTitle() {
-        #expect(CmarkTreeDump.dump("> x [a](b \"c\n> d)", options: [.sourcePosition], sourceRanges: true) == """
+        #expect(TreeDump.dump("> x [a](b \"c\n> d)", options: [.sourcePosition], sourceRanges: true) == """
             document @1:1-2:5
               block_quote @1:1-2:5
                 paragraph @1:3-2:5

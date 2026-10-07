@@ -26,7 +26,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func leadingDefinitionBeforeBlankLine(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("[a]: /u\n\n[a]", options: options) == """
+        #expect(TreeDump.dump("[a]: /u\n\n[a]", options: options) == """
             document
               paragraph
                 text "\\n"
@@ -38,14 +38,14 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func leadingDefinitionThenReference(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("[a]: /u\n[a]", options: options) == """
+        #expect(TreeDump.dump("[a]: /u\n[a]", options: options) == """
             document
               paragraph
                 link "/u" ""
                   text "a"
 
             """)
-        #expect(CmarkTreeDump.dump("[a]: /u \"t\"\nx [a]", options: options) == """
+        #expect(TreeDump.dump("[a]: /u \"t\"\nx [a]", options: options) == """
             document
               paragraph
                 text "x "
@@ -57,7 +57,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func definitionDestinationOnNextLine(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("[a]:\n/u\n\n[a]", options: options) == """
+        #expect(TreeDump.dump("[a]:\n/u\n\n[a]", options: options) == """
             document
               paragraph
                 text "\\n"
@@ -69,19 +69,19 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func literalDefinitionControls(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("[a]: /u", options: options) == """
+        #expect(TreeDump.dump("[a]: /u", options: options) == """
             document
               paragraph
                 text "[a]: /u"
 
             """)
-        #expect(CmarkTreeDump.dump(" [a]: /u\n\n[a]", options: options) == """
+        #expect(TreeDump.dump(" [a]: /u\n\n[a]", options: options) == """
             document
               paragraph
                 text " [a]: /u\\n\\n[a]"
 
             """)
-        #expect(CmarkTreeDump.dump("x\n[a]: /u\n[a]", options: options) == """
+        #expect(TreeDump.dump("x\n[a]: /u\n[a]", options: options) == """
             document
               paragraph
                 text "x\\n[a]: /u\\n[a]"
@@ -91,7 +91,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func backslashHardBreak(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("a\\\nb", options: options) == """
+        #expect(TreeDump.dump("a\\\nb", options: options) == """
             document
               paragraph
                 text "a"
@@ -103,13 +103,13 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func trailingWhitespaceStaysLiteral(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("a  \nb", options: options) == """
+        #expect(TreeDump.dump("a  \nb", options: options) == """
             document
               paragraph
                 text "a  \\nb"
 
             """)
-        #expect(CmarkTreeDump.dump("a\t\nb", options: options) == """
+        #expect(TreeDump.dump("a\t\nb", options: options) == """
             document
               paragraph
                 text "a\\t\\nb"
@@ -119,7 +119,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func stackedLeadingDefinitions(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("[a]: /u\n[b]: /v\n[a] [b]", options: options) == """
+        #expect(TreeDump.dump("[a]: /u\n[b]: /v\n[a] [b]", options: options) == """
             document
               paragraph
                 link "/u" ""
@@ -133,7 +133,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func definitionTitleSpanningLines(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("[a]: /u \"t\nu\"\n[a]", options: options) == """
+        #expect(TreeDump.dump("[a]: /u \"t\nu\"\n[a]", options: options) == """
             document
               paragraph
                 link "/u" "t\\nu"
@@ -141,7 +141,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
             """)
         // A next-line title with trailing content is rejected; the definition ends after its destination.
-        #expect(CmarkTreeDump.dump("[a]: /u\n(t) x\n[a]", options: options) == """
+        #expect(TreeDump.dump("[a]: /u\n(t) x\n[a]", options: options) == """
             document
               paragraph
                 text "(t) x\\n"
@@ -155,18 +155,18 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
     /// empty-paragraph removal is gated off in inline-only modes.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func definitionFollowedOnlyByWhitespace(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("[a]: /u\n", options: options) == """
+        #expect(TreeDump.dump("[a]: /u\n", options: options) == """
             document
               paragraph
 
             """)
-        #expect(CmarkTreeDump.dump("[a]: /u\n  ", options: options) == """
+        #expect(TreeDump.dump("[a]: /u\n  ", options: options) == """
             document
               paragraph
                 text "  "
 
             """)
-        #expect(CmarkTreeDump.dump("[a]: /u \"t\"", options: options) == """
+        #expect(TreeDump.dump("[a]: /u \"t\"", options: options) == """
             document
               paragraph
 
@@ -177,7 +177,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
     /// only inline-only content (no newline appended to its final line) can hit.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func definitionDestinationAtEndOfInputStaysLiteral(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("[a]: /u\n[b]: /v", options: options) == """
+        #expect(TreeDump.dump("[a]: /u\n[b]: /v", options: options) == """
             document
               paragraph
                 text "[b]: /v"
@@ -187,7 +187,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func definitionAfterCRLF(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("[a]: /u\r\n[a]", options: options) == """
+        #expect(TreeDump.dump("[a]: /u\r\n[a]", options: options) == """
             document
               paragraph
                 link "/u" ""
@@ -199,13 +199,13 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func backslashHardBreakEdges(options: MarkdownDocument.ParseOptions) {
         // At end of input the backslash is literal.
-        #expect(CmarkTreeDump.dump("a\\", options: options) == """
+        #expect(TreeDump.dump("a\\", options: options) == """
             document
               paragraph
                 text "a\\\\"
 
             """)
-        #expect(CmarkTreeDump.dump("a\\\r\nb", options: options) == """
+        #expect(TreeDump.dump("a\\\r\nb", options: options) == """
             document
               paragraph
                 text "a"
@@ -213,7 +213,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
                 text "b"
 
             """)
-        #expect(CmarkTreeDump.dump("a\\\n", options: options) == """
+        #expect(TreeDump.dump("a\\\n", options: options) == """
             document
               paragraph
                 text "a"
@@ -221,7 +221,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
             """)
         // The next line's leading spaces stay literal.
-        #expect(CmarkTreeDump.dump("a\\\n  b", options: options) == """
+        #expect(TreeDump.dump("a\\\n  b", options: options) == """
             document
               paragraph
                 text "a"
@@ -230,7 +230,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
             """)
         // An escaped backslash does not break.
-        #expect(CmarkTreeDump.dump("a\\\\\nb", options: options) == """
+        #expect(TreeDump.dump("a\\\\\nb", options: options) == """
             document
               paragraph
                 text "a\\\\\\nb"
@@ -241,13 +241,13 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func definitionEdgeForms(options: MarkdownDocument.ParseOptions) {
         // A pointy destination reaching the end of input is rejected like a bare one.
-        #expect(CmarkTreeDump.dump("[a]: <>", options: options) == """
+        #expect(TreeDump.dump("[a]: <>", options: options) == """
             document
               paragraph
                 text "[a]: <>"
 
             """)
-        #expect(CmarkTreeDump.dump("[a]: <u> \"t\"\n[a]", options: options) == """
+        #expect(TreeDump.dump("[a]: <u> \"t\"\n[a]", options: options) == """
             document
               paragraph
                 link "u" "t"
@@ -255,25 +255,25 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
             """)
         // Trailing space after the destination keeps it off the end of input, so the definition is consumed.
-        #expect(CmarkTreeDump.dump("[a]: /u ", options: options) == """
+        #expect(TreeDump.dump("[a]: /u ", options: options) == """
             document
               paragraph
 
             """)
         // Attribute definitions are consumed too; they have no destination, so one ending the input is accepted.
-        #expect(CmarkTreeDump.dump("^[x]: a\ny", options: options) == """
+        #expect(TreeDump.dump("^[x]: a\ny", options: options) == """
             document
               paragraph
                 text "y"
 
             """)
-        #expect(CmarkTreeDump.dump("^[x]: a", options: options) == """
+        #expect(TreeDump.dump("^[x]: a", options: options) == """
             document
               paragraph
 
             """)
         // NUL forces the arena path; the definition is still consumed and the NUL becomes U+FFFD.
-        #expect(CmarkTreeDump.dump("[a]: /u\n\u{0}[a]", options: options) == """
+        #expect(TreeDump.dump("[a]: /u\n\u{0}[a]", options: options) == """
             document
               paragraph
                 text "\u{FFFD}"
@@ -285,7 +285,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func backslashHardBreakAfterInlineConstruct(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("`x`\\\nb", options: options) == """
+        #expect(TreeDump.dump("`x`\\\nb", options: options) == """
             document
               paragraph
                 code "x"
@@ -293,7 +293,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
                 text "b"
 
             """)
-        #expect(CmarkTreeDump.dump("*a*\\\nb", options: options) == """
+        #expect(TreeDump.dump("*a*\\\nb", options: options) == """
             document
               paragraph
                 emph

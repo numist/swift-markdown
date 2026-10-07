@@ -18,7 +18,7 @@ class SetextRefdefLazyResidualTests: XCTestCase {
     private func surface(_ markdown: String) -> String {
         var bytes = Array(markdown.utf8)
         bytes.append(0x0a)
-        let (text, options) = FuzzRegressionTests.splitInput(bytes)!
+        let (text, options) = DocumentRegressionTests.splitInput(bytes)!
         return Document(parsing: text, options: options).debugDescription(options: [])
     }
 

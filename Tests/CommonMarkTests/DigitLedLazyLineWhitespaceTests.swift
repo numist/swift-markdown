@@ -26,7 +26,7 @@ struct DigitLedLazyLineWhitespaceTests {
     /// paragraph line's (CommonMark paragraphs), leaving a one-space code span, where cmark's later-line
     /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
     @Test func multiByteLineLazySpaceCodeSpanFlagOff() {
-        #expect(CmarkTreeDump.dump("+\n  22é [x] `\n `", options: Self.options) == """
+        #expect(TreeDump.dump("+\n  22é [x] `\n `", options: Self.options) == """
             document
               list bullet '+' tight
                 item
@@ -42,7 +42,7 @@ struct DigitLedLazyLineWhitespaceTests {
     /// paragraph line's (CommonMark paragraphs), leaving a one-space code span, where cmark's later-line
     /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
     @Test func tabLedLazyLineFlagOff() {
-        #expect(CmarkTreeDump.dump("+\n  2\u{0} [x] `\n\t`", options: Self.options) == """
+        #expect(TreeDump.dump("+\n  2\u{0} [x] `\n\t`", options: Self.options) == """
             document
               list bullet '+' tight
                 item
@@ -57,7 +57,7 @@ struct DigitLedLazyLineWhitespaceTests {
     /// line keeps its `2` prefix while the next line loses its leading whitespace (CommonMark paragraphs),
     /// where cmark's later-line checkbox retry checks the item and drops the advanced bytes.
     @Test func lazyBlockQuoteLineCodeSpanFlagOff() {
-        #expect(CmarkTreeDump.dump("- > a\n  2\u{0} [x] `\n `", options: Self.options) == """
+        #expect(TreeDump.dump("- > a\n  2\u{0} [x] `\n `", options: Self.options) == """
             document
               list bullet '-' tight
                 item
@@ -76,7 +76,7 @@ struct DigitLedLazyLineWhitespaceTests {
     /// paragraph line's (CommonMark paragraphs), leaving a one-space code span, where cmark's later-line
     /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
     @Test func twoSpaceLazyLineCodeSpanFlagOff() {
-        #expect(CmarkTreeDump.dump(" +\n   2\u{0} [x] `\n  `", options: Self.options) == """
+        #expect(TreeDump.dump(" +\n   2\u{0} [x] `\n  `", options: Self.options) == """
             document
               list bullet '+' tight
                 item
@@ -92,7 +92,7 @@ struct DigitLedLazyLineWhitespaceTests {
     /// paragraph line's (CommonMark paragraphs) inside the image title, where cmark's later-line checkbox
     /// retry checks the item and keeps the lazy line's leading whitespace.
     @Test func lazyLineImageTitleFlagOff() {
-        #expect(CmarkTreeDump.dump("+\n  2\u{0} [x] ![a](b \"c\n d\")", options: Self.options) == """
+        #expect(TreeDump.dump("+\n  2\u{0} [x] ![a](b \"c\n d\")", options: Self.options) == """
             document
               list bullet '+' tight
                 item
@@ -108,7 +108,7 @@ struct DigitLedLazyLineWhitespaceTests {
     /// items), so the item has no checkbox, and the link destination follows the line ending, where cmark's
     /// later-line checkbox retry checks the item and keeps the lazy line's leading whitespace.
     @Test func lazyLineLinkDestinationFlagOff() {
-        #expect(CmarkTreeDump.dump("+\n  2\u{0} [x] [a](\n b)", options: Self.options) == """
+        #expect(TreeDump.dump("+\n  2\u{0} [x] [a](\n b)", options: Self.options) == """
             document
               list bullet '+' tight
                 item
@@ -125,7 +125,7 @@ struct DigitLedLazyLineWhitespaceTests {
     /// paragraph line's (CommonMark paragraphs), leaving the code span `a`, where cmark's later-line
     /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
     @Test func secondLazyLineCodeSpanFlagOff() {
-        #expect(CmarkTreeDump.dump("+\n  2\u{0} [x] `\n a\n `", options: Self.options) == """
+        #expect(TreeDump.dump("+\n  2\u{0} [x] `\n a\n `", options: Self.options) == """
             document
               list bullet '+' tight
                 item
@@ -141,7 +141,7 @@ struct DigitLedLazyLineWhitespaceTests {
     /// paragraph line's (CommonMark paragraphs), leaving a one-space code span, where cmark's later-line
     /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
     @Test func matchedContinuationFlagOff() {
-        #expect(CmarkTreeDump.dump("+\n  2\u{0} [x] `\n   `", options: Self.options) == """
+        #expect(TreeDump.dump("+\n  2\u{0} [x] `\n   `", options: Self.options) == """
             document
               list bullet '+' tight
                 item
@@ -157,7 +157,7 @@ struct DigitLedLazyLineWhitespaceTests {
     /// paragraph line's (CommonMark paragraphs), where cmark's later-line checkbox retry checks the item
     /// and keeps the lazy line's leading whitespace.
     @Test func lazyLineAfterSoftBreakFlagOff() {
-        #expect(CmarkTreeDump.dump("+\n  2\u{0} [x] a\n b", options: Self.options) == """
+        #expect(TreeDump.dump("+\n  2\u{0} [x] a\n b", options: Self.options) == """
             document
               list bullet '+' tight
                 item
@@ -174,7 +174,7 @@ struct DigitLedLazyLineWhitespaceTests {
     /// paragraph line's (CommonMark paragraphs) after the hard line break, where cmark's later-line
     /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
     @Test func lazyLineAfterBackslashBreakFlagOff() {
-        #expect(CmarkTreeDump.dump("+\n  2\u{0} [x] a\\\n b", options: Self.options) == """
+        #expect(TreeDump.dump("+\n  2\u{0} [x] a\\\n b", options: Self.options) == """
             document
               list bullet '+' tight
                 item
@@ -191,7 +191,7 @@ struct DigitLedLazyLineWhitespaceTests {
     /// paragraph line's (CommonMark paragraphs), leaving a one-space code span, where cmark's later-line
     /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
     @Test func tabLazyLineCodeSpanFlagOff() {
-        #expect(CmarkTreeDump.dump("100.\n     2\u{0} [x] `\n \t`", options: Self.options) == """
+        #expect(TreeDump.dump("100.\n     2\u{0} [x] `\n \t`", options: Self.options) == """
             document
               list ordered start=100 delim=period tight
                 item
@@ -207,7 +207,7 @@ struct DigitLedLazyLineWhitespaceTests {
     /// paragraph line's (CommonMark paragraphs), leaving a one-space code span, where cmark's later-line
     /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
     @Test func splitTabLazyLineCodeSpanFlagOff() {
-        #expect(CmarkTreeDump.dump("+ 100.\n       2\u{0} [x] `\n \t`", options: Self.options) == """
+        #expect(TreeDump.dump("+ 100.\n       2\u{0} [x] `\n \t`", options: Self.options) == """
             document
               list bullet '+' tight
                 item

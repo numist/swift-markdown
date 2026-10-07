@@ -18,7 +18,7 @@ import CommonMark
 struct SmartPunctuationSourceRangeTests {
 
     private func tree(_ source: String) -> String {
-        CmarkTreeDump.dump(source, options: [.smart, .sourcePosition], sourceRanges: true)
+        TreeDump.dump(source, options: [.smart, .sourcePosition], sourceRanges: true)
     }
 
     @Test("an ellipsis that starts a text spans its three dots")

@@ -18,7 +18,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink, .footnotes]
 
     private func surface(_ markdown: String) -> String {
-        CmarkTreeDump.dump(markdown, options: Self.options)
+        TreeDump.dump(markdown, options: Self.options)
     }
 
     @Test func testEmptyLineControl() {

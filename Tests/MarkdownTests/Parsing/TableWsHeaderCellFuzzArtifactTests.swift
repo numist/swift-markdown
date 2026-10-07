@@ -18,7 +18,7 @@ class TableWsHeaderCellFuzzArtifactTests: XCTestCase {
     /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the spaces
     /// and opens a table headed by a whitespace cell.
     func testLazyTwoSpaceHeaderFlagOff() {
-        let (markdown, options) = FuzzRegressionTests.splitInput([62, 120, 10, 32, 32, 124, 10, 62, 45, 124, 10])!
+        let (markdown, options) = DocumentRegressionTests.splitInput([62, 120, 10, 32, 32, 124, 10, 62, 45, 124, 10])!
         XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", Document(parsing: markdown, options: options).debugDescription(options: []))
     }
 }

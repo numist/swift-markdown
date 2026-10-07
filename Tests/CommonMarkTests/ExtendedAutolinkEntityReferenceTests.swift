@@ -18,7 +18,7 @@ struct ExtendedAutolinkEntityReferenceTests {
     /// An entity reference after an extended autolink's domain stays literal in the autolink.
     @Test
     func testGFMExtendedAutolinkWithoutBugCompatibility() {
-        #expect(CmarkTreeDump.dump("http://a.a&amp;b", options: Self.options) == """
+        #expect(TreeDump.dump("http://a.a&amp;b", options: Self.options) == """
             document
               paragraph
                 link "http://a.a&amp;b" ""

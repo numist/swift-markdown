@@ -18,13 +18,13 @@ struct InlineOnlyFootnoteQuirkTests {
     private static let preserveWhitespace: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes, .preserveWhitespace]
 
     @Test func test_footnote_multiline_label_flag_off() {
-        #expect(CmarkTreeDump.dump(String(decoding: [91, 94, 10, 128, 93] as [UInt8], as: UTF8.self), options: Self.inlineOnly) == """
+        #expect(TreeDump.dump(String(decoding: [91, 94, 10, 128, 93] as [UInt8], as: UTF8.self), options: Self.inlineOnly) == """
             document
               paragraph
                 text "[^\\n\u{FFFD}]"
 
             """)
-        #expect(CmarkTreeDump.dump(String(decoding: [91, 94, 10, 128, 93] as [UInt8], as: UTF8.self), options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump(String(decoding: [91, 94, 10, 128, 93] as [UInt8], as: UTF8.self), options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "[^\\n\u{FFFD}]"
@@ -34,13 +34,13 @@ struct InlineOnlyFootnoteQuirkTests {
 
     /// A footnote reference label cannot hold an unescaped `[`, so the bracket run stays literal text.
     @Test func test_footnote_caret_bracket_innerclose_flag_off() {
-        #expect(CmarkTreeDump.dump("[^[]\n]", options: Self.inlineOnly) == """
+        #expect(TreeDump.dump("[^[]\n]", options: Self.inlineOnly) == """
             document
               paragraph
                 text "[^[]\\n]"
 
             """)
-        #expect(CmarkTreeDump.dump("[^[]\n]", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("[^[]\n]", options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "[^[]\\n]"
@@ -50,13 +50,13 @@ struct InlineOnlyFootnoteQuirkTests {
 
     /// A footnote reference label cannot hold an unescaped `[`, so the bracket run stays literal text.
     @Test func test_footnote_caret_bracket_spans_empty_flag_off() {
-        #expect(CmarkTreeDump.dump("[^[\n]]", options: Self.inlineOnly) == """
+        #expect(TreeDump.dump("[^[\n]]", options: Self.inlineOnly) == """
             document
               paragraph
                 text "[^[\\n]]"
 
             """)
-        #expect(CmarkTreeDump.dump("[^[\n]]", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("[^[\n]]", options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "[^[\\n]]"
@@ -66,13 +66,13 @@ struct InlineOnlyFootnoteQuirkTests {
 
     /// An escaped `^` is a literal caret, so the text keeps its single `]`.
     @Test func test_footnote_escaped_caret_crossline_flag_off() {
-        #expect(CmarkTreeDump.dump("[\\^\nx]", options: Self.inlineOnly) == """
+        #expect(TreeDump.dump("[\\^\nx]", options: Self.inlineOnly) == """
             document
               paragraph
                 text "[^\\nx]"
 
             """)
-        #expect(CmarkTreeDump.dump("[\\^\nx]", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("[\\^\nx]", options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "[^\\nx]"
@@ -82,13 +82,13 @@ struct InlineOnlyFootnoteQuirkTests {
 
     /// An escaped `^` is a literal caret, so the text keeps its leading `!`.
     @Test func test_footnote_escaped_caret_image_flag_off() {
-        #expect(CmarkTreeDump.dump("![\\^x]", options: Self.inlineOnly) == """
+        #expect(TreeDump.dump("![\\^x]", options: Self.inlineOnly) == """
             document
               paragraph
                 text "![^x]"
 
             """)
-        #expect(CmarkTreeDump.dump("![\\^x]", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("![\\^x]", options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "![^x]"
@@ -97,13 +97,13 @@ struct InlineOnlyFootnoteQuirkTests {
     }
 
     @Test func test_footnote_multiline_collapse_blockquote_flag_off() {
-        #expect(CmarkTreeDump.dump(String(decoding: [62, 91, 94, 10, 128, 93] as [UInt8], as: UTF8.self), options: Self.inlineOnly) == """
+        #expect(TreeDump.dump(String(decoding: [62, 91, 94, 10, 128, 93] as [UInt8], as: UTF8.self), options: Self.inlineOnly) == """
             document
               paragraph
                 text ">[^\\n\u{FFFD}]"
 
             """)
-        #expect(CmarkTreeDump.dump(String(decoding: [62, 91, 94, 10, 128, 93] as [UInt8], as: UTF8.self), options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump(String(decoding: [62, 91, 94, 10, 128, 93] as [UInt8], as: UTF8.self), options: Self.preserveWhitespace) == """
             document
               paragraph
                 text ">[^\\n\u{FFFD}]"
@@ -112,13 +112,13 @@ struct InlineOnlyFootnoteQuirkTests {
     }
 
     @Test func test_footnote_multiline_label_multibyte_flag_off() {
-        #expect(CmarkTreeDump.dump(String(decoding: [91, 94, 10, 128, 112, 93] as [UInt8], as: UTF8.self), options: Self.inlineOnly) == """
+        #expect(TreeDump.dump(String(decoding: [91, 94, 10, 128, 112, 93] as [UInt8], as: UTF8.self), options: Self.inlineOnly) == """
             document
               paragraph
                 text "[^\\n\u{FFFD}p]"
 
             """)
-        #expect(CmarkTreeDump.dump(String(decoding: [91, 94, 10, 128, 112, 93] as [UInt8], as: UTF8.self), options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump(String(decoding: [91, 94, 10, 128, 112, 93] as [UInt8], as: UTF8.self), options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "[^\\n\u{FFFD}p]"
@@ -127,13 +127,13 @@ struct InlineOnlyFootnoteQuirkTests {
     }
 
     @Test func test_probe_crossline_plain_label_flag_off() {
-        #expect(CmarkTreeDump.dump("a[^x\ny]b", options: Self.inlineOnly) == """
+        #expect(TreeDump.dump("a[^x\ny]b", options: Self.inlineOnly) == """
             document
               paragraph
                 text "a[^x\\ny]b"
 
             """)
-        #expect(CmarkTreeDump.dump("a[^x\ny]b", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("a[^x\ny]b", options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "a[^x\\ny]b"
@@ -142,13 +142,13 @@ struct InlineOnlyFootnoteQuirkTests {
     }
 
     @Test func test_probe_crossline_crlf_label_flag_off() {
-        #expect(CmarkTreeDump.dump("[^a\r\nb]", options: Self.inlineOnly) == """
+        #expect(TreeDump.dump("[^a\r\nb]", options: Self.inlineOnly) == """
             document
               paragraph
                 text "[^a\\nb]"
 
             """)
-        #expect(CmarkTreeDump.dump("[^a\r\nb]", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("[^a\r\nb]", options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "[^a\\nb]"
@@ -158,7 +158,7 @@ struct InlineOnlyFootnoteQuirkTests {
 
     /// Backticks form a code span whose line ending becomes a space.
     @Test func test_probe_codespan_newline_resets_flag_off() {
-        #expect(CmarkTreeDump.dump("[^`a\nb`\nc]", options: Self.inlineOnly) == """
+        #expect(TreeDump.dump("[^`a\nb`\nc]", options: Self.inlineOnly) == """
             document
               paragraph
                 text "[^"
@@ -166,7 +166,7 @@ struct InlineOnlyFootnoteQuirkTests {
                 text "\\nc]"
 
             """)
-        #expect(CmarkTreeDump.dump("[^`a\nb`\nc]", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("[^`a\nb`\nc]", options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "[^"
@@ -178,13 +178,13 @@ struct InlineOnlyFootnoteQuirkTests {
 
     /// An escaped `^` is a literal caret, so the text keeps its single `]`.
     @Test func test_probe_escaped_caret_crossline_long_flag_off() {
-        #expect(CmarkTreeDump.dump("[\\^abcdef\nxxxxx]", options: Self.inlineOnly) == """
+        #expect(TreeDump.dump("[\\^abcdef\nxxxxx]", options: Self.inlineOnly) == """
             document
               paragraph
                 text "[^abcdef\\nxxxxx]"
 
             """)
-        #expect(CmarkTreeDump.dump("[\\^abcdef\nxxxxx]", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("[\\^abcdef\nxxxxx]", options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "[^abcdef\\nxxxxx]"
@@ -194,13 +194,13 @@ struct InlineOnlyFootnoteQuirkTests {
 
     /// An escaped `^` is a literal caret, so the text keeps its leading `!`.
     @Test func test_probe_escaped_caret_image_crossline_flag_off() {
-        #expect(CmarkTreeDump.dump("![\\^a\nb]", options: Self.inlineOnly) == """
+        #expect(TreeDump.dump("![\\^a\nb]", options: Self.inlineOnly) == """
             document
               paragraph
                 text "![^a\\nb]"
 
             """)
-        #expect(CmarkTreeDump.dump("![\\^a\nb]", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("![\\^a\nb]", options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "![^a\\nb]"
@@ -210,13 +210,13 @@ struct InlineOnlyFootnoteQuirkTests {
 
     /// An escaped `^` is a literal caret, so the text is the source with its `!` and no extra `]`.
     @Test func test_probe_escaped_caret_image_trailing_newline_flag_off() {
-        #expect(CmarkTreeDump.dump("![\\^x]\n", options: Self.inlineOnly) == """
+        #expect(TreeDump.dump("![\\^x]\n", options: Self.inlineOnly) == """
             document
               paragraph
                 text "![^x]\\n"
 
             """)
-        #expect(CmarkTreeDump.dump("![\\^x]\n", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("![\\^x]\n", options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "![^x]\\n"

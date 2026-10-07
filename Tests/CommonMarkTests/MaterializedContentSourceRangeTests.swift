@@ -19,7 +19,7 @@ struct MaterializedContentSourceRangeTests {
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]
 
     private func tree(_ source: String, options: MarkdownDocument.ParseOptions) -> String {
-        CmarkTreeDump.dump(source, options: options, sourceRanges: true)
+        TreeDump.dump(source, options: options, sourceRanges: true)
     }
 
     /// The table starts on line 3 with its header row, the first line left once the definition is resolved, where

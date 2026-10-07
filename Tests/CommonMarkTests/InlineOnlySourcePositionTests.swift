@@ -28,7 +28,7 @@ struct InlineOnlySourcePositionTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func secondLineTextIsOnLineTwo(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("a\nb *c*", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("a\nb *c*", options: options, sourceRanges: true) == """
             document @1:1-2:6
               paragraph @1:1-2:6
                 text "a\\nb " @1:1-2:3
@@ -40,7 +40,7 @@ struct InlineOnlySourcePositionTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func backslashHardBreakAcrossLines(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("a\\\nb", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("a\\\nb", options: options, sourceRanges: true) == """
             document @1:1-2:2
               paragraph @1:1-2:2
                 text "a" @1:1-1:2
@@ -53,7 +53,7 @@ struct InlineOnlySourcePositionTests {
     /// A CRLF is normalized to one `\n` in the content but still occupies two source bytes, so line 2 starts after both.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func crlfLineEnding(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("a\r\nb *c*", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("a\r\nb *c*", options: options, sourceRanges: true) == """
             document @1:1-2:6
               paragraph @1:1-2:6
                 text "a\\nb " @1:1-2:3
@@ -62,7 +62,7 @@ struct InlineOnlySourcePositionTests {
 
             """)
         // The normalized `\n` images the LF, so text ending at a CRLF covers both bytes and ends at the next line's start...
-        #expect(CmarkTreeDump.dump("a\r\n*b*", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("a\r\n*b*", options: options, sourceRanges: true) == """
             document @1:1-2:4
               paragraph @1:1-2:4
                 text "a\\n" @1:1-2:1
@@ -71,7 +71,7 @@ struct InlineOnlySourcePositionTests {
 
             """)
         // ...while text starting at a CRLF starts at its LF, one byte past the CR.
-        #expect(CmarkTreeDump.dump("*a*\r\nb", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("*a*\r\nb", options: options, sourceRanges: true) == """
             document @1:1-2:2
               paragraph @1:1-2:2
                 emph @1:1-1:4
@@ -84,7 +84,7 @@ struct InlineOnlySourcePositionTests {
     /// A lone CR ends a line just like LF does.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func loneCRLineEnding(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("a\rb *c*", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("a\rb *c*", options: options, sourceRanges: true) == """
             document @1:1-2:6
               paragraph @1:1-2:6
                 text "a\\nb " @1:1-2:3
@@ -97,7 +97,7 @@ struct InlineOnlySourcePositionTests {
     /// A NUL is one source byte even though it surfaces as the three-byte U+FFFD.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func nul(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("a\u{0}b *c*", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("a\u{0}b *c*", options: options, sourceRanges: true) == """
             document @1:1-1:8
               paragraph @1:1-1:8
                 text "a\u{FFFD}b " @1:1-1:5
@@ -110,7 +110,7 @@ struct InlineOnlySourcePositionTests {
     /// A NUL ending the input, after a CRLF: the U+FFFD text ends at the source's last byte, not two bytes past it.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func trailingNULAfterCRLF(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("a\r\n*b*\u{0}", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("a\r\n*b*\u{0}", options: options, sourceRanges: true) == """
             document @1:1-2:5
               paragraph @1:1-2:5
                 text "a\\n" @1:1-2:1
@@ -124,13 +124,13 @@ struct InlineOnlySourcePositionTests {
     /// A leading byte-order mark is skipped: line 1's columns count from the byte after it.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func leadingByteOrderMark(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("\u{FEFF}a\nb", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("\u{FEFF}a\nb", options: options, sourceRanges: true) == """
             document @1:1-2:2
               paragraph @1:1-2:2
                 text "a\\nb" @1:1-2:2
 
             """)
-        #expect(CmarkTreeDump.dump("\u{FEFF}a\r\nb", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("\u{FEFF}a\r\nb", options: options, sourceRanges: true) == """
             document @1:1-2:2
               paragraph @1:1-2:2
                 text "a\\nb" @1:1-2:2
@@ -141,12 +141,12 @@ struct InlineOnlySourcePositionTests {
     /// A BOM-only input's empty paragraph sits at the start of line 1, past the BOM; a blank line after the BOM ends where its line ending starts, so the ranges are empty.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func byteOrderMarkWithoutContent(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("\u{FEFF}", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("\u{FEFF}", options: options, sourceRanges: true) == """
             document @1:1-1:1
               paragraph @1:1-1:1
 
             """)
-        #expect(CmarkTreeDump.dump("\u{FEFF}\n", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("\u{FEFF}\n", options: options, sourceRanges: true) == """
             document @1:1-1:1
               paragraph @1:1-1:1
                 text "\\n" @1:1-1:1
@@ -157,7 +157,7 @@ struct InlineOnlySourcePositionTests {
     /// Blank lines and a trailing line ending are literal paragraph content, so the paragraph and document span them, but every range ends where the final line ending starts, at the end of the last line.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func blankLinesAndTrailingLineEnding(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("a\n\n  b\n", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("a\n\n  b\n", options: options, sourceRanges: true) == """
             document @1:1-3:4
               paragraph @1:1-3:4
                 text "a\\n\\n  b\\n" @1:1-3:4
@@ -168,7 +168,7 @@ struct InlineOnlySourcePositionTests {
     /// Columns are UTF-8 byte offsets, so a two-byte scalar on line 2 advances the column by two.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func multibyteScalarOnSecondLine(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("a\né *c*", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("a\né *c*", options: options, sourceRanges: true) == """
             document @1:1-2:7
               paragraph @1:1-2:7
                 text "a\\né " @1:1-2:4
@@ -181,7 +181,7 @@ struct InlineOnlySourcePositionTests {
     /// Leading reference definitions are consumed from the normalized CRLF content; what remains keeps its original-source positions.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func leadingReferenceDefinitionWithCRLF(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("[a]: /u\r\n\r\n[a]", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("[a]: /u\r\n\r\n[a]", options: options, sourceRanges: true) == """
             document @1:1-3:4
               paragraph @1:1-3:4
                 text "\\n" @2:2-3:1
@@ -193,7 +193,7 @@ struct InlineOnlySourcePositionTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func linkSpanningLines(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("[a\nb](u)", options: options, sourceRanges: true) == """
+        #expect(TreeDump.dump("[a\nb](u)", options: options, sourceRanges: true) == """
             document @1:1-2:6
               paragraph @1:1-2:6
                 link "u" "" @1:1-2:6

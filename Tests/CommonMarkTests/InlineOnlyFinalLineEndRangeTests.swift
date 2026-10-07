@@ -21,7 +21,7 @@ struct InlineOnlyFinalLineEndRangeTests {
     private static let modes: [MarkdownDocument.ParseOptions] = [.inlineOnly, .preserveWhitespace]
 
     private func tree(_ source: String, _ mode: MarkdownDocument.ParseOptions, _ extra: MarkdownDocument.ParseOptions = []) -> String {
-        CmarkTreeDump.dump(source, options: mode.union(.sourcePosition).union(extra), sourceRanges: true)
+        TreeDump.dump(source, options: mode.union(.sourcePosition).union(extra), sourceRanges: true)
     }
 
     /// cmark-gfm ends the text at `@1:3`, a column past the line, because it counts the line ending the text holds.

@@ -18,7 +18,7 @@ struct FootnoteCaretBracketResolutionTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes]
 
     private static func surface(_ markdown: String) -> String {
-        CmarkTreeDump.dump(markdown, options: Self.options)
+        TreeDump.dump(markdown, options: Self.options)
     }
 
     @Test

@@ -19,10 +19,10 @@ struct InlineOnlyBlankInputTests {
         [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .preserveWhitespace],
     ] as [MarkdownDocument.ParseOptions])
     func testEmptyAndBlankInputs(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("", options: options) == "document\n")
-        #expect(CmarkTreeDump.dump("\u{FEFF}", options: options) == "document\n  paragraph\n")
-        #expect(CmarkTreeDump.dump("\u{FEFF}\n", options: options) == "document\n  paragraph\n    text \"\\n\"\n")
-        #expect(CmarkTreeDump.dump("\u{FEFF}  ", options: options) == "document\n  paragraph\n    text \"  \"\n")
-        #expect(CmarkTreeDump.dump("\n", options: options) == "document\n  paragraph\n    text \"\\n\"\n")
+        #expect(TreeDump.dump("", options: options) == "document\n")
+        #expect(TreeDump.dump("\u{FEFF}", options: options) == "document\n  paragraph\n")
+        #expect(TreeDump.dump("\u{FEFF}\n", options: options) == "document\n  paragraph\n    text \"\\n\"\n")
+        #expect(TreeDump.dump("\u{FEFF}  ", options: options) == "document\n  paragraph\n    text \"  \"\n")
+        #expect(TreeDump.dump("\n", options: options) == "document\n  paragraph\n    text \"\\n\"\n")
     }
 }

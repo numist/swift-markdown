@@ -24,7 +24,7 @@ struct TaskListRetryAfterSetextDefinitionTests {
     /// text with only the NUL replaced, where cmark checks the item and drops the line's leading `1`.
     @Test("without cmark bug compatibility, the item stays plain and the lazy line keeps its text", arguments: positionModes)
     func lazyLineAfterUnderlineSpecCorrect(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("- > [a]:\n  > u\n  > ===\n  1\u{0} [x] b\n", options: mode.union(.tasklist)) == """
+        #expect(TreeDump.dump("- > [a]:\n  > u\n  > ===\n  1\u{0} [x] b\n", options: mode.union(.tasklist)) == """
             document
               list bullet '-' tight
                 item

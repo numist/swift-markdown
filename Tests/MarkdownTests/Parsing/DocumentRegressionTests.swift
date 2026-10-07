@@ -14,7 +14,7 @@ import Testing
 
 /// Regression coverage for divergences found by the swift-markdown-difftest differential fuzzer.
 ///
-/// Each case is a pair of files in `FuzzRegressions/`:
+/// Each case is a pair of files in `DocumentRegressions/`:
 ///   - `<name>.input`    — the raw fuzzer artifact bytes (`[markdown …][final byte = options]`).
 ///   - `<name>.expected` — the shipped parser's surface WITH source positions
 ///                         (`debugDescription(options: .printSourceLocations)`). Its structure + literal
@@ -26,22 +26,22 @@ import Testing
 /// `@Test(arguments:)` runs one case per pair, so a failure names the exact fixture. The input split
 /// mirrors `DiffSupport.splitInput` (the fuzzer and `dump` build from it); MarkdownTests can't import
 /// that package, so the equivalent is inlined here.
-struct FuzzRegressionTests {
+struct DocumentRegressionTests {
 
     static let corpusDir: URL = {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("FuzzRegressions")
+            .appendingPathComponent("DocumentRegressions")
     }()
 
     /// Basenames of every `<name>.input` fixture, sorted. Built once from the filesystem so adding a
-    /// pair to `FuzzRegressions/` automatically adds a test case with no code change.
+    /// pair to `DocumentRegressions/` automatically adds a test case with no code change.
     static let corpus: [String] = {
         guard let contents = try? FileManager.default.contentsOfDirectory(
             at: corpusDir, includingPropertiesForKeys: nil
         ) else {
-            fatalError("Failed to enumerate FuzzRegressions corpus at \(corpusDir.path)")
+            fatalError("Failed to enumerate DocumentRegressions corpus at \(corpusDir.path)")
         }
         return contents.filter { $0.pathExtension == "input" }
             .map { $0.deletingPathExtension().lastPathComponent }
@@ -69,7 +69,7 @@ struct FuzzRegressionTests {
     }
 
     @Test(arguments: corpus)
-    func fuzzRegression(_ name: String) throws {
+    func documentRegression(_ name: String) throws {
         let bytes = [UInt8](try Data(contentsOf: Self.corpusDir.appendingPathComponent("\(name).input")))
         let expected = try String(
             contentsOf: Self.corpusDir.appendingPathComponent("\(name).expected"), encoding: .utf8)

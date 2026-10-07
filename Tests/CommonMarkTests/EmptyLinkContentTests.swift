@@ -20,7 +20,7 @@ struct EmptyLinkContentTests {
 
     @Test("the tree holds a link with an empty URL and title")
     func tree() {
-        #expect(CmarkTreeDump.dump(source, options: []) == """
+        #expect(TreeDump.dump(source, options: []) == """
             document
               paragraph
                 link "" ""

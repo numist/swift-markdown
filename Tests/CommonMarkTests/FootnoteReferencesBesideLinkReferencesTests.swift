@@ -29,7 +29,7 @@ struct FootnoteReferencesBesideLinkReferencesTests {
         let markdown = "[^n]: note\n\n[bar]: /" + String(repeating: "a", count: 2000) + "\n\n"
             + Array(repeating: "[^n]", count: 100).joined(separator: " ") + " "
             + Array(repeating: "[bar]", count: 60).joined(separator: " ")
-        let dump = CmarkTreeDump.dump(markdown, options: Self.options)
+        let dump = TreeDump.dump(markdown, options: Self.options)
         #expect(count("footnote_reference", in: dump) == 100)
         #expect(count("link", in: dump) == 60)
     }

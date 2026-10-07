@@ -17,7 +17,7 @@ struct PreserveWhitespaceLinkDestinationEndTests {
 
     @Test
     func destinationFollowedBySpacesAtEndOfInlineContent() {
-        #expect(CmarkTreeDump.dump("[](a ", options: Self.options) == """
+        #expect(TreeDump.dump("[](a ", options: Self.options) == """
             document
               paragraph
                 text "[](a "

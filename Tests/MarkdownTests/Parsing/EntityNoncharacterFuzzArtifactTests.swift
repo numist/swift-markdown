@@ -17,7 +17,7 @@ class EntityNoncharacterFuzzArtifactTests: XCTestCase {
     /// `&#65534;` decodes to the noncharacter U+FFFE, a valid code point CommonMark keeps, whereas cmark-gfm
     /// emits an invalid byte that its Swift bridge repairs to U+FFFD.
     func testFuzzedArtifactWithoutBugCompatibility() {
-        let (markdown, options) = FuzzRegressionTests.splitInput([38, 35, 54, 53, 53, 51, 52, 59, 0])!
+        let (markdown, options) = DocumentRegressionTests.splitInput([38, 35, 54, 53, 53, 51, 52, 59, 0])!
         let uFFFE = String(Unicode.Scalar(0xFFFE as UInt32)!)
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"\(uFFFE)\"", Document(parsing: markdown, options: options).debugDescription(options: []))
     }

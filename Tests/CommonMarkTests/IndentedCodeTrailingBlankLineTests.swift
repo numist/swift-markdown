@@ -18,7 +18,7 @@ struct IndentedCodeTrailingBlankLineTests {
 
     @Test("a trailing whitespace-only line is dropped from the body")
     func trailingWhitespaceLineDropped() {
-        #expect(CmarkTreeDump.dump("\t a\n\t  \n", options: []) == """
+        #expect(TreeDump.dump("\t a\n\t  \n", options: []) == """
             document
               code_block "" " a\\n"
 

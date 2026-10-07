@@ -17,7 +17,7 @@ struct FootnoteParsingTests {
 
     @Test
     func simpleReferenceAndDefinition() {
-        #expect(CmarkTreeDump.dump("see [^a]\n\n[^a]: note\n", options: Self.options) == """
+        #expect(TreeDump.dump("see [^a]\n\n[^a]: note\n", options: Self.options) == """
             document
               paragraph
                 text "see "
@@ -33,7 +33,7 @@ struct FootnoteParsingTests {
     /// following non-indented line (cmark: def prefix fails, the open paragraph continues).
     @Test
     func definitionLazyContinuation() {
-        #expect(CmarkTreeDump.dump("[^a]: text\nlazy line\n\nsee [^a]\n", options: Self.options) == """
+        #expect(TreeDump.dump("[^a]: text\nlazy line\n\nsee [^a]\n", options: Self.options) == """
             document
               paragraph
                 text "see "

@@ -14,7 +14,7 @@ import XCTest
 /// Inputs are `[markdown …][option byte]`, split as the fuzzer does.
 class TaskListRetryOrphanInFlattenedContentTests: XCTestCase {
     private func surface(_ bytes: [UInt8]) -> String {
-        let (markdown, options) = FuzzRegressionTests.splitInput(bytes)!
+        let (markdown, options) = DocumentRegressionTests.splitInput(bytes)!
         return Document(parsing: markdown, options: options).debugDescription(options: [])
     }
 

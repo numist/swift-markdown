@@ -19,7 +19,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
 
     @Test
     func testTopLevelAfterBlankThenNULLine() {
-        #expect(CmarkTreeDump.dump("^[][$]\n\n^[$]:l \n\u{0}", options: Self.options) == """
+        #expect(TreeDump.dump("^[][$]\n\n^[$]:l \n\u{0}", options: Self.options) == """
             document
               paragraph
                 attribute "l"
@@ -31,7 +31,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
 
     @Test
     func testTrailingTab() {
-        #expect(CmarkTreeDump.dump("^[][$]\n- ^[$]:l\t\n\u{0}", options: Self.options) == """
+        #expect(TreeDump.dump("^[][$]\n- ^[$]:l\t\n\u{0}", options: Self.options) == """
             document
               paragraph
                 attribute "l"
@@ -45,7 +45,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
 
     @Test
     func testBlockQuote() {
-        #expect(CmarkTreeDump.dump("^[][$]\n> ^[$]:l \n\u{0}", options: Self.options) == """
+        #expect(TreeDump.dump("^[][$]\n> ^[$]:l \n\u{0}", options: Self.options) == """
             document
               paragraph
                 attribute "l"
@@ -58,7 +58,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
 
     @Test
     func testTwoTrailingSpaces() {
-        #expect(CmarkTreeDump.dump("^[][$]\n- ^[$]:l  \n\u{0}", options: Self.options) == """
+        #expect(TreeDump.dump("^[][$]\n- ^[$]:l  \n\u{0}", options: Self.options) == """
             document
               paragraph
                 attribute "l"
@@ -72,7 +72,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
 
     @Test
     func testInteriorSpacesKept() {
-        #expect(CmarkTreeDump.dump("^[][$]\n\n^[$]:a b \nx", options: Self.options) == """
+        #expect(TreeDump.dump("^[][$]\n\n^[$]:a b \nx", options: Self.options) == """
             document
               paragraph
                 attribute "a b"
@@ -84,7 +84,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
 
     @Test
     func testFollowedByAnotherDefinition() {
-        #expect(CmarkTreeDump.dump("^[][$]^[][y]\n\n^[$]:l \n^[y]:m \nx", options: Self.options) == """
+        #expect(TreeDump.dump("^[][$]^[][y]\n\n^[$]:l \n^[y]:m \nx", options: Self.options) == """
             document
               paragraph
                 attribute "l"
@@ -97,7 +97,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
 
     @Test
     func testCRLF() {
-        #expect(CmarkTreeDump.dump("^[][$]\n\n^[$]:l \r\nx", options: Self.options) == """
+        #expect(TreeDump.dump("^[][$]\n\n^[$]:l \r\nx", options: Self.options) == """
             document
               paragraph
                 attribute "l"
@@ -111,7 +111,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     /// the value is the next line's content.
     @Test
     func testWhitespaceOnlyValueLineTakesNextLine() {
-        #expect(CmarkTreeDump.dump("^[][$]\n\n^[$]: \t \nx \nz", options: Self.options) == """
+        #expect(TreeDump.dump("^[][$]\n\n^[$]: \t \nx \nz", options: Self.options) == """
             document
               paragraph
                 attribute "x"
@@ -123,7 +123,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
 
     @Test
     func testLeadingSpaceAfterColon() {
-        #expect(CmarkTreeDump.dump("^[][$]\n\n^[$]: l \nx", options: Self.options) == """
+        #expect(TreeDump.dump("^[][$]\n\n^[$]: l \nx", options: Self.options) == """
             document
               paragraph
                 attribute "l"
@@ -135,7 +135,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
 
     @Test
     func testEscapesAndEntitiesDecoded() {
-        #expect(CmarkTreeDump.dump("^[][$]\n\n^[$]:a\\*&amp;b\nx", options: Self.options) == """
+        #expect(TreeDump.dump("^[][$]\n\n^[$]:a\\*&amp;b\nx", options: Self.options) == """
             document
               paragraph
                 attribute "a*&b"
@@ -148,7 +148,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     /// Flag-OFF shares the link destination's spec-correct single pass: `\&` escapes the `&`, so `amp;` stays literal.
     @Test
     func testEscapeBeforeEntityWithoutBugCompatibility() {
-        #expect(CmarkTreeDump.dump("^[][$]\n\n^[$]:\\&amp; \nx", options: Self.options) == """
+        #expect(TreeDump.dump("^[][$]\n\n^[$]:\\&amp; \nx", options: Self.options) == """
             document
               paragraph
                 attribute "&amp;"
@@ -161,7 +161,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     /// The trim is not a cmark quirk, so the flag-OFF deliverable trims too.
     @Test
     func testTrimmedWithoutBugCompatibility() {
-        #expect(CmarkTreeDump.dump("^[][$]\n- ^[$]:l \nx", options: Self.options) == """
+        #expect(TreeDump.dump("^[][$]\n- ^[$]:l \nx", options: Self.options) == """
             document
               paragraph
                 attribute "l"
@@ -176,7 +176,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     /// Control: a definition that isn't at the start of a paragraph is never formed, so its line stays literal.
     @Test
     func testLastLineControl() {
-        #expect(CmarkTreeDump.dump("^[][$]\n^[$]:l \n", options: Self.options) == """
+        #expect(TreeDump.dump("^[][$]\n^[$]:l \n", options: Self.options) == """
             document
               paragraph
                 text "^[][$]"

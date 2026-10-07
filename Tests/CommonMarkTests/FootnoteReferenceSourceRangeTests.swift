@@ -19,7 +19,7 @@ struct FootnoteReferenceSourceRangeTests {
     private static let opts: MarkdownDocument.ParseOptions = [.sourcePosition, .footnotes]
 
     private func tree(_ source: String, options: MarkdownDocument.ParseOptions = opts) -> String {
-        CmarkTreeDump.dump(source, options: options, sourceRanges: true)
+        TreeDump.dump(source, options: options, sourceRanges: true)
     }
 
     @Test("a reference spans its brackets")

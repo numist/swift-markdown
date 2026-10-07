@@ -18,7 +18,7 @@ struct CodeFenceInfoBackslashTests {
 
     @Test("a backslash before a letter stays literal and the entity decodes")
     func literalBackslash() {
-        #expect(CmarkTreeDump.dump("```\\a&amp;\nx\n```\n", options: []) == """
+        #expect(TreeDump.dump("```\\a&amp;\nx\n```\n", options: []) == """
             document
               code_block "\\\\a&" "x\\n"
 

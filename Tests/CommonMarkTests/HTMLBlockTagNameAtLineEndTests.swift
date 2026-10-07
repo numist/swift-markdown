@@ -18,7 +18,7 @@ struct HTMLBlockTagNameAtLineEndTests {
 
     @Test("a tag name ending the line opens an HTML block")
     func opensHTMLBlock() {
-        #expect(CmarkTreeDump.dump("<div\n", options: []) == """
+        #expect(TreeDump.dump("<div\n", options: []) == """
             document
               html_block "<div\\n"
 

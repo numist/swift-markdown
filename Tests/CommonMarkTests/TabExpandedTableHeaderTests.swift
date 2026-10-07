@@ -22,7 +22,7 @@ struct TabExpandedTableHeaderTests {
 
     @Test("a tab-expanded header line opens a table")
     func opensTable() {
-        #expect(CmarkTreeDump.dump(source, options: [.tables]) == """
+        #expect(TreeDump.dump(source, options: [.tables]) == """
             document
               block_quote
                 table
@@ -37,7 +37,7 @@ struct TabExpandedTableHeaderTests {
 
     @Test("without tables, the header and delimiter lines stay a paragraph")
     func staysParagraphWithoutTables() {
-        #expect(CmarkTreeDump.dump(source, options: []) == """
+        #expect(TreeDump.dump(source, options: []) == """
             document
               block_quote
                 paragraph

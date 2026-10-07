@@ -136,7 +136,7 @@ struct EscapedCaretImageInTableCellTests {
             ("x ![\\^a]\t\no\n|-", Self.paragraphBeforeTable),
         ]
         for (markdown, expected) in cases {
-            #expect(CmarkTreeDump.dump(markdown, options: Self.options) == expected, "\(markdown.debugDescription)")
+            #expect(TreeDump.dump(markdown, options: Self.options) == expected, "\(markdown.debugDescription)")
         }
     }
 }

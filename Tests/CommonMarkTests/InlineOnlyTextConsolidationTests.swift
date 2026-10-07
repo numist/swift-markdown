@@ -26,25 +26,25 @@ struct InlineOnlyTextConsolidationTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func failedEmphasisRunMerges(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("*a", options: options) == """
+        #expect(TreeDump.dump("*a", options: options) == """
             document
               paragraph
                 text "*a"
 
             """)
-        #expect(CmarkTreeDump.dump("a*b", options: options) == """
+        #expect(TreeDump.dump("a*b", options: options) == """
             document
               paragraph
                 text "a*b"
 
             """)
-        #expect(CmarkTreeDump.dump("a_b_", options: options) == """
+        #expect(TreeDump.dump("a_b_", options: options) == """
             document
               paragraph
                 text "a_b_"
 
             """)
-        #expect(CmarkTreeDump.dump("**a", options: options) == """
+        #expect(TreeDump.dump("**a", options: options) == """
             document
               paragraph
                 text "**a"
@@ -54,13 +54,13 @@ struct InlineOnlyTextConsolidationTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func failedBracketMerges(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("a ]b", options: options) == """
+        #expect(TreeDump.dump("a ]b", options: options) == """
             document
               paragraph
                 text "a ]b"
 
             """)
-        #expect(CmarkTreeDump.dump("![x", options: options) == """
+        #expect(TreeDump.dump("![x", options: options) == """
             document
               paragraph
                 text "![x"
@@ -70,7 +70,7 @@ struct InlineOnlyTextConsolidationTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func entityMergesWithAdjacentText(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("&copy;x", options: options) == """
+        #expect(TreeDump.dump("&copy;x", options: options) == """
             document
               paragraph
                 text "©x"
@@ -80,13 +80,13 @@ struct InlineOnlyTextConsolidationTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func backslashEscapeMergesWithAdjacentText(options: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("\\_x", options: options) == """
+        #expect(TreeDump.dump("\\_x", options: options) == """
             document
               paragraph
                 text "_x"
 
             """)
-        #expect(CmarkTreeDump.dump("a\\qb", options: options) == """
+        #expect(TreeDump.dump("a\\qb", options: options) == """
             document
               paragraph
                 text "a\\\\qb"
@@ -95,19 +95,19 @@ struct InlineOnlyTextConsolidationTests {
     }
 
     @Test func preservedNewlineMergesWithAdjacentText() {
-        #expect(CmarkTreeDump.dump("_\nb", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("_\nb", options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "_\\nb"
 
             """)
-        #expect(CmarkTreeDump.dump("a\n&amp;\nb", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("a\n&amp;\nb", options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "a\\n&\\nb"
 
             """)
-        #expect(CmarkTreeDump.dump("a\n[b", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("a\n[b", options: Self.preserveWhitespace) == """
             document
               paragraph
                 text "a\\n[b"

@@ -14,7 +14,7 @@ import Testing
 
 /// Whole-tree regression cases, one per pair of files in `TreeRegressions/`:
 ///   - `<name>.input`    — the markdown followed by one byte that selects the parse options (see `splitInput`).
-///   - `<name>.expected` — the `CmarkTreeDump` of the parsed tree, with source ranges.
+///   - `<name>.expected` — the `TreeDump` of the parsed tree, with source ranges.
 @Suite("Tree regressions")
 struct TreeRegressionTests {
 
@@ -74,7 +74,7 @@ struct TreeRegressionTests {
             contentsOf: Self.corpusDir.appendingPathComponent("\(name).expected"), encoding: .utf8)
 
         let (markdown, options) = try #require(Self.splitInput(bytes), "\(name): empty input")
-        let actual = CmarkTreeDump.dump(markdown, options: options, sourceRanges: true)
+        let actual = TreeDump.dump(markdown, options: options, sourceRanges: true)
 
         #expect(actual == expected, """
             tree differs for \(name)

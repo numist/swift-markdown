@@ -24,7 +24,7 @@ struct AttributeSyntaxDisabledTests {
     private static let footnotesAutolink: MarkdownDocument.ParseOptions = [.sourcePosition, .footnotes, .gfmAutolink]
 
     private func tree(_ source: String, _ options: MarkdownDocument.ParseOptions) -> String {
-        CmarkTreeDump.dump(source, options: options, sourceRanges: true)
+        TreeDump.dump(source, options: options, sourceRanges: true)
     }
 
     // MARK: - Inline form

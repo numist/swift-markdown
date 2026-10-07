@@ -20,7 +20,7 @@ struct GFMAutolinkSourceRangeTests {
     private static let opts: MarkdownDocument.ParseOptions = [.sourcePosition, .gfmAutolink]
 
     private func tree(_ source: String, options: MarkdownDocument.ParseOptions = opts) -> String {
-        CmarkTreeDump.dump(source, options: options, sourceRanges: true)
+        TreeDump.dump(source, options: options, sourceRanges: true)
     }
 
     /// cmark-gfm stretches the `(` to `@1:1-1:6` and starts the link at `@1:1`, because it rewinds over the scheme

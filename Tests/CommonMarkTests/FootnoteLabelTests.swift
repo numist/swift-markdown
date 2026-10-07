@@ -20,7 +20,7 @@ struct FootnoteLabelTests {
 
     @Test
     func definitionLabelWithEscapedBracket() {
-        #expect(CmarkTreeDump.dump("[^\\]]: x\n\n[^\\]]", options: Self.options, sourceRanges: true) == """
+        #expect(TreeDump.dump("[^\\]]: x\n\n[^\\]]", options: Self.options, sourceRanges: true) == """
             document @1:1-3:6
               paragraph @3:1-3:6
                 footnote_reference "1" @3:1-3:6
@@ -33,7 +33,7 @@ struct FootnoteLabelTests {
 
     @Test
     func referenceLabelSpanningLineEnding() {
-        #expect(CmarkTreeDump.dump("[^\na]\n\n[^a]: x", options: Self.options, sourceRanges: true) == """
+        #expect(TreeDump.dump("[^\na]\n\n[^a]: x", options: Self.options, sourceRanges: true) == """
             document @1:1-4:8
               paragraph @1:1-2:3
                 footnote_reference "1" @1:1-2:3
@@ -46,7 +46,7 @@ struct FootnoteLabelTests {
 
     @Test
     func unresolvedReferenceLabelSpanningLineEndingIsText() {
-        #expect(CmarkTreeDump.dump("[^\na]", options: Self.options, sourceRanges: true) == """
+        #expect(TreeDump.dump("[^\na]", options: Self.options, sourceRanges: true) == """
             document @1:1-2:3
               paragraph @1:1-2:3
                 text "[^" @1:1-1:3

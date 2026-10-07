@@ -23,7 +23,7 @@ struct TaskListRetryTabExpandedLineTests {
 
     @Test("without tasklist or cmark bug compatibility, the item stays a plain item")
     func plainItemWithoutTasklistOrBugCompatibility() {
-        #expect(CmarkTreeDump.dump(source, options: []) == """
+        #expect(TreeDump.dump(source, options: []) == """
             document
               list ordered start=10 delim=period tight
                 item
@@ -36,7 +36,7 @@ struct TaskListRetryTabExpandedLineTests {
     /// The rewrite intentionally keeps the plain item.
     @Test("without cmark bug compatibility, the item stays a plain item")
     func plainItemWithoutBugCompatibility() {
-        #expect(CmarkTreeDump.dump(source, options: [.tasklist]) == """
+        #expect(TreeDump.dump(source, options: [.tasklist]) == """
             document
               list ordered start=10 delim=period tight
                 item

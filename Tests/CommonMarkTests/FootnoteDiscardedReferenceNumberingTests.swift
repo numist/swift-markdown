@@ -21,7 +21,7 @@ struct FootnoteDiscardedReferenceNumberingTests {
     /// index 1 ahead of `[^b]`.
     @Test
     func testFlagOffInnerReferenceTakesFirstIndex() {
-        #expect(CmarkTreeDump.dump("[^ [^a]] [^b]\n\n[^a]: A\n\n[^b]: B\n", options: Self.options) == """
+        #expect(TreeDump.dump("[^ [^a]] [^b]\n\n[^a]: A\n\n[^b]: B\n", options: Self.options) == """
             document
               paragraph
                 text "[^ "
@@ -42,7 +42,7 @@ struct FootnoteDiscardedReferenceNumberingTests {
     /// reuses its index.
     @Test
     func testFlagOffInnerReferenceOrdersDefinitions() {
-        #expect(CmarkTreeDump.dump("[^ [^a]] [^b] [^a]\n\n[^a]: A\n\n[^b]: B\n", options: Self.options) == """
+        #expect(TreeDump.dump("[^ [^a]] [^b] [^a]\n\n[^a]: A\n\n[^b]: B\n", options: Self.options) == """
             document
               paragraph
                 text "[^ "
@@ -64,7 +64,7 @@ struct FootnoteDiscardedReferenceNumberingTests {
     /// Flag-off numbers references in the same document pre-order.
     @Test
     func testFlagOffReferencesNumberInDocumentPreOrder() {
-        #expect(CmarkTreeDump.dump("[^a]: see [^b]\n\n> - q [^c] [^b]\n\n[^b]: x\n\n[^c]: y\n\ntext [^a]\n", options: Self.options) == """
+        #expect(TreeDump.dump("[^a]: see [^b]\n\n> - q [^c] [^b]\n\n[^b]: x\n\n[^c]: y\n\ntext [^a]\n", options: Self.options) == """
             document
               block_quote
                 list bullet '-' tight

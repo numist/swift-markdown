@@ -22,7 +22,7 @@ struct TaskItemTableInterruptTests {
     ]
 
     @Test func fuzzedArtifactInEveryVariant() {
-        #expect(CmarkTreeDump.dump("- [x] |\n\u{1}\n  -|", options: Self.options) == """
+        #expect(TreeDump.dump("- [x] |\n\u{1}\n  -|", options: Self.options) == """
             document
               list bullet '-' tight
                 tasklist checked
@@ -37,7 +37,7 @@ struct TaskItemTableInterruptTests {
     }
 
     @Test func indentedHeaderAndDelimiter() {
-        #expect(CmarkTreeDump.dump("- [x] a\n  b|\n  -|", options: Self.options) == """
+        #expect(TreeDump.dump("- [x] a\n  b|\n  -|", options: Self.options) == """
             document
               list bullet '-' tight
                 tasklist checked
@@ -52,7 +52,7 @@ struct TaskItemTableInterruptTests {
     }
 
     @Test func lazyHeaderIndentedDelimiter() {
-        #expect(CmarkTreeDump.dump("- [x] a\nb\n  |-|", options: Self.options) == """
+        #expect(TreeDump.dump("- [x] a\nb\n  |-|", options: Self.options) == """
             document
               list bullet '-' tight
                 tasklist checked
@@ -67,7 +67,7 @@ struct TaskItemTableInterruptTests {
     }
 
     @Test func pipedTableWithBodyRow() {
-        #expect(CmarkTreeDump.dump("* [x] a\n  |b|\n  |-|\n  |c|", options: Self.options) == """
+        #expect(TreeDump.dump("* [x] a\n  |b|\n  |-|\n  |c|", options: Self.options) == """
             document
               list bullet '*' tight
                 tasklist checked
@@ -85,7 +85,7 @@ struct TaskItemTableInterruptTests {
     }
 
     @Test func multiLinePrecedingParagraph() {
-        #expect(CmarkTreeDump.dump("- [x] a\n  b\n  c|\n  -|", options: Self.options) == """
+        #expect(TreeDump.dump("- [x] a\n  b\n  c|\n  -|", options: Self.options) == """
             document
               list bullet '-' tight
                 tasklist checked
@@ -102,7 +102,7 @@ struct TaskItemTableInterruptTests {
     }
 
     @Test func crlfLineEndings() {
-        #expect(CmarkTreeDump.dump("- [x] a\r\n  b|\r\n  -|", options: Self.options) == """
+        #expect(TreeDump.dump("- [x] a\r\n  b|\r\n  -|", options: Self.options) == """
             document
               list bullet '-' tight
                 tasklist checked
@@ -117,7 +117,7 @@ struct TaskItemTableInterruptTests {
     }
 
     @Test func tabIndentedHeader() {
-        #expect(CmarkTreeDump.dump("- [x] a\n\tb|\n  -|", options: Self.options) == """
+        #expect(TreeDump.dump("- [x] a\n\tb|\n  -|", options: Self.options) == """
             document
               list bullet '-' tight
                 tasklist checked
@@ -134,7 +134,7 @@ struct TaskItemTableInterruptTests {
     /// The split-off paragraph is never finalized in cmark (`try_inserting_table_header_paragraph`), so a
     /// ref-def-shaped remainder after the checkbox stays literal text.
     @Test func refDefShapedPrecedingParagraphStaysText() {
-        #expect(CmarkTreeDump.dump("- [x] [a]: /u\n  b|\n  -|", options: Self.options) == """
+        #expect(TreeDump.dump("- [x] [a]: /u\n  b|\n  -|", options: Self.options) == """
             document
               list bullet '-' tight
                 tasklist checked
@@ -149,7 +149,7 @@ struct TaskItemTableInterruptTests {
     }
 
     @Test func nestedTaskItem() {
-        #expect(CmarkTreeDump.dump("- a\n  - [ ] b\n    c|\n    -|", options: Self.options) == """
+        #expect(TreeDump.dump("- a\n  - [ ] b\n    c|\n    -|", options: Self.options) == """
             document
               list bullet '-' tight
                 item
@@ -170,7 +170,7 @@ struct TaskItemTableInterruptTests {
     /// cmark sets the checked state by `strstr` over the opening line (`open_tasklist_item`); the
     /// spec-correct state comes from the leading token.
     @Test func checkedStateQuirkOnSplitOffLine() {
-        #expect(CmarkTreeDump.dump("- [ ] a [x]\n  b|\n  -|", options: Self.options) == """
+        #expect(TreeDump.dump("- [ ] a [x]\n  b|\n  -|", options: Self.options) == """
             document
               list bullet '-' tight
                 tasklist unchecked
@@ -189,7 +189,7 @@ struct TaskItemTableInterruptTests {
     @Test func setextHeadingAfterTaskItemRefDef() {
         // `[x] [a]: /u` does not begin with a link reference definition, so it is heading text, and a
         // heading is not the paragraph a task list item must begin with (spec "Task list items (extension)").
-        #expect(CmarkTreeDump.dump("- [x] [a]: /u\n  b\n  ===", options: Self.options) == """
+        #expect(TreeDump.dump("- [x] [a]: /u\n  b\n  ===", options: Self.options) == """
             document
               list bullet '-' tight
                 item
@@ -204,7 +204,7 @@ struct TaskItemTableInterruptTests {
     /// Nothing but a ref-def precedes the underline, so no heading forms: cmark keeps the paragraph open
     /// and absorbs `===` as text; the spec-correct default redispatches `===` as a new paragraph.
     @Test func setextUnderlineAfterTaskItemRefDefOnly() {
-        #expect(CmarkTreeDump.dump("- [x] [a]: /u\n  ===", options: Self.options) == """
+        #expect(TreeDump.dump("- [x] [a]: /u\n  ===", options: Self.options) == """
             document
               list bullet '-' tight
                 item
@@ -215,7 +215,7 @@ struct TaskItemTableInterruptTests {
     }
 
     @Test func lazyDelimiterRowStaysParagraph() {
-        #expect(CmarkTreeDump.dump("- [x] a\nb|c\n-|-", options: Self.options) == """
+        #expect(TreeDump.dump("- [x] a\nb|c\n-|-", options: Self.options) == """
             document
               list bullet '-' tight
                 tasklist checked
@@ -232,7 +232,7 @@ struct TaskItemTableInterruptTests {
     @Test func checkboxAfterBlockQuoteMarkerStaysLiteral() {
         // The item's first paragraph begins with a task list item marker, whatever precedes the list
         // marker on its line (spec "Task list items (extension)").
-        #expect(CmarkTreeDump.dump("> - [x] a\n>   b|\n>   -|", options: Self.options) == """
+        #expect(TreeDump.dump("> - [x] a\n>   b|\n>   -|", options: Self.options) == """
             document
               block_quote
                 list bullet '-' tight
@@ -250,7 +250,7 @@ struct TaskItemTableInterruptTests {
     @Test func tableIsWholeFirstParagraph() {
         // The header row `[x] |a|` has two cells and the delimiter row one, so no table forms (spec "Tables
         // (extension)") and the paragraph begins with the task list item marker.
-        #expect(CmarkTreeDump.dump("- [x] |a|\n  |-|", options: Self.options) == """
+        #expect(TreeDump.dump("- [x] |a|\n  |-|", options: Self.options) == """
             document
               list bullet '-' tight
                 tasklist checked
@@ -263,7 +263,7 @@ struct TaskItemTableInterruptTests {
     }
 
     @Test func tableAfterBlankTaskLine() {
-        #expect(CmarkTreeDump.dump("- [x] \n  a|\n  -|", options: Self.options) == """
+        #expect(TreeDump.dump("- [x] \n  a|\n  -|", options: Self.options) == """
             document
               list bullet '-' tight
                 tasklist checked
@@ -277,7 +277,7 @@ struct TaskItemTableInterruptTests {
 
     @Test func setextHeadingKeepsCheckbox() {
         // A heading is not the paragraph a task list item must begin with (spec "Task list items (extension)").
-        #expect(CmarkTreeDump.dump("- [ ] a\n  b\n  ---", options: Self.options) == """
+        #expect(TreeDump.dump("- [ ] a\n  b\n  ---", options: Self.options) == """
             document
               list bullet '-' tight
                 item
@@ -291,7 +291,7 @@ struct TaskItemTableInterruptTests {
 
     @Test func refDefOnlyTaskItem() {
         // `[x] [a]: /u` does not begin with a link reference definition, so `[a]: /u` is the paragraph's text.
-        #expect(CmarkTreeDump.dump("- [x] [a]: /u", options: Self.options) == """
+        #expect(TreeDump.dump("- [x] [a]: /u", options: Self.options) == """
             document
               list bullet '-' tight
                 tasklist checked

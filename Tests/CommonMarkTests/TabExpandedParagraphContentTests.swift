@@ -21,7 +21,7 @@ struct TabExpandedParagraphContentTests {
 
     @Test("emphasis characters before a tab stay literal", arguments: positionModes)
     func emphasisCharactersBeforeTab(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("**\tx", options: mode) == """
+        #expect(TreeDump.dump("**\tx", options: mode) == """
             document
               paragraph
                 text "**\\tx"
@@ -31,7 +31,7 @@ struct TabExpandedParagraphContentTests {
 
     @Test("an ordered-marker-like run before a tab stays literal", arguments: positionModes)
     func orderedMarkerRunBeforeTab(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("3)1.\tz", options: mode) == """
+        #expect(TreeDump.dump("3)1.\tz", options: mode) == """
             document
               paragraph
                 text "3)1.\\tz"
@@ -41,7 +41,7 @@ struct TabExpandedParagraphContentTests {
 
     @Test("a smart dash before a tab keeps the tab", arguments: positionModes)
     func smartDashBeforeTab(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("--\ta", options: mode.union(.smart)) == """
+        #expect(TreeDump.dump("--\ta", options: mode.union(.smart)) == """
             document
               paragraph
                 text "\u{2013}\\ta"
@@ -51,7 +51,7 @@ struct TabExpandedParagraphContentTests {
 
     @Test("a trailing tab ends the line with a soft break", arguments: positionModes)
     func trailingTabIsSoftBreak(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("**\t\nb", options: mode) == """
+        #expect(TreeDump.dump("**\t\nb", options: mode) == """
             document
               paragraph
                 text "**"
@@ -63,7 +63,7 @@ struct TabExpandedParagraphContentTests {
 
     @Test("consecutive tab-expanded lines keep their tabs", arguments: positionModes)
     func consecutiveTabExpandedLines(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("**\tx\n**\ty", options: mode) == """
+        #expect(TreeDump.dump("**\tx\n**\ty", options: mode) == """
             document
               paragraph
                 text "**\\tx"
@@ -75,7 +75,7 @@ struct TabExpandedParagraphContentTests {
 
     @Test("inside a block quote whose prefix is followed by a tab", arguments: positionModes)
     func insideTabbedBlockQuote(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump(">\t**\tx", options: mode) == """
+        #expect(TreeDump.dump(">\t**\tx", options: mode) == """
             document
               block_quote
                 paragraph
@@ -86,7 +86,7 @@ struct TabExpandedParagraphContentTests {
 
     @Test("a tab-expanded line after a setext underline left as text keeps its tab, without cmark bug compatibility", arguments: positionModes)
     func afterUnderlineLeftAsTextSpecCompliant(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("[a\n ]:b\n=\n**\tx", options: mode) == """
+        #expect(TreeDump.dump("[a\n ]:b\n=\n**\tx", options: mode) == """
             document
               paragraph
                 text "="
@@ -98,7 +98,7 @@ struct TabExpandedParagraphContentTests {
 
     @Test("a list item continuation line keeps its tabs", arguments: positionModes)
     func listItemContinuation(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("- a\n  **\tb\tc", options: mode) == """
+        #expect(TreeDump.dump("- a\n  **\tb\tc", options: mode) == """
             document
               list bullet '-' tight
                 item

@@ -18,7 +18,7 @@ struct TaskListMarkerAfterDefinitionsTests {
 
     @Test("a marker after a line tabulation makes a task item")
     func markerAfterLineTabulation() {
-        #expect(CmarkTreeDump.dump("- [a]: /u\n  \u{0B}[ ] b\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
+        #expect(TreeDump.dump("- [a]: /u\n  \u{0B}[ ] b\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
             document @1:1-2:9
               list bullet '-' tight @1:1-2:9
                 tasklist unchecked @1:1-2:9
@@ -30,7 +30,7 @@ struct TaskListMarkerAfterDefinitionsTests {
 
     @Test("a marker after a form feed makes a task item before a table")
     func markerAfterFormFeedBeforeTable() {
-        #expect(CmarkTreeDump.dump("- [a]: /u\n  \u{0C}[x] b\n  h|i\n  -|-\n", options: [.tasklist, .tables, .sourcePosition], sourceRanges: true) == """
+        #expect(TreeDump.dump("- [a]: /u\n  \u{0C}[x] b\n  h|i\n  -|-\n", options: [.tasklist, .tables, .sourcePosition], sourceRanges: true) == """
             document @1:1-4:6
               list bullet '-' tight @1:1-4:6
                 tasklist checked @1:1-4:6
@@ -48,7 +48,7 @@ struct TaskListMarkerAfterDefinitionsTests {
 
     @Test("without tasklist, the marker is text")
     func markerAfterLineTabulationWithoutTasklist() {
-        #expect(CmarkTreeDump.dump("- [a]: /u\n  \u{0B}[ ] b\n", options: []) == """
+        #expect(TreeDump.dump("- [a]: /u\n  \u{0B}[ ] b\n", options: []) == """
             document
               list bullet '-' tight
                 item

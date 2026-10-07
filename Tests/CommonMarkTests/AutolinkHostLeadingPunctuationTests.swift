@@ -17,7 +17,7 @@ struct AutolinkHostLeadingPunctuationTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink]
 
     private func surface(_ markdown: String) -> String {
-        CmarkTreeDump.dump(markdown, options: Self.options)
+        TreeDump.dump(markdown, options: Self.options)
     }
 
     private func text(_ literal: String) -> String {

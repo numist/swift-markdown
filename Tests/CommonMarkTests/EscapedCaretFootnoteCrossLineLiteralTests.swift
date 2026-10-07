@@ -21,7 +21,7 @@ struct EscapedCaretFootnoteCrossLineLiteralTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink, .footnotes]
 
     private func surface(_ bytes: [UInt8]) -> String {
-        CmarkTreeDump.dump(String(decoding: bytes, as: UTF8.self), options: Self.options)
+        TreeDump.dump(String(decoding: bytes, as: UTF8.self), options: Self.options)
     }
 
     @Test func testEscapedCaretImageForm() {

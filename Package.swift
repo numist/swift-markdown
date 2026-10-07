@@ -60,7 +60,7 @@ let package = Package(
             dependencies: ["Markdown"],
             resources: [
                 .process("Visitors/Everything.md"),
-                .copy("FuzzRegressions"),
+                .copy("DocumentRegressions"),
             ]),
         .testTarget(
             name: "CommonMarkTests",

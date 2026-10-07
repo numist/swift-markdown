@@ -181,7 +181,7 @@ struct TableVsReferenceDefinitionTests {
     /// paragraph (spec "List items"), so the `-` is paragraph text once the definition is removed.
     @Test("a bare `-` after a complete single-line ref-def is paragraph text")
     func bareDelimiterAfterCompleteReferenceDefinitionSpecCorrect() {
-        #expect(CmarkTreeDump.dump("[o]:o\n-", options: [.tables]) == """
+        #expect(TreeDump.dump("[o]:o\n-", options: [.tables]) == """
             document
               paragraph
                 text "-"
@@ -193,7 +193,7 @@ struct TableVsReferenceDefinitionTests {
     /// paragraph (spec "List items"), so the `-` is paragraph text once the definition is removed.
     @Test("a bare `-` after a ref-def with a space before the destination is paragraph text")
     func bareDelimiterAfterCompleteReferenceDefinitionWithSpaceSpecCorrect() {
-        #expect(CmarkTreeDump.dump("[o]: o\n-", options: [.tables]) == """
+        #expect(TreeDump.dump("[o]: o\n-", options: [.tables]) == """
             document
               paragraph
                 text "-"

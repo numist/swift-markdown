@@ -22,7 +22,7 @@ struct TableAfterSetextDefinitionTests {
 
     @Test("the underline stays a paragraph before the table")
     func underlineParagraphBeforeTable() {
-        #expect(CmarkTreeDump.dump(source, options: [.tables]) == """
+        #expect(TreeDump.dump(source, options: [.tables]) == """
             document
               block_quote
                 paragraph
@@ -40,7 +40,7 @@ struct TableAfterSetextDefinitionTests {
     @Test("a definition spanning two quoted lines leaves the underline before the table",
           arguments: [[], [.sourcePosition]] as [MarkdownDocument.ParseOptions])
     func multiLineDefinitionBeforeTable(positions: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("> [a]:\n> u\n> ===\n> b|c\n> -|-\n", options: positions.union(.tables)) == """
+        #expect(TreeDump.dump("> [a]:\n> u\n> ===\n> b|c\n> -|-\n", options: positions.union(.tables)) == """
             document
               block_quote
                 paragraph
@@ -57,7 +57,7 @@ struct TableAfterSetextDefinitionTests {
 
     @Test("without tables, the underline and table lines are one paragraph")
     func oneParagraphWithoutTables() {
-        #expect(CmarkTreeDump.dump(source, options: []) == """
+        #expect(TreeDump.dump(source, options: []) == """
             document
               block_quote
                 paragraph
