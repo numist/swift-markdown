@@ -135,7 +135,7 @@ internal struct ContentSpan: ~Escapable {
         return span[offset - base]
     }
 
-    /// Multi-segment byte resolution: find the segment covering virtual `offset` and read it. Source segments read `span` (== `sourceBytes`); a non-source segment synthesizes `\n` directly (its only non-source segment is the interned newline).
+    /// Multi-segment byte resolution: find the segment covering virtual `offset` and read it. Source segments read `span` (== `sourceBytes`); a non-source segment is the interned `"\n"` join, read as `\n` directly.
     private func multiByte(at offset: Int) -> UInt8 {
         let i = segmentIndex(covering: offset)
         assert(i < segments.count, "inline content is read only at offsets inside the content")
@@ -150,14 +150,14 @@ internal struct ContentSpan: ~Escapable {
 
     /// The original-source byte offset for the content byte at `offset`. Single-segment source content maps identity (the offset already IS a source offset); single-segment arena content resolves through its arena→source run map; multi-segment resolves through the segment list.
     ///
-    /// `offset` always images a source byte: callers resolve only an inline node's first and last bytes, and no inline node starts or ends on a byte without a source image, such as a line join (a soft or hard break is position-less, and the text before it ends at the join).
+    /// `offset` always images a source byte: callers resolve only an inline node's first and last bytes, and no inline node starts or ends on a byte without a source image, such as a line join (a soft or hard line break has no source range, and the text before it ends at the join).
     @inlinable
     func sourceOffset(ofVirtual offset: Int) -> Int {
         if !isMultiSegment {
             if inSource {
                 return offset
             }
-            // Arena content carries an arena→source run map, content-relative (keyed from the first content byte): inline nodes are stamped only with positions on, and every single-segment arena content inline-parsed with positions on carries a run map that tiles it. Resolve it exactly like the multi-segment segment list below. cmark maps a `\|`-unescaped table cell's bytes back to source by a constant shift (it does NOT re-widen for the removed backslash), which the degenerate single-run case reproduces exactly.
+            // Inline nodes are stamped only with positions on, and then every single-segment arena content carries a content-relative run map that tiles it, resolved like the multi-segment list below. A `\|`-unescaped table cell is one run, so its bytes map to source by a constant shift that does not account for removed backslashes.
             let k = offset - base
             let i = Self.firstIndex(endingAfter: k, in: arenaRunEnds)
             precondition(i < arenaRuns.count, "an inline node's source range lies inside its content's arena run map")
@@ -193,7 +193,7 @@ internal struct ContentSpan: ~Escapable {
     /// - **Single-segment** content is one buffer region whose global offsets index that buffer directly, so this returns `[offset, limit)` in that buffer unchanged (`readByte` reads stay in bounds, identical to addressing the offsets directly).
     /// - **Multi-segment** content is addressed by *virtual* offsets that don't index any single buffer, so this returns the slice of the one **source** segment containing `offset`, bounded at that segment's end (and at `limit`). Scans therefore stay within a single contiguous source region and never index the wrong buffer or run past its end. A form that would continue past the segment boundary (onto the next line) simply isn't seen, which the caller treats as "no match".
     ///
-    /// Returns `nil` when `offset >= limit` or `offset` lands on a synthetic (interned-newline) segment, where no link/reference form can begin. Convert a buffer offset `b` returned by a scanner back to a virtual offset with `offset + (b - chunk.offset)` (the identity for single-segment). Uses `seg.offset` (the byte-read offset) to match `subscript`/`chunk(offset:length:)`.
+    /// Returns `nil` when `offset >= limit` or `offset` lands on a synthetic segment (a line join), where no link/reference form can begin. Convert a buffer offset `b` returned by a scanner back to a virtual offset with `offset + (b - chunk.offset)` (the identity for single-segment). Uses `seg.offset` (the byte-read offset) to match `subscript`/`chunk(offset:length:)`.
     @inlinable
     func contiguousChunk(fromVirtual offset: Int, limit: Int) -> Chunk? {
         if offset >= limit {
@@ -213,7 +213,7 @@ internal struct ContentSpan: ~Escapable {
         return Chunk(offset: Int(seg.offset) + local, length: regionEnd - offset, inSource: true)
     }
 
-    /// Global offset of the next inline-significant byte at or after `globalCursor`, or `endOffset` if none remain. Used to skip plain-text runs in the inline dispatch loop without stepping byte by byte: a `SIMD16` scan compares 16 bytes at once against the significant set, recovering the first matching lane; a sub-16 tail is scanned scalar.
+    /// Global offset of the next inline-significant byte at or after `globalCursor`, or `endOffset` if none remain. Lets the inline dispatch loop skip plain-text runs without stepping byte by byte: a `SIMD16` scan compares 16 bytes at once against the significant set, recovering the first matching lane; a sub-16 tail is scanned scalar.
     ///
     /// The significant set must be a superset of the bytes the dispatch switch acts on. `~` and the GFM bare-URL autolink triggers (`:` `w`/`W`) are included only when their option is on - when off, the switch's case for them is a no-op (the byte becomes plain text), so skipping over them is equivalent. `@` is NOT in the set: the GFM email autolink form is detected in a post-pass (`gfmEmailAutolinkPass`), not the forward inline dispatch, so an `@` is always plain text here. The contiguous cluster `[ \ ] ^ _ \``` (91...96) is one range compare.
     func nextSignificant(from globalCursor: Int, strikethrough: Bool, gfmAutolink: Bool, smart: Bool) -> Int {
@@ -226,7 +226,7 @@ internal struct ContentSpan: ~Escapable {
         return base + found
     }
 
-    /// Multi-segment `nextSignificant`: walk the segment list, SIMD-scanning each source segment's contiguous source sub-range via `scanSignificant`. The interned `"\n"` joining two lines is itself in the significant set (the dispatch emits a soft/hard break for it), so a newline segment's first byte is reported immediately without scanning. Cost is `SIMD(content bytes)` plus a tiny per-segment fixed cost - the same order as the single-segment fast path, not an O(bytes × segments) scalar walk.
+    /// Multi-segment `nextSignificant`: walk the segment list, SIMD-scanning each source segment's contiguous source sub-range via `scanSignificant`. The interned `"\n"` joining two lines is itself in the significant set (the dispatch emits a soft or hard line break for it), so a join's position is reported immediately without scanning. Cost is `SIMD(content bytes)` plus a tiny per-segment fixed cost - the same order as the single-segment fast path, not an O(bytes × segments) scalar walk.
     private func multiNextSignificant(from globalCursor: Int, strikethrough: Bool, gfmAutolink: Bool, smart: Bool) -> Int {
         let end = multiVirtualLength
         let count = segments.count
@@ -239,7 +239,7 @@ internal struct ContentSpan: ~Escapable {
             let seg = segments[i]
             let len = Int(seg.length)
             if seg.inSource {
-                let local = cursor - vStart                 // 0 once we advance past the entry segment
+                let local = cursor - vStart                 // 0 past the entry segment
                 let absLo = Int(seg.offset) + local
                 let absHi = Int(seg.offset) + len
                 let foundAbs = Self.scanSignificant(span, from: absLo, to: absHi, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
@@ -247,7 +247,7 @@ internal struct ContentSpan: ~Escapable {
                     return vStart + (foundAbs - Int(seg.offset))
                 }
             } else {
-                // The interned "\n" join is always inline-significant (soft/hard break) - report its position directly.
+                // The interned "\n" join is always inline-significant (a soft or hard line break) - report its position directly.
                 return cursor
             }
             vStart += len

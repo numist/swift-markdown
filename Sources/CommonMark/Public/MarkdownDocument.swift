@@ -22,7 +22,7 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
 
     internal let _source: Span<UInt8>
 
-    /// Core parser entry: borrow the source bytes and parse. Internal - `Span<UInt8>` is not public API (the public surface only accepts `String` / `UTF8Span`, guaranteeing validated Unicode input).
+    /// Parses `source` in place. Internal because the public initializers accept only `String` and `UTF8Span`, which guarantee valid UTF-8.
     @_lifetime(copy source)
     internal init(parsing source: Span<UInt8>, options: MarkdownDocument.ParseOptions = []) {
         let storage = DocumentStorage(options: options)
@@ -91,12 +91,12 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
         }
     }
 
-    /// The options the document was parsed with.
+    /// The options that controlled parsing.
     public var options: MarkdownDocument.ParseOptions {
         borrowing get { _storage.options }
     }
 
-    /// The source text the document was parsed from.
+    /// The source text of the document.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     public var source: UTF8Span {
         @_lifetime(borrow self)

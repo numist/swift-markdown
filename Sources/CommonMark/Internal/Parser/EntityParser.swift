@@ -10,7 +10,7 @@
 
 /// A fixed 8-byte inline buffer.
 ///
-/// A value generic like `InlineArray<8, UInt8>` requires the anyAppleOS 26 runtime; this wraps a `SIMD8<UInt8>`, so it back-deploys and still stack-allocates. Indices are `0..<8`.
+/// A value generic like `InlineArray<8, UInt8>` requires the anyAppleOS 26 runtime; this wraps a `SIMD8<UInt8>`, so it back-deploys and stack-allocates. Indices are `0..<8`.
 internal struct Bytes8 {
     private var storage = SIMD8<UInt8>()
 
@@ -34,7 +34,7 @@ internal enum EntityParser {
 
     /// Try to match an HTML entity beginning at `start` (which points at `&`).
     ///
-    /// Returns the decoded codepoints and the offset just past the trailing `;`. CommonMark 0.31 §6.5.
+    /// Returns the decoded UTF-8 bytes and the offset just past the trailing `;` (spec "Entity and numeric character references").
     internal static func matchEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
         let after = start + 1
         if after >= end {
@@ -49,7 +49,7 @@ internal enum EntityParser {
 
     /// Match `&#NNN;` (decimal) or `&#xHHH;` / `&#XHHH;` (hex).
     ///
-    /// The spec-correct digit limits are 1–7 decimal / 1–6 hex (CommonMark §6.5).
+    /// Accepts 1–7 decimal or 1–6 hexadecimal digits (spec "Entity and numeric character references").
     private static func matchNumericEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
         var i = start + 2 // past `&#`
         if i >= end {
@@ -91,7 +91,7 @@ internal enum EntityParser {
             return nil
         }
         let afterSemi = i + 1
-        // Validate codepoint per CommonMark / Unicode.
+        // U+0000 and anything that is not a Unicode scalar value become U+FFFD.
         if n == 0 || n > 0x10FFFF || (n >= 0xD800 && n <= 0xDFFF) {
             let encoded = encodeCodepointUTF8(0xFFFD)
             return EntityMatch(bytes: encoded.bytes, count: encoded.count, afterSemi: afterSemi)
@@ -263,7 +263,7 @@ internal enum EntityParser {
     
     /// Clean a fenced code block's info string: if `chunk` contains any backslash escapes (`\<ASCII punct>`) or references, materialize a clean copy into `storage.strings` with them processed.
     ///
-    /// Returns the original chunk untouched if it contains neither a backslash escape nor an `&`. Otherwise the spec's single interleaved pass over the already-trimmed info string.
+    /// Returns the original chunk untouched if it contains neither a backslash escape nor an `&`. Otherwise processes both in one pass over the trimmed info string.
     internal static func unescapeInfoStringChunk(_ chunk: Chunk, source: Span<UInt8>, into storage: inout DocumentStorage) -> Chunk {
         guard urlChunkHasEscape(chunk, source: source) else {
             return chunk

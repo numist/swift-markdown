@@ -10,7 +10,7 @@
 
 /// One piece of a node's content: a byte range that lives in either the borrowed source `Span` (`inSource == true`) or `DocumentStorage`'s additions arena (`inSource == false`).
 ///
-/// A `Segment` is the N-way generalization of `Chunk`'s `inSource` two-buffer scheme. Nodes reference an ordered run of these (see `ContentRef`) so that content spanning multiple source ranges (a multi-line paragraph) or mixing source with synthetic bytes (a joined newline, a decoded entity) can be represented without copying the source bytes into an intermediate buffer.
+/// A `Segment` is the N-way generalization of `Chunk`'s `inSource` two-buffer scheme. Nodes reference an ordered run of these (see `ContentRef`) so that content spanning multiple source ranges (a multi-line paragraph) or mixing source with synthetic bytes (a joined line ending, a decoded entity) can be represented without copying the source bytes into an intermediate buffer.
 ///
 /// `Int32` fields keep the per-document segment pool compact; markdown sources are far below the 2 GiB limit this implies.
 internal struct Segment: Equatable {
@@ -28,7 +28,7 @@ internal struct Segment: Equatable {
         self.init(offset: Int32(chunk.offset), length: Int32(chunk.length), inSource: chunk.inSource)
     }
 
-    /// Reconstruct a `Chunk` view of this segment. Used by internal parser code that still works in the single-buffer `Chunk` vocabulary.
+    /// A `Chunk` view of this segment, for parser code that works in the single-buffer `Chunk` vocabulary.
     internal var chunk: Chunk {
         Chunk(offset: Int(offset), length: Int(length), inSource: inSource)
     }
@@ -36,7 +36,7 @@ internal struct Segment: Equatable {
 
 /// One run of a single-segment arena buffer's arena→source map: `length` consecutive content bytes that image a contiguous source range beginning at `sourceOffset`.
 ///
-/// A `sourceOffset < 0` marks a synthetic gap - the interned `"\n"` line join between reconstructed lines - which stays position-less (`nil`), matching cmark's position-less soft breaks. Runs are contiguous and ordered (they tile the content from its first byte), so the map walks exactly like the multi-segment `Segment` list, minus the byte reads (bytes come from the flat arena span). This lets inline stamping recover per-line source columns for content that was flattened into one arena chunk (a non-contiguous setext heading), and in the single-run case it expresses the constant shift of a `\|`-unescaped table cell.
+/// A `sourceOffset < 0` marks a synthetic gap - the interned `"\n"` line join between reconstructed lines - which has no source position (`nil`). Runs are contiguous and ordered (they tile the content from its first byte), so the map walks exactly like the multi-segment `Segment` list, minus the byte reads (bytes come from the flat arena span). This lets inline stamping recover per-line source columns for content flattened into one arena chunk (a non-contiguous setext heading), and in the single-run case it expresses the constant shift of a `\|`-unescaped table cell.
 ///
 internal struct ArenaRun: Equatable {
     internal var length: Int32

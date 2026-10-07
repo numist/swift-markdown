@@ -19,10 +19,10 @@ internal enum NodeData {
     /// Link or image destination + title.
     case link(url: ContentRef, title: ContentRef)
 
-    /// Raw HTML block - type id (1..7 per CommonMark spec) + body literal.
+    /// Raw HTML block - its type (1–7, the numbered start conditions under HTML blocks) + body literal.
     case htmlBlock(type: UInt8, literal: ContentRef)
 
-    /// `^[..]` extended attribute node (fork-specific). The ref is the raw uninterpreted attribute string (e.g. `"color: red, rainbow: 'extreme'"`).
+    /// `^[…]` inline attribute. The ref is the raw uninterpreted attribute string (e.g. `"color: red, rainbow: 'extreme'"`).
     case attribute(ContentRef)
 
     /// Footnote reference - the original label (used for resolution and rendering). The assigned 1-based index lives on the node's `kind`.
@@ -34,7 +34,7 @@ internal enum NodeData {
     /// Table - column count and per-column alignment table.
     case table(columnCount: Int, alignmentsOffset: Int)
 
-    /// List item - `padding` is the column at which the item's content starts, relative to the line position where the parent list/item walk began - used by the per-line container walk to strip leading indentation on continuation lines. The tasklist checked state lives on the node's `kind`.
+    /// List item - `padding` is the column at which the item's content starts, relative to the line position where the parent list/item walk began - used by the per-line container walk to strip leading indentation on continuation lines. A task list item's checked state lives on the node's `kind`.
     case item(padding: Int)
 }
 
@@ -48,7 +48,7 @@ internal struct NodeRecord {
     internal var parent: DocumentStorage.Index?
     internal var data: NodeData?
 
-    /// `true` when a blank line was the most recent line processed while this node was open. Drives CommonMark tight/loose list detection (`detectLooseList` / `endsWithBlankLine`). Stored inline here rather than in a side `Set<Index>` so set/clear/test are O(1) array-field accesses with no hashing.
+    /// `true` when the most recent line processed while this node is open is blank. Drives tight/loose list detection (`detectLooseList` / `endsWithBlankLine`).
     internal var lastLineBlank: Bool = false
 
     internal init(

@@ -120,7 +120,7 @@ extension MarkdownNode {
 
         /// Calls `body` with each child node, in document order.
         ///
-        /// Iteration uses a closure rather than `for`-`in` because a `MarkdownNode` is noncopyable and can't be produced by a standard iterator. The node passed to `body` must not escape the call.
+        /// Iteration uses a closure rather than `for`-`in` because a `MarkdownNode` is nonescapable and can't be produced by a standard iterator. The node passed to `body` must not escape the call.
         ///
         /// - Parameter body: A closure that receives each child node.
         public borrowing func forEach<E: Swift.Error>(_ body: (borrowing MarkdownNode) throws(E) -> Void) throws(E) {
@@ -193,7 +193,7 @@ extension MarkdownNode {
         case blockQuote
         /// A bullet or ordered list. The associated `ListInfo` carries the marker style, start number, and tightness.
         case list(ListInfo)
-        /// A list item. `checked` is `nil` for an ordinary item, or the task-list state (`true` when checked, `false` when unchecked) when the document was parsed with `MarkdownDocument.ParseOptions.tasklist`.
+        /// A list item. With `MarkdownDocument.ParseOptions.tasklist`, `checked` is the state of a task list item's checkbox (`true` when checked, `false` when unchecked); it is `nil` for any other item.
         case item(checked: Bool?)
         /// A fenced or indented code block. The associated `CodeBlockInfo` describes the fence.
         case codeBlock(CodeBlockInfo)
@@ -215,14 +215,14 @@ extension MarkdownNode {
         case tableRow(isHeader: Bool)
         /// A table cell, carrying its column `alignment` and the number of `columns` and `rows` it spans.
         ///
-        /// `columns` and `rows` are both `1` for an ordinary cell. Values other than `1` only arise when the document was parsed with `MarkdownDocument.ParseOptions.tableSpans` (and, for the `"` rowspan marker, `.tableRowspanDitto`): a cell that *begins* a span reports the span size (`2`, `3`, …), while a *filler* cell that merely continues a neighbour's span reports `0`.
+        /// `columns` and `rows` are both `1` for an ordinary cell. Values other than `1` arise only with `MarkdownDocument.ParseOptions.tableSpans` (and, for the `"` rowspan marker, `.tableRowspanDitto`): a cell that *begins* a span reports the span size (`2`, `3`, …), while a *filler* cell that merely continues a neighbour's span reports `0`.
         case tableCell(alignment: TableAlignment, columns: Int, rows: Int)
 
         // Inline kinds
 
         /// A run of literal text.
         case text
-        /// A soft line break (a newline within a paragraph that renders as a space).
+        /// A soft line break (a line ending within a paragraph that renders as a space).
         case softBreak
         /// A hard line break (a line ending with two or more spaces or a backslash).
         case lineBreak
@@ -244,7 +244,7 @@ extension MarkdownNode {
         case footnoteReference(index: Int)
         /// Struck-through text (`~text~` or `~~text~~`), produced when parsing with `MarkdownDocument.ParseOptions.strikethrough`.
         case strikethrough
-        /// An extended-attribute span (`^[…]`), produced when parsing with `MarkdownDocument.ParseOptions.attributes`. The raw attribute string is available through the node's content.
+        /// An inline attribute (`^[…]`), produced when parsing with `MarkdownDocument.ParseOptions.attributes`. The raw attribute string is available through the node's content.
         case attribute
         
         /// A Boolean value that indicates whether this is a block-level kind.
@@ -293,13 +293,13 @@ extension MarkdownNode {
 
     /// Column alignment for a GFM table cell.
     public enum TableAlignment: UInt8, Sendable, Hashable {
-        /// No explicit alignment (the delimiter row was `---`).
+        /// No explicit alignment (a `---` delimiter row cell).
         case none
-        /// Left-aligned (the delimiter row was `:---`).
+        /// Left-aligned (a `:---` delimiter row cell).
         case left
-        /// Center-aligned (the delimiter row was `:---:`).
+        /// Center-aligned (a `:---:` delimiter row cell).
         case center
-        /// Right-aligned (the delimiter row was `---:`).
+        /// Right-aligned (a `---:` delimiter row cell).
         case right
     }
 
@@ -382,7 +382,7 @@ extension MarkdownNode {
 }
 
 extension MarkdownNode {
-    /// A 1-based position in the source: `line` counts from 1, `column` is the 1-based UTF-8 **byte** offset within that line (so a leading multi-byte scalar advances the column by its byte count, matching cmark's convention).
+    /// A 1-based position in the source: `line` counts from 1, `column` is the 1-based UTF-8 **byte** offset within that line (so a leading multi-byte scalar advances the column by its byte count).
     public struct SourcePosition: Comparable, Hashable, Sendable {
         /// The 1-based line number.
         public var line: Int
@@ -407,9 +407,9 @@ extension MarkdownNode {
 }
 
 extension MarkdownNode {
-    /// The node's source position range, or `nil` if the document was parsed without `.sourcePosition` or this node carries no tracked position.
+    /// The node's source range, or `nil` without `MarkdownDocument.ParseOptions.sourcePosition` or for a node that has no source range.
     ///
-    /// `lowerBound` is the position of the node's first content byte. `upperBound` is the position just past its last content byte (half-open) - i.e. the column equals the last byte's 1-based column **plus one**. (cmark reports an inclusive end column; a client wanting cmark's raw number subtracts one from `upperBound.column`.)
+    /// `lowerBound` is the position of the node's first content byte. `upperBound` is the position just past its last content byte (half-open) - i.e. the column equals the last byte's 1-based column **plus one**.
     public var sourceRange: Range<SourcePosition>? {
         _view.sourceRange(of: _index)
     }

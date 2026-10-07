@@ -37,7 +37,7 @@ internal struct StorageView: ~Escapable, Copyable {
 
     /// Convert a source byte offset to a 1-based (line, column) position.
     ///
-    /// `column` is the 1-based UTF-8 byte offset within the line (matching cmark). Requires a populated `lineStarts`.
+    /// `column` is the 1-based UTF-8 byte offset within the line. Requires a populated `lineStarts`.
     internal func position(ofByte offset: Int) -> MarkdownNode.SourcePosition {
         // Largest line index `i` with lineStarts[i] <= offset (binary search; lineStarts is ascending).
         var lo = 0
@@ -56,9 +56,9 @@ internal struct StorageView: ~Escapable, Copyable {
         return MarkdownNode.SourcePosition(line: lineIndex + 1, column: Int(offset - lineStart) + 1)
     }
 
-    /// The 1-based source position range for a node, or `nil` if positions are off or the node was never stamped.
+    /// The source range of a node, or `nil` if positions are off or the node has no recorded source range.
     ///
-    /// `end` points just past the node's last content byte (half-open), converted as the position of that last byte... see `MarkdownNode.sourceRange` for the exposed convention. Both endpoints are the byte projection of the recorded source offsets.
+    /// The upper bound is the position just past the node's last content byte; see `MarkdownNode.sourceRange`.
     internal func sourceRange(of index: DocumentStorage.Index) -> Range<MarkdownNode.SourcePosition>? {
         guard sourceRanges.count > index else { return nil }
         let r = sourceRanges[index]
@@ -98,7 +98,7 @@ internal struct StorageView: ~Escapable, Copyable {
             return String(copying: utf8Span(of: segments[Int(ref.first)]))
         }
         return String(unsafeUninitializedCapacity: Int(ref.totalLength)) { buffer in
-            // SAFETY: `buffer` is the string's uninitialized storage, valid for this closure only. `OutputSpan(buffer:initializedCount: 0)` claims none of it as initialized, every append is capacity-checked (`ref.totalLength` is the sum of the segment lengths), `output.finalize(for: buffer)` checks that `output` still covers `buffer` before reporting its initialized count, and the initializer repairs any invalid UTF-8 in that prefix.
+            // SAFETY: `buffer` is the string's uninitialized storage, valid for this closure only. `OutputSpan(buffer:initializedCount: 0)` claims none of it as initialized, every append is capacity-checked (`ref.totalLength` is the sum of the segment lengths), `output.finalize(for: buffer)` checks that `buffer` is the buffer `output` covers before reporting its initialized count, and the initializer repairs any invalid UTF-8 in that prefix.
             //         No String initializer fills its UTF-8 storage through an `OutputSpan`; the safe route builds the bytes in an owned array and copies them with `String(decoding:as:)`, which measured about 0.4% more corpus and 3% more spec.txt instructions to parse and read every node's content.
             var output = unsafe OutputSpan(buffer: buffer, initializedCount: 0)
             for i in 0..<Int(ref.count) {
@@ -115,7 +115,7 @@ internal struct StorageView: ~Escapable, Copyable {
 
     /// Returns a `UTF8Span` from the raw byte span for the `UTF8Span`-vending public content API.
     ///
-    /// Source-derived chunks are always cut on scalar boundaries (the parser only ever splits on ASCII delimiters/whitespace/newlines), so validation succeeds for well-formed input.
+    /// Source-derived chunks are cut on scalar boundaries (the parser splits only at ASCII bytes), so every chunk is valid UTF-8.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @_lifetime(borrow self)
     internal func utf8Span(of segment: Segment) -> UTF8Span {
@@ -124,7 +124,7 @@ internal struct StorageView: ~Escapable, Copyable {
 
     /// Returns a `UTF8Span` from the raw byte span for the `UTF8Span`-vending public content API.
     ///
-    /// Source-derived chunks are always cut on scalar boundaries (the parser only ever splits on ASCII delimiters/whitespace/newlines), so validation succeeds for well-formed input.
+    /// Source-derived chunks are cut on scalar boundaries (the parser splits only at ASCII bytes), so every chunk is valid UTF-8.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @_lifetime(borrow self)
     internal func utf8Span(of ref: ContentRef) -> UTF8Span {

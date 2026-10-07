@@ -44,22 +44,19 @@ extension UInt8 {
             || self == UInt8(ascii: "\n") || self == UInt8(ascii: "\r")
     }
 
-    /// GFM extension-scanner whitespace: space, tab, vertical tab (0x0B), or form feed (0x0C).
+    /// A whitespace character other than a line ending: space, tab, line tabulation (0x0B), or form
+    /// feed (0x0C).
     ///
-    /// This is the `spacechar = [ \t\v\f]` defined once in cmark's `ext_scanners.re` and shared by the
-    /// GFM extension scanners: `scan_table_start` pads a delimiter marker with it
-    /// (`table_marker = spacechar*[:]?[-]+[:]?spacechar*`) and `scan_tasklist` requires it after the
-    /// checkbox (`... ("[ ]"|"[x]") spacechar+`). It deliberately excludes CR/LF (line terminators).
-    /// It is scanner-local: cmark's content trims (`cmark_strbuf_trim` / `cmark_isspace`,
-    /// `S_find_first_nonspace`) do NOT treat VT/FF as whitespace, so this notion must not be applied to
-    /// cell content, task-item content, or any other `cmark_isspace`-based construct.
+    /// It may pad a table delimiter row cell around `:?-+:?` (Tables (extension)) and must follow a task
+    /// list item's checkbox (Task list items (extension)). Trimming of cell content and task list item
+    /// content keeps line tabulation and form feed, so this predicate does not apply there.
     @inline(__always)
     var isExtensionScannerSpace: Bool {
         self == UInt8(ascii: " ") || self == UInt8(ascii: "\t")
             || self == 0x0B || self == 0x0C
     }
 
-    /// ASCII whitespace: space, tab, newline, carriage return, vertical tab, or form feed.
+    /// A whitespace character (spec "Characters and lines"): space, tab, line feed, carriage return, line tabulation, or form feed.
     @inline(__always)
     var isASCIISpace: Bool {
         switch self {
@@ -71,16 +68,14 @@ extension UInt8 {
         }
     }
 
-    /// Inline delimiter-run flanking whitespace: space, tab, line feed, carriage return, or form
-    /// feed (0x0C).
+    /// An ASCII Unicode whitespace character (spec "Characters and lines"): space, tab, line feed,
+    /// carriage return, or form feed (0x0C).
     ///
-    /// This is the ASCII subset of cmark's `cmark_utf8proc_is_space` (`src/utf8.c`, "anything in the
-    /// Zs class, plus LF, CR, TAB, FF"), the predicate `scan_delims` uses to classify the characters
-    /// bordering an emphasis / strikethrough / smart-quote run. It deliberately differs from
-    /// `isASCIISpace` (cmark's HTML `spacechar = [ \t\v\f\r\n]`) by EXCLUDING vertical tab (0x0B):
-    /// cmark counts VT as a non-space for flanking, so `~<VT>~` flanks and pairs into a strikethrough
-    /// while `~<FF>~` (FF is a flanking space) leaves the tildes non-flanking and literal. Non-ASCII
-    /// whitespace (NBSP and the other Zs code points) is multi-byte and classified at the call site.
+    /// Classifies the characters bordering an emphasis, strikethrough or smart-quote delimiter run under
+    /// the left- and right-flanking delimiter run definitions. Unlike a whitespace character, a Unicode
+    /// whitespace character excludes line tabulation (0x0B), so `~<VT>~` flanks and pairs into a
+    /// strikethrough while `~<FF>~` stays literal. Non-ASCII Unicode whitespace (the other `Zs` code
+    /// points) is multi-byte and classified at the call site.
     @inline(__always)
     var isFlankingSpace: Bool {
         switch self {
@@ -92,7 +87,7 @@ extension UInt8 {
         }
     }
 
-    /// ASCII punctuation: the 32 ASCII punctuation marks per CommonMark §2.1.
+    /// An ASCII punctuation character (spec "Characters and lines").
     @inline(__always)
     var isASCIIPunct: Bool {
         switch self {

@@ -87,7 +87,7 @@ extension BlockParser {
                         content: content,
                         into: parent
                     )
-                    // Code-span content: replace newlines with single spaces (per CommonMark §6.1) before applying the single-space-strip rule. Keep the original chunk if there are no newlines so we don't materialize for the common case.
+                    // Per Code spans, line endings become spaces before one leading and trailing space is stripped.
                     let normalized = normalizeCodeSpanContent(span.content)
                     let normalizedRef = storage.intern(normalized)
                     let codeIdx = storage.appendNode(
@@ -113,7 +113,7 @@ extension BlockParser {
             case UInt8(ascii: "\n"):
                 let info: LineBreakInfo
                 if preserveWhitespace {
-                    // Inline-only / preserve-whitespace mode: a newline is literal text, not a soft or trailing-space hard break. Leave it in the pending-text region (it has already been normalized to `\n` by `parseInlineOnly`) and step past it - unless a pending `\` precedes it: cmark's `handle_backslash` (src/inlines.c) builds a LINEBREAK for `\<line ending>` with no whitespace-option gate.
+                    // Preserving whitespace, a line ending is literal text rather than a soft line break or a trailing-space hard line break. A backslash before it forms a hard line break (Hard line breaks).
                     guard cursor > pendingTextStart, content[cursor - 1] == UInt8(ascii: "\\") else {
                         cursor += 1
                         continue
@@ -142,8 +142,8 @@ extension BlockParser {
                 // Entity matching reads a flat buffer by raw offset, so scan through a contiguous
                 // window (see `contiguousChunk`): identity for single-segment content, the single
                 // source segment's slice for multi-segment content (whose virtual offsets index no
-                // single buffer). An entity can't cross a segment boundary - the join newline
-                // terminates the name/number - so a window from `&` to the segment end is sufficient.
+                // single buffer). The line ending at a segment join terminates any entity name or
+                // number, so a window from `&` to the segment end is sufficient.
                 let contiguous = content.contiguousChunk(fromVirtual: cursor, limit: endOffset)
                 precondition(contiguous != nil, "an `&` lies in a source segment: the only synthetic segment is the line join")
                 let window = contiguous!
@@ -200,7 +200,7 @@ extension BlockParser {
                         into: parent,
                         content: content
                     )
-                    // Links may not contain other links (spec "Links"), and an autolink binds more tightly
+                    // Links may not contain other links (Links), and an autolink binds more tightly
                     // than link text brackets, so the link openers before it cannot form links.
                     markLinkOpenersInactive(brackets: &brackets, lastBracket: lastBracket)
                     cursor = auto.afterClose
@@ -218,16 +218,9 @@ extension BlockParser {
                         content: content,
                         into: parent
                     )
-                    // The literal is the tag's raw bytes. When the whole `[cursor, htmlEnd)` range lies
-                    // in one contiguous buffer region - every single-segment tag, and any multi-segment
-                    // tag that stays within one source segment - `contiguousChunk` returns it zero-copy,
-                    // byte-identical to the old `content.chunk` fast path. A multi-line tag straddles a
-                    // soft-break segment boundary (the tag's whitespace spanned a newline in a
-                    // non-contiguous paragraph): its bytes live in separate source segments joined by the
-                    // interned `\n`, so no single buffer holds them and a straddling `content.chunk` would
-                    // read the wrong bytes. Materialize the joined literal into the arena through the
-                    // segment-aware subscript - continuation lines already have their leading whitespace
-                    // stripped in the segment list, matching cmark's paragraph buffer.
+                    // The literal is the tag's raw bytes, zero-copy when they lie in one segment. A tag
+                    // spanning a line ending in a non-contiguous paragraph has its bytes in separate
+                    // segments, so the joined literal is materialized into the arena.
                     let chunkRef: ContentRef
                     if let contiguous = content.contiguousChunk(fromVirtual: cursor, limit: htmlEnd),
                        contiguous.length == htmlEnd - cursor {
@@ -308,10 +301,8 @@ extension BlockParser {
                 pendingTextStart = cursor
                 
             case UInt8(ascii: "!"):
-                // cmark opens an image only for `![` NOT followed by `^` (src/inlines.c: "specifically
-                // check for '![' not followed by '^'"). `![^…` leaves the `!` as literal text and lets
-                // the `[` open a link/footnote bracket, so `![^a]` is `!` + a footnote (or, with
-                // footnotes off, `!` + a link/literal), never an image.
+                // `![^` opens no image: the `!` is literal text and the `[` opens a bracket, so `![^a]`
+                // is `!` followed by a footnote reference, link or literal text.
                 if cursor + 1 < endOffset,
                    content[cursor + 1] == UInt8(ascii: "["),
                    !(cursor + 2 < endOffset && content[cursor + 2] == UInt8(ascii: "^")) {
@@ -399,7 +390,7 @@ extension BlockParser {
                 pendingTextStart = cursor
 
             case UInt8(ascii: "\\"):
-                // Backslash escape: `\<ASCII punct>` emits the punct as a single-byte text node. `\<newline>` is detected by the line-break handler when we hit the newline. Anything else leaves the backslash as literal text.
+                // Backslash escape: `\<ASCII punct>` emits the punct as a single-byte text node. The line ending case handles `\<line ending>`. Anything else leaves the backslash as literal text.
                 if cursor + 1 < endOffset {
                     let next = content[cursor + 1]
                     if next.isASCIIPunct {
@@ -428,17 +419,12 @@ extension BlockParser {
                 cursor += 1
                 
             case UInt8(ascii: ":"), UInt8(ascii: "w"), UInt8(ascii: "W"):
-                // Bare-URL autolinks (`://`-scheme and `www.`) are detected here, in the forward pass.
-                // The `@`-triggered EMAIL form is NOT: cmark-gfm detects it in a post-pass over the
-                // finished text nodes, AFTER emphasis resolution and `cmark_consolidate_text_nodes`
-                // (`postprocess`, `extensions/autolink.c`). The rewrite mirrors that in
-                // `gfmEmailAutolinkPass`, run after `consolidateTextNodes`, so a flanking `_`/`*` next to
-                // an email is resolved as emphasis (or not) before the email boundaries are decided.
-                // why: cmark's autolink extension declines to match a bare-URL autolink while an unclosed
-                // `[`/`![` (LINK/IMAGE) opener is on the bracket stack - `match` (`extensions/autolink.c`)
-                // bails when `cmark_inline_parser_in_bracket` reports LINK or IMAGE - so e.g. `[http://t`
-                // stays plain text. An `^[` (ATTRIBUTE-only) opener does not suppress. The email post-pass
-                // is unaffected: it runs after brackets have collapsed to literal text.
+                // `://` and `www.` extended autolinks are detected in this pass. Extended email autolinks
+                // are detected by `gfmEmailAutolinkPass` after emphasis resolution, so a `_` or `*` beside
+                // an email resolves as emphasis (or not) before the email's boundaries are decided.
+                // Links may not contain other links (Links), so no extended autolink forms while a `[` or
+                // `![` opener is on the bracket stack: `[http://t` is text. An `^[` opener does not
+                // suppress one.
                 let insideLinkOrImageBracket = lastBracket.map { brackets[$0].insideLinkOrImage } ?? false
                 if storage.options.contains(.gfmAutolink),
                    !insideLinkOrImageBracket,
@@ -554,7 +540,7 @@ extension BlockParser {
         case attribute
     }
 
-    /// Bracket-stack entry recording an open `[` (LINK), `![` (IMAGE), or `^[` (ATTRIBUTE - fork-specific extended-attribute syntax). Like the delimiter stack, it's a doubly-linked list embedded in an array; `previous` is an index into `brackets` (or `nil`).
+    /// Bracket-stack entry recording an open `[` (LINK), `![` (IMAGE), or `^[` (ATTRIBUTE, the inline-attribute syntax). Like the delimiter stack, it's a linked list embedded in an array; `previous` is an index into `brackets` (or `nil`).
     internal struct BracketRecord {
         var kind: BracketKind
         var inlText: DocumentStorage.Index
@@ -562,12 +548,12 @@ extension BlockParser {
         var virtualStart: Int
         /// Delimiter-stack index at time of push. Passed to `processEmphasis` as `stackBottom` after a successful link match so emphasis inside the link text gets resolved without leaking out.
         var delimPosition: Int
-        /// `true` once any later bracket has been pushed on top of this one. Used to disqualify the shortcut-reference form for outer brackets that contain nested ones.
+        /// `true` once any later bracket has been pushed on top of this one; an outer bracket that contains nested ones cannot take the shortcut reference form.
         var bracketAfter: Bool
-        /// `true` when this bracket, or any bracket enclosing it, is a `.link` or `.image` opener - the cumulative union cmark keeps in `bracket.in_bracket[LINK|IMAGE]` (see `push_bracket` in `src/inlines.c`). GFM bare-URL autolinks (`://`-scheme, `www.`) are suppressed while such a bracket is open, matching `match` in `extensions/autolink.c` (`cmark_inline_parser_in_bracket`). An `.attribute`-only chain does not suppress them.
+        /// `true` when this bracket, or any bracket enclosing it, is a `.link` or `.image` opener. `://` and `www.` extended autolinks don't form while such a bracket is open; an `.attribute`-only chain does not suppress them.
         var insideLinkOrImage: Bool
         /// `true` once a link or autolink formed after this opener, which then cannot form a link: links may not
-        /// contain other links (spec "Links").
+        /// contain other links (Links).
         var linkFormedAfter: Bool = false
         var previous: Int?
     }
@@ -656,9 +642,9 @@ extension BlockParser {
            content[pos] == UInt8(ascii: "(") {
             let afterParen = pos + 1
             let afterSpaces1 = skipSpaceChars(start: afterParen, end: end, content: content)
-            // Scan the destination and title over virtual offsets, as cmark's `manual_scan_link_url` and
-            // `scan_link_title` scan its flat buffer: either may cross a soft-break join of multi-segment
-            // content (`<a\` LF `b>`, `'\'` LF `'`), which a one-segment contiguous window would cut short.
+            // Scan the destination and title over virtual offsets: either may span a line ending in
+            // multi-segment content (`<a\` LF `b>`, `'\'` LF `'`), which a one-segment contiguous window
+            // would cut short.
             if let dest = matchLinkDestination(from: afterSpaces1, end: end, in: content) {
                 let afterDest = dest.afterEnd
                 let afterSpaces2 = skipSpaceChars(start: afterDest, end: end, content: content)
@@ -673,7 +659,7 @@ extension BlockParser {
                 if afterTitleSpaces < end,
                    content[afterTitleSpaces] == UInt8(ascii: ")") {
                     pos = afterTitleSpaces + 1
-                    // Clean the destination like cmark's `cmark_clean_url` (trim surrounding whitespace, then remove escapes / decode entities); the title uses `unescapeURLChunk` alone, since cmark's `cmark_clean_title` does not trim. Both read via the buffer-aware accessor (selects `sourceBytes` vs the arena per `chunk.inSource`): a link inside flattened/arena content (a non-contiguous setext heading, a `\|`-unescaped table cell) has an arena-backed destination/title, so reading must not index the source buffer at an arena offset. Either range may straddle a join, so it is materialized (zero-copy when it lies within one segment).
+                    // The destination is trimmed, then unescaped and entity-decoded; the title is unescaped and entity-decoded without trimming. Inside arena content (a non-contiguous setext heading, a table cell with `\|`) either can be arena-backed, and either may span a line ending, so both are materialized (zero-copy within one segment).
                     url = cleanURLChunk(materializedChunk(start: dest.destination.lowerBound, end: dest.destination.upperBound, content: content))
                     title = unescapeURLChunk(materializedChunk(start: titleInterior.lowerBound, end: titleInterior.upperBound, content: content))
                     matched = true
@@ -694,18 +680,14 @@ extension BlockParser {
                 labelChunk = lab.interior
                 afterRefForm = pos + (lab.afterEnd - labelWindow.offset)
             } else if let lab = matchLinkLabel(from: pos, end: end, in: content) {
-                // The full-reference label straddles a soft-break join (`[text][la\nbel]`), which the
-                // contiguous window can't image. cmark's `link_label` scans a flat buffer, so it crosses
-                // the join to the `]`; carry the interior's virtual range and normalize it across the
-                // join for lookup, exactly like the shortcut fallback below.
+                // The full-reference label spans a line ending (`[text][la\nbel]`), which the contiguous
+                // window can't image; carry the interior's virtual range and normalize it across the
+                // join for lookup.
                 labelRange = lab.interior
                 afterRefForm = lab.afterEnd
             }
-            // Collapsed `[]`, a whitespace-only `[   ]`, or absent - fall back to shortcut form (the
-            // bracket text itself becomes the label) when no inner brackets were nested under this
-            // opener. cmark trims the scanned label (`cmark_chunk_trim`) before testing it for empty,
-            // so a whitespace-only full-reference label triggers the same shortcut fallback (`[x][ ]`
-            // resolves `[x]`).
+            // A collapsed `[]`, a whitespace-only `[   ]` or no label falls back to the shortcut form,
+            // whose label is the bracket text, when no bracket is nested under this opener.
             var shortcutRange: Range<Int>?
             let labelIsBlank: Bool
             if let lc = labelChunk {
@@ -715,17 +697,17 @@ extension BlockParser {
             } else {
                 labelIsBlank = true
             }
-            // A whitespace-only `[ ]` is neither a link label nor `[]` (spec "Links": a link label holds a
+            // A whitespace-only `[ ]` is neither a link label nor `[]` (Links: a link label holds a
             // non-whitespace character), so a shortcut reference before it leaves it as text.
             let labelIsWhitespace = labelIsBlank && (labelChunk.map { $0.length > 0 } ?? (labelRange.map { !$0.isEmpty } ?? false))
             if labelIsWhitespace {
                 afterRefForm = pos
             }
             if labelIsBlank && !openerBracketAfter {
-                // Virtual offsets: the opener's `[` / `![` sits at `virtualStart`; the shortcut label runs from just past it to the `]` (`cursor`). `contiguousChunk` maps that virtual range to a real buffer chunk only when it lies within a single source segment. When it does, resolve from that chunk. When it straddles a multi-segment join (a soft break inside the label, `[foo\nbar]`), `contiguousChunk` can't image the whole label, so carry the virtual range and normalize across the join instead — cmark resolves such a multi-line label, so giving up here would leave the reference literal.
+                // The shortcut label runs from just past the opener to the `]` at `cursor`. Within one segment it resolves from a contiguous chunk; a label spanning a line ending (`[foo\nbar]`) carries its virtual range and normalizes across the join.
                 let openerContentStart = brackets[openerIdx].virtualStart + (isImage ? 2 : 1)
                 let shortcutLen = cursor - openerContentStart
-                // cmark's refmap lookup rejects an over-cap raw label, so such a shortcut stays literal.
+                // A link label has at most 999 characters inside its brackets (Links), so a longer shortcut stays literal.
                 if shortcutLen > 0,
                    linkLabelFitsLengthCap(virtualRange: openerContentStart..<cursor, in: content) {
                     if let sc = content.contiguousChunk(fromVirtual: openerContentStart, limit: cursor),
@@ -775,13 +757,12 @@ extension BlockParser {
             }
             return pos
         }
-        // GFM footnote reference: when no link form matches but the bracket contents start with `^` (and have at least one more byte), treat the whole `[^label]` as a `.footnoteReference` — but only when the label resolves to a known definition. cmark turns an unresolved `[^x]` back into literal `[^x]` text (and then consolidates it with neighbours), which the normal no-match bracket handling below reproduces, since the footnote map is fully populated before inline parsing. An image-shaped opener `![^label]` is a footnote too (cmark ignores the image flag here): its `[` sits one past the opener's `!`.
+        // With no link form matched, a `[^label]` whose label names a footnote definition is a footnote
+        // reference. Any other bracket stays literal text through the no-match handling below; the
+        // footnote map is complete before inline parsing.
         let footnoteBracketStart = brackets[openerIdx].virtualStart + (isImage ? 1 : 0)
-        // cmark gates ALL footnote handling below on the node immediately after the opener being a TEXT
-        // node (`handle_close_bracket`, src/inlines.c: `opener->inl_text->next->type ==
-        // CMARK_NODE_TEXT`). When the inner `^[…](…)` / `^[…][ref]` was consumed as an inline
-        // attribute, that node is the ATTRIBUTE node instead, so no footnote path applies and the
-        // bracket falls through to the literal `]` below (`[^[]()]` → `[` + attributes + `]`).
+        // When an inner `^[…](…)` or `^[…][ref]` formed an attribute, the node after the opener is that
+        // attribute rather than text, and the bracket stays literal (`[^[]()]` is `[`, an attribute and `]`).
         let footnoteAfterOpenerIsText = storage[openerInl].next.map { storage[$0].kind == .text } ?? false
         if storage.options.contains(.footnotes),
            footnoteAfterOpenerIsText,
@@ -844,7 +825,7 @@ extension BlockParser {
 
     /// The footnote definition the footnote-shaped bracket from `open` to `closeBracket` references, or `nil`.
     /// Its label - everything after the `^` - matches a definition's label after the normalization link labels
-    /// get (spec "Links": case-folded, with runs of whitespace, line endings included, collapsed to one
+    /// get (Links: case-folded, with runs of whitespace, line endings included, collapsed to one
     /// space and leading and trailing whitespace removed), so it may span a line ending.
     private func footnoteDefinition(referencedFrom open: Int, closeBracket: Int, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
         let labelStart = open + 2
@@ -859,10 +840,9 @@ extension BlockParser {
     ///
     /// Only called with the `definition` the reference's label resolved to (`footnoteDefinition`). The reference's index (and the
     /// definition's `referenceCount`) is assigned later, by the footnote post-processing pass over the
-    /// finalized tree, because an enclosing bracket can still discard this reference; until then it
-    /// carries a placeholder index of 0. The emitted reference carries the *definition's* raw label (cmark
-    /// discards the reference's own text and links back to the definition), so `[^Foo]` resolving to
-    /// `[^foo]` displays `foo`.
+    /// finalized tree, because an enclosing bracket can discard this reference; until then it
+    /// carries a placeholder index of 0. The emitted reference carries the *definition's* raw label, so
+    /// `[^Foo]` resolving to `[^foo]` displays `foo`.
     ///
     /// The opener node is removed whole: a `[` (`![^a]` never opens an image bracket, see the `!` dispatch,
     /// so it reaches here as a literal `!` followed by a `[` opener).
@@ -913,14 +893,8 @@ extension BlockParser {
                 }
             }
         }
-        // Try reference form `[label]` looking up in attribute refmap. cmark's
-        // `handle_close_bracket_attribute` (swift-cmark `src/inlines.c`) calls `link_label`
-        // unconditionally: it ADVANCES past a well-formed following `[…]` - even an empty `[]`, or one
-        // whose label resolves to no attribute reference - and only rewinds when no closing `]` is found.
-        // A resolved reference supplies the attributes; an unresolved one is still consumed. Unlike the
-        // link path, the failure branch does NOT rewind (`handle_close_bracket` resets
-        // `subj->pos = initial_pos`; the attribute path never does), so the consumed `[…]` does not
-        // re-parse - `^[][]` drops the trailing `[]`, leaving literal `^[]`.
+        // Otherwise try the reference form `[label]`, whose label must name an entry in
+        // `attributeReferenceMap`.
         var labelKey: String?
         // The inline form completes the construct; what follows it is not part of it.
         if !matched, let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
@@ -932,10 +906,8 @@ extension BlockParser {
                 labelKey = normalizeLabel(chunk: lab.interior)
             }
         } else if !matched, let lab = matchLinkLabel(from: pos, end: end, in: content) {
-            // The following `[…]` straddles a soft-break join (`^[](x)[la\nbel]`), which the contiguous
-            // window can't image - it stops at the segment boundary, leaving the closing `]` on the next
-            // line unseen. cmark's `link_label` scans a flat buffer, so it crosses the join to the `]` and
-            // consumes it without rewinding; normalize the interior across the join for lookup.
+            // The label spans a line ending (`^[x][la\nbel]`), past the end of the contiguous window;
+            // normalize the interior across the join for lookup.
             pos = lab.afterEnd
             if !lab.interior.isEmpty {
                 labelKey = normalizeLabel(virtualRange: lab.interior, in: content)
@@ -947,9 +919,9 @@ extension BlockParser {
             matched = true
         }
         if !matched {
-            // Fail: pop bracket, emit a single `]` text at the (possibly label-advanced) close position
-            // and resume there. The `^[` text node stays as regular text in the tree. A label naming no
-            // attribute definition is not part of the construct, so it is parsed again as text.
+            // Fail: pop bracket, emit `]` as text and resume just past it. The `^[` text node stays as
+            // text. A label naming no attribute definition is not part of the construct, so it is parsed
+            // again as text.
             pos = cursor + 1
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             emitBracketLiteral(at: pos - 1, content: content, parent: parent)
@@ -1029,16 +1001,10 @@ extension BlockParser {
 
     /// The attribute interior `[start, end)` as a single readable chunk.
     ///
-    /// Zero-copy when the range lies in one contiguous buffer region - every single-line attribute, and
-    /// any multi-segment one that stays within a single source segment. A multi-line attribute straddles
-    /// a soft-break segment boundary: its `(…)` content spans a paragraph line join (e.g. ` ^[](\n)`,
-    /// which the block parser keeps as non-contiguous segments once a positive content indent suppresses
-    /// the source-contiguity collapse), so the interior bytes live in separate source segments joined by
-    /// the interned `\n` and no single buffer holds them. Materialize the joined bytes into the arena
-    /// through the segment-aware subscript - the code-span / tab-expansion pattern - and hand back an
-    /// arena chunk. cmark reads its flattened paragraph buffer, so the interior newline is ordinary
-    /// attribute content (`manual_scan_attribute_attributes`, swift-cmark `src/inlines.c`). An empty `()`
-    /// is a zero-length chunk.
+    /// Zero-copy when the range lies in one segment. An interior spanning a line ending in a
+    /// non-contiguous paragraph (e.g. ` ^[](\n)`) lies in separate segments, so its joined bytes are
+    /// materialized into the arena; the line ending is ordinary attribute content. An empty `()` is a
+    /// zero-length chunk.
     private mutating func attributeContentChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         if start == end {
             return content.chunk(offset: start, length: 0)
@@ -1056,7 +1022,7 @@ extension BlockParser {
 
     // MARK: - Emphasis / strong (delimiter stack)
 
-    /// One node in the delimiter stack - the side data structure used by CommonMark's emphasis-resolution algorithm (§6.2 + Appendix). Each record points at a `.text` node whose literal contains the run of `*` or `_` characters scanned during the forward pass.
+    /// One node in the delimiter stack of the emphasis-resolution algorithm (Appendix: A parsing strategy). Each record points at a `.text` node whose literal contains a delimiter run scanned during the forward pass.
     ///
     /// The stack is a doubly-linked list embedded in a `UniqueArray<DelimiterRecord>` array - `previous`/`next` are array indices, `nil` means "none". When emphasis is resolved, individual records are unlinked from the list but the array itself isn't shrunk (so other indices stay valid).
     internal struct DelimiterRecord {
@@ -1084,23 +1050,16 @@ extension BlockParser {
         var afterIsPunct: Bool
     }
 
-    /// Classify a delimiter run's left/right flanking, matching cmark-gfm's `scan_delims`.
+    /// Classify a delimiter run as left- and/or right-flanking (Emphasis and strong emphasis).
     ///
-    /// cmark-gfm skips over emphasis "special" characters (`skip_chars`) when it reads the before
-    /// and after character for flanking. The only such character in this build is the GFM
-    /// strikethrough `~`: its extension declares itself an emphasis extension, which registers `~`
-    /// in `skip_chars`. The skip runs *before* cmark's per-delimiter-char branch, so it applies to
-    /// `*`/`_` runs and smart quotes (`'`/`"`) alike — but NOT to a `~` run itself, which cmark
-    /// scans through the extension's own delimiter scan that never consults `skip_chars`. With
-    /// strikethrough disabled, `~` is ordinary text and nothing is skipped, matching cmark-gfm with
-    /// the extension detached. So a `*`/`_`/quote run adjacent to a `~` is classified against the
-    /// character past the `~`, e.g. the closing `*` in `*-*~a` sees `a` (a letter) and is
-    /// left-flanking only, so it cannot close and no emphasis forms.
+    /// With strikethrough enabled, a `*`, `_` or quote run reads its bordering characters past any
+    /// adjacent `~` run, so the closing `*` in `*-*~a` borders `a`, is left-flanking only, and closes
+    /// no emphasis. A `~` run reads its immediate neighbours.
     private func classifyFlanking(char: UInt8, start: Int, runEnd: Int, end: Int, content: borrowing ContentSpan) -> Flanking {
         let chunkStart = content.startOffset
         let tilde = UInt8(ascii: "~")
         let skipTilde = char != tilde && storage.options.contains(.strikethrough)
-        // "Before" character - treat content boundaries as a line break; skip a leading `~` run.
+        // "Before" character - the start of the content counts as a line ending; skip a leading `~` run.
         var beforeIdx = start - 1
         if skipTilde {
             while beforeIdx >= chunkStart, content[beforeIdx] == tilde { beforeIdx -= 1 }
@@ -1111,15 +1070,9 @@ extension BlockParser {
         if skipTilde {
             while afterIdx < end, content[afterIdx] == tilde { afterIdx += 1 }
         }
-        // Classify the full Unicode scalar bordering the run, as cmark's `scan_delims` does via
-        // `cmark_utf8proc_is_space` / `cmark_utf8proc_is_punctuation` over the decoded codepoint (not the
-        // raw byte): a non-ASCII Unicode whitespace or punctuation neighbour (e.g. U+00A0 NBSP, the
-        // U+055E Armenian question mark, the U+2014 em dash) must count as such for flanking. The
-        // (skip-adjusted) neighbour byte is the LAST byte of the before scalar and the FIRST byte of the
-        // after scalar; an ASCII byte is its own scalar (the common fast path), otherwise the multi-byte
-        // scalar is decoded - the before scalar by walking back over continuation bytes to its lead.
-        // `beforeChar` keeps the raw byte for the quote `]`/`)` rule below (a multi-byte before scalar
-        // never equals those ASCII bytes), so only the space/punct classification changes here.
+        // Flanking is defined over characters, so a non-ASCII Unicode whitespace character or
+        // punctuation character neighbour (e.g. U+00A0, U+2014) counts as one. `beforeChar` keeps the
+        // raw byte for the quote `]`/`)` rule; a multi-byte scalar never equals those.
         let beforeScalar: Int32 = beforeIdx >= chunkStart
             ? Self.flankingScalarBefore(endingAt: beforeIdx, lowerBound: chunkStart, content: content)
             : 0x0A
@@ -1175,9 +1128,8 @@ extension BlockParser {
         return (Int32(b0 & 0x07) << 18) | (Int32(content[idx + 1] & 0x3F) << 12) | (Int32(content[idx + 2] & 0x3F) << 6) | Int32(content[idx + 3] & 0x3F)
     }
 
-    /// Whether `uc` is "Unicode whitespace" (for flanking and GFM autolink hosts) - cmark's
-    /// `cmark_utf8proc_is_space` (`src/utf8.c`): the Zs general category plus TAB/LF/FF/CR. The ASCII
-    /// subset ({9,10,12,13,32}) routes through the `isFlankingSpace` byte predicate.
+    /// Whether `uc` is a Unicode whitespace character (Characters and lines): the Zs general category
+    /// plus tab, line feed, form feed and carriage return.
     @inline(__always)
     private static func isUnicodeWhitespace(_ uc: Int32) -> Bool {
         if uc < 0x80 { return UInt8(uc).isFlankingSpace }
@@ -1189,9 +1141,8 @@ extension BlockParser {
         }
     }
 
-    /// Whether `uc` is a "Unicode punctuation character" (for flanking and GFM autolink hosts) - cmark's
-    /// `cmark_utf8proc_is_punctuation` (`src/utf8.c`): the P[cdefios] general categories. The ASCII subset
-    /// routes through the `isASCIIPunct` byte predicate (which mirrors cmark's `cmark_ispunct` ctype table).
+    /// Whether `uc` is a punctuation character (Characters and lines): an ASCII punctuation character or
+    /// a member of the Pc, Pd, Pe, Pf, Pi, Po or Ps general categories.
     @inline(__always)
     private static func isUnicodePunctuation(_ uc: Int32) -> Bool {
         if uc < 0x80 { return UInt8(uc).isASCIIPunct }
@@ -1230,9 +1181,9 @@ extension BlockParser {
         }
     }
 
-    /// Scan a maximal run of `c` (`*` or `_`) starting at `start`, classify its left/right-flanking + can_open/can_close per CommonMark 0.31 §6.2, emit a `.text` node for the run, and (if it can open or close) push a delimiter record onto the stack. Returns the offset just past the run.
+    /// Scan a maximal delimiter run of `char` starting at `start`, decide whether it can open and close (Emphasis and strong emphasis), emit a `.text` node for the run, and (if it can open or close) push a delimiter record onto the stack. Returns the offset just past the run.
     ///
-    /// The start of the content (`content.startOffset`) determines whether `start - 1` is a real "before" character or implicitly a newline (start of inline content acts like a line break).
+    /// The start of the content counts as a line ending before the run.
     private mutating func handleDelimRun(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, pendingTextStart: inout Int) -> Int {
         var runEnd = start
         while runEnd < end, content[runEnd] == char {
@@ -1256,7 +1207,10 @@ extension BlockParser {
             canOpen = leftFlanking
             canClose = rightFlanking
         }
-        // Non-flanking run: leave it as part of pending text. Don't emit a text node and don't flush - important so GFM autolink scan-back can later consume these bytes (e.g. `a.b-c_d@a.b` - the `_` mustn't fragment the local-part text). Strikethrough is exempt: cmark-gfm emits a text node for every `~` run it scans (`strikethrough.c` `match`), flanking or not, so a `~` isolated by whitespace still surfaces (as the zero-width node stamped below) rather than folding into surrounding text. A non-flanking `~` is always whitespace-surrounded, so it never sits inside a URL and this exemption can't disturb autolink scan-back.
+        // A run that can neither open nor close stays in the pending text, so the extended email
+        // autolink pass sees an unbroken local part (`a.b-c_d@a.b`). A `~` run always emits its own
+        // text node; a non-flanking `~` run is surrounded by whitespace, so it never falls inside an
+        // autolink.
         let isStrikethrough = char == UInt8(ascii: "~")
         if !canOpen && !canClose && !isStrikethrough {
             return runEnd
@@ -1272,16 +1226,11 @@ extension BlockParser {
         let runRef = storage.intern(runChunk)
         let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parent, data: .literal(runRef)))
         storage.appendChild(textIdx, to: parent)
-        // Stamp the run's own source span. A delimiter that never forms emphasis stays as literal text, and this range lets it keep its columns when it consolidates with adjacent text; a matched delimiter's text node is unlinked before it can matter. The reference stamps this node at creation for the same reason. The run is ordinary literal text and gets a normal, width-bearing range over its own `[start, runEnd)` span, exactly like emphasis (`*`/`_`) delimiters and every other text run stamped via `stampInline`.
+        // A delimiter that forms no emphasis stays literal text, and this range keeps its columns when it consolidates with adjacent text.
         stampInline(textIdx, start, runEnd, content: content)
-        // Push a delimiter record only when the run can open or close. A non-flanking `~` (emitted above to mirror cmark-gfm) can do neither, so it contributes no delimiter and stays literal text.
         if canOpen || canClose {
-            // cmark-gfm's strikethrough `match` (`strikethrough.c`) pushes a `~` delimiter only for a
-            // run of exactly length 2, or length 1 when the double-tilde option is off. Longer runs
-            // (and length-1 runs under doubleTilde) still surface as literal text — emitted above —
-            // but never become delimiters, so they can't pair into a strikethrough the way cmark's
-            // generic delimiter walk would otherwise let an equal-length neighbour do. `*`/`_` runs
-            // are pushed regardless of length.
+            // Strikethrough (extension) wraps text in two tildes, so a `~` run is a delimiter only at
+            // length 2, or length 1 without `.strikethroughDoubleTilde`. Other `~` runs stay literal text.
             let pushDelim: Bool
             if isStrikethrough {
                 let doubleTilde = storage.options.contains(.strikethroughDoubleTilde)
@@ -1343,15 +1292,10 @@ extension BlockParser {
                     && delimiters[o].character == closerChar {
                     let cl = delimiters[c]
                     let op = delimiters[o]
-                    // The rule-of-three opener-acceptance test cmark applies to EVERY delimiter in
-                    // `S_process_emphasis` — `*`/`_` and, through the generic driver, GFM `~` too. For
-                    // `~`, the run-length match is deliberately NOT checked here; `insertEmph` forms a
-                    // strikethrough only when the runs are equal-length and otherwise discards both
-                    // delimiters (its `goto done` path). Checking length here would instead let a
-                    // closer skip a mismatched-length opener and pair a farther equal-length one, which
-                    // cmark never does — it selects the nearest flanking opener, then discards it on
-                    // mismatch, so the farther opener can no longer reach this closer. That divergence
-                    // is only observable across a softbreak, where an intervening `~~` is can-open-only.
+                    // The multiple-of-3 test of rules 9 and 10 (Emphasis and strong emphasis) applies to
+                    // every delimiter, `~` included. A `~` opener is accepted whatever its length:
+                    // `insertEmph` discards a mismatched pair, so a closer never reaches past the nearest
+                    // `~` opener to a farther one of equal length.
                     if !(cl.canOpen || op.canClose)
                         || cl.length % 3 == 0
                         || (op.length + cl.length) % 3 != 0 {
@@ -1419,12 +1363,9 @@ extension BlockParser {
         let useDelims: Int
         let kind: MarkdownNode.Kind
         if openerChar == UInt8(ascii: "~") {
-            // cmark-gfm's strikethrough `insert` (`strikethrough.c`) forms a node only when the opener
-            // and closer text runs have equal length. On a mismatch it takes the `goto done` path:
-            // no node is built, but it still removes every delimiter from the closer back through the
-            // opener, so a farther equal-length opener can no longer pair with this closer. The runs
-            // survive as literal text. (`processEmphasis` selects the nearest flanking opener via the
-            // generic rule, so this is where the length constraint is actually enforced.)
+            // Strikethrough forms only between runs of equal length. On a mismatch both runs stay
+            // literal text, and every delimiter from the closer back through the opener is removed,
+            // so a farther opener can't pair with this closer.
             if openerNumChars != closerNumChars {
                 let next = delimiters[closer].next
                 var d: Int? = closer
@@ -1445,17 +1386,12 @@ extension BlockParser {
         }
         openerNumChars -= useDelims
         closerNumChars -= useDelims
-        // The delimiter records' `length` fields stay at their ORIGINAL run lengths and are never
-        // synced down to the remaining count. `processEmphasis` uses `delimiters[i].length` only for
-        // the rule-of-three modular arithmetic (`% 3`) and the `openersBottom` slot index, and the
-        // reference (cmark `S_insert_emph`) likewise reduces only the inline text literal length,
-        // never the delimiter's `length` — that field is fixed at creation (`inlines.c` line 551).
-        // Keeping it original is load-bearing: a closer whose remaining count changes its `length % 3`
-        // slot (e.g. a `****` run reduced 4→2 after one pairing) must still index its original slot, or
-        // a floor lowered by an unpairable interior run of a different original length would wrongly
-        // suppress the leftover pairing (`****a**o****` must nest as Strong>Strong>Text "a**o"). The
-        // remaining count that governs how many chars this pairing consumes is read from the inline
-        // text literal length (`literalLength` above), exactly as the reference reads it.
+        // The delimiter records' `length` stays the original run length: the multiple-of-3 test of
+        // rules 9 and 10 sums the lengths of the delimiter runs, and `processEmphasis` indexes
+        // `openersBottom` by it. A closer reduced from 4 to 2 must keep its original slot, or a floor
+        // lowered by an unpairable interior run would suppress the leftover pairing (`****a**o****`
+        // nests as Strong>Strong>Text "a**o"). The remaining count, which governs how many characters
+        // this pairing consumes, is the text literal's length (`literalLength` above).
         // Trim `useDelims` chars off the END of the opener literal.
         storage.trimLiteral(of: openerInl, trimStart: 0, newLength: openerNumChars)
         // Trim `useDelims` chars off the START of the closer literal.
@@ -1677,24 +1613,11 @@ extension BlockParser {
                 let closeEnd = scanBacktickRun(start: i, end: end, content: content)
                 let closeLength = closeEnd - i
                 if closeLength == runLength {
-                    // Return RAW content; the caller normalizes newlines and applies the single-space-strip rule (in that order) since the strip needs the post-normalize bytes to compare against.
-                    //
-                    // The raw content is `[openEnd, i)`. When that whole range lies in one contiguous buffer
-                    // region - every single-line span, and any multi-segment span that stays within one source
-                    // segment - it is returned zero-copy, byte-identical to the old `content.chunk` fast path. A
-                    // multi-line span straddles a soft-break segment boundary (its interior newline joined the
-                    // paragraph's non-contiguous lines): the content bytes live in separate source segments joined
-                    // by the interned `\n`, so no single
-                    // buffer holds them and a straddling `content.chunk` would read the wrong bytes - dropping the
-                    // tail and keeping the continuation line's stripped leading whitespace. `materializedChunk`
-                    // joins them through the segment-aware subscript, then hands them to the unchanged normalizer.
-                    // This is the `ef14606` inline-HTML sibling.
-                    //
-                    // The joined bytes equal cmark's paragraph buffer for a MATCHED continuation, whose leading
-                    // whitespace the block parser strips just as cmark does (blocks.c:1465). A LAZY continuation
-                    // (block quote / list) is the case cmark treats differently: it preserves that line's residual
-                    // leading whitespace (blocks.c:1408). The block parser begins every continuation at its first
-                    // non-space, so the residual never enters the join.
+                    // Return the raw content `[openEnd, i)`; the caller converts line endings to spaces before
+                    // the one-space strip, which compares the converted bytes. A span crossing a line ending in
+                    // a non-contiguous paragraph lies in separate segments, which `materializedChunk` joins
+                    // (zero-copy within one segment). Each continuation line, lazy or not, begins at its first
+                    // non-space character, so its leading whitespace is not part of the content (Paragraphs).
                     let contentChunk = materializedChunk(start: openEnd, end: i, content: content)
                     return CodeSpanMatch(content: contentChunk, afterClose: closeEnd, backtickCount: runLength)
                 }
@@ -1715,14 +1638,13 @@ extension BlockParser {
         return i
     }
 
-    /// Apply CommonMark's code-span normalization to raw content.
+    /// Apply code span normalization (Code spans) to raw content.
     ///
-    /// 1. Replace each `\n` with a single space. (Inline content holds no `\r`: lines split on it and join with `\n`.)
+    /// 1. Replace each line ending with a single space. (Inline content joins lines with `\n` alone.)
     /// 2. If the result begins AND ends with a space and isn't all spaces, strip one space from each end.
     ///
     /// Returns either the original chunk (if no changes) or a new chunk pointing at materialized bytes in `storage.strings`.
     private mutating func normalizeCodeSpanContent(_ chunk: Chunk) -> Chunk {
-        // Quick scan for newlines.
         var hasNewline = false
         let endOff = chunk.offset + chunk.length
         for i in chunk.offset..<endOff {
@@ -1734,7 +1656,7 @@ extension BlockParser {
         }
         var workChunk: Chunk
         if hasNewline {
-            // Materialize with newlines replaced by spaces.
+            // Materialize with line endings replaced by spaces.
             let outOffset = storage.strings.count
             var i = chunk.offset
             while i < endOff {
@@ -1756,11 +1678,10 @@ extension BlockParser {
         } else {
             workChunk = chunk
         }
-        // Now apply the single-space-strip rule on the (possibly newline-normalized) chunk.
         return trimSingleSpaces(workChunk)
     }
 
-    /// Apply CommonMark's "code-span single-space-strip" rule.
+    /// Apply the code span one-space strip (Code spans).
     ///
     /// If the content is non-empty, begins with a space, ends with a space, and contains at least one non-space byte, strip exactly one space from each end.
     private func trimSingleSpaces(_ chunk: Chunk) -> Chunk {
@@ -1797,9 +1718,9 @@ extension BlockParser {
         var isBackslash: Bool = false  // hard break driven by a trailing `\` (vs 2+ trailing spaces)
     }
 
-    /// Decide whether the `\n` at `newlineOffset` is a soft or hard line break. CommonMark 0.31 §6.6 / §6.7:
-    /// - Hard if a `\` immediately precedes the newline (with at least one byte in the pending-text region).
-    /// - Hard if 2+ spaces immediately precede the newline.
+    /// Decide whether the line ending at `newlineOffset` is a soft or hard line break (Hard line breaks):
+    /// - Hard if a `\` immediately precedes the line ending (with at least one byte in the pending-text region).
+    /// - Hard if 2+ spaces immediately precede the line ending.
     /// - Soft otherwise.
     /// Returns the kind plus the offset at which to truncate pending text (excluding the marker bytes - backslash or trailing spaces).
     private func classifyLineBreak(at newlineOffset: Int, pendingTextStart: Int, content: borrowing ContentSpan) -> LineBreakInfo {
@@ -1810,12 +1731,9 @@ extension BlockParser {
                 return LineBreakInfo(isHard: true, textEnd: newlineOffset - 1, isBackslash: true)
             }
         }
-        // Trailing whitespace before the newline. cmark's inline text flush rtrims the preceding text
-        // of `cmark_isspace` bytes - space and tab - regardless of the break kind (`cmark_chunk_rtrim`,
-        // src/inlines.c), so the content always ends at the first non-space/tab. VT (0x0b) / FF (0x0c)
-        // are NOT in `cmark_isspace`, so a trailing VT/FF is preserved (a\f\t  \n keeps "a\f"). The
-        // break is HARD when the two bytes immediately before the newline were both spaces (§6.7), SOFT
-        // otherwise; an intervening tab ends the "immediately before" run, so `a  \t\n` is soft.
+        // Spaces and tabs before a line ending are not part of the text, whatever the break kind; a
+        // line tabulation or form feed is (`a\f\t  \n` keeps `a\f`). The break is hard when the two
+        // characters immediately before the line ending are spaces, so `a  \t\n` is soft.
         var textEnd = newlineOffset
         var leadingSpaces = 0
         var inSpaceRun = true
@@ -1841,7 +1759,7 @@ extension BlockParser {
         var isEmail: Bool
     }
 
-    /// Try to match an autolink starting at `start` (which points at `<`). CommonMark 0.31 §6.4. URI form first, email form as fallback.
+    /// Try to match an autolink (Autolinks) starting at `start` (which points at `<`). URI form first, email form as fallback.
     private func matchAutolink(start: Int, end: Int, content: borrowing ContentSpan) -> AutolinkMatch? {
         if let uri = matchURIAutolink(start: start, end: end, content: content) {
             return uri
@@ -1882,10 +1800,7 @@ extension BlockParser {
             return nil
         }
         i += 1
-        // Scan body until `>`.
-        // why: cmark's `_scan_autolink_uri` (swift-cmark `src/scanners.re`) matches the URI body with the
-        // class `[^\x00-\x20<>]*`, which excludes 0x00–0x20 and `<`/`>` but NOT DEL (0x7F). DEL is an ASCII
-        // control character, which the spec excludes from an absolute URI, so it rejects the autolink.
+        // Scan body until `>`. An absolute URI excludes ASCII control characters, DEL (0x7F) included.
         let bodyStart = start + 1
         while i < end {
             let b = content[i]
@@ -1906,7 +1821,7 @@ extension BlockParser {
         return nil
     }
 
-    /// Email autolink: a relaxed approximation of the CommonMark email pattern. `<local@domain>` with `local` from a generous punctuation set and `domain` made of dot-separated labels. We don't enforce the full RFC here - pragmatic matches at the cost of some divergence from the spec.
+    /// Email autolink: `<local@domain>` where `local@domain` is an email address as Autolinks defines it, with `domain` made of dot-separated labels.
     private func matchEmailAutolink(start: Int, end: Int, content: borrowing ContentSpan) -> AutolinkMatch? {
         var i = start + 1
         let bodyStart = i
@@ -1936,9 +1851,8 @@ extension BlockParser {
             if b == UInt8(ascii: ">") {
                 break
             }
-            // why: stop at the first byte no domain can contain (`validateEmailDomain` would reject it
-            // anyway), as cmark's `_scan_autolink_email` does; scanning on to a distant `>` or the block's
-            // end makes each unclosed `<local@` cost O(block length).
+            // Stop at the first byte no domain can contain: scanning on to a distant `>` or the block's
+            // end would make each unclosed `<local@` cost O(block length).
             if !(b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-") || b == UInt8(ascii: ".")) {
                 return nil
             }
@@ -1975,12 +1889,8 @@ extension BlockParser {
         }
     }
 
-    /// Local-part char for a GFM *extended* email autolink (the `@`-triggered form).
-    ///
-    /// cmark-gfm's `postprocess_text` backward scan (`extensions/autolink.c`) accepts only alnum and
-    /// `.+-_`; it breaks at anything else. This is narrower than `isEmailLocalChar` (the CommonMark §6.4
-    /// angle-`<...>` email set, which also admits `!#$%&'*/=?^\`{|}~`). The `mailto:`/`xmpp:` protocol
-    /// prefixes cmark additionally recognizes via `validate_protocol` are a separate concern not handled here.
+    /// Whether `b` may appear in the local part of an extended email autolink (Autolinks (extension)):
+    /// alphanumeric, `.`, `-`, `_` or `+`.
     private func isGFMEmailLocalChar(_ b: UInt8) -> Bool {
         if b.isASCIILetter || b.isASCIIDigit {
             return true
@@ -2028,7 +1938,7 @@ extension BlockParser {
 
     /// Emit a `.link` node + a single `.text` child for an autolink match.
     ///
-    /// The text is the interior with entity and numeric character references decoded (CommonMark §6.2 recognizes them in every context but code; backslash escapes stay literal per §6.5), materialized into the string arena only when a `&` is present - cmark's `make_str_with_entities` (`src/inlines.c`). For email forms, the URL gets a `mailto:` prefix and is materialized into the string arena; the email grammar admits no `;`, so its interior can hold no reference to decode. For URI forms, the URL is the decoded text - cmark's `cmark_clean_autolink` runs the same `houdini_unescape_html_f` over it.
+    /// The text is the interior with entity and numeric character references decoded, materialized into the string arena only when a `&` is present; backslash escapes do not work in autolinks (Backslash escapes). For email forms, the URL gets a `mailto:` prefix and is materialized into the string arena; an email address admits no `;`, so its interior holds no reference to decode. For URI forms, the URL is the decoded text.
     private mutating func emitAutolink(auto: AutolinkMatch, into parent: DocumentStorage.Index, content: borrowing ContentSpan) {
         let textChunk = unescapeURLChunk(
             content.chunk(offset: auto.interior.lowerBound, length: auto.interior.count),
@@ -2079,7 +1989,7 @@ extension BlockParser {
     /// - declaration: `<!NAME …>`
     /// - CDATA section: `<![CDATA[…]]>`
     ///
-    /// CommonMark 0.31 §6.6.
+    /// (Raw HTML)
     private mutating func matchInlineHTML(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         let after = start + 1
         if after >= end {
@@ -2197,11 +2107,10 @@ extension BlockParser {
         return Self.scanRawHTMLCloser("-->", from: bodyStart, end: end, content: content, misses: &htmlCloserMisses.comment)
     }
 
-    /// Match `<![CDATA[…]]>`. Per CommonMark 0.31 §6.6 the content is any run not containing `]]>`, closed by
-    /// the first `]]>`.
+    /// Match `<![CDATA[…]]>`. Per the CDATA section definition (Raw HTML) the content is any run not
+    /// containing `]]>`, closed by the first `]]>`.
     private mutating func matchHTMLCDATA(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
-        // Need `<![CDATA[`. The two brackets are literal; the letters `CDATA` are matched
-        // case-SENSITIVELY per CommonMark start condition 5.
+        // Need `<![CDATA[`, with `CDATA` matched case-sensitively.
         let prefixLen = 9
         if start + prefixLen > end {
             return nil
@@ -2243,8 +2152,8 @@ extension BlockParser {
 
     /// Match `<?…?>`. Body may be empty; scans for the first `?>` terminator rejecting NUL bytes.
     ///
-    /// Per CommonMark 0.31 §6.6 the body is any string of characters not including `?>`, so this stops at the
-    /// FIRST `?>`.
+    /// Per the processing instruction definition (Raw HTML) the body is any string of characters not
+    /// including `?>`, so this stops at the first `?>`.
     private mutating func matchHTMLProcessingInstruction(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         return Self.scanRawHTMLCloser("?>", from: start + 2, end: end, content: content, misses: &htmlCloserMisses.processingInstruction)
     }
@@ -2405,20 +2314,20 @@ extension BlockParser {
         return i
     }
 
-    // MARK: - GFM extended autolinks
+    // MARK: - Extended autolinks
 
-    /// Form of a matched GFM autolink - affects how the destination URL is built when the node is emitted (`www.` needs a synthetic `http://` prefix; emails need `mailto:`).
+    /// Form of a matched extended autolink - affects how the destination URL is built when the node is emitted (`www.` needs a synthetic `http://` prefix; emails need `mailto:`).
     private enum GFMAutolinkForm {
         case uri      // already has http:// or https:// or ftp:// prefix
         case www      // needs http:// synthesized
         case email    // needs mailto: synthesized
     }
 
-    /// Result of a GFM bare-URL / email match. Carries the visible text range (used for the link's child `.text` node) plus the form so the emit step knows whether to synthesize a scheme prefix.
+    /// Result of an extended autolink match. Carries the visible text range (used for the link's child `.text` node) plus the form so the emit step knows whether to synthesize a scheme prefix.
     ///
-    /// `emailSchemeFolded` is set only for the email form when a recognized `mailto:`/`xmpp:` scheme was
-    /// absorbed into `[urlStart, urlEnd)` (cmark's `validate_protocol`). In that case the destination is
-    /// the folded run itself - no synthetic `mailto:` prefix - so `xmpp:` keeps its own scheme.
+    /// `emailSchemeFolded` is set only for the email form when `[urlStart, urlEnd)` begins with a folded
+    /// `mailto:`/`xmpp:` scheme. The destination is then the folded run itself, with no synthetic
+    /// `mailto:` prefix, so `xmpp:` keeps its own scheme.
     private struct GFMAutolinkMatch {
         var urlStart: Int
         var urlEnd: Int
@@ -2426,7 +2335,7 @@ extension BlockParser {
         var emailSchemeFolded: Bool = false
     }
 
-    /// Dispatch a GFM bare-URL autolink trial based on the trigger byte. Returns nil if no autolink starts at / contains `cursor`. The `@`-triggered email form is handled separately in `gfmEmailAutolinkPass`, not here.
+    /// Dispatch a `://` or `www.` extended autolink trial based on the trigger byte. Returns nil if no autolink starts at / contains `cursor`. The `@`-triggered email form is handled separately in `gfmEmailAutolinkPass`, not here.
     private func matchGFMAutolink(trigger: UInt8, cursor: Int, end: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         if trigger == UInt8(ascii: ":") {
             return matchGFMSchemeAutolink(
@@ -2454,13 +2363,9 @@ extension BlockParser {
             return nil
         }
         if schemeStart > chunkStart {
-            // why: cmark's `url_match` (`extensions/autolink.c`) rewinds over the maximal ASCII-alpha run
-            // before `://` and then validates that run as a safe scheme (`sd_autolink_issafe`), so the scheme
-            // is simply delimited by the first non-alpha byte. The char before the scheme may therefore be
-            // ANY non-alpha byte (a digit, punctuation, or a byte of a non-ASCII character), or the content
-            // start; only an ASCII letter blocks the match, because it would extend the rewind into an unsafe
-            // scheme. This is looser than the `www.` form's `isValidGFMPreceding` allowlist - `www_match` DOES
-            // restrict its preceding char, `url_match` does not.
+            // The scheme is the maximal run of ASCII letters before `://`, so a letter before `http`
+            // makes the scheme something else (`xhttp://a.b` is text). Any other preceding byte, unlike
+            // the `www.` form's `isValidGFMPreceding` set, is allowed.
             let pre = content[schemeStart - 1]
             if pre.isASCIILetter {
                 return nil
@@ -2482,9 +2387,8 @@ extension BlockParser {
         )
     }
 
-    /// Find the start position of `http`, `https`, or `ftp` (matched case-insensitively, per cmark's
-    /// `strncasecmp` in `sd_autolink_issafe`) ending just before `colon`. Returns the scheme's first-byte
-    /// offset, or nil.
+    /// Find the start position of `http`, `https`, or `ftp` (matched case-insensitively) ending just
+    /// before `colon`. Returns the scheme's first-byte offset, or nil.
     private func matchSchemeBackward(colon: Int, content: borrowing ContentSpan) -> Int? {
         let chunkStart = content.startOffset
         if colon - 5 >= chunkStart,
@@ -2530,14 +2434,13 @@ extension BlockParser {
         return GFMAutolinkMatch(urlStart: start, urlEnd: trimmedEnd, form: .www)
     }
 
-    /// One arm of cmark-gfm's `validate_protocol` (`extensions/autolink.c`): decide whether the `:` at
-    /// `colon` completes the given lowercase scheme literal (`mailto:` / `xmpp:`, `:` included) sitting at
-    /// a boundary, so the scheme should be folded into an email autolink. Returns the scheme's byte length,
-    /// or nil.
+    /// Decide whether the `:` at `colon` completes the given lowercase scheme literal (`mailto:` /
+    /// `xmpp:`, `:` included) sitting at a boundary, so the scheme folds into an extended email autolink.
+    /// Returns the scheme's byte length, or nil.
     ///
     /// A scheme qualifies when its bytes lie fully within the scan window `[localBound, colon]`, match the
-    /// literal case-sensitively (cmark uses `memcmp`, so `MAILTO:` does NOT match), and either begin exactly
-    /// at `localBound` or are preceded by a non-alphanumeric byte (`amailto:` - preceded by `a` - fails).
+    /// literal case-sensitively (`MAILTO:` does not match), and either begin exactly at `localBound` or are
+    /// preceded by a non-alphanumeric byte (`amailto:` fails).
     private func matchEmailScheme(_ scheme: String, colon: Int, localBound: Int, content: borrowing ContentSpan) -> Int? {
         let len = scheme.utf8.count
         let schemeStart = colon + 1 - len
@@ -2558,38 +2461,29 @@ extension BlockParser {
     }
 
     /// `@`-triggered: scans backward (bounded by `localBound`) for the email local part and forward for the
-    /// domain, restarting from a second `@` met mid-domain the way cmark's `goto found_at` does (see the loop).
+    /// domain, restarting from a second `@` met mid-domain (see the loop).
     ///
     /// `localBound` is the earliest offset the backward local-part scan may reach - the content start for a
-    /// fresh scan, or the end of the previous email when scanning a text node with several `@`s. It matches
-    /// cmark's `max_rewind` bound (`postprocess_text`, `extensions/autolink.c`): since `@` is never a
-    /// local-part char, the scan stops at any preceding `@` regardless, so the two agree.
+    /// fresh scan, or the end of the previous email when scanning a text node with several `@`s.
     ///
     /// On a non-match the function returns nil and sets `resumeAt` to the offset just past everything it
-    /// scanned (`> at` always). Every `@` in `[at, resumeAt)` was examined - the trial `@` plus any `@`s the
-    /// restart walked over - and provably cannot start an email (a restart that reaches those `@`s fresh
-    /// carries no MORE dots than this scan did, so it fails identically), so the caller skips straight to
-    /// `resumeAt`. This mirrors cmark advancing its `offset` past the failed region rather than re-examining
-    /// it, keeping the whole pass O(content length) even on adversarial `@`-dense input (the anti-quadratic
-    /// guard cmark maintains; see `check_domain`'s GHSA note).
+    /// scanned (`> at` always). Every `@` in `[at, resumeAt)` - the trial `@` plus any `@`s the restart
+    /// walked over - provably cannot start an email (a restart that reaches those `@`s fresh
+    /// carries no more periods than this scan did, so it fails identically), so the caller skips straight to
+    /// `resumeAt`. This keeps the whole pass O(content length) even on `@`-dense input.
     private func matchGFMEmailAutolink(at: Int, localBound: Int, end: Int, content: borrowing ContentSpan, resumeAt: inout Int) -> GFMAutolinkMatch? {
-        // `atSign` is the `@` currently under trial. cmark's `postprocess_text` (`extensions/autolink.c`)
-        // RESTARTS the match from a SECOND `@` met during the forward domain scan (`goto found_at`): it
-        // abandons the current `local@domain` candidate - never emitting it - and re-scans from that second
-        // `@` (the run between the two `@`s becomes the new local part). The `goto` jumps past the
-        // initializers of the state below, so these values CARRY across the restart while `localStart` and
-        // the domain cursor are recomputed from `atSign`.
+        // `atSign` is the `@` under trial. A second `@` met during the domain scan abandons the current
+        // candidate and restarts from that `@`, the run between the two becoming the new local part.
+        // The scheme state below carries across the restart; `localStart` and the domain cursor are
+        // recomputed from `atSign`.
         var atSign = at
         var schemeFolded = false
         var isXmpp = false
         while true {
-            // Local part: cmark-gfm's `postprocess_text` backward scan (`extensions/autolink.c`) accepts a
-            // NARROWER set than the CommonMark §6.4 angle-email form - only alnum + `.+-_` - and STOPS at any
-            // other char (`isGFMEmailLocalChar`, not `isEmailLocalChar`). Using the broad §6.4 set here would
-            // swallow chars cmark stops at (e.g. `x!@.e` -> cmark rejects; the broad set would link `mailto:x!@.e`).
-            // A `:` that completes a recognized lowercase `mailto:`/`xmpp:` scheme at a boundary is FOLDED into
-            // the link rather than stopping the scan (cmark's `validate_protocol`): the scheme becomes part of
-            // the link text and destination, and for `xmpp:` the destination keeps that scheme (see below).
+            // The local part stops at the first character an extended email autolink's local part can't
+            // hold (`isGFMEmailLocalChar`). A `:` completing a lowercase `mailto:` or `xmpp:` scheme at a
+            // boundary is instead folded into the link text and destination; an `xmpp:` destination keeps
+            // that scheme.
             var localStart = atSign
             while localStart > localBound {
                 let b = content[localStart - 1]
@@ -2612,25 +2506,18 @@ extension BlockParser {
                 }
                 break
             }
-            // No local part AND no folded scheme (cmark's `rewind == 0`): not an email at this `@`. Resume
-            // just past it and return nil - matching cmark, which on `rewind == 0` advances its offset past
-            // the `@` (`offset += max_rewind + 1`) rather than emitting anything or re-examining it. A folded
+            // No local part and no folded scheme: not an email at this `@`; resume just past it. A folded
             // scheme moves `localStart` back even when the local part is empty, so `mailto:@a.b` is accepted
             // here.
             if localStart == atSign {
                 resumeAt = atSign + 1
                 return nil
             }
-            // why: unlike the `www.`/`://`-scheme forms (`www_match`/`url_match`, which restrict the char
-            // before the match), cmark-gfm's email detection runs in `postprocess_text` (`extensions/autolink.c`)
-            // as a pass over the finished text node: it scans backward from `@` over local-part chars and simply
-            // STOPS at the first non-local char, leaving whatever precedes as ordinary "before" text with no
-            // validity check. So a leading `<` (that already failed as an angle autolink / inline HTML) doesn't
-            // block the email - `<o@.e` -> Text "<" + Link(mailto:o@.e). Applying a preceding-char restriction
-            // here would reject those, so the email form has none.
+            // Unlike the `www.` form, an email has no preceding-character restriction: whatever precedes
+            // the local part stays text, so `<o@a.b` is `<` followed by a link.
             // The domain is one or more segments of alphanumerics, `-` and `_` separated by periods, with
-            // at least one period, ending in neither `-` nor `_` (spec "Autolinks (extension)"). A
-            // period no segment follows ends the address before it.
+            // at least one period, ending in neither `-` nor `_` (Autolinks (extension)). A period no
+            // segment follows ends the address before it.
             var i = atSign + 1
             var periods = 0
             while true {
@@ -2664,7 +2551,7 @@ extension BlockParser {
             || (isXmpp && b == UInt8(ascii: "/"))
     }
 
-    /// Emit a `.link` node + a single `.text` child for a GFM autolink match. `www.` and email forms get a synthetic scheme prefix (`http://` or `mailto:`) materialized into the string arena.
+    /// Emit a `.link` node + a single `.text` child for an extended autolink match. `www.` and email forms get a synthetic scheme prefix (`http://` or `mailto:`) materialized into the string arena.
     private mutating func emitGFMAutolink(auto: GFMAutolinkMatch, content: borrowing ContentSpan, into parent: DocumentStorage.Index) {
         precondition(auto.form != .email, "email autolinks are emitted by gfmEmailAutolinkPass")
         let urlChunk: Chunk
@@ -2718,13 +2605,10 @@ extension BlockParser {
         )
     }
 
-    /// Walk forward until a URL boundary: cmark whitespace (`cmark_isspace` - space, tab, LF, CR) or `<`.
+    /// Walk forward until a URL boundary: space, tab, line feed, carriage return or `<`.
     ///
-    /// Mirrors cmark-gfm's URL body scan in `url_match` / `www_match` (`extensions/autolink.c`):
-    /// `while (link_end < size && !cmark_isspace(data[link_end]) && data[link_end] != '<')`. `>` is NOT a
-    /// boundary - it is an ordinary URL byte - and VT/FF are not `cmark_isspace` (they are HTML `spacechar`
-    /// but class-0 here), so both stay in the URL. Hence `isSpaceTabOrNewline` (exactly `cmark_isspace`),
-    /// not `isASCIISpace` (which also matches VT/FF).
+    /// `>`, line tabulation and form feed are ordinary URL bytes, hence `isSpaceTabOrNewline` rather than
+    /// `isASCIISpace`.
     private func scanGFMURLBody(
         start: Int,
         end: Int,
@@ -2741,20 +2625,19 @@ extension BlockParser {
         return i
     }
 
-    /// Trailing-boundary trim for a GFM autolink URL, mirroring cmark-gfm's `autolink_delim`
-    /// (`extensions/autolink.c`) as a single pass from the end of the `[urlStart, urlEnd)` run that
-    /// `scanGFMURLBody` produced:
+    /// Trailing-boundary trim for an extended autolink URL (extended autolink path validation, Autolinks
+    /// (extension)), as a single pass from the end of the `[urlStart, urlEnd)` run that `scanGFMURLBody`
+    /// produced:
     ///
     /// - a trailing `? ! . , : * _ ~ ' "` is peeled, one character at a time;
     /// - a trailing `)` is peeled only when the run holds more `)` than `(`, so balanced parentheses
     ///   (`…/Pikachu_(Electric)`) are kept while a stray closing paren is dropped. The `(`/`)` totals are
     ///   counted once over the whole run; `closing` is decremented as each unbalanced `)` is removed;
     /// - a trailing `;` peels a whole `&…;` entity tail when one precedes it (`&`, then one or more ASCII
-    ///   letters - `cmark_isalpha`, which excludes digits - then `;`), otherwise it peels just the `;`.
+    ///   letters, not digits, then `;`), otherwise it peels just the `;`.
     ///
-    /// These `)`, punctuation, and `;` cases are interleaved in one loop (as cmark does), so a mixed tail
-    /// like `');` peels right-to-left correctly. A `<` never appears in the run (`scanGFMURLBody` stops at
-    /// it), so cmark's `<`-truncation pass is a no-op and is omitted.
+    /// These `)`, punctuation, and `;` cases are interleaved in one loop, so a mixed tail like `');` peels
+    /// right-to-left. A `<` never appears in the run: `scanGFMURLBody` stops at it.
     private func trimTrailingPunctuation(urlStart: Int, urlEnd: Int, content: borrowing ContentSpan) -> Int {
         var opening = 0
         var closing = 0
@@ -2781,8 +2664,8 @@ extension BlockParser {
                 i -= 1
             case UInt8(ascii: ";"):
                 // Scan ASCII letters back from the char before the `;`; an entity tail is `&` + those
-                // letters + `;`. Requiring at least one letter (`entityStart < i - 2`) matches cmark's
-                // `new_end < link_end - 2` guard, so `&;` and a bare `;` peel only the `;`.
+                // letters + `;`. Requiring at least one letter (`entityStart < i - 2`) makes `&;` and a
+                // bare `;` peel only the `;`.
                 var entityStart = i - 2
                 while entityStart > urlStart, content[entityStart].isASCIILetter {
                     entityStart -= 1
@@ -2799,7 +2682,7 @@ extension BlockParser {
         return i
     }
 
-    /// The end of the valid domain starting at `start` (spec "Autolinks (extension)": segments of
+    /// The end of the valid domain starting at `start` (Autolinks (extension): segments of
     /// alphanumeric characters, underscores and hyphens separated by periods, with at least one period
     /// and no underscore in the last two segments), or `nil` when none starts there. A period that no
     /// segment follows ends the domain before it.
@@ -2853,13 +2736,9 @@ extension BlockParser {
         }
     }
 
-    /// Allowlist of characters that may directly precede a GFM `www.` autolink.
-    ///
-    /// Only whitespace, `*`, `_`, `~`, `(` count as valid boundaries; everything else (including `<`)
-    /// disqualifies the autolink, mirroring `www_match` in `extensions/autolink.c`. The `://`-scheme form
-    /// (`url_match`) uses a looser rule - any non-ASCII-alpha preceding byte is fine (see
-    /// `matchGFMSchemeAutolink`) - and the `@`-triggered email form imposes no such restriction at all
-    /// (cmark's `postprocess_text`; see `matchGFMEmailAutolink`).
+    /// Characters that may directly precede a `www.` extended autolink: whitespace, `*`, `_`, `~` and `(`.
+    /// Anything else, `<` included, disqualifies it. The `://` form only rejects a preceding ASCII letter
+    /// (see `matchGFMSchemeAutolink`), and the email form has no restriction (see `matchGFMEmailAutolink`).
     private func isValidGFMPreceding(_ b: UInt8) -> Bool {
         switch b {
         case UInt8(ascii: " "), UInt8(ascii: "\t"), UInt8(ascii: "\n"), UInt8(ascii: "\r"),
@@ -2871,11 +2750,9 @@ extension BlockParser {
     }
 
     /// Compare bytes at `start..(start+target.utf8.count)` against the string target.
-    /// `ignoringASCIICase` folds ASCII case on both sides (`| 0x20`) so a comparison mirrors cmark's
-    /// `strncasecmp` — used for the `://`-scheme literals, which cmark validates case-insensitively
-    /// (`sd_autolink_issafe`, `extensions/autolink.c`). The `www.` form stays exact (`memcmp` in cmark's
-    /// `www_match`). Case-folding never touches the source bytes: only this comparison folds, so the
-    /// matched destination/text keep the source case.
+    /// `ignoringASCIICase` folds ASCII case on both sides (`| 0x20`), for the case-insensitive `://`
+    /// scheme literals; the `www.` form compares exactly. Only the comparison folds, so the matched
+    /// destination and text keep the source case.
     private func bytesEqual(at start: Int, target: String, content: borrowing ContentSpan, ignoringASCIICase: Bool = false) -> Bool {
         let mask: UInt8 = ignoringASCIICase ? 0x20 : 0
         for (k, targetByte) in target.utf8.enumerated() {
@@ -2899,7 +2776,7 @@ extension BlockParser {
 
     /// Emit a `.text` node spanning `start..<end` if non-empty.
     ///
-    /// A text run never holds a line join - every `\n` flushes the run before it - so it lies within one line, which
+    /// A text run never holds a line join - every line ending flushes the run before it - so it lies within one line, which
     /// a single segment of multi-segment content holds.
     private mutating func flushPendingText(start: Int, end: Int, content: borrowing ContentSpan, into parent: DocumentStorage.Index) {
         if end <= start {
@@ -2933,7 +2810,7 @@ extension BlockParser {
 
     /// Stamp `node`'s source range from *virtual* content offsets, resolving each through `content.sourceOffset(ofVirtual:)`.
     ///
-    /// This is the only stamping path, shared by every inline node (leaf and wrapper - matching cmark, whose `S_insert_emph` derives a wrapper's range from its child columns in the same buffer map): a single-segment source span maps identity (byte offsets pass through unchanged), single-segment arena content resolves through its arena→source run map, and a multi-segment span walks its segment list - so a construct inside a multi-line blockquote/list paragraph gets real source positions. `end` is *exclusive* (one past the last byte), so the last content byte `end - 1` is resolved and incremented; this also maps an `end` that lands on the synthetic line-join newline back to just past the preceding source byte.
+    /// This is the only stamping path, shared by every inline node, leaf and wrapper: a single-segment source span maps identity (byte offsets pass through unchanged), single-segment arena content resolves through its arena→source run map, and a multi-segment span walks its segment list - so a construct inside a multi-line block quote or list paragraph gets real source positions. `end` is *exclusive* (one past the last byte), so the last content byte `end - 1` is resolved and incremented; this also maps an `end` that lands on the line ending at a segment join back to just past the preceding source byte.
     @inline(__always)
     mutating func stampInline(_ node: DocumentStorage.Index, _ start: Int, _ end: Int, content: borrowing ContentSpan) {
         guard positionsEnabled, end > start else {
@@ -2945,7 +2822,7 @@ extension BlockParser {
 
     /// Merge runs of adjacent `.text` children into single nodes, recursing into containers.
     ///
-    /// Smart-punctuation / entity substitutions emit their replacement as a separate text node (e.g. `"Markdown"` + `"’"` + `"s "`); cmark coalesces them into one text run. The merged node's content is the concatenation of the runs' segments and its source range runs from the first run's start to the last run's end.
+    /// Smart-punctuation and entity substitutions emit their replacement as a separate text node (e.g. `"Markdown"` + `"’"` + `"s "`), which this merges into one text run. The merged node's content is the concatenation of the runs' segments and its source range runs from the first run's start to the last run's end.
     mutating func consolidateTextNodes(_ parent: DocumentStorage.Index) {
         var child = storage[parent].firstChild
         while let current = child {
@@ -2963,7 +2840,7 @@ extension BlockParser {
 
     /// Merge `source` into the preceding text node `dest`, giving `dest` its own start and `source`'s end, and unlink `source`.
     ///
-    /// When the two runs are pool-contiguous (the common case for adjacent text) this just widens `dest`'s `ContentRef` - no new segments. Otherwise (e.g. a smart-punctuation glyph re-interned at the pool's end sits between them) it appends copies of both runs' segments as a fresh combined run, so consolidation still merges them.
+    /// When the two runs are pool-contiguous (the common case for adjacent text) this just widens `dest`'s `ContentRef` - no new segments. Otherwise (e.g. a smart-punctuation glyph re-interned at the pool's end sits between them) it appends copies of both runs' segments as a fresh combined run.
     private mutating func mergeTextNode(_ source: DocumentStorage.Index, into dest: DocumentStorage.Index) {
         guard case .literal(let destRef) = storage[dest].data,
               case .literal(let srcRef) = storage[source].data else {
@@ -2997,7 +2874,7 @@ extension BlockParser {
             let a = storage.sourceRanges[dest]
             let b = storage.sourceRanges[source]
             precondition(a.start >= 0 && b.start >= 0, "with positions tracked, every text node is stamped before it consolidates")
-            // why: cmark's `cmark_consolidate_text_nodes` (swift-cmark `src/iterator.c`) sets the merged run's range from the FIRST node's start and the LAST node's end (`cur->end_column = tmp->end_column` on every iteration; `cur`'s start is never touched) - not a min/max union. In this pairwise left-to-right merge `dest` is the running-first node and `source` the next (last-so-far) sibling, so first-start = `dest.start` and last-end = `source.end`. This differs from a union only when a non-final node ends further right than the final node, where cmark collapses the run to the final node's end.
+            // The merged run spans from the first node's start to the last node's end rather than the union of their ranges; the two differ only when an earlier node ends past the last one.
             storage.sourceRanges[dest] = DocumentStorage.SourceByteRange(
                 start: a.start,
                 end: b.end
@@ -3006,20 +2883,16 @@ extension BlockParser {
         storage.unlinkChild(source)
     }
 
-    // MARK: - GFM email autolink post-pass
+    // MARK: - Extended email autolink pass
 
-    /// Detect GFM `@`-triggered email autolinks in a post-pass over the consolidated inline tree.
+    /// Detect extended email autolinks in a pass over the consolidated inline tree.
     ///
-    /// cmark-gfm runs autolink detection in `postprocess` (`extensions/autolink.c`) AFTER emphasis
-    /// resolution and `cmark_consolidate_text_nodes`: it walks the finished tree and, for every text node
-    /// that is not inside a link, splits it into `[before, link, after]` at each email match. The rewrite
-    /// mirrors that here (run from the block/table/inline-only paths right after `consolidateTextNodes`),
-    /// so a flanking `_`/`*` next to an email is already resolved as emphasis - or left as literal text
-    /// folded into the local part - before the email boundaries are decided.
+    /// Runs after emphasis resolution and `consolidateTextNodes`, splitting every text node outside a link
+    /// into `[before, link, after]` at each email match. A `_` or `*` beside an email is therefore already
+    /// resolved as emphasis, or left as literal text in the local part, before the email's boundaries are
+    /// decided.
     ///
-    /// Every non-link container (emphasis, strong, image, …) is recursed into, matching cmark iterating
-    /// the whole tree; a link's own text - including a bare URL / email link just emitted - is never
-    /// re-scanned as more link text.
+    /// Every non-link container (emphasis, strong, image, …) is recursed into.
     ///
     /// A link may not contain another link, so the pass never autolinks inside a link and skips its subtree.
     /// `image` maps the leaf's arena content back to source, when its content is a single arena chunk with a source image.
@@ -3042,25 +2915,22 @@ extension BlockParser {
         }
     }
 
-    /// Split one text node into `[before, link, after]` at each GFM email autolink it contains.
+    /// Split one text node into `[before, link, after]` at each extended email autolink it contains.
     ///
-    /// Reuses `matchGFMEmailAutolink` (the locked matcher) so the match/reject decisions are identical to
-    /// the former inline path; only the emission moves to insertion-in-place. The node content is
-    /// materialized into a scratch buffer ONCE and scanned left-to-right in a single pass (each backward
-    /// local-part scan is bounded by the previous match's end), so cost is O(content length) - matching
-    /// cmark's `postprocess_text`, not the quadratic re-scan its authors guard against. `before`/`after`/
-    /// link-text are carved zero-copy from the node's existing segments (`subContentRef`); only the
-    /// `mailto:` URL is materialized into the arena.
+    /// The node content is materialized into a scratch buffer once and scanned left-to-right in a single
+    /// pass (each backward local-part scan is bounded by the previous match's end), so cost is O(content
+    /// length). `before`/`after`/link text are carved zero-copy from the node's existing segments
+    /// (`subContentRef`); only the `mailto:` URL is materialized into the arena.
     ///
     /// The link and its text span the address's source bytes. Each text run keeps the part of the split node's range
-    /// on its side of the address, so a run whose bytes aren't all source bytes (a smart quote, a NUL's U+FFFD) is
-    /// still placed.
+    /// on its side of the address, so a run whose bytes aren't all source bytes (a smart quote, a NUL's U+FFFD)
+    /// has a source range.
     private mutating func splitEmailsInTextNode(_ node: DocumentStorage.Index, parent: DocumentStorage.Index, image: ContentImage?) {
         guard case .literal(let ref) = storage[node].data else {
             preconditionFailure("a text node holds a literal")
         }
-        // Cheap early-out: a text node with no `@` is left exactly as it was (no allocation), matching
-        // cmark returning it untouched. This is the overwhelmingly common case.
+        // Cheap early-out: a text node with no `@` is left untouched (no allocation). This is the
+        // overwhelmingly common case.
         if !contentRefContains(ref, byte: UInt8(ascii: "@")) {
             return
         }
@@ -3093,15 +2963,10 @@ extension BlockParser {
                 // `matchGFMEmailAutolink` guarantees `resumeAt > i`, so this always advances (and skips any
                 // `@`s the restart already settled - see its doc). O(content length) overall.
                 //
-                // why: cmark's `postprocess_text` (`extensions/autolink.c`) runs a single monotonic cursor
-                // `start + offset`; a failed candidate advances it past the region scanned (`offset +=
-                // max_rewind + link_end`), so the NEXT `@`'s backward local-part scan is bounded there
-                // (`max_rewind = at - (data + start + offset)`) and cannot rewind into the abandoned
-                // candidate. The rewrite splits that cursor into the forward scan `i` and the backward-scan
-                // floor `cursor`; advancing both on failure preserves the bound. Otherwise a char the forward
-                // domain scan breaks on but the backward scan accepts as a local-part char - `+`, or a `.`
-                // not immediately followed by an alnum - is rewound through, pulling preceding text into the
-                // next email's local part.
+                // The backward-scan floor `cursor` advances with `i`, so the next `@`'s local part can't
+                // reach into the abandoned candidate. Otherwise a character the domain scan stops at but a
+                // local part accepts (`+`, or a `.` not followed by an alphanumeric) would pull preceding
+                // text into the next email's local part.
                 cursor = resumeAt
                 i = resumeAt
                 continue
@@ -3119,9 +2984,8 @@ extension BlockParser {
             }
 
             // The link node and its single text child (the visible email address).
-            // A folded `mailto:`/`xmpp:` scheme means the destination IS the visible run (cmark suppresses
-            // the synthetic `mailto:` and keeps `xmpp:`), so reuse the source-backed ref for the URL. A
-            // plain email still gets `mailto:` synthesized into the arena.
+            // A folded `mailto:`/`xmpp:` scheme means the destination is the visible run, so reuse its ref
+            // for the URL. A plain email gets `mailto:` synthesized into the arena.
             let urlRef = auto.emailSchemeFolded ? emailRef : materializeMailtoURL(for: emailRef)
             let linkIdx = storage.appendNode(NodeRecord(
                 kind: .link, parent: parent, data: .link(url: urlRef, title: .empty)))
@@ -3195,7 +3059,7 @@ extension BlockParser {
 
     /// Carve the logical sub-range `[lo, hi)` of `ref`'s content into a fresh `ContentRef`.
     ///
-    /// Zero-copy: the carved segments still point into the same source / arena bytes (with `offset` shifted for
+    /// Zero-copy: the carved segments point into the same source / arena bytes (with `offset` shifted for
     /// a partial leading segment); only new `Segment` entries are appended.
     private mutating func subContentRef(of ref: ContentRef, from lo: Int, to hi: Int) -> ContentRef {
         if hi <= lo {

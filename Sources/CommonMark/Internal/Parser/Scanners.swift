@@ -24,7 +24,7 @@ extension BlockParser {
         var afterEnd: Int
     }
 
-    /// Parse `[label]` per CommonMark §6.6 / §6.7. Returns the interior chunk (excluding brackets) and the offset just past the closing `]`. Allows ASCII `\X` escapes inside the label. Capped per `maxLinkLabelLength`.
+    /// Parse a `[label]` link label (spec "Links"). Returns the interior chunk (excluding brackets) and the offset just past the closing `]`. Allows ASCII `\X` escapes inside the label. Capped per `maxLinkLabelLength`.
     internal func matchLinkLabel(_ chunk: Chunk) -> LinkLabelMatch? {
         let start = chunk.offset
         let end = chunk.range.upperBound
@@ -65,14 +65,13 @@ extension BlockParser {
         return nil
     }
 
-    /// Cross-line variant of `matchLinkLabel(_:)` for multi-segment inline content. cmark's `link_label`
-    /// scans a flat input buffer, so a following full-reference label may span a soft-break join
-    /// (`[text][la\nbel]`) that `contiguousChunk` can't image within one source segment. Scans virtual
-    /// offsets of `content` from `start` (which must be `[`) to the closing `]`, crossing joins; returns
-    /// the interior's virtual range (excluding the brackets) and the offset just past `]`. Returns nil on
-    /// an interior `[` or the content end — cmark rewinds in both cases. Allows ASCII `\X` escapes,
-    /// capped per `maxLinkLabelLength`. The interior may straddle a join, so callers resolve it with
-    /// `normalizeLabel(virtualRange:in:)`, not a `Chunk`.
+    /// Variant of `matchLinkLabel(_:)` over the virtual offsets of multi-segment inline content, where a
+    /// full reference's link label may span a line ending (`[text][la\nbel]`) that `contiguousChunk` can't
+    /// image within one source segment. Scans from `start` (which must be `[`) to the closing `]`; returns
+    /// the interior's virtual range (excluding the brackets) and the offset just past `]`, or nil on an
+    /// interior `[` or at the content end. Allows ASCII `\X` escapes, capped per `maxLinkLabelLength`. The
+    /// interior may span segments, so callers resolve it with `normalizeLabel(virtualRange:in:)`, not a
+    /// `Chunk`.
     internal func matchLinkLabel(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
         if start >= end || content[start] != UInt8(ascii: "[") {
             return nil
@@ -108,11 +107,9 @@ extension BlockParser {
     }
 
     /// Whether a label that is looked up without being scanned by `matchLinkLabel` - the text at
-    /// virtual `range` of `content` - is within `maxLinkLabelLength`. That is a shortcut or collapsed
-    /// reference's link text (between the opener's `[` / `![` and the `]`) or a footnote reference's
-    /// label (past its `^`). cmark applies the cap to both at lookup: `cmark_map_lookup` (`src/map.c`),
-    /// shared by the link and footnote maps, returns no entry for a label over `MAX_LINK_LABEL_LENGTH`
-    /// bytes, measured on the raw, untrimmed text.
+    /// virtual `range` of `content`, measured raw and untrimmed - is within `maxLinkLabelLength`. That is
+    /// a shortcut or collapsed reference's link text (between the opener's `[` / `![` and the `]`) or a
+    /// footnote reference's label (past its `^`); a longer label matches no definition.
     internal func linkLabelFitsLengthCap(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> Bool {
         let maxLabelLength = Self.maxLinkLabelLength
         var length = 0
@@ -127,12 +124,12 @@ extension BlockParser {
 
     /// The maximum link-label length that `matchLinkLabel` accepts before rewinding and that
     /// `linkLabelFitsLengthCap` accepts for a shortcut or footnote label, in the units of
-    /// `labelLengthWeight`: CommonMark §6.6 caps a label at "at most 999 characters".
+    /// `labelLengthWeight`: a link label has "at most 999 characters" (spec "Links").
     private static let maxLinkLabelLength = 999
 
     /// A content byte's contribution to the link-label length against `maxLinkLabelLength`.
     ///
-    /// Counts characters (Unicode code points, CommonMark §2.1): a UTF-8
+    /// Counts characters (Unicode code points, spec "Characters and lines"): a UTF-8
     /// continuation byte counts 0 and every other byte, NUL included, counts 1.
     private func labelLengthWeight(_ byte: UInt8) -> Int {
         return byte & 0xC0 == 0x80 ? 0 : 1
@@ -152,7 +149,7 @@ extension BlockParser {
         next?.isASCIIPunct ?? false
     }
 
-    /// Parse a link destination - either `<...>` (no internal `<`, `>`, or unescaped newline) or a bare URL (no ASCII space or control character, balanced parens up to depth 32, ASCII `\X` escapes).
+    /// Parse a link destination - either `<...>` (no internal `<`, `>`, or line ending) or a bare URL (no ASCII space or control character, balanced parens up to depth 32, ASCII `\X` escapes).
     internal func matchLinkDestination(_ chunk: Chunk) -> LinkDestinationMatch? {
         let start = chunk.offset
         let end = chunk.range.upperBound
@@ -192,7 +189,7 @@ extension BlockParser {
             let c = readByte(at: i, in: chunk)
             // A backslash escapes only an ASCII-punctuation byte, so a `\` before a line ending (or any
             // non-punctuation byte) is a literal destination character - a destination never spans a
-            // line ending. Mirrors cmark's `manual_scan_link_url_2` (`src/inlines.c`).
+            // line ending.
             if c == UInt8(ascii: "\\") && i + 1 < end && readByte(at: i + 1, in: chunk).isASCIIPunct {
                 i += 2
                 continue
@@ -226,14 +223,11 @@ extension BlockParser {
         return LinkDestinationMatch(chunk: chunk.extracting(0..<(i - start)), afterEnd: i)
     }
 
-    /// Cross-line variant of `matchLinkDestination(_:)` for inline content, which may be multi-segment.
-    /// cmark's `manual_scan_link_url` scans a flat input buffer, and its `<…>` form skips the byte after
-    /// any `\` - a line ending included - so a `<a\` LF `b>` destination spans a soft-break join that
-    /// `contiguousChunk` can't image within one source segment. Scans virtual offsets of `content` from
-    /// `start` to `end`; returns the destination's virtual range (excluding any `<` `>`) and the offset
-    /// just past it. A bare destination ends at the first space or line ending, so it never reaches a
-    /// join and is scanned through the contiguous window by `matchLinkDestination(_:)`. The `<…>` range
-    /// may straddle a join, so callers materialize it with `materializedChunk`, not a contiguous `Chunk`.
+    /// Variant of `matchLinkDestination(_:)` over the virtual offsets of inline content, which may be
+    /// multi-segment. Scans from `start` to `end`; returns the destination's virtual range (excluding any
+    /// `<` `>`) and the offset just past it. A bare destination ends at the first space or line ending,
+    /// so it is scanned through the contiguous window by `matchLinkDestination(_:)`. Callers materialize
+    /// the range with `materializedChunk`, not a contiguous `Chunk`.
     internal func matchLinkDestination(from start: Int, end: Int, in content: borrowing ContentSpan) -> (destination: Range<Int>, afterEnd: Int)? {
         if start >= end {
             return nil
@@ -245,9 +239,6 @@ extension BlockParser {
                 if c == UInt8(ascii: ">") {
                     return ((start + 1)..<i, i + 1)
                 }
-                // why: cmark's `manual_scan_link_url` (`src/inlines.c`) skips the byte after any `\`,
-                // a line ending included, so `<a\` LF `b>` is a destination. CommonMark §6.3 forbids line
-                // endings inside `<…>`; this replicates cmark, as `matchLinkDestination(_:)` does.
                 if c == UInt8(ascii: "\\"), escapesNext(i + 1 < end ? content[i + 1] : nil) {
                     i += 2
                     continue
@@ -293,21 +284,16 @@ extension BlockParser {
         default:
             return nil
         }
-        // cmark's `scan_link_title` (re2c: `['] (escaped_char|[^'\x00])* [']` and the `"…"` / `(…)`
-        // forms in `src/scanners.re`, where `escaped_char = [\\]<ascii-punct>`) is a *longest-match*
-        // scan. Because `[^'\x00]` also matches `\`, a backslash inside the body admits two readings at
-        // once — the start of an `escaped_char`, or an ordinary content byte — and the scanner returns
-        // the FURTHEST reachable closing delimiter. A left-to-right "always escape `\X`" scan diverges
-        // when a `\` precedes the closer with no later closer to escape onto (`'\')` → title `\`): the
-        // eager scan consumes the closer as the escaped byte and never matches, while cmark reads the
-        // `\` as content and closes on the following delimiter. We simulate the two DFA threads:
-        //   - `inBody`: inside the body, able to consume a content byte, begin an escaped_char, or
-        //     close on the delimiter;
-        //   - `afterBackslash`: just consumed a `\` that begins an escaped_char and needs an ASCII
-        //     punctuation byte to complete it.
-        // The furthest position at which the body closed is the match. A content byte is any byte other
-        // than the opening/closing delimiters (for quote forms `opener == closer`; the `(…)` form
-        // excludes both, matching re2c's `[^()\x00]`).
+        // A `\` in the body has two readings at once: the start of a backslash escape (spec "Backslash
+        // escapes") or a literal byte. The title closes at the furthest closing delimiter either reading
+        // reaches, so `'\')` has the title `\`: no later `'` exists for the escape to land on, so the `\`
+        // is literal and the `'` after it closes. Two states track the readings:
+        //   - `inBody`: inside the body, able to consume a content byte, begin an escape, or close on
+        //     the delimiter;
+        //   - `afterBackslash`: just consumed a `\` that begins an escape and needs an ASCII punctuation
+        //     byte to complete it.
+        // A content byte is any byte other than the opening and closing delimiters (for quote forms
+        // `opener == closer`).
         var inBody = true
         var afterBackslash = false
         var closeAfterEnd: Int? = nil
@@ -340,17 +326,14 @@ extension BlockParser {
         return LinkTitleMatch(chunk: chunk.extracting(1..<(closeAfterEnd - 1 - start)), afterEnd: closeAfterEnd)
     }
 
-    /// Cross-line variant of `matchLinkTitle(_:)` for inline content, which may be multi-segment. cmark's
-    /// `scan_link_title` scans a flat input buffer, so an inline link's `"…"` / `'…'` / `(…)` title
-    /// may span a soft-break join (`[](f (\n))`) that `contiguousChunk` can't image within one source
-    /// segment. Its longest match can also pass a closer that ends the first line (`'\'` LF `'` closes
-    /// on the second line), so the scan must span the whole content, not one segment. Scans virtual
-    /// offsets of `content` from `start` (the opening delimiter) to `end`, crossing joins with the same
-    /// longest-match two-thread DFA as `matchLinkTitle(_:)` (see there for
-    /// the DFA rationale); returns the interior's virtual range (excluding the delimiters) and the
-    /// offset just past the closer, or nil when the opener is not a delimiter or no closer is reached.
-    /// The interior may straddle a join, so callers materialize it with `materializedChunk`, not a
-    /// contiguous `Chunk`.
+    /// Variant of `matchLinkTitle(_:)` over the virtual offsets of inline content, which may be
+    /// multi-segment: a title may span a line ending (`[](f (\n))`) that `contiguousChunk` can't image
+    /// within one source segment, and its furthest closing delimiter may lie past one that ends the first
+    /// line (`'\'` LF `'` closes on the second line). Scans from `start` (the opening delimiter) to `end`
+    /// with the same two-state scan as `matchLinkTitle(_:)`; returns the interior's virtual range
+    /// (excluding the delimiters) and the offset just past the closer, or nil when the opener is not a
+    /// delimiter or no closer is reached. The interior may span segments, so callers materialize it with
+    /// `materializedChunk`, not a contiguous `Chunk`.
     internal func matchLinkTitle(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
         if start >= end {
             return nil
@@ -416,7 +399,7 @@ extension BlockParser {
         return i
     }
 
-    /// Zero or more whitespace bytes other than line endings (`skipLineWhitespace`), then *at most one* line end, then more of them. Scans from `cursor` up to the end of `chunk`.
+    /// Zero or more whitespace bytes other than line endings (`skipLineWhitespace`), then *at most one* line ending, then more of them. Scans from `cursor` up to the end of `chunk`.
     internal func skipSpacesAndOneLineEnd(from cursor: Int, in chunk: Chunk) -> Int {
         let end = chunk.range.upperBound
         var i = skipLineWhitespace(from: cursor, in: chunk)
@@ -432,7 +415,7 @@ extension BlockParser {
         return i
     }
 
-    /// Match a line end or end-of-input at `cursor`. Returns the offset just past the line ending, or `nil` if `cursor` is neither at a line end nor at the end of `chunk`.
+    /// Match a line ending or end-of-input at `cursor`. Returns the offset just past the line ending, or `nil` if `cursor` is neither at a line ending nor at the end of `chunk`.
     internal func skipLineEndOrEOF(from cursor: Int, in chunk: Chunk) -> Int? {
         let end = chunk.range.upperBound
         if cursor >= end {
@@ -448,7 +431,7 @@ extension BlockParser {
 
     // MARK: - Label normalization
 
-    /// CommonMark §4.7 normalization: trim outer whitespace, collapse interior whitespace runs to a single space, then full Unicode case-fold (`String.lowercased()`) so labels match across scripts - `[ΑΓΩ]` and `[αγω]` resolve to the same key.
+    /// Normalizes a link label for matching (spec "Links"): trims outer whitespace, collapses interior whitespace runs to a single space, then case-folds with `String.lowercased()`, so `[ΑΓΩ]` and `[αγω]` resolve to the same key.
     internal func normalizeLabel(chunk: Chunk) -> String {
         let span = if chunk.inSource {
             sourceBytes.extracting(chunk.range)
@@ -459,12 +442,10 @@ extension BlockParser {
         return Self.normalizeLabel(span)
     }
 
-    /// §4.7 normalization for a shortcut/collapsed reference label whose bytes span a virtual `range`
-    /// of multi-segment `content` — i.e. the label straddles a soft-break join (`[foo\nbar]` used as a
-    /// reference). Reading through `content` resolves the interned newline join to `\n`, which the
-    /// normalizer collapses into the interior exactly as a contiguous label's newline would be. Used
-    /// when `contiguousChunk` can't image the whole label within one source segment; a contiguous
-    /// label goes through `normalizeLabel(chunk:)`.
+    /// Label normalization for a label at virtual `range` of multi-segment `content` that spans a line
+    /// ending (`[foo\nbar]` used as a reference), which `contiguousChunk` can't image within one source
+    /// segment. Reading through `content` resolves each line join to `\n`, which collapses like any other
+    /// interior whitespace. A contiguous label goes through `normalizeLabel(chunk:)`.
     internal func normalizeLabel(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> String {
         var bytes = UniqueArray<UInt8>()
         bytes.reserveCapacity(range.count)
@@ -474,17 +455,16 @@ extension BlockParser {
         return Self.normalizeLabel(bytes.span)
     }
 
-    /// CommonMark §4.7 normalization over an already-resolved span. The byte-level worker behind `normalizeLabel(chunk:)`; `static` because it touches no parser state.
+    /// Label normalization over a resolved span; `static` because it touches no parser state.
     ///
-    /// Also folds a NUL byte to U+FFFD (CommonMark §2.3) inline, into this same local output buffer -
-    /// never by materializing into `storage.strings`. A definition's label can reach this normalizer
-    /// mid-parse (the setext-underline path, PHASE 2c, keys its label before the paragraph's own content
-    /// is drained), while other live borrows of `storage.strings` may still be on the call stack; growing
-    /// that shared arena here would risk invalidating them. Sized generously (`span.count * 3`, the
-    /// worst case if every byte were NUL) so the one-pass loop never needs to resize.
+    /// Replaces each NUL with U+FFFD (spec "Insecure characters") in its own output buffer rather than in
+    /// `storage.strings`: a link reference definition's label can be normalized while other borrows of
+    /// `storage.strings` are live (while a setext heading underline is examined against the paragraph that holds the
+    /// definition), and growing that arena would invalidate them. `span.count * 3` covers every byte
+    /// being NUL, so the one-pass loop never resizes.
     private static func normalizeLabel(_ span: Span<UInt8>) -> String {
         String(unsafeUninitializedCapacity: span.count * 3) { buffer in
-            // SAFETY: `buffer` is the string's uninitialized storage, valid for this closure only. `OutputSpan(buffer:initializedCount: 0)` claims none of it as initialized, every append is capacity-checked (`span.count * 3` covers the worst case), `output.finalize(for: buffer)` checks that `output` still covers `buffer` before reporting its initialized count, and the initializer repairs any invalid UTF-8 in that prefix.
+            // SAFETY: `buffer` is the string's uninitialized storage, valid for this closure only. `OutputSpan(buffer:initializedCount: 0)` claims none of it as initialized, every append is capacity-checked (`span.count * 3` covers the worst case), `output.finalize(for: buffer)` checks that `buffer` is the buffer `output` covers before reporting its initialized count, and the initializer repairs any invalid UTF-8 in that prefix.
             //         No String initializer fills its UTF-8 storage through an `OutputSpan`; the safe route builds the bytes in an owned array and copies them with `String(decoding:as:)`, which measured about 1.2% more spec.txt parse instructions.
             var output = unsafe OutputSpan(buffer: buffer, initializedCount: 0)
             var pendingSpace = false

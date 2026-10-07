@@ -9,11 +9,11 @@
 */
 
 // Auto-generated
-// Offical source (via spec) is https://html.spec.whatwg.org/entities.json
+// Official source (via spec) is https://html.spec.whatwg.org/entities.json
 
 internal enum HTMLEntities {
 
-    /// Sorted array of HTML named entity names. Index `i` corresponds to `entityValues[i]`.
+    /// Sorted array of HTML named entity names. Index `i` corresponds to `entityValueOffsets[i]`.
     internal static let entityNames: [String] = [
         "AElig",
         "AMP",
@@ -2142,7 +2142,7 @@ internal enum HTMLEntities {
         "zwnj",
     ]
 
-    /// UTF-8 encoded value bytes for the entity at the corresponding index. Stored as a flat byte array with offsets/lengths so we don't pay the cost of 2125 nested array literals at compile time.
+    /// UTF-8 encoded value bytes for the entity at the corresponding index. Stored as one flat byte array, indexed by `entityValueOffsets`, to avoid compiling 2125 nested array literals.
     internal static let entityValueBuffer: [UInt8] = [
         0xC3, 0x86, 0x26, 0xC3, 0x81, 0xC4, 0x82, 0xC3, 0x82, 0xD0, 0x90, 0xF0, 0x9D, 0x94, 0x84, 0xC3,
         0x80, 0xCE, 0x91, 0xC4, 0x80, 0xE2, 0xA9, 0x93, 0xC4, 0x84, 0xF0, 0x9D, 0x94, 0xB8, 0xE2, 0x81,

@@ -46,14 +46,14 @@ internal struct LineReader: ~Escapable, ~Copyable {
 
         lineNumber += 1
 
-        // Find the next line terminator (`\n` 0x0A or `\r` 0x0D). In valid UTF-8 these bytes only ever appear as standalone ASCII scalars - never inside a multi-byte sequence - so a raw byte scan finds boundaries correctly. The scan is vectorized (16 bytes per step) since it touches every source byte exactly once and is a measurable slice of parse time.
+        // Find the next line ending (`\n` 0x0A or `\r` 0x0D). In valid UTF-8 these bytes only ever appear as standalone ASCII scalars - never inside a multi-byte sequence - so a raw byte scan finds boundaries correctly. The scan is vectorized (16 bytes per step) since it touches every source byte exactly once and is a measurable slice of parse time.
         let i = Self.firstLineTerminator(in: bytes)
 
         if i < count {
             let line = bytes.extracting(0..<i)
             lineRange = start..<(start + i)
 
-            // Consume the terminator. A `\r` immediately followed by `\n` is a single CRLF terminator.
+            // Consume the line ending. A `\r` immediately followed by `\n` is a single line ending.
             let b = bytes[i]
             var terminatorEnd = i + 1
             if b == UInt8(ascii: "\r"), terminatorEnd < count, bytes[terminatorEnd] == UInt8(ascii: "\n") {
@@ -64,7 +64,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
             return line
         }
 
-        // EOF without terminator.
+        // End of input without a line ending.
         lineRange = start..<(start + count)
         nextStart = lineRange.upperBound
         let result = source
@@ -74,9 +74,9 @@ internal struct LineReader: ~Escapable, ~Copyable {
 
     /// Index of the first `\n` or `\r` in `span`, or `span.count` if neither is present.
     ///
-    /// Scans 16 bytes at a time with a SIMD compare against both terminators, recovering the first matching lane via a per-lane index reduce; the sub-16-byte remainder is scanned scalar.
+    /// Scans 16 bytes at a time with a SIMD compare against both bytes, recovering the first matching lane via a per-lane index reduce; the sub-16-byte remainder is scanned scalar.
     ///
-    /// Shared with `BlockParser.parseInlineOnly`'s line-break scan so the vectorized terminator search lives in exactly one place.
+    /// Shared with `BlockParser.parseInlineOnly`'s line-break scan so the vectorized line-ending search lives in exactly one place.
     @inline(__always)
     internal static func firstLineTerminator(in span: Span<UInt8>) -> Int {
         let count = span.count

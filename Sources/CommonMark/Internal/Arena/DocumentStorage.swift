@@ -20,7 +20,7 @@ internal struct DocumentStorage: ~Copyable {
     
     /// All nodes in DFS order of creation.
     ///
-    /// The root document is always index 0. We know we're going to need some space here, so we pick a small enough size to hold nodes for the inline case.
+    /// The root document is always index 0. The initial capacity holds the nodes of a typical inline-only document.
     internal var nodes: UniqueArray<NodeRecord> = UniqueArray(minimumCapacity: 16)
 
     /// Bump-allocated arena for synthetic/materialized bytes (entity-decoded text, normalized link references, autolink scheme prefixes) that don't exist as contiguous regions of the source.
@@ -38,10 +38,10 @@ internal struct DocumentStorage: ~Copyable {
 
     /// Link reference definitions discovered while finalizing paragraphs.
     ///
-    /// Keys are normalized labels (CommonMark §4.7 normalization: case-folded ASCII, internal whitespace runs collapsed to a single space). First definition for any given label wins.
+    /// Keys are labels normalized by `normalizeLabel` (spec "Links"). The first definition of a label wins.
     internal var referenceMap: [String: ReferenceDefinition] = [:]
 
-    /// Fork-specific extended-attribute reference definitions of the form `^[label]: attrs`.
+    /// Inline attribute definitions of the form `^[label]: attrs`.
     ///
     /// Keyed by the same normalized label form as `referenceMap` but stored separately so `[foo]` (link) and `^[foo]` (attribute) lookups don't collide. First definition wins.
     internal var attributeReferenceMap: [String: Chunk] = [:]
@@ -51,7 +51,7 @@ internal struct DocumentStorage: ~Copyable {
     /// Keyed by normalized label, value is the index of the `.footnoteDefinition` node in `nodes`. The first definition to close wins, so a definition nested in a same-label one wins over its encloser.
     internal var footnoteMap: [String: Index] = [:]
 
-    /// Every `.footnoteDefinition` node, in the order it was opened (document order).
+    /// Every `.footnoteDefinition` node, in opening (document) order.
     ///
     /// Used by the footnote post-processing pass to enumerate all definitions so unreferenced ones can be dropped.
     internal var footnoteDefinitionOrder: [Index] = []
@@ -71,15 +71,15 @@ internal struct DocumentStorage: ~Copyable {
 
     /// Byte offset (into the original source, post-BOM) at which each line begins.
     ///
-    /// Index `i` holds the start of line `i+1`. Built during `parse()` ONLY when `.sourcePosition` is set; empty otherwise. Used to convert a node's byte range into 1-based (line, column) positions.
+    /// Index `i` holds the start of line `i+1`. Built during `parse()` ONLY when `.sourcePosition` is set; empty otherwise. Maps a node's byte range to 1-based (line, column) positions.
     internal var lineStarts: UniqueArray<Int> = UniqueArray()
 
     /// Per-node source byte range, parallel to `nodes` (index `i` is node `i`'s range).
     ///
-    /// Populated ONLY when `.sourcePosition` is set.`appendNode` pushes a default `.unset` entry in lockstep so the array stays index-aligned with `nodes`. `.start == -1` means the node was never stamped.
+    /// Populated ONLY when `.sourcePosition` is set. `appendNode` pushes a default `.unset` entry in lockstep so the array stays index-aligned with `nodes`. `.start == -1` means the node has no recorded start.
     internal var sourceRanges: UniqueArray<SourceByteRange> = UniqueArray()
 
-    /// Parse options used to create this document.
+    /// The options that control parsing of this document.
     internal let options: MarkdownDocument.ParseOptions
 
     /// `true` when source-position tracking is on.
@@ -89,7 +89,7 @@ internal struct DocumentStorage: ~Copyable {
 
     internal init(options: MarkdownDocument.ParseOptions) {
         self.options = options
-        // Reserve byte 0 of the additions arena as a shared `"\n"`. Multi-line code/HTML block bodies (and any future multi-segment join) reference this single byte via `newlineSegment` for their line separators instead of copying a `\n` into the arena per join.
+        // Reserve byte 0 of the additions arena as a shared `"\n"`. Multi-line code/HTML block bodies reference this single byte via `newlineSegment` for their line endings instead of copying a `\n` into the arena per join.
         strings = UniqueArray(repeating: UInt8(ascii: "\n"), count: 1)
     }
 
@@ -98,7 +98,7 @@ internal struct DocumentStorage: ~Copyable {
 
     /// A `Segment` addressing the shared interned `"\n"`.
     ///
-    /// Used as the line separator when a node's content is accumulated as a segment list (e.g. multi-line code blocks), so joins cost a pooled `Segment` entry rather than a copied byte.
+    /// Used as the line ending when a node's content is accumulated as a segment list (e.g. multi-line code blocks), so joins cost a pooled `Segment` entry rather than a copied byte.
     internal var newlineSegment: Segment {
         Segment(offset: Self.newlineOffset, length: 1, inSource: false)
     }
@@ -114,7 +114,7 @@ internal struct DocumentStorage: ~Copyable {
         return idx
     }
 
-    /// Record the source byte offset (into the original source) where `node`'s content begins. No-op when positions are off or `offset` is negative (e.g. a tab-expanded line that doesn't map to source).
+    /// Record the source byte offset (into the original source) where `node`'s content begins. No-op when positions are off or `offset` is `nil` (e.g. a tab-expanded line that doesn't map to source).
     internal mutating func setSourceStart(_ node: Index, _ offset: Int?) {
         if let offset, positionsEnabled {
             sourceRanges[node].start = offset
@@ -197,7 +197,7 @@ internal struct DocumentStorage: ~Copyable {
     ///
     /// The node itself remains in `nodes` (so other indices stay stable) but is orphaned - DFS traversals will not visit it. Used when ref-def parsing consumes an entire paragraph's content.
     ///
-    /// The detached node's `parent` pointer is preserved so that paragraph finalize can still bubble `state.current` back up via `parent` after dropping the empty paragraph.
+    /// The detached node's `parent` pointer is preserved so that paragraph finalization can bubble `state.current` back up via `parent` after dropping the empty paragraph.
     internal mutating func unlinkChild(_ childIndex: Index) {
         precondition(nodes[childIndex].parent != nil, "only the document node has no parent, and it is never unlinked")
         let parent = nodes[childIndex].parent!
