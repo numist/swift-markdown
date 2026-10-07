@@ -21,7 +21,7 @@ public struct ListItem: BlockContainer {
     public var _data: _MarkupData
     init(_ raw: RawMarkup) throws {
         guard case .listItem = raw.data else {
-            throw RawMarkup.Error.concreteConversionError(from: raw, to: ListItem.self)
+            throw RawMarkup.Error.concreteConversionError(from: raw.data, to: ListItem.self)
         }
         let absoluteRaw = AbsoluteRawMarkup(markup: raw, metadata: MarkupMetadata(id: .newRoot(), indexInParent: 0))
         self.init(_MarkupData(absoluteRaw))

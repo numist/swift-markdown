@@ -21,7 +21,7 @@ extension Table {
 
         init(_ raw: RawMarkup) throws {
             guard case .tableRow = raw.data else {
-                throw RawMarkup.Error.concreteConversionError(from: raw, to: Table.Row.self)
+                throw RawMarkup.Error.concreteConversionError(from: raw.data, to: Table.Row.self)
             }
             let absoluteRaw = AbsoluteRawMarkup(markup: raw, metadata: MarkupMetadata(id: .newRoot(), indexInParent: 0))
             self.init(_MarkupData(absoluteRaw))

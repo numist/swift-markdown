@@ -95,11 +95,11 @@ public struct RawMarkupHeader {
 
 final class RawMarkup: ManagedBuffer<RawMarkupHeader, RawMarkup> {
     enum Error: LocalizedError {
-        case concreteConversionError(from: RawMarkup, to: Markup.Type)
+        case concreteConversionError(from: RawMarkupData, to: Markup.Type)
         var errorDescription: String? {
             switch self {
-            case let .concreteConversionError(raw, to: type):
-                return "Can't wrap a \(raw.data) in a \(type)"
+            case let .concreteConversionError(data, to: type):
+                return "Can't wrap a \(data) in a \(type)"
             }
         }
     }

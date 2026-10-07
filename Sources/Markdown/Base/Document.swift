@@ -18,7 +18,7 @@ public struct Document: Markup, BasicBlockContainer {
 
     init(_ raw: RawMarkup) throws {
         guard case .document = raw.data else {
-            throw RawMarkup.Error.concreteConversionError(from: raw, to: Document.self)
+            throw RawMarkup.Error.concreteConversionError(from: raw.data, to: Document.self)
         }
         let absoluteRaw = AbsoluteRawMarkup(markup: raw, metadata: MarkupMetadata(id: .newRoot(), indexInParent: 0))
         self.init(_MarkupData(absoluteRaw))

@@ -13,7 +13,7 @@ public struct Strikethrough: RecurringInlineMarkup, BasicInlineContainer {
     public var _data: _MarkupData
     init(_ raw: RawMarkup) throws {
         guard case .strikethrough = raw.data else {
-            throw RawMarkup.Error.concreteConversionError(from: raw, to: Strikethrough.self)
+            throw RawMarkup.Error.concreteConversionError(from: raw.data, to: Strikethrough.self)
         }
         let absoluteRaw = AbsoluteRawMarkup(markup: raw, metadata: MarkupMetadata(id: .newRoot(), indexInParent: 0))
         self.init(_MarkupData(absoluteRaw))

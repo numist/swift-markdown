@@ -24,7 +24,7 @@ public struct DoxygenNote: BlockContainer {
 
     init(_ raw: RawMarkup) throws {
         guard case .doxygenNote = raw.data else {
-            throw RawMarkup.Error.concreteConversionError(from: raw, to: DoxygenNote.self)
+            throw RawMarkup.Error.concreteConversionError(from: raw.data, to: DoxygenNote.self)
         }
         let absoluteRaw = AbsoluteRawMarkup(markup: raw, metadata: MarkupMetadata(id: .newRoot(), indexInParent: 0))
         self.init(_MarkupData(absoluteRaw))

@@ -13,7 +13,7 @@ public struct Emphasis: RecurringInlineMarkup, BasicInlineContainer {
     public var _data: _MarkupData
     init(_ raw: RawMarkup) throws {
         guard case .emphasis = raw.data else {
-            throw RawMarkup.Error.concreteConversionError(from: raw, to: Emphasis.self)
+            throw RawMarkup.Error.concreteConversionError(from: raw.data, to: Emphasis.self)
         }
         let absoluteRaw = AbsoluteRawMarkup(markup: raw, metadata: MarkupMetadata(id: .newRoot(), indexInParent: 0))
         self.init(_MarkupData(absoluteRaw))

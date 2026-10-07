@@ -13,7 +13,7 @@ public struct BlockQuote: BlockMarkup, BasicBlockContainer {
     public var _data: _MarkupData
     init(_ raw: RawMarkup) throws {
         guard case .blockQuote = raw.data else {
-            throw RawMarkup.Error.concreteConversionError(from: raw, to: BlockQuote.self)
+            throw RawMarkup.Error.concreteConversionError(from: raw.data, to: BlockQuote.self)
         }
         let absoluteRaw = AbsoluteRawMarkup(markup: raw, metadata: MarkupMetadata(id: .newRoot(), indexInParent: 0))
         self.init(_MarkupData(absoluteRaw))

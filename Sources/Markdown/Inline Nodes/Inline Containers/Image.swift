@@ -18,7 +18,7 @@ public struct Image: InlineMarkup, InlineContainer {
 
     init(_ raw: RawMarkup) throws {
         guard case .image = raw.data else {
-            throw RawMarkup.Error.concreteConversionError(from: raw, to: Image.self)
+            throw RawMarkup.Error.concreteConversionError(from: raw.data, to: Image.self)
         }
         let absoluteRaw = AbsoluteRawMarkup(markup: raw, metadata: MarkupMetadata(id: .newRoot(), indexInParent: 0))
         self.init(_MarkupData(absoluteRaw))

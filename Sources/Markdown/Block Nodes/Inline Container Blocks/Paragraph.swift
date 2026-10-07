@@ -17,7 +17,7 @@ public struct Paragraph: BlockMarkup, BasicInlineContainer {
 
     init(_ raw: RawMarkup) throws {
         guard case .paragraph = raw.data else {
-            throw RawMarkup.Error.concreteConversionError(from: raw, to: Paragraph.self)
+            throw RawMarkup.Error.concreteConversionError(from: raw.data, to: Paragraph.self)
         }
         let absoluteRaw = AbsoluteRawMarkup(markup: raw, metadata: MarkupMetadata(id: .newRoot(), indexInParent: 0))
         self.init(_MarkupData(absoluteRaw))

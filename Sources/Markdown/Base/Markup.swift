@@ -88,7 +88,7 @@ func makeMarkup(_ data: _MarkupData) -> Markup {
 ///
 /// > Note: All supported markup elements are already implemented in the framework.
 /// Use this protocol only as a generic constraint.
-public protocol Markup {
+public protocol Markup: SendableMetatype {
     /// Accept a `MarkupVisitor` and call the specific visitation method for this element.
     ///
     /// - parameter visitor: The `MarkupVisitor` visiting the element.
