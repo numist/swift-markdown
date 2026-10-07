@@ -2,6 +2,6 @@ Document @1:1-3:153
 └─ Paragraph @1:1-3:153
    ├─ Text @1:1-1:6 "[foo["
    ├─ SoftBreak
-   ├─ Text @2:1-2:10 "@]z((!(~l"
+   ├─ Text @2:3-2:12 "@]z((!(~l"
    ├─ SoftBreak
-   └─ Text @3:1-3:152 "in](((((((((((((((W@WurlWWWWWWWWWWW���(((((WWWWWWWW]���(((W(((((((*(W(WWWWWWWW((WWWWWWWW: WWWWWWWWW((W((((W@WWWk:QW(]: <>br/[foo��eoo <?p\h;\ echv"
+   └─ Text @3:2-3:153 "in](((((((((((((((W@WurlWWWWWWWWWWW���(((((WWWWWWWW]���(((W(((((((*(W(WWWWWWWW((WWWWWWWW: WWWWWWWWW((W((((W@WWWk:QW(]: <>br/[foo��eoo <?p\h;\ echv"

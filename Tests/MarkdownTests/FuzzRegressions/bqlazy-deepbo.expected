@@ -3,4 +3,4 @@ Document @1:1-2:5
    └─ Paragraph @1:5-2:5
       ├─ Text @1:5-1:8 "foo"
       ├─ SoftBreak
-      └─ Text @2:5 "baz"
+      └─ Text @2:2-2:5 "baz"
