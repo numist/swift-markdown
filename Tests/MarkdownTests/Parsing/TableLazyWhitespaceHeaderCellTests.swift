@@ -39,6 +39,13 @@ class TableLazyWhitespaceHeaderCellTests: XCTestCase {
         XCTAssertEqual(Self.quotedTable(headCell: "Cell colspan: 0"), surface(">x\n |\n>-|\n"))
     }
 
+    /// Flag-off (shipped) strips a lazy continuation line's leading whitespace like any paragraph line's
+    /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the space
+    /// and opens a table headed by a filler cell.
+    func testLazyOneSpaceFlagOff() {
+        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", surface(">x\n |\n>-|\n", cmarkBugCompatible: false))
+    }
+
     func testLazyTwoSpacesIsPlainCell() {
         XCTAssertEqual(Self.quotedTable(headCell: "Cell"), surface(">x\n  |\n>-|\n"))
     }
@@ -47,12 +54,33 @@ class TableLazyWhitespaceHeaderCellTests: XCTestCase {
         XCTAssertEqual(Self.quotedTable(headCell: "Cell"), surface(">x\n   |\n>-|\n"))
     }
 
+    /// Flag-off (shipped) strips a lazy continuation line's leading whitespace like any paragraph line's
+    /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the
+    /// spaces and opens a table headed by a whitespace cell.
+    func testLazyThreeSpacesFlagOff() {
+        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", surface(">x\n   |\n>-|\n", cmarkBugCompatible: false))
+    }
+
     func testLazyTabIsColspanFiller() {
         XCTAssertEqual(Self.quotedTable(headCell: "Cell colspan: 0"), surface(">x\n\t|\n>-|\n"))
     }
 
+    /// Flag-off (shipped) strips a lazy continuation line's leading whitespace like any paragraph line's
+    /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the tab
+    /// and opens a table headed by a filler cell.
+    func testLazyTabFlagOff() {
+        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", surface(">x\n\t|\n>-|\n", cmarkBugCompatible: false))
+    }
+
     func testLazySpaceTabIsPlainCell() {
         XCTAssertEqual(Self.quotedTable(headCell: "Cell"), surface(">x\n \t|\n>-|\n"))
+    }
+
+    /// Flag-off (shipped) strips a lazy continuation line's leading whitespace like any paragraph line's
+    /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the space
+    /// and tab and opens a table headed by a whitespace cell.
+    func testLazySpaceTabFlagOff() {
+        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", surface(">x\n \t|\n>-|\n", cmarkBugCompatible: false))
     }
 
     private static func listQuotedTable(headCell: String) -> String {
@@ -64,10 +92,24 @@ class TableLazyWhitespaceHeaderCellTests: XCTestCase {
         XCTAssertEqual(Self.listQuotedTable(headCell: "Cell colspan: 0"), surface("- >x\n  \t|\n  >-|\n"))
     }
 
+    /// Flag-off (shipped) strips a lazy continuation line's leading whitespace like any paragraph line's
+    /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the tab
+    /// and opens a table headed by a filler cell.
+    func testLazyTabAfterListIndentFlagOff() {
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"x\"\n            ├─ SoftBreak\n            ├─ Text \"|\"\n            ├─ SoftBreak\n            └─ Text \"-|\"", surface("- >x\n  \t|\n  >-|\n", cmarkBugCompatible: false))
+    }
+
     /// The list item's content indent partially consumes the tab (`partially_consumed_tab`), and `add_line`
     /// emits its two leftover columns as spaces: a two-byte whitespace cell, so a plain `Cell`.
     func testLazySplitTabAfterListIndentIsPlainCell() {
         XCTAssertEqual(Self.listQuotedTable(headCell: "Cell"), surface("- >x\n \t|\n  >-|\n"))
+    }
+
+    /// Flag-off (shipped) strips a lazy continuation line's leading whitespace like any paragraph line's
+    /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the tab's
+    /// leftover columns and opens a table headed by a whitespace cell.
+    func testLazySplitTabAfterListIndentFlagOff() {
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"x\"\n            ├─ SoftBreak\n            ├─ Text \"|\"\n            ├─ SoftBreak\n            └─ Text \"-|\"", surface("- >x\n \t|\n  >-|\n", cmarkBugCompatible: false))
     }
 
     /// A matched block-quote continuation is advanced to its first non-space, so the header is a lone
@@ -76,6 +118,7 @@ class TableLazyWhitespaceHeaderCellTests: XCTestCase {
         XCTAssertEqual(
             "Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"",
             surface(">x\n>  |\n>-|\n"))
+        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", surface(">x\n>  |\n>-|\n", cmarkBugCompatible: false))
     }
 
     /// A paragraph's first line is advanced to its first non-space, so the header is a lone `|`.
@@ -83,6 +126,7 @@ class TableLazyWhitespaceHeaderCellTests: XCTestCase {
         XCTAssertEqual(
             "Document\n└─ Paragraph\n   ├─ Text \"|\"\n   ├─ SoftBreak\n   └─ Text \"-|\"",
             surface("  |\n-|\n"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"|\"\n   ├─ SoftBreak\n   └─ Text \"-|\"", surface("  |\n-|\n", cmarkBugCompatible: false))
     }
 
     /// A pipe-preceded whitespace-only cell backs `start_offset` over the whitespace to the previous pipe,
@@ -91,6 +135,7 @@ class TableLazyWhitespaceHeaderCellTests: XCTestCase {
         XCTAssertEqual(
             "Document\n└─ Table alignments: |-|-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  ├─ Cell\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body",
             surface("a|  |b\n-|-|-\n"))
+        XCTAssertEqual("Document\n└─ Table alignments: |-|-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  ├─ Cell\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body", surface("a|  |b\n-|-|-\n", cmarkBugCompatible: false))
     }
 
     /// Flag-off (shipped) drops the lazy residual, so the header is a lone `|` and no table forms.

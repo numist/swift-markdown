@@ -36,14 +36,28 @@ class TableRowspanBelowEmptyCellTests: XCTestCase {
         XCTAssertEqual(Self.emptyAboveCaret, surface(Array("a|b\n-|-\nx|\ny|^".utf8), optionBits: 0x7c))
     }
 
+    /// Flag-off (shipped): the cell padded in after `x|`'s row-ending pipe absorbs the span below it like a
+    /// parsed cell, where cmark gives a padded cell no span data.
+    func testExplicitEmptyCellAboveCaretGrowsFlagOff() {
+        XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"x\"\n      │  └─ Cell rowspan: 2\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"y\"\n         └─ Cell rowspan: 0", surfaceFlagOff("a|b\n-|-\nx|\ny|^"))
+    }
+
     func testNonEmptyCellAboveCaretControl() {
         XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"x\"\n      │  └─ Cell rowspan: 3\n      │     └─ Text \"z\"\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"y\"\n      │  └─ Cell rowspan: 0\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"w\"\n         └─ Cell rowspan: 0", surface(Array("a|b\n-|-\nx|z\ny|^\nw|^".utf8), optionBits: 0x7c))
+        XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"x\"\n      │  └─ Cell rowspan: 3\n      │     └─ Text \"z\"\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"y\"\n      │  └─ Cell rowspan: 0\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"w\"\n         └─ Cell rowspan: 0", surfaceFlagOff("a|b\n-|-\nx|z\ny|^\nw|^"))
     }
 
     // The fuzzer artifact: "||" NUL LF "-|-" LF NUL LF 0xFF "|^" (options byte 0x7c).
     func testFuzzedArtifact() {
         let bytes: [UInt8] = [0x7c, 0x7c, 0x00, 0x0a, 0x2d, 0x7c, 0x2d, 0x0a, 0x00, 0x0a, 0xff, 0x7c, 0x5e]
         XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell colspan: 0\n   │  └─ Cell\n   │     └─ Text \"\u{fffd}\"\n   └─ Body\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"\u{fffd}\"\n      │  └─ Cell\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"\u{fffd}\"\n         └─ Cell rowspan: 0", surface(bytes, optionBits: 0x7c))
+    }
+
+    /// Flag-off (shipped): the cell padded in beside the one-cell NUL row absorbs the span below it like a
+    /// parsed cell, where cmark gives a padded cell no span data.
+    func testPaddedCellBesideNULCellGrowsFlagOff() {
+        let bytes: [UInt8] = [0x7c, 0x7c, 0x00, 0x0a, 0x2d, 0x7c, 0x2d, 0x0a, 0x00, 0x0a, 0xff, 0x7c, 0x5e]
+        XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell colspan: 0\n   │  └─ Cell\n   │     └─ Text \"\u{fffd}\"\n   └─ Body\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"\u{fffd}\"\n      │  └─ Cell rowspan: 2\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"\u{fffd}\"\n         └─ Cell rowspan: 0", surfaceFlagOff(String(decoding: bytes, as: UTF8.self)))
     }
 
     private func surfaceFlagOff(_ markdown: String) -> String {
@@ -55,6 +69,12 @@ class TableRowspanBelowEmptyCellTests: XCTestCase {
         XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"x\"\n      │  └─ Cell\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"y\"\n      │  └─ Cell rowspan: 0\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"w\"\n         └─ Cell rowspan: 0", surface(Array("a|b\n-|-\nx\ny|^\nw|^".utf8), optionBits: 0x7c))
     }
 
+    /// Flag-off (shipped): the padded cell absorbs both spans below it like a parsed cell, where cmark
+    /// gives a padded cell no span data.
+    func testPaddedCellAboveSeveralCaretsGrowsFlagOff() {
+        XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"x\"\n      │  └─ Cell rowspan: 3\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"y\"\n      │  └─ Cell rowspan: 0\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"w\"\n         └─ Cell rowspan: 0", surfaceFlagOff("a|b\n-|-\nx\ny|^\nw|^"))
+    }
+
     /// A padded cell interrupts a span: the `^` below it stops there, so the spanning cell above keeps its earlier span.
     func testPaddedCellInterruptsEarlierSpan() {
         XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"x\"\n      │  └─ Cell rowspan: 2\n      │     └─ Text \"z\"\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"y\"\n      │  └─ Cell rowspan: 0\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"w\"\n      │  └─ Cell\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"v\"\n         └─ Cell rowspan: 0", surface(Array("a|b\n-|-\nx|z\ny|^\nw\nv|^".utf8), optionBits: 0x7c))
@@ -64,9 +84,16 @@ class TableRowspanBelowEmptyCellTests: XCTestCase {
         XCTAssertEqual("Document\n└─ Table alignments: |-|-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  ├─ Cell\n   │  │  └─ Text \"b\"\n   │  └─ Cell\n   │     └─ Text \"c\"\n   └─ Body\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"x\"\n      │  ├─ Cell\n      │  └─ Cell\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"y\"\n         ├─ Cell rowspan: 0\n         └─ Cell rowspan: 0", surface(Array("a|b|c\n-|-|-\nx\ny|^|^".utf8), optionBits: 0x7c))
     }
 
+    /// Flag-off (shipped): each padded cell absorbs the span below it like a parsed cell, where cmark gives
+    /// a padded cell no span data.
+    func testSeveralPaddedCellsAboveCaretsGrowFlagOff() {
+        XCTAssertEqual("Document\n└─ Table alignments: |-|-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  ├─ Cell\n   │  │  └─ Text \"b\"\n   │  └─ Cell\n   │     └─ Text \"c\"\n   └─ Body\n      ├─ Row\n      │  ├─ Cell\n      │  │  └─ Text \"x\"\n      │  ├─ Cell rowspan: 2\n      │  └─ Cell rowspan: 2\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"y\"\n         ├─ Cell rowspan: 0\n         └─ Cell rowspan: 0", surfaceFlagOff("a|b|c\n-|-|-\nx\ny|^|^"))
+    }
+
     /// A parsed cell that is empty (here whitespace-only, in the header) is a real cell, so it does grow.
     func testParsedEmptyHeaderCellAboveCaretGrows() {
         XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell rowspan: 2\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body\n      └─ Row\n         ├─ Cell rowspan: 0\n         └─ Cell\n            └─ Text \"x\"", surface(Array("| |b\n-|-\n^|x".utf8), optionBits: 0x7c))
+        XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell rowspan: 2\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body\n      └─ Row\n         ├─ Cell rowspan: 0\n         └─ Cell\n            └─ Text \"x\"", surfaceFlagOff("| |b\n-|-\n^|x"))
     }
 
     /// A zero-width `||` colspan filler is a parsed cell, so a `^` below it grows it; a padded cell beside it does not.

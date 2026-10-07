@@ -17,9 +17,9 @@ import XCTest
 /// trailing pipe); cmark treats it as a row-span marker (`rowspan: 0`) and grows the cell above to
 /// `rowspan: 2`. Position-free compare surface.
 class TableRowspanCaretAfterVerticalWhitespaceTests: XCTestCase {
-    private func surface(_ bytes: [UInt8], optionBits: UInt8 = 0x7c) -> String {
+    private func surface(_ bytes: [UInt8], optionBits: UInt8 = 0x7c, cmarkBugCompatible: Bool = true) -> String {
         var options = ParseOptions(rawValue: UInt(optionBits & 0b11011111))
-        options.insert(.cmarkBugCompatibility)
+        if cmarkBugCompatible { options.insert(.cmarkBugCompatibility) }
         return Document(parsing: String(decoding: bytes, as: UTF8.self), options: options)
             .debugDescription(options: [])
     }
@@ -32,41 +32,50 @@ class TableRowspanCaretAfterVerticalWhitespaceTests: XCTestCase {
 
     func testFormFeedBeforeCaret() {
         XCTAssertEqual(Self.singleColumn, surface(Array("a\n|-\n|\u{0C}^".utf8)))
+        XCTAssertEqual(Self.singleColumn, surface(Array("a\n|-\n|\u{0C}^".utf8), cmarkBugCompatible: false))
     }
 
     func testMixedWhitespaceBeforeCaret() {
         XCTAssertEqual(Self.singleColumn, surface(Array("a\n|-\n|\u{0B}\u{0C} ^".utf8)))
+        XCTAssertEqual(Self.singleColumn, surface(Array("a\n|-\n|\u{0B}\u{0C} ^".utf8), cmarkBugCompatible: false))
     }
 
     func testVerticalTabBeforeCaretInSecondColumn() {
         XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  └─ Cell rowspan: 2\n   │     └─ Text \"b\"\n   └─ Body\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"x\"\n         └─ Cell rowspan: 0", surface(Array("a|b\n-|-\nx|\u{0B}^".utf8)))
+        XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  └─ Cell rowspan: 2\n   │     └─ Text \"b\"\n   └─ Body\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"x\"\n         └─ Cell rowspan: 0", surface(Array("a|b\n-|-\nx|\u{0B}^".utf8), cmarkBugCompatible: false))
     }
 
     func testVerticalTabBeforeCaretWithClosingPipe() {
         XCTAssertEqual(Self.singleColumn, surface(Array("a\n|-\n|\u{0B}^|".utf8)))
+        XCTAssertEqual(Self.singleColumn, surface(Array("a\n|-\n|\u{0B}^|".utf8), cmarkBugCompatible: false))
     }
 
     func testFormFeedBeforeCaretWithPaddedClosingPipe() {
         XCTAssertEqual(Self.singleColumn, surface(Array("a\n|-\n|\u{0C}^ |".utf8)))
+        XCTAssertEqual(Self.singleColumn, surface(Array("a\n|-\n|\u{0C}^ |".utf8), cmarkBugCompatible: false))
     }
 
     func testVerticalTabBeforeCaretInFirstColumnOfTwo() {
         XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell rowspan: 2\n   │  │  └─ Text \"a\"\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body\n      └─ Row\n         ├─ Cell rowspan: 0\n         └─ Cell\n            └─ Text \"x\"", surface(Array("a|b\n-|-\n|\u{0B}^|x".utf8)))
+        XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell rowspan: 2\n   │  │  └─ Text \"a\"\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body\n      └─ Row\n         ├─ Cell rowspan: 0\n         └─ Cell\n            └─ Text \"x\"", surface(Array("a|b\n-|-\n|\u{0B}^|x".utf8), cmarkBugCompatible: false))
     }
 
     // A header cell has no row above to span into, so it keeps its `^` text but still carries rowspan 0.
     func testVerticalTabBeforeCaretInHeader() {
         XCTAssertEqual("Document\n└─ Table alignments: |-|\n   ├─ Head\n   │  └─ Cell rowspan: 0\n   │     └─ Text \"^\"\n   └─ Body", surface(Array("|\u{0B}^|\n|-|".utf8)))
+        XCTAssertEqual("Document\n└─ Table alignments: |-|\n   ├─ Head\n   │  └─ Cell rowspan: 0\n   │     └─ Text \"^\"\n   └─ Body", surface(Array("|\u{0B}^|\n|-|".utf8), cmarkBugCompatible: false))
     }
 
     // The row's first cell with no leading pipe is not pipe-preceded, so its leading VT is content, not padding.
     func testVerticalTabBeforeCaretWithoutLeadingPipeStaysLiteral() {
         XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"\u{0B}^\"\n         └─ Cell\n            └─ Text \"x\"", surface(Array("a|b\n-|-\n\u{0B}^|x".utf8)))
+        XCTAssertEqual("Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"\u{0B}^\"\n         └─ Cell\n            └─ Text \"x\"", surface(Array("a|b\n-|-\n\u{0B}^|x".utf8), cmarkBugCompatible: false))
     }
 
     // A trailing VT is content (only a pipe's leading padding absorbs VT/FF), so `^<VT>` is not a marker.
     func testVerticalTabAfterCaretStaysLiteral() {
         XCTAssertEqual("Document\n└─ Table alignments: |-|\n   ├─ Head\n   │  └─ Cell\n   │     └─ Text \"a\"\n   └─ Body\n      └─ Row\n         └─ Cell\n            └─ Text \"^\u{0B}\"", surface(Array("a\n|-\n|^\u{0B}".utf8)))
+        XCTAssertEqual("Document\n└─ Table alignments: |-|\n   ├─ Head\n   │  └─ Cell\n   │     └─ Text \"a\"\n   └─ Body\n      └─ Row\n         └─ Cell\n            └─ Text \"^\u{0B}\"", surface(Array("a\n|-\n|^\u{0B}".utf8), cmarkBugCompatible: false))
     }
 
     func testVerticalTabBeforeCaretFlagOff() {
@@ -78,5 +87,6 @@ class TableRowspanCaretAfterVerticalWhitespaceTests: XCTestCase {
     // The fuzzer artifact: 0xFF LF "|-" LF "|" VT "^" (options byte 0x7c).
     func testFuzzedArtifact() {
         XCTAssertEqual("Document\n└─ Table alignments: |-|\n   ├─ Head\n   │  └─ Cell rowspan: 2\n   │     └─ Text \"\u{fffd}\"\n   └─ Body\n      └─ Row\n         └─ Cell rowspan: 0", surface([0xff, 0x0a, 0x7c, 0x2d, 0x0a, 0x7c, 0x0b, 0x5e]))
+        XCTAssertEqual("Document\n└─ Table alignments: |-|\n   ├─ Head\n   │  └─ Cell rowspan: 2\n   │     └─ Text \"\u{fffd}\"\n   └─ Body\n      └─ Row\n         └─ Cell rowspan: 0", surface([0xff, 0x0a, 0x7c, 0x2d, 0x0a, 0x7c, 0x0b, 0x5e], cmarkBugCompatible: false))
     }
 }

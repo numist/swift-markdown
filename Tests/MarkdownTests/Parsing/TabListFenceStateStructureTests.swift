@@ -36,5 +36,8 @@ class TabListFenceStateStructureTests: XCTestCase {
 
         let document = Document(parsing: markdown, options: options)
         XCTAssertEqual(expected, document.debugDescription(options: []))
+
+        options.remove(.cmarkBugCompatibility)
+        XCTAssertEqual(expected, Document(parsing: markdown, options: options).debugDescription(options: []))
     }
 }
