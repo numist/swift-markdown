@@ -79,12 +79,6 @@ extension MarkdownDocument {
         /// A paragraph whose second line is a delimiter row, such as `---`, `:---`, `---:`, or `:---:`, becomes a table with aligned columns. Columns are separated by `|`; a single-column table has one delimiter cell and needs no `|` in its header line.
         public static let tables = MarkdownDocument.ParseOptions(rawValue: 1 << 25)
 
-        /// Replicate cmark-gfm's observable bugs bit-for-bit (for differential qualification). Covers both source-position quirks and structural ones that change the node tree (e.g. the inline code-span backtick-closer cache, which makes cmark miss some valid spans). Default off; the shipped parser is spec-correct.
-        public static let cmarkBugCompatibility = MarkdownDocument.ParseOptions(rawValue: 1 << 26)
-
-        /// Reproduce the content quirks cmark-gfm exhibits only when it parses with `CMARK_OPT_SOURCEPOS` off (for differential qualification). With source positions off, cmark's `adjust_subj_node_newlines` never runs, so a newline consumed inside a code span or raw HTML does NOT reset its per-line column cursor — unlike `handle_newline` (soft/space breaks), which always resets. That lengthens the raw byte capture of an unresolved cross-line footnote reference (`` [^`\n`] `` stays verbatim rather than collapsing to `[^]`). The Markdown layer forwards this only alongside `.cmarkBugCompatibility` when `disableSourcePosOpts` is set; the shipped parser never sets it and always tracks precise positions.
-        public static let cmarkSourcePositionsDisabled = MarkdownDocument.ParseOptions(rawValue: 1 << 27)
-
         /// Enables inline attributes, written as `^[text](key: value)`, and attribute definitions, written as `^[label]: key: value`.
         ///
         /// An inline attribute becomes an `.attribute` node whose children are the bracketed text; `^[text][label]` takes its attributes from the definition with that label. Without this option, `^` is ordinary text, the brackets after it follow the usual link rules, and a `^[label]:` line is ordinary paragraph content.

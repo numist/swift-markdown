@@ -40,7 +40,7 @@ internal struct Chunk: Equatable, Hashable {
         trimming(using: parser, leading: true, where: \.isSpaceTabOrNewline)
     }
 
-    /// Return a copy narrowed to drop TRAILING ASCII whitespace only (space, tab, `\n`, `\r`), preserving any leading whitespace. Used for the paragraph / flag-ON setext-heading content that reaches inline parsing after ref-def stripping: a lazy-continuation line's leading whitespace can survive at the front (flag-ON the block parser keeps that residual, `BlockParser.addLineSegment`), and cmark does not re-strip it - the ref-def parser consumes the earlier line through its newline, leaving the residual as literal text (`* [o]:e\n ~` -> Text " ~").
+    /// Return a copy narrowed to drop TRAILING ASCII whitespace only (space, tab, `\n`, `\r`), preserving any leading whitespace.
     internal func trimmingTrailing(using parser: borrowing BlockParser) -> Chunk {
         trimming(using: parser, leading: false, where: \.isSpaceTabOrNewline)
     }
@@ -49,9 +49,7 @@ internal struct Chunk: Equatable, Hashable {
     /// space, tab, line feed, line tabulation, form feed and carriage return - the removal that forms a
     /// paragraph's or setext heading's raw content (spec "Paragraphs", "Setext headings").
     internal func trimmingWhitespace(using parser: borrowing BlockParser) -> Chunk {
-        parser.storage.options.contains(.cmarkBugCompatibility)
-            ? trimming(using: parser)
-            : trimming(using: parser, leading: true, where: \.isASCIISpace)
+        trimming(using: parser, leading: true, where: \.isASCIISpace)
     }
 
     @inline(__always)

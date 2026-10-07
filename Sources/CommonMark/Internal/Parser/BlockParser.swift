@@ -60,7 +60,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// Single-line paragraphs/headings parsed from the original source stay `.lazy` until `materializePendingContent` emits them as a `Chunk(inSource: true)`.
     ///
-    /// A `.lazy` span with `joinPending` set holds a deferred separator: a continuation `\n` was requested after the span but not yet committed, so that if the *next* line turns out to be contiguous in source (single-LF terminated, no stripped prefix) the whole multi-line run can stay a single zero-copy source range - the embedded `\n` comes from the source itself rather than a synthesized copy. Only `appendNewline` sets it, and the next `addLine` (or `addLazyLineAfterTasklistAdvance`) always clears it, so content that is drained or inspected between lines never has it set.
+    /// A `.lazy` span with `joinPending` set holds a deferred separator: a continuation `\n` was requested after the span but not yet committed, so that if the *next* line turns out to be contiguous in source (single-LF terminated, no stripped prefix) the whole multi-line run can stay a single zero-copy source range - the embedded `\n` comes from the source itself rather than a synthesized copy. Only `appendNewline` sets it, and the next `addLine` always clears it, so content that is drained or inspected between lines never has it set.
     enum PendingContent : ~Copyable {
         case lazy(range: Range<Int>, joinPending: Bool = false)
         case materialized(MaterializedText)
@@ -142,18 +142,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     var currentLineSourceRange: Range<Int> = 0..<0
     var lastLineSourceEnd: Int = 0
 
-    /// The open leaf's `block_offset`: the byte distance from a line's start to the block's content column, established from the leaf's FIRST line and held for the block's lifetime.
-    ///
-    /// A paragraph continuation line's inline content is re-indented to this column: cmark fixes `block_offset` at the paragraph's first-line content column (`start_column - 1`) and reports EVERY *matched* continuation line's surviving content there, discarding each line's own leading whitespace. So a matched continuation segment maps its source to `currentLineSourceRange.lowerBound + currentContentIndent` (the bytes are still read from their true offset). It equals a continuation line's own content column only when the first line has no indentation beyond its container marker (the common case), so this is usually a no-op. A *lazy* continuation is the exception - cmark keeps the residual whitespace after the last matched prefix (see `currentLineIsLazyContinuation` / `currentLineContentCursor`). Set in `addLine` when a leaf's first line is accumulated; consumed by `addLineSegment`. Code/HTML bodies preserve their true offset instead.
-    var currentContentIndent: Int = 0
-
-    /// `true` when the line currently being processed is a *lazy* paragraph continuation: at least one open container's continuation prefix failed to match on this line (a block quote with no `>`, or a list item indented less than its content column), so the container-prefix walk stopped short of the open leaf. Set per line in `processLine` from the walk's `allMatched`; consumed by `addLineSegment` and `addLine` (via `keepsLazyResidual`) under `.cmarkBugCompatibility`.
-    ///
-    /// cmark strips a *matched* paragraph continuation's leading whitespace - it advances the line offset to the first non-space (`add_text_to_container`'s `accepts_lines` branch, blocks.c:1465) before adding the line - but a *lazy* continuation is added straight from the offset where prefix matching stopped (`add_line(parser->current, …)`, blocks.c:1408), so the residual whitespace between that stopping point and the first non-space survives in the content and shifts the reported column right. The inline parser then maps a continuation line's first content byte to `residual + block_offset + 1` columns (blocks.c/inlines.c `handle_newline`), where `residual` is the leading-space count in the added content. So a lazy continuation re-indents to `currentLineContentCursor`-relative residual plus the block-content column; a matched continuation discards its residual and re-indents to the block-content column outright.
+    /// `true` when the line currently being processed is a *lazy* paragraph continuation: at least one open container's continuation prefix failed to match on this line (a block quote with no `>`, or a list item indented less than its content column), so the container-prefix walk stopped short of the open leaf. Set per line in `processLine` from the walk's `allMatched`.
     var currentLineIsLazyContinuation: Bool = false
-
-    /// The byte offset into the current line where container-prefix matching stopped (the walk's `cursor`): the point past every *matched* container prefix, from which cmark measures a lazy continuation's residual whitespace. Set per line in `processLine`; consumed by `addLineSegment` only for a lazy continuation, where the preserved residual is `range.lowerBound - currentLineContentCursor` (the un-consumed leading whitespace after the last matched prefix). For a matched continuation the residual is discarded, so this is unused.
-    var currentLineContentCursor: Int = 0
 
     /// Inline-parsing tasks deferred until after all block parsing completes.
     ///
@@ -164,39 +154,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// Registered at finalize for paragraph, heading, table-cell and table-preceding-paragraph content that reaches inline parsing as one arena `Chunk` (flattened from segments, materialized, NUL-replaced or pipe-unescaped), which loses the per-line source mapping the content had. The content-relative run map lets the inline pass stamp the node's inlines with real source positions. Consulted in the inline pass when building an arena single-segment `ContentSpan`.
     var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
-
-    /// The `storage.strings` byte ranges holding a U+FFFD that stands for an orphaned UTF-8 continuation byte
-    /// of cmark's buffer (`tasklistAdvanceEnd`), one range per U+FFFD, ascending.
-    ///
-    /// cmark's UTF-8-validating scanners stop at an orphan, but its U+FFFD reads exactly like a NUL's, so the
-    /// scans need to be told which U+FFFDs are orphans (`ContentSpan.orphanReplacements`). A range is
-    /// registered where the replacement is written into the arena, and again wherever arena content holding
-    /// it is copied to a new arena offset (`flattenSegments`, `replacingNUL`, a `.materialized` buffer's
-    /// drain). Slicing content needs no update, as the offsets are the arena's own.
-    var orphanReplacementRanges = UniqueArray<Range<Int>>()
-
-    /// The orphan replacements inside a node's `.materialized` pending buffer, as buffer offsets, one range per
-    /// U+FFFD, ascending. Moved into `orphanReplacementRanges` when the buffer is copied into the arena.
-    var materializedOrphanReplacements: [DocumentStorage.Index: [Range<Int>]] = [:]
-
-    /// List-item nodes whose GFM task-list checkbox is eligible for recognition. cmark's
-    /// `open_tasklist_item` runs only as the item opens and scans that OPENING line from column 0
-    /// (`scan_tasklist`: `spacechar* marker spacechar+ checkbox spacechar+`), so an item qualifies only
-    /// when both halves of that scan hold on the marker's own physical line: the marker is preceded by
-    /// only whitespace (`taskMarkerLineAnchored`) AND a checkbox directly follows the marker + separator
-    /// (`openingLineCheckbox`). Both are PHYSICAL-LINE properties of the opening line, not block-nesting
-    /// depth: a block-nested item alone on its own (indented) line qualifies, while an item whose line
-    /// carries a block-quote `>` or an outer list marker before this marker does not, and an item whose
-    /// opening line is blank after the marker - the checkbox first appearing on a continuation line -
-    /// does not. Recorded at item-open time, where the opening line is available, and consulted by the two
-    /// finalize-time consumers - the checkbox strip in `runParagraphMatchers` and the continuation
-    /// re-indent bump in `tasklistContentIndentBump`, neither of which can tell an opening line from a
-    /// continuation line - so an ineligible item keeps its `[ ]`/`[x]` as literal paragraph text and
-    /// re-indents like a plain bullet. (Empty task items are consumed at open time in
-    /// `emptyTaskItemChecked`; this set carries the content-bearing case to finalize, and the strip removes the
-    /// item once it consumes the checkbox.) A task list item is otherwise decided by its first paragraph alone
-    /// (`tasklistEligibleItem`).
-    var lineAnchoredTaskItems: Set<DocumentStorage.Index> = []
 
     /// The indent, in columns, of each paragraph's SECOND physical line — its first continuation line —
     /// keyed by the paragraph node and recorded the first time the paragraph is continued.
@@ -239,26 +196,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// table).
     var paragraphTablePending: [DocumentStorage.Index: Bool] = [:]
 
-    /// cmark's autocompleted-cell accounting for a table-pending paragraph (`node_table`'s `n_columns`,
-    /// `n_rows`, `n_nonempty_cells` in `extensions/table.c`), keyed by the paragraph node. Populated only
-    /// flag-ON (`.cmarkBugCompatibility`), when the delimiter row opens the table.
-    var tableCellBudgets: [DocumentStorage.Index: TableCellBudget] = [:]
-
-    struct TableCellBudget {
-        /// The table's column count.
-        let columns: Int
-        /// The rows charged so far, header included.
-        var rows: Int
-        /// The cells charged so far: each row's scanned cells, capped at `columns`.
-        var cellsPresent: Int
-
-        /// cmark's `get_n_autocompleted_cells`: the empty cells the table has padded its rows out with.
-        var autocompletedCells: Int {
-            columns * rows - cellsPresent
-        }
-    }
-
-    /// Paragraphs whose leading reference-link definitions the flag-ON PHASE-2c setext reconstruction
+    /// Paragraphs whose leading reference-link definitions the PHASE-2c setext reconstruction
     /// resolved (and registered) and then RESTORED into the buffer.
     ///
     /// cmark drops a ref-def from a paragraph's content buffer the instant its setext-underline scan
@@ -271,53 +209,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// split consults this set to drop the same leading definitions cmark had already removed.
     var reconstructedRefDefParagraphs: Set<DocumentStorage.Index> = []
 
-    /// Lists and thematic breaks that cmark has finalized because a later sibling was added after them.
-    ///
-    /// cmark keeps a list or thematic break open until a later sibling closes it (`add_child` finalizes it
-    /// as a parent that cannot contain the new block), and `check_open_blocks` matches it on every line
-    /// while it is open. The sibling can vanish again - a reference-definition-only paragraph is dropped at
-    /// finalize - leaving a closed list or break as the last child, so the last child's kind alone does not
-    /// say whether cmark still has it open. Consulted by `lastChildAlwaysContinues(item:)`.
-    var listsAndBreaksClosedBySibling: Set<DocumentStorage.Index> = []
-
     /// The deepest list that has seen a blank line since its last item boundary.
     ///
     /// When a new item is added to that list (i.e., the blank line was between sibling items), the list gets marked loose. Cleared on each item open after the check, and stays stale (but harmless) when the list closes.
     var pendingLooseList: DocumentStorage.Index? = nil
 
-    // MARK: - Inline code-span backtick-closer cache (cmark bug-compat)
-
-    /// Longest backtick run for which the closer cache holds a slot - cmark's `MAXBACKTICKS`. A run longer than this is never a code-span opener (`matchCodeSpan` step 1) and is never recorded.
-    static let codeSpanMaxBacktickRun = 80
-
-    /// `true` once a closing-backtick scan in the current `parseInline` pass has run to the content end without finding a closer - cmark's `subject.scanned_for_backticks`. Once set, a later open of a length whose cached run-start lies at/before the open short-circuits (the stale-cache code-span miss). Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per pass.
-    var codeSpanScannedForBackticks = false
-
-    /// Per-run-length cache of the latest backtick run START offset a closing scan has passed - cmark's `subject.backticks[]`, indexed by run length (1...`codeSpanMaxBacktickRun`; index 0 unused). Combined with `codeSpanScannedForBackticks`, a stored value `<=` a new opener's post-run offset means "no closer of this length at/after here" and skips the rescan. Offsets are `ContentSpan` (content/virtual) offsets, the same space the closing scan walks. Meaningful only flag-ON; reset per pass.
-    var codeSpanBackticks = [Int](repeating: 0, count: BlockParser.codeSpanMaxBacktickRun + 1)
-
-    // MARK: - Inline raw-HTML overrun skip flags (cmark bug-compat)
-
-    /// Which inline raw-HTML scan kinds have overrun to end-of-input in the current `parseInline` pass and must not be re-attempted - cmark's per-subject `subject.flags` bits `FLAG_SKIP_HTML_{COMMENT,CDATA,DECLARATION,PI}` (`src/inlines.c` `handle_pointy_brace`). The `.comment` bit gates the ENTIRE `<!` dispatch, so it also suppresses later CDATA and declaration matches. Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per pass.
-    var htmlScanSkip: HTMLScanSkip = []
-
     /// Per-kind stretches of scan starts from which a first-closer raw-HTML scan is known to fail in the current `parseInline` pass (`HTMLCloserMisses`). Reset per pass.
     var htmlCloserMisses = HTMLCloserMisses()
-
-    /// Content offsets of newlines swallowed by a code span or raw HTML in the current `parseInline` pass. Such a newline resets cmark's per-line column cursor only with `CMARK_OPT_SOURCEPOS` on (`adjust_subj_node_newlines`), never via `handle_backslash` - a backslash before it is literal content - so an unresolved footnote reference's captured-label measurement (`footnoteColumnResets`) resets there exactly when `.cmarkSourcePositionsDisabled` is unset. Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per pass.
-    var codeSpanSwallowedNewlines: Set<Int> = []
-
-    /// Content offsets of newlines swallowed by `handleCloseBracketAttribute`'s raw scans in the current `parseInline` pass: a matched inline-attribute `(…)` payload (`matchAttributeAttributes`), and the following `[…]` label it consumes whether or not the attribute resolves. cmark's `manual_scan_attribute_attributes` and `link_label` (`handle_close_bracket_attribute`, `src/inlines.c`) read these as raw byte scans that bypass the per-character dispatch loop, so they never reach `handle_newline` or `adjust_subj_node_newlines` - unlike code spans / raw HTML, this holds regardless of `CMARK_OPT_SOURCEPOS`. Such a newline must not reset an unresolved footnote reference's captured-label measurement (`footnoteColumnResets`). Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per pass.
-    var attributeSwallowedNewlines: Set<Int> = []
-
-    /// Content offsets of newlines swallowed by a matched inline link/image destination `(…)` payload scan, or by the `[…]` label of a resolved reference link/image (`handleCloseBracket`'s link match), in the current `parseInline` pass. cmark's `manual_scan_link_url` / `scan_spacechars` / `scan_link_title` / `link_label` (`handle_close_bracket`, `src/inlines.c`) read these as raw byte scans that bypass the per-character dispatch loop, so `handle_close_bracket`'s `match:` label never calls `adjust_subj_node_newlines` - unlike code spans / raw HTML, this holds regardless of `CMARK_OPT_SOURCEPOS`. Such a newline must not reset an unresolved footnote reference's captured-label measurement (`footnoteColumnResets`). Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per pass.
-    var linkDestinationSwallowedNewlines: Set<Int> = []
-
-    /// Whether the current `parseInline` pass keeps line endings as literal text (its `preserveWhitespace` argument, cmark's `CMARK_OPT_PRESERVE_WHITESPACE`). cmark then emits each `\n` as a text node instead of calling `handle_newline`, so a bare line ending never resets the per-line column cursor, and an unresolved footnote reference's captured-label measurement (`footnoteColumnResets`) runs across it. Meaningful only flag-ON (`.cmarkBugCompatibility`); set per pass.
-    var lineEndingsAreLiteral = false
-
-    /// Bytes of reference-link expansion spent so far across the whole document - cmark's `refmap->ref_size`. cmark charges every found reference lookup its destination-plus-title size against a document-wide budget (`chargeReferenceExpansion`). Meaningful only flag-ON (`.cmarkBugCompatibility`); never reset.
-    var referenceExpansionSpent = 0
 
     // MARK: - Init
     
@@ -407,15 +305,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var delimiters = UniqueArray<DelimiterRecord>()
         var brackets = UniqueArray<BracketRecord>()
         
-        // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content) and `segEndScratch` its running virtual end offsets; `runScratch` holds a stable copy of a flattened block's arena→source run map and `runEndScratch` its running end offsets; `arenaScratch` holds a stable snapshot of `storage.strings` backing a multi-segment content's synthetic arena segment (a split-tab residual, or a lazy tasklist-retry line's orphaned-byte replacements). All owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
+        // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content) and `segEndScratch` its running virtual end offsets; `runScratch` holds a stable copy of a flattened block's arena→source run map and `runEndScratch` its running end offsets; All owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
         var scratch = UniqueArray<UInt8>()
         var segScratch = UniqueArray<Segment>()
         var segEndScratch = UniqueArray<Int>()
         var runScratch = UniqueArray<ArenaRun>()
         var runEndScratch = UniqueArray<Int>()
-        var arenaScratch = UniqueArray<UInt8>()
-        // `orphanScratch` holds a stable copy of the content's orphan replacements (`orphanReplacementRanges`).
-        var orphanScratch = UniqueArray<Range<Int>>()
         
         for (node, ref) in pending {
             precondition(ref.totalLength > 0, "only non-empty content is queued for inline parsing")
@@ -444,12 +339,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                             runEndScratch.append(runEnd)
                         }
                     }
-                    orphanScratch.removeSubrange(0..<orphanScratch.count)
-                    for replacement in orphanReplacements(in: chunk.range) {
-                        orphanScratch.append(replacement)
-                    }
                     parseInline(
-                        content: ContentSpan(span: scratch.span, base: chunk.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span, orphanReplacements: orphanScratch.span),
+                        content: ContentSpan(span: scratch.span, base: chunk.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span),
                         into: node,
                         delimiters: &delimiters,
                         brackets: &brackets
@@ -466,44 +357,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     virtualEnd += Int(seg.length)
                     segEndScratch.append(virtualEnd)
                 }
-                // A synthetic arena-backed segment (a lazy-continuation split-tab residual, `addLineSegment`, or
-                // a lazy tasklist-retry line's orphaned-byte replacements, `addLazyLineAfterTasklistAdvance`)
-                // lives at a NON-zero arena offset; the interned newline join sits at offset 0 and is read as
-                // `\n` without touching the arena. When one is present, snapshot the arena prefix that backs it
-                // into a stable buffer (the inline pass appends to `storage.strings`, which may reallocate) and
-                // hand it to the span. The common multi-line paragraph has no such segment and stays zero-copy.
-                var arenaExtent = 0
-                var replacements: [Range<Int>] = []
-                for i in 0..<segScratch.count {
-                    let seg = segScratch[i]
-                    if !seg.inSource && seg.offset != DocumentStorage.newlineOffset {
-                        arenaExtent = max(arenaExtent, Int(seg.offset) + Int(seg.length))
-                        replacements += orphanReplacements(in: Int(seg.offset)..<(Int(seg.offset) + Int(seg.length)))
-                    }
-                }
-                if arenaExtent > 0 {
-                    arenaScratch.removeSubrange(0..<arenaScratch.count)
-                    arenaScratch.append(copying: storage.strings.span.extracting(0..<arenaExtent))
-                    // Already ascending, as `ContentSpan.orphanedContinuationByteLength`'s search needs: each
-                    // arena segment was written at the arena's end when its line was added.
-                    orphanScratch.removeSubrange(0..<orphanScratch.count)
-                    for replacement in replacements {
-                        orphanScratch.append(replacement)
-                    }
-                    parseInline(
-                        content: ContentSpan(source: sourceBytes, segments: segScratch.span, segmentEnds: segEndScratch.span, virtualLength: Int(ref.totalLength), arena: arenaScratch.span, orphanReplacements: orphanScratch.span),
-                        into: node,
-                        delimiters: &delimiters,
-                        brackets: &brackets
-                    )
-                } else {
-                    parseInline(
-                        content: ContentSpan(source: sourceBytes, segments: segScratch.span, segmentEnds: segEndScratch.span, virtualLength: Int(ref.totalLength)),
-                        into: node,
-                        delimiters: &delimiters,
-                        brackets: &brackets
-                    )
-                }
+                parseInline(
+                    content: ContentSpan(source: sourceBytes, segments: segScratch.span, segmentEnds: segEndScratch.span, virtualLength: Int(ref.totalLength)),
+                    into: node,
+                    delimiters: &delimiters,
+                    brackets: &brackets
+                )
             }
 
             let image: ContentImage?
@@ -531,10 +390,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// behind.
     ///
     /// Numbering is decided here from the references that survive in the finalized tree, not when they
-    /// were emitted during inline parsing: an enclosing footnote-shaped bracket's
-    /// `.cmarkBugCompatibility` literal reconstruction can discard a reference after emission (the
-    /// inner `[^a]` of `[^ [^a]]`), and cmark, which numbers only what its tree walk finds, gives such
-    /// a reference no index and lets it keep no definition alive.
+    /// were emitted during inline parsing.
     private mutating func processFootnotes() {
         guard storage.options.contains(.footnotes) else { return }
         // No definitions means no reference can have been emitted (a reference resolves only against a
@@ -653,8 +509,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // `resolve_reference_link_definitions` in every mode but gates the empty-paragraph removal off for
         // `CMARK_OPT_PRESERVE_WHITESPACE` - whose `options & …` mask also matches a bare `CMARK_OPT_INLINE_ONLY`.
         let paragraph = addChild(kind: .paragraph, parent: documentIndex, start: start)
-        // cmark's inline-only buffer is neither newline-terminated nor trimmed - see `nulTerminatedInlineContainers`.
-        storage.nulTerminatedInlineContainers.insert(paragraph)
         // The paragraph's content is the whole post-BOM input, trailing line ending included (it is literal text here), and the document spans exactly its one paragraph. Both end where the last line's content ends, as in block mode, so a final line ending doesn't carry the range past the last line.
         storage.setSourceStart(documentIndex, start)
         storage.setSourceEnd(documentIndex, contentEnd)
@@ -729,7 +583,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     runEndScratch.append(runEnd)
                 }
             }
-            let content = ContentSpan(span: scratch.span, base: rest.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span, orphanReplacements: Span<Range<Int>>())
+            let content = ContentSpan(span: scratch.span, base: rest.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span)
             parseInline(
                 content: content,
                 into: paragraph,
@@ -787,20 +641,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if storage.options.contains(.gfmAutolink) {
             gfmEmailAutolinkPass(leaf, image: image)
         }
-        // A `[^[` footnote collapse (bug-compat) marked run-truncating nodes; their invisible tail is
-        // dropped AFTER the autolink pass, so a trailing email in that tail still links.
-        if !storage.runTruncatingTextNodes.isEmpty {
-            dropRunTruncatedTails(leaf)
-        }
     }
 
     // MARK: - State
     
     /// Append a node as a child of the given parent. Returns the new node's index.
     private mutating func addChild(kind: MarkdownNode.Kind, parent: DocumentStorage.Index, data: NodeData? = nil, start: Int? = nil) -> DocumentStorage.Index {
-        if let previous = storage[parent].lastChild, alwaysContinues(storage[previous].kind) {
-            listsAndBreaksClosedBySibling.insert(previous)
-        }
         let idx = storage.appendNode(NodeRecord(kind: kind, parent: parent, data: data))
         storage.appendChild(idx, to: parent)
         storage.setSourceStart(idx, start)
@@ -851,22 +697,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return i
     }
 
-    /// Map an original-source byte offset on the current materialized line to its buffer offset: the
-    /// inverse of `materializedSourceOffset`. A prefix byte's buffer offset is the column its expansion
-    /// starts at. Callers must hold `!currentLineMapsToSource`.
-    private func materializedBufferOffset(ofSource sourceOffset: Int) -> Int {
-        let lineStart = currentLineSourceRange.lowerBound
-        let prefixEnd = lineStart + materializedRestStart
-        if sourceOffset >= prefixEnd {
-            return materializedTailBufferStart + (sourceOffset - prefixEnd)
-        }
-        var col = 0
-        for i in lineStart..<sourceOffset {
-            col += sourceBytes[i] == UInt8(ascii: "\t") ? 4 - (col & 3) : 1
-        }
-        return col
-    }
-
     /// Consume `pending` and return `node`'s accumulated content, or `nil` if `node` has none (either nothing was pending, or a *different* node's leaf was - which the single-open-leaf invariant forbids).
     ///
     /// Moves the content out; the leaf is destroyed. Used by the append helpers, which always either find their own node's content or none.
@@ -906,11 +736,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         precondition(!chunk.inSource, "source-backed content re-seeds as a `.lazy` range, not through addChunk")
         precondition(map.reduce(0) { $0 + Int($1.length) } == chunk.length, "a run map tiles its content")
         var text = unwrap(take(pending, ifNode: node))
-        let shift = text.count - chunk.offset
-        let replacements = orphanReplacements(in: chunk.range)
-        if !replacements.isEmpty {
-            materializedOrphanReplacements[node, default: []] += replacements.map { ($0.lowerBound + shift)..<($0.upperBound + shift) }
-        }
         var i = chunk.offset
         for run in map {
             for j in 0..<Int(run.length) {
@@ -932,11 +757,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         switch take(pending, ifNode: node) {
         case .none:
-            // First content for this leaf: fix its `block_offset` (the content column) from this line, so any continuation line re-indents to it. `range.lowerBound` is the first-non-space byte; measure its distance from the source line start (via `sourceOffset` for a tab-expanded line). For a task-list item, add the checkbox marker width the tasklist extension consumes at finalize (see `tasklistContentIndentBump`).
-            if positionsEnabled, nodeKind.canAccumulateText, let s = sourceOffset(range.lowerBound) {
-                currentContentIndent = s - currentLineSourceRange.lowerBound
-                    + tasklistContentIndentBump(node: node, span: span, range: range)
-            }
             // Fast path: first content for this node and the current line maps directly into `self.source` - store the range lazily and skip the byte copy.
             precondition(nodeKind.canAccumulateText, "only paragraphs and headings accumulate text lines")
             if currentLineMapsToSource {
@@ -946,14 +766,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return PendingLeaf(node: node, content: .lazy(range: materializedSourceOffset(range.lowerBound)..<materializedSourceOffset(range.upperBound)))
         case .some(let existing):
             // Contiguity fast path: a `\n` separator was deferred after a `.lazy` span (`appendNewline` set its `joinPending`). If this line is also source-backed and immediately follows the previous span in the source - i.e. it starts one byte past the previous span and that byte is a single `\n` - then the join needs no synthesized separator: the embedded `\n` already lives in the source, so we keep the whole run as one zero-copy `.lazy` range. This holds for top-level paragraphs with LF line endings and no stripped container prefix; blockquote/list continuation (prefix stripped → non-adjacent range), CRLF/CR (separator isn't a lone `\n` at `prev.upperBound`), and tab-expanded lines (`!currentLineMapsToSource`) all fall through to the segment-list arm below.
-            //
-            // A LAZY continuation line into an indented container (a blockquote/list paragraph with no marker on the continuation line) IS source-contiguous, so it would collapse here and map to its true column. That equals cmark's output only at the top level, where the block-content column is 1; inside an indented container cmark re-indents every continuation line relative to the fixed block-content column (`currentContentIndent`) - the Quirk E re-indent (matched continuations to that column, lazy blockquote continuations to `true_col + block_offset`; see `addLineSegment`). Either target differs from the plain true column the collapse would produce, so flag-ON with a positive content indent is excluded from the collapse and falls through to the segment path below, which re-indents each continuation line via `addLineSegment` (the first line stays a plain source segment at its true column). Flag-OFF and the top-level `currentContentIndent == 0` case keep the zero-copy collapse (spec-correct there anyway).
             switch consume existing {
             case .lazy(let prev, joinPending: true) where currentLineMapsToSource
                     && range.lowerBound == prev.upperBound + 1
                     && prev.upperBound < sourceBytes.count
-                    && sourceBytes[prev.upperBound] == UInt8(ascii: "\n")
-                    && !(storage.options.contains(.cmarkBugCompatibility) && currentContentIndent > 0):
+                    && sourceBytes[prev.upperBound] == UInt8(ascii: "\n"):
                 return PendingLeaf(node: node, content: .lazy(range: prev.lowerBound..<range.upperBound))
             case .lazy(let prev, joinPending: true):
                 // Non-contiguous continuation (block-quote/list prefix stripped, CRLF, tab): switch to a source-segment list rather than copying bytes - the previous span becomes a zero-copy source segment, joined to this line by the shared interned `\n`.
@@ -965,57 +782,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return addLineSegment(span: span, range: range, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
             case let other:
                 var text = unwrap(other)
-                // why: flag ON, a LAZY continuation keeps its residual whitespace in the content, exactly as `addLineSegment` does for a segment list (cmark's lazy `add_line` copies from where prefix matching stopped, blocks.c:1408), so a code span or link title spanning the line reads it. Such a line reaches this materialized buffer when, for example, the paragraph began as an orphan-led tasklist-retry line (`appendOrphanLedLine`).
-                let contentStart = keepsLazyResidual(before: range.lowerBound) ? currentLineContentCursor : range.lowerBound
-                // A tab-expanded current line (`!currentLineMapsToSource`) has `span` pointing at the per-line expanded buffer, not source - appending `span[range]` directly would bake the expanded-tab spaces into the arena as if they were literal content. Map back to the literal source range instead (same rule as the `.none` case above and `addLineSegment`'s materialized branch): cmark expands tabs only for block-structure indentation and keeps them literal in inline content. A kept residual that starts inside a tab an outer container partly consumed begins with that tab's leftover columns as spaces (cmark's `partially_consumed_tab`, blocks.c `add_line`).
+                // A tab-expanded current line (`!currentLineMapsToSource`) has `span` pointing at the per-line expanded buffer, not source - appending `span[range]` directly would bake the expanded-tab spaces into the arena as if they were literal content. Map back to the literal source range instead (same rule as the `.none` case above and `addLineSegment`'s materialized branch): cmark expands tabs only for block-structure indentation and keeps them literal in inline content.
                 if !currentLineMapsToSource {
                     let sourceHigh = materializedSourceOffset(range.upperBound)
-                    let (sourceLow, splitTabSpaces) = materializedSourceStart(bufferStart: contentStart)
-                    // The leftover columns stand for the split tab, the byte before `sourceLow`.
-                    for _ in 0..<splitTabSpaces {
-                        text.append(UInt8(ascii: " "), imaging: sourceLow - 1)
-                    }
+                    let sourceLow = materializedSourceStart(bufferStart: range.lowerBound).sourceStart
                     text.append(sourceLow..<sourceHigh, of: sourceBytes)
                 } else {
                     // A source-mapped line's `span` is the source itself.
-                    text.append(contentStart..<range.upperBound, of: span)
+                    text.append(range.lowerBound..<range.upperBound, of: span)
                 }
                 return PendingLeaf(node: node, content: .materialized(text))
             }
         }
-    }
-
-    /// Whether the current line's content, whose first non-space is at line offset `contentStart`, keeps its leading residual whitespace: under `.cmarkBugCompatibility`, a *lazy* continuation with whitespace between the prefix-match stop (`currentLineContentCursor`) and its first non-space.
-    private func keepsLazyResidual(before contentStart: Int) -> Bool {
-        currentLineIsLazyContinuation && contentStart > currentLineContentCursor && storage.options.contains(.cmarkBugCompatibility)
-    }
-
-    /// Extra content-indent columns a task-list item contributes to a paragraph's continuation re-indent base.
-    ///
-    /// A GFM task-list item's checkbox marker (`[ ] ` / `[x] `) is stripped from the item's first paragraph at finalize (`runParagraphMatchers`), which advances the paragraph's own start past the marker but leaves the block-content column - the base every continuation line re-indents to (Quirk E, `addLineSegment`) - fixed at the *plain* item content column (where `[` sits). cmark-gfm fixes that base at the checkbox-adjusted content column instead, so a task-item continuation lands the marker's column-width further right than a plain bullet's would. Add that width here, at the point the base is first fixed, when this leaf is the first paragraph of a list item and its first line begins with a checkbox marker. Returns 0 otherwise (plain bullets, ordered lists, non-item paragraphs), so nothing else moves.
-    ///
-    /// `currentContentIndent` is a *column* count. A space-separated marker (`[ ] `) is exactly `tasklistMarkerWidth` single-byte columns, so the bump equals its byte width. A TAB-separated marker (`[ ]\t`) is still recognized by `matchTasklistMarker` but its column width is tab-stop-dependent, not its byte width, so it is left to the deferred tab class (see CLAUDE.md "tab after a list marker") rather than bumped with a wrong column count - `require`ing a space separator here keeps the arithmetic column-exact. A vertical-tab / form-feed separator is also recognized (both are scanner `spacechar`) but survives as leading content rather than being stripped, so its content column is `[`+3 not `[`+4; the same space-separator guard drops it through to `0`. The recognition otherwise mirrors `matchTasklistMarker` (same `tasklistMarkerChecked` predicate, same first-child-of-item condition, same `lineAnchoredTaskItems` gate so an item whose marker shares its line with a `>` or an outer marker - whose checkbox stays literal - re-indents like a plain bullet), so in the common case - marker on the first line, no preceding ref-def / footnote / table matcher redirecting finalize - the finalize consumption and this re-indent bump agree.
-    ///
-    /// This bump assumes a SINGLE separator space (`tasklistMarkerWidth`). `matchTasklistMarker` strips the whole post-checkbox whitespace run for the item's first-line CONTENT, so a MULTI-space marker (`[x]  a`) puts the true content column one-plus further right than this bump records - a flag-ON re-indent-base inaccuracy for a multi-space task item's continuation. It is unobservable: source positions are not part of the differential compare surface (see `DiffSupport.newSurface`) and this base is Quirk-E (`.cmarkBugCompatibility`) machinery only; the deliverable's spec-correct positions come from the true column, and no position suite exercises a multi-space task marker. A vertical-tab / form-feed GAP BEFORE the checkbox (`- \v[ ] `) is likewise now `lineAnchoredTaskItems`-eligible and reaches here, but `range.lowerBound` sits on the VT/FF (not gap-skipped like `matchTasklistMarker` / `openingLineCheckbox`), so `tasklistMarkerChecked` returns nil and the bump falls through to `0` - the same unobservable flag-ON continuation-base inaccuracy, for the same reasons.
-    private func tasklistContentIndentBump(node: DocumentStorage.Index, span: Span<UInt8>, range: Range<Int>) -> Int {
-        guard storage.options.contains(.tasklist),
-              storage[node].kind == .paragraph,
-              let parent = storage[node].parent,
-              case .item = storage[parent].kind,
-              storage[parent].firstChild == node,
-              lineAnchoredTaskItems.contains(parent),
-              range.lowerBound + Self.tasklistMarkerWidth <= range.upperBound,
-              Self.tasklistMarkerChecked(
-                span[range.lowerBound],
-                span[range.lowerBound + 1],
-                span[range.lowerBound + 2],
-                span[range.lowerBound + 3]
-              ) != nil,
-              span[range.lowerBound + 3] == UInt8(ascii: " ")   // space separator: byte width == column width
-        else {
-            return 0
-        }
-        return Self.tasklistMarkerWidth
     }
 
     /// Append a single `\n` to `pending` for `node`, returning the updated leaf.
@@ -1045,27 +823,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func addLineSegment(span: Span<UInt8>, range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         guard !range.isEmpty else { return pending }
         if currentLineMapsToSource {
-            // why: a paragraph continuation line's surviving content is mapped one of two ways depending on `.cmarkBugCompatibility` (adopted only by the differential fuzzer; default off is spec-correct). Code/HTML block bodies are excluded either way (they preserve their own indentation and keep their true offset). When the line has no whitespace beyond `block_offset` the two coincide, so this is a no-op.
-            //
-            // Flag ON reproduces cmark-gfm's continuation re-indent: cmark fixes the paragraph's content column from the FIRST line (`block_offset` = `currentContentIndent`) and reports every continuation line's surviving content relative to it. The inline parser (inlines.c `handle_newline`) columns a continuation line's first content byte at `leadingSpacesInAddedContent + block_offset + 1`, where the "added content" is whatever `add_line` copied - and cmark copies from `parser->offset` (blocks.c `add_line`), i.e. the point where container-prefix matching stopped. The base the block_offset is added to is therefore container-agnostic once expressed via that stopping point (`currentLineContentCursor`):
-            //
-            //   - A *matched* continuation (every open container's prefix matched down to the paragraph, INCLUDING a list-item or block-quote continuation whose indent the prefix consumed) has cmark advance the offset to the first non-space before `add_line` (blocks.c:1465), so the leading whitespace is DISCARDED: the content lands at the block-content column. Base = this line's start (`currentLineSourceRange.lowerBound`), residual dropped.
-            //   - A *lazy* continuation (some container prefix failed - a block quote with no `>`, or a list item indented below its content column) is added straight from the stopping point without advancing to the first non-space (blocks.c:1408), so the residual whitespace between the stopping point and the first non-space is PRESERVED and shifts the content right by that width. Base = this line's start plus that residual (`range.lowerBound - currentLineContentCursor`), so the column is `residual + block_offset + 1`. This is the single rule for every lazy container - top-level or nested, block quote or list - because the residual is measured from wherever the last matched prefix stopped, which is the line start at the top level and the post-prefix cursor when an outer container already consumed columns.
-            //
-            // Because cmark's lazy buffer keeps that residual, it is not only a source column: a LITERAL inline (a code span) reads it out of the buffer as content (`> `x\n y`` -> `x  y`), while a TEXT run does not (the inline parser's `handle_newline` skips it in text flow). So flag ON a lazy continuation's segment BEGINS at the prefix-match stop (`currentLineContentCursor`), carrying the residual bytes, not at the first non-space; the code-span content path then captures them and `InlineParser` (gated on the same flag) strips them back out of text. A matched continuation and every flag-OFF continuation begin at the first non-space, so the residual never enters the content.
-            //
             // Flag OFF is spec-correct: the continuation content keeps its TRUE first-non-space column (`range.lowerBound`), so its range is consistent with the block's true-width end, and no residual whitespace enters the content.
-            let kind = storage[node].kind
-            let isBodyLiteral = kind.isCodeBlock || kind == .htmlBlock
-            let reindent = positionsEnabled && storage.options.contains(.cmarkBugCompatibility) && !isBodyLiteral
-            let residual = currentLineIsLazyContinuation ? (range.lowerBound - currentLineContentCursor) : 0
-            let keepResidual = keepsLazyResidual(before: range.lowerBound) && !isBodyLiteral
-            let segStart = keepResidual ? currentLineContentCursor : range.lowerBound
-            let reindentBase = currentLineSourceRange.lowerBound + residual
-            // `mapsAt` is the source projection of the FIRST NON-SPACE byte (`range.lowerBound`). When the segment begins at the prefix stop (residual kept), back its projection up by the residual so the first non-space keeps the column the re-indent assigns it - the residual bytes take the columns before it.
-            let mapsAt = reindent ? reindentBase + currentContentIndent : range.lowerBound
-            let segSourceOffset = keepResidual ? mapsAt - residual : mapsAt
-            return appendSegment(Segment(offset: Int32(segStart), length: Int32(range.upperBound - segStart), inSource: true, sourceOffset: Int32(segSourceOffset)), to: node, pending: pending)
+            return appendSegment(Segment(offset: Int32(range.lowerBound), length: Int32(range.upperBound - range.lowerBound), inSource: true, sourceOffset: Int32(range.lowerBound)), to: node, pending: pending)
         }
         // Materialized (tab-expanded) line. `expandPrefixTabs` turned leading whitespace and container markers into spaces so column-based matching works on byte offsets, but that expansion is lossy for a code/HTML block BODY: cmark copies the body verbatim from `parser->offset` (blocks.c `add_line`), so a content tab survives literally - only the single tab that the consumed indentation splits becomes spaces. Recover the literal source bytes instead of copying the expanded buffer, so content tabs are preserved.
         let nodeKind = storage[node].kind
@@ -1079,30 +838,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let (sourceStart, splitTabSpaces) = materializedSourceStart(bufferStart: range.lowerBound)
         assert(splitTabSpaces == 0, "a paragraph continuation's content never begins inside an expanded tab")
         let lineEnd = currentLineSourceRange.upperBound
-        let reindent = positionsEnabled && storage.options.contains(.cmarkBugCompatibility)
-        // `range.lowerBound` / `currentLineContentCursor` are buffer (column) offsets here, so `residual` is the count of expanded-tab columns of leading whitespace a lazy continuation preserves.
-        let residual = currentLineIsLazyContinuation ? (range.lowerBound - currentLineContentCursor) : 0
-        // Flag ON, a LAZY continuation carries that residual into the CONTENT (Quirk E), exactly as the source-mapped branch above does. `materializedSourceStart(currentLineContentCursor)` reports HOW the prefix-match stop sits relative to the tab expansion:
-        //
-        //   - `splitTabSpaces == 0`: the stop lands on a clean byte boundary, so the residual is a run of LITERAL source bytes (a leading tab is one source byte that expands to several columns). Carry it as a zero-copy `inSource` slice: extend the segment start back to the source projection of the stop (`residualMap.sourceStart`). A code span / raw-HTML inline then captures the tab out of the buffer, while the inline whitespace-skip (gated on the same flag) strips it from TEXT flow. cmark keeps this literal tab: on such a line its `add_line` copies from `parser->offset` with no `partially_consumed_tab` (blocks.c:244).
-        //   - `splitTabSpaces > 0`: the stop lands INSIDE an expanded tab, because an OUTER container that DID match consumed PART of that tab (cmark's `partially_consumed_tab`), leaving the stop mid-tab (e.g. `> > \`x` then `>\ty\``). cmark drops the split tab byte and emits its leftover columns as SYNTHETIC spaces (blocks.c `add_line`), then copies the rest of the line verbatim - so the residual has no source byte to slice. Materialize just those spaces into the arena as one non-source segment and follow it with the zero-copy source segment starting past the split tab (`residualMap.sourceStart`, which preserves any following LITERAL tab). The multi-segment span is handed an arena snapshot so the synthetic segment reads back as spaces (see the inline pass in `parse()` and `ContentSpan.multiByte`). This is the split-tab sibling of the literal-tab carry above.
-        //
-        // The clean-boundary case earlier findings targeted - a top-level lazy block quote whose failing prefix consumed nothing, so the stop is the line start - has `splitTabSpaces == 0` and carries the literal tab.
-        let keepResidual = keepsLazyResidual(before: range.lowerBound)
-        let residualMap = keepResidual ? materializedSourceStart(bufferStart: currentLineContentCursor) : (sourceStart: sourceStart, splitTabSpaces: 0)
-        if keepResidual && residualMap.splitTabSpaces > 0 {
-            // Split-tab residual: emit the leftover columns as synthetic arena spaces standing for the split tab (the byte just before `residualMap.sourceStart`), then the literal content from just past the split tab, which maps to its own source bytes.
-            let afterSpaces = appendSyntheticResidualSpaces(residualMap.splitTabSpaces, standingFor: residualMap.sourceStart - 1, to: node, pending: pending)
-            return appendSegment(
-                Segment(offset: Int32(residualMap.sourceStart), length: Int32(lineEnd - residualMap.sourceStart), inSource: true),
-                to: node, pending: afterSpaces)
-        }
-        let carryResidual = keepResidual   // `splitTabSpaces == 0` here (the `> 0` case returned above)
-        let segStart = carryResidual ? residualMap.sourceStart : sourceStart
-        // The source-position mapping mirrors the source-mapped branch: the first non-space keeps its re-indented column (`mapsAt`), and the leading residual bytes take the columns before it. Back the projection up by the residual's BYTE width when carrying it - one byte for a tab, so the carried tab stamps at `mapsAt - 1` rather than across its full expanded column span. That is a flag-ON position approximation only: positions are off on the fuzzer surface and the flag-ON positions path is not unit-gated, so this keeps the mapping coherent (first non-space at `mapsAt`, offset in-source) without needing the exact spec column. Flag-off maps to the content's true source byte (`sourceStart`).
-        let mapsAt = reindent ? currentLineSourceRange.lowerBound + residual + currentContentIndent : sourceStart
-        let segSourceOffset = carryResidual ? mapsAt - (sourceStart - segStart) : mapsAt
-        return appendSegment(Segment(offset: Int32(segStart), length: Int32(lineEnd - segStart), inSource: true, sourceOffset: Int32(segSourceOffset)), to: node, pending: pending)
+        // Flag-off maps to the content's true source byte (`sourceStart`).
+        return appendSegment(Segment(offset: Int32(sourceStart), length: Int32(lineEnd - sourceStart), inSource: true, sourceOffset: Int32(sourceStart)), to: node, pending: pending)
     }
 
     /// Append one body line of a materialized (tab-expanded) code/HTML block as its literal source content, preserving content tabs that `expandPrefixTabs` expanded into spaces.
@@ -1138,26 +875,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         return appendSegment(
             Segment(offset: Int32(offset), length: Int32(spaces + (lineEnd - sourceStart)), inSource: false),
-            to: node, pending: pending)
-    }
-
-    /// Append `count` synthetic space bytes to the arena as one non-source `Segment`, returning the updated leaf.
-    ///
-    /// Used for a paragraph's LAZY continuation line whose outer container prefix PARTIALLY consumed a tab
-    /// (cmark's `partially_consumed_tab`): the tab's leftover columns become spaces with no source byte to
-    /// slice (`add_line`, blocks.c:236). Unlike `appendSplitTabCodeContent` (code/HTML bodies, one segment
-    /// per line), the paragraph's literal content is a *separate* source segment, so this appends only the
-    /// spaces - the caller follows it with the zero-copy source segment. A multi-segment inline `ContentSpan`
-    /// reads this arena segment through its arena snapshot (`ContentSpan.multiByte`); each synthetic space stands for
-    /// the split tab, source byte `tab`, so a range that starts on one starts at the tab.
-    private mutating func appendSyntheticResidualSpaces(_ count: Int, standingFor tab: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
-        let offset = storage.strings.count
-        storage.strings.reserveCapacity(offset + count)
-        for _ in 0..<count {
-            storage.strings.append(UInt8(ascii: " "))
-        }
-        return appendSegment(
-            Segment(offset: Int32(offset), length: Int32(count), inSource: false, sourceOffset: Int32(tab)),
             to: node, pending: pending)
     }
 
@@ -1240,16 +957,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func replacingNUL(_ chunk: Chunk) -> Chunk {
         guard containsNUL(chunk) else { return chunk }
         let offset = storage.strings.count
-        // An orphan replacement holds no NUL, so it is copied whole and only moves.
-        let replacements = chunk.inSource ? [] : orphanReplacements(in: chunk.range)
-        var nextReplacement = 0
-        var carried: [Range<Int>] = []
         for i in chunk.range {
-            if nextReplacement < replacements.count, replacements[nextReplacement].lowerBound == i {
-                let start = storage.strings.count
-                carried.append(start..<(start + replacements[nextReplacement].count))
-                nextReplacement += 1
-            }
             let b = readByte(at: i, in: chunk)
             if b == 0 {
                 storage.strings.append(0xEF)
@@ -1259,7 +967,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 storage.strings.append(b)
             }
         }
-        registerOrphanReplacements(carried)
         return Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
     }
 
@@ -1426,7 +1133,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .materialized(let content):
             let offset = storage.strings.count
             storage.strings.append(copying: content.bytes.span)
-            carryMaterializedOrphanReplacements(of: node, to: offset)
             return LeafMaterialization(chunk: Chunk(offset: offset, length: content.count, inSource: false), pending: nil, map: content.map)
         case .segments(let segs):
             // Flatten a segment list to one arena chunk (used when a `Chunk` is required - e.g. a setext heading's paragraph re-seed, or matcher-eligible content). The common multi-line paragraph path keeps segments zero-copy via the finalize segment branch. Capture the arena→source run map so the re-seed can carry per-line source columns onto the heading's inlines.
@@ -1458,26 +1164,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .segments:
             preconditionFailure("a single-line table header is a source range")
         }
-        // cmark's tasklist extension consumes a task item's checkbox at ITEM-OPEN time
-        // (`open_tasklist_item`), before the paragraph text exists at all - so when this header line is a
-        // checkbox-eligible item's first line, cmark's own header candidate never carries the checkbox.
-        // The rewrite defers that strip to finalize (`runParagraphMatchers`), so the scratch header just
-        // copied above still carries the literal marker; drop it here too, or the checkbox's own bytes can
-        // coincidentally give the header the same column count as the delimiter and open a table cmark
-        // never does (`- [ ] |` / `  -|`: header "[ ] |" -> 1 column, matching the delimiter, where cmark's
-        // already-stripped header "|" is the zero-column lone-pipe row).
-        var headerStart = scratchStart
-        if storage.options.contains(.cmarkBugCompatibility), let mark = eligibleTasklistMarker(
-            node: node,
-            content: Chunk(offset: scratchStart, length: storage.strings.count - scratchStart, inSource: false)
-        ) {
-            headerStart = mark.remaining.offset
-        }
         storage.strings.append(UInt8(ascii: "\n"))
         for i in delimRange {
             storage.strings.append(delimSpan[i])
         }
-        let chunk = Chunk(offset: headerStart, length: storage.strings.count - headerStart, inSource: false)
+        let chunk = Chunk(offset: scratchStart, length: storage.strings.count - scratchStart, inSource: false)
         switch classifyTableOpen(chunk: chunk) {
         case .opens:
             paragraphTablePending[node] = true
@@ -1525,9 +1216,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             for k in 0..<text.count where text[k] == UInt8(ascii: "\n") {
                 return .multiOther
             }
-            // A single-line materialized paragraph is a table-header re-seed (`splitMaterializedHeader`) or an
-            // orphan-led first line (`markOrphanLedParagraphTableVisited`); both set `paragraphTablePending`, so
-            // table detection never runs on one.
+            // A single-line materialized paragraph is a table-header re-seed (`splitMaterializedHeader`), which
+            // sets `paragraphTablePending`, so table detection never runs on one.
             preconditionFailure("a single-line materialized paragraph has already resolved its table fate")
         case .segments:
             return .multiOther
@@ -1571,10 +1261,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 paragraphTablePending[node] = false
                 return pending
             case .opens:
-                if cmarkHeaderScanAborts(pending!) {
-                    paragraphTablePending[node] = false
-                    return pending
-                }
                 recordSplitDelimiterLine(node, delimIndent: delimIndent)
                 return splitNoncontiguousPendingTable(node, pending: pending)
             }
@@ -1600,10 +1286,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 paragraphTablePending[node] = false
                 return pending
             case .opens:
-                if cmarkHeaderScanAborts(pending!) {
-                    paragraphTablePending[node] = false
-                    return pending
-                }
                 // Split the earlier lines off into a preceding paragraph, then re-seed `node` to the header
                 // line so the two-line finalize detection builds the table from `header` + delimiter (+ body).
                 // The preceding lines are non-blank paragraph content (a blank line would have closed the
@@ -1624,61 +1306,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return PendingLeaf(node: node, content: .lazy(range: headerRange))
             }
         }
-    }
-
-    /// Whether cmark's header-row scan over the multi-line paragraph `pending` returns no row, so the
-    /// paragraph is marked `TABLE_VISITED` and never becomes a table. Always `false` flag-OFF.
-    ///
-    /// cmark's `try_opening_table_header` scans the whole paragraph with `row_from_string`, discarding each
-    /// line's cells before the header line, but a discarded line that reaches `cmarkRowCellLimit` cells
-    /// still aborts the scan. (A header line that long can't match the delimiter's column count, which
-    /// `parseDelimRow` caps below the limit.) CommonMark has no such limit.
-    private mutating func cmarkHeaderScanAborts(_ pending: borrowing PendingLeaf) -> Bool {
-        guard storage.options.contains(.cmarkBugCompatibility) else { return false }
-        let scratchStart = storage.strings.count
-        switch pending.content {
-        case .lazy(let r, let joinPending):
-            precondition(!joinPending, "a deferred line join is always consumed by the next line")
-            for i in r { storage.strings.append(sourceBytes[i]) }
-        case .materialized(let text):
-            for i in 0..<text.count { storage.strings.append(text[i]) }
-        case .segments(let segs):
-            for i in 0..<segs.count {
-                for j in 0..<Int(segs[i].length) {
-                    storage.strings.append(segmentByte(segs[i], j))
-                }
-            }
-        }
-        let aborts = anyLineReachesTableRowCellLimit(
-            chunk: Chunk(offset: scratchStart, length: storage.strings.count - scratchStart, inSource: false)
-        )
-        storage.strings.removeLast(storage.strings.count - scratchStart)
-        return aborts
-    }
-
-    /// Whether cmark ends the table-pending paragraph `node`'s table at the body-row candidate
-    /// `span[range]` instead of adding it as a row; when it doesn't, charges the row to `node`'s
-    /// autocompleted-cell budget. Always `false` flag-OFF.
-    ///
-    /// cmark refuses a row that reaches `cmarkRowCellLimit` cells (`row_from_string` returns none, so the
-    /// table's `matches` fails) and, before scanning a row, refuses it while the table's autocompleted cells
-    /// exceed `cmarkMaxAutocompletedCells` (`try_opening_table_row`); either way the line starts a fresh
-    /// block after the table. An admitted row is charged its cells capped at the column count
-    /// (`incr_table_row_count`). Charging a line that goes on to start some other block is harmless: that
-    /// closes the table, so its budget is never consulted again. CommonMark has neither limit.
-    private mutating func cmarkTableRefusesBodyRow(_ node: DocumentStorage.Index, span: Span<UInt8>, range: Range<Int>) -> Bool {
-        guard storage.options.contains(.cmarkBugCompatibility), var budget = tableCellBudgets[node] else { return false }
-        if budget.autocompletedCells > Self.cmarkMaxAutocompletedCells {
-            return true
-        }
-        let cells = tableRowCellCount(span: span, range: range)
-        if cells >= Self.cmarkRowCellLimit {
-            return true
-        }
-        budget.rows += 1
-        budget.cellsPresent += min(cells, budget.columns)
-        tableCellBudgets[node] = budget
-        return false
     }
 
     /// Queue a table-preceding paragraph's `content` for inline parsing after cmark's substitutions on it -
@@ -1709,8 +1336,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func insertTablePrecedingParagraph(before node: DocumentStorage.Index) -> DocumentStorage.Index {
         let paragraph = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
         storage.insertChildBefore(paragraph, before: node)
-        // cmark builds it from a trimmed buffer, not newline-terminated lines - see `nulTerminatedInlineContainers`.
-        storage.nulTerminatedInlineContainers.insert(paragraph)
         return paragraph
     }
 
@@ -1818,7 +1443,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // they bypass finalize, so it is consumed below (see `stripTasklistCheckbox`), which needs them flat.
         let mayHoldCheckbox = tasklistEligibleItem(ofFirstLeaf: node) != nil
         if reconstructedRefDefParagraphs.contains(node) {
-            // A flag-ON PHASE-2c reconstruction restored the leading ref-defs cmark had already resolved off
+            // A PHASE-2c reconstruction restored the leading ref-defs cmark had already resolved off
             // its buffer (see `reconstructedRefDefParagraphs`). Flatten the preceding lines to strip those
             // definitions - as cmark did - and emit only the non-def remainder as the preceding paragraph so
             // the reconstructed underline-line-turned-header doesn't leak them back. When nothing else
@@ -1851,14 +1476,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // for why a segment list can't carry the replacement).
             let substitutes = segmentsContainNUL(preceding) || segmentsContainEscapedPipe(preceding)
             let trimsControlWhitespace = segmentsEndInControlWhitespace(preceding)
-            let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
-            let mayHoldDefinition = !bugCompatible && segmentsCouldMatchMatcher(preceding)
+            let mayHoldDefinition = segmentsCouldMatchMatcher(preceding)
             if substitutes || mayHoldCheckbox || trimsControlWhitespace || mayHoldDefinition {
                 var map: [ArenaRun] = []
                 let flat = flattenSegments(preceding, map: &map)
                 // `precedingNode` is the item's first child, so a checkbox strip also advances its stamped start.
                 if let content = tableSplitParagraphContent(flat.trimmingWhitespace(using: self), in: flat, node: precedingNode, fallbackSeparator: trailingSeparator) {
-                    if positionsEnabled, !bugCompatible, !content.isEmpty {
+                    if positionsEnabled, !content.isEmpty {
                         let span = sourceSpan(of: sliceRuns(map, from: content.offset - flat.offset, length: content.length))
                         storage.setSourceStart(precedingNode, span.start)
                         storage.setSourceEnd(precedingNode, span.end)
@@ -1887,17 +1511,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         precondition(segs.count > 0, "a paragraph's split-off lines and header line are never empty")
         let first = segs[0]
         let last = segs[segs.count - 1]
-        // A line that starts with a split tab's leftover columns starts at the tab they stand for.
-        let start = first.inSource ? Int(first.offset) : Int(first.sourceOffset)
-        precondition(start >= 0 && last.inSource, "a paragraph's lines start on a source byte or a split tab's columns, and end on a source byte")
-        return (start, Int(last.offset) + Int(last.length))
+        precondition(first.inSource && last.inSource, "a paragraph's lines start and end on a source byte")
+        return (Int(first.offset), Int(last.offset) + Int(last.length))
     }
 
-    /// Split a materialized paragraph (a byte buffer with embedded newlines, such as a definition-only setext
-    /// paragraph whose flattened content is restored under `.cmarkBugCompatibility`) into a preceding paragraph
+    /// Split a materialized paragraph (a byte buffer with embedded newlines) into a preceding paragraph
     /// plus a header-only re-seed, each carrying its part of the buffer's run map.
-    /// The buffer carries no orphan replacement (`materializedOrphanReplacements`): an orphan-led paragraph
-    /// never opens a table (`markOrphanLedParagraphTableVisited`).
     private mutating func splitMaterializedHeader(_ node: DocumentStorage.Index, text: consuming MaterializedText) -> PendingLeaf? {
         var lastNewline = -1
         for k in 0..<text.count where text[k] == UInt8(ascii: "\n") {
@@ -1953,11 +1572,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let prefixColumns = walk.prefixColumns
         let allMatched = walk.allMatched
 
-        // A paragraph continuation on this line re-indents relative to where the container-prefix walk
-        // stopped. A *lazy* continuation (some prefix failed → `!allMatched`) preserves the residual
-        // whitespace after that stopping point; a *matched* one discards it. `addLineSegment` reads both
-        // under `.cmarkBugCompatibility`.
-        currentLineContentCursor = cursor
         currentLineIsLazyContinuation = !allMatched
 
         let openKind = storage[current].kind
@@ -2055,14 +1669,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let flatMap = materialized.map
             pending = materialized.pending
             let trimmedHead = raw.trimmingWhitespace(using: self)
-            // cmark consumes a GFM task-list checkbox as the ITEM opens (`open_tasklist_item`), before the
-            // setext scan resolves ref-defs, so a line-anchored task item's checkbox is stripped (and the
-            // item's checked state set) first, exactly as `runParagraphMatchers` does, whatever the leaf
-            // becomes.
-            let afterCheckbox = storage.options.contains(.cmarkBugCompatibility)
-                ? stripTasklistCheckbox(node: para, content: trimmedHead)
-                : trimmedHead
-            let stripped = parseDefinitions(in: afterCheckbox)
+            let stripped = parseDefinitions(in: trimmedHead)
             if self.isBlank(chunk: stripped) {
                 // A paragraph of only definitions forms no heading (spec "Setext headings": the
                 // underline must follow lines that are a paragraph once definitions are removed), but it
@@ -2070,28 +1677,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // a lone `-`, which would be an empty list item (spec "List items"), or a run of `=` or
                 // `-` that is no thematic break - continues it, and becomes the paragraph's text when the
                 // definitions are removed at finalize. A thematic break interrupts it.
-                let continuesParagraph = storage.options.contains(.cmarkBugCompatibility)
-                    || !lineStartsNewBlock(
-                        source: source,
-                        range: cursor..<lineRange.upperBound,
-                        firstNonSpace: firstNonSpace,
-                        indent: indent,
-                        currentKind: .paragraph,
-                        interruptsParagraph: true,
-                        lineStart: lineRange.lowerBound
-                    )
+                let continuesParagraph = !lineStartsNewBlock(
+                    source: source,
+                    range: cursor..<lineRange.upperBound,
+                    firstNonSpace: firstNonSpace,
+                    indent: indent,
+                    currentKind: .paragraph,
+                    interruptsParagraph: true,
+                    lineStart: lineRange.lowerBound
+                )
                 if continuesParagraph {
                     // These leading definitions are registered already; restoring them below lets the
                     // paragraph's finalize remove them again, and a table that forms first drops them in its
                     // split (`detectPendingTable`) rather than leak them back as a paragraph.
                     reconstructedRefDefParagraphs.insert(para)
-                    // A consumed checkbox is not restored: its strip already set the item's state and
-                    // stamped start, and must not run again at finalize.
-                    let checkboxConsumed = afterCheckbox.offset != trimmedHead.offset
-                    let restored = checkboxConsumed ? afterCheckbox : raw
-                    pending = restored.inSource
-                        ? PendingLeaf(node: para, content: .lazy(range: restored.range))
-                        : addChunk(restored, map: sliceRuns(flatMap, from: restored.offset - raw.offset, length: restored.length), to: para, pending: pending)
+                    pending = raw.inSource
+                        ? PendingLeaf(node: para, content: .lazy(range: raw.range))
+                        : addChunk(raw, map: sliceRuns(flatMap, from: 0, length: raw.length), to: para, pending: pending)
                     pending = appendNewline(to: para, pending: pending)
                     pending = addLine(span: source, range: firstNonSpace..<lineRange.upperBound, to: para, pending: pending)
                     return pending
@@ -2104,8 +1706,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 current = parent
                 stillOpenKind = storage[current].kind
             } else {
-                // The re-seed below drops the trailing whitespace this heading's buffer keeps in cmark.
-                recordTrailingBlank(of: para, chunk: raw)
                 // Re-seed pending content with the stripped bytes so the heading's inline-parse pass sees only what's left after ref-defs (and any task checkbox) were extracted. Keep source-backed content zero-copy as a `.lazy` source range (its offset/length are source offsets when `inSource`), so the heading's inlines are source-mapped and get positions exactly as paragraph / ATX-heading content does; only arena-backed content (non-contiguous or normalized lines) is copied.
                 if stripped.inSource {
                     pending = PendingLeaf(node: para, content: .lazy(range: stripped.range))
@@ -2158,8 +1758,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let breaksOutOfPendingTable = tablePending
             && (currentLineIsLazyContinuation
                 || indent >= 4
-                || Self.isLonePipeRow(span: source, range: firstNonSpace..<lineRange.upperBound)
-                || cmarkTableRefusesBodyRow(current, span: source, range: firstNonSpace..<lineRange.upperBound))
+                || Self.isLonePipeRow(span: source, range: firstNonSpace..<lineRange.upperBound))
         if stillOpenKind == .paragraph && !breaksOutOfPendingTable {
             // The matcher ladder can only return true if the first content byte is one that some block construct starts with; for ordinary prose continuation lines it isn't, so we skip the whole ladder. `mightStartBlock` is a superset of every matcher's trigger byte, so a `false` here is exactly what `lineStartsNewBlock` would have returned.
             // `interruptsParagraph` mirrors cmark's flag (blocks.c: `check_open_blocks` backs `container` up to its parent on a failed continuation): true iff the open paragraph's OWN container matched this line, i.e. `deepestMatched` is the paragraph's parent. When a shallower container matched, the marker is a sibling item at the list level, not an interruption of this paragraph.
@@ -2206,26 +1805,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                        indent < 4, !currentLineIsLazyContinuation,
                        Self.couldBeDelimiterRow(span: source, range: firstNonSpace..<lineRange.upperBound) {
                         pending = detectPendingTable(current, delimSpan: source, delimRange: firstNonSpace..<lineRange.upperBound, delimIndent: indent, pending: pending)
-                        if storage.options.contains(.cmarkBugCompatibility), paragraphTablePending[current] ?? false {
-                            // The header row has as many cells as the delimiter row, so it autocompletes none.
-                            let columns = tableRowCellCount(span: source, range: firstNonSpace..<lineRange.upperBound)
-                            tableCellBudgets[current] = TableCellBudget(columns: columns, rows: 1, cellsPresent: columns)
-                        }
                     }
                 }
                 pending = appendNewline(to: current, pending: pending)
-                // GFM tasklist quirk (`.cmarkBugCompatibility` only): on a lazy line cmark's deepest matched
-                // container can be a bare item (a block quote inside it failed its `>` check). cmark then
-                // runs `open_new_blocks` against that item, and with no block start there its tasklist
-                // extension retries the checkbox exactly as in `dispatchNewBlocks`: it sets the ITEM's
-                // checked state and advances the offset 3 bytes, and `add_text_to_container` still adds the
-                // rest of the line to the open paragraph as a lazy continuation (blocks.c:1405-1408).
-                if currentLineIsLazyContinuation,
-                   isTasklistRetryItem(deepestMatched),
-                   tasklistScanMatchesFromLineStart(source: source, lineRange: lineRange) {
-                    storage[deepestMatched].kind = .item(checked: lineContainsCheckedBox(source: source, lineRange: lineRange))
-                    return addLazyLineAfterTasklistAdvance(source: source, lineRange: lineRange, cursor: cursor, pending: pending)
-                }
                 pending = addLine(span: source, range: firstNonSpace..<lineRange.upperBound, to: current, pending: pending)
                 return pending
             }
@@ -2304,9 +1886,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 } else {
                     // No `>` on this line: the block quote's paragraph continues lazily. The walk stops
                     // here (`allMatched: false`), and `cursor` marks where the last matched prefix ended.
-                    // `processLine` turns that into `currentLineIsLazyContinuation`, and `addLineSegment`
-                    // preserves the residual whitespace after `cursor` in the re-indent column - the same
-                    // rule for a top-level, nested, or list-wrapped lazy block quote.
+                    // `processLine` turns that into `currentLineIsLazyContinuation`.
                     return (deepestMatched, cursor, prefixColumns, false)
                 }
             case .list:
@@ -2362,7 +1942,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // Footnote-definition continuation, mirroring cmark's
                 // `parse_footnote_definition_block_prefix` (blocks.c): a line indented >= 4 columns
                 // (relative to the parent's consumed prefix) stays in the definition with 4 columns
-                // stripped; a blank line (flag-ON: an empty raw line) keeps the definition open; any other
+                // stripped; a blank line keeps the definition open; any other
                 // (non-indented, non-blank) line fails the prefix, so the definition's open paragraph
                 // may continue lazily (the walk stops here with `allMatched: false`).
                 let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
@@ -2379,11 +1959,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     )
                     prefixColumns += 4
                     deepestMatched = node
-                } else if isBlank, lineRange.isEmpty || !storage.options.contains(.cmarkBugCompatibility) {
-                    // why: cmark keeps the definition open on a short-indented blank line only when the
-                    // whole raw line is empty (`input->data[0] == '\n'` tests byte 0 of the line, not the
-                    // parser's offset), so a whitespace-only line, or a blank line behind a container prefix
-                    // like `>`, closes it. CommonMark counts a whitespace-only line as blank (§4.9), so
+                } else if isBlank {
+                    // why: CommonMark counts a whitespace-only line as blank (§4.9), so
                     // flag-OFF keeps the definition open on any blank line.
                     cursor = firstNonSpace
                     prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
@@ -2645,15 +2222,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Containers opened on this line so far, matching cmark's per-line `depth` (open_new_blocks):
         // incremented once per iteration and used to cap list opening at `maxListNesting`.
         var depth = 0
-        // Whether a list marker matched THIS line (below), opening or extending an item that's still
-        // `current` when the loop reaches the childless-item tasklist-quirk check further down. cmark's
-        // `open_tasklist_item` fires once per line when the container-to-extend is a bare item, and on
-        // the marker's own opening line that's already covered inline by `taskMarkerLineAnchored` /
-        // `openingLineCheckbox` right where the marker matches - so the later, generic check must skip
-        // an item this same call just opened, or it would re-scan (and mis-handle, since it doesn't
-        // track multi-line paragraph content the way finalize-time `stripTasklistCheckbox` does) a line
-        // the marker-line path already decided.
-        var openedListItemThisLine = false
         while true {
             depth += 1
             let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
@@ -2764,70 +2332,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 indent: indent
             ) {
                 pending = openListItem(marker: marker, firstNonSpace: firstNonSpace, pending: pending)
-                openedListItemThisLine = true
                 cursor = marker.consumedTo
                 // The item content begins at `marker.contentStartColumn`, which exceeds the physical
                 // column of `cursor` when the optional padding column partially consumed a tab (the tab
                 // byte stays at `cursor`); use it so the re-dispatch indent below is measured from the
                 // column cmark reached, not the tab's left edge (cmark's `partially_consumed_tab`).
                 column = marker.contentStartColumn
-                // Mark this item eligible for finalize-time checkbox recognition only when cmark's
-                // open-time `scan_tasklist` would match on THIS opening line: the marker is preceded by
-                // only whitespace (`taskMarkerLineAnchored`) AND a checkbox directly follows the marker
-                // (`openingLineCheckbox`). A checkbox that first appears on a later continuation line
-                // (the item's opening line was blank, or a blank line closed its last child) is a
-                // DIFFERENT cmark quirk, handled separately in `dispatchNewBlocks`'s paragraph-fallback
-                // (`tasklistScanMatchesFromLineStart`) since it needs that later line's own bytes, not
-                // this opening line's. Gating both halves here keeps the finalize consumers (which see
-                // flattened content and cannot tell an opening line from a continuation line) from
-                // over-recognizing it. `firstNonSpace`
-                // is the marker column; `cursor` is the opening line's first content byte
-                // (`marker.consumedTo`); `lineRange.lowerBound` is the physical line start (unchanged by
-                // any block-quote prefix already consumed this line).
-                if storage.options.contains(.tasklist),
-                   storage.options.contains(.cmarkBugCompatibility),
-                   taskMarkerLineAnchored(
-                       source: source,
-                       lineStart: lineRange.lowerBound,
-                       markerStart: firstNonSpace
-                   ),
-                   openingLineCheckbox(
-                       source: source,
-                       contentStart: cursor,
-                       lineEnd: lineRange.upperBound
-                   ) != nil {
-                    lineAnchoredTaskItems.insert(current)
-                }
-                // GFM empty task-list item: cmark's tasklist extension consumes the checkbox when the
-                // ITEM opens (`open_tasklist_item`), so an item whose first line is nothing but a
-                // checkbox gets no paragraph child - it stays empty, exactly like a plain `- ` empty
-                // item, and a following unindented line closes it instead of lazily continuing into it.
-                // The rewrite recognizes the checkbox at finalize (`runParagraphMatchers`, #65), which
-                // is too late for an empty item (there is no paragraph to finalize), so the empty case
-                // is caught here at open time. Content-bearing task items fail the whitespace-to-line-end
-                // test and are left untouched - their checkbox is still stripped at finalize.
-                if let checked = emptyTaskItemChecked(
-                    source: source,
-                    lineStart: lineRange.lowerBound,
-                    markerStart: firstNonSpace,
-                    contentStart: cursor,
-                    lineEnd: lineRange.upperBound
-                ) {
-                    storage[current].kind = .item(checked: checked)
-                    cursor = lineRange.upperBound
-                    column = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
-                    // The checkbox is fully consumed above, so this item must NOT reach the two
-                    // finalize-time `lineAnchoredTaskItems` consumers (the checkbox strip in
-                    // `runParagraphMatchers` / `eligibleTasklistMarker` and the re-indent bump in
-                    // `tasklistContentIndentBump`) - it was inserted just above on `openingLineCheckbox`
-                    // alone, which this (stricter) empty-item case also satisfies. Left in the set, a
-                    // later lazy-continuation line that supplies the item's first paragraph (its content
-                    // is bracket-shaped, e.g. `[x]`) would be mistaken by those finalize consumers for the
-                    // opening line's checkbox and stripped/dropped - `matchTasklistMarker` even accepts a
-                    // checkbox with no real trailing separator when it ends the chunk. Undo the insert so
-                    // the set carries forward only the content-bearing case, per its documented contract.
-                    lineAnchoredTaskItems.remove(current)
-                }
                 continue
             }
 
@@ -2847,8 +2357,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     parent: current,
                     start: sourceOffset(firstNonSpace)
                 )
-                // An ATX (not setext) heading's buffer is NUL-terminated - see `nulTerminatedInlineContainers`.
-                storage.nulTerminatedInlineContainers.insert(headingIdx)
                 current = headingIdx
                 if !heading.contentRange.isEmpty {
                     pending = addLine(span: source, range: heading.contentRange, to: headingIdx, pending: pending)
@@ -2994,52 +2502,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 )
             }
 
-            // GFM tasklist quirk (`.cmarkBugCompatibility` only): cmark's tasklist extension gets a shot
-            // at opening a new container on EVERY line where the deepest open container is still the bare
-            // item (`open_tasklist_item`'s only gate is `parent_container`'s type being
-            // `CMARK_NODE_ITEM`) - not only the item's own opening line, which `taskMarkerLineAnchored` /
-            // `openingLineCheckbox` above cover. When the item's opening line was blank (or a blank line
-            // closed its last child), `current` is still `.item` here, and cmark re-runs the scan against
-            // THIS physical line's raw bytes from `lineRange.lowerBound` - NOT `cursor` - since
-            // `open_tasklist_item` receives the whole current line (`blocks.c` `open_new_blocks`'s
-            // extension loop passes `input->data`, unrelated to `parser->offset`). On a match, cmark sets
-            // the checked state from a whole-line `strstr` for `"[x]"`/`"[X]"` and advances exactly 3
-            // bytes from `parser->offset` (`cursor` here) - unrelated to how many bytes the scan itself
-            // matched - then falls through to open the paragraph from there, exactly like the empty-item
-            // case above. Those 3 bytes are counted in cmark's line buffer, not ours (see
-            // `tasklistAdvanceEnd`), so the paragraph can start inside a NUL's U+FFFD. A lazy paragraph
-            // continuation reaches the same retry in `processLine` PHASE 2d instead.
-            if !openedListItemThisLine,
-               isTasklistRetryItem(current),
-               tasklistScanMatchesFromLineStart(source: source, lineRange: lineRange) {
-                storage[current].kind = .item(checked: lineContainsCheckedBox(source: source, lineRange: lineRange))
-                let lineEnd = currentLineSourceRange.upperBound
-                let advance = tasklistAdvanceEnd(cursor: cursor)
-                if advance.orphanedBytes > 0 {
-                    // The advance stopped inside a scalar (a NUL's U+FFFD, or a multi-byte source scalar), so
-                    // cmark's paragraph starts with its orphaned continuation bytes, and the reference's String
-                    // bridge repairs each one to its own U+FFFD. Materialize this first line into the arena with
-                    // those replacements leading the rest of the line (from the byte after the orphans), so the
-                    // content stays well-formed UTF-8 (`StorageView.string(of:)`). It stays a single-line
-                    // `.materialized` leaf, marked table-visited, so table detection never inspects it.
-                    let paragraphIdx = addChild(kind: .paragraph, parent: current, start: advance.orphanStart)
-                    current = paragraphIdx
-                    markOrphanLedParagraphTableVisited(paragraphIdx)
-                    if positionsEnabled {
-                        currentContentIndent = advance.orphanStart - currentLineSourceRange.lowerBound
-                    }
-                    var text = MaterializedText()
-                    materializedOrphanReplacements[paragraphIdx] = appendOrphanLedLine(advance, lineEnd: lineEnd, to: &text)
-                    _ = take(pending, ifNode: paragraphIdx)
-                    return PendingLeaf(node: paragraphIdx, content: .materialized(text))
-                }
-                let contentStart = indexOfFirstNonSpace(source: sourceBytes, range: advance.sourceOffset..<lineEnd)
-                let lineContentStart = currentLineMapsToSource ? contentStart : materializedBufferOffset(ofSource: contentStart)
-                let paragraphIdx = addChild(kind: .paragraph, parent: current, start: sourceOffset(lineContentStart))
-                current = paragraphIdx
-                return addLine(span: source, range: lineContentStart..<lineRange.upperBound, to: paragraphIdx, pending: pending)
-            }
-
             // Paragraph fallback. By this point the list-close-if-needed step above has already ensured `current` isn't a list.
             let textRange = firstNonSpace..<lineRange.upperBound
             precondition(storage[current].kind != .paragraph, "dispatch starts below the deepest matched container and opens only containers before a leaf, so `current` is never a paragraph here")
@@ -3098,7 +2560,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             case .materialized(let content):
                 let offset = storage.strings.count
                 storage.strings.append(copying: content.bytes.span)
-                carryMaterializedOrphanReplacements(of: node, to: offset)
                 var map = content.map
                 let replaced = replacingNUL(Chunk(offset: offset, length: content.count, inSource: false), map: &map)
                 return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
@@ -3130,42 +2591,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return segs
     }
 
-    /// Record, flag-ON, the first space or tab of the trailing whitespace a line-built block's content ends
-    /// with - see `trailingBlankAfterContent`.
-    private mutating func recordTrailingBlank(of node: DocumentStorage.Index, chunk raw: Chunk) {
-        guard storage.options.contains(.cmarkBugCompatibility) else { return }
-        var hi = raw.length
-        while hi > 0, readByte(at: raw.offset + hi - 1, in: raw).isSpaceTabOrNewline { hi -= 1 }
-        if hi < raw.length {
-            storeTrailingBlank(readByte(at: raw.offset + hi, in: raw), for: node)
-        }
-    }
-
-    /// `recordTrailingBlank(of:chunk:)` for a segment-list body, whose trailing whitespace lies in its last segment
-    /// (`trimSegments`).
-    private mutating func recordTrailingBlank(of node: DocumentStorage.Index, segments segs: borrowing UniqueArray<Segment>) {
-        guard storage.options.contains(.cmarkBugCompatibility), segs.count > 0 else { return }
-        let last = segs[segs.count - 1]
-        var hi = Int(last.length)
-        while hi > 0, segmentByte(last, hi - 1).isSpaceTabOrNewline { hi -= 1 }
-        if hi < Int(last.length) {
-            storeTrailingBlank(segmentByte(last, hi), for: node)
-        }
-    }
-
-    private mutating func storeTrailingBlank(_ byte: UInt8, for node: DocumentStorage.Index) {
-        // A line ending is what cmark's buffer holds there anyway (it replaces each one with `\n`).
-        if byte == UInt8(ascii: " ") || byte == UInt8(ascii: "\t") {
-            storage.trailingBlankAfterContent[node] = byte
-        }
-    }
-
     /// Whether a paragraph's segment list begins or ends with a line tabulation or form feed, whitespace that
     /// `trimSegments` leaves for the flat content's trim to remove.
     private func segmentsEndInControlWhitespace(_ segs: borrowing UniqueArray<Segment>) -> Bool {
-        if storage.options.contains(.cmarkBugCompatibility) {
-            return false
-        }
         let first = segs[0]
         let last = segs[segs.count - 1]
         let isControlWhitespace = { (b: UInt8) in b == 0x0B || b == 0x0C }
@@ -3257,18 +2685,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if seg.inSource {
                 for j in Int(seg.offset)..<end { buf.append(sourceBytes[j]) }
             } else {
-                carryOrphanReplacements(from: Int(seg.offset)..<end, to: offset + buf.count)
                 for j in Int(seg.offset)..<end { buf.append(storage.strings[j]) }
             }
             if len > 0 {
                 if seg.inSource {
                     // A source segment images its (re-indented) source range - `sourceOffset` re-indents a continuation line to its block-content column; otherwise it equals `offset`. `physicalOffset` (the segment's byte-read `offset`) stays on the run's physical source line so inline stamping can anchor a re-indented run there.
                     map.append(ArenaRun(length: Int32(len), sourceOffset: seg.sourceOffset, physicalOffset: seg.offset))
-                } else if seg.sourceOffset >= 0 {
-                    // Synthetic bytes standing for one source byte (a split tab's leftover columns) each image that byte.
-                    for _ in 0..<len {
-                        Self.appendContentByte(imaging: Int(seg.sourceOffset), to: &map)
-                    }
                 } else {
                     // The interned `\n` join, or an arena-only line: a synthetic gap.
                     map.append(ArenaRun(length: Int32(len), sourceOffset: -1, physicalOffset: -1))
@@ -3307,15 +2729,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// before `lines` was formed, if any.
     private mutating func tableSplitParagraphContent(_ trimmed: Chunk, in lines: Chunk, node: DocumentStorage.Index, fallbackSeparator: UInt8? = nil) -> Chunk? {
         var content = trimmed
-        if storage.options.contains(.cmarkBugCompatibility) {
-            content = stripTasklistCheckbox(node: node, content: content, trailingSeparator: byte(after: content, in: lines) ?? fallbackSeparator)
-            if reconstructedRefDefParagraphs.contains(node) {
-                content = parseDefinitions(in: content).trimmingWhitespace(using: self)
-            }
-        } else {
-            content = parseDefinitions(in: content).trimmingWhitespace(using: self)
-            content = stripTasklistCheckbox(node: node, content: content, trailingSeparator: byte(after: content, in: lines) ?? fallbackSeparator)
-        }
+        content = parseDefinitions(in: content).trimmingWhitespace(using: self)
+        content = stripTasklistCheckbox(node: node, content: content, trailingSeparator: byte(after: content, in: lines) ?? fallbackSeparator)
         return content.isEmpty && content.offset != trimmed.offset ? nil : content
     }
 
@@ -3355,12 +2770,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         // A task list item marker begins the paragraph left once its definitions are removed (spec "Task list
         // items (extension)"), so it is stripped below, after `parseDefinitions`.
-        let beforeCheckbox = trimmed
-        let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
-        if bugCompatible {
-            trimmed = stripTasklistCheckbox(node: node, content: trimmed)
-        }
-        let strippedCheckbox = trimmed.offset != beforeCheckbox.offset
         // GFM table detection: header line + delimiter row mutates the node in place to `.table`.
         // This runs BEFORE reference-link-definition extraction because cmark opens a table while
         // processing the delimiter row (`try_opening_table_block`), converting the still-open paragraph to
@@ -3381,7 +2790,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // would-be ref-def. Only a pipe-less all-dashes/all-equals row is a setext underline, and cmark
         // never opens a table on such a row (the setext branch consumes it first, before the extension), so
         // a legitimate table's delimiter always went through `detectPendingTable` and set this flag; the only
-        // way table-shaped content reaches finalize with the flag unset is the flag-ON setext/ref-def
+        // way table-shaped content reaches finalize with the flag unset is the setext/ref-def
         // reconstruction (PHASE 2c), which cmark treats as a ref-def. The delimiter row is the paragraph's
         // second physical line; cmark opens a table only when that line is NOT indented >= 4 columns
         // (`try_opening_table_block`'s
@@ -3399,17 +2808,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // LEADING edge: a lazy continuation's residual leading whitespace (kept by `addLineSegment` and
             // preserved through finalize for a table-pending node) is the header's empty leading cell
             // (` |` → `Cell colspan: 0`, not the zero-column lone-pipe `|`). So build from the leading-
-            // preserving `raw` — except when a task-list checkbox was stripped, where the header is the
-            // item's first line (which carries no such residual) and must start after the checkbox. The two
-            // never coexist: a checkbox sits only on an item's first line, a promoted residual only on a
-            // later split-off line.
-            let tableContent = strippedCheckbox
-                ? trimmed.trimmingTrailing(using: self)
-                : raw.trimmingTrailing(using: self)
+            // preserving `raw`.
+            let tableContent = raw.trimmingTrailing(using: self)
             // Rows that aren't source-contiguous (a container prefix, leading whitespace, or a CRLF between
             // them) make the paragraph a segment list, so its content reaches here flattened with a run map
-            // imaging each row's content on its source line; a re-indented row's content is mapped to the
-            // table's content column (Quirk E), exactly cmark's re-based cell columns. Content whose NULs were
+            // imaging each row's content on its source line. Content whose NULs were
             // replaced likewise carries a run map imaging each U+FFFD back to its NUL. Narrow that map to the
             // content window the table parser sees. The contiguous fast path passes an empty map (the table
             // parser maps by a constant source delta instead).
@@ -3421,19 +2824,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         // Reference link definitions stack at the start of a paragraph; any that match are stripped and registered.
         trimmed = parseDefinitions(in: trimmed)
-        if !bugCompatible {
-            // The paragraph left once its definitions are removed is the block a task list item marker
-            // begins (spec "Task list items (extension)"); its separator may be trailing whitespace.
-            trimmed = stripTasklistCheckbox(node: node, content: trimmed, trailingSeparator: byte(after: trimmed, in: raw))
-        }
+        // The paragraph left once its definitions are removed is the block a task list item marker
+        // begins (spec "Task list items (extension)"); its separator may be trailing whitespace.
+        trimmed = stripTasklistCheckbox(node: node, content: trimmed, trailingSeparator: byte(after: trimmed, in: raw))
         if isBlank(chunk: trimmed) {
             // Whole paragraph was ref-defs, or a task list item marker - drop the empty paragraph node.
             storage.unlinkChild(node)
             return
         }
-        let contentChunk = bugCompatible
-            ? trimmed.trimmingTrailing(using: self)
-            : trimmed.trimmingWhitespace(using: self)
+        let contentChunk = trimmed.trimmingWhitespace(using: self)
         if positionsEnabled, let start = sourceStart(of: contentChunk, in: raw, map: map) {
             storage.setSourceStart(node, start)
         }
@@ -3458,9 +2857,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let startedThisLine = startByte >= Int32(currentLineSourceRange.lowerBound)
             let isFenced: Bool
             if case .codeBlock(let info) = kind { isFenced = info.isFenced } else { isFenced = false }
-            // A `.heading` reaching finalize's else-branch is always a setext heading: an ATX heading finalizes immediately via `atxHeadingEnd` and is never open at close time.
-            let isSetextHeading: Bool
-            if case .heading = kind { isSetextHeading = true } else { isSetextHeading = false }
             let end: Int
             if let atxHeadingEnd {
                 // An ATX heading ends at its trimmed content extent, not the raw line. Map the line-offset through `sourceOffset` exactly like the heading start, so tab-expanded lines resolve correctly.
@@ -3470,8 +2866,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // cmark's chop_trailing_hashtags shrinks the line chunk before `last_line_length` is recorded (src/blocks.c), so a block later attributed to this line - notably the document, whose end is stamped from the final line - inherits the trimmed extent, not the raw line end. Mirror that by shrinking the tracked current-line end to the heading's content end.
                 currentLineSourceRange = currentLineSourceRange.lowerBound..<end
             } else {
-                let endsOnClosingLine = isSetextHeading && storage.options.contains(.cmarkBugCompatibility)
-                end = (atEOF || startedThisLine || endsOnClosingLine || kind == .document || isFenced)
+                end = (atEOF || startedThisLine || kind == .document || isFenced)
                     ? currentLineSourceRange.upperBound
                     : lastLineSourceEnd
             }
@@ -3485,10 +2880,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let map = drained.map
             switch consume drained.content {
             case .chunk(let raw):
-                recordTrailingBlank(of: node, chunk: raw)
                 runParagraphMatchers(node: node, raw: raw, map: map)
             case .segments(let segs):
-                recordTrailingBlank(of: node, segments: segs)
                 // Multi-line non-contiguous body held as zero-copy source segments. Trim, then only materialize (flatten) if it could match a finalize matcher; plain prose stays segments.
                 // A table-pending node keeps its header row's leading residual (a lazy continuation's
                 // preserved whitespace, promoted to the first line by a multi-line split): cmark builds the
@@ -3510,15 +2903,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let map = drained.map
             switch consume drained.content {
             case .chunk(let raw):
-                // why: a setext heading whose leading ref-def was resolved can open on a lazy continuation's
-                // residual whitespace (kept flag-ON, see `addLineSegment`). cmark's setext branch drops the
-                // ref-def through its newline and heading inlines are only right-trimmed (inlines.c
-                // `cmark_parse_inlines`), so the residual stays literal text (`>[a]:u\n b\n>=` -> Text " b").
-                // Spec-correct flag-off strips it; an ATX heading's content never carries leading whitespace.
-                let keepsLeadingResidual = atxHeadingEnd == nil && storage.options.contains(.cmarkBugCompatibility)
-                let trimmed = keepsLeadingResidual
-                    ? raw.trimmingTrailing(using: self)
-                    : atxHeadingEnd == nil ? raw.trimmingWhitespace(using: self) : raw.trimming(using: self)
+                let trimmed = atxHeadingEnd == nil ? raw.trimmingWhitespace(using: self) : raw.trimming(using: self)
                 if !trimmed.isEmpty {
                     if positionsEnabled, !map.isEmpty {
                         arenaSourceMaps[node] = sliceRuns(map, from: trimmed.offset - raw.offset, length: trimmed.length)
@@ -4072,17 +3457,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         "thead", "title", "tr", "track", "ul",
     ].map { Array($0.utf8) }
 
-    /// Tag names that trigger an HTML block of type 6 under `.cmarkBugCompatibility`: cmark-gfm's `blocktagname` list (swift-cmark `src/scanners.re`), which predates CommonMark 0.31 and so has `source` in place of `search`. Kept in the spec list's order, with `source` where `search` stands.
-    private static let cmarkHTMLBlockType6Tags: [[UInt8]] =
-        htmlBlockType6Tags.map { $0 == Array("search".utf8) ? Array("source".utf8) : $0 }
-
     /// Tag names that trigger an HTML block of type 1 (their *closing* tag also ends the block), as UTF-8 bytes.
     private static let htmlBlockType1Tags: [[UInt8]] = [
         "pre", "script", "style", "textarea",
     ].map { Array($0.utf8) }
-
-    /// The letters of an HTML block of type 5's `<![CDATA[` opener, as UTF-8 bytes.
-    private static let cdataLetters = Array("CDATA".utf8)
 
     /// The end conditions of HTML blocks of types 2 (`-->`), 3 (`?>`) and 5 (`]]>`), as UTF-8 bytes.
     private static let htmlCommentEnd = Array("-->".utf8)
@@ -4097,12 +3475,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         for i in 0..<len {
             var a = span[range.lowerBound + i]
-            var b = target[i]
+            let b = target[i]
             if a.isUppercaseASCIILetter {
                 a += 32
-            }
-            if b.isUppercaseASCIILetter {
-                b += 32
             }
             if a != b {
                 return false
@@ -4136,28 +3511,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return 2
         }
         // Type 5: `<![CDATA[`. The two brackets are literal; the letters `CDATA` are matched
-        // case-SENSITIVELY per CommonMark start condition 5 (spec-correct, flag OFF). Under
-        // `.cmarkBugCompatibility` they are matched case-INSENSITIVELY to reproduce cmark-gfm.
-        // why: cmark-gfm's `_scan_html_block_start` scans the opener from the single-quoted re2c pattern
-        // `'<![CDATA['` (swift-cmark `src/scanners.re`), and re2c compiles a single-quoted string to a
-        // case-INSENSITIVE matcher - the generated `scanners.c` accepts either case at every letter state
-        // (state `yy318` onward: `if (yych=='C') ... if (yych=='c')`, and likewise D/A/T/A). So cmark opens
-        // a type-5 HTML block for `<![cdata[`, `<![CDAtA[`, ... The trailing `[` is a literal bracket (only
-        // `[` reaches `return 5`; anything else backtracks to `return 0`), so `<![CDATAx` stays a paragraph
-        // under both, and type 4 (`<!` + [A-Z], a case-sensitive class) is left unchanged either way.
+        // case-SENSITIVELY per CommonMark start condition 5 (spec-correct, flag OFF).
         if next == UInt8(ascii: "!"),
            after + 7 < range.upperBound,
            source[after + 1] == UInt8(ascii: "["),
            source[after + 7] == UInt8(ascii: "[") {
-            let letters = (after + 2)..<(after + 7)
-            let matched =
-                storage.options.contains(.cmarkBugCompatibility)
-                ? bytesEqualASCIICaseInsensitive(span: source, range: letters, target: Self.cdataLetters)
-                : source[after + 2] == UInt8(ascii: "C")
-                    && source[after + 3] == UInt8(ascii: "D")
-                    && source[after + 4] == UInt8(ascii: "A")
-                    && source[after + 5] == UInt8(ascii: "T")
-                    && source[after + 6] == UInt8(ascii: "A")
+            let matched = source[after + 2] == UInt8(ascii: "C")
+                && source[after + 3] == UInt8(ascii: "D")
+                && source[after + 4] == UInt8(ascii: "A")
+                && source[after + 5] == UInt8(ascii: "T")
+                && source[after + 6] == UInt8(ascii: "A")
             if matched {
                 return 5
             }
@@ -4208,8 +3571,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
 
         // Type 6: block-tag-name list.
-        let type6Tags = storage.options.contains(.cmarkBugCompatibility) ? Self.cmarkHTMLBlockType6Tags : Self.htmlBlockType6Tags
-        for tag in type6Tags {
+        for tag in Self.htmlBlockType6Tags {
             if bytesEqualASCIICaseInsensitive(span: source, range: nameRange, target: tag) {
                 // Must be followed by a spacechar (`[ \t\v\f\r\n]`), `>`, `/>`, or EOL (cmark's `(spacechar | [/]? [>])`).
                 if nameEnd >= range.upperBound { return 6 }
@@ -4810,7 +4172,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Classify the four leading bytes of a candidate GFM tasklist marker (`[`, ` `/`x`/`X`, `]`, `spacechar`).
     ///
-    /// Returns the checked state (`false` for `[ ]`, `true` for `[x]`/`[X]`), or `nil` if the bytes aren't a marker. The fourth byte is cmark's tasklist-scanner `spacechar` (`[ \t\v\f]`, `isExtensionScannerSpace`): `scan_tasklist` requires `("[ ]"|"[x]"|"[X]") spacechar+` after the checkbox (the compiled `extensions/ext_scanners.c`; its `.re` source omits `[X]` but isn't what's built), so space, tab, vertical tab, and form feed all separate the checkbox from its content. Shared by `matchTasklistMarker` (finalize-time, over the flattened paragraph content) and the continuation re-indent base (`addLine`, over the first line's source bytes) so both agree on exactly what counts as a checkbox.
+    /// Returns the checked state (`false` for `[ ]`, `true` for `[x]`/`[X]`), or `nil` if the bytes aren't a marker. The fourth byte is cmark's tasklist-scanner `spacechar` (`[ \t\v\f]`, `isExtensionScannerSpace`): `scan_tasklist` requires `("[ ]"|"[x]"|"[X]") spacechar+` after the checkbox (the compiled `extensions/ext_scanners.c`; its `.re` source omits `[X]` but isn't what's built), so space, tab, vertical tab, and form feed all separate the checkbox from its content.
     static func tasklistMarkerChecked(_ b0: UInt8, _ b1: UInt8, _ b2: UInt8, _ b3: UInt8) -> Bool? {
         guard b0 == UInt8(ascii: "[") else {
             return nil
@@ -4830,25 +4192,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return checked
     }
 
-    /// Match a GFM tasklist marker at the start of a paragraph chunk: an optional `spacechar` gap that
-    /// the content start skipped over, then `[ ]`, `[x]`, or `[X]`.
+    /// Match a GFM tasklist marker at the start of a paragraph chunk: `[ ]`, `[x]`, or `[X]`.
     ///
     /// Returns the `checked` state and the remaining content, or `nil` if the chunk doesn't hold a
-    /// checkbox. cmark's `scan_tasklist` treats the marker→checkbox separator as `spacechar+`
-    /// (`[ \t\v\f]`), but the block parser's content start skips only space/tab (like cmark's
-    /// `S_find_first_nonspace`), so a vertical-tab / form-feed run survives at the front of the flattened
-    /// content (`- \v[ ] `); skip the rest of the `spacechar` run here to reach the `[`, exactly as the
-    /// scanner does. The trailing `spacechar` that `scan_tasklist` also requires was validated on the
-    /// opening line at open time (`openingLineCheckbox`, which gates `lineAnchoredTaskItems` — this
-    /// method's caller-side guard); by finalize it may have been trailing-trimmed off the content, so a
-    /// space is substituted for it when the checkbox ends the chunk.
-    ///
-    /// cmark's `open_tasklist_item` advances exactly 3 bytes from the content start (the space/tab-skipped
-    /// position), NOT from the `[`: with a vertical-tab / form-feed gap the 3-byte advance lands
-    /// mid-checkbox, leaving its tail as content (`- \v[ ] ` → `Text "]"`); the paragraph then strips the
-    /// leading space/tab run. Consuming 3 bytes from the chunk start plus that run reproduces this
-    /// uniformly — in the common no-gap case those 3 bytes are exactly `[ ]`. Paragraph content is always
-    /// materialized so we only handle `inSource: false` here.
+    /// checkbox.
     ///
     /// A chunk that doesn't begin with a checkbox returns `nil`. The separator must be a space, tab, line tabulation or form feed on the
     /// marker's line (spec "Task list items (extension)": at least one whitespace character before any other
@@ -4857,60 +4204,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// which the paragraph's raw content would not begin with.
     private func matchTasklistMarker(chunk: Chunk, trailingSeparator: UInt8? = nil) -> (checked: Bool, remaining: Chunk)? {
         let off = chunk.offset
-        if !storage.options.contains(.cmarkBugCompatibility) {
-            let markerWidth = Self.tasklistMarkerWidth - 1
-            guard markerWidth <= chunk.length,
-                  let separator = markerWidth < chunk.length ? readByte(at: off + markerWidth, in: chunk) : trailingSeparator,
-                  let checked = Self.tasklistMarkerChecked(
-                      readByte(at: off, in: chunk),
-                      readByte(at: off + 1, in: chunk),
-                      readByte(at: off + 2, in: chunk),
-                      separator
-                  ) else {
-                return nil
-            }
-            var contentStart = min(Self.tasklistMarkerWidth, chunk.length)
-            while contentStart < chunk.length, readByte(at: off + contentStart, in: chunk).isASCIISpace {
-                contentStart += 1
-            }
-            return (checked, chunk.extracting(contentStart..<chunk.length))
+        let markerWidth = Self.tasklistMarkerWidth - 1
+        guard markerWidth <= chunk.length,
+              let separator = markerWidth < chunk.length ? readByte(at: off + markerWidth, in: chunk) : trailingSeparator,
+              let checked = Self.tasklistMarkerChecked(
+                  readByte(at: off, in: chunk),
+                  readByte(at: off + 1, in: chunk),
+                  readByte(at: off + 2, in: chunk),
+                  separator
+              ) else {
+            return nil
         }
-        // Skip the residual marker→checkbox `spacechar` gap in front of the `[`: a vertical-tab / form-
-        // feed run (leading space/tab were already trimmed off `chunk`), plus any space/tab following it -
-        // exactly the `spacechar+` cmark's scanner spans.
-        var gap = 0
-        while gap < chunk.length, readByte(at: off + gap, in: chunk).isExtensionScannerSpace {
-            gap += 1
-        }
-        precondition(gap + Self.tasklistMarkerWidth - 1 <= chunk.length, "an eligible task item's first leaf begins with its checkbox")
-        let separator = gap + Self.tasklistMarkerWidth - 1 < chunk.length
-            ? readByte(at: off + gap + Self.tasklistMarkerWidth - 1, in: chunk)
-            : UInt8(ascii: " ")
-        let marker = Self.tasklistMarkerChecked(
-            readByte(at: off + gap, in: chunk),
-            readByte(at: off + gap + 1, in: chunk),
-            readByte(at: off + gap + 2, in: chunk),
-            separator
-        )
-        precondition(marker != nil, "an eligible task item's first leaf begins with the checkbox its opening line held")
-        let checked = marker!
-        // cmark advances 3 bytes from the content start, then the paragraph strips the leading space/tab
-        // run; do the same from the chunk start (index 3), not from the checkbox.
-        var contentStart = 3
-        while contentStart < chunk.length {
-            let b = readByte(at: off + contentStart, in: chunk)
-            if b == UInt8(ascii: " ") || b == UInt8(ascii: "\t") {
-                contentStart += 1
-            } else {
-                break
-            }
+        var contentStart = min(Self.tasklistMarkerWidth, chunk.length)
+        while contentStart < chunk.length, readByte(at: off + contentStart, in: chunk).isASCIISpace {
+            contentStart += 1
         }
         return (checked, chunk.extracting(contentStart..<chunk.length))
     }
 
     /// Whether `node` is an eligible task item's first leaf (the same gate `stripTasklistCheckbox` uses:
-    /// `.tasklist` on, `node` is the parent item's first child, and `lineAnchoredTaskItems` recognized a
-    /// checkbox on the item's opening physical line) AND `content` begins with that checkbox, per
+    /// `.tasklist` on, `node` is the parent item's first child) AND `content` begins with that checkbox, per
     /// `matchTasklistMarker`. Read-only - callers that only need to know the marker's width (to skip past
     /// it for a classification decision) without yet performing the strip (which also sets the item's
     /// checked state and adjusts stamped positions) use this instead of `stripTasklistCheckbox`.
@@ -4923,14 +4236,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// The list item whose checkbox `node`'s content may begin with: `.tasklist` is on and `node` is the item's
-    /// first child, the paragraph a task list item marker begins (spec "Task list items (extension)"), or
-    /// `lineAnchoredTaskItems` holds the item. `nil` otherwise. The content-independent half of `eligibleTasklistMarker`.
+    /// first child, the paragraph a task list item marker begins (spec "Task list items (extension)"). `nil` otherwise. The content-independent half of `eligibleTasklistMarker`.
     private func tasklistEligibleItem(ofFirstLeaf node: DocumentStorage.Index) -> DocumentStorage.Index? {
         guard storage.options.contains(.tasklist),
               let parent = storage[node].parent,
               case .item = storage[parent].kind,
-              storage[parent].firstChild == node,
-              lineAnchoredTaskItems.contains(parent) || !storage.options.contains(.cmarkBugCompatibility) else {
+              storage[parent].firstChild == node else {
             return nil
         }
         return parent
@@ -4951,30 +4262,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// leave the open paragraph by - a paragraph finalize (`runParagraphMatchers`), a setext heading
     /// transformed from that paragraph (`processLine` PHASE 2c), and the preceding paragraph a table splits
     /// off (`detectPendingTable`) - and BEFORE any other consumer of the content (ref-def extraction, table
-    /// header detection), since cmark's consumers only ever see the content after it. Eligibility was decided at open time
-    /// (`lineAnchoredTaskItems`: the marker is preceded on its own physical line by only whitespace AND a
-    /// checkbox directly follows it), so an item sharing its line with a `>` or an outer marker is absent
-    /// from the set and keeps its `[ ]`/`[x]` as literal text (matching cmark's `scan_tasklist`).
+    /// header detection), since cmark's consumers only ever see the content after it.
     private mutating func stripTasklistCheckbox(node: DocumentStorage.Index, content: Chunk, trailingSeparator: UInt8? = nil) -> Chunk {
         guard let mark = eligibleTasklistMarker(node: node, content: content, trailingSeparator: trailingSeparator) else {
             return content
         }
-        // cmark consumes an item's checkbox once, as the item opens. Once consumed here, a later leaf that
-        // becomes the item's first child - because this one held only reference definitions and is unlinked -
-        // keeps its own leading `[ ]`/`[x]` as text.
-        lineAnchoredTaskItems.remove(mark.parent)
-        var checked = mark.checked
-        // why: cmark-gfm's tasklist extension (`open_tasklist_item`) sets the checked state with
-        // `strstr(input, "[x]") || strstr(input, "[X]")` over the checkbox's own line, NOT from the
-        // leading token, so any `[x]`/`[X]` substring later on that first line flips the item checked
-        // even when the leading token is `[ ]` (`- [ ] [x]` -> checked). Reproduced only under
-        // `.cmarkBugCompatibility` (adopted by the differential fuzzer); the deliverable (flag OFF)
-        // keeps the spec-correct leading-token state. `content` starts at the checkbox and preserves
-        // the source line separators, so the scan is scoped to its first physical line.
-        if storage.options.contains(.cmarkBugCompatibility) {
-            checked = firstLineContainsCheckedBox(chunk: content)
-        }
-        storage[mark.parent].kind = .item(checked: checked)
+        storage[mark.parent].kind = .item(checked: mark.checked)
         // cmark attributes the leaf's source range to the content after the checkbox and all the whitespace following it (the first non-space/tab). The marker+whitespace length is the offset delta between the content and the marker's remainder (buffer-agnostic), so advance the already-stamped leaf start by that many bytes.
         if positionsEnabled {
             let start = storage.sourceRanges[node].start
@@ -4983,429 +4276,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
         return mark.remaining
-    }
-
-    /// Flag-ON (`.cmarkBugCompatibility`) reproduction of cmark-gfm's tasklist checked-state bug: does the
-    /// checkbox's own line contain the substring `[x]` or `[X]`?
-    ///
-    /// cmark's `open_tasklist_item` sets `parent->as.list.checked = (strstr(input, "[x]") ||
-    /// strstr(input, "[X]"))`, where `input` is the item content on the checkbox's physical line, scanned to
-    /// the line end. So a later `[x]`/`[X]` flips an item checked even under a `[ ]` leading token. `chunk`
-    /// begins at the checkbox and joins its lines with `\n`, so scan only its FIRST physical line (up to the
-    /// first `\n`) for the 3-byte window `[x]`/`[X]`; the checkbox token itself is included, so a `[x]`/`[X]`
-    /// leading token always self-matches (agreeing with the token result). Read straight from `chunk`'s
-    /// buffer - no copy, no whole-source pass.
-    private func firstLineContainsCheckedBox(chunk: Chunk) -> Bool {
-        var i = 0
-        // The `[x]` window needs three bytes, so the last start index is `length - 3`.
-        while i + 2 < chunk.length {
-            let b = readByte(at: chunk.offset + i, in: chunk)
-            if b == UInt8(ascii: "\n") {
-                return false
-            }
-            if b == UInt8(ascii: "["),
-               readByte(at: chunk.offset + i + 2, in: chunk) == UInt8(ascii: "]") {
-                let mid = readByte(at: chunk.offset + i + 1, in: chunk)
-                if mid == UInt8(ascii: "x") || mid == UInt8(ascii: "X") {
-                    return true
-                }
-            }
-            i += 1
-        }
-        return false
-    }
-
-    /// True when the list marker at `markerStart` is preceded on its physical line (from `lineStart`)
-    /// by only whitespace - cmark's condition for recognizing a GFM task-list checkbox in the item.
-    ///
-    /// cmark's `scan_tasklist` scans the WHOLE line from offset 0 with the pattern
-    /// `spacechar* marker spacechar+ checkbox spacechar+` (`extensions/ext_scanners.re`), passed
-    /// `input->data` at block-open time (`blocks.c` open_new_blocks). A block-quote marker or an OUTER
-    /// list marker on the same line before the checkbox breaks that scan, so a checkbox is recognized
-    /// only when the marker is preceded on its physical line by nothing but spaces/tabs. This is a
-    /// PHYSICAL-LINE property, not block-nesting depth: a block-nested item alone on its own indented
-    /// line still matches (the indentation is the `spacechar*` prefix), while an item sharing its line
-    /// with a `>` or an outer marker does not. Both task paths share this test: the empty-item open-time
-    /// consumer (`emptyTaskItemChecked`) and the content-bearing finalize gate (`lineAnchoredTaskItems`,
-    /// consulted in `runParagraphMatchers` / `tasklistContentIndentBump`).
-    private func taskMarkerLineAnchored(source: Span<UInt8>, lineStart: Int, markerStart: Int) -> Bool {
-        indexOfFirstNonSpace(source: source, range: lineStart..<markerStart) >= markerStart
-    }
-
-    /// The checked state of a GFM task-list checkbox at (or, past a `spacechar` gap, just after)
-    /// `contentStart` (the item's opening-line first content byte, `marker.consumedTo`), fitting before
-    /// `lineEnd`, or `nil` if no checkbox is there.
-    ///
-    /// Wraps `tasklistMarkerChecked` with the bounds check so the two open-time task paths agree on what
-    /// counts as a checkbox on the OPENING line - the eligibility gate for `lineAnchoredTaskItems`
-    /// (checkbox present, any trailing content) and the empty-item consumer (`emptyTaskItemChecked`, which
-    /// additionally requires only whitespace to `lineEnd`). This is the checkbox half of cmark's
-    /// `scan_tasklist`, anchored to the opening line where `open_tasklist_item` runs on THIS call; an item
-    /// whose opening line is blank after the marker has `contentStart == lineEnd`, so no checkbox fits
-    /// here - but `open_tasklist_item` runs AGAIN on the item's first later, still-childless line, where
-    /// `tasklistScanMatchesFromLineStart` (a different, whole-line scan) picks it up instead.
-    private func openingLineCheckbox(source: Span<UInt8>, contentStart: Int, lineEnd: Int) -> Bool? {
-        // cmark's `scan_tasklist` treats the marker→checkbox separator as `spacechar+` (`[ \t\v\f]`), but
-        // the content start skips only space/tab, so a vertical-tab / form-feed gap survives before the
-        // `[` (`- \v[ ] `). Skip the rest of the `spacechar` run to reach the checkbox, as the scanner does.
-        var cb = contentStart
-        while cb < lineEnd, source[cb].isExtensionScannerSpace {
-            cb += 1
-        }
-        guard cb + Self.tasklistMarkerWidth <= lineEnd else {
-            return nil
-        }
-        return Self.tasklistMarkerChecked(
-            source[cb],
-            source[cb + 1],
-            source[cb + 2],
-            source[cb + 3]
-        )
-    }
-
-    /// If the item content beginning at `contentStart` is a GFM task-list checkbox (`[ ]`/`[x]`/`[X]`)
-    /// followed by a separator and then only whitespace to `lineEnd`, return its checked state;
-    /// otherwise `nil`.
-    ///
-    /// cmark-gfm's tasklist extension consumes the checkbox at item-OPEN time (`open_tasklist_item`),
-    /// so an item whose first line holds nothing but a checkbox gets no paragraph child - it stays
-    /// empty, exactly like a plain `- ` empty item, and a following unindented line closes it rather
-    /// than lazily continuing into it. A task item WITH content keeps the checkbox in its first
-    /// paragraph, where finalize strips it (`runParagraphMatchers`, #65); the rewrite's finalize-time
-    /// recognition cannot reach the empty case (there is no paragraph to finalize), so it is detected
-    /// here at open time. The checkbox itself is classified by `openingLineCheckbox` (shared with the
-    /// `lineAnchoredTaskItems` eligibility gate), and the whitespace-to-`lineEnd` test confines it to the
-    /// empty case - content-bearing items fail it and are left to finalize. The line-anchoring requirement
-    /// (`taskMarkerLineAnchored`) is shared with the content-bearing path: an item whose marker shares its
-    /// line with a `>` or an outer marker is left untouched here.
-    private func emptyTaskItemChecked(
-        source: Span<UInt8>, lineStart: Int, markerStart: Int, contentStart: Int, lineEnd: Int
-    ) -> Bool? {
-        guard storage.options.contains(.tasklist),
-              storage.options.contains(.cmarkBugCompatibility),
-              taskMarkerLineAnchored(source: source, lineStart: lineStart, markerStart: markerStart),
-              let checked = openingLineCheckbox(source: source, contentStart: contentStart, lineEnd: lineEnd),
-              // cmark decides emptiness by `S_find_first_nonspace` (space/tab only) from right after the
-              // `]` - it advances exactly 3 bytes past `[ ]` and never over the separator. So scan from
-              // the checkbox's own width (`tasklistMarkerWidth - 1`, i.e. `[ ]` without the separator),
-              // not past the separator byte: a space/tab separator is skipped here, but a vertical-tab /
-              // form-feed separator (a `spacechar`, so the checkbox is still recognized) is NOT first-non-
-              // space, so the item is non-blank and keeps that byte as paragraph content (matching cmark,
-              // whose `cmark_isspace` content trim also leaves VT/FF).
-              indexOfFirstNonSpace(
-                  source: source,
-                  range: (contentStart + Self.tasklistMarkerWidth - 1)..<lineEnd
-              ) >= lineEnd
-        else {
-            return nil
-        }
-        return checked
-    }
-
-    /// Whether `kind` is a block that cmark's `check_open_blocks` matches on every line while it is open - a
-    /// list or a thematic break (`blocks.c`: neither has a case in its switch, so it falls to `default`).
-    private func alwaysContinues(_ kind: MarkdownNode.Kind) -> Bool {
-        kind.isList || kind == .thematicBreak
-    }
-
-    /// Whether cmark's `open_tasklist_item` retries a checkbox on the current line with `node` as its
-    /// `parent_container` (`.cmarkBugCompatibility` only): `node` is an item that is the line's deepest matched
-    /// container. The rewrite's walk can stop at an item whose last child is a list or thematic break cmark
-    /// still has open; `check_open_blocks` matches either on every line (neither has a continuation test), so
-    /// cmark's container is that child, not the item. The rewrite closes such a child earlier than cmark does.
-    private func isTasklistRetryItem(_ node: DocumentStorage.Index) -> Bool {
-        guard storage.options.contains(.cmarkBugCompatibility),
-              storage.options.contains(.tasklist),
-              case .item = storage[node].kind else {
-            return false
-        }
-        return !lastChildAlwaysContinues(item: node)
-    }
-
-    /// Whether `item`'s last child is a list or thematic break that cmark still has open, making it (not the
-    /// item) the line's deepest matched container. cmark finalizes such a child only when its item closes or
-    /// a later sibling is added (`listsAndBreaksClosedBySibling`).
-    private func lastChildAlwaysContinues(item: DocumentStorage.Index) -> Bool {
-        guard let lastChild = storage[item].lastChild else {
-            return false
-        }
-        return alwaysContinues(storage[lastChild].kind) && !listsAndBreaksClosedBySibling.contains(lastChild)
-    }
-
-    /// Whether cmark's `scan_tasklist` pattern (`extensions/ext_scanners.re`) matches `lineRange`'s raw
-    /// bytes from their TRUE start (`lineRange.lowerBound`), independent of any container prefix already
-    /// stripped up to `cursor`: `spacechar*("-"|"+"|"*"|[0-9]+.)spacechar+("[ ]"|"[x]"|"[X]")spacechar+`. This is
-    /// the childless-item continuation half of `open_tasklist_item` - see the call site in
-    /// `dispatchNewBlocks` for why cmark re-runs this scan on a line the item's own marker never touched.
-    ///
-    /// The digit-run alternative's trailing `.` matches ANY one UTF-8 scalar other than a newline (re2c
-    /// wildcard; the compiled `ext_scanners.c` decodes a whole multi-byte sequence there), and re2c
-    /// compiles the whole pattern to one DFA that accepts if ANY split of the digit run between `[0-9]+`
-    /// and `.` completes the rest of the pattern - not just the greedy (all-digits-to-the-run) split. E.g. for
-    /// `222 [ ] `, only ceding the LAST digit to the wildcard leaves a space for the mandatory
-    /// `spacechar+` that follows; ceding zero or two digits does not. So every split is tried.
-    private func tasklistScanMatchesFromLineStart(source: Span<UInt8>, lineRange: Range<Int>) -> Bool {
-        let end = lineRange.upperBound
-        var p = lineRange.lowerBound
-        while p < end, source[p].isExtensionScannerSpace {
-            p += 1
-        }
-        guard p < end else {
-            return false
-        }
-        switch source[p] {
-        case UInt8(ascii: "-"), UInt8(ascii: "+"), UInt8(ascii: "*"):
-            return tasklistScanTailMatches(source: source, from: p + 1, end: end)
-        default:
-            break
-        }
-        guard source[p].isASCIIDigit else {
-            return false
-        }
-        var digitsEnd = p
-        while digitsEnd < end, source[digitsEnd].isASCIIDigit {
-            digitsEnd += 1
-        }
-        // `[0-9]+.` needs >= 1 digit then exactly 1 more (any) scalar. `wildcard` is that scalar's first
-        // byte; try every position the digit run allows ceding to it.
-        var wildcard = p + 1
-        while wildcard <= digitsEnd, wildcard < end {
-            if tasklistScanTailMatches(source: source, from: wildcard + source[wildcard].utf8SequenceLength, end: end) {
-                return true
-            }
-            wildcard += 1
-        }
-        return false
-    }
-
-    /// The `spacechar+("[ ]"|"[x]"|"[X]")spacechar+` tail of cmark's `scan_tasklist`, starting at `from`.
-    /// The uppercase `[X]` isn't in `ext_scanners.re`'s pattern, but the compiled `ext_scanners.c` (the
-    /// `.re` is excluded from the build) accepts it, so it's matched here too. Both
-    /// `spacechar` runs are greedy with no ambiguity to backtrack over: neither literal that follows
-    /// (`[` for the checkbox, end-of-pattern for the trailing run) is itself a `spacechar`.
-    private func tasklistScanTailMatches(source: Span<UInt8>, from: Int, end: Int) -> Bool {
-        var p = from
-        guard p < end, source[p].isExtensionScannerSpace else {
-            return false
-        }
-        while p < end, source[p].isExtensionScannerSpace {
-            p += 1
-        }
-        guard p + 3 <= end,
-              source[p] == UInt8(ascii: "["),
-              source[p + 1] == UInt8(ascii: " ") || source[p + 1] == UInt8(ascii: "x")
-                || source[p + 1] == UInt8(ascii: "X"),
-              source[p + 2] == UInt8(ascii: "]") else {
-            return false
-        }
-        let afterCheckbox = p + 3
-        return afterCheckbox < end && source[afterCheckbox].isExtensionScannerSpace
-    }
-
-    /// Mark a paragraph whose cmark content contains orphaned UTF-8 continuation bytes as never able to open a
-    /// GFM table. The later-line tasklist advance orphans them when it stops inside a scalar: a NUL's U+FFFD
-    /// (see `tasklistAdvanceEnd`), or a multi-byte scalar the digit run's wildcard matched.
-    ///
-    /// cmark's `try_opening_table_header` parses its header row from the paragraph's whole raw content
-    /// (`row_from_string` over `cmark_node_get_string_content`), and those orphans stay in that content for
-    /// the paragraph's lifetime. The compiled `scan_table_cell` is a UTF-8 DFA that rejects a lone
-    /// continuation byte, so the row scan stops at the first orphan short of the content's end and the header
-    /// row is NULL for every delimiter line, and cmark sets `CMARK_NODE__TABLE_VISITED`. `paragraphTablePending == false` is that state: no
-    /// later delimiter line is classified, and finalize never builds a table.
-    private mutating func markOrphanLedParagraphTableVisited(_ paragraph: DocumentStorage.Index) {
-        paragraphTablePending[paragraph] = false
-    }
-
-    /// Where cmark's `open_tasklist_item` 3-byte advance (`S_advance_offset` with `columns == false`) from
-    /// `cursor` ends, as an original-source byte offset on the current line.
-    ///
-    /// cmark counts those bytes in its own line buffer, which differs from the rewrite's in two ways. A NUL
-    /// is already the 3-byte U+FFFD there (feed-time replacement), so it counts 3 and the advance can stop
-    /// inside it. `orphanedBytes` is then how many of its bytes are left over, and `sourceOffset` is the byte
-    /// after the NUL. A tab is 1 byte, including one the item's indent only partly consumed: cmark's offset
-    /// still sits on that tab, where the rewrite's tab-expanded `cursor` is a column inside it.
-    ///
-    /// An advance that stops inside a multi-byte source scalar (one the digit run's wildcard matched) orphans
-    /// that scalar's remaining continuation bytes: `orphanedBytes` counts them and `sourceOffset` is past them.
-    /// Either way `orphanStart` is the source byte holding the first orphan, the NUL or that continuation byte.
-    private func tasklistAdvanceEnd(cursor: Int) -> (sourceOffset: Int, orphanedBytes: Int, orphanStart: Int) {
-        var p: Int
-        if currentLineMapsToSource {
-            p = cursor
-        } else {
-            let (sourceStart, splitTabSpaces) = materializedSourceStart(bufferStart: cursor)
-            p = splitTabSpaces > 0 ? sourceStart - 1 : sourceStart
-        }
-        let lineEnd = currentLineSourceRange.upperBound
-        var remaining = 3
-        while remaining > 0, p < lineEnd {
-            let width = sourceBytes[p] == 0 ? 3 : 1
-            p += 1
-            if width > remaining {
-                return (p, width - remaining, p - 1)
-            }
-            remaining -= width
-        }
-        let orphanStart = p
-        while p < lineEnd, sourceBytes[p] & 0xC0 == 0x80 {
-            p += 1
-        }
-        return (p, p - orphanStart, orphanStart)
-    }
-
-    /// Append a line that cmark's tasklist `advance` left starting with orphaned continuation bytes
-    /// (`tasklistAdvanceEnd`): one U+FFFD per orphan, as the reference's String bridge repairs each, standing for
-    /// the source byte its orphan came from (`orphanImage`), then the source bytes from the advance's end to
-    /// `lineEnd`. Returns the buffer ranges of the U+FFFDs, one per orphan.
-    private func appendOrphanLedLine(_ advance: (sourceOffset: Int, orphanedBytes: Int, orphanStart: Int), lineEnd: Int, to text: inout MaterializedText) -> [Range<Int>] {
-        var replacements: [Range<Int>] = []
-        for k in 0..<advance.orphanedBytes {
-            let start = text.count
-            for byte: UInt8 in [0xEF, 0xBF, 0xBD] {
-                text.append(byte, imaging: orphanImage(k, of: advance))
-            }
-            replacements.append(start..<text.count)
-        }
-        text.append(advance.sourceOffset..<lineEnd, of: sourceBytes)
-        return replacements
-    }
-
-    /// The source byte the `k`th orphan of a tasklist `advance` came from: the NUL whose U+FFFD the advance
-    /// stopped inside, or the `k`th continuation byte of the multi-byte scalar it stopped inside.
-    private func orphanImage(_ k: Int, of advance: (sourceOffset: Int, orphanedBytes: Int, orphanStart: Int)) -> Int {
-        sourceBytes[advance.orphanStart] == 0 ? advance.orphanStart : advance.orphanStart + k
-    }
-
-    /// Append one U+FFFD per orphaned continuation byte (`tasklistAdvanceEnd`), as the reference's String
-    /// bridge repairs each. Returns the buffer ranges of the U+FFFDs, one per orphan.
-    private static func appendOrphanReplacements(_ orphanedBytes: Int, to buffer: inout UniqueArray<UInt8>) -> [Range<Int>] {
-        var replacements: [Range<Int>] = []
-        for _ in 0..<orphanedBytes {
-            let start = buffer.count
-            buffer.append(0xEF)
-            buffer.append(0xBF)
-            buffer.append(0xBD)
-            replacements.append(start..<buffer.count)
-        }
-        return replacements
-    }
-
-    /// The index in `orphanReplacementRanges` of the first range ending after arena offset `offset`.
-    private func firstOrphanReplacementIndex(endingAfter offset: Int) -> Int {
-        ContentSpan.firstIndex(endingAfter: offset, in: orphanReplacementRanges.span)
-    }
-
-    /// The orphan replacements (`orphanReplacementRanges`) within the arena bytes `range`, clamped to it.
-    func orphanReplacements(in range: Range<Int>) -> [Range<Int>] {
-        var result: [Range<Int>] = []
-        var i = firstOrphanReplacementIndex(endingAfter: range.lowerBound)
-        while i < orphanReplacementRanges.count, orphanReplacementRanges[i].lowerBound < range.upperBound {
-            result.append(orphanReplacementRanges[i].clamped(to: range))
-            i += 1
-        }
-        return result
-    }
-
-    /// Whether arena offset `offset` is within an orphan replacement (`orphanReplacementRanges`).
-    func isOrphanReplacement(at offset: Int) -> Bool {
-        let i = firstOrphanReplacementIndex(endingAfter: offset)
-        return i < orphanReplacementRanges.count && orphanReplacementRanges[i].lowerBound <= offset
-    }
-
-    /// Register `ranges`, arena ranges past every registered one, as orphan replacements.
-    private mutating func registerOrphanReplacements(_ ranges: [Range<Int>]) {
-        assert(ranges.first.map { orphanReplacementRanges.isEmpty || $0.lowerBound >= orphanReplacementRanges[orphanReplacementRanges.count - 1].upperBound } ?? true, "orphan replacements are registered in arena order")
-        for range in ranges {
-            orphanReplacementRanges.append(range)
-        }
-    }
-
-    /// Register the orphan replacements of the arena bytes `source` at their copy starting at arena offset
-    /// `destination` (past every registered replacement).
-    private mutating func carryOrphanReplacements(from source: Range<Int>, to destination: Int) {
-        let shift = destination - source.lowerBound
-        registerOrphanReplacements(orphanReplacements(in: source).map { ($0.lowerBound + shift)..<($0.upperBound + shift) })
-    }
-
-    /// Register the orphan replacements of `node`'s `.materialized` buffer at its copy starting at arena offset
-    /// `destination` (`materializedOrphanReplacements`).
-    private mutating func carryMaterializedOrphanReplacements(of node: DocumentStorage.Index, to destination: Int) {
-        if let replacements = materializedOrphanReplacements.removeValue(forKey: node) {
-            registerOrphanReplacements(replacements.map { ($0.lowerBound + destination)..<($0.upperBound + destination) })
-        }
-    }
-
-    /// Add the current line to the open paragraph `current` as a lazy continuation that starts where cmark's
-    /// `open_tasklist_item` 3-byte advance from `cursor` ended (`tasklistAdvanceEnd`).
-    ///
-    /// cmark's lazy `add_line` copies from that offset, so whitespace between it and the first non-space is
-    /// the preserved lazy residual (`currentLineContentCursor`). An advance that stopped inside a scalar - a
-    /// NUL's U+FFFD, or a multi-byte scalar the digit run's wildcard matched - leaves its orphaned continuation
-    /// bytes leading the added text, each replaced by a U+FFFD as the reference's String bridge repairs it: a
-    /// materialized leaf copies that line into its buffer (`appendOrphanLedLine`); a segment list gets the
-    /// replacements as an arena segment followed by the rest of the line as a source segment. Orphaned bytes
-    /// keep the paragraph from ever opening a table (`markOrphanLedParagraphTableVisited`).
-    private mutating func addLazyLineAfterTasklistAdvance(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
-        let lineEnd = currentLineSourceRange.upperBound
-        let advance = tasklistAdvanceEnd(cursor: cursor)
-        // Orphans are replaced rather than borrowed, including a multi-byte source scalar's: content bytes
-        // must stay well-formed UTF-8 (`StorageView.string(of:)`), and the registered replacements are what
-        // the inline scanners recognize as orphans (`orphanReplacementRanges`).
-        if advance.orphanedBytes > 0 {
-            markOrphanLedParagraphTableVisited(current)
-            var segs: UniqueArray<Segment>
-            switch take(pending, ifNode: current) {
-            case .segments(let existing)?:
-                segs = existing
-            case .lazy(let prev, joinPending: true)?:
-                // Keep the borrowed earlier lines zero-copy, as `addLine` does for a non-contiguous continuation.
-                segs = UniqueArray<Segment>()
-                segs.append(Segment(offset: Int32(prev.lowerBound), length: Int32(prev.count), inSource: true))
-                segs.append(storage.newlineSegment)
-            case let other:
-                var text = unwrap(other)
-                let replacements = appendOrphanLedLine(advance, lineEnd: lineEnd, to: &text)
-                materializedOrphanReplacements[current, default: []] += replacements
-                return PendingLeaf(node: current, content: .materialized(text))
-            }
-            // Only the replacements go to the arena; the rest of the line stays a zero-copy source segment.
-            // A multi-segment inline span scans only source segments for inline syntax (a non-source segment
-            // is the newline join or synthetic filler, `ContentSpan.multiNextSignificant`), so the line's
-            // emphasis, links, entities, ... must not sit in the arena segment.
-            // Each replacement is its own segment, standing for the source byte its orphan came from.
-            var afterReplacements = PendingLeaf(node: current, content: .segments(segs))
-            for k in 0..<advance.orphanedBytes {
-                let offset = storage.strings.count
-                let replacementRanges = Self.appendOrphanReplacements(1, to: &storage.strings)
-                registerOrphanReplacements(replacementRanges)
-                let replacement = Segment(offset: Int32(offset), length: Int32(storage.strings.count - offset), inSource: false, sourceOffset: Int32(orphanImage(k, of: advance)))
-                afterReplacements = appendSegment(replacement, to: current, pending: afterReplacements)
-            }
-            let rest = Segment(offset: Int32(advance.sourceOffset), length: Int32(lineEnd - advance.sourceOffset), inSource: true)
-            return appendSegment(rest, to: current, pending: afterReplacements)
-        }
-        let contentStart = indexOfFirstNonSpace(source: sourceBytes, range: advance.sourceOffset..<lineEnd)
-        currentLineContentCursor = currentLineMapsToSource ? advance.sourceOffset : materializedBufferOffset(ofSource: advance.sourceOffset)
-        let lineContentStart = currentLineMapsToSource ? contentStart : materializedBufferOffset(ofSource: contentStart)
-        return addLine(span: source, range: lineContentStart..<lineRange.upperBound, to: current, pending: pending)
-    }
-
-    /// Whether `lineRange`'s raw bytes contain `"[x]"` or `"[X]"` anywhere - cmark's whole-line
-    /// `strstr(input, "[x]") || strstr(input, "[X]")` check (`open_tasklist_item`) for a task item's
-    /// checked state. This is independent of where (or whether via which split) the marker scan itself
-    /// matched: any `[x]`/`[X]` substring on the line flips the item checked.
-    private func lineContainsCheckedBox(source: Span<UInt8>, lineRange: Range<Int>) -> Bool {
-        var i = lineRange.lowerBound
-        while i + 2 < lineRange.upperBound {
-            if source[i] == UInt8(ascii: "["), source[i + 2] == UInt8(ascii: "]") {
-                let mid = source[i + 1]
-                if mid == UInt8(ascii: "x") || mid == UInt8(ascii: "X") {
-                    return true
-                }
-            }
-            i += 1
-        }
-        return false
     }
 
     /// Match a GFM footnote definition opener `[^label]:` at `firstNonSpace` on the current line.
@@ -5423,7 +4293,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         let labelStart = firstNonSpace + 2
-        let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
         var i = labelStart
         while i < end {
             let b = source[i]
@@ -5431,14 +4300,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 break
             }
             // As in a link label (spec "Links"), a square bracket inside the label must be escaped.
-            if !bugCompatible {
-                if b == UInt8(ascii: "[") {
-                    return nil
-                }
-                if b == UInt8(ascii: "\\"), i + 1 < end, !source[i + 1].isSpaceTabOrNewline {
-                    i += 2
-                    continue
-                }
+            if b == UInt8(ascii: "[") {
+                return nil
+            }
+            if b == UInt8(ascii: "\\"), i + 1 < end, !source[i + 1].isSpaceTabOrNewline {
+                i += 2
+                continue
             }
             // cmark replaces NUL with U+FFFD before scanning, so its scanner (which excludes NUL)
             // never rejects a source NUL — the replacement character is an allowed label byte. The
@@ -5558,7 +4425,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         i += 1
-        let lineTabulationAndFormFeed = !storage.options.contains(.cmarkBugCompatibility)
+        let lineTabulationAndFormFeed = true
         i = skipSpacesAndOneLineEnd(from: i, in: chunk, lineTabulationAndFormFeed: lineTabulationAndFormFeed)
         guard let dest = matchLinkDestination(
             Chunk(offset: i, length: end - i, inSource: inSource)
@@ -5582,12 +4449,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let afterTitleSpnl = skipSpacesAndOneLineEnd(from: i, in: chunk, lineTabulationAndFormFeed: lineTabulationAndFormFeed)
         var titleChunk: Chunk = .empty
         var afterAll = -1
-        var scannedTitleChunk: Chunk?
         if afterTitleSpnl > beforeTitle,
            let title = matchLinkTitle(
                Chunk(offset: afterTitleSpnl, length: end - afterTitleSpnl, inSource: inSource)
            ) {
-            scannedTitleChunk = title.chunk
             let afterSpaces = skipSpacesTabs(from: title.afterEnd, in: chunk, lineTabulationAndFormFeed: lineTabulationAndFormFeed)
             if let lineEnd = skipLineEndOrEOF(from: afterSpaces, in: chunk) {
                 titleChunk = title.chunk
@@ -5600,19 +4465,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return nil
             }
             afterAll = lineEnd
-            // why (ref-b4b): cmark's `cmark_parse_reference_inline` rewinds `subj.pos` to right
-            // after the destination when a scanned title has trailing (non-whitespace) content on
-            // its line, then re-checks for a clean line end from there - but never clears the
-            // `title` chunk it already scanned, so a title it just rejected gets attached to the
-            // reference anyway. That rewind point coincides with our `dest.afterEnd` recheck above,
-            // and lands on a line ending exactly when the title started on a CONTINUATION line (a
-            // real line break separates the destination from the title); on a single physical line
-            // there's no line ending to land on, so the recheck (and cmark's) fails outright and no
-            // bogus title survives. Reproduce cmark's stale-title bug only where its rewind would
-            // land on that line ending, i.e. exactly when this recheck (mirroring the rewind) finds one.
-            if storage.options.contains(.cmarkBugCompatibility), let scannedTitleChunk {
-                titleChunk = scannedTitleChunk
-            }
         }
         // `normalizeLabel` folds a NUL in the label to U+FFFD itself (CommonMark §2.3), matching the
         // reference side's key even though this definition may be keyed straight from the
@@ -5625,7 +4477,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if key.isEmpty {
             return nil
         }
-        if storage.referenceMap[key] == nil, !storage.isLabelClaimedInSharedRefmap(key) {
+        if storage.referenceMap[key] == nil {
             // CommonMark §2.3: a NUL in the destination/title becomes U+FFFD. Ref-defs are parsed
             // straight from the (possibly still source-backed) paragraph content on both the normal
             // (`runParagraphMatchers`) and the setext-underline (`processLine`) paths, so normalize here -
@@ -5680,7 +4532,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if key.isEmpty {
             return nil
         }
-        if storage.attributeReferenceMap[key] == nil, !storage.isLabelClaimedInSharedRefmap(key) {
+        if storage.attributeReferenceMap[key] == nil {
             // cmark stores the value through `cmark_clean_attributes`, which is `cmark_clean_url`
             // (swift-cmark `src/inlines.c`): trimmed and unescaped, like a link ref-def destination.
             // CommonMark §2.3: a NUL in the stored attributes becomes U+FFFD, symmetric with the link
@@ -5740,9 +4592,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             if b == UInt8(ascii: "&") {
                 let entity = if chunk.inSource {
-                    EntityParser.matchEntity(start: j, end: endOff, source: sourceBytes, bugCompat: storage.options.contains(.cmarkBugCompatibility))
+                    EntityParser.matchEntity(start: j, end: endOff, source: sourceBytes)
                 } else {
-                    EntityParser.matchEntity(start: j, end: endOff, source: storage.strings.span, bugCompat: storage.options.contains(.cmarkBugCompatibility))
+                    EntityParser.matchEntity(start: j, end: endOff, source: storage.strings.span)
                 }
                 if let entity {
                     for k in 0..<entity.count {
@@ -5769,38 +4621,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// which is `Chunk.trimming(using:)`'s `isSpaceTabOrNewline`. Only DESTINATIONS are cleaned this
     /// way; titles use cmark's `cmark_clean_title`, which does NOT trim, so the title path calls
     /// `unescapeURLChunk` directly instead.
-    ///
-    /// `cmark_clean_url` decodes entities in a first pass, then strips backslash escapes from that
-    /// result in a second pass (`houdini_unescape_html_f` followed by `cmark_strbuf_unescape`) — the
-    /// same entity-first order as the fenced-code info string (see
-    /// `EntityParser.entityFirstEscapedURLChunkBytes`), so `\&#3;` decodes its entity first and the
-    /// backslash survives (U+0003 isn't escapable punctuation), where the interleaved pass below would
-    /// let the backslash escape the `&` before `&#3;` can become an entity. Reproduced under
-    /// `.cmarkBugCompatibility`; flag-off keeps the spec-correct interleaved pass.
     mutating func cleanURLChunk(_ chunk: Chunk) -> Chunk {
         let trimmed = chunk.trimming(using: self)
-        guard storage.options.contains(.cmarkBugCompatibility) else {
-            return unescapeURLChunk(trimmed)
-        }
-        if trimmed.inSource {
-            guard EntityParser.urlChunkHasEscape(trimmed, source: sourceBytes) else {
-                return trimmed
-            }
-            return EntityParser.entityFirstEscapedURLChunkBytes(trimmed, source: sourceBytes, into: &storage)
-        }
-        guard EntityParser.urlChunkHasEscape(trimmed, source: storage.strings.span) else {
-            return trimmed
-        }
-        // `entityFirstEscapedURLChunkBytes` reads `source` while appending the result to
-        // `storage.strings`; for an arena-backed chunk `source` would otherwise alias the very
-        // storage being mutated (an exclusivity violation), so snapshot the chunk into an
-        // independent buffer first - a plain copy, not a new architectural pattern.
-        var snapshot = UniqueArray<UInt8>(minimumCapacity: trimmed.length)
-        snapshot.append(copying: storage.strings.span.extracting(trimmed.range))
-        return EntityParser.entityFirstEscapedURLChunkBytes(
-            Chunk(offset: 0, length: trimmed.length, inSource: false),
-            source: snapshot.span,
-            into: &storage
-        )
+        return unescapeURLChunk(trimmed)
     }
 }

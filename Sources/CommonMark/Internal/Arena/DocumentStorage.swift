@@ -43,16 +43,8 @@ internal struct DocumentStorage: ~Copyable {
 
     /// Fork-specific extended-attribute reference definitions of the form `^[label]: attrs`.
     ///
-    /// Keyed by the same normalized label form as `referenceMap` but stored separately so `[foo]` (link) and `^[foo]` (attribute) lookups don't collide. First definition wins; under `.cmarkBugCompatibility` the first definition of *either* kind wins (see `isLabelClaimedInSharedRefmap(_:)`).
+    /// Keyed by the same normalized label form as `referenceMap` but stored separately so `[foo]` (link) and `^[foo]` (attribute) lookups don't collide. First definition wins.
     internal var attributeReferenceMap: [String: Chunk] = [:]
-
-    /// Under `.cmarkBugCompatibility`, whether a new link or attribute definition for normalized label `key` loses to an existing definition of either kind; always `false` flag-OFF, where each registration site checks only its own kind.
-    ///
-    /// cmark-gfm keeps both kinds in one refmap keyed by label and keeps only the first-registered entry (`references.c`, `map.c` `sort_map`); a lookup that lands on the other kind's entry fails (`inlines.c` `handle_close_bracket` requires `!ref->is_attributes_reference`, `handle_close_bracket_attribute` requires `ref->is_attributes_reference`). So a later definition of the other kind is shadowed. The two syntaxes are distinct, so flag-OFF each kind keeps its own namespace and only a same-kind earlier definition wins.
-    internal func isLabelClaimedInSharedRefmap(_ key: String) -> Bool {
-        options.contains(.cmarkBugCompatibility)
-            && (referenceMap[key] != nil || attributeReferenceMap[key] != nil)
-    }
 
     /// GFM footnote definitions, registered as each definition block closes.
     ///
@@ -63,42 +55,6 @@ internal struct DocumentStorage: ~Copyable {
     ///
     /// Used by the footnote post-processing pass to enumerate all definitions so unreferenced ones can be dropped.
     internal var footnoteDefinitionOrder: [Index] = []
-
-    /// Text nodes that stand in for cmark's embedded NUL after a `[^[` footnote collapse, ending their
-    /// text-consolidation run.
-    ///
-    /// Reproduces a cmark `.cmarkBugCompatibility` quirk: a `[^[` footnote-shaped bracket's inline
-    /// footnote branch captures its label from the static `"^["` string, over-reading past the inner
-    /// `[` into that string's NUL terminator. The unresolved reference reconstructs as `[^[` + NUL + …,
-    /// and reading the consolidated run as a C-string stops at the NUL — so the `[^[` node's own tail
-    /// and any following text merged into its run vanish, while structure (an enclosing link) survives.
-    /// `consolidateTextNodes` merges preceding text in but stops the run at a marked node; the invisible
-    /// tail is unlinked in `dropRunTruncatedTails`, run AFTER the autolink pass so a trailing email links.
-    internal var runTruncatingTextNodes: Set<Index> = []
-
-    /// The inline-bearing nodes whose cmark content buffer ends in its `cmark_strbuf` NUL terminator
-    /// rather than a trailing newline: ATX headings, table cells, the paragraph split off before a
-    /// table's header, and the inline-only paragraph. Consulted only by the escaped-caret footnote-image
-    /// over-read simulation (`emitEscapedCaretFootnote`), whose one-byte over-read lands on whatever cmark's buffer holds one
-    /// past the node's own content. An ATX heading's line is pre-trimmed of its trailing newline by
-    /// `chop_trailing_hashtags` *before* that content is copied in; a table cell (`row_from_string`) and the
-    /// preceding paragraph (`try_inserting_table_header_paragraph`) are built from a trimmed buffer via
-    /// `cmark_node_set_string_content`. Under `CMARK_OPT_INLINE_ONLY` (whose `PRESERVE_WHITESPACE` tests are
-    /// all true, as that macro includes the `INLINE_ONLY` bit) the final unterminated line gets no newline
-    /// (`cmark_parser_finish`'s `S_process_line`) and the inline subject is never rtrimmed, so the content -
-    /// including any trailing whitespace or newline the source itself ends with - runs right up to the NUL.
-    /// Every other inline-bearing node - a paragraph assembled line by line,
-    /// or a setext heading, which is one - keeps its last line's trailing whitespace and newline there instead
-    /// (see `trailingBlankAfterContent`).
-    internal var nulTerminatedInlineContainers: Set<Index> = []
-
-    /// The first space or tab of the trailing whitespace a line-built block (a paragraph or setext heading) ends
-    /// with, recorded flag-ON only. Consulted only by the escaped-caret footnote-image over-read simulation
-    /// (`emitEscapedCaretFootnote`): cmark keeps each line's trailing whitespace in the block's buffer (it
-    /// replaces only the line ending, with a `\n`), and the inline subject's `cmark_chunk_rtrim` shortens its
-    /// length without touching those bytes, so the over-read one past the trimmed content lands on this byte.
-    /// A line-built block absent here holds the `\n` there instead.
-    internal var trailingBlankAfterContent: [Index: UInt8] = [:]
 
     /// Number of lines in the document.
     internal var lineCount = 0

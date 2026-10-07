@@ -26,18 +26,6 @@ internal struct OpenersBottom {
     }
 }
 
-/// Per-text-run record of which inline raw-HTML scan kinds have overrun to end-of-input and must not be
-/// re-attempted for the rest of the run - cmark's per-subject `FLAG_SKIP_HTML_*` bits (`src/inlines.c`
-/// `handle_pointy_brace`). Meaningful only flag-ON (`.cmarkBugCompatibility`); reset per `parseInline` pass.
-internal struct HTMLScanSkip: OptionSet {
-    let rawValue: UInt8
-
-    static let comment = HTMLScanSkip(rawValue: 1 << 0)
-    static let cdata = HTMLScanSkip(rawValue: 1 << 1)
-    static let declaration = HTMLScanSkip(rawValue: 1 << 2)
-    static let processingInstruction = HTMLScanSkip(rawValue: 1 << 3)
-}
-
 /// Per-kind stretch of scan-start offsets from which a spec (first-closer) raw-HTML closer scan is known to
 /// fail in the current `parseInline` pass. A scan that fails from `p` reached the content end, so it rules
 /// out every start at or after `p`.
@@ -80,24 +68,7 @@ extension BlockParser {
         let strikethroughEnabled = storage.options.contains(.strikethrough)
         let gfmAutolinkEnabled = storage.options.contains(.gfmAutolink)
         let smartEnabled = storage.options.contains(.smart)
-        // Record newlines swallowed by a code span / raw HTML only when reproducing cmark's column
-        // behavior (`footnoteColumnResets`); otherwise leave the set inert. Gated on `.cmarkBugCompatibility`
-        // so this write-gate matches the reset-gate below (the set is cleared per pass only in that block).
-        let recordSwallowedNewlines = storage.options.contains(.cmarkBugCompatibility)
 
-        // Reset cmark's per-subject backtick-closer cache (`matchCodeSpan`, flag-ON only). Flag-OFF the cache is never consulted, so leave it untouched - inert.
-        if storage.options.contains(.cmarkBugCompatibility) {
-            codeSpanScannedForBackticks = false
-            for i in codeSpanBackticks.indices {
-                codeSpanBackticks[i] = 0
-            }
-            // cmark's per-subject `FLAG_SKIP_HTML_*` bits start clear for each new inline subject.
-            htmlScanSkip = []
-            codeSpanSwallowedNewlines.removeAll(keepingCapacity: true)
-            attributeSwallowedNewlines.removeAll(keepingCapacity: true)
-            linkDestinationSwallowedNewlines.removeAll(keepingCapacity: true)
-            lineEndingsAreLiteral = preserveWhitespace
-        }
         htmlCloserMisses = HTMLCloserMisses()
 
         while cursor < endOffset {
@@ -127,9 +98,6 @@ extension BlockParser {
                     )
                     storage.appendChild(codeIdx, to: parent)
                     stampInline(codeIdx, cursor, span.afterClose, content: content)
-                    if recordSwallowedNewlines {
-                        recordRawInlineSwallowedNewlines(from: cursor, to: span.afterClose, content: content)
-                    }
                     cursor = span.afterClose
                     pendingTextStart = cursor
                     continue
@@ -161,24 +129,13 @@ extension BlockParser {
                     start: pendingTextStart,
                     end: info.textEnd,
                     content: content,
-                    into: parent,
-                    rangeEnd: info.isBackslash || !storage.options.contains(.cmarkBugCompatibility) ? nil : cursor,
-                    // A whitespace-only run before a soft OR trailing-space hard break survives flag-ON as an empty text node spanning the stripped whitespace (see `flushPendingText`). cmark's parse_inline creates and rtrims this node in its generic text path BEFORE handle_newline classifies the break, so the empty node is emitted the same way regardless of break kind - the `emptytext-*` (soft) and `brkhb-*` (hard) fuzzer pairs both assert it. A backslash hard break is excluded by `rangeEnd: nil` above (its `\` leaves no trailing whitespace to strip).
-                    emitEmptyStrippedWhitespace: true
+                    into: parent
                 )
                 let kind: MarkdownNode.Kind = info.isHard ? .lineBreak : .softBreak
                 let breakIdx = storage.appendNode(NodeRecord(kind: kind, parent: parent))
                 storage.appendChild(breakIdx, to: parent)
                 cursor += 1
                 pendingTextStart = cursor
-                // why: after a soft or trailing-space break cmark's inline `handle_newline` (inlines.c ~1499) advances past the spaces/tabs that begin the next line before resuming text, so a LAZY continuation's residual leading whitespace - which flag-ON the block parser keeps in the buffer (see `BlockParser.addLineSegment`) - never reaches a TEXT node, mirroring cmark stripping it from text flow while a code span still captures it straight from the raw buffer. Gated on `.cmarkBugCompatibility`: flag-OFF (and for every matched continuation) the block parser begins each continuation at its first non-space, so no residual follows a break and this loop finds none. EXCLUDES a backslash hard break (`!info.isBackslash`): cmark's `handle_backslash` builds the LINEBREAK and does NOT advance past the next line's leading whitespace, so after a `\`-break a lazy continuation's residual stays literal text (`- \<nl> r` -> Text " r"); skipping it here diverged from cmark (a fuzzer-found residual, previously mis-noted as out-of-corpus).
-                if storage.options.contains(.cmarkBugCompatibility), !info.isBackslash {
-                    while cursor < endOffset,
-                          content[cursor] == UInt8(ascii: " ") || content[cursor] == UInt8(ascii: "\t") {
-                        cursor += 1
-                    }
-                    pendingTextStart = cursor
-                }
 
             case UInt8(ascii: "&"):
                 // Entity matching reads a flat buffer by raw offset, so scan through a contiguous
@@ -191,9 +148,9 @@ extension BlockParser {
                 let window = contiguous!
                 // Match in an expression of its own so the borrowed `source` span (lifetime-dependent) stays scoped to the call and can't escape into the body.
                 let entity: EntityParser.EntityMatch? = if window.inSource {
-                    EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: sourceBytes, bugCompat: storage.options.contains(.cmarkBugCompatibility))
+                    EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: sourceBytes)
                 } else {
-                    EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: storage.strings.span, bugCompat: storage.options.contains(.cmarkBugCompatibility))
+                    EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: storage.strings.span)
                 }
                 if let entity {
                     flushPendingText(
@@ -240,9 +197,7 @@ extension BlockParser {
                     )
                     // Links may not contain other links (spec "Links"), and an autolink binds more tightly
                     // than link text brackets, so the link openers before it cannot form links.
-                    if !storage.options.contains(.cmarkBugCompatibility) {
-                        markLinkOpenersInactive(brackets: &brackets, lastBracket: lastBracket)
-                    }
+                    markLinkOpenersInactive(brackets: &brackets, lastBracket: lastBracket)
                     cursor = auto.afterClose
                     pendingTextStart = cursor
                     continue
@@ -286,9 +241,6 @@ extension BlockParser {
                     )
                     storage.appendChild(nodeIdx, to: parent)
                     stampInline(nodeIdx, cursor, htmlEnd, content: content)
-                    if recordSwallowedNewlines {
-                        recordRawInlineSwallowedNewlines(from: cursor, to: htmlEnd, content: content)
-                    }
                     cursor = htmlEnd
                     pendingTextStart = cursor
                     continue
@@ -491,18 +443,12 @@ extension BlockParser {
                     end: endOffset,
                     content: content
                    ) {
-                    let emptyBefore = pendingTextStart == auto.urlStart
                     flushPendingText(
                         start: pendingTextStart,
                         end: auto.urlStart,
                         content: content,
                         into: parent
                     )
-                    // why: cmark-gfm's autolink extension splits the text flow into `[before, link, after]` and leaves an EMPTY text node where the rewrite emits none. Flag-ON (`.cmarkBugCompatibility`) reproduce those empties; flag-OFF the tree stays clean (spec-correct deliverable). A `://`-scheme URL (`url_match` + `cmark_node_unput`) leaves an empty `before` only when the scheme-only preceding text node is fully rewound, and never an `after`; a `www.` match rewinds nothing and its trigger fires before any text is emitted, so it gets neither. (The EMAIL form's empty siblings are handled in `gfmEmailAutolinkPass`, not here.) `consolidateTextNodes` later folds an empty node into an adjacent real text run (mirroring cmark's `cmark_consolidate_text_nodes`), leaving it standalone only where cmark does.
-                    if storage.options.contains(.cmarkBugCompatibility),
-                       emptyBefore, auto.form != .www {
-                        emitEmptyText(at: auto.urlStart, content: content, into: parent)
-                    }
                     emitGFMAutolink(
                         auto: auto,
                         content: content,
@@ -726,9 +672,6 @@ extension BlockParser {
                     url = cleanURLChunk(materializedChunk(start: dest.destination.lowerBound, end: dest.destination.upperBound, content: content))
                     title = unescapeURLChunk(materializedChunk(start: titleInterior.lowerBound, end: titleInterior.upperBound, content: content))
                     matched = true
-                    if storage.options.contains(.cmarkBugCompatibility) {
-                        recordLinkDestinationSwallowedNewlines(from: afterParen, to: afterTitleSpaces, content: content)
-                    }
                 }
             }
             if !matched {
@@ -770,7 +713,7 @@ extension BlockParser {
             // A whitespace-only `[ ]` is neither a link label nor `[]` (spec "Links": a link label holds a
             // non-whitespace character), so a shortcut reference before it leaves it as text.
             let labelIsWhitespace = labelIsBlank && (labelChunk.map { $0.length > 0 } ?? (labelRange.map { !$0.isEmpty } ?? false))
-            if labelIsWhitespace && !storage.options.contains(.cmarkBugCompatibility) {
+            if labelIsWhitespace {
                 afterRefForm = pos
             }
             if labelIsBlank && !openerBracketAfter {
@@ -799,15 +742,9 @@ extension BlockParser {
                 key = nil
             }
             if let key, !key.isEmpty,
-               let ref = storage.referenceMap[key],
-               chargeReferenceExpansion(ref) {
+               let ref = storage.referenceMap[key] {
                 url = ref.destination
                 title = ref.title
-                // why: cmark's `link_label` consumed this `[…]` as a raw byte scan and `goto match` keeps
-                // that position, so its newlines never reset the column cursor a later footnote measures.
-                if storage.options.contains(.cmarkBugCompatibility) {
-                    recordLinkDestinationSwallowedNewlines(from: pos, to: afterRefForm, content: content)
-                }
                 pos = afterRefForm
                 matched = true
             }
@@ -835,14 +772,11 @@ extension BlockParser {
         }
         // GFM footnote reference: when no link form matches but the bracket contents start with `^` (and have at least one more byte), treat the whole `[^label]` as a `.footnoteReference` — but only when the label resolves to a known definition. cmark turns an unresolved `[^x]` back into literal `[^x]` text (and then consolidates it with neighbours), which the normal no-match bracket handling below reproduces, since the footnote map is fully populated before inline parsing. An image-shaped opener `![^label]` is a footnote too (cmark ignores the image flag here): its `[` sits one past the opener's `!`.
         let footnoteBracketStart = brackets[openerIdx].virtualStart + (isImage ? 1 : 0)
-        // cmark gates ALL footnote handling below — the resolved reference and every
-        // `.cmarkBugCompatibility` collapse — on the node immediately after the opener being a TEXT
+        // cmark gates ALL footnote handling below on the node immediately after the opener being a TEXT
         // node (`handle_close_bracket`, src/inlines.c: `opener->inl_text->next->type ==
         // CMARK_NODE_TEXT`). When the inner `^[…](…)` / `^[…][ref]` was consumed as an inline
         // attribute, that node is the ATTRIBUTE node instead, so no footnote path applies and the
-        // bracket falls through to the literal `]` below (`[^[]()]` → `[` + attributes + `]`). The
-        // `[^[` collapse still fires when the inner `^[` did NOT form an attribute, because then the
-        // `^[` text node remains (`[[^[]]]()` → `Link[Text "[^["]`).
+        // bracket falls through to the literal `]` below (`[^[]()]` → `[` + attributes + `]`).
         let footnoteAfterOpenerIsText = storage[openerInl].next.map { storage[$0].kind == .text } ?? false
         if storage.options.contains(.footnotes),
            footnoteAfterOpenerIsText,
@@ -851,108 +785,6 @@ extension BlockParser {
             // removing the inner nodes below doesn't leave stale delimiters for `processEmphasis`.
             processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
             emitFootnoteReference(openerInl: openerInl, definition: defIdx, span: footnoteBracketStart..<(cursor + 1), content: content)
-            popBracket(brackets: &brackets, lastBracket: &lastBracket)
-            return initialPos
-        }
-        // cmark BUG (bug-compat only): a footnote-shaped opener whose caret is immediately followed by
-        // another `[` (`[^[…`) has its inline footnote branch capture the label from the static `"^["`
-        // string, over-reading past the inner `[` into that string's NUL terminator (FINDINGS #146). That
-        // label resolves to a `[` definition when one exists (`collapseCaretBracket`). Otherwise the
-        // unresolved reference reconstructs to `[^[` (`![^[` for an image opener) followed by a NUL, so
-        // reading its consolidated run as a C-string truncates there. Emit the `[^[` text and mark it as
-        // run-truncating (its invisible tail is dropped in `dropRunTruncatedTails`, after the autolink pass
-        // so a trailing email still links), then continue parsing so an enclosing bracket can still close
-        // (`[[^[]]]()` -> `Link[Text "[^["]`).
-        // Checked before the cross-line case because a `[^[…` opener takes this shape even across lines.
-        // The static `"^["` string belongs to the `^[` attribute opener, so without `.attributes` the `^`
-        // is ordinary text, the label is read from the source, and the bracket takes the paths below.
-        if storage.options.contains(.footnotes),
-           storage.options.contains(.cmarkBugCompatibility),
-           storage.options.contains(.attributes),
-           footnoteAfterOpenerIsText,
-           footnoteBracketStart + 2 < end,
-           content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
-           content[footnoteBracketStart + 2] == UInt8(ascii: "["),
-           caretBracketCollapses(content, open: footnoteBracketStart, outerClose: cursor) {
-            processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
-            collapseCaretBracket(
-                openerInl: openerInl,
-                footnoteBracketStart: footnoteBracketStart,
-                closeBracket: cursor,
-                content: content
-            )
-            popBracket(brackets: &brackets, lastBracket: &lastBracket)
-            return initialPos
-        }
-        // cmark BUG (bug-compat only): a footnote-shaped opener `[^…]` / `![^…]` whose `]` is on a
-        // later line than its `[` collapses to literal `[^]` / `![^]`, dropping the inner content and
-        // the soft break (empty label from a column-length underflow across the break). The
-        // spec-correct default falls through to normal bracket handling, keeping the break. See
-        // FINDINGS #146.
-        if storage.options.contains(.footnotes),
-           storage.options.contains(.cmarkBugCompatibility),
-           footnoteAfterOpenerIsText,
-           footnoteBracketStart + 1 < end,
-           footnoteBracketStart + 2 < cursor,
-           content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
-           footnoteSpanCrossesLine(content, from: footnoteBracketStart + 2, to: cursor) {
-            processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
-            collapseMultilineFootnote(
-                openerInl: openerInl,
-                footnoteBracketStart: footnoteBracketStart,
-                closeBracket: cursor,
-                content: content
-            )
-            popBracket(brackets: &brackets, lastBracket: &lastBracket)
-            return initialPos
-        }
-        // cmark BUG (bug-compat only): any other unresolved footnote-shaped bracket with a same-line
-        // label reconstructs to the RAW `[^label]` source span. cmark synthesizes the unresolved
-        // reference's text from raw bytes in `process_footnotes`, bypassing the smart punctuation,
-        // backslash escapes, and entity decoding that the spec-correct literal path applies.
-        if storage.options.contains(.footnotes),
-           storage.options.contains(.cmarkBugCompatibility),
-           footnoteAfterOpenerIsText,
-           footnoteBracketStart + 1 < end,
-           content[footnoteBracketStart + 1] == UInt8(ascii: "^"),
-           let labelChunk = footnoteRefLabel(openerVirtualStart: footnoteBracketStart, closeBracket: cursor, content: content),
-           footnoteDefinition(label: labelChunk, measuredOver: (footnoteBracketStart + 2)..<cursor, in: content) == nil {
-            processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
-            emitRawFootnoteLiteral(openerInl: openerInl, openerVirtualStart: brackets[openerIdx].virtualStart, closeBracket: cursor, content: content)
-            popBracket(brackets: &brackets, lastBracket: &lastBracket)
-            return initialPos
-        }
-        // cmark BUG (bug-compat only): a footnote-shaped bracket whose caret is backslash-escaped
-        // (`[\^…]` / `![\^…]`). cmark still treats it as a footnote — the text node after `[` is the
-        // escaped `^` — but measures the reference-label length in *columns* from the opener's start
-        // (the `[`, or the `!` of an image opener) spanning the backslash, while reading the label bytes
-        // from just past the `^`. Counting the backslash column runs the read one byte past the label:
-        //   - a `[` opener captures the closing `]` (`[\^x]` -> `[^x]]`);
-        //   - an image `![` opener, whose start column sits one further left, over-reads a *second* byte
-        //     past the `]` into whatever follows the block's content - a paragraph's first trailing space/tab
-        //     (`trailingBlankAfterContent`), else its trailing newline, or the NUL terminator of a
-        //     `nulTerminatedInlineContainers` block - and drops the `!` (`![\^x]` -> `[^x]\n]`);
-        //   - a cross-line span resets the per-line column at the soft break, so the length comes from the
-        //     `]`'s column on its own line: it can underflow to an empty label (`[\^\nx]` -> `[^]`) or cut
-        //     the first line short (`[\^abcdef\nxxxxx]` captures `abc`).
-        // A captured label matching a definition resolves to a footnote reference; otherwise the
-        // unresolved reference reconstructs as `[^` + captured bytes + `]`. The spec-correct default
-        // processes the escape and keeps a single `]` (`[^x]`).
-        if storage.options.contains(.footnotes),
-           storage.options.contains(.cmarkBugCompatibility),
-           footnoteAfterOpenerIsText,
-           footnoteBracketStart + 3 < cursor,
-           content[footnoteBracketStart + 1] == UInt8(ascii: "\\"),
-           content[footnoteBracketStart + 2] == UInt8(ascii: "^") {
-            processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
-            emitEscapedCaretFootnote(
-                openerInl: openerInl,
-                isImage: isImage,
-                footnoteBracketStart: footnoteBracketStart,
-                closeBracket: cursor,
-                content: content,
-                parent: parent
-            )
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             return initialPos
         }
@@ -1005,65 +837,17 @@ extension BlockParser {
 
     // MARK: - Footnote references
 
-    /// Match a footnote-reference label inside an unmatched `[…]`.
-    ///
-    /// Returns the label chunk (excluding `[^` and `]`) if the bracket contents start with `^` and contain at least one more byte. `openerVirtualStart` and `closeBracket` are *virtual* content offsets; the returned chunk is resolved to a real buffer chunk via `contiguousChunk`, so multi-segment content reads real bytes. A label that straddles a line join (not representable as one contiguous chunk) yields `nil` (the reference isn't recognized) rather than reading past a segment.
-    private func footnoteRefLabel(openerVirtualStart: Int, closeBracket: Int, content: borrowing ContentSpan) -> Chunk? {
-        let interiorStart = openerVirtualStart + 1
-        precondition(interiorStart < closeBracket, "a footnote-shaped bracket holds at least one byte")
-        if content[interiorStart] != UInt8(ascii: "^") {
-            return nil
-        }
-        let labelStart = interiorStart + 1
-        if labelStart >= closeBracket {
-            return nil
-        }
-        guard let chunk = content.contiguousChunk(fromVirtual: labelStart, limit: closeBracket),
-              chunk.length == closeBracket - labelStart else {
-            return nil
-        }
-        // A footnote reference is same-line only. Unlike a link reference (whose multi-line label
-        // cmark resolves after normalization), cmark never resolves a footnote-shaped bracket whose
-        // label spans a soft break — such a bracket takes the cross-line collapse instead. So reject a
-        // label containing a newline here; the cross-line branch handles it.
-        var i = labelStart
-        while i < closeBracket {
-            if content[i] == UInt8(ascii: "\n") {
-                return nil
-            }
-            i += 1
-        }
-        return chunk
-    }
-
     /// The footnote definition the footnote-shaped bracket from `open` to `closeBracket` references, or `nil`.
     /// Its label - everything after the `^` - matches a definition's label after the normalization link labels
     /// get (spec "Links": case-folded, with runs of whitespace, line endings included, collapsed to one
     /// space and leading and trailing whitespace removed), so it may span a line ending.
     private func footnoteDefinition(referencedFrom open: Int, closeBracket: Int, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
-        if storage.options.contains(.cmarkBugCompatibility) {
-            guard let label = footnoteRefLabel(openerVirtualStart: open, closeBracket: closeBracket, content: content) else {
-                return nil
-            }
-            return footnoteDefinition(label: label, measuredOver: (open + 2)..<closeBracket, in: content)
-        }
         let labelStart = open + 2
         guard labelStart < closeBracket, content[open + 1] == UInt8(ascii: "^"),
               linkLabelFitsLengthCap(virtualRange: labelStart..<closeBracket, in: content) else {
             return nil
         }
         return storage.footnoteMap[normalizeLabel(virtualRange: labelStart..<closeBracket, in: content)]
-    }
-
-    /// The footnote definition a reference's `label` resolves to, or `nil`, as cmark's `process_footnotes`
-    /// resolves it: `cmark_map_lookup` (`src/map.c`) returns no definition for a label over the link-label
-    /// length cap, so an over-cap reference stays literal. `labelRange` is the virtual range of `content`
-    /// holding the label cmark measures. A definition's own label is not capped (`cmark_footnote_create`).
-    private func footnoteDefinition(label: Chunk, measuredOver labelRange: Range<Int>, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
-        guard linkLabelFitsLengthCap(virtualRange: labelRange, in: content) else {
-            return nil
-        }
-        return storage.footnoteMap[normalizeLabel(chunk: label)]
     }
 
     /// Splice a `.footnoteReference` node in place of the opener's bracket text node and any inner-content text nodes.
@@ -1076,8 +860,7 @@ extension BlockParser {
     /// `[^foo]` displays `foo`.
     ///
     /// The opener node is removed whole: a `[` (`![^a]` never opens an image bracket, see the `!` dispatch,
-    /// so it reaches here as a literal `!` followed by a `[` opener), or the `![` of an escaped-caret image
-    /// opener (`emitEscapedCaretFootnote`), which cmark frees entirely.
+    /// so it reaches here as a literal `!` followed by a `[` opener).
     ///
     /// The reference's source range is `span`, the virtual range of `content` it replaces: from its opener to just past its `]`.
     private mutating func emitFootnoteReference(openerInl: DocumentStorage.Index, definition defIdx: DocumentStorage.Index, span: Range<Int>, content: borrowing ContentSpan) {
@@ -1102,413 +885,6 @@ extension BlockParser {
         }
     }
 
-    /// Whether the virtual content range `[from, to)` contains a line break (`\n`), i.e. a
-    /// footnote-shaped bracket's `]` lands on a later line than its `[`. Soft breaks appear as `\n`
-    /// bytes whether the paragraph content is one contiguous source chunk or a multi-segment join.
-    private func footnoteSpanCrossesLine(_ content: borrowing ContentSpan, from: Int, to: Int) -> Bool {
-        var i = from
-        while i < to {
-            if content[i] == UInt8(ascii: "\n") {
-                return true
-            }
-            i += 1
-        }
-        return false
-    }
-
-    /// The byte length of the label cmark captures for a footnote-shaped bracket, `colOf(]) -
-    /// colOf([) - 2`, with each column measured from its own line's start (cmark's `handle_newline`
-    /// resets `column_offset` at each *bare* line ending). Negative/zero means an empty captured label.
-    ///
-    /// Only a bare `\n` resets: cmark's `handle_newline` (soft break, or the trailing-space hard break)
-    /// runs `column_offset = -subj->pos` unconditionally, but a `\n` consumed by a preceding backslash
-    /// hard break (`handle_backslash`'s `make_linebreak`) never touches `column_offset`. A `\n` is
-    /// backslash-consumed exactly when an *odd* run of backslashes immediately precedes it, so those
-    /// bytes must not reset the per-line column (see FINDINGS #154).
-    private func footnoteCapturedLabelLength(_ content: borrowing ContentSpan, open: Int, close: Int) -> Int {
-        var afterNLOpen = content.base
-        var i = content.base
-        while i < open {
-            if content[i] == UInt8(ascii: "\n"), footnoteColumnResets(content, at: i) {
-                afterNLOpen = i + 1
-            }
-            i += 1
-        }
-        var afterNLClose = afterNLOpen
-        i = open
-        while i < close {
-            if content[i] == UInt8(ascii: "\n"), footnoteColumnResets(content, at: i) {
-                afterNLClose = i + 1
-            }
-            i += 1
-        }
-        return (close - afterNLClose) - (open - afterNLOpen) - 2
-    }
-
-    /// Whether the `\n` at `i` is a *bare* line ending — one that cmark's `handle_newline` processes
-    /// (resetting `column_offset`) rather than one consumed by a preceding backslash hard break. The
-    /// last of an odd run of backslashes immediately before the `\n` consumes it (CommonMark's
-    /// backslash line-break rule), so the newline is bare exactly when that run has even length.
-    private func bareLineEnding(_ content: borrowing ContentSpan, at i: Int) -> Bool {
-        var backslashes = 0
-        var j = i - 1
-        while j >= content.base, content[j] == UInt8(ascii: "\\") {
-            backslashes += 1
-            j -= 1
-        }
-        return backslashes % 2 == 0
-    }
-
-    /// Whether the `\n` at `i` resets cmark's per-line column cursor when measuring a footnote
-    /// reference's captured label length (`footnoteCapturedLabelLength`).
-    ///
-    /// A newline swallowed by a code span or raw HTML resets exactly when source positions are on: cmark
-    /// runs its `adjust_subj_node_newlines` cursor reset only under `CMARK_OPT_SOURCEPOS`. So with source
-    /// positions off (`.cmarkSourcePositionsDisabled`) the swallowed newline stays part of the raw byte
-    /// capture (`` [^`\n`] `` verbatim), while with them on it collapses the label like a soft break
-    /// (`[^]`). See FINDINGS Quirk I (#35/#74). This is decided before the backslash check because a
-    /// backslash inside a code span or raw HTML is literal content - cmark's `handle_backslash` never sees
-    /// it, so a code span holding a backslash-newline resets like `` [^`\n`] ``.
-    /// Deciding first cannot shadow the attribute or link-destination sets: the parse cursor jumps past a
-    /// raw scan, so their offsets never coincide with a code span's or raw HTML's.
-    ///
-    /// Otherwise a backslash hard break's newline never resets (`bareLineEnding`), nor does a newline
-    /// swallowed by an attribute or link-destination scan, nor any newline of a pass whose line endings
-    /// are literal text (`lineEndingsAreLiteral`) - cmark's `handle_newline` never runs there.
-    private func footnoteColumnResets(_ content: borrowing ContentSpan, at i: Int) -> Bool {
-        if codeSpanSwallowedNewlines.contains(i) {
-            return !storage.options.contains(.cmarkSourcePositionsDisabled)
-        }
-        guard !lineEndingsAreLiteral, bareLineEnding(content, at: i) else {
-            return false
-        }
-        if attributeSwallowedNewlines.contains(i) {
-            return false
-        }
-        if linkDestinationSwallowedNewlines.contains(i) {
-            return false
-        }
-        return true
-    }
-
-    /// Record every newline byte in `[from, to)` as one consumed inside a raw-scan inline (a code span
-    /// or raw HTML). Called at those two handlers only flag-ON (`.cmarkBugCompatibility`); the recorded
-    /// offsets decide that newline's column reset in `footnoteColumnResets` by source-position mode alone.
-    private mutating func recordRawInlineSwallowedNewlines(from: Int, to: Int, content: borrowing ContentSpan) {
-        codeSpanSwallowedNewlines.formUnion(Self.newlineOffsets(from: from, to: to, content: content))
-    }
-
-    /// Record every newline byte in `[from, to)` as one consumed inside `handleCloseBracketAttribute`'s
-    /// raw scans: a matched inline-attribute `(…)` payload, or the following `[…]` label it consumes;
-    /// the recorded offsets suppress that newline's column reset in `footnoteColumnResets`,
-    /// unconditionally - unlike `recordRawInlineSwallowedNewlines`, this doesn't depend on
-    /// `.cmarkSourcePositionsDisabled` (cmark's attribute scans never call `adjust_subj_node_newlines`
-    /// regardless of `CMARK_OPT_SOURCEPOS`).
-    private mutating func recordAttributeSwallowedNewlines(from: Int, to: Int, content: borrowing ContentSpan) {
-        attributeSwallowedNewlines.formUnion(Self.newlineOffsets(from: from, to: to, content: content))
-    }
-
-    /// Record every newline byte in `[from, to)` as one consumed inside a matched inline link/image
-    /// destination `(…)` payload scan, or inside the `[…]` label of a resolved reference link/image.
-    /// Called only when that form actually matches (`handleCloseBracket`); the recorded offsets suppress
-    /// that newline's column reset in `footnoteColumnResets`, unconditionally - like
-    /// `recordAttributeSwallowedNewlines`, this doesn't depend on `.cmarkSourcePositionsDisabled` (cmark's
-    /// `manual_scan_link_url` / `scan_spacechars` / `scan_link_title` / `link_label` never call
-    /// `adjust_subj_node_newlines` regardless of `CMARK_OPT_SOURCEPOS`).
-    private mutating func recordLinkDestinationSwallowedNewlines(from: Int, to: Int, content: borrowing ContentSpan) {
-        linkDestinationSwallowedNewlines.formUnion(Self.newlineOffsets(from: from, to: to, content: content))
-    }
-
-    /// Every newline byte offset in `[from, to)`. Shared scan behind `recordRawInlineSwallowedNewlines`,
-    /// `recordAttributeSwallowedNewlines`, and `recordLinkDestinationSwallowedNewlines`, which differ
-    /// only in which set the offsets join.
-    private static func newlineOffsets(from: Int, to: Int, content: borrowing ContentSpan) -> [Int] {
-        var offsets: [Int] = []
-        var i = from
-        while i < to {
-            if content[i] == UInt8(ascii: "\n") {
-                offsets.append(i)
-            }
-            i += 1
-        }
-        return offsets
-    }
-
-    /// Whether a footnote-shaped `[^[…` opener takes cmark's static-string label capture
-    /// (`collapseCaretBracket`: a reference to a `[` definition, else literal `[^[` dropping the rest of
-    /// the line) rather than the cross-line label reconstruction. The captured label starts with the
-    /// inner `[`; cmark reads it from the static `"^["` string once that label is >= 2 bytes (the inner
-    /// `[` plus more). A length of 1 (just the inner `[`) reconstructs to `[^[]`, and <= 0 to `[^]`,
-    /// both handled by the cross-line branch.
-    private func caretBracketCollapses(_ content: borrowing ContentSpan, open: Int, outerClose: Int) -> Bool {
-        return footnoteCapturedLabelLength(content, open: open, close: outerClose) >= 2
-    }
-
-    /// Replace an unresolved same-line footnote-shaped bracket with its RAW `[^label]` (or `![^label]`)
-    /// source span as a single text node, reproducing cmark's `process_footnotes` reconstruction which
-    /// works from raw bytes — so smart punctuation, backslash escapes, and entity references inside the
-    /// bracket stay verbatim, unlike the spec-correct literal path.
-    private mutating func emitRawFootnoteLiteral(openerInl: DocumentStorage.Index, openerVirtualStart: Int, closeBracket: Int, content: borrowing ContentSpan) {
-        let parentIdx = storage[openerInl].parent
-        let chunk = content.chunk(offset: openerVirtualStart, length: closeBracket + 1 - openerVirtualStart)
-        let ref = storage.intern(chunk)
-        let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parentIdx, data: .literal(ref)))
-        storage.insertChildBefore(textIdx, before: openerInl)
-        stampInline(textIdx, openerVirtualStart, closeBracket + 1, content: content)
-        var sib: DocumentStorage.Index? = openerInl
-        while let s = sib {
-            let next = storage[s].next
-            storage.unlinkChild(s)
-            sib = next
-        }
-    }
-
-    /// Collapse a footnote-shaped bracket whose caret is *immediately* followed by another `[`
-    /// (`[^[…`) once its outer `]` closes, reproducing cmark's `.cmarkBugCompatibility` behavior:
-    /// cmark's inline footnote branch (`handle_close_bracket`) captures the label from the static `"^["`
-    /// string, over-reading past the inner `[` into its NUL terminator. `cmark_map_lookup` compares
-    /// normalized labels with `strcmp`, which stops at that NUL, so the captured label resolves to a
-    /// definition labelled `[` - subject only to the lookup's length cap on the captured length - and
-    /// the bracket becomes a reference to it. Otherwise the unresolved reference reconstructs to `[^[`
-    /// followed by a NUL. Emit that `[^[` literal in place of the opener and its inner content, and mark
-    /// it run-truncating so `dropRunTruncatedTails` (run after the autolink pass) drops the invisible
-    /// tail the NUL would hide - while an email in that tail still links. The caller returns
-    /// `initialPos` so parsing continues - an enclosing bracket can still form a link around the `[^[`
-    /// or the reference.
-    private mutating func collapseCaretBracket(openerInl: DocumentStorage.Index, footnoteBracketStart: Int, closeBracket: Int, content: borrowing ContentSpan) {
-        let labelStart = footnoteBracketStart + 2
-        let capturedLength = footnoteCapturedLabelLength(content, open: footnoteBracketStart, close: closeBracket)
-        if let defIdx = capturedFootnoteDefinition([UInt8(ascii: "[")], measuredOver: labelStart..<min(labelStart + capturedLength, closeBracket), in: content) {
-            emitFootnoteReference(openerInl: openerInl, definition: defIdx, span: footnoteBracketStart..<(closeBracket + 1), content: content)
-            return
-        }
-        let parentIdx = storage[openerInl].parent
-        var literal: [UInt8] = []
-        literal.append(UInt8(ascii: "["))
-        literal.append(UInt8(ascii: "^"))
-        literal.append(UInt8(ascii: "["))
-        let startOff = storage.strings.count
-        for b in literal {
-            storage.strings.append(b)
-        }
-        let ref = storage.intern(Chunk(offset: startOff, length: literal.count, inSource: false))
-        let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parentIdx, data: .literal(ref)))
-        storage.insertChildBefore(textIdx, before: openerInl)
-        stampInline(textIdx, footnoteBracketStart, footnoteBracketStart + 3, content: content)
-        storage.runTruncatingTextNodes.insert(textIdx)
-        var sib: DocumentStorage.Index? = openerInl
-        while let s = sib {
-            let next = storage[s].next
-            storage.unlinkChild(s)
-            sib = next
-        }
-    }
-
-    /// Build the byte-captured label for a raw byte-length cut `[start, cutEnd)`, reproducing cmark's
-    /// `cmark_chunk` truncation: the cut is a length-bounded slice oblivious to UTF-8 boundaries, and a
-    /// scalar split by the cut is never completed by reading past it. The split scalar's bytes reach the
-    /// two uses of the capture differently, so each gets its own form:
-    /// - `display`, the bytes of an unresolved reconstruction, ends in a single U+FFFD for the truncated
-    ///   tail: the reference's later `String(cString:)` bridge repairs it as one maximal subpart.
-    /// - `lookupKey`, the label matched against definitions, ends in one U+FFFD per truncated byte:
-    ///   cmark's `cmark_map_lookup` case-folds the raw cut with `cmark_utf8proc_case_fold`, whose
-    ///   `cmark_utf8proc_iterate` rejects an incomplete sequence and advances a single byte at a time.
-    ///
-    /// Shared by both footnote-shaped-bracket label captures (`collapseMultilineFootnote`,
-    /// `emitEscapedCaretFootnote`).
-    /// `overreadByte`, when non-nil, stands in for content at/past `content.endOffset` — the
-    /// escaped-caret image form's one-byte over-read past the block's own content, into whatever cmark's
-    /// buffer holds right there (its caller, `emitEscapedCaretFootnote`, picks the byte); callers
-    /// that don't over-read never pass a `cutEnd` past `content.endOffset`, so it's never forced.
-    private static func capturedLabelBytes(content: borrowing ContentSpan, start: Int, cutEnd: Int, overreadByte: UInt8? = nil) -> (display: [UInt8], lookupKey: [UInt8]) {
-        let contentEnd = content.endOffset
-        let replacementCharacter: [UInt8] = [0xEF, 0xBF, 0xBD]
-        var display: [UInt8] = []
-        var lookupKey: [UInt8] = []
-        var j = start
-        while j < cutEnd {
-            let b0 = j < contentEnd ? content[j] : overreadByte!
-            let sequenceLength = b0.utf8SequenceLength
-            if j + sequenceLength <= cutEnd {
-                for k in j..<(j + sequenceLength) {
-                    display.append(k < contentEnd ? content[k] : overreadByte!)
-                }
-                j += sequenceLength
-            } else {
-                // The cut lands inside this scalar's continuation bytes: cmark's raw slice ends here, so
-                // nothing beyond `cutEnd` is part of the capture.
-                lookupKey = display
-                for _ in j..<cutEnd {
-                    lookupKey.append(contentsOf: replacementCharacter)
-                }
-                display.append(contentsOf: replacementCharacter)
-                return (display, lookupKey)
-            }
-        }
-        return (display, display)
-    }
-
-    /// The footnote definition a captured label's lookup key (as `capturedLabelBytes` builds it) resolves to,
-    /// or `nil`, as cmark's `process_footnotes` looks up the captured reference literal. `labelRange` is
-    /// the virtual range of `content` whose bytes cmark counts against the label-length cap
-    /// (`footnoteDefinition`).
-    private mutating func capturedFootnoteDefinition(_ lookupKey: [UInt8], measuredOver labelRange: Range<Int>, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
-        let capStart = storage.strings.count
-        for b in lookupKey {
-            storage.strings.append(b)
-        }
-        let capturedChunk = Chunk(offset: capStart, length: lookupKey.count, inSource: false)
-        if normalizeLabel(chunk: capturedChunk).isEmpty {
-            return nil
-        }
-        return footnoteDefinition(label: capturedChunk, measuredOver: labelRange, in: content)
-    }
-
-    /// Handle a footnote-shaped bracket whose `]` lands on a later line than its opener, reproducing
-    /// cmark's `.cmarkBugCompatibility` behavior. cmark's inline footnote branch captures the label as
-    /// `cmark_chunk_dup(caretNode, 1, end_col - start_col - 2)`, reading raw bytes from just after the
-    /// `^` across the soft break; its column arithmetic resets at each newline (`handle_newline` sets
-    /// `column_offset = -pos`), so the captured byte length is `colOf(]) - colOf([) - 2` with per-line
-    /// columns (`footnoteCapturedLabelLength`). That raw byte cut can land mid-character: cmark's
-    /// `cmark_chunk` is just a length-bounded slice, so the copy is oblivious to UTF-8 boundaries and can
-    /// truncate a multi-byte scalar to its lead byte(s) alone. The reference's Swift bridge later turns
-    /// that raw C chunk into a `String` via `String(cString:)`, whose own UTF-8 decoding repairs the
-    /// truncated tail to a single U+FFFD (Unicode's maximal-subpart replacement) — so a captured lead
-    /// byte with no continuation bytes becomes `�`, not the rest of the (unrelated) character that
-    /// happened to follow it in the buffer. Materialize that same replacement here rather than reading
-    /// past the cut to complete the scalar. cmark then RESOLVES the raw captured bytes if they match a
-    /// definition (so a cross-line `[^abcdef<nl>xxxxx]` resolves to `abc`), looking up the truncated tail
-    /// as one U+FFFD per byte (`capturedLabelBytes`); otherwise the whole span reconstructs as
-    /// `[^` + the captured bytes + `]` (`[^]` for an empty capture). The spec-correct default keeps the
-    /// bracket literal with its soft break; see FINDINGS #146.
-    private mutating func collapseMultilineFootnote(openerInl: DocumentStorage.Index, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan) {
-        let labelStart = open + 2
-        // A cross-line reset can drive the length negative; cmark's underflow guard clamps it to empty.
-        let x = max(0, footnoteCapturedLabelLength(content, open: open, close: close))
-        var labelBytes: [UInt8] = []
-        var lookupKey: [UInt8] = []
-        if x > 0 {
-            (labelBytes, lookupKey) = Self.capturedLabelBytes(content: content, start: labelStart, cutEnd: min(labelStart + x, close))
-        }
-        // cmark resolves the reference by its byte-captured label; a match emits a footnote reference.
-        // cmark measures the captured length `x`, not `lookupKey`, which U+FFFD replacement can lengthen.
-        if let defIdx = capturedFootnoteDefinition(lookupKey, measuredOver: labelStart..<min(labelStart + x, close), in: content) {
-            emitFootnoteReference(openerInl: openerInl, definition: defIdx, span: open..<(close + 1), content: content)
-            return
-        }
-        // Unresolved: reconstruct `[^` + captured bytes + `]`.
-        var literal: [UInt8] = []
-        literal.append(UInt8(ascii: "["))
-        literal.append(UInt8(ascii: "^"))
-        literal.append(contentsOf: labelBytes)
-        literal.append(UInt8(ascii: "]"))
-
-        let parentIdx = storage[openerInl].parent
-        let start = storage.strings.count
-        for b in literal {
-            storage.strings.append(b)
-        }
-        let ref = storage.intern(Chunk(offset: start, length: literal.count, inSource: false))
-        let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parentIdx, data: .literal(ref)))
-        storage.insertChildBefore(textIdx, before: openerInl)
-        stampInline(textIdx, open, close + 1, content: content)
-        // Remove the opener and every inner-content sibling (the `^…` up to the `]`).
-        var sib: DocumentStorage.Index? = openerInl
-        while let s = sib {
-            let next = storage[s].next
-            storage.unlinkChild(s)
-            sib = next
-        }
-    }
-
-    /// Reconstruct a footnote-shaped bracket `[\^…]` / `![\^…]` (backslash-escaped caret) under
-    /// `.cmarkBugCompatibility`. cmark reads the reference label from just past the `^` (`open + 3`, one byte
-    /// after the escaped caret) for its column-measured length `colOf(]) - colOf(opener) - 2`, where the
-    /// opener column is the `[`'s for a `[` opener and the `!`'s for an image opener (one further left, so an
-    /// image captures one extra byte). Counting the backslash runs the read one byte past the label: a `[`
-    /// opener captures the closing `]` (`[\^x]` -> `[^x]]`); an image opener over-reads a second byte,
-    /// landing on whatever cmark's buffer holds one past the block's own content - a paragraph's (or setext
-    /// heading's) buffer keeps its last line's first trailing space or tab there (`![\^x] ` -> `[^x] ]` - see
-    /// `trailingBlankAfterContent`), else that line's trailing newline (`![\^x]` -> `[^x]\n]`), while an ATX
-    /// heading's, a table cell's, or a table's preceding paragraph's buffer has none, and cmark's
-    /// `cmark_strbuf` always writes a NUL terminator at its logical end instead (`# ![\^x]` -> `[^x]` - see
-    /// `nulTerminatedInlineContainers`); a cross-line span resets the per-line column at the soft break,
-    /// underflowing the length to an empty label (`[\^\nx]` -> `[^]`). That raw byte cut can land
-    /// mid-character the same way the plain `[^…]` capture does (`collapseMultilineFootnote`): cmark's
-    /// `cmark_chunk` slice is UTF-8-oblivious, and its Swift bridge's later `String(cString:)` repairs a
-    /// truncated tail to a single U+FFFD (`capturedLabelBytes`), rather than reading past the cut to complete
-    /// the scalar. cmark resolves the captured label, keyed as `capturedLabelBytes` describes, if it
-    /// matches a definition (a cross-line `[\^abcdef<nl>xxxxx]` captures `abc`); otherwise the reference
-    /// reconstructs as `[^` + captured bytes + `]` - and that same `String(cString:)` bridge truncates the WHOLE reconstructed literal at the
-    /// NUL-terminated case's embedded NUL, dropping it and the `]` appended after it.
-    private mutating func emitEscapedCaretFootnote(openerInl: DocumentStorage.Index, isImage: Bool, footnoteBracketStart open: Int, closeBracket close: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index) {
-        // cmark's byte-length label is `colOf(]) - colOf(opener) - 2` (per-line columns); an image
-        // opener's `![` shifts the start one byte left, so it captures one extra byte. A cross-line reset
-        // can drive it negative — cmark's underflow guard clamps that to an empty label.
-        let labelLength = max(0, footnoteCapturedLabelLength(content, open: open, close: close) + (isImage ? 1 : 0))
-        // The label runs from just past the escaped `^` (`open + 3`). The image over-read is the only
-        // read that reaches the content end, where the synthetic stand-in below applies.
-        let labelStart = open + 3
-        let overreadByte: UInt8 = storage.nulTerminatedInlineContainers.contains(parent)
-            ? 0
-            : storage.trailingBlankAfterContent[parent] ?? UInt8(ascii: "\n")
-        let (labelBytes, lookupKey) = Self.capturedLabelBytes(
-            content: content, start: labelStart, cutEnd: labelStart + labelLength, overreadByte: overreadByte)
-        // cmark resolves the captured label like any footnote reference. The measured range stops at the
-        // content end: a capture reaching past it includes the closing `]`, which no definition's label
-        // can contain, so the shortened measure never changes the outcome.
-        if let defIdx = capturedFootnoteDefinition(lookupKey, measuredOver: labelStart..<min(labelStart + labelLength, content.endOffset), in: content) {
-            // cmark frees the whole opener node, so a resolved `![\^…]` keeps no `!`: unlike `![^…`, the
-            // `![\` opener is pushed as an image bracket. The reference spans the freed `!` too.
-            emitFootnoteReference(openerInl: openerInl, definition: defIdx, span: (isImage ? open - 1 : open)..<(close + 1), content: content)
-            return
-        }
-        var literal: [UInt8] = []
-        literal.append(UInt8(ascii: "["))
-        literal.append(UInt8(ascii: "^"))
-        literal.append(contentsOf: labelBytes)
-        literal.append(UInt8(ascii: "]"))
-        // A NUL-terminated container's over-read NUL stands in for cmark's `cmark_strbuf` terminator; the later
-        // `String(cString:)` bridge that materializes this literal stops at the first NUL, so drop it
-        // and everything reconstructed after it (the closing `]` just appended above).
-        if let nulIndex = literal.firstIndex(of: 0) {
-            literal.removeSubrange(nulIndex...)
-        }
-
-        let parentIdx = storage[openerInl].parent
-        let start = storage.strings.count
-        for b in literal {
-            storage.strings.append(b)
-        }
-        let ref = storage.intern(Chunk(offset: start, length: literal.count, inSource: false))
-        let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parentIdx, data: .literal(ref)))
-        storage.insertChildBefore(textIdx, before: openerInl)
-        // The reconstructed span runs from the opener (the `!` for an image, else the `[`) to just past
-        // the closing `]`.
-        stampInline(textIdx, open - (isImage ? 1 : 0), close + 1, content: content)
-        // Remove the opener and every inner-content sibling (the `\^…` up to the `]`).
-        var sib: DocumentStorage.Index? = openerInl
-        while let s = sib {
-            let next = storage[s].next
-            storage.unlinkChild(s)
-            sib = next
-        }
-    }
-
-    /// Charges a found link reference against cmark's reference-expansion budget, returning whether it may resolve.
-    ///
-    /// cmark caps the total bytes that reference links expand to at `max(source bytes, 100000)` (`blocks.c` `finalize_document`); each found lookup costs the stored destination plus title bytes (`references.c` `cmark_reference_create`), and a lookup that would exceed the remaining budget fails without spending any (`map.c` `cmark_map_lookup`), leaving the reference literal. CommonMark has no such cap, so flag-OFF every reference resolves.
-    private mutating func chargeReferenceExpansion(_ ref: ReferenceDefinition) -> Bool {
-        guard storage.options.contains(.cmarkBugCompatibility) else { return true }
-        let size = ref.destination.length + ref.title.length
-        let budget = max(sourceBytes.count, 100_000)
-        if size > budget - referenceExpansionSpent {
-            return false
-        }
-        referenceExpansionSpent += size
-        return true
-    }
-
     // MARK: - Extended attributes (`^[..]`)
 
     /// Resolve a `]` that closes an `^[…]` attribute opener. Tries the inline form `(attrs)` first, then the reference form `[label]` whose label resolves in `storage.attributeReferenceMap`.
@@ -1529,9 +905,6 @@ extension BlockParser {
                     attrs = scanned.chunk
                     pos = endAttrs + 1
                     matched = true
-                    if storage.options.contains(.cmarkBugCompatibility) {
-                        recordAttributeSwallowedNewlines(from: startAttrs, to: endAttrs, content: content)
-                    }
                 }
             }
         }
@@ -1544,10 +917,8 @@ extension BlockParser {
         // `subj->pos = initial_pos`; the attribute path never does), so the consumed `[…]` does not
         // re-parse - `^[][]` drops the trailing `[]`, leaving literal `^[]`.
         var labelKey: String?
-        let labelStart = pos
-        let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
         // The inline form completes the construct; what follows it is not part of it.
-        let scansLabel = !matched || bugCompatible
+        let scansLabel = !matched
         if scansLabel, let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
            let lab = matchLinkLabel(labelWindow) {
             // Contiguous window (see `contiguousChunk`): `lab.interior` is a real buffer chunk and
@@ -1566,19 +937,6 @@ extension BlockParser {
                 labelKey = normalizeLabel(virtualRange: lab.interior, in: content)
             }
         }
-        // why: cmark's `link_label` consumes the `[…]` as a raw byte scan outside the dispatch loop, so a
-        // newline inside it never reaches `handle_newline` and never resets the column cursor that a
-        // later `[^[` footnote collapse measures its captured label with (`[^[][\n]]` → `[^[`).
-        if bugCompatible {
-            recordAttributeSwallowedNewlines(from: labelStart, to: pos, content: content)
-        }
-        // why: cmark looks the label up in the refmap it shares with link references, so a link
-        // reference that is the label's surviving entry is charged against the expansion budget here
-        // even though it can't supply attributes.
-        if let key = labelKey, !key.isEmpty,
-           let ref = storage.referenceMap[key] {
-            _ = chargeReferenceExpansion(ref)
-        }
         if let key = labelKey, !key.isEmpty,
            let storedAttrs = storage.attributeReferenceMap[key] {
             attrs = storedAttrs
@@ -1588,9 +946,7 @@ extension BlockParser {
             // Fail: pop bracket, emit a single `]` text at the (possibly label-advanced) close position
             // and resume there. The `^[` text node stays as regular text in the tree. A label naming no
             // attribute definition is not part of the construct, so it is parsed again as text.
-            if !bugCompatible {
-                pos = cursor + 1
-            }
+            pos = cursor + 1
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             emitBracketLiteral(at: pos - 1, content: content, parent: parent)
             return pos
@@ -1874,21 +1230,8 @@ extension BlockParser {
     ///
     /// The start of the content (`content.startOffset`) determines whether `start - 1` is a real "before" character or implicitly a newline (start of inline content acts like a line break).
     private mutating func handleDelimRun(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, pendingTextStart: inout Int) -> Int {
-        // why: cmark-gfm's strikethrough `match` (`extensions/strikethrough.c`) scans a `~` run into a
-        // fixed `char buffer[101]` via `cmark_inline_parser_scan_delimiters(inline_parser,
-        // sizeof(buffer) - 1, '~', …)`, so it reads at most 100 consecutive `~` per delimiter token. A
-        // longer run is thereby chunked into 100-length tokens (never a valid strikethrough delimiter -
-        // only lengths 1 and 2 are - so each stays literal text) plus a final `N mod 100` token that can
-        // pair. Cap the scan at 100 under `.cmarkBugCompatibility`; the outer loop re-enters here for the
-        // next chunk, reproducing the chunking. Flag-OFF stays spec-correct (a run of length ≥ 3 is
-        // simply not a valid delimiter), and `*`/`_` are never capped - cmark's own `scan_delims`
-        // (`src/inlines.c`) has no such fixed buffer, only the strikethrough extension does.
-        let scanLimit =
-            char == UInt8(ascii: "~") && storage.options.contains(.cmarkBugCompatibility)
-            ? min(end, start + 100)
-            : end
         var runEnd = start
-        while runEnd < scanLimit, content[runEnd] == char {
+        while runEnd < end, content[runEnd] == char {
             runEnd += 1
         }
 
@@ -2318,23 +1661,9 @@ extension BlockParser {
     }
 
     /// Match a code span starting at `start` (which must point at a backtick). Returns the resulting content chunk and the offset just past the closing backtick run, or `nil` if no closing run of equal length exists in `start..<end`.
-    ///
-    /// Flag-ON (`.cmarkBugCompatibility`) this reproduces cmark's per-subject backtick-closer cache (`scan_to_closing_backticks`, swift-cmark `src/inlines.c`): a stale "no closer here" record makes cmark MISS some valid later same-length spans after an unmatched longer run has scanned to the end. Flag-OFF the search is spec-correct greedy matching, unchanged - it finds every valid span.
     private mutating func matchCodeSpan(start: Int, end: Int, content: borrowing ContentSpan) -> CodeSpanMatch? {
         let openEnd = scanBacktickRun(start: start, end: end, content: content)
         let runLength = openEnd - start
-
-        let bugCompat = storage.options.contains(.cmarkBugCompatibility)
-        if bugCompat {
-            // cmark step 1: the closer cache has no slot past MAXBACKTICKS, so a longer run is never an opener.
-            if runLength > Self.codeSpanMaxBacktickRun {
-                return nil
-            }
-            // cmark step 2 (early bail): a prior scan already reached the content end for this length, and the latest run start it recorded is at/before this opener - so there is no closer of this length at/after here. Skip the rescan (the stale-cache miss).
-            if codeSpanScannedForBackticks && codeSpanBackticks[runLength] <= openEnd {
-                return nil
-            }
-        }
 
         // Find a matching same-length backtick run after `openEnd`.
         var i = openEnd
@@ -2343,10 +1672,6 @@ extension BlockParser {
             if b == UInt8(ascii: "`") {
                 let closeEnd = scanBacktickRun(start: i, end: end, content: content)
                 let closeLength = closeEnd - i
-                // cmark step 3: record this run's START as the latest known closer position for its length.
-                if bugCompat && closeLength <= Self.codeSpanMaxBacktickRun {
-                    codeSpanBackticks[closeLength] = i
-                }
                 if closeLength == runLength {
                     // Return RAW content; the caller normalizes newlines and applies the single-space-strip rule (in that order) since the strip needs the post-normalize bytes to compare against.
                     //
@@ -2355,7 +1680,7 @@ extension BlockParser {
                     // segment - it is returned zero-copy, byte-identical to the old `content.chunk` fast path. A
                     // multi-line span straddles a soft-break segment boundary (its interior newline joined the
                     // paragraph's non-contiguous lines): the content bytes live in separate source segments joined
-                    // by the interned `\n` (and, flag-ON, a synthetic split-tab residual segment), so no single
+                    // by the interned `\n`, so no single
                     // buffer holds them and a straddling `content.chunk` would read the wrong bytes - dropping the
                     // tail and keeping the continuation line's stripped leading whitespace. `materializedChunk`
                     // joins them through the segment-aware subscript, then hands them to the unchanged normalizer.
@@ -2364,11 +1689,7 @@ extension BlockParser {
                     // The joined bytes equal cmark's paragraph buffer for a MATCHED continuation, whose leading
                     // whitespace the block parser strips just as cmark does (blocks.c:1465). A LAZY continuation
                     // (block quote / list) is the case cmark treats differently: it preserves that line's residual
-                    // leading whitespace (blocks.c:1408), and flag-ON the block parser now keeps that residual in
-                    // the segment content too (`BlockParser.addLineSegment` begins the lazy segment at the
-                    // prefix-match stop, or emits a synthetic-space segment for a split tab), so the join here
-                    // captures it and the code-span literal reproduces cmark (`> `x\n y`` -> `x  y`; the
-                    // `lazyres-*` pairs). Flag-OFF the block parser begins every continuation at its first
+                    // leading whitespace (blocks.c:1408). Flag-OFF the block parser begins every continuation at its first
                     // non-space, so the residual never enters the join - spec-correct.
                     let contentChunk = materializedChunk(start: openEnd, end: i, content: content)
                     return CodeSpanMatch(content: contentChunk, afterClose: closeEnd, backtickCount: runLength)
@@ -2377,10 +1698,6 @@ extension BlockParser {
                 continue
             }
             i += 1
-        }
-        // cmark step 4: reached the content end without a closer. Remember it so any later open short-circuits at step 2.
-        if bugCompat {
-            codeSpanScannedForBackticks = true
         }
         return nil
     }
@@ -2565,10 +1882,7 @@ extension BlockParser {
         // why: cmark's `_scan_autolink_uri` (swift-cmark `src/scanners.re`) matches the URI body with the
         // class `[^\x00-\x20<>]*`, which excludes 0x00–0x20 and `<`/`>` but NOT DEL (0x7F). DEL is an ASCII
         // control character, so the spec excludes it and the deliverable (flag OFF) rejects it; cmark
-        // wrongly admits it. Under `.cmarkBugCompatibility` (adopted only by the differential fuzzer) admit
-        // DEL to match cmark. The email form's explicit char classes never include 0x7F, so only this URI
-        // form diverges.
-        let admitDEL = storage.options.contains(.cmarkBugCompatibility)
+        // wrongly admits it.
         let bodyStart = start + 1
         while i < end {
             let b = content[i]
@@ -2581,7 +1895,7 @@ extension BlockParser {
             }
             if b == UInt8(ascii: "<") || b == UInt8(ascii: " ") || b == UInt8(ascii: "\t")
                 || b == UInt8(ascii: "\n") || b == UInt8(ascii: "\r") || b < 0x20
-                || (b == 0x7F && !admitDEL) {
+                || b == 0x7F {
                 return nil
             }
             i += 1
@@ -2845,13 +2159,6 @@ extension BlockParser {
     /// Dispatch `<!`-prefixed HTML forms: comment, CDATA, declaration.
     private mutating func matchHTMLBangForm(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         // start[0] == '<', start[1] == '!' guaranteed by caller.
-        // why: cmark-gfm guards the ENTIRE `<!` dispatch on the comment skip flag
-        // (`src/inlines.c` `handle_pointy_brace`: `if (c == '!' && (subj->flags & FLAG_SKIP_HTML_COMMENT) == 0)`),
-        // so once a comment scan has overrun to end-of-input in this run, later CDATA and declaration
-        // matches are suppressed too. Flag-ON only; flag-OFF each bang form is attempted independently.
-        if storage.options.contains(.cmarkBugCompatibility), htmlScanSkip.contains(.comment) {
-            return nil
-        }
         let i = start + 2
         if i >= end {
             return nil
@@ -2866,7 +2173,7 @@ extension BlockParser {
         return matchHTMLDeclaration(start: start, end: end, content: content)
     }
 
-    /// Match `<!--…-->`. Accepts the empty forms `<!-->` and `<!--->` per HTML5, then scans for the first `-->` terminator (rejecting NUL bytes in the body). Under `.cmarkBugCompatibility` the body+closer is matched by cmark-gfm's stricter grammar instead (`matchHTMLCommentBodyStrict`), which rejects some forms the first-`-->` rule accepts (e.g. `<!----->`).
+    /// Match `<!--…-->`. Accepts the empty forms `<!-->` and `<!--->` per HTML5, then scans for the first `-->` terminator (rejecting NUL bytes in the body).
     private mutating func matchHTMLComment(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         // Need at least `<!--`.
         if start + 4 > end {
@@ -2884,175 +2191,29 @@ extension BlockParser {
         if bodyStart + 1 < end, content[bodyStart] == UInt8(ascii: "-"), content[bodyStart + 1] == UInt8(ascii: ">") {
             return bodyStart + 2
         }
-        // why: cmark-gfm scans comment bodies with the stricter grammar in swift-cmark `src/scanners.re`
-        // (`htmlcomment`, via `_scan_html_comment`), which rejects forms the CommonMark 0.31 first-`-->`
-        // rule accepts (e.g. `<!----->`). Flag-ON (`.cmarkBugCompatibility`, adopted only by the
-        // differential fuzzer) reproduces that rejection; flag-OFF the deliverable stays spec-correct
-        // (0.31), matching the first `-->` below.
-        if storage.options.contains(.cmarkBugCompatibility) {
-            if let match = matchHTMLCommentBodyStrict(bodyStart: bodyStart, end: end, content: content) {
-                return match
-            }
-            // why: `scan_html_comment` returning 0 (no closer reachable) is exactly where cmark sets
-            // `subj->flags |= FLAG_SKIP_HTML_COMMENT` (`src/inlines.c` `handle_pointy_brace`), so no later
-            // `<!` form is reparsed in this run. The empty forms above match before this, mirroring cmark's
-            // `matchlen = 4/5` shortcuts, so they never set the flag.
-            htmlScanSkip.insert(.comment)
-            return nil
-        }
         return Self.scanRawHTMLCloser("-->", from: bodyStart, end: end, content: content, misses: &htmlCloserMisses.comment)
     }
 
-    /// Match a comment body + `-->` closer under cmark-gfm's stricter grammar (swift-cmark `src/scanners.re`: `([^\x00-]+ | "-" [^\x00-] | "--" [^\x00>])* "-->"`, scanned by `_scan_html_comment` after the `<!--` opener). Returns the offset just past `-->`, or `nil` if no closer is reachable. Dashes are admitted only in runs of one or two before a non-dash / non-`>` char, so a body element can never leave a lone `-->` closer — which is why `<!----->` is rejected (its three interior dashes are absorbed as `--` + `-`, then `>` no longer follows a `--`). A NUL byte, or reaching `end` without a closer, fails.
-    private func matchHTMLCommentBodyStrict(bodyStart: Int, end: Int, content: borrowing ContentSpan) -> Int? {
-        // Unabsorbed dashes since the last body char, capped at two (cmark DFA states yy226/yy228/yy236);
-        // a third dash is the `[^\x00>]` completing a `--` run, so the run resets.
-        var pendingDashes = 0
-        var i = bodyStart
-        while i < end {
-            let b = content[i]
-            // why: the re2c scanners validate UTF-8, so an orphaned continuation byte matches no body
-            // alternative and the comment fails like at a NUL (`src/scanners.c` `_scan_html_comment`).
-            if b == 0 || content.orphanedContinuationByteLength(at: i) != nil {
-                return nil
-            }
-            if b == UInt8(ascii: "-") {
-                pendingDashes = pendingDashes == 2 ? 0 : pendingDashes + 1
-            } else if b == UInt8(ascii: ">"), pendingDashes == 2 {
-                return i + 1
-            } else {
-                // Any other char (including `>` after fewer than two dashes) absorbs the pending run.
-                pendingDashes = 0
-            }
-            i += 1
-        }
-        return nil
-    }
-
     /// Match `<![CDATA[…]]>`. Flag-OFF (spec-correct, CommonMark 0.31 §6.6) the content is any run not
-    /// containing `]]>`, closed by the first `]]>`. Under `.cmarkBugCompatibility` the content is scanned
-    /// by cmark-gfm's stricter grammar instead (`scanCDATAContentEnd`), which rejects some forms the
-    /// first-`]]>` rule accepts (e.g. a content run ending in a lone `]`, `<![CDATA[…]]]>`).
+    /// containing `]]>`, closed by the first `]]>`.
     private mutating func matchHTMLCDATA(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
-        // why: cmark checks (and, on overrun, sets) `FLAG_SKIP_HTML_CDATA` around the CDATA scan
-        // (`src/inlines.c` `handle_pointy_brace`). Flag-ON only.
-        let bugCompat = storage.options.contains(.cmarkBugCompatibility)
-        if bugCompat, htmlScanSkip.contains(.cdata) {
-            return nil
-        }
         // Need `<![CDATA[`. The two brackets are literal; the letters `CDATA` are matched
-        // case-SENSITIVELY per CommonMark start condition 5 (spec-correct, flag OFF). Under
-        // `.cmarkBugCompatibility` they are matched case-INSENSITIVELY to reproduce cmark-gfm.
-        // why: cmark-gfm's `inlines.c` `handle_pointy_brace` matches the leading `<![` with literal
-        // byte compares, then hands the rest to `_scan_html_cdata` (`src/scanners.re`'s
-        // `cdata = "CDATA[" (...)*` production). `scanners.re` is compiled with `re2c --case-insensitive`
-        // (swift-cmark `Makefile`, the `scanners.c` build rule), so the generated DFA accepts either case
-        // at each of the five `CDATA` letter states (`scanners.c`: `if (yych == 'C') ... if (yych == 'c')
-        // ...`, and likewise D/A/T/A) while the literal brackets are unaffected.
+        // case-SENSITIVELY per CommonMark start condition 5 (spec-correct, flag OFF).
         let prefixLen = 9
         if start + prefixLen > end {
             return nil
         }
         let prefix = "<![CDATA["
-        let letters = 3..<8
         for (k, prefixByte) in prefix.utf8.enumerated() {
-            var actual = content[start + k]
-            var expected = prefixByte
-            if bugCompat, letters.contains(k) {
-                if actual.isUppercaseASCIILetter {
-                    actual += 32
-                }
-                if expected.isUppercaseASCIILetter {
-                    expected += 32
-                }
-            }
-            if actual != expected {
+            if content[start + k] != prefixByte {
                 return nil
             }
-        }
-        // why: cmark-gfm scans the CDATA body with the grammar in swift-cmark `src/scanners.re` (`cdata`,
-        // via `_scan_html_cdata`), then in `src/inlines.c` `handle_pointy_brace` ASSUMES a `]]>` closer
-        // follows the matched content WITHOUT verifying it (`matchlen += 5` for `![` + `]]>`), rejecting
-        // only when that assumed closer overruns the buffer (`subj->pos + matchlen > input.len`, which
-        // sets `FLAG_SKIP_HTML_CDATA`). The grammar's `"]]" [^>\x00]` token absorbs a content run ending
-        // in a lone `]` right before the real closer (`…]]]>` reads as `]]` + `]` content, then `>`
-        // content), carrying the match past where the closer would begin so the assumed `]]>` overruns
-        // and the `<` stays literal. Flag-ON (`.cmarkBugCompatibility`, adopted only by the differential
-        // fuzzer) reproduces that rejection; flag-OFF the deliverable stays spec-correct (0.31), matching
-        // the first `]]>` below.
-        if bugCompat {
-            let contentEnd = scanCDATAContentEnd(bodyStart: start + prefixLen, end: end, content: content)
-            let cdataEnd = Self.offset(advancingCmarkBytes: 3, from: contentEnd, end: end, content: content)
-            if cdataEnd <= end {
-                return cdataEnd
-            }
-            htmlScanSkip.insert(.cdata)
-            return nil
         }
         return Self.scanRawHTMLCloser("]]>", from: start + prefixLen, end: end, content: content, misses: &htmlCloserMisses.cdata)
     }
 
-    /// Scan a CDATA body under cmark-gfm's grammar (swift-cmark `src/scanners.re`:
-    /// `([^\]\x00]+ | "]" [^\]\x00] | "]]" [^>\x00])*`, the tail of the `cdata` production that
-    /// `_scan_html_cdata` matches after `CDATA[`). Returns the offset just past the longest content match
-    /// starting at `bodyStart`. Content bytes are admitted as `[^\]\x00]` runs; a `]` is admitted only
-    /// when a non-`]` byte follows (`] [^\]\x00]`) and `]]` only when a non-`>` byte follows
-    /// (`]] [^>\x00]`), so a run halts just before a `]]>` closer — but a lone `]` (or `]]`) whose
-    /// following bytes are themselves the closer's brackets (`…]]]>`) is absorbed as content, carrying the
-    /// match past the closer. A NUL byte or reaching `end` halts the run; a trailing `]`/`]]` with no
-    /// completing byte is excluded (its token never closed). The caller adds the assumed `]]>` and
-    /// bounds-checks, mirroring cmark. Operates byte-wise: valid multibyte UTF-8 (every byte ≠ `]`, `>`,
-    /// NUL) is consumed as content exactly as the grammar's codepoint classes intend. The re2c scanners
-    /// validate UTF-8, so an orphaned continuation byte in cmark's buffer (the U+FFFD standing for it here,
-    /// `ContentSpan.orphanedContinuationByteLength`) halts the run like a NUL.
-    private func scanCDATAContentEnd(bodyStart: Int, end: Int, content: borrowing ContentSpan) -> Int {
-        let bracket = UInt8(ascii: "]")
-        let gt = UInt8(ascii: ">")
-        // Furthest offset ending a complete token sequence (cmark's re2c backtrack marker); a `]` or `]]`
-        // still awaiting the byte that completes its token is not yet part of the match.
-        var lastComplete = bodyStart
-        var i = bodyStart
-        while i < end {
-            let b = content[i]
-            if b == 0 || content.orphanedContinuationByteLength(at: i) != nil {
-                break
-            }
-            if b != bracket {
-                // Ordinary content byte: `[^\]\x00]+`, or the trailing byte of a `] X` / `]] X` token.
-                i += 1
-                lastComplete = i
-                continue
-            }
-            // A `]`. Consume it and look for the byte completing `] [^\]\x00]` or `]] [^>\x00]`.
-            i += 1
-            if i < end, content[i] == bracket {
-                // `]]`: needs a following non-`>`, non-NUL byte to complete `]] [^>\x00]`.
-                i += 1
-                if i < end, content[i] != 0, content[i] != gt, content.orphanedContinuationByteLength(at: i) == nil {
-                    i += 1
-                    lastComplete = i
-                } else {
-                    break
-                }
-            } else if i < end, content[i] != 0, content.orphanedContinuationByteLength(at: i) == nil {
-                // `] [^\]\x00]`: the following byte is non-`]` (checked above) and non-NUL.
-                i += 1
-                lastComplete = i
-            } else {
-                break
-            }
-        }
-        return lastComplete
-    }
-
     /// Match `<!NAME …>` where NAME is `[A-Z]+`, followed by at least one spacechar, any non-`>` non-NUL chars, then `>`.
     private mutating func matchHTMLDeclaration(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
-        // why: cmark checks (and, on overrun, sets) `FLAG_SKIP_HTML_DECLARATION` around the declaration
-        // scan (`src/inlines.c` `handle_pointy_brace`). Flag-ON only.
-        let bugCompat = storage.options.contains(.cmarkBugCompatibility)
-        if bugCompat, htmlScanSkip.contains(.declaration) {
-            return nil
-        }
         var i = start + 2
         var nameLen = 0
         while i < end {
@@ -3074,48 +2235,14 @@ extension BlockParser {
         if afterSpaces == i {
             return nil
         }
-        if bugCompat {
-            return matchHTMLDeclarationBodyCmark(from: afterSpaces, end: end, content: content)
-        }
         return Self.scanRawHTMLCloser(">", from: afterSpaces, end: end, content: content, misses: &htmlCloserMisses.declaration)
-    }
-
-    /// Match a declaration body + `>` closer from `bodyStart` under cmark-gfm's grammar, reproduced only under
-    /// `.cmarkBugCompatibility`. Returns the offset just past the closer, or `nil` if the end of the content
-    /// comes first.
-    ///
-    /// cmark scans the body as `[^>\x00]*` (swift-cmark `src/scanners.re` `declaration`) and frames it with a
-    /// `>` it never verifies (`src/inlines.c` `handle_pointy_brace`, `matchlen += 2`), rejecting only a framing
-    /// that overruns the input (`subj->pos + matchlen > input.len`), which sets `FLAG_SKIP_HTML_DECLARATION`.
-    /// The re2c scanners validate UTF-8, so the body also stops at an orphaned continuation byte
-    /// (`ContentSpan.orphanedContinuationByteLength`), and that orphan stands in for the `>`.
-    private mutating func matchHTMLDeclarationBodyCmark(from bodyStart: Int, end: Int, content: borrowing ContentSpan) -> Int? {
-        var i = bodyStart
-        while i < end {
-            let b = content[i]
-            if b == UInt8(ascii: ">") {
-                return i + 1
-            }
-            assert(b != 0, "inline content holds no NUL: the block parser replaces it with U+FFFD")
-            if let orphan = content.orphanedContinuationByteLength(at: i) {
-                return i + orphan
-            }
-            i += 1
-        }
-        htmlScanSkip.insert(.declaration)
-        return nil
     }
 
     /// Match `<?…?>`. Body may be empty; scans for the first `?>` terminator rejecting NUL bytes.
     ///
     /// Flag-OFF (the spec-correct deliverable, CommonMark 0.31 §6.6) the body is any string of
-    /// characters not including `?>`, so this stops at the FIRST `?>`. Under `.cmarkBugCompatibility`
-    /// the scan follows cmark-gfm's inline PI grammar instead (`matchHTMLProcessingInstructionCmark`),
-    /// which over-consumes and rejects some PIs the spec accepts (e.g. `<???>`).
+    /// characters not including `?>`, so this stops at the FIRST `?>`.
     private mutating func matchHTMLProcessingInstruction(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
-        if storage.options.contains(.cmarkBugCompatibility) {
-            return matchHTMLProcessingInstructionCmark(start: start, end: end, content: content)
-        }
         return Self.scanRawHTMLCloser("?>", from: start + 2, end: end, content: content, misses: &htmlCloserMisses.processingInstruction)
     }
 
@@ -3146,81 +2273,6 @@ extension BlockParser {
         }
         misses = start..<Int.max
         return nil
-    }
-
-    /// Match `<?…?>` under cmark-gfm's inline processing-instruction grammar (swift-cmark
-    /// `src/inlines.c` `handle_pointy_brace` + `src/scanners.re` `_scan_html_pi`), reproduced only
-    /// under `.cmarkBugCompatibility`.
-    ///
-    /// cmark scans the body with `processinginstruction = ([^?>\x00]+ | [?][^>\x00] | [>])+` starting
-    /// at the byte AFTER the opening `?` (`start + 2` here, since `start` is `<`), then frames the
-    /// match with `<?`…`?>` (`matchlen += 3`) and rejects the PI when that framing overruns the input
-    /// (`subj->pos + matchlen > input.len`). The regex never verifies a real `?>` follows; it just
-    /// requires two bytes of room for it. Because the regex admits a lone `>` and pairs each `?` with
-    /// its FOLLOWING byte, a body beginning with `?` can swallow the closing `?>` — for `<???>` the
-    /// scan of `??>` eats `??` (a `[?][^>\x00]` pair) then `>` (a lone `[>]`), consuming through the
-    /// input with no room left for the closer, so cmark rejects it. `<?x?>` matches only `x`, stops
-    /// before `?>`, and is accepted. The body ends at the first `?` immediately before
-    /// `>` (or at input end), or an orphaned continuation byte (`ContentSpan.orphanedContinuationByteLength`),
-    /// whichever comes first.
-    private mutating func matchHTMLProcessingInstructionCmark(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
-        // why: cmark checks `FLAG_SKIP_HTML_PI` before attempting the PI (`src/inlines.c`
-        // `handle_pointy_brace`); once set, the `<` stays literal. Reached only flag-ON.
-        if htmlScanSkip.contains(.processingInstruction) {
-            return nil
-        }
-        var i = start + 2
-        while i < end {
-            let b = content[i]
-            assert(b != 0, "inline content holds no NUL: the block parser replaces it with U+FFFD")
-            if b == UInt8(ascii: ">") {
-                // `[>]`: a lone `>` is consumed into the body.
-                i += 1
-                continue
-            }
-            if b == UInt8(ascii: "?") {
-                // `[?][^>\x00]`: a `?` is consumed only when paired with a following non-`>`,
-                // non-NUL, well-formed byte. A `?` at input end, or immediately before `>`, NUL or an
-                // orphan, cannot be consumed and ends the body — this is where cmark stops before a real `?>`.
-                if i + 1 < end {
-                    let next = content[i + 1]
-                    if next != UInt8(ascii: ">") && next != 0 && content.orphanedContinuationByteLength(at: i + 1) == nil {
-                        i += 2
-                        continue
-                    }
-                }
-                break
-            }
-            // why: the re2c scanners validate UTF-8, so an orphaned continuation byte matches no
-            // alternative and ends the body (`src/scanners.c` `_scan_html_pi`).
-            if content.orphanedContinuationByteLength(at: i) != nil {
-                break
-            }
-            // `[^?>\x00]`: any other byte is consumed.
-            i += 1
-        }
-        // cmark: matchlen = (body length) + 3, reject when subj->pos (start + 1) + matchlen > end.
-        // The offset just past the framed `?>` is two cmark bytes past the body: `?>` itself, or at an
-        // orphan the unverified orphan and the byte after it.
-        let piEnd = Self.offset(advancingCmarkBytes: 2, from: i, end: end, content: content)
-        if piEnd > end {
-            // Framing overruns the input: cmark sets `FLAG_SKIP_HTML_PI`, so no later `<?` is reparsed
-            // in this run.
-            htmlScanSkip.insert(.processingInstruction)
-            return nil
-        }
-        return piEnd
-    }
-
-    /// The content offset `count` bytes of cmark's buffer past `offset`, where the U+FFFD standing for an
-    /// orphaned continuation byte is one of them (`ContentSpan.orphanedContinuationByteLength`). May pass `end`,
-    /// as cmark's unverified closer framing does before its overrun check.
-    private static func offset(advancingCmarkBytes count: Int, from offset: Int, end: Int, content: borrowing ContentSpan) -> Int {
-        var j = offset
-        for _ in 0..<count {
-            j += (j < end ? content.orphanedContinuationByteLength(at: j) : nil) ?? 1
-        }
-        return j
     }
 
     /// Scan `[A-Za-z][A-Za-z0-9-]*`. Returns the offset just past the last tag-name byte, or `nil` if the first byte isn't a letter.
@@ -3305,11 +2357,6 @@ extension BlockParser {
             var i = start + 1
             while i < end {
                 let b = content[i]
-                // why: the re2c scanners validate UTF-8, so an orphaned continuation byte matches no
-                // quoted-value byte and the tag fails like at a NUL (`src/scanners.c` `_scan_html_tag`).
-                if b == 0 || content.orphanedContinuationByteLength(at: i) != nil {
-                    return nil
-                }
                 if b == first {
                     return i + 1
                 }
@@ -3420,9 +2467,7 @@ extension BlockParser {
         if trimmedEnd <= colon + 3 {
             return nil
         }
-        let domainAccepted = storage.options.contains(.cmarkBugCompatibility)
-            ? schemeURLDomainAccepted(afterSlashes: colon + 3, end: end, content: content)
-            : validDomainEnd(start: colon + 3, end: trimmedEnd, content: content) != nil
+        let domainAccepted = validDomainEnd(start: colon + 3, end: trimmedEnd, content: content) != nil
         if !domainAccepted {
             return nil
         }
@@ -3468,13 +2513,6 @@ extension BlockParser {
         if !bytesEqual(at: start, target: "www.", content: content) {
             return nil
         }
-        // cmark's `www_match` (`extensions/autolink.c`) gates on `check_domain(data, size, allow_short: 0)`
-        // before scanning the URL body and returns NULL on failure, so a domain bearing an underscore in
-        // either of its last two `.`-separated labels (a host name may not) is never linked.
-        let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
-        guard !bugCompatible || checkDomainAccepted(base: start, end: end, requireDot: true, content: content) else {
-            return nil
-        }
         let urlEnd = scanGFMURLBody(start: start + 4, end: end, content: content)
         let trimmedEnd = trimTrailingPunctuation(
             urlStart: start, urlEnd: urlEnd,
@@ -3482,7 +2520,7 @@ extension BlockParser {
         )
         // The trailing punctuation removed above is not part of the autolink, so neither is it part of
         // its domain.
-        guard bugCompatible || validDomainEnd(start: start + 4, end: trimmedEnd, content: content) != nil else {
+        guard validDomainEnd(start: start + 4, end: trimmedEnd, content: content) != nil else {
             return nil
         }
         return GFMAutolinkMatch(urlStart: start, urlEnd: trimmedEnd, form: .www)
@@ -3540,12 +2578,6 @@ extension BlockParser {
         var atSign = at
         var schemeFolded = false
         var isXmpp = false
-        // cmark's `np`: the count of domain dots each immediately followed by an alphanumeric, gating "the
-        // domain must contain a dot". It carries across the restart (declared before the loop), so a dot
-        // counted while scanning the first candidate's domain still satisfies the gate for the restarted
-        // email - `o@.e@b` links `.e@b` (the dot in `.e` was counted) though standalone `.e@b` does not (its
-        // only dot is in the local part). Likewise `a@b.c@d` links `b.c@d` off the dot counted in `b.c`.
-        var hasDotFollowedByAlnum = false
         while true {
             // Local part: cmark-gfm's `postprocess_text` backward scan (`extensions/autolink.c`) accepts a
             // NARROWER set than the CommonMark §6.4 angle-email form - only alnum + `.+-_` - and STOPS at any
@@ -3592,98 +2624,31 @@ extension BlockParser {
             // validity check. So a leading `<` (that already failed as an angle autolink / inline HTML) doesn't
             // block the email - `<o@.e` -> Text "<" + Link(mailto:o@.e). Applying a preceding-char restriction
             // here would reject those, so the email form has none.
-            // Domain: cmark's `postprocess_text` requires the domain's dot count `np >= 1`, but a dot counts
-            // toward `np` only when it is immediately followed by an alphanumeric. A trailing dot yields an
-            // empty last label and does not count, so `o@b.` is not a valid domain (whereas `o@b.c` and the
-            // empty-FIRST-label `o@.e` are - their dot is followed by an alphanumeric). The scan itself also
-            // ENDS at a `.` not immediately followed by an alphanumeric (cmark breaks the domain there rather
-            // than consuming the dot): `a@x.y.-5` scans the domain as `x.y` and leaves `.-5` as after-text.
-            if !storage.options.contains(.cmarkBugCompatibility) {
-                // The domain is one or more segments of alphanumerics, `-` and `_` separated by periods, with
-                // at least one period, ending in neither `-` nor `_` (spec "Autolinks (extension)"). A
-                // period no segment follows ends the address before it.
-                var i = atSign + 1
-                var periods = 0
-                while true {
-                    let segmentStart = i
-                    while i < end, isEmailDomainByte(content[i], isXmpp: isXmpp) {
-                        i += 1
-                    }
-                    guard i > segmentStart, i + 1 < end, content[i] == UInt8(ascii: "."),
-                          isEmailDomainByte(content[i + 1], isXmpp: isXmpp) else {
-                        break
-                    }
-                    periods += 1
-                    i += 1
-                }
-                if i < end, content[i] == UInt8(ascii: "@") {
-                    atSign = i
-                    continue
-                }
-                resumeAt = max(i, atSign + 1)
-                guard periods > 0, content[i - 1] != UInt8(ascii: "-"), content[i - 1] != UInt8(ascii: "_") else {
-                    return nil
-                }
-                return GFMAutolinkMatch(urlStart: localStart, urlEnd: i, form: .email, emailSchemeFolded: schemeFolded)
-            }
+            // The domain is one or more segments of alphanumerics, `-` and `_` separated by periods, with
+            // at least one period, ending in neither `-` nor `_` (spec "Autolinks (extension)"). A
+            // period no segment follows ends the address before it.
             var i = atSign + 1
-            let domainStart = i
-            var sawSecondAt = false
-            while i < end {
-                let b = content[i]
-                if b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-") || b == UInt8(ascii: "_") {
+            var periods = 0
+            while true {
+                let segmentStart = i
+                while i < end, isEmailDomainByte(content[i], isXmpp: isXmpp) {
                     i += 1
-                } else if b == UInt8(ascii: ".") {
-                    if i + 1 < end, content[i + 1].isASCIILetter || content[i + 1].isASCIIDigit {
-                        hasDotFollowedByAlnum = true
-                        i += 1
-                    } else {
-                        break
-                    }
-                } else if b == UInt8(ascii: "/"), isXmpp {
-                    // why: cmark's `postprocess_text` forward domain scan admits `/` only for a folded `xmpp:`
-                    // (`c == '/' && is_xmpp`); for every other form a `/` ends the domain.
-                    i += 1
-                } else if b == UInt8(ascii: "@") {
-                    // why: cmark's forward domain scan does `goto found_at` on a second `@` - it does NOT emit
-                    // the current pre-`@` candidate; it restarts the match from this `@`. Restart the loop with
-                    // `atSign` at this `@`, carrying `hasDotFollowedByAlnum` / `schemeFolded` / `isXmpp` (which
-                    // cmark's `goto` preserves), so the restarted email is gated exactly as cmark gates it.
-                    sawSecondAt = true
-                    break
-                } else {
+                }
+                guard i > segmentStart, i + 1 < end, content[i] == UInt8(ascii: "."),
+                      isEmailDomainByte(content[i + 1], isXmpp: isXmpp) else {
                     break
                 }
+                periods += 1
+                i += 1
             }
-            if sawSecondAt {
+            if i < end, content[i] == UInt8(ascii: "@") {
                 atSign = i
                 continue
             }
-            // The domain scan settled at `i` (a non-`@` terminator or `end`): every gate failure below is a
-            // non-match for the whole `[at, i)` region, so resume there and skip the interior `@`s already
-            // walked. (On the success path this is overwritten by the caller's use of `urlEnd`.)
-            resumeAt = i
-            // The last char of the scanned domain must be a LETTER or `.` (cmark's `postprocess_text` gate:
-            // `cmark_isalpha(c) || c == '.'`). A digit there fails, so `f@.0` / `a@b.c9` are rejected even
-            // though digits are allowed in the domain interior. This also rejects `a.b-c_d@a.b_` - the
-            // trailing `_` is neither a letter nor `.`. The scan consumes a `.` only together with the
-            // alphanumeric after it, so the domain ends in a letter and has no trailing punctuation to trim.
-            if i <= atSign + 1 {
+            resumeAt = max(i, atSign + 1)
+            guard periods > 0, content[i - 1] != UInt8(ascii: "-"), content[i - 1] != UInt8(ascii: "_") else {
                 return nil
             }
-            let preTrimLast = content[i - 1]
-            let preTrimAlphaOrDot = preTrimLast.isASCIILetter || preTrimLast == UInt8(ascii: ".")
-            if !preTrimAlphaOrDot {
-                return nil
-            }
-            if !hasDotFollowedByAlnum || domainStart == i {
-                return nil
-            }
-            // why: unlike the `://`-scheme URL form (`schemeURLDomainAccepted`, cmark's `check_domain`), the
-            // email path does NOT reject an underscore in the domain's last (or any) label. cmark's
-            // `postprocess_text` (`extensions/autolink.c`) accepts `_` anywhere in the domain - its forward scan
-            // treats `_` like `-` (`c != '-' && c != '_'` never breaks) and it never calls `check_domain`. So
-            // `a@b.c_d`, `a@.b_o`, and `-@.b_o` all link, gated only by the letter-or-dot check above.
             return GFMAutolinkMatch(urlStart: localStart, urlEnd: i, form: .email, emailSchemeFolded: schemeFolded)
         }
     }
@@ -3693,23 +2658,6 @@ extension BlockParser {
     private func isEmailDomainByte(_ b: UInt8, isXmpp: Bool) -> Bool {
         b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-") || b == UInt8(ascii: "_")
             || (isXmpp && b == UInt8(ascii: "/"))
-    }
-
-    /// Emit a zero-length `.text` node at virtual offset `offset` as a child of `parent`.
-    ///
-    /// Used flag-ON to reproduce the empty `before`/`after` siblings cmark-gfm's autolink extension leaves around a GFM autolink. The node gets an empty source range where it sits, just before the content byte at `offset`.
-    private mutating func emitEmptyText(at offset: Int, content: borrowing ContentSpan, into parent: DocumentStorage.Index) {
-        let emptyRef = storage.intern(content.chunk(offset: offset, length: 0))
-        let textIdx = storage.appendNode(
-            NodeRecord(kind: .text, parent: parent, data: .literal(emptyRef))
-        )
-        storage.appendChild(textIdx, to: parent)
-        if positionsEnabled {
-            let at = content.sourceOffsets(ofVirtual: offset)
-            let position = clampedToLine(at.source, ofByte: at.physical)
-            storage.setSourceStart(textIdx, position)
-            storage.setSourceEnd(textIdx, position)
-        }
     }
 
     /// Emit a `.link` node + a single `.text` child for a GFM autolink match. `www.` and email forms get a synthetic scheme prefix (`http://` or `mailto:`) materialized into the string arena.
@@ -3847,45 +2795,6 @@ extension BlockParser {
         return i
     }
 
-    /// cmark-gfm's `check_domain` (`extensions/autolink.c`) domain-acceptance test, shared by the `www.` and
-    /// `://`-scheme autolink forms. Scanning from the second domain byte and never examining the final content
-    /// byte (`i < size - 1`), it rejects a domain that bears an underscore in either of its last two
-    /// `.`-separated labels - a host-name restriction (`www.xxx.yyy._zzz` is not a host) waived only once the
-    /// domain has more than ten labels, to bound cost (cmark's GHSA anti-quadratic guard). `requireDot` is
-    /// cmark's `!allow_short`: the `www.` form (`allow_short: 0`) additionally demands at least one period the
-    /// scan reaches, while the `://`-scheme form (`allow_short: 1`) accepts any non-empty domain of valid host
-    /// chars. `base` is the first domain byte; `end` is the inline-content boundary (cmark scans to the chunk
-    /// end, not to the trimmed URL), so a trailing `_` is left to the trailing-punctuation trim rather than
-    /// failing the whole domain.
-    private func checkDomainAccepted(base: Int, end: Int, requireDot: Bool, content: borrowing ContentSpan) -> Bool {
-        let size = end - base
-        var dotCount = 0
-        var underscoresInPrevLabel = 0
-        var underscoresInLastLabel = 0
-        var i = 1
-        while i < size - 1 {
-            var b = content[base + i]
-            if b == UInt8(ascii: "\\"), i < size - 2 {
-                i += 1
-                b = content[base + i]
-            }
-            if b == UInt8(ascii: "_") {
-                underscoresInLastLabel += 1
-            } else if b == UInt8(ascii: ".") {
-                underscoresInPrevLabel = underscoresInLastLabel
-                underscoresInLastLabel = 0
-                dotCount += 1
-            } else if !isValidGFMHostByte(b) && b != UInt8(ascii: "-") {
-                break
-            }
-            i += 1
-        }
-        if (underscoresInPrevLabel > 0 || underscoresInLastLabel > 0) && dotCount <= 10 {
-            return false
-        }
-        return requireDot ? dotCount > 0 : true
-    }
-
     /// The end of the valid domain starting at `start` (spec "Autolinks (extension)": segments of
     /// alphanumeric characters, underscores and hyphens separated by periods, with at least one period
     /// and no underscore in the last two segments), or `nil` when none starts there. A period that no
@@ -3940,64 +2849,6 @@ extension BlockParser {
         }
     }
 
-    /// cmark-gfm's `://`-scheme domain acceptance (`sd_autolink_issafe` + `check_domain(..., allow_short: 1)`,
-    /// `extensions/autolink.c`). Unlike the `www.` / email forms, a scheme URL does NOT require a dot: any
-    /// non-empty domain whose first character is a valid host char is accepted, EXCEPT one bearing an
-    /// underscore in either of its last two `.`-separated labels (deferred to `checkDomainAccepted`).
-    /// `afterSlashes` is the first byte after `://`; `end` is the inline-content boundary.
-    private func schemeURLDomainAccepted(afterSlashes: Int, end: Int, content: borrowing ContentSpan) -> Bool {
-        // `sd_autolink_issafe`: the char immediately after `://` must be a valid host char. There cmark's
-        // `is_valid_hostchar` decodes the whole scalar, so a multi-byte Unicode space or punctuation scalar
-        // (`«`, `—`, `“`, NBSP, ...) rejects the URL; letters, marks, symbols and emoji are valid.
-        let first = content[afterSlashes]
-        if first < 0x80 {
-            if !isValidGFMHostByte(first) {
-                return false
-            }
-        } else {
-            let scalar = Self.decodeUTF8Scalar(at: afterSlashes, content: content)
-            guard !Self.isUnicodeWhitespace(scalar), !Self.isUnicodePunctuation(scalar) else {
-                return false
-            }
-        }
-        return checkDomainAccepted(base: afterSlashes, end: end, requireDot: false, content: content)
-    }
-
-    /// Approximates cmark-gfm's `is_valid_hostchar` (`extensions/autolink.c`) for a single byte: a host char
-    /// is neither whitespace nor punctuation (`cmark_utf8proc_is_space` / `cmark_utf8proc_is_punctuation`,
-    /// `src/utf8.c`). For ASCII, `is_punctuation` routes through cmark's ctype table, so `isASCIIPunct` mirrors
-    /// it exactly. `isASCIISpace` mirrors `cmark_utf8proc_is_space` for every byte except vertical tab
-    /// (0x0B): cmark's hand-rolled space table (`uc == 9 || uc == 10 || uc == 12 || uc == 13 || uc == 32 ||
-    /// ...`) omits 0x0B, unlike the real Unicode `White_Space` property this rewrite's spec-correct
-    /// `isASCIISpace` follows (and unlike `scanGFMURLBody`'s `cmark_isspace`, a DIFFERENT, narrower cmark
-    /// function that also excludes VT/FF - see that function's doc comment). That gap lets a domain-less
-    /// `http://` immediately followed by VT slip past `sd_autolink_issafe` as a "safe" URI in cmark, forming
-    /// a bogus autolink (a domain-less URL is not a valid GFM autolink - a reference quirk, `[ref-b4b]`).
-    /// Flag-ON (`.cmarkBugCompatibility`) reproduces the gap by treating VT as a valid host byte; flag-OFF
-    /// stays spec-correct (VT is whitespace, so a bare `http://` before it never autolinks).
-    ///
-    /// A UTF-8 continuation byte (0x80-0xBF) is NOT a valid host byte: cmark's `is_valid_hostchar` runs
-    /// `cmark_utf8proc_iterate` and returns 0 when it fails (`r < 0`), which it does on a byte that cannot
-    /// START a codepoint. `check_domain` advances one byte at a time, so at the LEADING byte of a multibyte
-    /// codepoint iterate succeeds and reports the codepoint's category (a non-space/non-punct char is valid),
-    /// but the very next byte is a continuation byte where iterate fails and the scan breaks. The domain scan
-    /// therefore stops inside the first multibyte codepoint and never advances past it. Rejecting continuation
-    /// bytes reproduces that break: without it, the scan runs past a `�` (U+FFFD, whose repaired bytes are the
-    /// input `String`'s own - the harness decodes invalid UTF-8 to U+FFFD before parsing) into a trailing
-    /// `_`/`.` and spuriously triggers `checkDomainAccepted`'s underscore-in-last-label rejection.
-    private func isValidGFMHostByte(_ b: UInt8) -> Bool {
-        if b & 0b1100_0000 == 0b1000_0000 {
-            return false
-        }
-        if b.isASCIIPunct {
-            return false
-        }
-        if b == 0x0B {
-            return storage.options.contains(.cmarkBugCompatibility)
-        }
-        return !b.isASCIISpace
-    }
-
     /// Allowlist of characters that may directly precede a GFM `www.` autolink.
     ///
     /// Only whitespace, `*`, `_`, `~`, `(` count as valid boundaries; everything else (including `<`)
@@ -4043,36 +2894,17 @@ extension BlockParser {
     // MARK: - Helpers
 
     /// Emit a `.text` node spanning `start..<end` if non-empty.
-    ///
-    /// `rangeEnd` defaults to `end` but may be set larger to extend the node's *source range* past its content - e.g. the text node before a soft break or a trailing-space hard break owns the trailing whitespace that was stripped from its content (cmark stamps the text up to the newline), so the content is `[start, end)` while the range is `[start, rangeEnd)`. A backslash hard break is the exception: it passes `rangeEnd: nil`, so the text ends at its content, before the `\` that cmark consumes into the LINEBREAK.
-    ///
-    /// `emitEmptyStrippedWhitespace` (set by the line-break flush, soft OR trailing-space hard) governs the whitespace-only run, whose stripped content is empty (`end <= start`) but whose raw range `[start, rangeEnd)` still spans the trailing whitespace. Flag-OFF (spec-correct) such a run is dropped. Flag-ON reproduces a cmark quirk (Hyrum's Law): its text-flush path (swift-cmark `src/inlines.c` `parse_inline` ~1683-1694) creates a `.text` node from the run, then `cmark_chunk_rtrim` strips its content to empty at the line-end char but leaves the now-empty node in the tree carrying its pre-strip source range. That flush runs BEFORE `handle_newline` classifies the following break, so cmark emits the empty node identically for soft and trailing-space hard breaks (the `emptytext-*` and `brkhb-*` fuzzer pairs). So emit an empty `.text` node whose range is the raw `[start, rangeEnd)`. This fires whenever the pre-break run is empty: after a non-text inline (link/emphasis/code) the empty node survives standalone (`brkhb-emph`/`code`/`link`), and after a separately-emitted text node - the `emitBracketLiteral` `]`, whose return resets `pendingTextStart` past the bracket so the trailing spaces start a fresh run - `consolidateTextNodes` merges the empty node into that text, extending its end over the stripped spaces (how `brkhb-min`/`brkhb-text` stamp `]` to the newline). It does NOT fire for an ordinary contiguous text run, which absorbs its own trailing whitespace (#22) and stays non-empty (`end > start`).
-    private mutating func flushPendingText(start: Int, end: Int, content: borrowing ContentSpan, into parent: DocumentStorage.Index, rangeEnd: Int? = nil, emitEmptyStrippedWhitespace: Bool = false) {
+    private mutating func flushPendingText(start: Int, end: Int, content: borrowing ContentSpan, into parent: DocumentStorage.Index) {
         if end <= start {
-            if emitEmptyStrippedWhitespace,
-               let rangeEnd, rangeEnd > start,
-               storage.options.contains(.cmarkBugCompatibility) {
-                let emptyRef = storage.intern(content.chunk(offset: start, length: 0))
-                let textIdx = storage.appendNode(
-                    NodeRecord(kind: .text, parent: parent, data: .literal(emptyRef))
-                )
-                storage.appendChild(textIdx, to: parent)
-                stampInline(textIdx, start, rangeEnd, content: content)
-            }
             return
         }
-        // A text run can straddle a segment boundary when a synthetic arena segment stays in text flow
-        // (flag-ON): a lazy split-tab residual after a backslash hard break, where the residual-skip does
-        // not fire, or a lazy tasklist-retry line's orphaned-byte replacements. `[start, end)` then spans the
-        // synthetic bytes and the following source line, which no single buffer holds. Materialize such a run into the arena; a run within one segment stays
-        // zero-copy. (Otherwise a run never straddles - soft/hard breaks bound text at the newline.)
         let chunk = materializedChunk(start: start, end: end, content: content)
         let chunkRef = storage.intern(chunk)
         let textIdx = storage.appendNode(
             NodeRecord(kind: .text, parent: parent, data: .literal(chunkRef))
         )
         storage.appendChild(textIdx, to: parent)
-        stampInline(textIdx, start, rangeEnd ?? end, content: content)
+        stampInline(textIdx, start, end, content: content)
     }
 
     /// Build a `Chunk` for the virtual range `[start, end)`, materializing into the arena ONLY when the
@@ -4102,39 +2934,8 @@ extension BlockParser {
         }
         let first = content.sourceOffsets(ofVirtual: start)
         let last = content.sourceOffsets(ofVirtual: end - 1)
-        storage.setSourceStart(node, clampedToLine(first.source, ofByte: first.physical))
-        storage.setSourceEnd(node, clampedToLine(last.source + 1, ofByte: last.physical))
-    }
-
-    /// `offset`, a position stamped for the content byte read at source offset `physical`, cut off at the end of that byte's source line. A re-indented continuation line's bytes are stamped at its block-content column, which can lie past the end of the line; no range may run onto the next line.
-    private func clampedToLine(_ offset: Int, ofByte physical: Int) -> Int {
-        // A position at or just past its own byte is on the byte's line.
-        offset <= physical + 1 ? offset : min(offset, physicalLineEnd(containing: physical))
-    }
-
-    /// The offset of the terminator of the source line holding byte `offset`, or the source's end for an unterminated last line.
-    private func physicalLineEnd(containing offset: Int) -> Int {
-        // The last line start at or before `offset` (`lineStarts` is ascending).
-        var lo = 0
-        var hi = storage.lineStarts.count
-        while lo < hi {
-            let mid = (lo + hi) / 2
-            if storage.lineStarts[mid] <= offset {
-                lo = mid + 1
-            } else {
-                hi = mid
-            }
-        }
-        precondition(lo > 0, "a stamped byte lies on a line the parser read")
-        let lineStart = storage.lineStarts[lo - 1]
-        var end = lo < storage.lineStarts.count ? storage.lineStarts[lo] : sourceBytes.count
-        if end > lineStart && sourceBytes[end - 1] == UInt8(ascii: "\n") {
-            end -= 1
-        }
-        if end > lineStart && sourceBytes[end - 1] == UInt8(ascii: "\r") {
-            end -= 1
-        }
-        return end
+        storage.setSourceStart(node, first.source)
+        storage.setSourceEnd(node, last.source + 1)
     }
 
     /// Merge runs of adjacent `.text` children into single nodes, recursing into containers.
@@ -4144,62 +2945,14 @@ extension BlockParser {
         var child = storage[parent].firstChild
         while let current = child {
             if storage[current].kind == .text {
-                // A `[^[` footnote-collapse node (bug-compat) stands in for cmark's embedded NUL, which ends
-                // the consolidation run when it is read as a C-string. Merge preceding text INTO the run so
-                // `x[^[` becomes one node (as cmark does), but do NOT absorb the following text: its invisible
-                // tail is dropped in `dropRunTruncatedTails`, run AFTER the autolink pass so an email hiding
-                // in that tail is linked first.
-                if !storage.runTruncatingTextNodes.contains(current) {
-                    // Absorb all immediately-following text siblings into `current`.
-                    while let next = storage[current].next, storage[next].kind == .text {
-                        let nextTruncates = storage.runTruncatingTextNodes.contains(next)
-                        mergeTextNode(next, into: current)
-                        if nextTruncates {
-                            // The `[^[` node folded into this run; the merged node inherits the mark and the
-                            // run stops here (its tail is dropped later, not now).
-                            storage.runTruncatingTextNodes.remove(next)
-                            storage.runTruncatingTextNodes.insert(current)
-                            break
-                        }
-                    }
+                // Absorb all immediately-following text siblings into `current`.
+                while let next = storage[current].next, storage[next].kind == .text {
+                    mergeTextNode(next, into: current)
                 }
             } else {
                 consolidateTextNodes(current)
             }
             child = storage[current].next
-        }
-    }
-
-    /// Drop the invisible tail a `[^[` footnote-collapse node (bug-compat) leaves behind, after the autolink
-    /// pass has run.
-    ///
-    /// A run-truncating node stands in for cmark's embedded NUL: at render cmark reads the consolidated run as
-    /// a C-string and stops at the NUL, so the reconstructed node's own tail and any text merged after it in
-    /// the run vanish. Reproduce that by unlinking the marked node's following text siblings - but only AFTER
-    /// `gfmEmailAutolinkPass`, so an email in that tail is already carved into a `Link` (a non-text node that
-    /// ends the run and survives, along with the empty text the split leaves after it). Recurses into
-    /// containers like the autolink pass, since the collapse can sit inside a link or emphasis.
-    mutating func dropRunTruncatedTails(_ parent: DocumentStorage.Index) {
-        var child = storage[parent].firstChild
-        while let current = child {
-            if storage.runTruncatingTextNodes.contains(current) {
-                storage.runTruncatingTextNodes.remove(current)
-                var sib = storage[current].next
-                while let s = sib, storage[s].kind == .text {
-                    let after = storage[s].next
-                    // A following text sibling may itself be run-truncating (two `[^[` collapses in a row);
-                    // it is dropped here, so clear its mark too rather than leave a stale index in the set.
-                    storage.runTruncatingTextNodes.remove(s)
-                    storage.unlinkChild(s)
-                    sib = after
-                }
-                child = storage[current].next
-            } else {
-                if storage[current].kind != .text {
-                    dropRunTruncatedTails(current)
-                }
-                child = storage[current].next
-            }
         }
     }
 
@@ -4263,21 +3016,11 @@ extension BlockParser {
     /// the whole tree; a link's own text - including a bare URL / email link just emitted - is never
     /// re-scanned as more link text.
     ///
-    /// cmark's autolink `postprocess` (`extensions/autolink.c`) tracks link context with a single `in_link`
-    /// BOOLEAN, not a nesting depth: entering a link arms it and exiting ANY link clears it. So a link
-    /// nested in another link's text - e.g. an angle autolink `<a@b>` inside `[…]` link text - clears
-    /// `in_link` when it closes, and the OUTER link's remaining text then gets autolinked. Flag-ON
-    /// (`.cmarkBugCompatibility`) reproduces that boolean. Flag-OFF, since a link nested in a link is
+    /// Flag-OFF, since a link nested in a link is
     /// invalid HTML/CommonMark, the spec-correct deliverable never autolinks inside a link and skips its
     /// subtree.
     /// `image` maps the leaf's arena content back to source, when its content is a single arena chunk with a source image.
     mutating func gfmEmailAutolinkPass(_ parent: DocumentStorage.Index, image: ContentImage?) {
-        var inLink = false
-        gfmEmailAutolinkPass(parent, image: image, inLink: &inLink)
-    }
-
-    private mutating func gfmEmailAutolinkPass(_ parent: DocumentStorage.Index, image: ContentImage?, inLink: inout Bool) {
-        let bugCompat = storage.options.contains(.cmarkBugCompatibility)
         var child = storage[parent].firstChild
         while let current = child {
             // Capture the next sibling BEFORE splitting: `splitEmailsInTextNode` inserts the link/after
@@ -4286,21 +3029,11 @@ extension BlockParser {
             let next = storage[current].next
             switch storage[current].kind {
             case .text:
-                // Skip text inside a link (cmark's `!in_link`).
-                if !inLink {
-                    splitEmailsInTextNode(current, parent: parent, image: image)
-                }
+                splitEmailsInTextNode(current, parent: parent, image: image)
             case .link:
-                // why: flag-ON reproduce cmark's `in_link` boolean by walking the link subtree with the
-                // flag set - a nested link's exit clears it, so the outer link's later text is scanned.
-                // Flag-OFF skip the subtree outright (never re-scan link text), matching the old behavior.
-                if bugCompat {
-                    inLink = true
-                    gfmEmailAutolinkPass(current, image: image, inLink: &inLink)
-                    inLink = false
-                }
+                break
             default:
-                gfmEmailAutolinkPass(current, image: image, inLink: &inLink)
+                gfmEmailAutolinkPass(current, image: image)
             }
             child = next
         }
@@ -4314,12 +3047,11 @@ extension BlockParser {
     /// local-part scan is bounded by the previous match's end), so cost is O(content length) - matching
     /// cmark's `postprocess_text`, not the quadratic re-scan its authors guard against. `before`/`after`/
     /// link-text are carved zero-copy from the node's existing segments (`subContentRef`); only the
-    /// `mailto:` URL is materialized into the arena. Under `.cmarkBugCompatibility` an empty `before`/`after`
-    /// is kept as an empty `Text` sibling (Quirk M); flag-OFF drops it for the spec-correct clean tree.
+    /// `mailto:` URL is materialized into the arena.
     ///
     /// The link and its text span the address's source bytes. Each text run keeps the part of the split node's range
     /// on its side of the address, so a run whose bytes aren't all source bytes (a smart quote, a NUL's U+FFFD) is
-    /// still placed, and a kept empty run sits where the address starts or ends.
+    /// still placed.
     private mutating func splitEmailsInTextNode(_ node: DocumentStorage.Index, parent: DocumentStorage.Index, image: ContentImage?) {
         guard case .literal(let ref) = storage[node].data else {
             preconditionFailure("a text node holds a literal")
@@ -4329,7 +3061,6 @@ extension BlockParser {
         if !contentRefContains(ref, byte: UInt8(ascii: "@")) {
             return
         }
-        let keepEmpties = storage.options.contains(.cmarkBugCompatibility)
         var scratch = UniqueArray<UInt8>()
         materialize(ref, into: &scratch)
         let total = scratch.count
@@ -4424,7 +3155,7 @@ extension BlockParser {
             }
 
             // Flag-OFF: an empty `before` / `between` run is not a real text node, so drop it.
-            if beforeRef.totalLength == 0, !keepEmpties {
+            if beforeRef.totalLength == 0 {
                 storage.unlinkChild(current)
             }
             current = tailIdx
@@ -4435,17 +3166,8 @@ extension BlockParser {
         }
         // Flag-OFF: drop the final tail run if the split left it empty. Only ever a residual this pass
         // produced (`didSplit`), never a pre-existing `@`-free node.
-        if didSplit, !keepEmpties, case .literal(let last) = storage[current].data, last.totalLength == 0 {
+        if didSplit, case .literal(let last) = storage[current].data, last.totalLength == 0 {
             storage.unlinkChild(current)
-        }
-        // A `[^[` footnote-collapse node (bug-compat) that also carried an email (the email precedes the
-        // collapse, e.g. `f@.f[^[]]…`) has just been split: the split reuses `node` for the `before` run and
-        // carves the `[^[` residual into the tail `current`. cmark's embedded NUL sits at the end of that
-        // reconstructed prefix, so the run-truncating mark belongs on the tail - move it there so
-        // `dropRunTruncatedTails` drops the tail's following siblings, not the `before` node's.
-        if didSplit, storage.runTruncatingTextNodes.contains(node) {
-            storage.runTruncatingTextNodes.remove(node)
-            storage.runTruncatingTextNodes.insert(current)
         }
     }
 
@@ -4546,7 +3268,7 @@ extension BlockParser {
               let last = sourceOffsets(of: lastSeg, local: Int(lastSeg.length) - 1, image: image) else {
             return nil
         }
-        return (clampedToLine(first.source, ofByte: first.physical), clampedToLine(last.source + 1, ofByte: last.physical))
+        return (first.source, last.source + 1)
     }
 
     /// The source offsets (stamped, and as read; see `ContentSpan.sourceOffsets(ofVirtual:)`) of byte `local` of `seg`: a source segment's own byte, or an arena byte of the leaf's content imaged by `image`.

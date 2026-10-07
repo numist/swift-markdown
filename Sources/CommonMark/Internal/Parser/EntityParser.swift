@@ -35,28 +35,22 @@ internal enum EntityParser {
     /// Try to match an HTML entity beginning at `start` (which points at `&`).
     ///
     /// Returns the decoded codepoints and the offset just past the trailing `;`. CommonMark 0.31 §6.5.
-    ///
-    /// `bugCompat` selects cmark-gfm's looser numeric digit limits and its U+FFFE / U+FFFF → U+FFFD
-    /// replacement (see `matchNumericEntity`); it is
-    /// threaded from `MarkdownDocument.ParseOptions.cmarkBugCompatibility` at the call sites.
-    internal static func matchEntity(start: Int, end: Int, source: Span<UInt8>, bugCompat: Bool) -> EntityMatch? {
+    internal static func matchEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
         let after = start + 1
         if after >= end {
             return nil
         }
         let next = source[after]
         if next == UInt8(ascii: "#") {
-            return matchNumericEntity(start: start, end: end, source: source, bugCompat: bugCompat)
+            return matchNumericEntity(start: start, end: end, source: source)
         }
         return matchNamedEntity(start: start, end: end, source: source)
     }
 
     /// Match `&#NNN;` (decimal) or `&#xHHH;` / `&#XHHH;` (hex).
     ///
-    /// The spec-correct digit limits are 1–7 decimal / 1–6 hex (CommonMark §6.5). When `bugCompat` is
-    /// set, both branches accept up to 8 digits instead, and U+FFFE / U+FFFF decode to U+FFFD, matching
-    /// cmark-gfm (see below).
-    private static func matchNumericEntity(start: Int, end: Int, source: Span<UInt8>, bugCompat: Bool) -> EntityMatch? {
+    /// The spec-correct digit limits are 1–7 decimal / 1–6 hex (CommonMark §6.5).
+    private static func matchNumericEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
         var i = start + 2 // past `&#`
         if i >= end {
             return nil
@@ -69,14 +63,7 @@ internal enum EntityParser {
         }
         var n: UInt32 = 0
         var digits = 0
-        // why: cmark-gfm decodes inline numeric refs with `houdini_unescape_ent` (swift-cmark
-        // src/houdini_html_u.c), which `handle_entity` (src/inlines.c) calls directly — never the
-        // stricter `_scan_entity` grammar (src/scanners.re). That decoder's shared gate is
-        // `num_digits >= 1 && num_digits <= 8` for BOTH the decimal and hex branches, so cmark accepts
-        // up to 8 digits either way — looser than CommonMark §6.5's 7-decimal / 6-hex limits. Flag-ON
-        // (`.cmarkBugCompatibility`, adopted only by the differential fuzzer) match that 8-digit cap;
-        // flag-OFF stays spec-correct so an 8+-digit decimal / 7+-digit hex ref remains literal.
-        let maxDigits = bugCompat ? 8 : (hex ? 6 : 7)
+        let maxDigits = hex ? 6 : 7
         while i < end {
             let b = source[i]
             let value: UInt32
@@ -91,8 +78,7 @@ internal enum EntityParser {
             }
             n = n * (hex ? 16 : 10) + value
             // Mirror cmark's overflow guard (`if (codepoint >= 0x110000) codepoint = 0x110000;`): clamp
-            // once out of Unicode range so the next digit's multiply can't overflow `UInt32` (reachable
-            // flag-ON, where a 9th hex digit is accumulated before the digit-count check rejects it).
+            // once out of Unicode range so the next digit's multiply can't overflow `UInt32`.
             // The final validation below maps anything `> 0x10FFFF` to U+FFFD, so the clamp value is
             // observationally identical to the unclamped value — it only bounds the arithmetic.
             if n >= 0x110000 {
@@ -112,13 +98,7 @@ internal enum EntityParser {
         }
         let afterSemi = i + 1
         // Validate codepoint per CommonMark / Unicode.
-        // why: cmark-gfm's `cmark_utf8proc_encode_char` (swift-cmark src/utf8.c) special-cases exactly
-        // U+FFFF and U+FFFE, emitting the lone invalid bytes 0xFF / 0xFE; swift-markdown's cmark bridge
-        // reads every literal, destination, title and info string with `String(cString:)`, which repairs
-        // each such byte to U+FFFD. Flag-ON (`.cmarkBugCompatibility`) reproduces that; flag-OFF keeps the
-        // noncharacter, a valid Unicode scalar that CommonMark §6.5 does not replace.
-        let cmarkEncodesAsInvalidByte = bugCompat && (n == 0xFFFE || n == 0xFFFF)
-        if n == 0 || n > 0x10FFFF || (n >= 0xD800 && n <= 0xDFFF) || cmarkEncodesAsInvalidByte {
+        if n == 0 || n > 0x10FFFF || (n >= 0xD800 && n <= 0xDFFF) {
             let encoded = encodeCodepointUTF8(0xFFFD)
             return EntityMatch(bytes: encoded.bytes, count: encoded.count, afterSemi: afterSemi)
         }
@@ -269,8 +249,7 @@ internal enum EntityParser {
                let entity = matchEntity(
                    start: i,
                    end: endOff,
-                   source: source,
-                   bugCompat: storage.options.contains(.cmarkBugCompatibility)
+                   source: source
                ) {
                 for k in 0..<entity.count {
                     storage.strings.append(entity.bytes[k])
@@ -288,80 +267,14 @@ internal enum EntityParser {
         )
     }
     
-    /// Reproduces cmark's fenced-code info-string order: `blocks.c`'s `CMARK_NODE_CODE_BLOCK` case
-    /// calls `houdini_unescape_html_f` (entity decode over the WHOLE chunk, backslashes untouched)
-    /// and only afterwards `cmark_strbuf_unescape` (strip backslash escapes from THAT result) - two
-    /// separate passes, entities first. That's a different order than `escapedURLChunkBytes`'s single
-    /// left-to-right pass (which interleaves the two, matching standard CommonMark inline processing
-    /// where a `\` immediately escapes a following `&` before it can start an entity). Under this
-    /// order `\&#3;` entity-decodes first to `\` + U+0003, and the backslash then survives the second
-    /// pass because U+0003 isn't escapable punctuation - whereas the interleaved pass would escape the
-    /// `&` before `&#3;` ever becomes an entity. `cmark_clean_url` (link destinations) uses this same
-    /// entity-first order, so `BlockParser.cleanURLChunk` also calls this under `.cmarkBugCompatibility`.
-    /// Link titles (`cmark_clean_title`) do not reproduce this quirk on the compare surface, so the
-    /// title callers of `unescapeURLChunk` are left on the interleaved pass.
-    ///
-    /// `trimmingDecodedWhitespace` reproduces the info string's `cmark_strbuf_trim`, which runs BETWEEN
-    /// the two passes over the `cmark_isspace` set, so whitespace a reference decodes to at either end
-    /// (```` ```&#9;x ```` → `x`) is dropped. `cmark_clean_url` trims before decoding instead, so
-    /// destinations pass `false`.
-    internal static func entityFirstEscapedURLChunkBytes(_ chunk: Chunk, source: Span<UInt8>, into storage: inout DocumentStorage, trimmingDecodedWhitespace: Bool = false) -> Chunk {
-        let endOff = chunk.offset + chunk.length
-        var decoded = [UInt8]()
-        decoded.reserveCapacity(chunk.length)
-        var i = chunk.offset
-        while i < endOff {
-            let b = source[i]
-            if b == UInt8(ascii: "&"),
-               let entity = matchEntity(
-                   start: i,
-                   end: endOff,
-                   source: source,
-                   bugCompat: storage.options.contains(.cmarkBugCompatibility)
-               ) {
-                for k in 0..<entity.count {
-                    decoded.append(entity.bytes[k])
-                }
-                i = entity.afterSemi
-                continue
-            }
-            decoded.append(b)
-            i += 1
-        }
-        var r = 0
-        var end = decoded.count
-        if trimmingDecodedWhitespace {
-            while r < end && decoded[r].isSpaceTabOrNewline { r += 1 }
-            while end > r && decoded[end - 1].isSpaceTabOrNewline { end -= 1 }
-        }
-        let outOffset = storage.strings.count
-        while r < end {
-            if decoded[r] == UInt8(ascii: "\\"), r + 1 < end, decoded[r + 1].isASCIIPunct {
-                storage.strings.append(decoded[r + 1])
-                r += 2
-                continue
-            }
-            storage.strings.append(decoded[r])
-            r += 1
-        }
-        return Chunk(
-            offset: outOffset,
-            length: storage.strings.count - outOffset,
-            inSource: false
-        )
-    }
-
     /// Clean a fenced code block's info string: if `chunk` contains any backslash escapes (`\<ASCII punct>`) or references, materialize a clean copy into `storage.strings` with them processed.
     ///
-    /// Returns the original chunk untouched if it contains neither a backslash escape nor an `&`. Under `.cmarkBugCompatibility` this is cmark's `blocks.c` order (decode references, trim, strip backslash escapes); otherwise the spec's single interleaved pass over the already-trimmed info string.
+    /// Returns the original chunk untouched if it contains neither a backslash escape nor an `&`. Otherwise the spec's single interleaved pass over the already-trimmed info string.
     internal static func unescapeInfoStringChunk(_ chunk: Chunk, source: Span<UInt8>, into storage: inout DocumentStorage) -> Chunk {
         guard urlChunkHasEscape(chunk, source: source) else {
             return chunk
         }
 
-        if storage.options.contains(.cmarkBugCompatibility) {
-            return entityFirstEscapedURLChunkBytes(chunk, source: source, into: &storage, trimmingDecodedWhitespace: true)
-        }
         return escapedURLChunkBytes(chunk, source: source, into: &storage)
     }
 }

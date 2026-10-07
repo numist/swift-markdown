@@ -178,35 +178,6 @@ extension BlockParser {
         return true
     }
 
-    // MARK: - cmark's anti-DoS limits
-
-    /// The cell count at which cmark's `row_from_string` gives up on a row and returns none
-    /// (`UINT16_MAX`, the `int_overflow_abort` check after each appended cell in `extensions/table.c`).
-    static let cmarkRowCellLimit = Int(UInt16.max)
-
-    /// cmark's `MAX_AUTOCOMPLETED_CELLS` (`extensions/table.c`): `try_opening_table_row` refuses a body row
-    /// while the table's autocompleted cells exceed it.
-    static let cmarkMaxAutocompletedCells = 0x80000
-
-    /// The number of cells cmark's `row_from_string` scans from the single row `span[range]`.
-    internal mutating func tableRowCellCount(span: Span<UInt8>, range: Range<Int>) -> Int {
-        let scratchStart = storage.strings.count
-        for i in range {
-            storage.strings.append(span[i])
-        }
-        let count = splitCells(line: scratchStart..<storage.strings.count).cells.count
-        storage.strings.removeLast(storage.strings.count - scratchStart)
-        return count
-    }
-
-    /// Whether any line of the materialized `chunk` reaches `cmarkRowCellLimit` cells.
-    internal mutating func anyLineReachesTableRowCellLimit(chunk: Chunk) -> Bool {
-        // A line shorter than `cmarkRowCellLimit` bytes can't hold that many cells, so skip splitting it.
-        splitLines(chunk: chunk).contains { line in
-            line.count >= Self.cmarkRowCellLimit && splitCells(line: line).cells.count >= Self.cmarkRowCellLimit
-        }
-    }
-
     // MARK: - Row construction
 
     /// Build a `.tableRow` node + its cells under `parent`. Missing trailing cells are emitted as empty; extras beyond `columnCount` are dropped.
@@ -300,7 +271,6 @@ extension BlockParser {
                 for col in 0..<columnCount where rowspans[col] == 0 {
                     var r = previousRows.count - 1
                     var spanning: DocumentStorage.Index? = nil
-                    var spanningIsPadded = false
                     while r >= 0 {
                         let prev = previousRows[r]
                         precondition(col < prev.cells.count, "every row of a table holds one cell per column")
@@ -310,18 +280,10 @@ extension BlockParser {
                             continue
                         }
                         spanning = candidate
-                        spanningIsPadded = col >= prev.parsedCellCount
                         break
                     }
                     if let spanning {
-                        // why: cmark-gfm creates a short row's padded-in cells with no span data
-                        // (`try_opening_table_row`), so `get_cell_rowspan` reads them as 1 but
-                        // `increment_cell_rowspan` is a no-op: the marker still resolves to (and stops at)
-                        // the padded cell and is cleared, yet the padded cell never grows, leaving the
-                        // row a cell short. Reproduced flag-on only; flag-off the padded cell spans.
-                        if !(spanningIsPadded && storage.options.contains(.cmarkBugCompatibility)) {
-                            setCellRowspan(spanning, cellRowspan(spanning) + 1)
-                        }
+                        setCellRowspan(spanning, cellRowspan(spanning) + 1)
                         skipContent[col] = true
                     }
                 }
@@ -340,8 +302,6 @@ extension BlockParser {
                 data: nil
             ))
             storage.appendChild(cellIdx, to: rowIdx)
-            // A cell's buffer is NUL-terminated - see `nulTerminatedInlineContainers`.
-            storage.nulTerminatedInlineContainers.insert(cellIdx)
             if spansEnabled {
                 cellIndices.append(cellIdx)
             }
@@ -389,8 +349,7 @@ extension BlockParser {
                         // in the unescaped buffer added to the cell start, ignoring any stripped `\|` backslash
                         // (`unescapedPipesMap`). why:
                         // table-cell inline positions track the reference's escape-oblivious / re-based columns
-                        // unconditionally - this is NOT enrolled in `.cmarkBugCompatibility`, so there is no flag
-                        // split here. With positions off there is no projection, so no mapping is registered.
+                        // unconditionally. With positions off there is no projection, so no mapping is registered.
                         if let projection {
                             let cellMap = projection.runs(from: cellRange.lowerBound, length: cellRange.count, in: self)
                             arenaSourceMaps[cellIdx] = noEscape
@@ -402,7 +361,7 @@ extension BlockParser {
                 }
             }
         }
-        return SpanRow(cells: cellIndices, parsedCellCount: cells.count)
+        return SpanRow(cells: cellIndices)
     }
 
     // MARK: - Source projection
@@ -536,8 +495,6 @@ extension BlockParser {
     /// A built row's cell node indices, kept so the rows below it can resolve their rowspan markers.
     private struct SpanRow {
         let cells: [DocumentStorage.Index]
-        /// How many leading cells were parsed from the row's source line; any cells after them were padded in for a short row.
-        let parsedCellCount: Int
     }
 
     /// Current rowspan of a `.tableCell` node.
@@ -619,11 +576,6 @@ extension BlockParser {
     private func parseDelimRow(line: Range<Int>) -> [MarkdownNode.TableAlignment]? {
         let cells = splitCells(line: line).cells
         precondition(!cells.isEmpty, "a delimiter-candidate line holds a `-`, so it splits into at least one cell")
-        // why: cmark's `row_from_string` returns no row once it reaches `cmarkRowCellLimit` cells, so such a
-        // delimiter line opens no table (`try_opening_table_header`). CommonMark has no such limit.
-        if storage.options.contains(.cmarkBugCompatibility) && cells.count >= Self.cmarkRowCellLimit {
-            return nil
-        }
         var alignments: [MarkdownNode.TableAlignment] = []
         alignments.reserveCapacity(cells.count)
         for cell in cells {
@@ -671,15 +623,11 @@ extension BlockParser {
         return alignments
     }
 
-    /// Split `line` into cells on unescaped `|`. Strips a single trailing `|` if present (with optional surrounding whitespace), and a single leading `|` only when the row's first byte is that pipe (no whitespace before it). `hadClosingPipe` reports whether a trailing `|` was stripped, so the caller can tell a rightmost cell capped by a pipe from one that runs to the line end. `leadingWhitespace` is the number of leading space/tab bytes trimmed before the first cell (non-zero only for a lazy-continuation header, flag-ON), which cmark scans as that cell's bytes.
+    /// Split `line` into cells on unescaped `|`. Strips a single trailing `|` if present (with optional surrounding whitespace), and a single leading `|` only when the row's first byte is that pipe (no whitespace before it). `hadClosingPipe` reports whether a trailing `|` was stripped, so the caller can tell a rightmost cell capped by a pipe from one that runs to the line end. `leadingWhitespace` is the number of leading space/tab bytes trimmed before the first cell, which cmark scans as that cell's bytes.
     private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool, hadLeadingPipe: Bool, leadingWhitespace: Int) {
         var s = line.lowerBound
         var e = line.upperBound
-        let lineStart = s
-        while s < e && storage.strings[s].isSpaceOrTab {
-            s += 1
-        }
-        let leadingWhitespace = s - lineStart
+        let leadingWhitespace = 0
         let trimmedLeadingSpace = leadingWhitespace > 0
         while e > s && storage.strings[e - 1].isSpaceOrTab {
             e -= 1
@@ -688,10 +636,7 @@ extension BlockParser {
         // (`[|] spacechar*`), which requires the FIRST byte to be `|`. A pipe reached only after leading
         // whitespace is therefore NOT a stripped leading pipe: cmark leaves that whitespace as an empty
         // leading cell's content and treats the pipe as its closing delimiter (` |` → one empty cell,
-        // `colspan 0`, not the zero-column lone-pipe row that `|` alone yields). A table row acquires leading
-        // whitespace only from a lazy paragraph continuation's preserved residual (`addLineSegment`, gated on
-        // `.cmarkBugCompatibility`); a matched continuation and every flag-OFF row begin at their first
-        // non-space, so `trimmedLeadingSpace` is only ever true when reproducing that cmark quirk.
+        // `colspan 0`, not the zero-column lone-pipe row that `|` alone yields).
         var hadLeadingPipe = false
         if s < e && storage.strings[s] == UInt8(ascii: "|") && !trimmedLeadingSpace {
             s += 1

@@ -129,27 +129,16 @@ extension BlockParser {
     /// `linkLabelFitsLengthCap` accepts for a shortcut or footnote label, in the units of
     /// `labelLengthWeight`.
     /// CommonMark §6.6 caps a label at "at most 999 characters", which the shipped deliverable
-    /// enforces (reject `> 999`). cmark-gfm's `MAX_LINK_LABEL_LENGTH` is 1000 and both its
-    /// `link_label` (`src/inlines.c`) and `cmark_map_lookup` (`src/map.c`) reject only `> 1000`, so it
-    /// accepts a 1000-byte label - an off-by-one against the spec. Under `.cmarkBugCompatibility`
-    /// (adopted only by the differential fuzzer) we reproduce that and accept up to 1000; the single
-    /// cmark constant governs every label site (inline reference and block reference/attribute
-    /// definition).
+    /// enforces (reject `> 999`).
     private var maxLinkLabelLength: Int {
-        storage.options.contains(.cmarkBugCompatibility) ? 1000 : 999
+        999
     }
 
     /// A content byte's contribution to the link-label length against `maxLinkLabelLength`.
     ///
-    /// cmark counts bytes of its normalized input buffer: every byte is 1, including each byte of a
-    /// multi-byte UTF-8 character, and a source NUL is 3 because `blocks.c`'s `S_parser_feed` replaces
-    /// it with the 3-byte U+FFFD encoding before any scanning. Under `.cmarkBugCompatibility` we
-    /// reproduce that. Flag-off counts characters (Unicode code points, CommonMark §2.1): a UTF-8
+    /// Flag-off counts characters (Unicode code points, CommonMark §2.1): a UTF-8
     /// continuation byte counts 0 and every other byte, NUL included, counts 1.
     private func labelLengthWeight(_ byte: UInt8) -> Int {
-        if storage.options.contains(.cmarkBugCompatibility) {
-            return byte == 0 ? 3 : 1
-        }
         return byte & 0xC0 == 0x80 ? 0 : 1
     }
 
@@ -164,7 +153,7 @@ extension BlockParser {
     /// only ASCII punctuation (spec "Backslash escapes"), so a `\` before a line ending leaves the line ending
     /// in the destination, which a `<…>` destination may not contain (spec "Links").
     private func escapesNext(_ next: UInt8?) -> Bool {
-        storage.options.contains(.cmarkBugCompatibility) || (next?.isASCIIPunct ?? false)
+        next?.isASCIIPunct ?? false
     }
 
     /// Parse a link destination - either `<...>` (no internal `<`, `>`, or unescaped newline) or a bare URL (no ASCII space or control character, balanced parens up to depth 32, ASCII `\X` escapes).
@@ -195,9 +184,8 @@ extension BlockParser {
         }
         // A bare destination contains no ASCII space or control character (spec "Links"). A NUL stands
         // for U+FFFD (spec "Insecure characters"), so it is destination content.
-        let bugCompat = storage.options.contains(.cmarkBugCompatibility)
         func terminatesDestination(_ b: UInt8) -> Bool {
-            bugCompat ? b.isSpaceTabOrNewline : b == UInt8(ascii: " ") || (b != 0 && b < 0x20) || b == 0x7F
+            b == UInt8(ascii: " ") || (b != 0 && b < 0x20) || b == 0x7F
         }
         if terminatesDestination(first) {
             return nil
@@ -235,7 +223,7 @@ extension BlockParser {
             i += 1
         }
         // A bare destination includes parentheses only when they are escaped or balanced (spec "Links").
-        if nbParen != 0 && !bugCompat {
+        if nbParen != 0 {
             return nil
         }
         // Empty bare URL is allowed for inline links - `[a]()` should match with an empty destination.
@@ -329,12 +317,6 @@ extension BlockParser {
         var closeAfterEnd: Int? = nil
         var i = start + 1
         while i < end, inBody || afterBackslash {
-            // why: the re2c scanners validate UTF-8, so an orphaned continuation byte in cmark's buffer (the
-            // U+FFFD standing for it here) matches no transition and ends the scan (`src/scanners.c`
-            // `_scan_link_title`).
-            if !chunk.inSource, isOrphanReplacement(at: i) {
-                break
-            }
             let c = readByte(at: i, in: chunk)
             var nextInBody = false
             var nextAfterBackslash = false
@@ -394,12 +376,6 @@ extension BlockParser {
         var closeAfterEnd: Int? = nil
         var i = start + 1
         while i < end, inBody || afterBackslash {
-            // why: the re2c scanners validate UTF-8, so an orphaned continuation byte in cmark's buffer (the
-            // U+FFFD standing for it here) matches no transition and ends the scan (`src/scanners.c`
-            // `_scan_link_title`).
-            if content.orphanedContinuationByteLength(at: i) != nil {
-                break
-            }
             let c = content[i]
             var nextInBody = false
             var nextAfterBackslash = false
