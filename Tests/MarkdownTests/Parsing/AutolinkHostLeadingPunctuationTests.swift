@@ -15,29 +15,35 @@ import XCTest
 /// Expected surfaces are the cmark-gfm reference's output bytes; inputs are `[markdown …][option byte]`,
 /// split as the fuzzer does.
 class AutolinkHostLeadingPunctuationTests: XCTestCase {
-    private func surface(_ bytes: [UInt8]) -> String {
-        let (markdown, options) = FuzzRegressionTests.splitInput(bytes)!
-        return Document(parsing: markdown, options: options.union(.cmarkBugCompatibility)).debugDescription(options: [])
+    private func surface(_ bytes: [UInt8], cmarkBugCompatible: Bool = true) -> String {
+        var (markdown, options) = FuzzRegressionTests.splitInput(bytes)!
+        if cmarkBugCompatible { options.insert(.cmarkBugCompatibility) }
+        return Document(parsing: markdown, options: options).debugDescription(options: [])
     }
 
     func testCase0() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"http://«\"", surface([104, 116, 116, 112, 58, 47, 47, 194, 171, 66]))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"http://«\"", surface([104, 116, 116, 112, 58, 47, 47, 194, 171, 66], cmarkBugCompatible: false))
     }
 
     func testCase1() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"https://«\"", surface([104, 116, 116, 112, 115, 58, 47, 47, 194, 171, 68]))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"https://«\"", surface([104, 116, 116, 112, 115, 58, 47, 47, 194, 171, 68], cmarkBugCompatible: false))
     }
 
     func testCase2() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"ftp://«)\"", surface([102, 116, 112, 58, 47, 47, 194, 171, 41, 68]))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"ftp://«)\"", surface([102, 116, 112, 58, 47, 47, 194, 171, 41, 68], cmarkBugCompatible: false))
     }
 
     func testCase3() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"x http://«.\"", surface([120, 32, 104, 116, 116, 112, 58, 47, 47, 194, 171, 46, 68]))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"x http://«.\"", surface([120, 32, 104, 116, 116, 112, 58, 47, 47, 194, 171, 46, 68], cmarkBugCompatible: false))
     }
 
     func testCase4() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"HTTP://«*\"", surface([72, 84, 84, 80, 58, 47, 47, 194, 171, 42, 68]))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"HTTP://«*\"", surface([72, 84, 84, 80, 58, 47, 47, 194, 171, 42, 68], cmarkBugCompatible: false))
     }
 
     func testCase5() {
@@ -46,6 +52,7 @@ class AutolinkHostLeadingPunctuationTests: XCTestCase {
 
     func testCase6() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"http://«a.b\"", surface([104, 116, 116, 112, 58, 47, 47, 194, 171, 97, 46, 98, 68]))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"http://«a.b\"", surface([104, 116, 116, 112, 58, 47, 47, 194, 171, 97, 46, 98, 68], cmarkBugCompatible: false))
     }
 
     func testCase7() {
@@ -58,14 +65,17 @@ class AutolinkHostLeadingPunctuationTests: XCTestCase {
 
     func testCase9() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"http://¡x\"", surface([104, 116, 116, 112, 58, 47, 47, 194, 161, 120, 68]))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"http://¡x\"", surface([104, 116, 116, 112, 58, 47, 47, 194, 161, 120, 68], cmarkBugCompatible: false))
     }
 
     func testCase10() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"http://—x\"", surface([104, 116, 116, 112, 58, 47, 47, 226, 128, 148, 120, 68]))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"http://—x\"", surface([104, 116, 116, 112, 58, 47, 47, 226, 128, 148, 120, 68], cmarkBugCompatible: false))
     }
 
     func testCase11() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"http://“x\"", surface([104, 116, 116, 112, 58, 47, 47, 226, 128, 156, 120, 68]))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"http://“x\"", surface([104, 116, 116, 112, 58, 47, 47, 226, 128, 156, 120, 68], cmarkBugCompatible: false))
     }
 
     // MARK: - Category probes
@@ -106,6 +116,7 @@ class AutolinkHostLeadingPunctuationTests: XCTestCase {
         ]
         for (category, scalar) in rejected {
             XCTAssertEqual(text("http://\(scalar)a.b"), probeSurface("http://\(scalar)a.b"), category)
+            XCTAssertEqual(text("http://\(scalar)a.b"), probeSurface("http://\(scalar)a.b", options: []), category)
         }
     }
 
@@ -143,6 +154,16 @@ class AutolinkHostLeadingPunctuationTests: XCTestCase {
         for scalar in ["\u{2014}", "\u{00AB}", "\u{00A1}", "\u{00A0}"] {
             XCTAssertEqual(text("http://\(scalar)a.b"), probeSurface("http://\(scalar)a.b", options: []), scalar)
         }
+    }
+
+    /// A letter is a valid domain character at a label's start or end, so a host holding one links; flag-off the
+    /// scheme autolink is the paragraph's only child, whereas cmark-gfm leaves an empty text node where it
+    /// rewinds over the scheme.
+    func testLetterInHostIsALinkWithoutBugCompatibility() {
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Link destination: \"http://\u{4E2D}a.b\"\n      └─ Text \"http://\u{4E2D}a.b\"", probeSurface("http://\u{4E2D}a.b", options: []))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Link destination: \"http://a.\u{4E2D}b\"\n      └─ Text \"http://a.\u{4E2D}b\"", probeSurface("http://a.\u{4E2D}b", options: []))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Link destination: \"http://a\u{4E2D}.b\"\n      └─ Text \"http://a\u{4E2D}.b\"", probeSurface("http://a\u{4E2D}.b", options: []))
+        XCTAssertEqual(wwwLink("www.a\u{4E2D}.b"), probeSurface("www.a\u{4E2D}.b", options: []))
     }
 
 }

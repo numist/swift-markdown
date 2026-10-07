@@ -19,9 +19,9 @@ import XCTest
 /// The same holds for the paragraph split off before a table's header; a setext heading, like a paragraph,
 /// keeps its trailing newline. The non-image `[\^a]` form over-reads only onto the `]` (control). Position-free compare surface.
 class EscapedCaretImageInTableCellTests: XCTestCase {
-    private func surface(_ markdown: String) -> String {
+    private func surface(_ markdown: String, cmarkBugCompatible: Bool = true) -> String {
         var options = ParseOptions(rawValue: UInt(0xe4 & 0b11011111))
-        options.insert(.cmarkBugCompatibility)
+        if cmarkBugCompatible { options.insert(.cmarkBugCompatibility) }
         return Document(parsing: markdown, options: options).debugDescription(options: [])
     }
 
@@ -102,5 +102,32 @@ class EscapedCaretImageInTableCellTests: XCTestCase {
     /// The preceding paragraph's buffer is trimmed, so trailing whitespace doesn't stand between the `]` and the terminator.
     func testParagraphBeforeTableWithTrailingTab() {
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ Text \"x [^a]\"\n└─ Table alignments: |-|\n   ├─ Head\n   │  └─ Cell\n   │     └─ Text \"o\"\n   └─ Body", surface("x ![\\^a]\t\no\n|-"))
+    }
+
+    /// Flag-off, a backslash-escaped caret makes `![\^…]` plain text, so the brackets stay literal with the image
+    /// `!` kept and nothing read past the `]`, whereas cmark-gfm drops the `!` and over-reads past the label.
+    func testEscapedCaretStaysLiteralWithoutBugCompatibility() {
+        let cases: [(markdown: String, expected: String)] = [
+            ("o\n|-\n![\\^\u{14}]", Self.singleColumn("![^\u{14}]")),
+            ("o\n|-\n![\\^a]", Self.singleColumn("![^a]")),
+            ("o\n|-\n|![\\^a]|", Self.singleColumn("![^a]")),
+            ("o\n|-\nx ![\\^ab]", Self.singleColumn("x ![^ab]")),
+            ("o|p\n-|-\n![\\^a]|b", "Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"o\"\n   │  └─ Cell\n   │     └─ Text \"p\"\n   └─ Body\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"![^a]\"\n         └─ Cell\n            └─ Text \"b\""),
+            ("o\n|-\n![\\^\u{14}]\nq", "Document\n└─ Table alignments: |-|\n   ├─ Head\n   │  └─ Cell\n   │     └─ Text \"o\"\n   └─ Body\n      ├─ Row\n      │  └─ Cell\n      │     └─ Text \"![^\u{14}]\"\n      └─ Row\n         └─ Cell\n            └─ Text \"q\""),
+            ("o\n|-\n[\\^a]", Self.singleColumn("[^a]")),
+            ("![\\^a]\n|-", "Document\n└─ Table alignments: |-|\n   ├─ Head\n   │  └─ Cell\n   │     └─ Text \"![^a]\"\n   └─ Body"),
+            ("![\\^a]|p\n-|-", "Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"![^a]\"\n   │  └─ Cell\n   │     └─ Text \"p\"\n   └─ Body"),
+            ("o|p\n-|-\nb|![\\^a]", "Document\n└─ Table alignments: |-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"o\"\n   │  └─ Cell\n   │     └─ Text \"p\"\n   └─ Body\n      └─ Row\n         ├─ Cell\n         │  └─ Text \"b\"\n         └─ Cell\n            └─ Text \"![^a]\""),
+            ("o\n|-\n![\\^\u{0}]", Self.singleColumn("![^\u{FFFD}]")),
+            ("o\n|-\n![\\^a\\|]", Self.singleColumn("![^a|]")),
+            ("x ![\\^a]\no\n|-", "Document\n├─ Paragraph\n│  └─ Text \"x ![^a]\"\n└─ Table alignments: |-|\n   ├─ Head\n   │  └─ Cell\n   │     └─ Text \"o\"\n   └─ Body"),
+            ("![\\^a]\n===", "Document\n└─ Heading level: 1\n   └─ Text \"![^a]\""),
+            ("> x ![\\^a]\n> o\n> |-", "Document\n└─ BlockQuote\n   ├─ Paragraph\n   │  └─ Text \"x ![^a]\"\n   └─ Table alignments: |-|\n      ├─ Head\n      │  └─ Cell\n      │     └─ Text \"o\"\n      └─ Body"),
+            ("x ![\\^a]\r\no\r\n|-", "Document\n├─ Paragraph\n│  └─ Text \"x ![^a]\"\n└─ Table alignments: |-|\n   ├─ Head\n   │  └─ Cell\n   │     └─ Text \"o\"\n   └─ Body"),
+            ("x ![\\^a]\t\no\n|-", "Document\n├─ Paragraph\n│  └─ Text \"x ![^a]\"\n└─ Table alignments: |-|\n   ├─ Head\n   │  └─ Cell\n   │     └─ Text \"o\"\n   └─ Body"),
+        ]
+        for (markdown, expected) in cases {
+            XCTAssertEqual(expected, surface(markdown, cmarkBugCompatible: false), markdown.debugDescription)
+        }
     }
 }

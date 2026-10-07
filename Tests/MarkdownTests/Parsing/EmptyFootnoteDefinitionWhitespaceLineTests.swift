@@ -19,9 +19,9 @@ import XCTest
 /// that follows lands in the enclosing container. Flag-OFF follows CommonMark: any whitespace-only line is
 /// blank and keeps the definition open. Position-free compare surface.
 class EmptyFootnoteDefinitionWhitespaceLineTests: XCTestCase {
-    private func surface(_ markdown: String) -> String {
+    private func surface(_ markdown: String, cmarkBugCompatible: Bool = true) -> String {
         var options = ParseOptions(rawValue: UInt(0xf0 & 0b11011111))
-        options.insert(.cmarkBugCompatibility)
+        if cmarkBugCompatible { options.insert(.cmarkBugCompatibility) }
         return Document(parsing: markdown, options: options).debugDescription(options: [])
     }
 
@@ -55,6 +55,7 @@ class EmptyFootnoteDefinitionWhitespaceLineTests: XCTestCase {
 
     func testEmptyLineControl() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem", surface("- [^a]:\n\n\t\t\""))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem", surface("- [^a]:\n\n\t\t\"", cmarkBugCompatible: false))
     }
 
     func testOrderedListItem() {
@@ -75,6 +76,7 @@ class EmptyFootnoteDefinitionWhitespaceLineTests: XCTestCase {
             XCTAssertEqual("Document\n├─ CodeBlock language: none\n│  x\n├─ Paragraph\n│  └─ FootnoteReference label: \"a\" index: 1\n└─ FootnoteDefinition label: \"a\"", surface("[^a]:\n" + String(repeating: " ", count: spaces) + "\n    x\n\n[^a]"), "\(spaces) spaces")
         }
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ FootnoteReference label: \"a\" index: 1\n└─ FootnoteDefinition label: \"a\"\n   └─ Paragraph\n      └─ Text \"x\"", surface("[^a]:\n    \n    x\n\n[^a]"))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  └─ FootnoteReference label: \"a\" index: 1\n└─ FootnoteDefinition label: \"a\"\n   └─ Paragraph\n      └─ Text \"x\"", surface("[^a]:\n    \n    x\n\n[^a]", cmarkBugCompatible: false))
     }
 
     func testNonEmptyDefinitionClosesBeforeIndentedContent() {
@@ -83,10 +85,12 @@ class EmptyFootnoteDefinitionWhitespaceLineTests: XCTestCase {
 
     func testParagraphAfterWhitespaceLineControl() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"y\"", surface("- [^a]: x\n \n  y"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"y\"", surface("- [^a]: x\n \n  y", cmarkBugCompatible: false))
     }
 
     func testCRLFEmptyLineKeepsDefinitionOpen() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem", surface("- [^a]:\r\n\r\n\t\t\""))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem", surface("- [^a]:\r\n\r\n\t\t\"", cmarkBugCompatible: false))
     }
 
     func testCRLFSpaceOnlyLineClosesDefinition() {
@@ -97,5 +101,24 @@ class EmptyFootnoteDefinitionWhitespaceLineTests: XCTestCase {
     func testSpecCorrectDefinitionContinuesPastWhitespaceLine() {
         let document = Document(parsing: "- [^a]:\n \n      x\n\n[^a]", options: ParseOptions(rawValue: UInt(0xf0 & 0b11011111)))
         XCTAssertEqual("Document\n├─ UnorderedList\n│  └─ ListItem\n├─ Paragraph\n│  └─ FootnoteReference label: \"a\" index: 1\n└─ FootnoteDefinition label: \"a\"\n   └─ Paragraph\n      └─ Text \"x\"", document.debugDescription(options: []))
+    }
+
+    /// A whitespace-only line is a blank line, so the definition stays open and the indented content after it
+    /// joins the definition (dropped with it when unreferenced), whereas cmark-gfm closes the definition there
+    /// and the content becomes indented code in the enclosing container.
+    func testSpecCorrectDefinitionHoldsContentAfterWhitespaceLine() {
+        let emptyItem = "Document\n└─ UnorderedList\n   └─ ListItem"
+        for markdown in ["- [^a]:\n\t\n\t\t\"", "- [^a]:\n \n\t\t\"", "- [^a]:\r\t\n\t\t\"", "- [^\u{0}]:\r\t\n\t\t\"", "- [^a]:\n\t\n      x", "- [^a]:\r\n \r\n\t\t\""] {
+            XCTAssertEqual(emptyItem, surface(markdown, cmarkBugCompatible: false), markdown.debugDescription)
+        }
+        XCTAssertEqual("Document\n└─ BlockQuote", surface("> [^a]:\n>\t\n>\t\tx", cmarkBugCompatible: false))
+        XCTAssertEqual("Document\n└─ OrderedList\n   └─ ListItem", surface("1. [^a]:\n \n       x", cmarkBugCompatible: false))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ UnorderedList\n         └─ ListItem", surface("- - [^a]:\n \n        x", cmarkBugCompatible: false))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote", surface("- > [^a]:\n  >\n  >     x", cmarkBugCompatible: false))
+        XCTAssertEqual("Document\n├─ UnorderedList\n│  └─ ListItem\n├─ Paragraph\n│  └─ FootnoteReference label: \"a\" index: 1\n└─ FootnoteDefinition label: \"a\"\n   └─ Paragraph\n      └─ Text \"x\"", surface("- [^a]:\n\t\n\t\tx\n\n[^a]", cmarkBugCompatible: false))
+        for spaces in 1...3 {
+            XCTAssertEqual("Document\n├─ Paragraph\n│  └─ FootnoteReference label: \"a\" index: 1\n└─ FootnoteDefinition label: \"a\"\n   └─ Paragraph\n      └─ Text \"x\"", surface("[^a]:\n" + String(repeating: " ", count: spaces) + "\n    x\n\n[^a]", cmarkBugCompatible: false), "\(spaces) spaces")
+        }
+        XCTAssertEqual("Document\n├─ UnorderedList\n│  └─ ListItem\n├─ Paragraph\n│  └─ FootnoteReference label: \"a\" index: 1\n└─ FootnoteDefinition label: \"a\"\n   ├─ Paragraph\n   │  └─ Text \"x\"\n   └─ Paragraph\n      └─ Text \"y\"", surface("- [^a]: x\n \n\t\ty\n\n[^a]", cmarkBugCompatible: false))
     }
 }

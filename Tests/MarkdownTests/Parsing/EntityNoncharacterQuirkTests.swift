@@ -92,6 +92,9 @@ class EntityNoncharacterQuirkTests: XCTestCase {
 
     func testFlagOffKeepsNoncharacters() {
         XCTAssertEqual(Self.text(Self.uFFFE + Self.uFFFF), surface("&#xFFFE;&#65535;", []))
+        XCTAssertEqual(Self.text(Self.uFFFE), surface("&#xFFFE;", []))
+        XCTAssertEqual(Self.text(Self.uFFFF), surface("&#xFFFF;", []))
+        XCTAssertEqual(Self.text(Self.uFFFF), surface("&#65535;", []))
         XCTAssertEqual(Self.image(source: "/" + Self.uFFFF, title: Self.uFFFE), surface("![a](/&#xFFFF; \"&#xFFFE;\")", []))
         XCTAssertEqual(Self.image(source: "/" + Self.uFFFE, title: Self.uFFFF), surface("![a]\n\n[a]: /&#xFFFE; \"&#65535;\"", []))
         XCTAssertEqual(Self.autolink("op:" + Self.uFFFF), surface("<op:&#xFFFF;>", []))

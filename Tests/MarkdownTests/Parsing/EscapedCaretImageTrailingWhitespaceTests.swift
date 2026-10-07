@@ -18,9 +18,9 @@ import XCTest
 /// `\n`), and the inline subject's rtrim shortens its length without touching those bytes, so the over-read
 /// lands on the first trailing whitespace byte instead of the `\n`. Position-free compare surface.
 class EscapedCaretImageTrailingWhitespaceTests: XCTestCase {
-    private func surface(_ markdown: String) -> String {
+    private func surface(_ markdown: String, cmarkBugCompatible: Bool = true) -> String {
         var options = ParseOptions(rawValue: UInt(0xe4 & 0b11011111))
-        options.insert(.cmarkBugCompatibility)
+        if cmarkBugCompatible { options.insert(.cmarkBugCompatibility) }
         return Document(parsing: markdown, options: options).debugDescription(options: [])
     }
 
@@ -136,5 +136,43 @@ class EscapedCaretImageTrailingWhitespaceTests: XCTestCase {
 
     func testATXHeading() {
         XCTAssertEqual("Document\n└─ Heading level: 1\n   └─ Text \"[^a]\"", surface("# ![\\^a] "))
+    }
+
+    /// Flag-off, a backslash-escaped caret makes `![\^…]` plain text, so the brackets stay literal with the image
+    /// `!` kept and the line's trailing whitespace stripped, whereas cmark-gfm drops the `!` and its label capture
+    /// over-reads onto the byte after the `]`.
+    func testEscapedCaretStaysLiteralWithoutBugCompatibility() {
+        let cases: [(markdown: String, expected: String)] = [
+            ("![\\^a] ", "Document\n└─ Paragraph\n   └─ Text \"![^a]\""),
+            ("![\\^a]\t", "Document\n└─ Paragraph\n   └─ Text \"![^a]\""),
+            ("![\\^a]  ", "Document\n└─ Paragraph\n   └─ Text \"![^a]\""),
+            ("![\\^ab] ", "Document\n└─ Paragraph\n   └─ Text \"![^ab]\""),
+            ("![\\^a] \n", "Document\n└─ Paragraph\n   └─ Text \"![^a]\""),
+            ("![\\^a] \r\n", "Document\n└─ Paragraph\n   └─ Text \"![^a]\""),
+            ("![\\^a] \n\nb", "Document\n├─ Paragraph\n│  └─ Text \"![^a]\"\n└─ Paragraph\n   └─ Text \"b\""),
+            ("x\n![\\^a] ", "Document\n└─ Paragraph\n   ├─ Text \"x\"\n   ├─ SoftBreak\n   └─ Text \"![^a]\""),
+            ("> ![\\^a] ", "Document\n└─ BlockQuote\n   └─ Paragraph\n      └─ Text \"![^a]\""),
+            ("> x\n> ![\\^a] ", "Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      └─ Text \"![^a]\""),
+            ("> x\n![\\^a] ", "Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      └─ Text \"![^a]\""),
+            ("- ![\\^a] ", "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"![^a]\""),
+            ("![\\^a] \n===", "Document\n└─ Heading level: 1\n   └─ Text \"![^a]\""),
+            ("![\\^a]\t\n===", "Document\n└─ Heading level: 1\n   └─ Text \"![^a]\""),
+            ("x\n![\\^a] \n===", "Document\n└─ Heading level: 1\n   ├─ Text \"x\"\n   ├─ SoftBreak\n   └─ Text \"![^a]\""),
+            ("![\\^a]\t ", "Document\n└─ Paragraph\n   └─ Text \"![^a]\""),
+            ("[x]: /u\n![\\^a] ", "Document\n└─ Paragraph\n   └─ Text \"![^a]\""),
+            ("- [ ] ![\\^a] ", "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [ ]\n      └─ Paragraph\n         └─ Text \"![^a]\""),
+            ("> \u{0}\n> ![\\^a] ", "Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"\u{FFFD}\"\n      ├─ SoftBreak\n      └─ Text \"![^a]\""),
+            ("- x\n![\\^a] ", "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         ├─ Text \"x\"\n         ├─ SoftBreak\n         └─ Text \"![^a]\""),
+            ("> ![\\^a] \n> ===", "Document\n└─ BlockQuote\n   └─ Heading level: 1\n      └─ Text \"![^a]\""),
+            ("- ![\\^a] \n  ===", "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 1\n         └─ Text \"![^a]\""),
+            ("![\\^a]\r\n", "Document\n└─ Paragraph\n   └─ Text \"![^a]\""),
+            ("![\\^a]  \nb", "Document\n└─ Paragraph\n   ├─ Text \"![^a]\"\n   ├─ LineBreak\n   └─ Text \"b\""),
+            ("x ![\\^a] \ny", "Document\n└─ Paragraph\n   ├─ Text \"x ![^a]\"\n   ├─ SoftBreak\n   └─ Text \"y\""),
+            ("[\\^a] ", "Document\n└─ Paragraph\n   └─ Text \"[^a]\""),
+            ("# ![\\^a] ", "Document\n└─ Heading level: 1\n   └─ Text \"![^a]\""),
+        ]
+        for (markdown, expected) in cases {
+            XCTAssertEqual(expected, surface(markdown, cmarkBugCompatible: false), markdown.debugDescription)
+        }
     }
 }
