@@ -194,8 +194,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// continuation line - so an ineligible item keeps its `[ ]`/`[x]` as literal paragraph text and
     /// re-indents like a plain bullet. (Empty task items are consumed at open time in
     /// `emptyTaskItemChecked`; this set carries the content-bearing case to finalize, and the strip removes the
-    /// item once it consumes the checkbox.) Populated only under `.cmarkBugCompatibility`; otherwise an item's
-    /// first paragraph decides on its own (`tasklistEligibleItem`).
+    /// item once it consumes the checkbox.) A task list item is otherwise decided by its first paragraph alone
+    /// (`tasklistEligibleItem`).
     var lineAnchoredTaskItems: Set<DocumentStorage.Index> = []
 
     /// The indent, in columns, of each paragraph's SECOND physical line — its first continuation line —
@@ -1609,26 +1609,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // The preceding lines are non-blank paragraph content (a blank line would have closed the
                 // paragraph); they trim to empty only when they hold nothing but line tabulations and form feeds.
                 let precedingLines = Chunk(offset: range.lowerBound, length: lastNewline - range.lowerBound, inSource: true)
-                var precedingChunk = precedingLines.trimmingWhitespace(using: self)
                 // The split-off lines start with the paragraph's first line, so they carry any task-item
-                // checkbox; they bypass finalize, so consume it here (see `stripTasklistCheckbox`). It never
-                // empties them: an opening line with nothing after its checkbox is consumed at item open
-                // (`emptyTaskItemChecked`) and leaves the item out of `lineAnchoredTaskItems`.
-                let beforeCheckbox = precedingChunk
-                precedingChunk = stripTasklistCheckbox(node: node, content: precedingChunk, trailingSeparator: byte(after: precedingChunk, in: precedingLines))
-                let onlyCheckbox = precedingChunk.isEmpty && precedingChunk.offset != beforeCheckbox.offset
-                // A flag-ON PHASE-2c reconstruction restored the leading ref-defs cmark had already resolved
-                // off its buffer; now that the reconstructed underline line is a table header, drop those
-                // same definitions from the preceding content - as cmark did - so they don't leak back as a
-                // spurious paragraph. Registration is first-wins, so the re-strip only removes bytes. When
-                // nothing but ref-defs preceded the header, cmark opens the table with no preceding paragraph.
-                let reconstructed = reconstructedRefDefParagraphs.contains(node)
-                if reconstructed {
-                    precedingChunk = parseDefinitions(in: precedingChunk).trimmingWhitespace(using: self)
-                }
-                // A reconstructed paragraph whose entire preceding run was leading ref-defs opens the table
-                // with no preceding paragraph.
-                if !((reconstructed || onlyCheckbox) && precedingChunk.isEmpty) {
+                // checkbox and leading definitions; they bypass finalize, so consume them here.
+                if let precedingChunk = tableSplitParagraphContent(precedingLines.trimmingWhitespace(using: self), in: precedingLines, node: node) {
                     let preceding = insertTablePrecedingParagraph(before: node)
                     let span = precedingChunk.isEmpty ? precedingLines : precedingChunk
                     storage.setSourceStart(preceding, span.offset)
@@ -1867,23 +1850,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // for why a segment list can't carry the replacement).
             let substitutes = segmentsContainNUL(preceding) || segmentsContainEscapedPipe(preceding)
             let trimsControlWhitespace = segmentsEndInControlWhitespace(preceding)
-            if substitutes || mayHoldCheckbox || trimsControlWhitespace {
+            let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
+            let mayHoldDefinition = !bugCompatible && segmentsCouldMatchMatcher(preceding)
+            if substitutes || mayHoldCheckbox || trimsControlWhitespace || mayHoldDefinition {
                 var map: [ArenaRun] = []
                 let flat = flattenSegments(preceding, map: &map)
-                let trimmed = flat.trimmingWhitespace(using: self)
-                if positionsEnabled, trimsControlWhitespace, !trimmed.isEmpty {
-                    let span = sourceSpan(of: sliceRuns(map, from: trimmed.offset - flat.offset, length: trimmed.length))
-                    storage.setSourceStart(precedingNode, span.start)
-                    storage.setSourceEnd(precedingNode, span.end)
-                }
-                // `precedingNode` is now the item's first child, so the strip also advances its stamped start.
-                let content = stripTasklistCheckbox(node: precedingNode, content: trimmed, trailingSeparator: trailingSeparator)
-                if content.offset != trimmed.offset, content.isEmpty {
-                    // Only the task list item marker preceded the header.
-                    storage.unlinkChild(precedingNode)
-                } else {
+                // `precedingNode` is the item's first child, so a checkbox strip also advances its stamped start.
+                if let content = tableSplitParagraphContent(flat.trimmingWhitespace(using: self), in: flat, node: precedingNode, fallbackSeparator: trailingSeparator) {
+                    if positionsEnabled, !bugCompatible, !content.isEmpty {
+                        let span = sourceSpan(of: sliceRuns(map, from: content.offset - flat.offset, length: content.length))
+                        storage.setSourceStart(precedingNode, span.start)
+                        storage.setSourceEnd(precedingNode, span.end)
+                    }
                     let contentMap = positionsEnabled ? sliceRuns(map, from: content.offset - flat.offset, length: content.length) : []
                     enqueueTablePrecedingContent(content, map: contentMap, of: precedingNode)
+                } else {
+                    storage.unlinkChild(precedingNode)
                 }
             } else {
                 pendingInlines.append((precedingNode, storage.intern(preceding)))
@@ -1926,21 +1908,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             storage.strings.append(text[k])
         }
         let precedingLines = Chunk(offset: precedingStart, length: lastNewline, inSource: false)
-        var precedingChunk = precedingLines.trimmingWhitespace(using: self)
-        // The split-off lines carry any task-item checkbox and bypass finalize (see `stripTasklistCheckbox`).
-        let beforeCheckbox = precedingChunk
-        precedingChunk = stripTasklistCheckbox(node: node, content: precedingChunk, trailingSeparator: byte(after: precedingChunk, in: precedingLines))
-        let onlyCheckbox = precedingChunk.isEmpty && precedingChunk.offset != beforeCheckbox.offset
-        // A flag-ON PHASE-2c reconstruction restored the leading ref-defs cmark had already resolved off its
-        // buffer (see `reconstructedRefDefParagraphs`); drop them from the preceding content - as cmark did -
-        // so the reconstructed underline-line-turned-header doesn't leak them back as a spurious paragraph.
-        // When nothing else preceded the header the table opens with no preceding paragraph, exactly as when
-        // the earlier lines were blank.
-        let reconstructed = reconstructedRefDefParagraphs.contains(node)
-        if reconstructed {
-            precedingChunk = parseDefinitions(in: precedingChunk).trimmingWhitespace(using: self)
-        }
-        if !((reconstructed || onlyCheckbox) && precedingChunk.isEmpty) {
+        // The split-off lines carry any task-item checkbox and leading definitions, and bypass finalize.
+        if let precedingChunk = tableSplitParagraphContent(precedingLines.trimmingWhitespace(using: self), in: precedingLines, node: node) {
             let precedingNode = insertTablePrecedingParagraph(before: node)
             let precedingMap = sliceRuns(text.map, from: precedingChunk.offset - precedingStart, length: precedingChunk.length)
             if positionsEnabled {
@@ -3190,9 +3159,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Cheap, over-approximate gate: could this segment content match a finalize-time matcher (ref-def / footnote / tasklist start with `[`, an attribute def starts with `^[` when `.attributes` is set, or a GFM table)?
-    ///
-    /// A false positive only costs an avoidable materialization; a false negative would skip a real matcher, so the checks must cover every matcher's necessary condition. The table necessary condition is on the DELIMITER (second) line, not the header: a single-column table's header need not contain a pipe (`a\n|-`, `a\n:-`), so the header-`|` check that once lived here would skip such tables. The segment list is isomorphic to `\n`-separated lines, so the second line is scanned directly.
     /// Whether a paragraph's segment list begins or ends with a line tabulation or form feed, whitespace that
     /// `trimSegments` leaves for the flat content's trim to remove.
     private func segmentsEndInControlWhitespace(_ segs: borrowing UniqueArray<Segment>) -> Bool {
@@ -3206,6 +3172,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             || (last.length > 0 && isControlWhitespace(segmentByte(last, Int(last.length) - 1)))
     }
 
+    /// Cheap, over-approximate gate: could this segment content match a finalize-time matcher (ref-def / footnote / tasklist start with `[`, an attribute def starts with `^[` when `.attributes` is set, or a GFM table)?
+    ///
+    /// A false positive only costs an avoidable materialization; a false negative would skip a real matcher, so the checks must cover every matcher's necessary condition. The table necessary condition is on the DELIMITER (second) line, not the header: a single-column table's header need not contain a pipe (`a\n|-`, `a\n:-`), so the header-`|` check that once lived here would skip such tables. The segment list is isomorphic to `\n`-separated lines, so the second line is scanned directly.
     private func segmentsCouldMatchMatcher(_ segs: borrowing UniqueArray<Segment>) -> Bool {
         // First content byte == '['  ⇒ possible ref-def / footnote def / tasklist marker.
         // First content bytes == '^['  ⇒ possible attribute reference definition (`^[label]: attrs`), with `.attributes`.
@@ -3331,6 +3300,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return result
     }
 
+    /// The content of the paragraph a table's header row splits off: `trimmed`, a window of `lines`, with its leading
+    /// link reference definitions removed (spec "Link reference definitions") and any task list item marker consumed
+    /// for `node`, or `nil` when nothing else remained. `fallbackSeparator` is the first byte trimmed off the lines
+    /// before `lines` was formed, if any.
+    private mutating func tableSplitParagraphContent(_ trimmed: Chunk, in lines: Chunk, node: DocumentStorage.Index, fallbackSeparator: UInt8? = nil) -> Chunk? {
+        var content = trimmed
+        if storage.options.contains(.cmarkBugCompatibility) {
+            content = stripTasklistCheckbox(node: node, content: content, trailingSeparator: byte(after: content, in: lines) ?? fallbackSeparator)
+            if reconstructedRefDefParagraphs.contains(node) {
+                content = parseDefinitions(in: content).trimmingWhitespace(using: self)
+            }
+        } else {
+            content = parseDefinitions(in: content).trimmingWhitespace(using: self)
+            content = stripTasklistCheckbox(node: node, content: content, trailingSeparator: byte(after: content, in: lines) ?? fallbackSeparator)
+        }
+        return content.isEmpty && content.offset != trimmed.offset ? nil : content
+    }
+
     /// The byte of `outer` just past `content`, a window of it in the same buffer, or `nil` at `outer`'s end.
     private func byte(after content: Chunk, in outer: Chunk) -> UInt8? {
         let end = content.offset + content.length
@@ -3365,10 +3352,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // paragraph no raw content (spec "Paragraphs").
             return
         }
-        // GFM tasklist: under `.cmarkBugCompatibility` the checkbox is stripped first, as cmark's tasklist
-        // extension consumes it at item-OPEN time (`open_tasklist_item`), so every finalize matcher below
-        // (footnote def, link ref-def, table) sees the content AFTER the checkbox. Otherwise it is stripped
-        // from the paragraph left after the definitions, below.
+        // A task list item marker begins the paragraph left once its definitions are removed (spec "Task list
+        // items (extension)"), so it is stripped below, after `parseDefinitions`.
         let beforeCheckbox = trimmed
         let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
         if bugCompatible {
@@ -4864,8 +4849,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// uniformly — in the common no-gap case those 3 bytes are exactly `[ ]`. Paragraph content is always
     /// materialized so we only handle `inSource: false` here.
     ///
-    /// Without `.cmarkBugCompatibility`, eligibility no longer guarantees a checkbox, so a chunk that doesn't
-    /// begin with one returns `nil`. The separator must be a space, tab, line tabulation or form feed on the
+    /// A chunk that doesn't begin with a checkbox returns `nil`. The separator must be a space, tab, line tabulation or form feed on the
     /// marker's line (spec "Task list items (extension)": at least one whitespace character before any other
     /// content). When the checkbox fills the chunk, the separator is the chunk's trimmed trailing whitespace,
     /// whose first byte is `trailingSeparator`. The content starts past all the whitespace that follows,
@@ -4938,9 +4922,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// The list item whose checkbox `node`'s content may begin with: `.tasklist` is on and `node` is the item's
-    /// first child, the paragraph a task list item marker begins (spec "Task list items (extension)"). Under
-    /// `.cmarkBugCompatibility`, `lineAnchoredTaskItems` must also have recognized a checkbox on the item's
-    /// opening physical line. `nil` otherwise. The content-independent half of `eligibleTasklistMarker`.
+    /// first child, the paragraph a task list item marker begins (spec "Task list items (extension)"), or
+    /// `lineAnchoredTaskItems` holds the item. `nil` otherwise. The content-independent half of `eligibleTasklistMarker`.
     private func tasklistEligibleItem(ofFirstLeaf node: DocumentStorage.Index) -> DocumentStorage.Index? {
         guard storage.options.contains(.tasklist),
               let parent = storage[node].parent,
@@ -4958,8 +4941,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// begin with a checkbox). `trailingSeparator` is the first byte trimmed off `content`'s end, which separates a
     /// checkbox that fills `content` from what followed it on its line.
     ///
-    /// The shipped parser calls this on a paragraph that is the item's first block, once its definitions are removed
-    /// (spec "Task list items (extension)"), and on the paragraph a table splits off. Under `.cmarkBugCompatibility`:
+    /// It is called on a paragraph that is the item's first block, once its definitions are removed (spec "Task list
+    /// items (extension)"), and on the paragraph a table splits off.
+    ///
     /// cmark-gfm consumes the checkbox in `open_tasklist_item` (`extensions/tasklist.c`) as the ITEM
     /// opens, regardless of what that content later becomes - a paragraph, a setext heading, etc. The
     /// rewrite defers that consumption, so this must be called on EVERY path a task item's first line can

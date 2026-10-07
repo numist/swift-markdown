@@ -239,9 +239,9 @@ extension BlockParser {
                         content: content
                     )
                     // Links may not contain other links (spec "Links"), and an autolink binds more tightly
-                    // than link text brackets, so the link openers before it can no longer form links.
+                    // than link text brackets, so the link openers before it cannot form links.
                     if !storage.options.contains(.cmarkBugCompatibility) {
-                        noLinkOpeners = true
+                        markLinkOpenersInactive(brackets: &brackets, lastBracket: lastBracket)
                     }
                     cursor = auto.afterClose
                     pendingTextStart = cursor
@@ -615,7 +615,21 @@ extension BlockParser {
         var bracketAfter: Bool
         /// `true` when this bracket, or any bracket enclosing it, is a `.link` or `.image` opener - the cumulative union cmark keeps in `bracket.in_bracket[LINK|IMAGE]` (see `push_bracket` in `src/inlines.c`). GFM bare-URL autolinks (`://`-scheme, `www.`) are suppressed while such a bracket is open, matching `match` in `extensions/autolink.c` (`cmark_inline_parser_in_bracket`). An `.attribute`-only chain does not suppress them.
         var insideLinkOrImage: Bool
+        /// `true` once a link or autolink formed after this opener, which then cannot form a link: links may not
+        /// contain other links (spec "Links").
+        var linkFormedAfter: Bool = false
         var previous: Int?
+    }
+
+    /// Marks every open link opener as unable to form a link, because a link or autolink formed after it.
+    private func markLinkOpenersInactive(brackets: inout UniqueArray<BracketRecord>, lastBracket: Int?) {
+        var idx = lastBracket
+        while let i = idx {
+            if brackets[i].kind == .link {
+                brackets[i].linkFormedAfter = true
+            }
+            idx = brackets[i].previous
+        }
     }
 
     private func pushBracket(kind: BracketKind, inlText: DocumentStorage.Index, virtualStart: Int, delimPosition: Int, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?, noLinkOpeners: inout Bool) {
@@ -677,7 +691,7 @@ extension BlockParser {
         }
         let isImage = openerKind == .image
         // Inactive link opener: just pop and emit `]`.
-        if !isImage && noLinkOpeners {
+        if !isImage && (noLinkOpeners || brackets[openerIdx].linkFormedAfter) {
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             emitBracketLiteral(at: cursor, content: content, parent: parent)
             return pos
@@ -815,6 +829,7 @@ extension BlockParser {
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             if !isImage {
                 noLinkOpeners = true
+                markLinkOpenersInactive(brackets: &brackets, lastBracket: lastBracket)
             }
             return pos
         }
@@ -1531,9 +1546,9 @@ extension BlockParser {
         var labelKey: String?
         let labelStart = pos
         let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
-        if matched && !bugCompatible {
-            // The inline form completes the construct; what follows it is not part of it.
-        } else if let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
+        // The inline form completes the construct; what follows it is not part of it.
+        let scansLabel = !matched || bugCompatible
+        if scansLabel, let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
            let lab = matchLinkLabel(labelWindow) {
             // Contiguous window (see `contiguousChunk`): `lab.interior` is a real buffer chunk and
             // `lab.afterEnd` a buffer offset converted back to virtual via the window base.
@@ -1541,7 +1556,7 @@ extension BlockParser {
             if lab.interior.length > 0 {
                 labelKey = normalizeLabel(chunk: lab.interior)
             }
-        } else if let lab = matchLinkLabel(from: pos, end: end, in: content) {
+        } else if scansLabel, let lab = matchLinkLabel(from: pos, end: end, in: content) {
             // The following `[…]` straddles a soft-break join (`^[](x)[la\nbel]`), which the contiguous
             // window can't image - it stops at the segment boundary, leaving the closing `]` on the next
             // line unseen. cmark's `link_label` scans a flat buffer, so it crosses the join to the `]` and
@@ -3454,8 +3469,8 @@ extension BlockParser {
             return nil
         }
         // cmark's `www_match` (`extensions/autolink.c`) gates on `check_domain(data, size, allow_short: 0)`
-        // before scanning the URL body and returns NULL on failure. It counts the dot inside `www.` as the
-        // domain's required period, so it links a bare `www` once the trailing `.` is trimmed.
+        // before scanning the URL body and returns NULL on failure, so a domain bearing an underscore in
+        // either of its last two `.`-separated labels (a host name may not) is never linked.
         let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
         guard !bugCompatible || checkDomainAccepted(base: start, end: end, requireDot: true, content: content) else {
             return nil

@@ -162,4 +162,27 @@ struct AutolinkInLinkTextTests {
                   └─ Text @1:15-1:16 "x"
             """)
     }
+
+    @Test func autolinkInLinkTextBeforeAnotherBracket() {
+        #expect(tree("[a <http://b.c> [d] e](f)") == """
+            Document @1:1-1:26
+            └─ Paragraph @1:1-1:26
+               ├─ Text @1:1-1:4 "[a "
+               ├─ Link @1:4-1:16 destination: "http://b.c"
+               │  └─ Text @1:5-1:15 "http://b.c"
+               └─ Text @1:16-1:26 " [d] e](f)"
+            """)
+    }
+
+    @Test func linkInLinkTextBeforeAnotherBracket() {
+        #expect(tree("[a [b](c) [d] e](f)") == """
+            Document @1:1-1:20
+            └─ Paragraph @1:1-1:20
+               ├─ Text @1:1-1:4 "[a "
+               ├─ Link @1:4-1:10 destination: "c"
+               │  └─ Text @1:5-1:6 "b"
+               └─ Text @1:10-1:20 " [d] e](f)"
+            """)
+    }
 }
+
