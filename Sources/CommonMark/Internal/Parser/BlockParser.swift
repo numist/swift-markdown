@@ -1808,8 +1808,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         segs.removeSubrange(lastNewlineIndex..<segs.count)
         let untrimmedLastLine = segs[segs.count - 1]
-        let preceding = trimSegments(segs)
-        let trimmedLastLength = Int(preceding[preceding.count - 1].length)
+        segs = trimSegments(segs)
+        let trimmedLastLength = Int(segs[segs.count - 1].length)
+        let preceding = segs
         let trailingSeparator = trimmedLastLength < Int(untrimmedLastLine.length)
             ? segmentByte(untrimmedLastLine, trimmedLastLength)
             : nil
