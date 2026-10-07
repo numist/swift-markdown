@@ -177,4 +177,19 @@ struct InlineHTMLScanSkipQuirkTests {
     func flagOffControlTwoPIs() {
         #expect(htmlCount("x<?a?><?b?>", options: Self.flagOff) == 2)
     }
+
+    @Test("flag OFF control: a single well-formed comment is recognized")
+    func flagOffControlSingleComment() {
+        #expect(htmlCount("x<!--y-->", options: Self.flagOff) == 1)
+    }
+
+    @Test("flag OFF control: a single well-formed CDATA is recognized")
+    func flagOffControlSingleCDATA() {
+        #expect(htmlCount("x<![CDATA[y]]>", options: Self.flagOff) == 1)
+    }
+
+    @Test("flag OFF control: a single well-formed declaration is recognized")
+    func flagOffControlSingleDeclaration() {
+        #expect(htmlCount("x<!DOCTYPE html>", options: Self.flagOff) == 1)
+    }
 }

@@ -174,6 +174,7 @@ struct InlineProcessingInstructionQuestionMarkQuirkTests {
             }
             let body = try #require(block, "expected an HTML block")
             #expect(body.contains("<???>"))
+            #expect(body == "<???>\n")
         }
     }
 }

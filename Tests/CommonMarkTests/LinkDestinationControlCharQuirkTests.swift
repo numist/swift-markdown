@@ -111,6 +111,20 @@ struct LinkDestinationControlCharQuirkTests {
         #expect(linkURL("[](a\u{0B}b)", options: Self.flagOff) == nil)
     }
 
+    /// A bare destination stops at the VT, which then separates the destination from the `)` as whitespace, so the
+    /// destination is `a` where cmark-gfm keeps the VT in it.
+    @Test("flag OFF: `[](a\\u{0B})` drops the trailing VT — dest is `a` (spec-correct)")
+    func flagOffInlineTrailingVT() {
+        #expect(linkURL("[](a\u{0B})", options: Self.flagOff) == "a")
+    }
+
+    /// A bare destination stops at the FF, and the `b)` that follows is no link title, so no link forms where
+    /// cmark-gfm keeps the FF in the destination `a\u{0C}b`.
+    @Test("flag OFF: `[](a\\u{0C}b)` forms NO link — the FF terminates the dest so `b)` fails the close")
+    func flagOffInlineInteriorFF() {
+        #expect(linkURL("[](a\u{0C}b)", options: Self.flagOff) == nil)
+    }
+
     // MARK: Facet B — reference-definition bare destination (VT forms the dest flag ON)
 
     @Test("flag ON: `[?]:\\u{0B}` forms a valid (unused) ref-def — document has no blocks")
