@@ -17,5 +17,6 @@ class FnNestedDefFuzzArtifactTests: XCTestCase {
     func testFuzzedArtifact() {
         let (markdown, options) = FuzzRegressionTests.splitInput([91, 94, 98, 93, 10, 91, 94, 98, 93, 58, 91, 94, 98, 93, 58, 65, 128])!
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ FootnoteReference label: \"b\" index: 1\n└─ FootnoteDefinition label: \"b\"\n   └─ Paragraph\n      └─ Text \"A\"", Document(parsing: markdown, options: options.union(.cmarkBugCompatibility)).debugDescription(options: []))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  └─ FootnoteReference label: \"b\" index: 1\n└─ FootnoteDefinition label: \"b\"\n   └─ Paragraph\n      └─ Text \"A\"", Document(parsing: markdown, options: options).debugDescription(options: []))
     }
 }

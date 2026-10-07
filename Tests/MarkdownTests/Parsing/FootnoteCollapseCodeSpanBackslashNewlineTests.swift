@@ -19,9 +19,9 @@ import XCTest
 /// A code span with a bare line ending (`[^` backtick LF backtick `]`) is the control. Position-free
 /// compare surface.
 class FootnoteCollapseCodeSpanBackslashNewlineTests: XCTestCase {
-    private func surface(_ markdown: String) -> String {
+    private func surface(_ markdown: String, cmarkBugCompatible: Bool = true) -> String {
         var options = ParseOptions(rawValue: UInt(0xec & 0b11011111))
-        options.insert(.cmarkBugCompatibility)
+        if cmarkBugCompatible { options.insert(.cmarkBugCompatibility) }
         return Document(parsing: markdown, options: options).debugDescription(options: [])
     }
 
@@ -84,5 +84,28 @@ class FootnoteCollapseCodeSpanBackslashNewlineTests: XCTestCase {
         options.insert(.cmarkBugCompatibility)
         let surface = Document(parsing: "[^`\\\n`]", options: options).debugDescription(options: [])
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^`\\\n`]\"", surface)
+    }
+
+    /// Flag-off the bracket's label matches no footnote definition, so the bracket stays literal around the code
+    /// span, raw HTML or image it holds, whereas cmark-gfm collapses it to the text captured up to its column reset.
+    func testBracketStaysLiteralWithoutBugCompatibility() {
+        let cases: [(markdown: String, expected: String)] = [
+            ("[^`\\\n`]", "Document\n└─ Paragraph\n   ├─ Text \"[^\"\n   ├─ InlineCode `\\ `\n   └─ Text \"]\""),
+            ("[^`a\\\nb`]", "Document\n└─ Paragraph\n   ├─ Text \"[^\"\n   ├─ InlineCode `a\\ b`\n   └─ Text \"]\""),
+            ("[^a`\\\n`]", "Document\n└─ Paragraph\n   ├─ Text \"[^a\"\n   ├─ InlineCode `\\ `\n   └─ Text \"]\""),
+            ("[^`\\\n`] x", "Document\n└─ Paragraph\n   ├─ Text \"[^\"\n   ├─ InlineCode `\\ `\n   └─ Text \"] x\""),
+            ("[^`\\\r\n`]", "Document\n└─ Paragraph\n   ├─ Text \"[^\"\n   ├─ InlineCode `\\ `\n   └─ Text \"]\""),
+            ("[^`\\\r`]", "Document\n└─ Paragraph\n   ├─ Text \"[^\"\n   ├─ InlineCode `\\ `\n   └─ Text \"]\""),
+            ("[^`\n`]", "Document\n└─ Paragraph\n   ├─ Text \"[^\"\n   ├─ InlineCode ` `\n   └─ Text \"]\""),
+            ("[^``\\\n``]", "Document\n└─ Paragraph\n   ├─ Text \"[^\"\n   ├─ InlineCode `\\ `\n   └─ Text \"]\""),
+            ("[^`a  \n`]", "Document\n└─ Paragraph\n   ├─ Text \"[^\"\n   ├─ InlineCode `a   `\n   └─ Text \"]\""),
+            ("[^<a b=\"\\\n\">]", "Document\n└─ Paragraph\n   ├─ Text \"[^\"\n   ├─ InlineHTML <a b=\"\\\n\">\n   └─ Text \"]\""),
+            ("[^![x](/u \"a\\\nb\")]", "Document\n└─ Paragraph\n   ├─ Text \"[^\"\n   ├─ Image source: \"/u\" title: \"a\\\nb\"\n   │  └─ Text \"x\"\n   └─ Text \"]\""),
+        ]
+        for (markdown, expected) in cases {
+            XCTAssertEqual(expected, surface(markdown, cmarkBugCompatible: false), markdown.debugDescription)
+        }
+        let positionsOff = Document(parsing: "[^`\\\n`]", options: ParseOptions(rawValue: UInt(0xfc & 0b11011111))).debugDescription(options: [])
+        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"[^\"\n   ├─ InlineCode `\\ `\n   └─ Text \"]\"", positionsOff)
     }
 }

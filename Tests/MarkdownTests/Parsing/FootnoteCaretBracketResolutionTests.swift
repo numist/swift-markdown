@@ -99,4 +99,26 @@ struct FootnoteCaretBracketResolutionTests {
             == "Document\n└─ Paragraph\n   └─ Text \"[^[]]\"")
         #expect(Self.surface("[^[]:[^[]]", cmarkBugCompatible: false) == "Document")
     }
+
+    /// Flag-off a footnote-shaped bracket whose caret is followed by `[` is no footnote reference, so it stays
+    /// literal text, whereas cmark-gfm looks its label up as `[` and resolves it to a `[` definition.
+    @Test(arguments: [
+        ("[^[]]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
+        ("[^[]: n\n\n[^[]]", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
+        ("[^[a]]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[a]]\""),
+        ("[^[]a]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[]a]\""),
+        ("[^[]\nabcd]\n\n[^[]: n", "Document\n└─ Paragraph\n   ├─ Text \"[^[]\"\n   ├─ SoftBreak\n   └─ Text \"abcd]\""),
+        ("[^[\nabcd]]\n\n[^[]: n", "Document\n└─ Paragraph\n   ├─ Text \"[^[\"\n   ├─ SoftBreak\n   └─ Text \"abcd]]\""),
+        ("[^[" + String(repeating: "a", count: 998) + "]]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[" + String(repeating: "a", count: 998) + "]]\""),
+        ("![^[]]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"![^[]]\""),
+        ("[[^[]]]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"[[^[]]]\""),
+        ("[[^[]]](/u)\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Link destination: \"/u\"\n      └─ Text \"[^[]]\""),
+        ("[^a] [^[x]]\n\n[^a]: m\n\n[^[]: n", "Document\n├─ Paragraph\n│  ├─ FootnoteReference label: \"a\" index: 1\n│  └─ Text \" [^[x]]\"\n└─ FootnoteDefinition label: \"a\"\n   └─ Paragraph\n      └─ Text \"m\""),
+        ("[^[]:[^[]]", "Document"),
+        ("[^[" + String(repeating: "a", count: 999) + "]]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[" + String(repeating: "a", count: 999) + "]]\""),
+        ("[^[]]\n\n[^[a]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
+    ] as [(String, String)])
+    func withoutCompatibilityEveryBracketStaysLiteral(_ markdown: String, _ expected: String) {
+        #expect(Self.surface(markdown, cmarkBugCompatible: false) == expected)
+    }
 }

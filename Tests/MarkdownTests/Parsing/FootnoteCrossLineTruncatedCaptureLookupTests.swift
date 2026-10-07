@@ -63,6 +63,7 @@ struct FootnoteCrossLineTruncatedCaptureLookupTests {
     @Test
     func lazyContinuationCaptureMissesItsOwnDefinition() {
         #expect(Self.surface("[^\u{0}]:[^\u{FFFD}\n \u{FFFD}]") == "Document")
+        #expect(Self.surface("[^\u{0}]:[^\u{FFFD}\n \u{FFFD}]", cmarkBugCompatible: false) == "Document")
     }
 
     @Test
@@ -71,5 +72,19 @@ struct FootnoteCrossLineTruncatedCaptureLookupTests {
             == "Document\n└─ Paragraph\n   ├─ Text \"[^\u{2003}\"\n   ├─ SoftBreak\n   └─ Text \"xxxx]\"")
         #expect(Self.surface("[^\u{2003}\nxxxx]\n\n[^\u{FFFD}]: n", cmarkBugCompatible: false)
             == "Document\n└─ Paragraph\n   ├─ Text \"[^\u{2003}\"\n   ├─ SoftBreak\n   └─ Text \"xxxx]\"")
+    }
+
+    /// Flag-off a footnote reference never spans a line, so the bracket stays literal text around a soft break,
+    /// whereas cmark-gfm looks up the label cut from the first line, one U+FFFD per byte of a truncated scalar.
+    @Test(arguments: [
+        ("[^\u{2003}\nxxxx]\n\n[^\u{FFFD}\u{FFFD}]: n", "Document\n└─ Paragraph\n   ├─ Text \"[^\u{2003}\"\n   ├─ SoftBreak\n   └─ Text \"xxxx]\""),
+        ("[^\u{1F600}\nxxxxx]\n\n[^\u{FFFD}\u{FFFD}\u{FFFD}]: n", "Document\n└─ Paragraph\n   ├─ Text \"[^\u{1F600}\"\n   ├─ SoftBreak\n   └─ Text \"xxxxx]\""),
+        ("[^a\u{20AC}\nxxxxx]\n\n[^a\u{FFFD}\u{FFFD}]: n", "Document\n└─ Paragraph\n   ├─ Text \"[^a\u{20AC}\"\n   ├─ SoftBreak\n   └─ Text \"xxxxx]\""),
+        ("[\\^\u{2003}\nxxxx]\n\n[^\u{FFFD}\u{FFFD}]: n", "Document\n└─ Paragraph\n   ├─ Text \"[^\u{2003}\"\n   ├─ SoftBreak\n   └─ Text \"xxxx]\""),
+        ("![\\^\u{2003}\nxxxx]\n\n[^\u{FFFD}\u{FFFD}]: n", "Document\n└─ Paragraph\n   ├─ Text \"![^\u{2003}\"\n   ├─ SoftBreak\n   └─ Text \"xxxx]\""),
+        ("[^\u{FFFD}\nxxx]\n\n[^\u{FFFD}]: n", "Document\n└─ Paragraph\n   ├─ Text \"[^\u{FFFD}\"\n   ├─ SoftBreak\n   └─ Text \"xxx]\""),
+    ])
+    func withoutCompatibilityTruncatedCaptureStaysLiteral(_ markdown: String, _ expected: String) {
+        #expect(Self.surface(markdown, cmarkBugCompatible: false) == expected)
     }
 }

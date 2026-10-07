@@ -17,9 +17,9 @@ import XCTest
 /// label `abc`; with `[^abc]: note` defined, cmark emits a FootnoteReference and keeps the definition. When the
 /// capture doesn't match a definition (`[^abcdef]`, or `[\^ab` LF `x]` with `[^ab]`) both parsers already agree.
 class EscapedCaretMultilineFootnoteResolutionTests: XCTestCase {
-    private func surface(_ markdown: String) -> String {
+    private func surface(_ markdown: String, cmarkBugCompatible: Bool = true) -> String {
         var options = ParseOptions(rawValue: UInt(0xd0 & 0b11011111))
-        options.insert(.cmarkBugCompatibility)
+        if cmarkBugCompatible { options.insert(.cmarkBugCompatibility) }
         return Document(parsing: markdown, options: options).debugDescription(options: [])
     }
 
@@ -86,5 +86,31 @@ class EscapedCaretMultilineFootnoteResolutionTests: XCTestCase {
     /// A plain-caret cross-line capture whose length underflows stays literal (and doesn't trap).
     func testUnderflowedPlainCaretCaptureStaysLiteral() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^]\"", surface("[^a\nx]\n\n[^a]: note"))
+    }
+
+    /// Flag-off, a backslash-escaped caret makes `[\^…]` plain text and a footnote reference never spans a line,
+    /// so the bracket stays literal around its soft break, whereas cmark-gfm resolves a label captured from the
+    /// bracket's first line against a definition.
+    func testBracketStaysLiteralWithoutBugCompatibility() {
+        let atCap = String(repeating: "a", count: 1000)
+        let overCap = String(repeating: "a", count: 1001)
+        let cases: [(markdown: String, expected: String)] = [
+            ("[\\^abcdef\nxxxxx]\n\n[^abc]: note", "Document\n└─ Paragraph\n   ├─ Text \"[^abcdef\"\n   ├─ SoftBreak\n   └─ Text \"xxxxx]\""),
+            ("[\\^abc\nxxxxx]\n\n[^abc]: note", "Document\n└─ Paragraph\n   ├─ Text \"[^abc\"\n   ├─ SoftBreak\n   └─ Text \"xxxxx]\""),
+            ("![\\^abcdef\nxxxxx]\n\n[^abc]: note", "Document\n└─ Paragraph\n   ├─ Text \"![^abcdef\"\n   ├─ SoftBreak\n   └─ Text \"xxxxx]\""),
+            ("[\\^ABCdef\nxxxxx]\n\n[^abc]: note", "Document\n└─ Paragraph\n   ├─ Text \"[^ABCdef\"\n   ├─ SoftBreak\n   └─ Text \"xxxxx]\""),
+            ("[\\^\(atCap)bbb\n\(String(repeating: "x", count: 1002))]\n\n[^\(atCap)]: note", "Document\n└─ Paragraph\n   ├─ Text \"[^\(atCap)bbb\"\n   ├─ SoftBreak\n   └─ Text \"\(String(repeating: "x", count: 1002))]\""),
+            ("[\\^\(overCap)bbb\n\(String(repeating: "x", count: 1003))]\n\n[^\(overCap)]: note", "Document\n└─ Paragraph\n   ├─ Text \"[^\(overCap)bbb\"\n   ├─ SoftBreak\n   └─ Text \"\(String(repeating: "x", count: 1003))]\""),
+            ("[\\^a\u{0}bcdef\nxxxxxxx]\n\n[^a\u{0}b]: note", "Document\n└─ Paragraph\n   ├─ Text \"[^a\u{FFFD}bcdef\"\n   ├─ SoftBreak\n   └─ Text \"xxxxxxx]\""),
+            ("[\\^abcdef\nxxxxx]\n[\\^abcdef\nxxxxx]\n\n[^abc]: note", "Document\n└─ Paragraph\n   ├─ Text \"[^abcdef\"\n   ├─ SoftBreak\n   ├─ Text \"xxxxx]\"\n   ├─ SoftBreak\n   ├─ Text \"[^abcdef\"\n   ├─ SoftBreak\n   └─ Text \"xxxxx]\""),
+            ("[\\^abcdef\nxxxxx] [^abc]\n\n[^abc]: note", "Document\n├─ Paragraph\n│  ├─ Text \"[^abcdef\"\n│  ├─ SoftBreak\n│  ├─ Text \"xxxxx] \"\n│  └─ FootnoteReference label: \"abc\" index: 1\n└─ FootnoteDefinition label: \"abc\"\n   └─ Paragraph\n      └─ Text \"note\""),
+            ("[^zzz]\n[\\^abcdef\nxxxxx]\n\n[^abc]: a\n\n[^zzz]: z", "Document\n├─ Paragraph\n│  ├─ FootnoteReference label: \"zzz\" index: 1\n│  ├─ SoftBreak\n│  ├─ Text \"[^abcdef\"\n│  ├─ SoftBreak\n│  └─ Text \"xxxxx]\"\n└─ FootnoteDefinition label: \"zzz\"\n   └─ Paragraph\n      └─ Text \"z\""),
+            ("[\\^ab\nxxxxx]\n\n[^ab]: note", "Document\n└─ Paragraph\n   ├─ Text \"[^ab\"\n   ├─ SoftBreak\n   └─ Text \"xxxxx]\""),
+            ("[\\^ab\u{E9}\nxxxxx]\n\n[^ab\u{FFFD}]: note", "Document\n└─ Paragraph\n   ├─ Text \"[^ab\u{E9}\"\n   ├─ SoftBreak\n   └─ Text \"xxxxx]\""),
+            ("[^a\nx]\n\n[^a]: note", "Document\n└─ Paragraph\n   ├─ Text \"[^a\"\n   ├─ SoftBreak\n   └─ Text \"x]\""),
+        ]
+        for (markdown, expected) in cases {
+            XCTAssertEqual(expected, surface(markdown, cmarkBugCompatible: false), markdown.debugDescription)
+        }
     }
 }

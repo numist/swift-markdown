@@ -17,9 +17,9 @@ import XCTest
 /// drops the rest of the paragraph; a trailing bracket with no line ending inside (`[^[][ ]]`) yields the same `[^[`.
 /// Position-free compare surface.
 class FootnoteCaretBracketNewlineInLabelTests: XCTestCase {
-    private func surface(_ markdown: String, optionBits: UInt8 = 0xc0) -> String {
+    private func surface(_ markdown: String, optionBits: UInt8 = 0xc0, cmarkBugCompatible: Bool = true) -> String {
         var options = ParseOptions(rawValue: UInt(optionBits & 0b11011111))
-        options.insert(.cmarkBugCompatibility)
+        if cmarkBugCompatible { options.insert(.cmarkBugCompatibility) }
         return Document(parsing: markdown, options: options).debugDescription(options: [])
     }
 
@@ -72,5 +72,29 @@ class FootnoteCaretBracketNewlineInLabelTests: XCTestCase {
 
     func testResolvedImageReferenceLabelInFootnote() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^x ![a][b\nc]]\"", surface("[^x ![a][b\nc]]\n\n[b c]: /u"))
+    }
+
+    /// Flag-off a footnote-shaped bracket holding `^[` is no footnote reference, so it stays literal around the
+    /// inline-attribute text (whose unresolved `[…]` label the attribute grammar consumes), whereas cmark-gfm's
+    /// `[^[` collapse keeps only `[^[` and drops the rest of the paragraph.
+    func testBracketStaysLiteralWithoutBugCompatibility() {
+        let cases: [(markdown: String, expected: String)] = [
+            ("[^[][\n]]", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
+            ("[^[][\nx]]", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
+            ("[^[][\r\n]]", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
+            ("[^[x][\n]]", "Document\n└─ Paragraph\n   └─ Text \"[^[x]]\""),
+            ("a [^[][\n]] b", "Document\n└─ Paragraph\n   └─ Text \"a [^[]] b\""),
+            ("[^[][ ]]", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
+            ("[^a ^[][\n]]", "Document\n└─ Paragraph\n   └─ Text \"[^a ^[]]\""),
+            ("[^[][\n]()]", "Document\n└─ Paragraph\n   └─ Text \"[^[]()]\""),
+            ("[^[][a\nb\nc]]", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
+            ("[^[][\n]\n]", "Document\n└─ Paragraph\n   ├─ Text \"[^[]\"\n   ├─ SoftBreak\n   └─ Text \"]\""),
+            ("> [^[][\n> ]]", "Document\n└─ BlockQuote\n   └─ Paragraph\n      └─ Text \"[^[]]\""),
+            ("[^x ![a][b\nc]]\n\n[b c]: /u", "Document\n└─ Paragraph\n   ├─ Text \"[^x \"\n   ├─ Image source: \"/u\"\n   │  └─ Text \"a\"\n   └─ Text \"]\""),
+        ]
+        for (markdown, expected) in cases {
+            XCTAssertEqual(expected, surface(markdown, cmarkBugCompatible: false), markdown.debugDescription)
+        }
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^[]]\"", surface("[^[][\n]]", optionBits: 0xf7, cmarkBugCompatible: false))
     }
 }
