@@ -1835,6 +1835,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if !stripped.isEmpty {
                 let precedingNode = insertTablePrecedingParagraph(before: node)
                 let strippedMap = positionsEnabled ? sliceRuns(map, from: stripped.offset - flat.offset, length: stripped.length) : []
+                if positionsEnabled {
+                    let span = sourceSpan(of: strippedMap)
+                    storage.setSourceStart(precedingNode, span.start)
+                    storage.setSourceEnd(precedingNode, span.end)
+                }
                 enqueueTablePrecedingContent(stripped, map: strippedMap, of: precedingNode)
             }
         } else {
@@ -1924,6 +1929,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             header.append(text[k])
         }
         let headerMap = sliceRuns(text.map, from: lastNewline + 1, length: text.count - lastNewline - 1)
+        if positionsEnabled {
+            storage.setSourceStart(node, sourceSpan(of: headerMap).start)
+        }
         paragraphTablePending[node] = true
         return PendingLeaf(node: node, content: .materialized(MaterializedText(bytes: header, map: headerMap)))
     }
@@ -2058,35 +2066,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let afterCheckbox = stripTasklistCheckbox(node: para, content: trimmedHead)
             let stripped = parseDefinitions(in: afterCheckbox)
             if self.isBlank(chunk: stripped) {
-                // why: the paragraph is nothing but reference definitions, so the setext underline
-                // never forms a heading - but the two implementations then diverge in BLOCK
-                // STRUCTURE. cmark resolves (drops) the leading ref-defs from the paragraph's
-                // content buffer the moment it scans the underline (`resolve_reference_link_definitions`,
-                // blocks.c:1228-1240); finding no content left, it neither promotes to a heading nor
-                // advances the offset, and - because the setext branch matched - the thematic-break
-                // branch below it is skipped. The still-open, now-empty paragraph then absorbs the
-                // underline line as ordinary continuation text, keeping its ORIGINAL start line. The
-                // spec-correct default instead drops the empty paragraph and redispatches the underline
-                // as a fresh block (a new paragraph for `===`, a thematic break for `---`) at true
-                // positions.
-                //
-                // Reproduce cmark's structure flag-ON by keeping the paragraph open and appending this
-                // line as a normal continuation (as PHASE 2d would), restoring the accumulated content
-                // - drained by the materialize above - so the EXISTING finalize path extracts the
-                // ref-def and the surviving underline text finalizes as this paragraph's body.
-                // `raw.inSource` distinguishes HOW the drained content is addressed, not how many lines
-                // it spans: content that survived as a contiguous source range restores zero-copy as
-                // that range (`.lazy`), while content that was flattened into the arena - because a
-                // continuation line's stripped leading whitespace, a CRLF join, or a tab broke source
-                // contiguity - restores from that arena chunk (`addChunk`). Structure and content are
-                // identical either way, so the empty marker / setext underline is absorbed as text
-                // instead of opening a new block. (A multi-line def whose lines stay source-contiguous,
-                // e.g. no stripped prefix, collapses back to one `.lazy` range and takes the first branch.)
-                if storage.options.contains(.cmarkBugCompatibility) {
-                    // Record that these leading ref-defs were resolved by the setext scan (cmark drops them
-                    // from the buffer now); restoring them below lets a later paragraph finalize re-extract
-                    // them, but a table that forms first must drop them in the split (`detectPendingTable`)
-                    // rather than leak them back as a paragraph.
+                // A paragraph of only definitions forms no heading (spec "Setext headings": the
+                // underline must follow lines that are a paragraph once definitions are removed), but it
+                // is still open while this line is examined. A line that cannot interrupt a paragraph -
+                // a lone `-`, which would be an empty list item (spec "List items"), or a run of `=` or
+                // `-` that is no thematic break - continues it, and becomes the paragraph's text when the
+                // definitions are removed at finalize. A thematic break interrupts it.
+                let continuesParagraph = storage.options.contains(.cmarkBugCompatibility)
+                    || !lineStartsNewBlock(
+                        source: source,
+                        range: cursor..<lineRange.upperBound,
+                        firstNonSpace: firstNonSpace,
+                        indent: indent,
+                        currentKind: .paragraph,
+                        interruptsParagraph: true,
+                        lineStart: lineRange.lowerBound
+                    )
+                if continuesParagraph {
+                    // These leading definitions are registered already; restoring them below lets the
+                    // paragraph's finalize remove them again, and a table that forms first drops them in its
+                    // split (`detectPendingTable`) rather than leak them back as a paragraph.
                     reconstructedRefDefParagraphs.insert(para)
                     // A consumed checkbox is not restored: its strip already set the item's state and
                     // stamped start, and must not run again at finalize.
@@ -2115,6 +2114,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 } else {
                     // Arena-backed (non-contiguous) content: `addChunk` re-copies the stripped bytes into a fresh buffer. The flattened content's run map is content-relative, so narrow it to the re-seeded bytes and carry it with them, so the heading's text/emphasis keep their source positions.
                     pending = addChunk(stripped, map: sliceRuns(flatMap, from: stripped.offset - raw.offset, length: stripped.length), to: para, pending: pending)
+                }
+                if positionsEnabled, stripped.offset != afterCheckbox.offset {
+                    storage.setSourceStart(para, sourceStart(of: stripped.trimming(using: self), in: raw, map: flatMap))
                 }
                 storage[para].kind = .heading(level: Int(level))
                 // why: cmark finalizes a setext heading only when a later line or EOF closes it
@@ -3285,6 +3287,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return result
     }
 
+    /// The source byte at which `content`, a window of the leaf content `raw` whose arena→source run map is
+    /// `map` (empty for source-backed content), begins.
+    private func sourceStart(of content: Chunk, in raw: Chunk, map: [ArenaRun]) -> Int {
+        if map.isEmpty {
+            precondition(content.inSource, "with positions tracked, arena-backed leaf content carries a run map")
+            return content.offset
+        }
+        let runs = sliceRuns(map, from: content.offset - raw.offset, length: content.length)
+        precondition(!runs.isEmpty && runs[0].physicalOffset >= 0, "leaf content starts on a source byte")
+        return Int(runs[0].physicalOffset)
+    }
+
     /// Run the paragraph finalize-time matchers on a single flat content `Chunk`: footnote definition, reference-link definitions, GFM table detection, and tasklist marker - then queue the remaining content for inline parsing (or drop the node if it was entirely ref-defs).
     ///
     /// Factored out so both the flat-content path and the (eligibility-gated) segment path can reuse it. `map` is the content's arena→source run map (empty for source-backed content): when the content was flattened from a non-contiguous, re-indented segment list it carries per-line source columns, and when NULs were replaced it images each U+FFFD back to its NUL. It is sliced to the surviving `contentChunk` window and stamped on the node so the inline pass can stamp positions.
@@ -3356,6 +3370,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return
         }
         // Reference link definitions stack at the start of a paragraph; any that match are stripped and registered.
+        let beforeDefinitions = trimmed
         trimmed = parseDefinitions(in: trimmed)
         if isBlank(chunk: trimmed) {
             // Whole paragraph was ref-defs - drop the empty paragraph node.
@@ -3363,6 +3378,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return
         }
         let contentChunk = trimmed.trimmingTrailing(using: self)
+        if positionsEnabled, trimmed.offset != beforeDefinitions.offset {
+            storage.setSourceStart(node, sourceStart(of: contentChunk, in: raw, map: map))
+        }
         // Stamp the run map for the content that actually reaches inline parsing: narrow the content's map to the surviving `contentChunk` window (after trailing trim, ref-def stripping, and any tasklist marker; leading whitespace left by a ref-def's lazy residual is preserved, see `trimmingTrailing`). Source-backed content passes an empty map.
         if positionsEnabled, !map.isEmpty {
             let slice = sliceRuns(map, from: contentChunk.offset - raw.offset, length: contentChunk.length)
@@ -3396,8 +3414,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // cmark's chop_trailing_hashtags shrinks the line chunk before `last_line_length` is recorded (src/blocks.c), so a block later attributed to this line - notably the document, whose end is stamped from the final line - inherits the trimmed extent, not the raw line end. Mirror that by shrinking the tracked current-line end to the heading's content end.
                 currentLineSourceRange = currentLineSourceRange.lowerBound..<end
             } else {
-                // cmark finalizes a setext heading like the document / fenced code (blocks.c:327), so its end is the line that CLOSES it - the current line when this deferred finalize runs (PHASE 2c leaves it open), not the underline. Same finalize-timing class as the deferred thematic break (FINDINGS #7).
-                end = (atEOF || startedThisLine || isSetextHeading || kind == .document || isFenced)
+                let endsOnClosingLine = isSetextHeading && storage.options.contains(.cmarkBugCompatibility)
+                end = (atEOF || startedThisLine || endsOnClosingLine || kind == .document || isFenced)
                     ? currentLineSourceRange.upperBound
                     : lastLineSourceEnd
             }

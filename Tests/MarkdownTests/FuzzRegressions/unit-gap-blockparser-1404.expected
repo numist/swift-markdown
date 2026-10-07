@@ -1,7 +1,7 @@
 Document @1:1-8:9
 ├─ Paragraph @1:1-1:10
 │  └─ Text @1:1-1:10 "-o     -2"
-├─ Heading @3:1-8:9 level: 2
+├─ Heading @6:1-7:4 level: 2
 │  └─ Text @6:1-6:2 "="
 └─ Paragraph @8:1-8:9
    └─ Text @8:1-8:9 "!� ��"

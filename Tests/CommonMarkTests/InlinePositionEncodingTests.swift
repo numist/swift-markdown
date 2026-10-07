@@ -436,23 +436,23 @@ struct InlinePositionEncodingTests {
 
     // MARK: - Hard breaks (two trailing spaces)
 
-    @Test("hard break (two spaces) — preceding text owns the trailing spaces; break carries no range")
+    @Test("hard break (two spaces) — preceding text ends at its content; break carries no range")
     func hardBreakTwoSpaces() throws {
-        // "a  \nb": text "a" range extends over the 2 stripped spaces to col 4 (literal still "a");
+        // "a  \nb": text "a" range ends at its last byte, col 2, not over the 2 stripped spaces;
         // the LineBreak has no source range; "b" is line 2 col 1.
         var n = nodes("a  \nb")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .lineBreak, .text])
         try #require(n[2].literal == "a" && n[4].literal == "b")
         #expect(n[1].range == range(1, 1, 2, 2))
-        #expect(n[2].range == range(1, 1, 1, 4))
+        #expect(n[2].range == range(1, 1, 1, 2))
         #expect(n[3].range == nil)
         #expect(n[4].range == range(2, 1, 2, 2))
 
-        // Leading é (2 bytes): text "é" spans cols 1-2 and its range extends to col 5 over the spaces.
+        // Leading é (2 bytes): text "é" spans cols 1-2, end column 3.
         n = nodes("\u{E9}  \nb")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .lineBreak, .text])
         try #require(n[2].literal == "\u{E9}" && n[4].literal == "b")
-        #expect(n[2].range == range(1, 1, 1, 5))
+        #expect(n[2].range == range(1, 1, 1, 3))
         #expect(n[3].range == nil)
         #expect(n[4].range == range(2, 1, 2, 2))
 
@@ -461,7 +461,7 @@ struct InlinePositionEncodingTests {
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .lineBreak, .text])
         try #require(n[2].literal == "a" && n[4].literal == "\u{20AC}b")
         #expect(n[1].range == range(1, 1, 2, 5))
-        #expect(n[2].range == range(1, 1, 1, 4))
+        #expect(n[2].range == range(1, 1, 1, 2))
         #expect(n[3].range == nil)
         #expect(n[4].range == range(2, 1, 2, 5))
     }

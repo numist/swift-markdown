@@ -92,7 +92,7 @@ final class MarkupTreeDumperTests: XCTestCase {
         │  ├─ InlineHTML @37:28-37:32 #68 </p>
         │  └─ Text @37:32-37:33 #69 "."
         ├─ Paragraph @39:1-40:6 #70
-        │  ├─ Text @39:1-39:7 #71 "line"
+        │  ├─ Text @39:1-39:5 #71 "line"
         │  ├─ LineBreak #72
         │  └─ Text @40:1-40:6 #73 "break"
         ├─ Paragraph @42:1-43:6 #74

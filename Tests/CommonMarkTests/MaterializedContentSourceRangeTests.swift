@@ -38,7 +38,7 @@ struct MaterializedContentSourceRangeTests {
     func tableAfterResolvedDefinition() {
         #expect(tree("[b\n ]:o\n=\n-|\na") == """
             document @1:1-5:2
-              table @1:1-5:2
+              table @3:1-5:2
                 table_header @3:1-3:2
                   table_cell align=none colspan=1 rowspan=1 @3:1-3:2
                     text "=" @3:1-3:2

@@ -212,26 +212,26 @@ struct TableVsReferenceDefinitionTests {
         #expect(doc.count == 1)
     }
 
-    /// A complete link reference definition leaves no paragraph behind, so a bare `-` on the next line opens an empty
-    /// bullet list item (CommonMark list items), where cmark keeps the emptied paragraph open and absorbs the `-` as text.
-    @Test("without bug compatibility, a bare `-` after a complete single-line ref-def is an empty list item")
+    /// The definition's paragraph is still open when the bare `-` is read, and an empty list item cannot interrupt a
+    /// paragraph (spec "List items"), so the `-` is paragraph text once the definition is removed.
+    @Test("a bare `-` after a complete single-line ref-def is paragraph text")
     func bareDelimiterAfterCompleteReferenceDefinitionSpecCorrect() {
         #expect(CmarkTreeDump.dump("[o]:o\n-", options: [.tables]) == """
             document
-              list bullet '-' tight
-                item
+              paragraph
+                text "-"
 
             """)
     }
 
-    /// A complete link reference definition leaves no paragraph behind, so a bare `-` on the next line opens an empty
-    /// bullet list item (CommonMark list items), where cmark keeps the emptied paragraph open and absorbs the `-` as text.
-    @Test("without bug compatibility, a bare `-` after a ref-def with a space before the destination is an empty list item")
+    /// The definition's paragraph is still open when the bare `-` is read, and an empty list item cannot interrupt a
+    /// paragraph (spec "List items"), so the `-` is paragraph text once the definition is removed.
+    @Test("a bare `-` after a ref-def with a space before the destination is paragraph text")
     func bareDelimiterAfterCompleteReferenceDefinitionWithSpaceSpecCorrect() {
         #expect(CmarkTreeDump.dump("[o]: o\n-", options: [.tables]) == """
             document
-              list bullet '-' tight
-                item
+              paragraph
+                text "-"
 
             """)
     }

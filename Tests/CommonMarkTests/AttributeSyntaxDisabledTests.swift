@@ -195,7 +195,7 @@ struct AttributeSyntaxDisabledTests {
     func definitionAfterLinkDefinitionIsParagraph() {
         #expect(tree("[foo]: /url\n^[foo]: color: red\n\n[foo] and ^[content][foo]", Self.plain) == """
             document @1:1-4:26
-              paragraph @1:1-2:19
+              paragraph @2:1-2:19
                 text "^" @2:1-2:2
                 link "/url" "" @2:2-2:7
                   text "foo" @2:3-2:6

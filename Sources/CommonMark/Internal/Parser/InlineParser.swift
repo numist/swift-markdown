@@ -162,8 +162,7 @@ extension BlockParser {
                     end: info.textEnd,
                     content: content,
                     into: parent,
-                    // A soft break and a trailing-space hard break both extend the preceding text node's source range to the newline at `cursor`, owning the line's trailing whitespace (cmark stamps up to the newline for both). A backslash hard break's `\` does NOT: cmark's handle_backslash consumes the backslash into the LINEBREAK, so the preceding text ends at the content (`info.textEnd`), before the `\`.
-                    rangeEnd: info.isBackslash ? nil : cursor,
+                    rangeEnd: info.isBackslash || !storage.options.contains(.cmarkBugCompatibility) ? nil : cursor,
                     // A whitespace-only run before a soft OR trailing-space hard break survives flag-ON as an empty text node spanning the stripped whitespace (see `flushPendingText`). cmark's parse_inline creates and rtrims this node in its generic text path BEFORE handle_newline classifies the break, so the empty node is emitted the same way regardless of break kind - the `emptytext-*` (soft) and `brkhb-*` (hard) fuzzer pairs both assert it. A backslash hard break is excluded by `rangeEnd: nil` above (its `\` leaves no trailing whitespace to strip).
                     emitEmptyStrippedWhitespace: true
                 )

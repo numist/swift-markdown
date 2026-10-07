@@ -52,7 +52,7 @@ class RefDefSetextTableStructureTests: XCTestCase {
 
         let expectedDump = """
         Document @1:1-3:2
-        └─ Paragraph @1:1-3:2
+        └─ Paragraph @2:1-3:2
            ├─ Text @2:1-2:2 "="
            ├─ SoftBreak
            └─ Text @3:1-3:2 "x"
@@ -69,7 +69,7 @@ class RefDefSetextTableStructureTests: XCTestCase {
 
         let expectedDump = """
         Document @1:1-4:3
-        └─ Table @1:1-4:3 alignments: |-|
+        └─ Table @3:1-4:3 alignments: |-|
            ├─ Head @3:1-3:2
            │  └─ Cell @3:1-3:2
            │     └─ Text @3:1-3:2 "="
