@@ -53,33 +53,44 @@ class AutolinkEntityDecodingEdgeTests: XCTestCase {
 
     func testUnknownNamedEntityStaysLiteral() {
         XCTAssertEqual(Self.autolink("http://a&bogus;b"), surface("<http://a&bogus;b>"))
+        XCTAssertEqual(Self.autolink("http://a&bogus;b"), surface("<http://a&bogus;b>", []))
     }
 
     func testDigitlessHexReferenceStaysLiteral() {
         XCTAssertEqual(Self.autolink("http://a&#x;b"), surface("<http://a&#x;b>"))
+        XCTAssertEqual(Self.autolink("http://a&#x;b"), surface("<http://a&#x;b>", []))
     }
 
     func testReferenceAboveUnicodeRangeBecomesReplacementCharacter() {
         XCTAssertEqual(Self.autolink("http://a\u{fffd}"), surface("<http://a&#1114112;>"))
         XCTAssertEqual(Self.autolink("http://a\u{fffd}"), surface("<http://a&#xFFFFFF;>"))
+        XCTAssertEqual(Self.autolink("http://a\u{fffd}"), surface("<http://a&#1114112;>", []))
+        XCTAssertEqual(Self.autolink("http://a\u{fffd}"), surface("<http://a&#xFFFFFF;>", []))
     }
 
     func testSurrogateReferenceBecomesReplacementCharacter() {
         XCTAssertEqual(Self.autolink("http://a\u{fffd}b"), surface("<http://a&#xD800;b>"))
+        XCTAssertEqual(Self.autolink("http://a\u{fffd}b"), surface("<http://a&#xD800;b>", []))
     }
 
     func testMultiByteNamedEntityDecodes() {
         XCTAssertEqual(Self.autolink("xy:&z\u{e9}"), surface("<xy:&amp;z&eacute;>"))
+        XCTAssertEqual(Self.autolink("xy:&z\u{e9}"), surface("<xy:&amp;z&eacute;>", []))
     }
 
     func testBackslashStaysLiteralWhileReferenceDecodes() {
         XCTAssertEqual(Self.autolink("http://a\\&b"), surface("<http://a\\&amp;b>"))
+        XCTAssertEqual(Self.autolink("http://a\\&b"), surface("<http://a\\&amp;b>", []))
     }
 
     func testReferenceDecodesOnAContinuationLine() {
         XCTAssertEqual(
             "Document\n└─ Paragraph\n   ├─ Text \"x\"\n   ├─ SoftBreak\n   └─ Link destination: \"http://a&b\"\n      └─ Text \"http://a&b\"",
             surface("x\n<http://a&amp;b>")
+        )
+        XCTAssertEqual(
+            "Document\n└─ Paragraph\n   ├─ Text \"x\"\n   ├─ SoftBreak\n   └─ Link destination: \"http://a&b\"\n      └─ Text \"http://a&b\"",
+            surface("x\n<http://a&amp;b>", [])
         )
     }
 
@@ -93,6 +104,10 @@ class AutolinkEntityDecodingEdgeTests: XCTestCase {
         XCTAssertEqual(
             "Document\n└─ Paragraph\n   └─ Link destination: \"mailto:a&b@c.d\"\n      └─ Text \"a&b@c.d\"",
             surface("<a&b@c.d>")
+        )
+        XCTAssertEqual(
+            "Document\n└─ Paragraph\n   └─ Link destination: \"mailto:a&b@c.d\"\n      └─ Text \"a&b@c.d\"",
+            surface("<a&b@c.d>", [])
         )
     }
 
@@ -131,11 +146,44 @@ class AutolinkEntityDecodingEdgeTests: XCTestCase {
             "Document\n└─ Paragraph\n   ├─ Text \"a\u{fffd}\"\n   └─ Link destination: \"http://a&b\"\n      └─ Text \"http://a&b\"",
             surface("a\u{0}<http://a&amp;b>")
         )
+        XCTAssertEqual(
+            """
+            Document
+            └─ Table alignments: |-|
+               ├─ Head
+               │  └─ Cell
+               │     └─ Text "a"
+               └─ Body
+                  └─ Row
+                     └─ Cell
+                        ├─ Link destination: "http://a&b"
+                        │  └─ Text "http://a&b"
+                        └─ Text " | x"
+            """,
+            surface("| a |\n|---|\n| <http://a&amp;b> \\| x |", [])
+        )
+        XCTAssertEqual(
+            """
+            Document
+            └─ BlockQuote
+               └─ Heading level: 1
+                  ├─ Text "a"
+                  ├─ SoftBreak
+                  └─ Link destination: "http://a&b"
+                     └─ Text "http://a&b"
+            """,
+            surface("> a\n> <http://a&amp;b>\n> ===", [])
+        )
+        XCTAssertEqual(
+            "Document\n└─ Paragraph\n   ├─ Text \"a\u{fffd}\"\n   └─ Link destination: \"http://a&b\"\n      └─ Text \"http://a&b\"",
+            surface("a\u{0}<http://a&amp;b>", [])
+        )
     }
 
     func testDeliverableDecodesToo() {
         XCTAssertEqual(Self.autolink("http://a&b"), surface("<http://a&amp;b>", []))
         XCTAssertEqual(Self.autolink("op:\u{fffd}"), surface("<op:&#0;>", []))
+        XCTAssertEqual(Self.autolink("http://aAb"), surface("<http://a&#65;b>", []))
     }
 
     func testGFMExtendedAutolinkKeepsReferenceLiteral() {
@@ -146,6 +194,15 @@ class AutolinkEntityDecodingEdgeTests: XCTestCase {
         )
     }
 
+    /// Flag-off, a GFM extended autolink is the paragraph's only child, whereas cmark-gfm leaves an empty
+    /// text node where it rewinds over the scheme; the reference stays literal under both flags.
+    func testGFMExtendedAutolinkWithoutBugCompatibility() {
+        XCTAssertEqual(
+            "Document\n└─ Paragraph\n   └─ Link destination: \"http://a&amp;b\"\n      └─ Text \"http://a&amp;b\"",
+            surface("http://a&amp;b", [.gfmAutolink])
+        )
+    }
+
     func testEmailFormCannotHoldAReference() {
         XCTAssertEqual(
             // `;` is outside the email local-part class, so no autolink forms; the `&amp;` decodes as ordinary
@@ -153,5 +210,6 @@ class AutolinkEntityDecodingEdgeTests: XCTestCase {
             "Document\n└─ Paragraph\n   └─ Text \"<a&b@c.d>\"",
             surface("<a&amp;b@c.d>")
         )
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"<a&b@c.d>\"", surface("<a&amp;b@c.d>", []))
     }
 }

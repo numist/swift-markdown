@@ -20,8 +20,6 @@ import XCTest
 /// "[baz]"`. The rewrite resolved it to a link. (Without the VT, `^[baz]:/[baz]` is a single attribute
 /// definition consuming the whole line — an empty document on both sides; the divergence needs the
 /// attribute def with attributes, the VT, and the forward ref def together.)
-///
-/// This asserts only the flag-on (fuzzer) surface: it must match cmark's literal.
 class AttributeDefLinkRefVerticalTabTests: XCTestCase {
     // "^[baz]:/" VT "[baz]" LF LF "[baz]:/"
     private static let bytes: [UInt8] = [
@@ -36,6 +34,15 @@ class AttributeDefLinkRefVerticalTabTests: XCTestCase {
         XCTAssertEqual(
             "Document\n└─ Paragraph\n   └─ Text \"[baz]\"",
             Document(parsing: String(decoding: Self.bytes, as: UTF8.self), options: options)
+                .debugDescription(options: []))
+    }
+
+    /// A link reference left on the definition line resolves against a later link reference definition, as
+    /// CommonMark resolves references document-wide, whereas cmark-gfm keeps it literal.
+    func testFlagOffResolvesLinkReference() {
+        XCTAssertEqual(
+            "Document\n└─ Paragraph\n   └─ Link destination: \"/\"\n      └─ Text \"baz\"",
+            Document(parsing: String(decoding: Self.bytes, as: UTF8.self), options: Self.fuzzedBits)
                 .debugDescription(options: []))
     }
 }

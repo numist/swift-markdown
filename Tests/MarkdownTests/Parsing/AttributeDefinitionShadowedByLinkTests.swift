@@ -54,6 +54,7 @@ class AttributeDefinitionShadowedByLinkTests: XCTestCase {
 
     func testInlineAttributesAfterShadowedDefinition() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ InlineAttributes attributes: `b`\n      └─ Text \"t\"", surface("[foo]: /u\n^[foo]: attrs\n\n^[t](b)"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ InlineAttributes attributes: `b`\n      └─ Text \"t\"", surfaceSpec("[foo]: /u\n^[foo]: attrs\n\n^[t](b)"))
     }
 
     /// cmark scans a `[label]` after an inline `(attrs)` too; a label whose surviving entry is a link ref keeps the inline attributes, and the label is consumed.
@@ -66,6 +67,9 @@ class AttributeDefinitionShadowedByLinkTests: XCTestCase {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", surface("[foo]: /u\n^[foo]: attrs\n\n^[foo][]"))
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", surface("[foo]: /u\n^[foo]: attrs\n\n^[foo]"))
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", surface("^[foo]: attrs\n\n^[foo][]"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", surfaceSpec("[foo]: /u\n^[foo]: attrs\n\n^[foo][]"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", surfaceSpec("[foo]: /u\n^[foo]: attrs\n\n^[foo]"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", surfaceSpec("^[foo]: attrs\n\n^[foo][]"))
     }
 
     func testLinkDefinitionInLaterParagraphShadowedByAttribute() {
@@ -84,5 +88,26 @@ class AttributeDefinitionShadowedByLinkTests: XCTestCase {
 
     func testFlagOffLinkDefinitionAfterAttributeDefinitionResolves() {
         XCTAssertEqual("Document\n└─ Paragraph\n   ├─ InlineAttributes attributes: `attrs`\n   │  └─ Text \"t\"\n   ├─ Text \" \"\n   └─ Link destination: \"/u\"\n      └─ Text \"foo\"", surfaceSpec("^[foo]: attrs\n[foo]: /u\n\n^[t][foo] [foo]"))
+    }
+
+    /// An attribute definition resolves even after a same-label link definition, whereas cmark-gfm's shared refmap lets the earlier link definition shadow it and leaves `^[t]` literal.
+    func testFlagOffAttributeDefinitionNotShadowedByEarlierLinkDefinition() {
+        let attributed = "Document\n└─ Paragraph\n   └─ InlineAttributes attributes: `attrs`\n      └─ Text \"t\""
+        XCTAssertEqual(attributed, surfaceSpec("[foo]: /u\n^[foo]: attrs\n\n^[t][foo]"))
+        XCTAssertEqual(attributed, surfaceSpec("[foo]: /u\n\n^[foo]: attrs\n\n^[t][foo]"))
+        XCTAssertEqual(attributed, surfaceSpec("[FOO]: /u\n^[foo]: attrs\n\n^[t][Foo]"))
+        XCTAssertEqual("Document\n├─ BlockQuote\n└─ Paragraph\n   └─ InlineAttributes attributes: `attrs`\n      └─ Text \"t\"", surfaceSpec("[foo]: /u\n\n> ^[foo]: attrs\n\n^[t][foo]"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Link destination: \"/u\"\n   │  └─ Text \"foo\"\n   ├─ Text \" \"\n   ├─ InlineAttributes attributes: `attrs`\n   │  └─ Text \"t\"\n   └─ Text \" x\"", surfaceSpec("[foo]: /u\n^[foo]: attrs\n\n[foo] ^[t][foo] x"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ InlineAttributes attributes: `attrs`\n   │  └─ Text \"t\"\n   └─ Link destination: \"/u\"\n      └─ Text \"foo\"", surfaceSpec("[foo]: /u\n^[foo]: attrs\n\n^[t][foo][foo]"))
+    }
+
+    /// A label after inline `(attrs)` resolves to the attribute definition, whose value replaces the inline one, whereas cmark-gfm finds the shadowing link definition there and keeps `b`.
+    func testFlagOffLabelAfterInlineAttributesResolvesAttributeDefinition() {
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ InlineAttributes attributes: `attrs`\n      └─ Text \"t\"", surfaceSpec("[foo]: /u\n^[foo]: attrs\n\n^[t](b)[foo]"))
+    }
+
+    /// A link definition resolves even after a same-label attribute definition in an earlier paragraph, whereas cmark-gfm's shared refmap lets the attribute definition shadow it and leaves `[foo]` literal.
+    func testFlagOffLinkDefinitionInLaterParagraphResolves() {
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Link destination: \"/u\"\n      └─ Text \"foo\"", surfaceSpec("^[foo]: attrs\n\n[foo]: /u\n\n[foo]"))
     }
 }

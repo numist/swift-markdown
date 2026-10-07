@@ -15,13 +15,15 @@ import XCTest
 /// trimmed even when more paragraph content follows it, with escapes and entities decoded. Flag-ON surfaces
 /// are the cmark-gfm reference's; inputs are `[markdown …][option byte]`, split as the fuzzer does.
 class AttributeDefinitionTrailingWhitespaceTests: XCTestCase {
-    private func surface(_ bytes: [UInt8]) -> String {
-        let (markdown, options) = FuzzRegressionTests.splitInput(bytes)!
-        return Document(parsing: markdown, options: options.union(.cmarkBugCompatibility)).debugDescription(options: [])
+    private func surface(_ bytes: [UInt8], cmarkBugCompatible: Bool = true) -> String {
+        var (markdown, options) = FuzzRegressionTests.splitInput(bytes)!
+        if cmarkBugCompatible { options.insert(.cmarkBugCompatibility) }
+        return Document(parsing: markdown, options: options).debugDescription(options: [])
     }
 
     func testListItemThenNULLine() {
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"\u{fffd}\"", surface([94, 91, 93, 91, 36, 93, 10, 45, 32, 94, 91, 36, 93, 58, 108, 32, 10, 0, 72]))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"\u{fffd}\"", surface([94, 91, 93, 91, 36, 93, 10, 45, 32, 94, 91, 36, 93, 58, 108, 32, 10, 0, 72], cmarkBugCompatible: false))
     }
 
     func testListItemThenText() {
@@ -30,48 +32,59 @@ class AttributeDefinitionTrailingWhitespaceTests: XCTestCase {
 
     func testTopLevelAfterBlankThenNULLine() {
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ Paragraph\n   └─ Text \"\u{fffd}\"", surface([94, 91, 93, 91, 36, 93, 10, 10, 94, 91, 36, 93, 58, 108, 32, 10, 0, 72]))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ Paragraph\n   └─ Text \"\u{fffd}\"", surface([94, 91, 93, 91, 36, 93, 10, 10, 94, 91, 36, 93, 58, 108, 32, 10, 0, 72], cmarkBugCompatible: false))
     }
 
     func testTrailingTab() {
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"\u{fffd}\"", surface([94, 91, 93, 91, 36, 93, 10, 45, 32, 94, 91, 36, 93, 58, 108, 9, 10, 0, 72]))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"\u{fffd}\"", surface([94, 91, 93, 91, 36, 93, 10, 45, 32, 94, 91, 36, 93, 58, 108, 9, 10, 0, 72], cmarkBugCompatible: false))
     }
 
     func testBlockQuote() {
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ BlockQuote\n   └─ Paragraph\n      └─ Text \"\u{fffd}\"", surface([94, 91, 93, 91, 36, 93, 10, 62, 32, 94, 91, 36, 93, 58, 108, 32, 10, 0, 72]))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ BlockQuote\n   └─ Paragraph\n      └─ Text \"\u{fffd}\"", surface([94, 91, 93, 91, 36, 93, 10, 62, 32, 94, 91, 36, 93, 58, 108, 32, 10, 0, 72], cmarkBugCompatible: false))
     }
 
     func testTwoTrailingSpaces() {
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"\u{fffd}\"", surface([94, 91, 93, 91, 36, 93, 10, 45, 32, 94, 91, 36, 93, 58, 108, 32, 32, 10, 0, 72]))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"\u{fffd}\"", surface([94, 91, 93, 91, 36, 93, 10, 45, 32, 94, 91, 36, 93, 58, 108, 32, 32, 10, 0, 72], cmarkBugCompatible: false))
     }
 
     func testFuzzedArtifact() {
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"\u{fffd}\"", surface([94, 91, 93, 91, 36, 93, 10, 45, 32, 94, 91, 36, 93, 58, 108, 32, 10, 0, 72]))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"\u{fffd}\"", surface([94, 91, 93, 91, 36, 93, 10, 45, 32, 94, 91, 36, 93, 58, 108, 32, 10, 0, 72], cmarkBugCompatible: false))
     }
 
     func testInteriorSpacesKept() {
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `a b`\n└─ Paragraph\n   └─ Text \"x\"", surface(Array("^[][$]\n\n^[$]:a b \nx".utf8) + [72]))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `a b`\n└─ Paragraph\n   └─ Text \"x\"", surface(Array("^[][$]\n\n^[$]:a b \nx".utf8) + [72], cmarkBugCompatible: false))
     }
 
     func testFollowedByAnotherDefinition() {
         XCTAssertEqual("Document\n├─ Paragraph\n│  ├─ InlineAttributes attributes: `l`\n│  └─ InlineAttributes attributes: `m`\n└─ Paragraph\n   └─ Text \"x\"", surface(Array("^[][$]^[][y]\n\n^[$]:l \n^[y]:m \nx".utf8) + [72]))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  ├─ InlineAttributes attributes: `l`\n│  └─ InlineAttributes attributes: `m`\n└─ Paragraph\n   └─ Text \"x\"", surface(Array("^[][$]^[][y]\n\n^[$]:l \n^[y]:m \nx".utf8) + [72], cmarkBugCompatible: false))
     }
 
     func testCRLF() {
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ Paragraph\n   └─ Text \"x\"", surface(Array("^[][$]\n\n^[$]:l \r\nx".utf8) + [72]))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ Paragraph\n   └─ Text \"x\"", surface(Array("^[][$]\n\n^[$]:l \r\nx".utf8) + [72], cmarkBugCompatible: false))
     }
 
     /// A whitespace-only value line can't form an empty value: the separator skip crosses one line end, so
     /// the value is the next line's content.
     func testWhitespaceOnlyValueLineTakesNextLine() {
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `x`\n└─ Paragraph\n   └─ Text \"z\"", surface(Array("^[][$]\n\n^[$]: \t \nx \nz".utf8) + [72]))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `x`\n└─ Paragraph\n   └─ Text \"z\"", surface(Array("^[][$]\n\n^[$]: \t \nx \nz".utf8) + [72], cmarkBugCompatible: false))
     }
 
     func testLeadingSpaceAfterColon() {
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ Paragraph\n   └─ Text \"x\"", surface(Array("^[][$]\n\n^[$]: l \nx".utf8) + [72]))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `l`\n└─ Paragraph\n   └─ Text \"x\"", surface(Array("^[][$]\n\n^[$]: l \nx".utf8) + [72], cmarkBugCompatible: false))
     }
 
     func testEscapesAndEntitiesDecoded() {
         XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `a*&b`\n└─ Paragraph\n   └─ Text \"x\"", surface(Array("^[][$]\n\n^[$]:a\\*&amp;b\nx".utf8) + [72]))
+        XCTAssertEqual("Document\n├─ Paragraph\n│  └─ InlineAttributes attributes: `a*&b`\n└─ Paragraph\n   └─ Text \"x\"", surface(Array("^[][$]\n\n^[$]:a\\*&amp;b\nx".utf8) + [72], cmarkBugCompatible: false))
     }
 
     /// cmark decodes entities before backslash escapes, so `\&amp;` becomes `&`.
@@ -94,6 +107,7 @@ class AttributeDefinitionTrailingWhitespaceTests: XCTestCase {
     /// Control: a definition that isn't at the start of a paragraph is never formed, so its line stays literal.
     func testLastLineControl() {
         XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"^[]\"\n   ├─ SoftBreak\n   └─ Text \"^[$]:l\"", surface([94, 91, 93, 91, 36, 93, 10, 94, 91, 36, 93, 58, 108, 32, 10, 72]))
+        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"^[]\"\n   ├─ SoftBreak\n   └─ Text \"^[$]:l\"", surface([94, 91, 93, 91, 36, 93, 10, 94, 91, 36, 93, 58, 108, 32, 10, 72], cmarkBugCompatible: false))
     }
 
 }
