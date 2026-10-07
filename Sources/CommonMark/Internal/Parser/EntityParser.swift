@@ -76,14 +76,8 @@ internal enum EntityParser {
             } else {
                 break
             }
+            // At most one digit past the limit is accumulated, which stays far below `UInt32.max`.
             n = n * (hex ? 16 : 10) + value
-            // Mirror cmark's overflow guard (`if (codepoint >= 0x110000) codepoint = 0x110000;`): clamp
-            // once out of Unicode range so the next digit's multiply can't overflow `UInt32`.
-            // The final validation below maps anything `> 0x10FFFF` to U+FFFD, so the clamp value is
-            // observationally identical to the unclamped value — it only bounds the arithmetic.
-            if n >= 0x110000 {
-                n = 0x110000
-            }
             digits += 1
             if digits > maxDigits {
                 return nil
