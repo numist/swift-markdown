@@ -16,7 +16,7 @@
 ///
 /// - **Multi-segment.** The content is an ordered list of `Segment`s - source-line ranges (zero-copy into `sourceBytes`) joined by the shared interned `"\n"` - addressed by flat *virtual* offsets (`0..<virtualLength`). Used for multi-line paragraph/heading bodies whose lines aren't source-contiguous (block-quote/list continuation, CRLF) so no source bytes are copied. Almost all non-source segments are the interned `"\n"` join, read as `\n` without touching the arena.
 ///
-/// `sourceOffsets(ofVirtual:)` maps a (virtual) offset back to its original-source byte offsets, which is how inline nodes get stamped with source ranges.
+/// `sourceOffset(ofVirtual:)` maps a (virtual) offset back to its original-source byte offset, which is how inline nodes get stamped with source ranges.
 internal struct ContentSpan: ~Escapable {
     /// Single-segment: the content bytes (0-based via `base`). Multi-segment: `sourceBytes` (the whole source), indexed directly by a segment's absolute source offset.
     @usableFromInline let span: Span<UInt8>
@@ -148,14 +148,14 @@ internal struct ContentSpan: ~Escapable {
         return UInt8(ascii: "\n")
     }
 
-    /// The original-source byte offsets for the content byte at `offset`: `source` is the offset it is stamped at, and `physical` the offset of the byte as read, which sits on the byte's own source line. Single-segment source content maps identity (the offset already IS a source offset); single-segment arena content resolves through its arena→source run map; multi-segment resolves through the segment list.
+    /// The original-source byte offset for the content byte at `offset`. Single-segment source content maps identity (the offset already IS a source offset); single-segment arena content resolves through its arena→source run map; multi-segment resolves through the segment list.
     ///
     /// `offset` always images a source byte: callers resolve only an inline node's first and last bytes, and no inline node starts or ends on a byte without a source image, such as a line join (a soft or hard break is position-less, and the text before it ends at the join).
     @inlinable
-    func sourceOffsets(ofVirtual offset: Int) -> (source: Int, physical: Int) {
+    func sourceOffset(ofVirtual offset: Int) -> Int {
         if !isMultiSegment {
             if inSource {
-                return (offset, offset)
+                return offset
             }
             // Arena content carries an arena→source run map, content-relative (keyed from the first content byte): inline nodes are stamped only with positions on, and every single-segment arena content inline-parsed with positions on carries a run map that tiles it. Resolve it exactly like the multi-segment segment list below. cmark maps a `\|`-unescaped table cell's bytes back to source by a constant shift (it does NOT re-widen for the removed backslash), which the degenerate single-run case reproduces exactly.
             let k = offset - base
@@ -164,15 +164,13 @@ internal struct ContentSpan: ~Escapable {
             let run = arenaRuns[i]
             let v = i == 0 ? 0 : arenaRunEnds[i - 1]
             precondition(run.sourceOffset >= 0, "an inline node's first and last bytes image source bytes")
-            return (Int(run.sourceOffset) + (k - v), Int(run.physicalOffset) + (k - v))
+            return Int(run.sourceOffset) + (k - v)
         }
         let i = segmentIndex(covering: offset)
         precondition(i < segments.count, "an inline node's source range lies inside its multi-segment content")
         let seg = segments[i]
-        // Map through `sourceOffset`; the byte-read `offset` is the physical image.
         precondition(seg.inSource, "an inline node's first and last bytes image source bytes")
-        let local = offset - segmentStart(i)
-        return (Int(seg.sourceOffset) + local, Int(seg.offset) + local)
+        return Int(seg.offset) + (offset - segmentStart(i))
     }
 
     /// Build a `Chunk` for a sub-range of this content. Single-segment: a direct sub-chunk. Multi-segment: valid only when the range lies within one segment (the common case - most inline nodes don't straddle a line join); callers whose range can straddle (a code span) materialize via `InlineParser.materializedChunk` themselves.

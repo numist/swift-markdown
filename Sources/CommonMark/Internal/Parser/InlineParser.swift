@@ -2925,7 +2925,7 @@ extension BlockParser {
         return Chunk(offset: outOffset, length: storage.strings.count - outOffset, inSource: false)
     }
 
-    /// Stamp `node`'s source range from *virtual* content offsets, resolving each through `content.sourceOffsets(ofVirtual:)`.
+    /// Stamp `node`'s source range from *virtual* content offsets, resolving each through `content.sourceOffset(ofVirtual:)`.
     ///
     /// This is the only stamping path, shared by every inline node (leaf and wrapper - matching cmark, whose `S_insert_emph` derives a wrapper's range from its child columns in the same buffer map): a single-segment source span maps identity (byte offsets pass through unchanged), single-segment arena content resolves through its arena→source run map, and a multi-segment span walks its segment list - so a construct inside a multi-line blockquote/list paragraph gets real source positions. `end` is *exclusive* (one past the last byte), so the last content byte `end - 1` is resolved and incremented; this also maps an `end` that lands on the synthetic line-join newline back to just past the preceding source byte.
     @inline(__always)
@@ -2933,10 +2933,8 @@ extension BlockParser {
         guard positionsEnabled, end > start else {
             return
         }
-        let first = content.sourceOffsets(ofVirtual: start)
-        let last = content.sourceOffsets(ofVirtual: end - 1)
-        storage.setSourceStart(node, first.source)
-        storage.setSourceEnd(node, last.source + 1)
+        storage.setSourceStart(node, content.sourceOffset(ofVirtual: start))
+        storage.setSourceEnd(node, content.sourceOffset(ofVirtual: end - 1) + 1)
     }
 
     /// Merge runs of adjacent `.text` children into single nodes, recursing into containers.
@@ -3203,8 +3201,8 @@ extension BlockParser {
 
     /// Carve the logical sub-range `[lo, hi)` of `ref`'s content into a fresh `ContentRef`.
     ///
-    /// Zero-copy: the carved segments still point into the same source / arena bytes (with `offset` and
-    /// `sourceOffset` shifted for a partial leading segment); only new `Segment` entries are appended.
+    /// Zero-copy: the carved segments still point into the same source / arena bytes (with `offset` shifted for
+    /// a partial leading segment); only new `Segment` entries are appended.
     private mutating func subContentRef(of ref: ContentRef, from lo: Int, to hi: Int) -> ContentRef {
         if hi <= lo {
             return .empty
@@ -3232,9 +3230,7 @@ extension BlockParser {
             storage.segments.append(Segment(
                 offset: seg.offset + localOffset,
                 length: pieceLen,
-                inSource: seg.inSource,
-                // An arena piece keeps the one source byte its whole segment stands for (or none).
-                sourceOffset: seg.inSource ? seg.sourceOffset + localOffset : seg.sourceOffset
+                inSource: seg.inSource
             ))
             count += 1
             total += pieceLen
@@ -3260,23 +3256,23 @@ extension BlockParser {
         return storage.intern(Chunk(offset: offset, length: buf.count, inSource: false))
     }
 
-    /// The source extent of the non-empty `ref`'s bytes: from its first byte to just past its last, each resolved through `sourceOffsets(of:local:image:)` and cut off at the end of its line, or `nil` when either end has no source image.
+    /// The source extent of the non-empty `ref`'s bytes: from its first byte to just past its last, each resolved through `sourceOffset(of:local:image:)`, or `nil` when either end has no source image.
     private func sourceSpan(of ref: ContentRef, image: ContentImage?) -> (start: Int, end: Int)? {
         precondition(ref.count > 0 && ref.totalLength > 0, "an email address holds at least one byte")
         let firstSeg = storage.segments[Int(ref.first)]
         let lastSeg = storage.segments[Int(ref.first) + Int(ref.count) - 1]
-        guard let first = sourceOffsets(of: firstSeg, local: 0, image: image),
-              let last = sourceOffsets(of: lastSeg, local: Int(lastSeg.length) - 1, image: image) else {
+        guard let first = sourceOffset(of: firstSeg, local: 0, image: image),
+              let last = sourceOffset(of: lastSeg, local: Int(lastSeg.length) - 1, image: image) else {
             return nil
         }
-        return (first.source, last.source + 1)
+        return (first, last + 1)
     }
 
-    /// The source offsets (stamped, and as read; see `ContentSpan.sourceOffsets(ofVirtual:)`) of byte `local` of `seg`: a source segment's own byte, or an arena byte of the leaf's content imaged by `image`.
-    private func sourceOffsets(of seg: Segment, local: Int, image: ContentImage?) -> (source: Int, physical: Int)? {
+    /// The source offset of byte `local` of `seg`: a source segment's own byte, or an arena byte of the leaf's content imaged by `image`.
+    private func sourceOffset(of seg: Segment, local: Int, image: ContentImage?) -> Int? {
         if seg.inSource {
-            return (Int(seg.sourceOffset) + local, Int(seg.offset) + local)
+            return Int(seg.offset) + local
         }
-        return image?.sourceOffsets(ofArenaByte: Int(seg.offset) + local)
+        return image?.sourceOffset(ofArenaByte: Int(seg.offset) + local)
     }
 }

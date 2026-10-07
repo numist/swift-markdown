@@ -90,10 +90,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         subscript(_ index: Int) -> UInt8 { bytes[index] }
 
-        /// Append `byte`, imaging source byte `sourceOffset` read at `physicalOffset` (see `ArenaRun`), or a synthetic gap when `sourceOffset < 0`.
-        mutating func append(_ byte: UInt8, imaging sourceOffset: Int, physicalOffset: Int? = nil) {
+        /// Append `byte`, imaging source byte `sourceOffset` (see `ArenaRun`), or a synthetic gap when `sourceOffset < 0`.
+        mutating func append(_ byte: UInt8, imaging sourceOffset: Int) {
             bytes.append(byte)
-            BlockParser.appendContentByte(imaging: sourceOffset, physicalOffset: physicalOffset, to: &map)
+            BlockParser.appendContentByte(imaging: sourceOffset, to: &map)
         }
 
         /// Append the source bytes `source[range]`, each imaging itself.
@@ -611,22 +611,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Extend an arena→source run map by one content byte that images source byte `sourceOffset` (read from physical byte `physicalOffset`, which defaults to `sourceOffset`; see `ArenaRun`), or by one synthetic gap byte when `sourceOffset < 0`: the last run grows when the byte continues it, otherwise a new run starts.
+    /// Extend an arena→source run map by one content byte that images source byte `sourceOffset` (see `ArenaRun`), or by one synthetic gap byte when `sourceOffset < 0`: the last run grows when the byte continues it, otherwise a new run starts.
     @inline(__always)
-    fileprivate static func appendContentByte(imaging sourceOffset: Int, physicalOffset: Int? = nil, to runs: inout [ArenaRun]) {
-        let physicalOffset = physicalOffset ?? sourceOffset
+    fileprivate static func appendContentByte(imaging sourceOffset: Int, to runs: inout [ArenaRun]) {
         if let last = runs.last {
             let length = Int(last.length)
             let continuesGap = sourceOffset < 0 && last.sourceOffset < 0
             let continuesRun = sourceOffset >= 0 && last.sourceOffset >= 0
                 && Int(last.sourceOffset) + length == sourceOffset
-                && Int(last.physicalOffset) + length == physicalOffset
             if continuesGap || continuesRun {
                 runs[runs.count - 1].length += 1
                 return
             }
         }
-        runs.append(ArenaRun(length: 1, sourceOffset: Int32(sourceOffset), physicalOffset: Int32(physicalOffset)))
+        runs.append(ArenaRun(length: 1, sourceOffset: Int32(sourceOffset)))
     }
 
     /// Post-process a leaf's freshly parsed inline children, mirroring cmark's `cmark_parser_finish` (consolidate, then extension postprocess).
@@ -740,8 +738,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         for run in map {
             for j in 0..<Int(run.length) {
                 let sourceOffset = run.sourceOffset < 0 ? -1 : Int(run.sourceOffset) + j
-                let physicalOffset = run.physicalOffset < 0 ? -1 : Int(run.physicalOffset) + j
-                text.append(storage.strings[i], imaging: sourceOffset, physicalOffset: physicalOffset)
+                text.append(storage.strings[i], imaging: sourceOffset)
                 i += 1
             }
         }
@@ -824,8 +821,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func addLineSegment(span: Span<UInt8>, range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         guard !range.isEmpty else { return pending }
         if currentLineMapsToSource {
-            // Flag OFF is spec-correct: the continuation content keeps its TRUE first-non-space column (`range.lowerBound`), so its range is consistent with the block's true-width end, and no residual whitespace enters the content.
-            return appendSegment(Segment(offset: Int32(range.lowerBound), length: Int32(range.upperBound - range.lowerBound), inSource: true, sourceOffset: Int32(range.lowerBound)), to: node, pending: pending)
+            return appendSegment(Segment(offset: Int32(range.lowerBound), length: Int32(range.upperBound - range.lowerBound), inSource: true), to: node, pending: pending)
         }
         // Materialized (tab-expanded) line. `expandPrefixTabs` turned leading whitespace and container markers into spaces so column-based matching works on byte offsets, but that expansion is lossy for a code/HTML block BODY: cmark copies the body verbatim from `parser->offset` (blocks.c `add_line`), so a content tab survives literally - only the single tab that the consumed indentation splits becomes spaces. Recover the literal source bytes instead of copying the expanded buffer, so content tabs are preserved.
         let nodeKind = storage[node].kind
@@ -839,8 +835,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let (sourceStart, splitTabSpaces) = materializedSourceStart(bufferStart: range.lowerBound)
         assert(splitTabSpaces == 0, "a paragraph continuation's content never begins inside an expanded tab")
         let lineEnd = currentLineSourceRange.upperBound
-        // Flag-off maps to the content's true source byte (`sourceStart`).
-        return appendSegment(Segment(offset: Int32(sourceStart), length: Int32(lineEnd - sourceStart), inSource: true, sourceOffset: Int32(sourceStart)), to: node, pending: pending)
+        return appendSegment(Segment(offset: Int32(sourceStart), length: Int32(lineEnd - sourceStart), inSource: true), to: node, pending: pending)
     }
 
     /// Append one body line of a materialized (tab-expanded) code/HTML block as its literal source content, preserving content tabs that `expandPrefixTabs` expanded into spaces.
@@ -983,9 +978,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         for run in image {
             for local in 0..<Int(run.length) {
                 let sourceOffset = run.sourceOffset < 0 ? -1 : Int(run.sourceOffset) + local
-                let physicalOffset = run.physicalOffset < 0 ? -1 : Int(run.physicalOffset) + local
                 for _ in 0..<(readByte(at: i, in: chunk) == 0 ? 3 : 1) {
-                    Self.appendContentByte(imaging: sourceOffset, physicalOffset: physicalOffset, to: &replacedMap)
+                    Self.appendContentByte(imaging: sourceOffset, to: &replacedMap)
                 }
                 i += 1
             }
@@ -1064,8 +1058,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     continue
                 }
                 let sourceOffset = run.sourceOffset < 0 ? -1 : Int(run.sourceOffset) + local - stripped
-                let physicalOffset = run.physicalOffset < 0 ? -1 : Int(run.physicalOffset) + local - stripped
-                Self.appendContentByte(imaging: sourceOffset, physicalOffset: physicalOffset, to: &unescapedMap)
+                Self.appendContentByte(imaging: sourceOffset, to: &unescapedMap)
                 if readByte(at: i, in: raw) == UInt8(ascii: "\n") {
                     stripped = 0
                 }
@@ -1548,11 +1541,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return PendingLeaf(node: node, content: .materialized(MaterializedText(bytes: header, map: headerMap)))
     }
 
-    /// The physical source extent imaged by the run map of trimmed paragraph content: from its first run's byte as
-    /// read to just past its last run's.
+    /// The source extent imaged by the run map of trimmed paragraph content: from its first run's byte to just past
+    /// its last run's.
     private func sourceSpan(of map: [ArenaRun]) -> (start: Int, end: Int) {
-        precondition(!map.isEmpty && map.first!.physicalOffset >= 0 && map.last!.physicalOffset >= 0, "trimmed paragraph content starts and ends on source bytes")
-        return (Int(map.first!.physicalOffset), Int(map.last!.physicalOffset) + Int(map.last!.length))
+        precondition(!map.isEmpty && map.first!.sourceOffset >= 0 && map.last!.sourceOffset >= 0, "trimmed paragraph content starts and ends on source bytes")
+        return (Int(map.first!.sourceOffset), Int(map.last!.sourceOffset) + Int(map.last!.length))
     }
 
     // MARK: - Per-line dispatcher
@@ -2665,7 +2658,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return false
     }
 
-    /// Flatten a segment list into one arena chunk, recording a content-relative arena→source run map in `map` as it copies: one run per non-empty segment. A source segment images its (re-indented) source range (run `sourceOffset` = the segment's `sourceOffset`); a non-source segment - the interned `\n` line-join, or an arena-only line with no source pre-image - becomes a synthetic gap (`sourceOffset < 0`). The map tiles the flattened content from its first byte, so it survives a later arena re-copy of the content (the byte layout is unchanged) and lets inline stamping recover per-line source columns.
+    /// Flatten a segment list into one arena chunk, recording a content-relative arena→source run map in `map` as it copies: one run per non-empty segment. A source segment images its own source range; a non-source segment - the interned `\n` line-join, or an arena-only line with no source pre-image - becomes a synthetic gap (`sourceOffset < 0`). The map tiles the flattened content from its first byte, so it survives a later arena re-copy of the content (the byte layout is unchanged) and lets inline stamping recover per-line source columns.
     ///
     /// Used when content must be a contiguous `Chunk` - the matcher-eligible path and code/HTML-block fallback.
     private mutating func flattenSegments(_ segs: borrowing UniqueArray<Segment>, map: inout [ArenaRun]) -> Chunk {
@@ -2684,11 +2677,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             if len > 0 {
                 if seg.inSource {
-                    // A source segment images its source range. `physicalOffset` is the segment's byte-read `offset`.
-                    map.append(ArenaRun(length: Int32(len), sourceOffset: seg.sourceOffset, physicalOffset: seg.offset))
+                    // A source segment images its source range.
+                    map.append(ArenaRun(length: Int32(len), sourceOffset: seg.offset))
                 } else {
                     // The interned `\n` join, or an arena-only line: a synthetic gap.
-                    map.append(ArenaRun(length: Int32(len), sourceOffset: -1, physicalOffset: -1))
+                    map.append(ArenaRun(length: Int32(len), sourceOffset: -1))
                 }
             }
         }
@@ -2711,9 +2704,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let hi = min(runEnd, end)
             if lo >= hi { continue }
             let sourceOffset: Int32 = run.sourceOffset < 0 ? -1 : run.sourceOffset + Int32(lo - runStart)
-            // `physicalOffset` (the run's byte-read source line anchor) advances by the same trimmed-off prefix as `sourceOffset`; a synthetic gap stays a gap.
-            let physicalOffset: Int32 = run.physicalOffset < 0 ? -1 : run.physicalOffset + Int32(lo - runStart)
-            result.append(ArenaRun(length: Int32(hi - lo), sourceOffset: sourceOffset, physicalOffset: physicalOffset))
+            result.append(ArenaRun(length: Int32(hi - lo), sourceOffset: sourceOffset))
         }
         return result
     }
@@ -2744,7 +2735,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var remaining = content.offset - raw.offset
         for run in map {
             if remaining < Int(run.length) {
-                return run.physicalOffset < 0 ? nil : Int(run.physicalOffset) + remaining
+                return run.sourceOffset < 0 ? nil : Int(run.sourceOffset) + remaining
             }
             remaining -= Int(run.length)
         }
@@ -2753,7 +2744,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Run the paragraph finalize-time matchers on a single flat content `Chunk`: GFM table detection, then the paragraph's raw content (`paragraphContent`) - which it queues for inline parsing, or drops the node if nothing remains.
     ///
-    /// Factored out so both the flat-content path and the (eligibility-gated) segment path can reuse it. `map` is the content's arena→source run map (empty for source-backed content): when the content was flattened from a non-contiguous, re-indented segment list it carries per-line source columns, and when NULs were replaced it images each U+FFFD back to its NUL. It is sliced to the surviving `contentChunk` window and stamped on the node so the inline pass can stamp positions.
+    /// Factored out so both the flat-content path and the (eligibility-gated) segment path can reuse it. `map` is the content's arena→source run map (empty for source-backed content): when the content was flattened from a non-contiguous segment list it carries per-line source columns, and when NULs were replaced it images each U+FFFD back to its NUL. It is sliced to the surviving `contentChunk` window and stamped on the node so the inline pass can stamp positions.
     private mutating func runParagraphMatchers(node: DocumentStorage.Index, raw: Chunk, map: [ArenaRun] = []) {
         let trimmed = raw.trimmingWhitespace(using: self)
         if trimmed.isEmpty {
@@ -2868,7 +2859,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let tablePending = storage.options.contains(.tables) && (paragraphTablePending[node] ?? false)
                 let trimmed = trimSegments(segs, trimLeading: !tablePending)
                 if segmentsCouldMatchMatcher(trimmed) || segmentsEndInControlWhitespace(trimmed) {
-                    // Flatten for the chunk-based matchers, capturing the arena→source run map so a re-indented continuation line's inline content is still stamped (matchers that survive re-seed the map via `runParagraphMatchers`).
+                    // Flatten for the chunk-based matchers, capturing the arena→source run map so a continuation line's inline content is still stamped (matchers that survive re-seed the map via `runParagraphMatchers`).
                     var map: [ArenaRun] = []
                     let raw = flattenSegments(trimmed, map: &map)
                     runParagraphMatchers(node: node, raw: raw, map: map)

@@ -369,9 +369,9 @@ extension BlockParser {
     private enum TableSourceMode {
         /// Not source-mapped: positions are off.
         case none
-        /// A contiguous `inSource` range copied into the arena: arena offset `A` maps to source `A + delta` (physical == re-based). The common no-leading-whitespace table.
+        /// A contiguous `inSource` range copied into the arena: arena offset `A` maps to source `A + delta`. The common no-leading-whitespace table.
         case contiguous(delta: Int)
-        /// Non-contiguous rows (a container prefix, leading whitespace, or a CRLF) or replaced NULs: the paragraph arrived as arena content with a content-relative arena→source run map that images each row's content on its source line, re-based to the table's content column for a re-indented row (cmark's cell-column re-base). Runs carry both the re-based `sourceOffset` and the physical byte-read `physicalOffset` (the latter places the row's content end on its true physical line).
+        /// Non-contiguous rows (a container prefix, leading whitespace, or a CRLF) or replaced NULs: the paragraph arrived as arena content with a content-relative arena→source run map that images each row's content on its source line.
         case flattened([ArenaRun])
     }
 

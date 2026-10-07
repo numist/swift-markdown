@@ -18,19 +18,10 @@ internal struct Segment: Equatable {
     internal var length: Int32
     internal var inSource: Bool
 
-    /// The original-source byte offset this segment's content maps to for source-position stamping, when it differs from `offset` (the byte-read offset).
-    ///
-    /// Equal to `offset` in the overwhelmingly common case - the content is stamped where its bytes physically sit.
-    ///
-    /// For an `inSource == false` segment, `sourceOffset` is the one source byte that every byte of the segment stands for or `-1` when the segment has no source image (the interned `\n` join and other arena-only content, which no inline node starts or ends on).
-    internal var sourceOffset: Int32
-
-    /// `sourceOffset` defaults to `offset` for a source segment (the content is stamped where it sits) and to `-1` (no source image) for an arena segment.
-    internal init(offset: Int32, length: Int32, inSource: Bool, sourceOffset: Int32? = nil) {
+    internal init(offset: Int32, length: Int32, inSource: Bool) {
         self.offset = offset
         self.length = length
         self.inSource = inSource
-        self.sourceOffset = sourceOffset ?? (inSource ? offset : -1)
     }
 
     internal init(_ chunk: Chunk) {
@@ -47,17 +38,13 @@ internal struct Segment: Equatable {
 ///
 /// A `sourceOffset < 0` marks a synthetic gap - the interned `"\n"` line-join between reconstructed lines, or an arena-only line with no source pre-image - which stays position-less (`nil`), matching cmark's position-less soft breaks. Runs are contiguous and ordered (they tile the content from its first byte), so the map walks exactly like the multi-segment `Segment` list, minus the byte reads (bytes come from the flat arena span). This lets inline stamping recover per-line source columns for content that was flattened into one arena chunk (a non-contiguous setext heading), and in the single-run case it expresses the constant shift of a `\|`-unescaped table cell.
 ///
-/// `physicalOffset` is the `Segment.offset` analog: the run's byte-read source offset, which always sits on the run's own physical source line. It equals `sourceOffset` for content that images its source where its bytes sit (a top-level line, or the constant-shift table cell). A source-mapped table row uses it to place the row's content end on its true physical line (see `TableParser.rowProjection`); `< 0` marks a synthetic gap with no physical image.
 internal struct ArenaRun: Equatable {
     internal var length: Int32
     internal var sourceOffset: Int32
-    internal var physicalOffset: Int32
 
-    /// `physicalOffset` defaults to `sourceOffset` (the run images its source where its bytes sit).
-    internal init(length: Int32, sourceOffset: Int32, physicalOffset: Int32? = nil) {
+    internal init(length: Int32, sourceOffset: Int32) {
         self.length = length
         self.sourceOffset = sourceOffset
-        self.physicalOffset = physicalOffset ?? sourceOffset
     }
 }
 
@@ -78,8 +65,8 @@ internal struct ContentImage {
         }
     }
 
-    /// The source offsets imaged by arena byte `offset` - the offset it is stamped at, and the offset it was read from (see `ArenaRun`) - or `nil` for a byte outside the chunk. Callers resolve only bytes that aren't line joins, the chunk's one kind of synthetic gap.
-    internal func sourceOffsets(ofArenaByte offset: Int) -> (source: Int, physical: Int)? {
+    /// The source offset imaged by arena byte `offset`, or `nil` for a byte outside the chunk. Callers resolve only bytes that aren't line joins, the chunk's one kind of synthetic gap.
+    internal func sourceOffset(ofArenaByte offset: Int) -> Int? {
         let k = offset - base
         guard k >= 0, let total = runEnds.last, k < total else {
             return nil
@@ -97,7 +84,7 @@ internal struct ContentImage {
         let run = runs[lo]
         let local = k - (lo == 0 ? 0 : runEnds[lo - 1])
         precondition(run.sourceOffset >= 0, "a resolved byte is not a line join")
-        return (Int(run.sourceOffset) + local, Int(run.physicalOffset) + local)
+        return Int(run.sourceOffset) + local
     }
 }
 
