@@ -1,0 +1,3 @@
+document @1:1-1:4
+  paragraph @1:1-1:4
+    text "<p*" @1:1-1:4

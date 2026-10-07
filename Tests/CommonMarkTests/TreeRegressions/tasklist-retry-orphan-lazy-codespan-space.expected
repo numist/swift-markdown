@@ -1,0 +1,6 @@
+document @1:1-3:3
+  list bullet '+' tight @1:1-3:3
+    item @1:1-3:3
+      paragraph @2:3-3:3
+        text "2� [x] " @2:3-2:10
+        code " " @2:10-3:3

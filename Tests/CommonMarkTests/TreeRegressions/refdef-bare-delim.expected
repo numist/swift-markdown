@@ -1,0 +1,3 @@
+document @1:1-2:2
+  paragraph @2:1-2:2
+    text "-" @2:1-2:2

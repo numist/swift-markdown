@@ -1,0 +1,5 @@
+document @1:1-4:13
+  paragraph @1:1-2:7
+    text "[^abcdef" @1:1-1:10
+    softbreak @-
+    text "xxxxx]" @2:1-2:7

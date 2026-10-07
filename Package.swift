@@ -67,6 +67,7 @@ let package = Package(
             dependencies: ["CommonMark"],
             resources: [
                 .copy("spec.txt"),
+                .copy("TreeRegressions"),
             ],
             swiftSettings: commonMarkSwiftSettings
         ),

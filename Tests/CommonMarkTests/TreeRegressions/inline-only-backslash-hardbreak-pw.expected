@@ -1,0 +1,5 @@
+document @1:1-2:2
+  paragraph @1:1-2:2
+    text "a" @1:1-1:2
+    linebreak @-
+    text "b" @2:1-2:2

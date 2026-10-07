@@ -1,0 +1,5 @@
+document @1:1-2:4
+  paragraph @1:1-2:4
+    text "a[^x" @1:1-1:5
+    softbreak @-
+    text "y]b" @2:1-2:4

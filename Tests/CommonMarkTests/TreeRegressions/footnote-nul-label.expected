@@ -1,0 +1,7 @@
+document @1:1-3:9
+  paragraph @3:1-3:9
+    text "see " @3:1-3:5
+    footnote_reference "1" @3:5-3:9
+  footnote_definition "�" @1:1-2:1
+    paragraph @1:7-1:11
+      text "body" @1:7-1:11

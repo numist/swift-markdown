@@ -1,0 +1,5 @@
+document @1:1-2:10
+  paragraph @1:1-2:10
+    text "M�[" @1:1-1:6
+    softbreak @-
+    text "�][>\u{18}\\" @2:2-2:10

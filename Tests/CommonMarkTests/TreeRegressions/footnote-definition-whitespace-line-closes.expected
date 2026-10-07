@@ -1,0 +1,3 @@
+document @1:1-3:4
+  list bullet '-' tight @1:1-3:4
+    item @1:1-3:4

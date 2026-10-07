@@ -1,0 +1,14 @@
+document @1:1-4:8
+  paragraph @1:1-1:19
+    text "[^ " @1:1-1:4
+    footnote_reference "1" @1:4-1:8
+    text "] " @1:8-1:10
+    footnote_reference "2" @1:10-1:14
+    text " " @1:14-1:15
+    footnote_reference "1" @1:15-1:19
+  footnote_definition "a" @3:1-3:8
+    paragraph @3:7-3:8
+      text "x" @3:7-3:8
+  footnote_definition "b" @4:1-4:8
+    paragraph @4:7-4:8
+      text "y" @4:7-4:8

@@ -1,0 +1,6 @@
+document @1:1-2:5
+  block_quote @1:1-2:5
+    paragraph @1:2-2:5
+      text "[^" @1:2-1:4
+      softbreak @-
+      text "�]" @2:1-2:5

@@ -1,0 +1,5 @@
+document @1:1-2:3
+  paragraph @1:1-2:3
+    text "[^" @1:1-1:3
+    image "" "" @1:3-2:2
+    text "]" @2:2-2:3

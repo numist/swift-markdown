@@ -1,0 +1,4 @@
+document @1:1-1:4
+  paragraph @1:1-1:4
+    strikethrough @1:1-1:4
+      text "\u{B}" @1:2-1:3

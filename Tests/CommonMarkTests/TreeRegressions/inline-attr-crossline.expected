@@ -1,0 +1,3 @@
+document @1:1-2:2
+  paragraph @1:2-2:2
+    attribute "\n" @1:2-2:2

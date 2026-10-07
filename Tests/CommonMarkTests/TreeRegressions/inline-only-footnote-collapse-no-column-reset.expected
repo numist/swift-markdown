@@ -1,0 +1,3 @@
+document @1:1-2:2
+  paragraph @1:1-2:2
+    text "[^[]\n]" @1:1-2:2

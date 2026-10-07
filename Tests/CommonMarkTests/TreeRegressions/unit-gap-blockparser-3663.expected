@@ -1,0 +1,4 @@
+document @1:1-2:5
+  list bullet '+' tight @1:1-2:5
+    item @1:1-2:5
+      code_block "" "  B\n" @1:4-2:5

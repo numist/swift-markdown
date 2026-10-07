@@ -1,0 +1,7 @@
+document @1:1-3:153
+  paragraph @1:1-3:153
+    text "[foo[" @1:1-1:6
+    softbreak @-
+    text "@]z((!(~l" @2:3-2:12
+    softbreak @-
+    text "in](((((((((((((((W@WurlWWWWWWWWWWW���(((((WWWWWWWW]���(((W(((((((*(W(WWWWWWWW((WWWWWWWW: WWWWWWWWW((W((((W@WWWk:QW(]: <>br/[foo��eoo <?p\\h;\\ echv" @3:2-3:153

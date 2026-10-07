@@ -1,0 +1,5 @@
+document @1:1-2:10
+  list bullet '-' tight @1:1-2:10
+    item @1:1-2:10
+      paragraph @2:3-2:10
+        text "22 [ ]" @2:3-2:9

@@ -1,0 +1,5 @@
+document @1:1-1:12
+  list bullet '-' tight @1:1-1:12
+    tasklist checked @1:1-1:12
+      paragraph @1:7-1:12
+        text "[f]:a" @1:7-1:12

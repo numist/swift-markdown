@@ -1,0 +1,6 @@
+document @1:1-2:12
+  paragraph @1:1-1:5
+    footnote_reference "1" @1:1-1:5
+  footnote_definition "b" @2:6-2:12
+    paragraph @2:11-2:12
+      text "A" @2:11-2:12

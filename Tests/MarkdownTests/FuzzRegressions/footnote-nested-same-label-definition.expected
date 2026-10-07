@@ -1,6 +1,0 @@
-Document @1:1-2:12
-├─ Paragraph @1:1-1:5
-│  └─ FootnoteReference @1:1-1:5 label: "b" index: 1
-└─ FootnoteDefinition @2:6-2:12 label: "b"
-   └─ Paragraph @2:11-2:12
-      └─ Text @2:11-2:12 "A"

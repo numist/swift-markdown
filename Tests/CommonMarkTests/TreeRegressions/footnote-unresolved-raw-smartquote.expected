@@ -1,0 +1,3 @@
+document @1:1-1:5
+  paragraph @1:1-1:5
+    text "[^’]" @1:1-1:5

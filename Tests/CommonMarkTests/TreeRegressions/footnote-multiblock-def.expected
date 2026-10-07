@@ -1,0 +1,9 @@
+document @1:1-5:9
+  paragraph @5:1-5:9
+    text "see " @5:1-5:5
+    footnote_reference "1" @5:5-5:9
+  footnote_definition "a" @1:1-4:1
+    paragraph @1:7-1:12
+      text "first" @1:7-1:12
+    paragraph @3:5-3:16
+      text "second para" @3:5-3:16

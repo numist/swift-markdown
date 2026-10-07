@@ -1,0 +1,3 @@
+document @1:1-1:8
+  list bullet '-' tight @1:1-1:8
+    tasklist unchecked @1:1-1:8

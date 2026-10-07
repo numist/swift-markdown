@@ -1,0 +1,3 @@
+document @1:1-1:8
+  paragraph @1:1-1:8
+    text "x[^[]]y" @1:1-1:8
