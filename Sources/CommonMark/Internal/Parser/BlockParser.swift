@@ -431,11 +431,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     )
                 } else {
                     // Arena-backed: copy the content region out of `storage.strings` so the read view is independent of the appends `parseInline` makes to that same array.
-                    scratch.removeAll(keepingCapacity: true)
+                    scratch.removeSubrange(0..<scratch.count)
                     scratch.append(copying: storage.strings.span.extracting(chunk.range))
                     // Arena content with a source image carries an arena→source run map so its inlines still get source positions; arena content without one (positions off) parses unmapped.
-                    runScratch.removeAll(keepingCapacity: true)
-                    runEndScratch.removeAll(keepingCapacity: true)
+                    runScratch.removeSubrange(0..<runScratch.count)
+                    runEndScratch.removeSubrange(0..<runEndScratch.count)
                     if let map = arenaSourceMaps[node] {
                         var runEnd = 0
                         for run in map {
@@ -444,7 +444,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                             runEndScratch.append(runEnd)
                         }
                     }
-                    orphanScratch.removeAll()
+                    orphanScratch.removeSubrange(0..<orphanScratch.count)
                     for replacement in orphanReplacements(in: chunk.range) {
                         orphanScratch.append(replacement)
                     }
@@ -457,8 +457,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
             } else {
                 // Multi-segment content (multi-line non-contiguous paragraph/heading): copy the segment list into stable storage and parse it directly from the source - no flattening into the arena.
-                segScratch.removeAll(keepingCapacity: true)
-                segEndScratch.removeAll(keepingCapacity: true)
+                segScratch.removeSubrange(0..<segScratch.count)
+                segEndScratch.removeSubrange(0..<segEndScratch.count)
                 var virtualEnd = 0
                 for i in 0..<Int(ref.count) {
                     let seg = storage.segments[Int(ref.first) + i]
@@ -482,11 +482,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     }
                 }
                 if arenaExtent > 0 {
-                    arenaScratch.removeAll(keepingCapacity: true)
+                    arenaScratch.removeSubrange(0..<arenaScratch.count)
                     arenaScratch.append(copying: storage.strings.span.extracting(0..<arenaExtent))
                     // Already ascending, as `ContentSpan.orphanedContinuationByteLength`'s search needs: each
                     // arena segment was written at the arena's end when its line was added.
-                    orphanScratch.removeAll()
+                    orphanScratch.removeSubrange(0..<orphanScratch.count)
                     for replacement in replacements {
                         orphanScratch.append(replacement)
                     }
@@ -2257,7 +2257,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var prefixColumns = 0
 
         // Build top-down chain via parent walk + reverse. `chain` is a caller-owned reused buffer (reset here per line) so we don't allocate/zero a fresh array each line.
-        chain.removeAll(keepingCapacity: true)
+        chain.removeSubrange(0..<chain.count)
         var idx: DocumentStorage.Index? = current
         while let idx_ = idx {
             chain.append(idx_)

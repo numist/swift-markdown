@@ -66,8 +66,8 @@ extension BlockParser {
             return
         }
         // The delimiter and bracket stacks are caller-owned scratch buffers, reused across every paragraph in the document. Reset them to empty rather than allocating per call.
-        delimiters.removeAll(keepingCapacity: true)
-        brackets.removeAll(keepingCapacity: true)
+        delimiters.removeSubrange(0..<delimiters.count)
+        brackets.removeSubrange(0..<brackets.count)
         
         var cursor = content.startOffset
         let endOffset = content.endOffset
