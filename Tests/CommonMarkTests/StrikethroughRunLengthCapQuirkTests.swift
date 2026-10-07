@@ -169,6 +169,13 @@ struct StrikethroughRunLengthCapQuirkTests {
         #expect(strikeText(input(openerLen: 1, tailCount: 200), options: Self.flagOff) == nil)
     }
 
+    /// GFM only lets a run of one or two tildes delimit strikethrough, so a 101-tilde opener never opens one, where
+    /// cmark-gfm reads that run as a 100-tilde chunk plus a one-tilde opener.
+    @Test("flag OFF: a 101-tilde opener stays literal")
+    func flagOffOpenerNotChunked() {
+        #expect(strikeText("**" + String(repeating: "~", count: 101) + ")~", options: Self.flagOff) == nil)
+    }
+
     // MARK: Ordinary controls — unchanged under BOTH flags
 
     @Test("controls: short runs pair (or not) identically under both flags")
@@ -202,6 +209,15 @@ struct StrikethroughRunLengthCapQuirkTests {
             strikeText(input(openerLen: 2, tailCount: 102), options: options),
             "L=2/N=102 must form under doubleTilde")
         #expect(formed == ")" + String(repeating: "~", count: 100))
+        #expect(strikeText(input(openerLen: 1, tailCount: 101), options: options) == nil)
+    }
+
+    /// Under `.strikethroughDoubleTilde` only a two-tilde run delimits strikethrough, so a 102-tilde closer never
+    /// closes one, where cmark-gfm reads its final two tildes as a closer of their own.
+    @Test("flag OFF + doubleTilde: neither L=2/N=102 nor L=1/N=101 forms")
+    func flagOffDoubleTildeComposition() {
+        let options: MarkdownDocument.ParseOptions = [.strikethrough, .strikethroughDoubleTilde]
+        #expect(strikeText(input(openerLen: 2, tailCount: 102), options: options) == nil)
         #expect(strikeText(input(openerLen: 1, tailCount: 101), options: options) == nil)
     }
 }

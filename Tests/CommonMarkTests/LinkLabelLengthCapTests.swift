@@ -118,4 +118,27 @@ struct LinkLabelLengthCapTests {
             #expect(linkURLs(doc).isEmpty, "flag-OFF: the 1000-char definition is rejected, so nothing resolves")
         }
     }
+
+    // MARK: - Labels past the spec cap, without cmark bug compatibility
+
+    /// CommonMark §6.6 caps a link label at 999 characters, so the 1000- and 1001-character labels that
+    /// cmark-gfm's 1000 cap splits between accepted and rejected are both rejected: each definition line
+    /// stays a literal paragraph and each shortcut reference stays literal text.
+    @Test("flag OFF: 1000- and 1001-character labels neither define nor resolve")
+    func overCapLabelsWithoutCompatibility() {
+        for length in [1000, 1001] {
+            MarkdownDocument.withParsedDocument("[\(label(length))]: /u", options: []) { doc in
+                let nodes = dfs(doc)
+                #expect(nodes.map(\.kind) == [.document, .paragraph, .text], "length=\(length)")
+                #expect(nodes.compactMap(\.literal) == ["[\(label(length))]: /u"], "length=\(length)")
+            }
+
+            MarkdownDocument.withParsedDocument("[\(label(length))]: /u\n\n[\(label(length))]", options: []) { doc in
+                let nodes = dfs(doc)
+                #expect(linkURLs(doc) == [], "length=\(length)")
+                #expect(nodes.map(\.kind) == [.document, .paragraph, .text, .paragraph, .text], "length=\(length)")
+                #expect(nodes.compactMap(\.literal) == ["[\(label(length))]: /u", "[\(label(length))]"], "length=\(length)")
+            }
+        }
+    }
 }
