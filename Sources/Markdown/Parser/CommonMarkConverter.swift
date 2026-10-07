@@ -228,8 +228,7 @@ struct MarkupParser {
         case .attribute:
             return .inlineAttributes(attributes: attributeString(node), parsedRange: parsedRange, children)
         case .footnoteReference, .footnoteDefinition:
-            // The parse options never enable footnotes.
-            fatalError("footnote node encountered without footnote parsing")
+            preconditionFailure("the parse options never enable footnotes, so no footnote node is produced")
         @unknown default:
             fatalError("unhandled CommonMark node kind")
         }
