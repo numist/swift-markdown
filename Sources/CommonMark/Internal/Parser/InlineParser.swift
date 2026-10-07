@@ -2894,12 +2894,15 @@ extension BlockParser {
     // MARK: - Helpers
 
     /// Emit a `.text` node spanning `start..<end` if non-empty.
+    ///
+    /// A text run never holds a line join - every `\n` flushes the run before it - so it lies within one line, which
+    /// a single segment of multi-segment content holds.
     private mutating func flushPendingText(start: Int, end: Int, content: borrowing ContentSpan, into parent: DocumentStorage.Index) {
         if end <= start {
             return
         }
-        let chunk = materializedChunk(start: start, end: end, content: content)
-        let chunkRef = storage.intern(chunk)
+        assert(content.contiguousChunk(fromVirtual: start, limit: end)?.length == end - start, "a text run lies within one segment")
+        let chunkRef = storage.intern(content.chunk(offset: start, length: end - start))
         let textIdx = storage.appendNode(
             NodeRecord(kind: .text, parent: parent, data: .literal(chunkRef))
         )
@@ -2910,8 +2913,8 @@ extension BlockParser {
     /// Build a `Chunk` for the virtual range `[start, end)`, materializing into the arena ONLY when the
     /// range straddles a segment boundary (multi-segment content whose bytes don't lie in one contiguous
     /// buffer region). Single-segment content and any range confined to one segment stay zero-copy - the
-    /// contiguous slice is returned unchanged. This is the shared form of the join used by code spans and
-    /// straddling text runs.
+    /// contiguous slice is returned unchanged. Code spans and link destinations and titles can straddle a
+    /// line join.
     private mutating func materializedChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end),
            contiguous.length == end - start {
