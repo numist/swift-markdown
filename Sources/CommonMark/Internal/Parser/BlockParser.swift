@@ -1428,8 +1428,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // for why a segment list can't carry the replacement).
         let substitutes = segmentsContainNUL(preceding) || segmentsContainEscapedPipe(preceding)
         let trimsControlWhitespace = segmentsEndInControlWhitespace(preceding)
-        let mayHoldDefinition = segmentsCouldMatchMatcher(preceding)
-        if substitutes || trimsControlWhitespace || mayHoldDefinition {
+        let mayHoldMatcher = segmentsCouldMatchMatcher(preceding)
+        if substitutes || trimsControlWhitespace || mayHoldMatcher {
             var map: [ArenaRun] = []
             let flat = flattenSegments(preceding, map: &map)
             if let content = tableSplitParagraphContent(flat.trimmingWhitespace(using: self), in: flat, node: precedingNode, fallbackSeparator: trailingSeparator) {
@@ -2618,7 +2618,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return false
     }
 
-    /// Flatten a segment list into one arena chunk, recording a content-relative arena→source run map in `map` as it copies: one run per non-empty segment. A source segment images its own source range; a non-source segment - the interned `\n` line-join, or an arena-only line with no source pre-image - becomes a synthetic gap (`sourceOffset < 0`). The map tiles the flattened content from its first byte, so it survives a later arena re-copy of the content (the byte layout is unchanged) and lets inline stamping recover per-line source columns.
+    /// Flatten a segment list into one arena chunk, recording a content-relative arena→source run map in `map` as it copies: one run per non-empty segment. A source segment images its own source range; the interned `\n` line join, the only non-source segment, becomes a synthetic gap (`sourceOffset < 0`). The map tiles the flattened content from its first byte, so it survives a later arena re-copy of the content (the byte layout is unchanged) and lets inline stamping recover per-line source columns.
     ///
     /// Used when content must be a contiguous `Chunk` - the matcher-eligible path and code/HTML-block fallback.
     private mutating func flattenSegments(_ segs: borrowing UniqueArray<Segment>, map: inout [ArenaRun]) -> Chunk {
@@ -2640,7 +2640,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // A source segment images its source range.
                     map.append(ArenaRun(length: Int32(len), sourceOffset: seg.offset))
                 } else {
-                    // The interned `\n` join, or an arena-only line: a synthetic gap.
+                    // The interned `\n` join: a synthetic gap.
                     map.append(ArenaRun(length: Int32(len), sourceOffset: -1))
                 }
             }
@@ -2832,7 +2832,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let map = drained.map
             switch consume drained.content {
             case .chunk(let raw):
-                // An ATX heading's content range already excludes its surrounding spaces and tabs.
+                // An ATX heading's content range already excludes its surrounding spaces and tabs, and holds no line ending.
                 let trimmed = atxHeadingEnd == nil ? raw.trimmingWhitespace(using: self) : raw
                 if !trimmed.isEmpty {
                     if positionsEnabled, !map.isEmpty {

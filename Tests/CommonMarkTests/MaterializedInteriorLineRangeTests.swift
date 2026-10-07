@@ -24,8 +24,7 @@ import Testing
 ///
 /// Stamping an interior-line run on the contiguous arena run must project onto the run's own physical line,
 /// exactly like the multi-segment-source case (`MultiLineSegmentRangeTests`). Each run maps its source where
-/// its bytes sit, so its byte projection is already exact and lands on the run's own line. (Regression for the differential-fuzzer
-/// `pipemid-*` pairs.)
+/// its bytes sit, so its byte projection is already exact and lands on the run's own line.
 @Suite("Materialized (arena) multi-line contiguous run - interior-line inline positions")
 struct MaterializedInteriorLineRangeTests {
 

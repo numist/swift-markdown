@@ -145,7 +145,7 @@ extension BlockParser {
                 // single buffer). An entity can't cross a segment boundary - the join newline
                 // terminates the name/number - so a window from `&` to the segment end is sufficient.
                 let contiguous = content.contiguousChunk(fromVirtual: cursor, limit: endOffset)
-                precondition(contiguous != nil, "an `&` lies in a source segment: synthetic segments hold only newlines, spaces and U+FFFD")
+                precondition(contiguous != nil, "an `&` lies in a source segment: the only synthetic segment is the line join")
                 let window = contiguous!
                 // Match in an expression of its own so the borrowed `source` span (lifetime-dependent) stays scoped to the call and can't escape into the body.
                 let entity: EntityParser.EntityMatch? = if window.inSource {
@@ -2905,7 +2905,7 @@ extension BlockParser {
         if end <= start {
             return
         }
-        assert(content.contiguousChunk(fromVirtual: start, limit: end)?.length == end - start, "a text run lies within one segment")
+        precondition(content.contiguousChunk(fromVirtual: start, limit: end)?.length == end - start, "a text run lies within one segment")
         let chunkRef = storage.intern(content.chunk(offset: start, length: end - start))
         let textIdx = storage.appendNode(
             NodeRecord(kind: .text, parent: parent, data: .literal(chunkRef))
@@ -3261,8 +3261,8 @@ extension BlockParser {
         return (first.lowerBound, last.upperBound)
     }
 
-    /// The source bytes that byte `local` of `seg`, an address's, stands for: a source segment's own byte, an arena
-    /// byte of the leaf's content imaged by `image`, or the whole character reference a decoded byte comes from.
+    /// The source bytes that byte `local` of an address's segment `seg` stands for: a source segment's own byte, an
+    /// arena byte of the leaf's content imaged by `image`, or the whole character reference a decoded byte comes from.
     /// Every other arena text is punctuation no address holds.
     private func sourceRange(of seg: Segment, local: Int, image: ContentImage?) -> Range<Int> {
         if seg.inSource {
