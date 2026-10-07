@@ -5433,11 +5433,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         let labelStart = firstNonSpace + 2
+        let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
         var i = labelStart
         while i < end {
             let b = source[i]
             if b == UInt8(ascii: "]") {
                 break
+            }
+            // As in a link label (spec "Links"), a square bracket inside the label must be escaped.
+            if !bugCompatible {
+                if b == UInt8(ascii: "[") {
+                    return nil
+                }
+                if b == UInt8(ascii: "\\"), i + 1 < end, !source[i + 1].isSpaceTabOrNewline {
+                    i += 2
+                    continue
+                }
             }
             // cmark replaces NUL with U+FFFD before scanning, so its scanner (which excludes NUL)
             // never rejects a source NUL — the replacement character is an allowed label byte. The

@@ -91,8 +91,8 @@ struct MultiSegmentAttributeSurfaceTests {
     /// When the content is multi-segment (here a block-quote body, whose stripped `>` prefixes leave the
     /// lines non-contiguous) the trailing label can straddle a soft-break join, landing the closing `]` in
     /// a later segment that a contiguous-only scan never reaches — the scan must still cross the join and
-    /// consume the pair. Consumption is unconditional, so both flag modes must agree.
-    @Test(arguments: [ParseOptions(), ParseOptions.cmarkBugCompatibility])
+    /// consume the pair.
+    @Test(arguments: [ParseOptions.cmarkBugCompatibility])
     func trailingBracketAfterAttributeConsumed(_ options: ParseOptions) {
         // Single-line control: contiguous content, the trailing `[y]` is consumed.
         #expect(Document(parsing: "^[](x)[y]", options: options).debugDescription() == """
@@ -118,6 +118,37 @@ struct MultiSegmentAttributeSurfaceTests {
                └─ Paragraph
                   ├─ Text "x"
                   └─ InlineAttributes attributes: `color: red`
+            """)
+    }
+
+    /// An inline attribute's `(attributes)` form completes it, so a following `[label]` is not part of it and
+    /// stays text, also when the label straddles a block-quote line join.
+    @Test func trailingBracketAfterAttributeIsText() {
+        #expect(Document(parsing: "^[](x)[y]").debugDescription() == """
+            Document
+            └─ Paragraph
+               ├─ InlineAttributes attributes: `x`
+               └─ Text "[y]"
+            """)
+        #expect(Document(parsing: ">a^[](x)[\n>c]").debugDescription() == """
+            Document
+            └─ BlockQuote
+               └─ Paragraph
+                  ├─ Text "a"
+                  ├─ InlineAttributes attributes: `x`
+                  ├─ Text "["
+                  ├─ SoftBreak
+                  └─ Text "c]"
+            """)
+        #expect(Document(parsing: "^[a b]: color: red\n\n>x^[](ignore)[a\n>b]").debugDescription() == """
+            Document
+            └─ BlockQuote
+               └─ Paragraph
+                  ├─ Text "x"
+                  ├─ InlineAttributes attributes: `ignore`
+                  ├─ Text "[a"
+                  ├─ SoftBreak
+                  └─ Text "b]"
             """)
     }
 }

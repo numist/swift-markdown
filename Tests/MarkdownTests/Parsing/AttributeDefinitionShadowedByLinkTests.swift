@@ -62,14 +62,14 @@ class AttributeDefinitionShadowedByLinkTests: XCTestCase {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ InlineAttributes attributes: `b`\n      └─ Text \"t\"", surface("[foo]: /u\n^[foo]: attrs\n\n^[t](b)[foo]"))
     }
 
-    /// The attributes grammar has no collapsed or shortcut reference form: an empty `[]` label never resolves (and is consumed), and a bare `^[foo]` never looks up its content.
+    /// The attributes grammar has no collapsed or shortcut reference form: an empty `[]` label never resolves, and a bare `^[foo]` never looks up its content. A label that resolves to no attribute definition is text in the shipped parser.
     func testNoCollapsedOrShortcutForm() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", surface("[foo]: /u\n^[foo]: attrs\n\n^[foo][]"))
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", surface("[foo]: /u\n^[foo]: attrs\n\n^[foo]"))
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", surface("^[foo]: attrs\n\n^[foo][]"))
-        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", surfaceSpec("[foo]: /u\n^[foo]: attrs\n\n^[foo][]"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo][]\"", surfaceSpec("[foo]: /u\n^[foo]: attrs\n\n^[foo][]"))
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", surfaceSpec("[foo]: /u\n^[foo]: attrs\n\n^[foo]"))
-        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", surfaceSpec("^[foo]: attrs\n\n^[foo][]"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo][]\"", surfaceSpec("^[foo]: attrs\n\n^[foo][]"))
     }
 
     func testLinkDefinitionInLaterParagraphShadowedByAttribute() {
@@ -101,9 +101,9 @@ class AttributeDefinitionShadowedByLinkTests: XCTestCase {
         XCTAssertEqual("Document\n└─ Paragraph\n   ├─ InlineAttributes attributes: `attrs`\n   │  └─ Text \"t\"\n   └─ Link destination: \"/u\"\n      └─ Text \"foo\"", surfaceSpec("[foo]: /u\n^[foo]: attrs\n\n^[t][foo][foo]"))
     }
 
-    /// A label after inline `(attrs)` resolves to the attribute definition, whose value replaces the inline one, whereas cmark-gfm finds the shadowing link definition there and keeps `b`.
-    func testFlagOffLabelAfterInlineAttributesResolvesAttributeDefinition() {
-        XCTAssertEqual("Document\n└─ Paragraph\n   └─ InlineAttributes attributes: `attrs`\n      └─ Text \"t\"", surfaceSpec("[foo]: /u\n^[foo]: attrs\n\n^[t](b)[foo]"))
+    /// The inline `(attrs)` form completes the attribute, so the label after it is a link reference of its own.
+    func testFlagOffLabelAfterInlineAttributesIsLink() {
+        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ InlineAttributes attributes: `b`\n   │  └─ Text \"t\"\n   └─ Link destination: \"/u\"\n      └─ Text \"foo\"", surfaceSpec("[foo]: /u\n^[foo]: attrs\n\n^[t](b)[foo]"))
     }
 
     /// A link definition resolves even after a same-label attribute definition in an earlier paragraph, whereas cmark-gfm's shared refmap lets the attribute definition shadow it and leaves `[foo]` literal.

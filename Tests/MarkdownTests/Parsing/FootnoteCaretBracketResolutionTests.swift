@@ -95,28 +95,29 @@ struct FootnoteCaretBracketResolutionTests {
 
     @Test
     func withoutCompatibilityBracketStaysLiteral() {
-        #expect(Self.surface("[^[]]\n\n[^[]: n", cmarkBugCompatible: false)
+        #expect(Self.surface("[^[]]\n\n[^\\[]: n", cmarkBugCompatible: false)
             == "Document\n└─ Paragraph\n   └─ Text \"[^[]]\"")
-        #expect(Self.surface("[^[]:[^[]]", cmarkBugCompatible: false) == "Document")
+        #expect(Self.surface("[^[]:[^[]]", cmarkBugCompatible: false) == "Document\n└─ Paragraph\n   └─ Text \"[^[]:[^[]]\"")
     }
 
-    /// Flag-off a footnote-shaped bracket whose caret is followed by `[` is no footnote reference, so it stays
-    /// literal text, whereas cmark-gfm looks its label up as `[` and resolves it to a `[` definition.
+    /// A footnote-shaped bracket whose caret is followed by `[` is no footnote reference, so it stays literal text,
+    /// even beside a definition of the escaped label `\[`. A definition label may not hold an unescaped `[`, as a
+    /// link label may not (spec "Links"), so `[^[]:` defines nothing.
     @Test(arguments: [
-        ("[^[]]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
-        ("[^[]: n\n\n[^[]]", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
-        ("[^[a]]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[a]]\""),
-        ("[^[]a]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[]a]\""),
-        ("[^[]\nabcd]\n\n[^[]: n", "Document\n└─ Paragraph\n   ├─ Text \"[^[]\"\n   ├─ SoftBreak\n   └─ Text \"abcd]\""),
-        ("[^[\nabcd]]\n\n[^[]: n", "Document\n└─ Paragraph\n   ├─ Text \"[^[\"\n   ├─ SoftBreak\n   └─ Text \"abcd]]\""),
-        ("[^[" + String(repeating: "a", count: 998) + "]]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[" + String(repeating: "a", count: 998) + "]]\""),
-        ("![^[]]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"![^[]]\""),
-        ("[[^[]]]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"[[^[]]]\""),
-        ("[[^[]]](/u)\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Link destination: \"/u\"\n      └─ Text \"[^[]]\""),
-        ("[^a] [^[x]]\n\n[^a]: m\n\n[^[]: n", "Document\n├─ Paragraph\n│  ├─ FootnoteReference label: \"a\" index: 1\n│  └─ Text \" [^[x]]\"\n└─ FootnoteDefinition label: \"a\"\n   └─ Paragraph\n      └─ Text \"m\""),
-        ("[^[]:[^[]]", "Document"),
-        ("[^[" + String(repeating: "a", count: 999) + "]]\n\n[^[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[" + String(repeating: "a", count: 999) + "]]\""),
-        ("[^[]]\n\n[^[a]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
+        ("[^[]]\n\n[^\\[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
+        ("[^\\[]: n\n\n[^[]]", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
+        ("[^[a]]\n\n[^\\[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[a]]\""),
+        ("[^[]a]\n\n[^\\[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[]a]\""),
+        ("[^[]\nabcd]\n\n[^\\[]: n", "Document\n└─ Paragraph\n   ├─ Text \"[^[]\"\n   ├─ SoftBreak\n   └─ Text \"abcd]\""),
+        ("[^[\nabcd]]\n\n[^\\[]: n", "Document\n└─ Paragraph\n   ├─ Text \"[^[\"\n   ├─ SoftBreak\n   └─ Text \"abcd]]\""),
+        ("[^[" + String(repeating: "a", count: 998) + "]]\n\n[^\\[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[" + String(repeating: "a", count: 998) + "]]\""),
+        ("![^[]]\n\n[^\\[]: n", "Document\n└─ Paragraph\n   └─ Text \"![^[]]\""),
+        ("[[^[]]]\n\n[^\\[]: n", "Document\n└─ Paragraph\n   └─ Text \"[[^[]]]\""),
+        ("[[^[]]](/u)\n\n[^\\[]: n", "Document\n└─ Paragraph\n   └─ Link destination: \"/u\"\n      └─ Text \"[^[]]\""),
+        ("[^a] [^[x]]\n\n[^a]: m\n\n[^\\[]: n", "Document\n├─ Paragraph\n│  ├─ FootnoteReference label: \"a\" index: 1\n│  └─ Text \" [^[x]]\"\n└─ FootnoteDefinition label: \"a\"\n   └─ Paragraph\n      └─ Text \"m\""),
+        ("[^[]:[^[]]", "Document\n└─ Paragraph\n   └─ Text \"[^[]:[^[]]\""),
+        ("[^[" + String(repeating: "a", count: 999) + "]]\n\n[^\\[]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[" + String(repeating: "a", count: 999) + "]]\""),
+        ("[^[]]\n\n[^\\[a]: n", "Document\n└─ Paragraph\n   └─ Text \"[^[]]\""),
     ] as [(String, String)])
     func withoutCompatibilityEveryBracketStaysLiteral(_ markdown: String, _ expected: String) {
         #expect(Self.surface(markdown, cmarkBugCompatible: false) == expected)

@@ -300,22 +300,20 @@ class ReferenceExpansionBudgetTests: XCTestCase {
         XCTAssertEqual(150, links(oneShort, cmarkBugCompatible: false))
     }
 
-    /// Flag-off (shipped): the attribute bracket still consumes its `[bar]` label, but all 60 links resolve,
-    /// where cmark-gfm's budget charges the lookups and leaves 39.
+    /// Every reference resolves: `[bar]` names no attribute definition, so after each `^[t]` it is a link too.
     func testFlagOffAttributeLookupOfLinkReference() {
         let markdown = Self.definition("bar", destinationBytes: 2001) + Self.uses("^[t][bar]", 10) + " " + Self.uses("[bar]", 60)
         let result = surface(markdown, cmarkBugCompatible: false)
         XCTAssertEqual(0, count("InlineAttributes", in: result))
-        XCTAssertEqual(60, count("Link destination:", in: result))
+        XCTAssertEqual(70, count("Link destination:", in: result))
     }
 
-    /// Flag-off (shipped): the inline attributes still form and all 60 links resolve, where cmark-gfm's
-    /// budget charges the trailing lookups and leaves 39.
+    /// The inline attributes form and every reference resolves, including the `[bar]` after each attribute.
     func testFlagOffAttributeLookupAfterInlineForm() {
         let markdown = Self.definition("bar", destinationBytes: 2001) + Self.uses("^[t](a)[bar]", 10) + " " + Self.uses("[bar]", 60)
         let result = surface(markdown, cmarkBugCompatible: false)
         XCTAssertEqual(10, count("InlineAttributes", in: result))
-        XCTAssertEqual(60, count("Link destination:", in: result))
+        XCTAssertEqual(70, count("Link destination:", in: result))
     }
 
     /// Flag-off (shipped): all 60 link uses resolve beside the footnote references, where cmark-gfm's budget

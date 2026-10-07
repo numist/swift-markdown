@@ -107,7 +107,7 @@ class AttributeDefinitionTrailingWhitespaceTests: XCTestCase {
     /// Control: a definition that isn't at the start of a paragraph is never formed, so its line stays literal.
     func testLastLineControl() {
         XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"^[]\"\n   ├─ SoftBreak\n   └─ Text \"^[$]:l\"", surface([94, 91, 93, 91, 36, 93, 10, 94, 91, 36, 93, 58, 108, 32, 10, 72]))
-        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"^[]\"\n   ├─ SoftBreak\n   └─ Text \"^[$]:l\"", surface([94, 91, 93, 91, 36, 93, 10, 94, 91, 36, 93, 58, 108, 32, 10, 72], cmarkBugCompatible: false))
+        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"^[][$]\"\n   ├─ SoftBreak\n   └─ Text \"^[$]:l\"", surface([94, 91, 93, 91, 36, 93, 10, 94, 91, 36, 93, 58, 108, 32, 10, 72], cmarkBugCompatible: false))
     }
 
 }

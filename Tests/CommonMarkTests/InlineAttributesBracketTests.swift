@@ -216,11 +216,12 @@ struct InlineAttributesBracketTests {
         #expect(ns.compactMap(\.text) == ["^[]x"])
     }
 
-    @Test("flag OFF: a resolved attribute reference following an inline form overwrites its attributes")
+    /// The inline form completes the attribute, so a following label naming an attribute definition is text.
+    @Test("flag OFF: a label following an inline form is text")
     func inlineAttributeThenResolvedReferenceWithoutCompatibility() {
         let ns = nodes(in: "^[lbl]: color: blue\n\n^[](x)[lbl]", options: Self.specOptions)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .attribute])
-        #expect(ns.compactMap(\.attrs) == ["color: blue"])
-        #expect(ns.compactMap(\.text) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .attribute, .text])
+        #expect(ns.compactMap(\.attrs) == ["x"])
+        #expect(ns.compactMap(\.text) == ["[lbl]"])
     }
 }

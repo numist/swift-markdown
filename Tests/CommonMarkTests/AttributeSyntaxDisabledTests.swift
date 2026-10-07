@@ -710,8 +710,12 @@ struct AttributeSyntaxDisabledTests {
                 text "[^[]]" @3:1-3:6
 
             """)
+        // A definition label may not hold an unescaped `[`, as a link label may not (spec "Links"), so here
+        // `[^[]: note` is paragraph text.
         #expect(tree("[^[]: note\n\n[^[]]", Self.footnotes) == """
             document @1:1-3:6
+              paragraph @1:1-1:11
+                text "[^[]: note" @1:1-1:11
               paragraph @3:1-3:6
                 text "[^[]]" @3:1-3:6
 

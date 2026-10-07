@@ -831,16 +831,7 @@ extension BlockParser {
         let footnoteAfterOpenerIsText = storage[openerInl].next.map { storage[$0].kind == .text } ?? false
         if storage.options.contains(.footnotes),
            footnoteAfterOpenerIsText,
-           let labelChunk = footnoteRefLabel(
-               openerVirtualStart: footnoteBracketStart,
-               closeBracket: cursor,
-               content: content
-           ),
-           let defIdx = footnoteDefinition(
-               label: labelChunk,
-               measuredOver: (footnoteBracketStart + 2)..<cursor,
-               in: content
-           ) {
+           let defIdx = footnoteDefinition(referencedFrom: footnoteBracketStart, closeBracket: cursor, in: content) {
             // Resolve emphasis inside the bracket first (clearing its delimiters from the stack) so
             // removing the inner nodes below doesn't leave stale delimiters for `processEmphasis`.
             processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
@@ -1028,6 +1019,25 @@ extension BlockParser {
             i += 1
         }
         return chunk
+    }
+
+    /// The footnote definition the footnote-shaped bracket from `open` to `closeBracket` references, or `nil`.
+    /// Its label - everything after the `^` - matches a definition's label after the normalization link labels
+    /// get (spec "Links": case-folded, with runs of whitespace, line endings included, collapsed to one
+    /// space and leading and trailing whitespace removed), so it may span a line ending.
+    private func footnoteDefinition(referencedFrom open: Int, closeBracket: Int, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
+        if storage.options.contains(.cmarkBugCompatibility) {
+            guard let label = footnoteRefLabel(openerVirtualStart: open, closeBracket: closeBracket, content: content) else {
+                return nil
+            }
+            return footnoteDefinition(label: label, measuredOver: (open + 2)..<closeBracket, in: content)
+        }
+        let labelStart = open + 2
+        guard labelStart < closeBracket, content[open + 1] == UInt8(ascii: "^"),
+              linkLabelFitsLengthCap(virtualRange: labelStart..<closeBracket, in: content) else {
+            return nil
+        }
+        return storage.footnoteMap[normalizeLabel(virtualRange: labelStart..<closeBracket, in: content)]
     }
 
     /// The footnote definition a reference's `label` resolves to, or `nil`, as cmark's `process_footnotes`
@@ -1520,7 +1530,10 @@ extension BlockParser {
         // re-parse - `^[][]` drops the trailing `[]`, leaving literal `^[]`.
         var labelKey: String?
         let labelStart = pos
-        if let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
+        let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
+        if matched && !bugCompatible {
+            // The inline form completes the construct; what follows it is not part of it.
+        } else if let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
            let lab = matchLinkLabel(labelWindow) {
             // Contiguous window (see `contiguousChunk`): `lab.interior` is a real buffer chunk and
             // `lab.afterEnd` a buffer offset converted back to virtual via the window base.
@@ -1541,7 +1554,7 @@ extension BlockParser {
         // why: cmark's `link_label` consumes the `[…]` as a raw byte scan outside the dispatch loop, so a
         // newline inside it never reaches `handle_newline` and never resets the column cursor that a
         // later `[^[` footnote collapse measures its captured label with (`[^[][\n]]` → `[^[`).
-        if storage.options.contains(.cmarkBugCompatibility) {
+        if bugCompatible {
             recordAttributeSwallowedNewlines(from: labelStart, to: pos, content: content)
         }
         // why: cmark looks the label up in the refmap it shares with link references, so a link
@@ -1558,7 +1571,11 @@ extension BlockParser {
         }
         if !matched {
             // Fail: pop bracket, emit a single `]` text at the (possibly label-advanced) close position
-            // and resume there. The `^[` text node stays as regular text in the tree, matching cmark.
+            // and resume there. The `^[` text node stays as regular text in the tree. A label naming no
+            // attribute definition is not part of the construct, so it is parsed again as text.
+            if !bugCompatible {
+                pos = cursor + 1
+            }
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             emitBracketLiteral(at: pos - 1, content: content, parent: parent)
             return pos
