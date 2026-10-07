@@ -206,4 +206,136 @@ class ReferenceExpansionBudgetTests: XCTestCase {
         XCTAssertEqual(49, count("Link destination:", in: result))
         XCTAssertEqual(19, count("Link destination:", in: paragraph))
     }
+
+    // MARK: - Flag-off (shipped): CommonMark has no expansion budget, so every use resolves.
+
+    func testFlagOffUnderBudgetAllResolve() {
+        let markdown = Self.definition("bar", destinationBytes: 2001) + Self.uses("[bar]", 40)
+        XCTAssertEqual(40, links(markdown, cmarkBugCompatible: false))
+    }
+
+    func testFlagOffAtBudgetResolves() {
+        XCTAssertEqual(50, links(Self.definition("bar", destinationBytes: 2000) + Self.uses("[bar]", 50), cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): the 51st use resolves, where cmark-gfm's budget leaves it literal.
+    func testFlagOffPastBudgetResolves() {
+        XCTAssertEqual(51, links(Self.definition("bar", destinationBytes: 2000) + Self.uses("[bar]", 51), cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): `[b]` and both trailing `[a]` resolve, where cmark-gfm's budget rejects `[b]`.
+    func testFlagOffEveryLabelResolves() {
+        let markdown = Self.definition("a", destinationBytes: 2000) + Self.definition("b", destinationBytes: 2001)
+            + Self.uses("[a]", 49) + " [b] [a] [a]"
+        let result = surface(markdown, cmarkBugCompatible: false)
+        XCTAssertEqual(52, count("Link destination:", in: result))
+        XCTAssertEqual(1, count("Link destination: \"/" + String(repeating: "a", count: 2000) + "\"", in: result))
+    }
+
+    /// Flag-off (shipped): the full reference `[a][b]` resolves to `b`, where cmark-gfm's budget leaves it
+    /// literal.
+    func testFlagOffFullReferenceResolves() {
+        let markdown = Self.definition("a", destinationBytes: 2000) + Self.definition("b", destinationBytes: 2001)
+            + Self.uses("[a]", 49) + " [a][b] [a] [a]"
+        let result = surface(markdown, cmarkBugCompatible: false)
+        XCTAssertEqual(52, count("Link destination:", in: result))
+        XCTAssertEqual(0, count("[a][b]", in: result))
+    }
+
+    /// Flag-off (shipped): all 60 full and collapsed uses resolve, where cmark-gfm's budget stops at 49.
+    func testFlagOffFullAndCollapsedFormsAllResolve() {
+        let markdown = Self.definition("bar", destinationBytes: 2001)
+            + Self.uses("[bar]", 20) + " " + Self.uses("[bar][]", 20) + " " + Self.uses("[t][bar]", 20)
+        XCTAssertEqual(60, links(markdown, cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): all 60 image references resolve, where cmark-gfm's budget stops at 49.
+    func testFlagOffImageReferencesAllResolve() {
+        let images = Self.definition("bar", destinationBytes: 2001) + Self.uses("![bar]", 60)
+        XCTAssertEqual(60, count("Image source:", in: surface(images, cmarkBugCompatible: false)))
+        let mixed = Self.definition("bar", destinationBytes: 2001) + Self.uses("[bar] ![bar]", 30)
+        let result = surface(mixed, cmarkBugCompatible: false)
+        XCTAssertEqual(30, count("Link destination:", in: result))
+        XCTAssertEqual(30, count("Image source:", in: result))
+    }
+
+    /// Flag-off (shipped): all 51 uses of a reference with a title resolve, where cmark-gfm's budget stops
+    /// at 50.
+    func testFlagOffTitledReferenceAllResolve() {
+        let markdown = "[bar]: /" + String(repeating: "a", count: 999) + " \"" + String(repeating: "t", count: 1000) + "\"\n\n"
+            + Self.uses("[bar]", 51)
+        XCTAssertEqual(51, links(markdown, cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): all 51 uses of a reference with entities resolve, where cmark-gfm's budget stops
+    /// at 50.
+    func testFlagOffEntityDestinationAllResolve() {
+        let markdown = "[bar]: /" + String(repeating: "&amp;", count: 1999) + "\n\n" + Self.uses("[bar]", 51)
+        XCTAssertEqual(51, links(markdown, cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): all 51 uses of a reference with escapes and entities in its title resolve, where
+    /// cmark-gfm's budget stops at 50.
+    func testFlagOffEscapedTitleAllResolve() {
+        let title = String(repeating: "\\*", count: 500) + String(repeating: "&eacute;", count: 250)
+        let markdown = "[bar]: /" + String(repeating: "a", count: 999) + " \"" + title + "\"\n\n"
+            + Self.uses("[bar]", 51)
+        XCTAssertEqual(51, links(markdown, cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): all 51 uses of a reference with NULs resolve, where cmark-gfm's budget stops at 50.
+    func testFlagOffNULDestinationAllResolve() {
+        let markdown = "[bar]: /" + String(repeating: "\u{0}", count: 666) + "a\n\n" + Self.uses("[bar]", 51)
+        XCTAssertEqual(51, links(markdown, cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): all 150 uses in a large document resolve, where cmark-gfm's budget is the
+    /// document's byte count.
+    func testFlagOffLargeDocumentAllResolve() {
+        let rest = Self.definition("bar", destinationBytes: 2001) + Self.uses("[bar]", 150)
+        let fillerBytes = 101 * 2001 - rest.utf8.count - 2
+        let exact = String(repeating: "\u{E9}", count: fillerBytes / 2) + "\n\n" + rest
+        XCTAssertEqual(150, links(exact, cmarkBugCompatible: false))
+        let oneShort = String(repeating: "\u{E9}", count: fillerBytes / 2 - 1) + "x\n\n" + rest
+        XCTAssertEqual(150, links(oneShort, cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): the attribute bracket still consumes its `[bar]` label, but all 60 links resolve,
+    /// where cmark-gfm's budget charges the lookups and leaves 39.
+    func testFlagOffAttributeLookupOfLinkReference() {
+        let markdown = Self.definition("bar", destinationBytes: 2001) + Self.uses("^[t][bar]", 10) + " " + Self.uses("[bar]", 60)
+        let result = surface(markdown, cmarkBugCompatible: false)
+        XCTAssertEqual(0, count("InlineAttributes", in: result))
+        XCTAssertEqual(60, count("Link destination:", in: result))
+    }
+
+    /// Flag-off (shipped): the inline attributes still form and all 60 links resolve, where cmark-gfm's
+    /// budget charges the trailing lookups and leaves 39.
+    func testFlagOffAttributeLookupAfterInlineForm() {
+        let markdown = Self.definition("bar", destinationBytes: 2001) + Self.uses("^[t](a)[bar]", 10) + " " + Self.uses("[bar]", 60)
+        let result = surface(markdown, cmarkBugCompatible: false)
+        XCTAssertEqual(10, count("InlineAttributes", in: result))
+        XCTAssertEqual(60, count("Link destination:", in: result))
+    }
+
+    /// Flag-off (shipped): all 60 link uses resolve beside the footnote references, where cmark-gfm's budget
+    /// stops at 49.
+    func testFlagOffFootnoteReferencesBesideAllLinks() {
+        let markdown = "[^n]: note\n\n" + Self.definition("bar", destinationBytes: 2001)
+            + Self.uses("[^n]", 100) + " " + Self.uses("[bar]", 60)
+        let result = surface(markdown, cmarkBugCompatible: false, options: .footnotes)
+        XCTAssertEqual(100, count("FootnoteReference", in: result))
+        XCTAssertEqual(60, count("Link destination:", in: result))
+    }
+
+    /// Flag-off (shipped): the heading's and the paragraph's 30 uses each all resolve, where cmark-gfm's
+    /// budget leaves the paragraph 19.
+    func testFlagOffEveryBlockResolves() {
+        let markdown = Self.definition("bar", destinationBytes: 2001) + "# " + Self.uses("[bar]", 30) + "\n\n"
+            + Self.uses("[bar]", 30)
+        let result = surface(markdown, cmarkBugCompatible: false)
+        let paragraph = result.components(separatedBy: "Paragraph").last!
+        XCTAssertEqual(60, count("Link destination:", in: result))
+        XCTAssertEqual(30, count("Link destination:", in: paragraph))
+    }
 }

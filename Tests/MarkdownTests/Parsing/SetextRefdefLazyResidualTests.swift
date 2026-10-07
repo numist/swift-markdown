@@ -95,4 +95,64 @@ class SetextRefdefLazyResidualTests: XCTestCase {
     func testLazyTwoSpacesFlagOff() {
         XCTAssertEqual(Self.quotedHeading("      └─ Text \"b\""), surface(">[a]:u\n  b\n>=\n", cmarkBugCompatible: false))
     }
+
+    /// Flag-off (shipped): a setext heading's content is stripped of leading whitespace, where cmark-gfm
+    /// keeps the lazy line's leading tab.
+    func testLazyTabFlagOff() {
+        XCTAssertEqual(Self.quotedHeading("      └─ Text \"b\""), surface(">[a]:u\n\tb\n>=\n", cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): a setext heading's content is stripped of leading whitespace, where cmark-gfm
+    /// keeps the first remainder line's leading space.
+    func testMultiLineRemainderFlagOff() {
+        XCTAssertEqual(
+            Self.quotedHeading("      ├─ Text \"b\"\n      ├─ SoftBreak\n      └─ Text \"c\""),
+            surface(">[a]:u\n b\n c\n>=\n", cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): a setext heading's content is stripped of leading whitespace, where cmark-gfm
+    /// keeps the lazy line's leading space under a `---` underline.
+    func testDashUnderlineFlagOff() {
+        XCTAssertEqual(Self.quotedHeading(level: 2, "      └─ Text \"b\""), surface(">[a]:u\n b\n>---\n", cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): a setext heading's content is stripped of leading whitespace, where cmark-gfm
+    /// keeps the lazy line's leading space in a list item.
+    func testListLazyResidualFlagOff() {
+        XCTAssertEqual(
+            "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 1\n         └─ Text \"b\"",
+            surface("- [a]:u\n b\n  =\n", cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): a setext heading's content is stripped of leading whitespace, where cmark-gfm
+    /// keeps the space left after the outer `>` prefix match.
+    func testNestedQuotePartialPrefixFlagOff() {
+        XCTAssertEqual(
+            "Document\n└─ BlockQuote\n   └─ BlockQuote\n      └─ Heading level: 1\n         └─ Text \"b\"",
+            surface(">>[a]:u\n>  b\n>>=\n", cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): a setext heading's content is stripped of leading whitespace, where cmark-gfm
+    /// keeps the lazy line's leading space after the checkbox and definition.
+    func testTaskCheckboxThenRefDefFlagOff() {
+        XCTAssertEqual(
+            "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [ ]\n      └─ Heading level: 1\n         └─ Text \"b\"",
+            surface("- [ ] [a]:u\n b\n  =\n", cmarkBugCompatible: false))
+    }
+
+    func testNonLazyContinuationFlagOff() {
+        XCTAssertEqual(Self.quotedHeading("      └─ Text \"b\""), surface(">[a]:u\n>  b\n>=\n", cmarkBugCompatible: false))
+    }
+
+    func testNoRefDefFlagOff() {
+        XCTAssertEqual(
+            Self.quotedHeading("      ├─ Text \"a\"\n      ├─ SoftBreak\n      └─ Text \"b\""),
+            surface(">a\n b\n>=\n", cmarkBugCompatible: false))
+    }
+
+    func testTaskCheckboxGapFlagOff() {
+        XCTAssertEqual(
+            "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [ ]\n      └─ Heading level: 1\n         └─ Text \"b\"",
+            surface("- [ ]  \tb\n  =\n", cmarkBugCompatible: false))
+    }
 }

@@ -25,11 +25,16 @@ class InlineOnlyTextConsolidationTests: XCTestCase {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"_f\"", surface("_f", .inlineOnly))
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"~x\"", surface("~x", .inlineOnly))
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[t\"", surface("[t", .inlineOnly))
+        assertMerges("_f", into: "_f", modes: [.inlineOnly])
+        assertMerges("~x", into: "~x", modes: [.inlineOnly])
+        assertMerges("[t", into: "[t", modes: [.inlineOnly])
     }
 
     func testFailedDelimiterMergesPreserveWhitespace() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"_f\"", surface("_f", .preserveWhitespace))
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[t\"", surface("[t", .preserveWhitespace))
+        assertMerges("_f", into: "_f", modes: [.preserveWhitespace])
+        assertMerges("[t", into: "[t", modes: [.preserveWhitespace])
     }
 
     /// Asserts `markdown` parses to a paragraph holding the single text node `merged`, in both inline-only

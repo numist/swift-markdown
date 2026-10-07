@@ -34,4 +34,13 @@ class FootnoteDefAfterCaretRefParagraphTests: XCTestCase {
             Document(parsing: String(decoding: Self.bytes, as: UTF8.self), options: options)
                 .debugDescription(options: []))
     }
+
+    /// Flag-off (shipped): the innermost brackets `[^^]` form the footnote reference and the `[^^]:` line
+    /// defines it, where cmark-gfm keeps the whole paragraph literal and registers no definition.
+    func testFlagOffResolvesInnerReferenceAndDefinition() {
+        XCTAssertEqual(
+            "Document\n├─ Paragraph\n│  ├─ Text \"[^ \"\n│  ├─ FootnoteReference label: \"^\" index: 1\n│  └─ Text \"]\"\n└─ FootnoteDefinition label: \"^\"",
+            Document(parsing: String(decoding: Self.bytes, as: UTF8.self), options: Self.fuzzedBits)
+                .debugDescription(options: []))
+    }
 }

@@ -38,6 +38,11 @@ class FootnoteReferenceLabelLengthCapTests: XCTestCase {
         "Document\n└─ Paragraph\n   └─ Text \"\(text)\""
     }
 
+    /// The surface of `referenceAndDefinition(label)` when the reference resolves.
+    private func resolvedReference(_ label: String) -> String {
+        "Document\n├─ Paragraph\n│  ├─ Text \"x\"\n│  └─ FootnoteReference label: \"\(label)\" index: 1\n└─ FootnoteDefinition label: \"\(label)\"\n   └─ Paragraph\n      └─ Text \"note\""
+    }
+
     func testAtCapResolves() {
         XCTAssertTrue(surface(1000).contains("FootnoteReference"))
         XCTAssertTrue(surface(999).contains("FootnoteReference"))
@@ -144,5 +149,108 @@ class FootnoteReferenceLabelLengthCapTests: XCTestCase {
     func testSpecOverCapStaysLiteral() {
         let label = String(repeating: "a", count: 1000)
         XCTAssertEqual(literalParagraph("x[^\(label)]"), surface(referenceAndDefinition(label), bugCompatible: false))
+    }
+
+    /// Flag-off (shipped): a footnote label holds at most 999 characters, so a 1000-byte label stays literal
+    /// where cmark-gfm's 1000-byte lookup cap resolves it.
+    func testFlagOffAtCap() {
+        let label999 = String(repeating: "a", count: 999)
+        XCTAssertEqual(resolvedReference(label999), surface(referenceAndDefinition(label999), bugCompatible: false))
+        let label1000 = String(repeating: "a", count: 1000)
+        XCTAssertEqual(literalParagraph("x[^\(label1000)]"), surface(referenceAndDefinition(label1000), bugCompatible: false))
+    }
+
+    func testFlagOffOverCapStaysLiteral() {
+        let label = String(repeating: "a", count: 1001)
+        XCTAssertEqual(literalParagraph("x[^\(label)]"), surface(referenceAndDefinition(label), bugCompatible: false))
+    }
+
+    /// Flag-off (shipped): the cap counts characters, so 501 `é` (1002 bytes) resolve where cmark-gfm's
+    /// byte count leaves them literal.
+    func testFlagOffMultibyteCountsCharacters() {
+        let atCap = String(repeating: "\u{E9}", count: 500)
+        XCTAssertEqual(resolvedReference(atCap), surface(referenceAndDefinition(atCap), bugCompatible: false))
+        let overCap = atCap + "a"
+        XCTAssertEqual(resolvedReference(overCap), surface(referenceAndDefinition(overCap), bugCompatible: false))
+    }
+
+    /// Flag-off (shipped): a NUL is one character (the U+FFFD it becomes), so a 999-character label ending
+    /// in one resolves where cmark-gfm counts the replacement's 3 bytes and leaves it literal.
+    func testFlagOffNULCountsOneCharacter() {
+        let atCap = String(repeating: "a", count: 997)
+        XCTAssertEqual(resolvedReference(atCap + "\u{FFFD}"), surface(referenceAndDefinition(atCap + "\u{0}"), bugCompatible: false))
+        let overCap = String(repeating: "a", count: 998)
+        XCTAssertEqual(resolvedReference(overCap + "\u{FFFD}"), surface(referenceAndDefinition(overCap + "\u{0}"), bugCompatible: false))
+    }
+
+    /// Flag-off (shipped): an over-cap reference is ordinary paragraph text, so its entity decodes, where
+    /// cmark-gfm restores the reference's undecoded source text.
+    func testFlagOffOverCapDecodesEntity() {
+        let label = String(repeating: "a", count: 996) + "&amp;"
+        XCTAssertEqual(literalParagraph("x[^\(String(repeating: "a", count: 996))&]"), surface(referenceAndDefinition(label), bugCompatible: false))
+    }
+
+    /// Flag-off (shipped): the 999-character cap applies after an image-shaped `!`, so a 1000-byte label
+    /// stays literal where cmark-gfm's 1000-byte cap resolves it.
+    func testFlagOffImageShapedOpener() {
+        let atCap = String(repeating: "a", count: 1000)
+        XCTAssertEqual(literalParagraph("x![^\(atCap)]"), surface("x![^\(atCap)]\n\n[^\(atCap)]: note", bugCompatible: false))
+        let label = String(repeating: "a", count: 1001)
+        XCTAssertEqual(literalParagraph("x![^\(label)]"), surface("x![^\(label)]\n\n[^\(label)]: note", bugCompatible: false))
+    }
+
+    /// Flag-off (shipped): the 999-character cap applies in a block quote, so a 1000-byte label stays
+    /// literal where cmark-gfm's 1000-byte cap resolves it.
+    func testFlagOffReferenceInBlockQuote() {
+        let atCap = String(repeating: "a", count: 1000)
+        XCTAssertEqual(
+            "Document\n└─ BlockQuote\n   └─ Paragraph\n      └─ Text \"x[^\(atCap)]\"",
+            surface("> x[^\(atCap)]\n\n[^\(atCap)]: note", bugCompatible: false)
+        )
+        let label = String(repeating: "a", count: 1001)
+        XCTAssertEqual(
+            "Document\n└─ BlockQuote\n   └─ Paragraph\n      └─ Text \"x[^\(label)]\"",
+            surface("> x[^\(label)]\n\n[^\(label)]: note", bugCompatible: false)
+        )
+    }
+
+    func testFlagOffRepeatedReferenceOverCapStaysLiteral() {
+        let label = String(repeating: "a", count: 1001)
+        XCTAssertEqual(
+            literalParagraph("x[^\(label)] y[^\(label)]"),
+            surface("x[^\(label)] y[^\(label)]\n\n[^\(label)]: note", bugCompatible: false)
+        )
+    }
+
+    /// Flag-off (shipped): a label spanning the line break holds both lines' characters, over the cap, so it
+    /// stays literal text around a soft break, where cmark-gfm measures a column-captured slice of the
+    /// first line and resolves or collapses that.
+    func testFlagOffCrossLineLabelStaysLiteral() {
+        for length in [1000, 1001] {
+            let label = String(repeating: "a", count: length)
+            let second = String(repeating: "b", count: length + 2)
+            XCTAssertEqual(
+                "Document\n└─ Paragraph\n   ├─ Text \"[^\(label)\"\n   ├─ SoftBreak\n   └─ Text \"\(second)]\"",
+                surface("[^\(label)\n\(second)]\n\n[^\(label)]: note", bugCompatible: false)
+            )
+        }
+    }
+
+    /// Flag-off (shipped): the cross-line label ending in `é` holds both lines' characters, over the cap, so
+    /// it stays literal where cmark-gfm resolves the cut first-line capture.
+    func testFlagOffCrossLineCutLabelStaysLiteral() {
+        let label = String(repeating: "a", count: 999)
+        let second = String(repeating: "b", count: 1002)
+        XCTAssertEqual(
+            "Document\n└─ Paragraph\n   ├─ Text \"[^\(label)\u{E9}\"\n   ├─ SoftBreak\n   └─ Text \"\(second)]\"",
+            surface("[^\(label)\u{E9}\n\(second)]\n\n[^\(label)\u{FFFD}]: note", bugCompatible: false)
+        )
+    }
+
+    /// Flag-off (shipped): a footnote label cannot hold an unescaped `[`, so the whole `[^[…]]` run stays
+    /// literal text, where cmark-gfm collapses it to `[^[`.
+    func testFlagOffCaretBracketStaysLiteral() {
+        let label = String(repeating: "a", count: 1001)
+        XCTAssertEqual(literalParagraph("x[^[\(label)]]"), surface("x[^[\(label)]]\n\n[^\(label)]: note", bugCompatible: false))
     }
 }

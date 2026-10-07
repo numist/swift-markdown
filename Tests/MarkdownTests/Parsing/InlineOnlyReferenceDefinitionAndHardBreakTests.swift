@@ -17,10 +17,12 @@ import XCTest
 /// Ground truth is cmark-gfm, in both `.inlineOnly` and `.preserveWhitespace`. A reference definition at the
 /// start of the input is consumed (and resolves later references) when content follows it; a lone definition,
 /// or one preceded by a space, stays literal. A `\` immediately before a line ending is a LineBreak, while
-/// trailing spaces or a tab before a line ending stay literal. Position-free compare surface.
+/// trailing spaces or a tab before a line ending stay literal. Inline-only mode has no spec and its shipped
+/// clients relied on cmark, so each case asserts the same surface with `.cmarkBugCompatibility` off.
+/// Position-free compare surface.
 class InlineOnlyReferenceDefinitionAndHardBreakTests: XCTestCase {
-    private func surface(_ markdown: String, _ options: ParseOptions) -> String {
-        Document(parsing: markdown, options: options.union(.cmarkBugCompatibility)).debugDescription(options: [])
+    private func surface(_ markdown: String, _ options: ParseOptions, cmarkBugCompatible: Bool = true) -> String {
+        Document(parsing: markdown, options: cmarkBugCompatible ? options.union(.cmarkBugCompatibility) : options).debugDescription(options: [])
     }
 
     private let modes: [ParseOptions] = [.inlineOnly, .preserveWhitespace]
@@ -28,54 +30,67 @@ class InlineOnlyReferenceDefinitionAndHardBreakTests: XCTestCase {
     func testLeadingDefinitionBeforeBlankLine() {
         for mode in modes {
             XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"\n\"\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u\n\n[a]", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"\n\"\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u\n\n[a]", mode, cmarkBugCompatible: false))
         }
     }
 
     func testLeadingDefinitionThenReference() {
         for mode in modes {
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u\n[a]", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u\n[a]", mode, cmarkBugCompatible: false))
             XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"x \"\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u \"t\"\nx [a]", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"x \"\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u \"t\"\nx [a]", mode, cmarkBugCompatible: false))
         }
     }
 
     func testDefinitionDestinationOnNextLine() {
         for mode in modes {
             XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"\n\"\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]:\n/u\n\n[a]", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"\n\"\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]:\n/u\n\n[a]", mode, cmarkBugCompatible: false))
         }
     }
 
     func testLiteralDefinitionControls() {
         for mode in modes {
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[a]: /u\"", surface("[a]: /u", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[a]: /u\"", surface("[a]: /u", mode, cmarkBugCompatible: false))
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \" [a]: /u\n\n[a]\"", surface(" [a]: /u\n\n[a]", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \" [a]: /u\n\n[a]\"", surface(" [a]: /u\n\n[a]", mode, cmarkBugCompatible: false))
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"x\n[a]: /u\n[a]\"", surface("x\n[a]: /u\n[a]", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"x\n[a]: /u\n[a]\"", surface("x\n[a]: /u\n[a]", mode, cmarkBugCompatible: false))
         }
     }
 
     func testBackslashHardBreak() {
         for mode in modes {
             XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"a\"\n   ├─ LineBreak\n   └─ Text \"b\"", surface("a\\\nb", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"a\"\n   ├─ LineBreak\n   └─ Text \"b\"", surface("a\\\nb", mode, cmarkBugCompatible: false))
         }
     }
 
     func testTrailingWhitespaceStaysLiteral() {
         for mode in modes {
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"a  \nb\"", surface("a  \nb", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"a  \nb\"", surface("a  \nb", mode, cmarkBugCompatible: false))
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"a\t\nb\"", surface("a\t\nb", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"a\t\nb\"", surface("a\t\nb", mode, cmarkBugCompatible: false))
         }
     }
 
     func testStackedLeadingDefinitions() {
         for mode in modes {
             XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Link destination: \"/u\"\n   │  └─ Text \"a\"\n   ├─ Text \" \"\n   └─ Link destination: \"/v\"\n      └─ Text \"b\"", surface("[a]: /u\n[b]: /v\n[a] [b]", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Link destination: \"/u\"\n   │  └─ Text \"a\"\n   ├─ Text \" \"\n   └─ Link destination: \"/v\"\n      └─ Text \"b\"", surface("[a]: /u\n[b]: /v\n[a] [b]", mode, cmarkBugCompatible: false))
         }
     }
 
     func testDefinitionTitleSpanningLines() {
         for mode in modes {
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u \"t\nu\"\n[a]", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u \"t\nu\"\n[a]", mode, cmarkBugCompatible: false))
             // A next-line title with trailing content is rejected; the definition ends after its destination.
             XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"(t) x\n\"\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u\n(t) x\n[a]", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"(t) x\n\"\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u\n(t) x\n[a]", mode, cmarkBugCompatible: false))
         }
     }
 
@@ -84,8 +99,11 @@ class InlineOnlyReferenceDefinitionAndHardBreakTests: XCTestCase {
     func testDefinitionFollowedOnlyByWhitespace() {
         for mode in modes {
             XCTAssertEqual("Document\n└─ Paragraph", surface("[a]: /u\n", mode))
+            XCTAssertEqual("Document\n└─ Paragraph", surface("[a]: /u\n", mode, cmarkBugCompatible: false))
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"  \"", surface("[a]: /u\n  ", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"  \"", surface("[a]: /u\n  ", mode, cmarkBugCompatible: false))
             XCTAssertEqual("Document\n└─ Paragraph", surface("[a]: /u \"t\"", mode))
+            XCTAssertEqual("Document\n└─ Paragraph", surface("[a]: /u \"t\"", mode, cmarkBugCompatible: false))
         }
     }
 
@@ -94,6 +112,7 @@ class InlineOnlyReferenceDefinitionAndHardBreakTests: XCTestCase {
     func testDefinitionDestinationAtEndOfInputStaysLiteral() {
         for mode in modes {
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[b]: /v\"", surface("[a]: /u\n[b]: /v", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[b]: /v\"", surface("[a]: /u\n[b]: /v", mode, cmarkBugCompatible: false))
         }
     }
 
@@ -108,6 +127,7 @@ class InlineOnlyReferenceDefinitionAndHardBreakTests: XCTestCase {
     func testDefinitionAfterCRLF() {
         for mode in modes {
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u\r\n[a]", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u\r\n[a]", mode, cmarkBugCompatible: false))
         }
     }
 
@@ -115,12 +135,17 @@ class InlineOnlyReferenceDefinitionAndHardBreakTests: XCTestCase {
         for mode in modes {
             // At end of input the backslash is literal.
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"a\\\"", surface("a\\", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"a\\\"", surface("a\\", mode, cmarkBugCompatible: false))
             XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"a\"\n   ├─ LineBreak\n   └─ Text \"b\"", surface("a\\\r\nb", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"a\"\n   ├─ LineBreak\n   └─ Text \"b\"", surface("a\\\r\nb", mode, cmarkBugCompatible: false))
             XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"a\"\n   └─ LineBreak", surface("a\\\n", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"a\"\n   └─ LineBreak", surface("a\\\n", mode, cmarkBugCompatible: false))
             // The next line's leading spaces stay literal.
             XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"a\"\n   ├─ LineBreak\n   └─ Text \"  b\"", surface("a\\\n  b", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"a\"\n   ├─ LineBreak\n   └─ Text \"  b\"", surface("a\\\n  b", mode, cmarkBugCompatible: false))
             // An escaped backslash does not break.
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"a\\\nb\"", surface("a\\\\\nb", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"a\\\nb\"", surface("a\\\\\nb", mode, cmarkBugCompatible: false))
         }
     }
 
@@ -136,21 +161,29 @@ class InlineOnlyReferenceDefinitionAndHardBreakTests: XCTestCase {
         for mode in modes {
             // A pointy destination reaching the end of input is rejected like a bare one.
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[a]: <>\"", surface("[a]: <>", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[a]: <>\"", surface("[a]: <>", mode, cmarkBugCompatible: false))
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Link destination: \"u\"\n      └─ Text \"a\"", surface("[a]: <u> \"t\"\n[a]", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Link destination: \"u\"\n      └─ Text \"a\"", surface("[a]: <u> \"t\"\n[a]", mode, cmarkBugCompatible: false))
             // Trailing space after the destination keeps it off the end of input, so the definition is consumed.
             XCTAssertEqual("Document\n└─ Paragraph", surface("[a]: /u ", mode))
+            XCTAssertEqual("Document\n└─ Paragraph", surface("[a]: /u ", mode, cmarkBugCompatible: false))
             // Attribute definitions are consumed too; they have no destination, so one ending the input is accepted.
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"y\"", surface("^[x]: a\ny", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"y\"", surface("^[x]: a\ny", mode, cmarkBugCompatible: false))
             XCTAssertEqual("Document\n└─ Paragraph", surface("^[x]: a", mode))
+            XCTAssertEqual("Document\n└─ Paragraph", surface("^[x]: a", mode, cmarkBugCompatible: false))
             // NUL forces the arena path; the definition is still consumed and the NUL becomes U+FFFD.
             XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"\u{FFFD}\"\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u\n\u{0}[a]", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"\u{FFFD}\"\n   └─ Link destination: \"/u\"\n      └─ Text \"a\"", surface("[a]: /u\n\u{0}[a]", mode, cmarkBugCompatible: false))
         }
     }
 
     func testBackslashHardBreakAfterInlineConstruct() {
         for mode in modes {
             XCTAssertEqual("Document\n└─ Paragraph\n   ├─ InlineCode `x`\n   ├─ LineBreak\n   └─ Text \"b\"", surface("`x`\\\nb", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   ├─ InlineCode `x`\n   ├─ LineBreak\n   └─ Text \"b\"", surface("`x`\\\nb", mode, cmarkBugCompatible: false))
             XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Emphasis\n   │  └─ Text \"a\"\n   ├─ LineBreak\n   └─ Text \"b\"", surface("*a*\\\nb", mode))
+            XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Emphasis\n   │  └─ Text \"a\"\n   ├─ LineBreak\n   └─ Text \"b\"", surface("*a*\\\nb", mode, cmarkBugCompatible: false))
         }
     }
 }

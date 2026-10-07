@@ -43,10 +43,12 @@ class LinkTitleAcrossIndentedContinuationTests: XCTestCase {
 
     func testEscapedParenDestination() {
         XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"x\"\n   ├─ SoftBreak\n   └─ Image source: \"(\" title: \"'\n\"", surface("x\n ![](\\(\n'\\'\n')"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"x\"\n   ├─ SoftBreak\n   └─ Image source: \"(\" title: \"'\n\"", surface("x\n ![](\\(\n'\\'\n')", options: []))
     }
 
     func testTitleSpanningThreeLines() {
         XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"x\"\n   ├─ SoftBreak\n   └─ Image source: \"a\" title: \"'\nb\n\"", surface("x\n ![](a\n'\\'\nb\n')"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"x\"\n   ├─ SoftBreak\n   └─ Image source: \"a\" title: \"'\nb\n\"", surface("x\n ![](a\n'\\'\nb\n')", options: []))
     }
 
     func testBlockQuoteContainer() {
@@ -64,11 +66,13 @@ class LinkTitleAcrossIndentedContinuationTests: XCTestCase {
     /// forms, as for the unindented twin.
     func testLongestTitleWithoutCloserIsNotALink() {
         XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"x\"\n   ├─ SoftBreak\n   ├─ Text \"[](a ’')\"\n   ├─ SoftBreak\n   └─ Text \"’\"", surface("x\n [](a '\\')\n'"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"x\"\n   ├─ SoftBreak\n   ├─ Text \"[](a ’')\"\n   ├─ SoftBreak\n   └─ Text \"’\"", surface("x\n [](a '\\')\n'", options: []))
     }
 
     /// An unescaped line ending ends a `<…>` destination scan across a join, as for the unindented twin.
     func testPointyDestinationWithBareLineEndIsNotALink() {
         XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"x\"\n   ├─ SoftBreak\n   ├─ Text \"[](\"\n   ├─ InlineHTML <a\nb>\n   └─ Text \")\"", surface("x\n [](<a\nb>)"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"x\"\n   ├─ SoftBreak\n   ├─ Text \"[](\"\n   ├─ InlineHTML <a\nb>\n   └─ Text \")\"", surface("x\n [](<a\nb>)", options: []))
     }
 
     func testUnindentedControl() {

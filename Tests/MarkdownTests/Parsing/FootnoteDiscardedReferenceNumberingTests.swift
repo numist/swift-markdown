@@ -16,8 +16,8 @@ import XCTest
 /// definition order. cmark-gfm's `process_footnotes` numbers only the references that survive in the
 /// finalized tree, in document order, and appends definitions in that index order.
 class FootnoteDiscardedReferenceNumberingTests: XCTestCase {
-    private func dump(_ markdown: String) -> String {
-        Document(parsing: markdown, options: [.footnotes, .cmarkBugCompatibility])
+    private func dump(_ markdown: String, cmarkBugCompatible: Bool = true) -> String {
+        Document(parsing: markdown, options: cmarkBugCompatible ? [.footnotes, .cmarkBugCompatibility] : [.footnotes])
             .debugDescription(options: [])
     }
 
@@ -84,5 +84,79 @@ class FootnoteDiscardedReferenceNumberingTests: XCTestCase {
                   └─ FootnoteReference label: "b" index: 1
             """,
             dump("[^a]: see [^b]\n\n> - q [^c] [^b]\n\n[^b]: x\n\n[^c]: y\n\ntext [^a]\n"))
+    }
+
+    /// Flag-off (shipped): `[^ …]` is not a footnote reference, so the inner `[^a]` survives and takes
+    /// index 1 ahead of `[^b]`, where cmark-gfm's literal reconstruction discards it.
+    func testFlagOffInnerReferenceTakesFirstIndex() {
+        XCTAssertEqual(
+            """
+            Document
+            ├─ Paragraph
+            │  ├─ Text "[^ "
+            │  ├─ FootnoteReference label: "a" index: 1
+            │  ├─ Text "] "
+            │  └─ FootnoteReference label: "b" index: 2
+            ├─ FootnoteDefinition label: "a"
+            │  └─ Paragraph
+            │     └─ Text "A"
+            └─ FootnoteDefinition label: "b"
+               └─ Paragraph
+                  └─ Text "B"
+            """,
+            dump("[^ [^a]] [^b]\n\n[^a]: A\n\n[^b]: B\n", cmarkBugCompatible: false))
+    }
+
+    /// Flag-off (shipped): the surviving inner `[^a]` orders definition `a` first and the later `[^a]`
+    /// reuses its index, where cmark-gfm discards the inner reference and orders `b` first.
+    func testFlagOffInnerReferenceOrdersDefinitions() {
+        XCTAssertEqual(
+            """
+            Document
+            ├─ Paragraph
+            │  ├─ Text "[^ "
+            │  ├─ FootnoteReference label: "a" index: 1
+            │  ├─ Text "] "
+            │  ├─ FootnoteReference label: "b" index: 2
+            │  ├─ Text " "
+            │  └─ FootnoteReference label: "a" index: 1
+            ├─ FootnoteDefinition label: "a"
+            │  └─ Paragraph
+            │     └─ Text "A"
+            └─ FootnoteDefinition label: "b"
+               └─ Paragraph
+                  └─ Text "B"
+            """,
+            dump("[^ [^a]] [^b] [^a]\n\n[^a]: A\n\n[^b]: B\n", cmarkBugCompatible: false))
+    }
+
+    /// Flag-off numbers references in the same document pre-order.
+    func testFlagOffReferencesNumberInDocumentPreOrder() {
+        XCTAssertEqual(
+            """
+            Document
+            ├─ BlockQuote
+            │  └─ UnorderedList
+            │     └─ ListItem
+            │        └─ Paragraph
+            │           ├─ Text "q "
+            │           ├─ FootnoteReference label: "c" index: 2
+            │           ├─ Text " "
+            │           └─ FootnoteReference label: "b" index: 1
+            ├─ Paragraph
+            │  ├─ Text "text "
+            │  └─ FootnoteReference label: "a" index: 3
+            ├─ FootnoteDefinition label: "b"
+            │  └─ Paragraph
+            │     └─ Text "x"
+            ├─ FootnoteDefinition label: "c"
+            │  └─ Paragraph
+            │     └─ Text "y"
+            └─ FootnoteDefinition label: "a"
+               └─ Paragraph
+                  ├─ Text "see "
+                  └─ FootnoteReference label: "b" index: 1
+            """,
+            dump("[^a]: see [^b]\n\n> - q [^c] [^b]\n\n[^b]: x\n\n[^c]: y\n\ntext [^a]\n", cmarkBugCompatible: false))
     }
 }

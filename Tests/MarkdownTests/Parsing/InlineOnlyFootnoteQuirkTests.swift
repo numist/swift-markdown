@@ -17,9 +17,9 @@ import XCTest
 /// byte's inline-mode bit (`0x20`, plus `0x10` for preserveWhitespace); the expected surfaces are the
 /// reference's output bytes. Inputs are `[markdown …][option byte]`, split as the fuzzer does.
 class InlineOnlyFootnoteQuirkTests: XCTestCase {
-    private func surface(_ bytes: [UInt8]) -> String {
+    private func surface(_ bytes: [UInt8], cmarkBugCompatible: Bool = true) -> String {
         let (markdown, options) = FuzzRegressionTests.splitInput(bytes)!
-        return Document(parsing: markdown, options: options.union(.cmarkBugCompatibility)).debugDescription(options: [])
+        return Document(parsing: markdown, options: cmarkBugCompatible ? options.union(.cmarkBugCompatibility) : options).debugDescription(options: [])
     }
 
     func test_footnote_multiline_label_io() {
@@ -137,4 +137,98 @@ class InlineOnlyFootnoteQuirkTests: XCTestCase {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^`a\nb`\nc]\"", Document(parsing: "[^`a\nb`\nc]", options: options).debugDescription(options: []))
     }
 
+    // Flag-off (shipped): the same inputs in both inline-only modes.
+
+    func test_footnote_multiline_label_flag_off() {
+        for optionByte: UInt8 in [160, 176] {
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^\n\u{fffd}]\"", surface([91, 94, 10, 128, 93] + [optionByte], cmarkBugCompatible: false))
+        }
+    }
+
+    /// A footnote label cannot hold `[`, so the bracket run stays literal text, where cmark-gfm collapses it to `[^[`.
+    func test_footnote_caret_bracket_innerclose_flag_off() {
+        for optionByte: UInt8 in [160, 176] {
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^[]\n]\"", surface([91, 94, 91, 93, 10, 93] + [optionByte], cmarkBugCompatible: false))
+        }
+    }
+
+    /// A footnote label cannot hold `[`, so the bracket run stays literal text, where cmark-gfm collapses it to `[^[`.
+    func test_footnote_caret_bracket_spans_empty_flag_off() {
+        for optionByte: UInt8 in [160, 176] {
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^[\n]]\"", surface([91, 94, 91, 10, 93, 93] + [optionByte], cmarkBugCompatible: false))
+        }
+    }
+
+    /// An escaped `^` is a literal caret, so the text keeps its single `]`, where cmark-gfm over-reads a second `]`.
+    func test_footnote_escaped_caret_crossline_flag_off() {
+        for optionByte: UInt8 in [160, 176] {
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^\nx]\"", surface([91, 92, 94, 10, 120, 93] + [optionByte], cmarkBugCompatible: false))
+        }
+    }
+
+    /// An escaped `^` is a literal caret, so the text keeps its leading `!`, where cmark-gfm drops it.
+    func test_footnote_escaped_caret_image_flag_off() {
+        for optionByte: UInt8 in [160, 176] {
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"![^x]\"", surface([33, 91, 92, 94, 120, 93] + [optionByte], cmarkBugCompatible: false))
+        }
+    }
+
+    func test_footnote_multiline_collapse_blockquote_flag_off() {
+        for optionByte: UInt8 in [160, 176] {
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \">[^\n\u{fffd}]\"", surface([62, 91, 94, 10, 128, 93] + [optionByte], cmarkBugCompatible: false))
+        }
+    }
+
+    func test_footnote_multiline_label_multibyte_flag_off() {
+        for optionByte: UInt8 in [160, 176] {
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^\n\u{fffd}p]\"", surface([91, 94, 10, 128, 112, 93] + [optionByte], cmarkBugCompatible: false))
+        }
+    }
+
+    func test_probe_crossline_plain_label_flag_off() {
+        for optionByte: UInt8 in [160, 176] {
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"a[^x\ny]b\"", surface(Array("a[^x\ny]b".utf8) + [optionByte], cmarkBugCompatible: false))
+        }
+    }
+
+    func test_probe_crossline_crlf_label_flag_off() {
+        for optionByte: UInt8 in [160, 176] {
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^a\nb]\"", surface(Array("[^a\r\nb]".utf8) + [optionByte], cmarkBugCompatible: false))
+        }
+    }
+
+    /// Backticks form a code span whose line ending becomes a space, where cmark-gfm collapses the unresolved footnote bracket over it to `[^`a]`.
+    func test_probe_codespan_newline_resets_flag_off() {
+        for optionByte: UInt8 in [160, 176] {
+            XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"[^\"\n   ├─ InlineCode `a b`\n   └─ Text \"\nc]\"", surface(Array("[^`a\nb`\nc]".utf8) + [optionByte], cmarkBugCompatible: false))
+        }
+    }
+
+    /// An escaped `^` is a literal caret, so the text keeps its single `]`, where cmark-gfm over-reads a second `]`.
+    func test_probe_escaped_caret_crossline_long_flag_off() {
+        for optionByte: UInt8 in [160, 176] {
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^abcdef\nxxxxx]\"", surface(Array("[\\^abcdef\nxxxxx]".utf8) + [optionByte], cmarkBugCompatible: false))
+        }
+    }
+
+    /// An escaped `^` is a literal caret, so the text keeps its leading `!`, where cmark-gfm drops it.
+    func test_probe_escaped_caret_image_crossline_flag_off() {
+        for optionByte: UInt8 in [160, 176] {
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"![^a\nb]\"", surface(Array("![\\^a\nb]".utf8) + [optionByte], cmarkBugCompatible: false))
+        }
+    }
+
+    /// An escaped `^` is a literal caret, so the text is the source with its `!` and no extra `]`, where cmark-gfm drops the `!` and over-reads a `]`.
+    func test_probe_escaped_caret_image_trailing_newline_flag_off() {
+        for optionByte: UInt8 in [160, 176] {
+            XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"![^x]\n\"", surface(Array("![\\^x]\n".utf8) + [optionByte], cmarkBugCompatible: false))
+        }
+    }
+
+    /// Flag-off (shipped): with source positions off too, backticks form a code span whose line ending
+    /// becomes a space, where cmark-gfm keeps the whole bracket run literal.
+    func test_probe_codespan_newline_sourcepos_off_flag_off() {
+        let options: ParseOptions = [.inlineOnly, .footnotes, .disableSourcePosOpts]
+        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"[^\"\n   ├─ InlineCode `a b`\n   └─ Text \"\nc]\"", Document(parsing: "[^`a\nb`\nc]", options: options).debugDescription(options: []))
+    }
 }

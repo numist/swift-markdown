@@ -25,8 +25,8 @@ import Testing
 @Suite("Multi-segment attribute surface")
 struct MultiSegmentAttributeSurfaceTests {
 
-    private static func surface(_ markdown: String) -> String {
-        Document(parsing: markdown, options: [.cmarkBugCompatibility])
+    private static func surface(_ markdown: String, options: ParseOptions = [.cmarkBugCompatibility]) -> String {
+        Document(parsing: markdown, options: options)
             .debugDescription(options: .printSourceLocations)
     }
 
@@ -43,6 +43,47 @@ struct MultiSegmentAttributeSurfaceTests {
         // string carries the interior newline (reading it forces the arena materialization).
         #expect(rendered.contains("InlineAttributes"))
         #expect(rendered.contains("attributes: `\(expectedAttributes)`"))
+    }
+
+    /// The same cross-line forms with `.cmarkBugCompatibility` off: the attribute spans the line join and
+    /// keeps the interior newline, as cmark-gfm's does.
+    @Test(arguments: [
+        ("> ^[a](\n> b)", """
+            Document @1:1-2:5
+            └─ BlockQuote @1:1-2:5
+               └─ Paragraph @1:3-2:5
+                  └─ InlineAttributes @1:3-2:5 attributes: `
+            b`
+                     └─ Text @1:5-1:6 "a"
+            """),
+        ("> ^[hi](\n> x)", """
+            Document @1:1-2:5
+            └─ BlockQuote @1:1-2:5
+               └─ Paragraph @1:3-2:5
+                  └─ InlineAttributes @1:3-2:5 attributes: `
+            x`
+                     └─ Text @1:5-1:7 "hi"
+            """),
+        ("- ^[a](\n  b)", """
+            Document @1:1-2:5
+            └─ UnorderedList @1:1-2:5
+               └─ ListItem @1:1-2:5
+                  └─ Paragraph @1:3-2:5
+                     └─ InlineAttributes @1:3-2:5 attributes: `
+            b`
+                        └─ Text @1:5-1:6 "a"
+            """),
+        (">^[a](b\n>c)", """
+            Document @1:1-2:4
+            └─ BlockQuote @1:1-2:4
+               └─ Paragraph @1:2-2:4
+                  └─ InlineAttributes @1:2-2:4 attributes: `b
+            c`
+                     └─ Text @1:4-1:5 "a"
+            """),
+    ])
+    func crossLineAttributeFormsFlagOff(_ markdown: String, _ expected: String) {
+        #expect(Self.surface(markdown, options: []) == expected)
     }
 
     /// A trailing `[label]` following an `^[](attrs)` attribute is consumed by cmark's `link_label`,

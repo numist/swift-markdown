@@ -18,4 +18,9 @@ class InlineBomOnlyFuzzArtifactTests: XCTestCase {
         let (markdown, options) = FuzzRegressionTests.splitInput([239, 187, 191, 46])!
         XCTAssertEqual("Document\n└─ Paragraph", Document(parsing: markdown, options: options.union(.cmarkBugCompatibility)).debugDescription(options: []))
     }
+
+    func testFlagOff() {
+        let (markdown, options) = FuzzRegressionTests.splitInput([239, 187, 191, 46])!
+        XCTAssertEqual("Document\n└─ Paragraph", Document(parsing: markdown, options: options).debugDescription(options: []))
+    }
 }
