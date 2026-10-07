@@ -238,6 +238,11 @@ extension BlockParser {
                         into: parent,
                         content: content
                     )
+                    // Links may not contain other links (spec "Links"), and an autolink binds more tightly
+                    // than link text brackets, so the link openers before it can no longer form links.
+                    if !storage.options.contains(.cmarkBugCompatibility) {
+                        noLinkOpeners = true
+                    }
                     cursor = auto.afterClose
                     pendingTextStart = cursor
                     continue
@@ -747,6 +752,12 @@ extension BlockParser {
                 labelIsBlank = normalizeLabel(virtualRange: lr, in: content).isEmpty
             } else {
                 labelIsBlank = true
+            }
+            // A whitespace-only `[ ]` is neither a link label nor `[]` (spec "Links": a link label holds a
+            // non-whitespace character), so a shortcut reference before it leaves it as text.
+            let labelIsWhitespace = labelIsBlank && (labelChunk.map { $0.length > 0 } ?? (labelRange.map { !$0.isEmpty } ?? false))
+            if labelIsWhitespace && !storage.options.contains(.cmarkBugCompatibility) {
+                afterRefForm = pos
             }
             if labelIsBlank && !openerBracketAfter {
                 // Virtual offsets: the opener's `[` / `![` sits at `virtualStart`; the shortcut label runs from just past it to the `]` (`cursor`). `contiguousChunk` maps that virtual range to a real buffer chunk only when it lies within a single source segment. When it does, resolve from that chunk. When it straddles a multi-segment join (a soft break inside the label, `[foo\nbar]`), `contiguousChunk` can't image the whole label, so carry the virtual range and normalize across the join instead — cmark resolves such a multi-line label, so giving up here would leave the reference literal.
@@ -3377,7 +3388,10 @@ extension BlockParser {
         if trimmedEnd <= colon + 3 {
             return nil
         }
-        if !schemeURLDomainAccepted(afterSlashes: colon + 3, end: end, content: content) {
+        let domainAccepted = storage.options.contains(.cmarkBugCompatibility)
+            ? schemeURLDomainAccepted(afterSlashes: colon + 3, end: end, content: content)
+            : validDomainEnd(start: colon + 3, end: trimmedEnd, content: content) != nil
+        if !domainAccepted {
             return nil
         }
         return GFMAutolinkMatch(
@@ -3426,7 +3440,8 @@ extension BlockParser {
         // before scanning the URL body and returns NULL on failure, so a domain bearing an underscore in
         // either of its last two `.`-separated labels (a host name may not) is never linked. The rejection
         // is GFM-spec-correct, so it applies in both modes - unlike the bare-`www` over-trim below.
-        guard checkDomainAccepted(base: start, end: end, requireDot: true, content: content) else {
+        let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
+        guard !bugCompatible || checkDomainAccepted(base: start, end: end, requireDot: true, content: content) else {
             return nil
         }
         let urlEnd = scanGFMURLBody(start: start + 4, end: end, content: content)
@@ -3434,6 +3449,11 @@ extension BlockParser {
             urlStart: start, urlEnd: urlEnd,
             content: content
         )
+        // The trailing punctuation removed above is not part of the autolink, so neither is it part of
+        // its domain.
+        guard bugCompatible || validDomainEnd(start: start + 4, end: trimmedEnd, content: content) != nil else {
+            return nil
+        }
         if trimmedEnd <= start + 4 {
             // why: nothing survives the trailing-punctuation trim past `www.`, so there is no real domain.
             // Flag-OFF (spec-correct) this is not a www autolink. Flag-ON reproduce cmark's `www_match`
@@ -3559,6 +3579,34 @@ extension BlockParser {
             // empty-FIRST-label `o@.e` are - their dot is followed by an alphanumeric). The scan itself also
             // ENDS at a `.` not immediately followed by an alphanumeric (cmark breaks the domain there rather
             // than consuming the dot): `a@x.y.-5` scans the domain as `x.y` and leaves `.-5` as after-text.
+            if !storage.options.contains(.cmarkBugCompatibility) {
+                // The domain is one or more segments of alphanumerics, `-` and `_` separated by periods, with
+                // at least one period, ending in neither `-` nor `_` (spec "Autolinks (extension)"). A
+                // period no segment follows ends the address before it.
+                var i = atSign + 1
+                var periods = 0
+                while true {
+                    let segmentStart = i
+                    while i < end, isEmailDomainByte(content[i], isXmpp: isXmpp) {
+                        i += 1
+                    }
+                    guard i > segmentStart, i + 1 < end, content[i] == UInt8(ascii: "."),
+                          isEmailDomainByte(content[i + 1], isXmpp: isXmpp) else {
+                        break
+                    }
+                    periods += 1
+                    i += 1
+                }
+                if i < end, content[i] == UInt8(ascii: "@") {
+                    atSign = i
+                    continue
+                }
+                resumeAt = max(i, atSign + 1)
+                guard periods > 0, content[i - 1] != UInt8(ascii: "-"), content[i - 1] != UInt8(ascii: "_") else {
+                    return nil
+                }
+                return GFMAutolinkMatch(urlStart: localStart, urlEnd: i, form: .email, emailSchemeFolded: schemeFolded)
+            }
             var i = atSign + 1
             let domainStart = i
             var sawSecondAt = false
@@ -3619,6 +3667,13 @@ extension BlockParser {
             // `a@b.c_d`, `a@.b_o`, and `-@.b_o` all link, gated only by the letter-or-dot check above.
             return GFMAutolinkMatch(urlStart: localStart, urlEnd: i, form: .email, emailSchemeFolded: schemeFolded)
         }
+    }
+
+    /// Whether `b` may appear in an extended email autolink's domain segment: an ASCII alphanumeric, `-`
+    /// or `_`, or `/` after a folded `xmpp:` scheme.
+    private func isEmailDomainByte(_ b: UInt8, isXmpp: Bool) -> Bool {
+        b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-") || b == UInt8(ascii: "_")
+            || (isXmpp && b == UInt8(ascii: "/"))
     }
 
     /// Emit a zero-length `.text` node at virtual offset `offset` as a child of `parent`.
@@ -3810,6 +3865,60 @@ extension BlockParser {
             return false
         }
         return requireDot ? dotCount > 0 : true
+    }
+
+    /// The end of the valid domain starting at `start` (spec "Autolinks (extension)": segments of
+    /// alphanumeric characters, underscores and hyphens separated by periods, with at least one period
+    /// and no underscore in the last two segments), or `nil` when none starts there. A period that no
+    /// segment follows ends the domain before it.
+    private func validDomainEnd(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
+        var i = start
+        var periods = 0
+        var underscoreInPreviousSegment = false
+        var underscoreInSegment = false
+        while true {
+            let segmentStart = i
+            underscoreInPreviousSegment = underscoreInSegment
+            underscoreInSegment = false
+            while i < end, let width = domainCharacterWidth(at: i, content: content) {
+                if content[i] == UInt8(ascii: "_") {
+                    underscoreInSegment = true
+                }
+                i += width
+            }
+            if i == segmentStart {
+                return nil
+            }
+            guard i + 1 < end, content[i] == UInt8(ascii: "."),
+                  domainCharacterWidth(at: i + 1, content: content) != nil else {
+                break
+            }
+            periods += 1
+            i += 1
+        }
+        if periods == 0 || underscoreInSegment || underscoreInPreviousSegment {
+            return nil
+        }
+        return i
+    }
+
+    /// The byte width of the domain-segment character at `i` - an alphanumeric character (a Unicode letter or
+    /// number), `_` or `-` - or `nil` when another character is there.
+    private func domainCharacterWidth(at i: Int, content: borrowing ContentSpan) -> Int? {
+        let b = content[i]
+        if b < 0x80 {
+            return b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "_") || b == UInt8(ascii: "-") ? 1 : nil
+        }
+        guard let scalar = Unicode.Scalar(UInt32(Self.decodeUTF8Scalar(at: i, content: content))) else {
+            return nil
+        }
+        switch scalar.properties.generalCategory {
+        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
+             .decimalNumber, .letterNumber, .otherNumber:
+            return scalar.utf8.count
+        default:
+            return nil
+        }
     }
 
     /// cmark-gfm's `://`-scheme domain acceptance (`sd_autolink_issafe` + `check_domain(..., allow_short: 1)`,

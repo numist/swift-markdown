@@ -61,17 +61,17 @@ struct AutolinkSchemeCaseTests {
 
     @Test("upper-case `HTTP://` links, preserving case")
     func upperHTTP() {
-        expectWholeSourceLinks("HTTP://e", link: "HTTP://e")
+        expectWholeSourceLinks("HTTP://e.e", link: "HTTP://e.e")
     }
 
     @Test("title-case `Http://` links, preserving case")
     func titleHTTP() {
-        expectWholeSourceLinks("Http://e", link: "Http://e")
+        expectWholeSourceLinks("Http://e.e", link: "Http://e.e")
     }
 
     @Test("mixed-case `hTTp://` links, preserving case")
     func mixedHTTP() {
-        expectWholeSourceLinks("hTTp://e", link: "hTTp://e")
+        expectWholeSourceLinks("hTTp://e.e", link: "hTTp://e.e")
     }
 
     @Test("upper-case `HTTPS://` links, preserving case")
@@ -88,7 +88,7 @@ struct AutolinkSchemeCaseTests {
 
     @Test("guard: lower-case `http://` still links")
     func lowerHTTP() {
-        expectWholeSourceLinks("http://e", link: "http://e")
+        expectWholeSourceLinks("http://e.e", link: "http://e.e")
     }
 
     @Test("guard: an unrecognized scheme (`xttp://`) does NOT link, case aside")

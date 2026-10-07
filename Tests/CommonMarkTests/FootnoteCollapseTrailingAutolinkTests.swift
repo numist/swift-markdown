@@ -76,14 +76,14 @@ struct FootnoteCollapseTrailingAutolinkTests {
 
     // MARK: - Control: the shipped deliverable stays spec-correct
 
-    @Test("flag-OFF: `[^[]]f@.f` keeps the bracket literal and still autolinks the email")
+    @Test("flag-OFF: `[^[]]f@f.f` keeps the bracket literal and still autolinks the email")
     func collapseThenEmailFlagOff() {
         // No collapse (bug-compat off): the bracket is literal `[^[]]` and the email autolinks with no
         // trailing empty sibling (spec-correct clean tree).
-        let ns = nodes(in: "[^[]]f@.f", options: Self.flagOff)
+        let ns = nodes(in: "[^[]]f@f.f", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "[^[]]", nil, "f@.f"])
-        #expect(ns.compactMap(\.url) == ["mailto:f@.f"])
+        #expect(ns.map(\.text) == [nil, nil, "[^[]]", nil, "f@f.f"])
+        #expect(ns.compactMap(\.url) == ["mailto:f@f.f"])
     }
 
     // MARK: - Guard: trailing plain text (no email) is still dropped by the truncation
@@ -124,11 +124,11 @@ struct FootnoteCollapseTrailingAutolinkTests {
     /// The leading email autolinks and the undefined footnote reference after it stays literal text with nothing
     /// dropped, whereas cmark-gfm truncates the text after the address to `[^[` and adds an empty text node before
     /// the link.
-    @Test("flag-OFF: `f@.f[^[]]y` links the leading email and keeps the trailing text literal")
+    @Test("flag-OFF: `f@f.f[^[]]y` links the leading email and keeps the trailing text literal")
     func emailBeforeBracketKeepsTrailingTextFlagOff() {
-        let ns = nodes(in: "f@.f[^[]]y", options: Self.flagOff)
+        let ns = nodes(in: "f@f.f[^[]]y", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "f@.f", "[^[]]y"])
-        #expect(ns.compactMap(\.url) == ["mailto:f@.f"])
+        #expect(ns.map(\.text) == [nil, nil, nil, "f@f.f", "[^[]]y"])
+        #expect(ns.compactMap(\.url) == ["mailto:f@f.f"])
     }
 }

@@ -194,12 +194,11 @@ class AutolinkEntityDecodingEdgeTests: XCTestCase {
         )
     }
 
-    /// Flag-off, a GFM extended autolink is the paragraph's only child, whereas cmark-gfm leaves an empty
-    /// text node where it rewinds over the scheme; the reference stays literal under both flags.
+    /// An entity reference after an extended autolink's domain stays literal in the autolink.
     func testGFMExtendedAutolinkWithoutBugCompatibility() {
         XCTAssertEqual(
-            "Document\n└─ Paragraph\n   └─ Link destination: \"http://a&amp;b\"\n      └─ Text \"http://a&amp;b\"",
-            surface("http://a&amp;b", [.gfmAutolink])
+            "Document\n└─ Paragraph\n   └─ Link destination: \"http://a.a&amp;b\"\n      └─ Text \"http://a.a&amp;b\"",
+            surface("http://a.a&amp;b", [.gfmAutolink])
         )
     }
 

@@ -26,20 +26,10 @@ private func dfsAutolinkNodes(
 
 /// A GFM email autolink whose forward domain scan runs into a SECOND `@`.
 ///
-/// cmark-gfm's `postprocess_text` (`extensions/autolink.c`) does `goto found_at` when the domain scan of a
-/// `local@domain` candidate meets a second `@`: it does NOT emit that first candidate. Instead it RESTARTS
-/// the match from the second `@` (the run between the two `@`s becomes the new local part) and links the
-/// second email if the restart is valid. The restart is STATEFUL - the accumulated domain dot-count `np`,
-/// which gates "domain must contain a dot", is declared at the top of the outer `while` loop, and the
-/// `goto` jumps past its initializer, so it CARRIES across the restart. Only the local-part boundary and
-/// the scan offset are recomputed.
-///
-/// The observable consequence is the reason a fresh re-match cannot reproduce cmark: `.e@b` does NOT link
-/// standalone (its lone dot is in the LOCAL part, so a fresh scan sees `np == 0` in the domain `b` and
-/// rejects), yet `o@.e@b` LINKS `.e@b` - the dot in `.e` was counted while scanning the first candidate's
-/// domain, and that already-counted `np` survives the restart. Likewise `a@b.c@d` links `b.c@d`: the dot in
-/// `b.c` counted during the first scan lets the restarted `b.c@d` pass. The rewrite reproduces this inside
-/// `matchGFMEmailAutolink` with an internal restart that preserves the carried dot-count.
+/// The first candidate is abandoned and the match restarts from the second `@`, with the run between the
+/// two `@`s as the new local part. The restarted address is an extended email autolink only when its own
+/// domain is valid (spec "Autolinks (extension)"): one or more segments separated by periods, with at least
+/// one period.
 @Suite("GFM email autolink second-`@` restart (stateful goto found_at)")
 struct AutolinkEmailTrailingAtTests {
 
@@ -107,34 +97,26 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.compactMap(\.url) == [])
     }
 
-    // MARK: - The restart SUCCEEDS via the carried dot-count: links the second email
+    // MARK: - The restarted address needs a period in its own domain
 
-    @Test("`o@.e@b`: restart links `.e@b` (carried dot from the first scan), before-text `o@`")
-    func restartLinksTailAfterAt() {
-        // Standalone `.e@b` does NOT link (its dot is in the local part, `np == 0` in domain `b`), but here
-        // the dot in `.e` was counted while scanning the first candidate's domain, and that `np` survives
-        // the restart - so `.e@b` links, leaving `o@` as before-text.
+    @Test("`o@.e@b`: the restarted `.e@b` has a dotless domain → no link")
+    func restartNeedsOwnPeriod() {
         let ns = nodes(in: "o@.e@b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "o@", nil, ".e@b"])
-        #expect(ns.compactMap(\.url) == ["mailto:.e@b"])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "o@.e@b"])
     }
 
-    @Test("`a@b.c@d`: restart links `b.c@d` (carried dot from `b.c`), before-text `a@`")
-    func restartLinksValidEmailTail() {
-        // The dot in `b.c` is counted during the first scan of the valid candidate `a@b.c`; the restart at
-        // the second `@` (local part `b.c`, domain `d`) inherits that dot, so `b.c@d` links.
+    @Test("`a@b.c@d`: the restarted `b.c@d` has a dotless domain → no link")
+    func restartWithValidPrefixNeedsOwnPeriod() {
         let ns = nodes(in: "a@b.c@d")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@", nil, "b.c@d"])
-        #expect(ns.compactMap(\.url) == ["mailto:b.c@d"])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@b.c@d"])
     }
 
     @Test("`a@b@c.d`: restart links `b@c.d` on its own valid domain, before-text `a@`")
     func restartLinksOnOwnDomain() {
-        // A restart-succeeds control derived from the same mechanism: the domain scan of `a@b` meets `@`, the
-        // restart treats `b` as the new local part, and the domain `c.d` has its own dot - so `b@c.d` links
-        // regardless of any carried count.
+        // The domain scan of `a@b` meets `@`, the restart treats `b` as the new local part, and the domain
+        // `c.d` has its own period, so `b@c.d` links.
         let ns = nodes(in: "a@b@c.d")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "a@", nil, "b@c.d"])
@@ -154,38 +136,38 @@ struct AutolinkEmailTrailingAtTests {
 
     // MARK: - Positive controls: valid emails must keep linking (no over-correction)
 
-    @Test("`o@.e`: the bare valid email still links")
+    @Test("`o@e.e`: the bare valid email still links")
     func bareEmailLinks() {
-        let ns = nodes(in: "o@.e")
+        let ns = nodes(in: "o@e.e")
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "o@.e"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.e"])
+        #expect(ns.map(\.text) == [nil, nil, nil, "o@e.e"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
-    @Test("`o@.e `: a trailing space is stripped before inline parse; the email links, no after-text")
+    @Test("`o@e.e `: a trailing space is stripped before inline parse; the email links, no after-text")
     func emailTrailingSpaceLinks() {
         // CommonMark strips a paragraph's trailing spaces before inline parsing, so the text node the
-        // post-pass sees is already `o@.e`: the whole node links and there is no after-text.
-        let ns = nodes(in: "o@.e ")
+        // post-pass sees is already `o@e.e`: the whole node links and there is no after-text.
+        let ns = nodes(in: "o@e.e ")
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "o@.e"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.e"])
+        #expect(ns.map(\.text) == [nil, nil, nil, "o@e.e"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
-    @Test("`@o@.e`: a leading `@` is skipped (empty local part); the real email links after `@`")
+    @Test("`@o@e.e`: a leading `@` is skipped (empty local part); the real email links after `@`")
     func leadingAtLinks() {
-        let ns = nodes(in: "@o@.e")
+        let ns = nodes(in: "@o@e.e")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "@", nil, "o@.e"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.e"])
+        #expect(ns.map(\.text) == [nil, nil, "@", nil, "o@e.e"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
-    @Test("`o@.ex`: a letter after the domain (not `@`) extends the last label; the email links")
+    @Test("`o@e.ex`: a letter after the domain (not `@`) extends the last label; the email links")
     func emailTrailingLetterLinks() {
-        let ns = nodes(in: "o@.ex")
+        let ns = nodes(in: "o@e.ex")
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "o@.ex"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.ex"])
+        #expect(ns.map(\.text) == [nil, nil, nil, "o@e.ex"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@e.ex"])
     }
 
     // MARK: - Standalone non-linkers (controls): these must NOT link on their own

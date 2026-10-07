@@ -782,30 +782,26 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// An undefined footnote reference is text, and the GFM extended email autolink after it is just the link, whereas
-    /// cmark-gfm's email split also keeps an empty text run after the address.
-    @Test("an email after a footnote-shaped bracket holding `^[` autolinks without an empty text run")
+    /// An undefined footnote reference is text, and `f@.f` is no extended email autolink because its domain starts
+    /// with a period (spec "Autolinks (extension)").
+    @Test("an email-shaped run with an empty first domain segment after a footnote-shaped bracket holding `^[` is text")
     func emailAfterCaretBracketAutolinksWithoutEmptyText() {
         #expect(tree("[^[]]f@.f", Self.footnotesAutolink) == """
             document @1:1-1:10
               paragraph @1:1-1:10
-                text "[^[]]" @1:1-1:6
-                link "mailto:f@.f" "" @1:6-1:10
-                  text "f@.f" @1:6-1:10
+                text "[^[]]f@.f" @1:1-1:10
 
             """)
     }
 
-    /// A GFM extended email autolink is just the link and the undefined footnote reference after it is text, whereas
-    /// cmark-gfm's email split also keeps an empty text run before the address.
-    @Test("text after an email and a footnote-shaped bracket holding `^[` is kept without an empty text run")
+    /// `f@.f` is no extended email autolink because its domain starts with a period (spec "Autolinks (extension)"),
+    /// and the undefined footnote reference after it is text.
+    @Test("an email-shaped run with an empty first domain segment before a footnote-shaped bracket holding `^[` is text")
     func textAfterEmailAndCaretBracketIsKeptWithoutEmptyText() {
         #expect(tree("f@.f[^[]]y", Self.footnotesAutolink) == """
             document @1:1-1:11
               paragraph @1:1-1:11
-                link "mailto:f@.f" "" @1:1-1:5
-                  text "f@.f" @1:1-1:5
-                text "[^[]]y" @1:5-1:11
+                text "f@.f[^[]]y" @1:1-1:11
 
             """)
     }

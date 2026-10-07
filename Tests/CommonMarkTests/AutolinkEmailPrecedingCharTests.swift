@@ -31,7 +31,7 @@ private func dfsAutolinkNodes(
 /// first non-local char, leaving whatever precedes as ordinary "before" text - there is no rule that the
 /// preceding char be whitespace or `(`. (Only the `www.` and `://`-scheme forms - `www_match`/`url_match`
 /// - restrict the preceding char.) So a leading `<` that failed as an angle autolink / inline HTML does
-/// not block the email match: `<o@.e` yields Text "<" + Link(mailto:o@.e).
+/// not block the email match: `<o@e.e` yields Text "<" + Link(mailto:o@e.e).
 @Suite("GFM email autolink preceding-character")
 struct AutolinkEmailPrecedingCharTests {
 
@@ -57,46 +57,46 @@ struct AutolinkEmailPrecedingCharTests {
     @Test("flag-OFF: email autolinks after a leading `<`")
     func emailAfterAngleFlagOff() {
         // The `<` is not a valid `<...>` autolink/HTML (no `>`), so it is literal text; the email still
-        // autolinks. Flag-OFF: no empty trailing sibling. Text "<" + Link(mailto:o@.e)[Text "o@.e"].
-        let ns = nodes(in: "<o@.e", options: Self.flagOff)
+        // autolinks. Flag-OFF: no empty trailing sibling. Text "<" + Link(mailto:o@e.e)[Text "o@e.e"].
+        let ns = nodes(in: "<o@e.e", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "<", nil, "o@.e"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.e"])
+        #expect(ns.map(\.text) == [nil, nil, "<", nil, "o@e.e"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
     @Test("flag-ON: email after a leading `<` keeps Quirk M's empty trailing sibling")
     func emailAfterAngleFlagOn() {
-        // Same match; flag-ON reproduces cmark's empty `after` node: Text "<" + Link + Text "o@.e" + Text "".
-        let ns = nodes(in: "<o@.e", options: Self.flagOn)
+        // Same match; flag-ON reproduces cmark's empty `after` node: Text "<" + Link + Text "o@e.e" + Text "".
+        let ns = nodes(in: "<o@e.e", options: Self.flagOn)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, "<", nil, "o@.e", ""])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.e"])
+        #expect(ns.map(\.text) == [nil, nil, "<", nil, "o@e.e", ""])
+        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
     // MARK: - Guards: preceding contexts that already autolink must stay working
 
     @Test("guard: standalone email still autolinks")
     func emailStandalone() {
-        let ns = nodes(in: "o@.e", options: Self.flagOff)
+        let ns = nodes(in: "o@e.e", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "o@.e"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.e"])
+        #expect(ns.map(\.text) == [nil, nil, nil, "o@e.e"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
     @Test("guard: email after text + space still autolinks")
     func emailAfterTextSpace() {
-        let ns = nodes(in: "x o@.e", options: Self.flagOff)
+        let ns = nodes(in: "x o@e.e", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "x ", nil, "o@.e"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.e"])
+        #expect(ns.map(\.text) == [nil, nil, "x ", nil, "o@e.e"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
     @Test("guard: email after `(` still autolinks")
     func emailAfterParen() {
-        let ns = nodes(in: "(o@.e", options: Self.flagOff)
+        let ns = nodes(in: "(o@e.e", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "(", nil, "o@.e"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.e"])
+        #expect(ns.map(\.text) == [nil, nil, "(", nil, "o@e.e"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
     // MARK: - Guards: the local-part scan must accept only cmark's set
@@ -108,21 +108,21 @@ struct AutolinkEmailPrecedingCharTests {
 
     @Test("guard: `!` before `@` is not a GFM local-part char - no autolink")
     func bangBeforeAtNoLink() {
-        // `<a!@.e`: cmark's backward scan hits `!` immediately and rejects; `a!` is not swallowed into a
+        // `<a!@e.e`: cmark's backward scan hits `!` immediately and rejects; `a!` is not swallowed into a
         // local part. Whole thing stays plain text.
-        let ns = nodes(in: "<a!@.e", options: Self.flagOff)
+        let ns = nodes(in: "<a!@e.e", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "<a!@.e"])
+        #expect(ns.map(\.text) == [nil, nil, "<a!@e.e"])
         #expect(ns.compactMap(\.url) == [])
     }
 
     @Test("guard: `!` local-part char at line start is still not a GFM local-part char")
     func bangLocalAtStartNoLink() {
-        // `x!@.e` at the very start (local part touches the content start, so the old preceding-char guard
+        // `x!@e.e` at the very start (local part touches the content start, so the old preceding-char guard
         // never applied): cmark still rejects because `!` breaks its backward scan. Plain text.
-        let ns = nodes(in: "x!@.e", options: Self.flagOff)
+        let ns = nodes(in: "x!@e.e", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "x!@.e"])
+        #expect(ns.map(\.text) == [nil, nil, "x!@e.e"])
         #expect(ns.compactMap(\.url) == [])
     }
 

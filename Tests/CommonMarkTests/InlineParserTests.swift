@@ -1765,14 +1765,13 @@ struct GFMAutolinkTests {
         }
     }
 
-    @Test("scheme URL host needs no dot (cmark's url_match)")
-    func schemeHostNeedsNoDot() {
-        // cmark's `url_match` accepts a dotless scheme-URL host (`check_domain(..., allow_short: 1)`), so
-        // `http://localhost` autolinks - unlike the `www.` form, which requires a dot in the host.
+    /// A valid domain holds at least one period (spec "Autolinks (extension)").
+    @Test("scheme URL host needs a period")
+    func schemeHostNeedsPeriod() {
         let source = "look at http://localhost"
         MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         let info = Self.firstLink(doc)
-        #expect(info.url == "http://localhost")
+        #expect(info.url == nil)
         }
     }
 

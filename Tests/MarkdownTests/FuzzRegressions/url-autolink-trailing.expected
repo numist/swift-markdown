@@ -1,5 +1,3 @@
 Document @1:1-1:10
 └─ Paragraph @1:1-1:10
-   ├─ Text @1:1 ""
-   └─ Link @1:1-1:10 destination: "http://l>"
-      └─ Text @1:1-1:10 "http://l>"
+   └─ Text @1:1-1:10 "http://l>"

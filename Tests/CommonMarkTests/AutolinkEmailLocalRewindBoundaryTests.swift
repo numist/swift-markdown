@@ -73,106 +73,106 @@ struct AutolinkEmailLocalRewindBoundaryTests {
 
     // MARK: - `+` breaks the forward scan, bounding the next local part
 
-    @Test("`l@o+@.b`: the `+` bounds the second local part; before-text `l@o`")
+    @Test("`l@o+@b.b`: the `+` bounds the second local part; before-text `l@o`")
     func plusBoundsLocalPart() {
         // `l@o` fails (domain `o` has no dot, and the scan breaks at `+`), advancing the cursor to the `+`.
-        // The second `@`'s local part may only rewind back to the `+`, so it is `+@.b`, leaving `l@o` before.
-        let ns = nodes(in: "l@o+@.b")
+        // The second `@`'s local part may only rewind back to the `+`, so it is `+@b.b`, leaving `l@o` before.
+        let ns = nodes(in: "l@o+@b.b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@o", nil, "+@.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:+@.b"])
+        #expect(ns.map(\.text) == [nil, nil, "l@o", nil, "+@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:+@b.b"])
     }
 
-    @Test("`l@oo+@.b`: the `+` bounds the second local part; before-text `l@oo`")
+    @Test("`l@oo+@b.b`: the `+` bounds the second local part; before-text `l@oo`")
     func plusBoundsLocalPartTwoChars() {
-        let ns = nodes(in: "l@oo+@.b")
+        let ns = nodes(in: "l@oo+@b.b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@oo", nil, "+@.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:+@.b"])
+        #expect(ns.map(\.text) == [nil, nil, "l@oo", nil, "+@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:+@b.b"])
     }
 
-    @Test("`a@b+c@.d`: the `+` bounds the second local part to `+c`; before-text `a@b`")
+    @Test("`a@b+c@d.d`: the `+` bounds the second local part to `+c`; before-text `a@b`")
     func plusBoundsLocalPartWithTrailingAlnum() {
-        let ns = nodes(in: "a@b+c@.d")
+        let ns = nodes(in: "a@b+c@d.d")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b", nil, "+c@.d"])
-        #expect(ns.compactMap(\.url) == ["mailto:+c@.d"])
+        #expect(ns.map(\.text) == [nil, nil, "a@b", nil, "+c@d.d"])
+        #expect(ns.compactMap(\.url) == ["mailto:+c@d.d"])
     }
 
     // MARK: - Controls that ALREADY MATCH: `.`, `-`, `_`, alnum rewind THROUGH (forward scan continues)
 
-    @Test("`l@o.p@.b`: `.`-followed-by-alnum rewinds through; before-text `l@`")
+    @Test("`l@o.p@b.b`: `.`-followed-by-alnum rewinds through; before-text `l@`")
     func dotRewindsThrough() {
-        let ns = nodes(in: "l@o.p@.b")
+        let ns = nodes(in: "l@o.p@b.b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o.p@.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:o.p@.b"])
+        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o.p@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:o.p@b.b"])
     }
 
-    @Test("`l@o-p@.b`: `-` rewinds through; before-text `l@`")
+    @Test("`l@o-p@b.b`: `-` rewinds through; before-text `l@`")
     func hyphenRewindsThrough() {
-        let ns = nodes(in: "l@o-p@.b")
+        let ns = nodes(in: "l@o-p@b.b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o-p@.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:o-p@.b"])
+        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o-p@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:o-p@b.b"])
     }
 
-    @Test("`l@o_p@.b`: `_` rewinds through; before-text `l@`")
+    @Test("`l@o_p@b.b`: `_` rewinds through; before-text `l@`")
     func underscoreRewindsThrough() {
-        let ns = nodes(in: "l@o_p@.b")
+        let ns = nodes(in: "l@o_p@b.b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o_p@.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:o_p@.b"])
+        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o_p@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:o_p@b.b"])
     }
 
-    @Test("`l@abc@.b`: alphanumerics rewind through; before-text `l@`")
+    @Test("`l@abc@b.b`: alphanumerics rewind through; before-text `l@`")
     func alnumRewindsThrough() {
-        let ns = nodes(in: "l@abc@.b")
+        let ns = nodes(in: "l@abc@b.b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "abc@.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:abc@.b"])
+        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "abc@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:abc@b.b"])
     }
 
-    @Test("`l@+@.b`: `+` at the local-part start; nothing before it to keep; before-text `l@`")
+    @Test("`l@+@b.b`: `+` at the local-part start; nothing before it to keep; before-text `l@`")
     func plusAtStart() {
         // The `@` between `l` and `+` stops the backward scan regardless of the floor, so the local part is
         // `+` no matter where the floor sits - a guard that the boundary rule does not over-correct here.
-        let ns = nodes(in: "l@+@.b")
+        let ns = nodes(in: "l@+@b.b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "+@.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:+@.b"])
+        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "+@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:+@b.b"])
     }
 
-    @Test("`xy@ab@.c`: an alnum-only first local part rewinds through; before-text `xy@`")
+    @Test("`xy@ab@c.c`: an alnum-only first local part rewinds through; before-text `xy@`")
     func alnumFirstLocalPart() {
-        let ns = nodes(in: "xy@ab@.c")
+        let ns = nodes(in: "xy@ab@c.c")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "xy@", nil, "ab@.c"])
-        #expect(ns.compactMap(\.url) == ["mailto:ab@.c"])
+        #expect(ns.map(\.text) == [nil, nil, "xy@", nil, "ab@c.c"])
+        #expect(ns.compactMap(\.url) == ["mailto:ab@c.c"])
     }
 
     // MARK: - A `.` NOT immediately followed by an alnum also breaks the forward scan
 
-    @Test("`a@b.+@.c`: a `.`-then-`+` boundary bounds the second local part to `.+`; before-text `a@b`")
+    @Test("`a@b.+@c.c`: a `.`-then-`+` boundary bounds the second local part to `.+`; before-text `a@b`")
     func dotThenPlusBoundary() {
         // The first candidate `a@b` breaks at the `.` (it is followed by `+`, not an alnum), advancing the
         // cursor to the `.`. The second `@`'s backward scan rewinds through `+` and `.` only to that cursor,
-        // giving local part `.+`, so the link is `.+@.c` with before-text `a@b`. Same class as the `+`
+        // giving local part `.+`, so the link is `.+@c.c` with before-text `a@b`. Same class as the `+`
         // cases - a forward-scan break creates the boundary - with the break driven by a boundary `.`.
-        let ns = nodes(in: "a@b.+@.c")
+        let ns = nodes(in: "a@b.+@c.c")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b", nil, ".+@.c"])
-        #expect(ns.compactMap(\.url) == ["mailto:.+@.c"])
+        #expect(ns.map(\.text) == [nil, nil, "a@b", nil, ".+@c.c"])
+        #expect(ns.compactMap(\.url) == ["mailto:.+@c.c"])
     }
 
-    @Test("`a@b..c@.d`: a doubled `.` (first not followed by alnum) bounds the second local part to `..c`")
+    @Test("`a@b..c@d.d`: a doubled `.` (first not followed by alnum) bounds the second local part to `..c`")
     func doubledDotBoundary() {
         // The first candidate `a@b` breaks at the first `.` of `..` (it is followed by another `.`, not an
         // alnum), advancing the cursor. The second `@`'s backward scan rewinds through `..c` only to that
         // cursor, giving local part `..c` and before-text `a@b`.
-        let ns = nodes(in: "a@b..c@.d")
+        let ns = nodes(in: "a@b..c@d.d")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b", nil, "..c@.d"])
-        #expect(ns.compactMap(\.url) == ["mailto:..c@.d"])
+        #expect(ns.map(\.text) == [nil, nil, "a@b", nil, "..c@d.d"])
+        #expect(ns.compactMap(\.url) == ["mailto:..c@d.d"])
     }
 }

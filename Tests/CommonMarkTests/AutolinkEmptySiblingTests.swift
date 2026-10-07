@@ -63,13 +63,13 @@ struct AutolinkEmptySiblingTests {
 
     @Test("flag-ON email: empty Text siblings on BOTH sides")
     func emailFlagOn() {
-        // `o@.x` - the email spans the whole paragraph, so cmark's `before` and `after` text nodes are
-        // both empty and both survive: Text "" + Link(mailto:o@.x) + Text "".
-        let ns = nodes(in: "o@.x", options: Self.flagOn)
+        // `o@x.x` - the email spans the whole paragraph, so cmark's `before` and `after` text nodes are
+        // both empty and both survive: Text "" + Link(mailto:o@x.x) + Text "".
+        let ns = nodes(in: "o@x.x", options: Self.flagOn)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, "", nil, "o@.x", ""])
+        #expect(ns.map(\.text) == [nil, nil, "", nil, "o@x.x", ""])
         // Fixture-sanity: this really is a recognized email autolink, not stray text.
-        #expect(ns.compactMap(\.url) == ["mailto:o@.x"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@x.x"])
     }
 
     @Test("flag-ON scheme URL: empty LEADING Text sibling only")
@@ -86,13 +86,13 @@ struct AutolinkEmptySiblingTests {
 
     @Test("flag-ON email with trailing text: empty LEADING only, real trailing text preserved")
     func emailTrailingTextFlagOn() {
-        // `o@.x y` - the email is at the start (empty `before`) but has real text after. cmark's `after`
+        // `o@x.x y` - the email is at the start (empty `before`) but has real text after. cmark's `after`
         // node is " y" (non-empty), so no empty trailing node survives: the empty node the split emits
         // is folded into " y" by `consolidateTextNodes`. Result: Text "" + Link + Text " y".
-        let ns = nodes(in: "o@.x y", options: Self.flagOn)
+        let ns = nodes(in: "o@x.x y", options: Self.flagOn)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, "", nil, "o@.x", " y"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.x"])
+        #expect(ns.map(\.text) == [nil, nil, "", nil, "o@x.x", " y"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@x.x"])
     }
 
     @Test("mid-text www: non-empty siblings, identical in BOTH modes")
@@ -135,23 +135,23 @@ struct AutolinkEmptySiblingTests {
 
     @Test("flag-ON email before emphasis: standalone empty trailing node survives")
     func emailBeforeEmphasisFlagOn() {
-        // `o@.x*a*` - the email's `post` is empty (the emphasis is a separate node). cmark keeps that
+        // `o@x.x*a*` - the email's `post` is empty (the emphasis is a separate node). cmark keeps that
         // empty `post` node standalone between the Link and the Emphasis; consolidation cannot fold it
         // (both neighbours are non-text). Structure: Text "" + Link + Text "" + Emphasis(Text "a").
-        let ns = nodes(in: "o@.x*a*", options: Self.flagOn)
+        let ns = nodes(in: "o@x.x*a*", options: Self.flagOn)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text, .emphasis, .text])
-        #expect(ns.map(\.text) == [nil, nil, "", nil, "o@.x", "", nil, "a"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.x"])
+        #expect(ns.map(\.text) == [nil, nil, "", nil, "o@x.x", "", nil, "a"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@x.x"])
     }
 
     // MARK: - Flag OFF: spec-correct, no empty siblings
 
     @Test("flag-OFF email: just the Link, no empty siblings")
     func emailFlagOff() {
-        let ns = nodes(in: "o@.x", options: Self.flagOff)
+        let ns = nodes(in: "o@x.x", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "o@.x"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.x"])
+        #expect(ns.map(\.text) == [nil, nil, nil, "o@x.x"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@x.x"])
     }
 
     @Test("flag-OFF scheme URL: just the Link, no empty siblings")
@@ -166,19 +166,19 @@ struct AutolinkEmptySiblingTests {
     /// keeps the empty text node its split leaves before the link.
     @Test("flag-OFF email with trailing text: just the Link and the real trailing text")
     func emailTrailingTextFlagOff() {
-        let ns = nodes(in: "o@.x y", options: Self.flagOff)
+        let ns = nodes(in: "o@x.x y", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "o@.x", " y"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.x"])
+        #expect(ns.map(\.text) == [nil, nil, nil, "o@x.x", " y"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@x.x"])
     }
 
     /// GFM's extended email autolink yields just the link followed by the emphasis, whereas cmark-gfm also keeps the
     /// empty text nodes its split leaves on both sides of the link.
     @Test("flag-OFF email before emphasis: just the Link and the Emphasis")
     func emailBeforeEmphasisFlagOff() {
-        let ns = nodes(in: "o@.x*a*", options: Self.flagOff)
+        let ns = nodes(in: "o@x.x*a*", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .emphasis, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "o@.x", nil, "a"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@.x"])
+        #expect(ns.map(\.text) == [nil, nil, nil, "o@x.x", nil, "a"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@x.x"])
     }
 }

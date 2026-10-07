@@ -43,12 +43,12 @@ struct AttributeOpenerSourceRangeTests {
     /// The opener is not a link bracket, so a GFM extended autolink after it is still recognized.
     @Test("a URL after an opener autolinks")
     func urlAfterOpener() {
-        #expect(CmarkTreeDump.dump("^[http://t", options: [.sourcePosition, .gfmAutolink, .attributes], sourceRanges: true) == """
-            document @1:1-1:11
-              paragraph @1:1-1:11
+        #expect(CmarkTreeDump.dump("^[http://t.t", options: [.sourcePosition, .gfmAutolink, .attributes], sourceRanges: true) == """
+            document @1:1-1:13
+              paragraph @1:1-1:13
                 text "^[" @1:1-1:3
-                link "http://t" "" @1:3-1:11
-                  text "http://t" @1:3-1:11
+                link "http://t.t" "" @1:3-1:13
+                  text "http://t.t" @1:3-1:13
 
             """)
     }

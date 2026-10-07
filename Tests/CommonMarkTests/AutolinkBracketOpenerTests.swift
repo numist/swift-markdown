@@ -31,8 +31,8 @@ private func dfsAutolinkNodes(
 /// bails with `if (cmark_inline_parser_in_bracket(inline_parser, false) ||
 /// cmark_inline_parser_in_bracket(inline_parser, true)) return NULL;`, so a `://`-scheme (or `www.`)
 /// autolink is suppressed whenever a LINK (`[`) or IMAGE (`![`) bracket opener is still open on the
-/// delimiter/bracket stack. An unclosed `[` therefore keeps `http://t` as plain text — even though the
-/// bare `http://t` on its own autolinks fine, and even though cmark otherwise accepts a non-alpha
+/// delimiter/bracket stack. An unclosed `[` therefore keeps `http://t.t` as plain text — even though the
+/// bare `http://t.t` on its own autolinks fine, and even though cmark otherwise accepts a non-alpha
 /// preceding character for scheme autolinks. The `^[` (ATTRIBUTE) opener does not suppress; only
 /// LINK/IMAGE do. The email post-pass (`postprocess_text`) is a separate path and runs after brackets
 /// have collapsed to literal text, so it is unaffected.
@@ -57,23 +57,23 @@ struct AutolinkBracketOpenerTests {
 
     @Test("unclosed `[` before a scheme URL leaves it as plain text (no link)")
     func openBracketSuppressesSchemeAutolink() {
-        // The fuzzer finding: `[http://t` — the `[` pushes a LINK opener that never closes, so cmark's
+        // The fuzzer finding: `[http://t.t` — the `[` pushes a LINK opener that never closes, so cmark's
         // autolink extension declines. The whole run is one plain text node; NO link is produced.
-        let ns = nodes(in: "[http://t", options: Self.flagOff)
+        let ns = nodes(in: "[http://t.t", options: Self.flagOff)
         // Fixture sanity: a degenerate/empty tree (e.g. just `[.document]`) must not pass vacuously.
         #expect(ns.count == 3)
         #expect(!ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "[http://t"])
+        #expect(ns.map(\.text) == [nil, nil, "[http://t.t"])
         #expect(ns.compactMap(\.url) == [])
     }
 
     @Test("unclosed `![` image opener also suppresses the scheme autolink")
     func openImageBracketSuppressesSchemeAutolink() {
         // `![` pushes an IMAGE opener; cmark checks `in_bracket(IMAGE)` too.
-        let ns = nodes(in: "![http://t", options: Self.flagOff)
+        let ns = nodes(in: "![http://t.t", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "![http://t"])
+        #expect(ns.map(\.text) == [nil, nil, "![http://t.t"])
         #expect(ns.compactMap(\.url) == [])
     }
 
@@ -81,26 +81,26 @@ struct AutolinkBracketOpenerTests {
 
     @Test("control: a bare scheme URL with no leading `[` still autolinks")
     func bareSchemeStillAutolinks() {
-        let ns = nodes(in: "http://t", options: Self.flagOff)
+        let ns = nodes(in: "http://t.t", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "http://t"])
-        #expect(ns.compactMap(\.url) == ["http://t"])
+        #expect(ns.map(\.text) == [nil, nil, nil, "http://t.t"])
+        #expect(ns.compactMap(\.url) == ["http://t.t"])
     }
 
-    @Test("control: a normal closed link `[x](http://t)` still parses as a link")
+    @Test("control: a normal closed link `[x](http://t.t)` still parses as a link")
     func closedLinkStillParses() {
-        let ns = nodes(in: "[x](http://t)", options: Self.flagOff)
+        let ns = nodes(in: "[x](http://t.t)", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "x"])
-        #expect(ns.compactMap(\.url) == ["http://t"])
+        #expect(ns.compactMap(\.url) == ["http://t.t"])
     }
 
     @Test("control: once the `[…]` closes, a following scheme URL autolinks again")
     func afterClosedBracketAutolinks() {
-        // `[a] http://t` — the bracket closes (as literal `[a]`, no matching def), so the opener is popped
+        // `[a] http://t.t` — the bracket closes (as literal `[a]`, no matching def), so the opener is popped
         // before the `:` is reached and the autolink is no longer suppressed.
-        let ns = nodes(in: "[a] http://t", options: Self.flagOff)
+        let ns = nodes(in: "[a] http://t.t", options: Self.flagOff)
         #expect(ns.map(\.kind).contains(.link))
-        #expect(ns.compactMap(\.url) == ["http://t"])
+        #expect(ns.compactMap(\.url) == ["http://t.t"])
     }
 }

@@ -28,12 +28,12 @@ struct GFMAutolinkSourceRangeTests {
     /// after emitting it as text.
     @Test("a URL autolink spans the URL")
     func url() {
-        #expect(tree("(http://e") == """
-            document @1:1-1:10
-              paragraph @1:1-1:10
+        #expect(tree("(http://e.e") == """
+            document @1:1-1:12
+              paragraph @1:1-1:12
                 text "(" @1:1-1:2
-                link "http://e" "" @1:2-1:10
-                  text "http://e" @1:2-1:10
+                link "http://e.e" "" @1:2-1:12
+                  text "http://e.e" @1:2-1:12
 
             """)
     }
@@ -41,11 +41,11 @@ struct GFMAutolinkSourceRangeTests {
     /// cmark-gfm starts the link at `@1:1`, the paragraph's line start.
     @Test("a www autolink spans the domain")
     func www() {
-        #expect(tree(" www.w") == """
-            document @1:1-1:7
-              paragraph @1:2-1:7
-                link "http://www.w" "" @1:2-1:7
-                  text "www.w" @1:2-1:7
+        #expect(tree(" www.w.w") == """
+            document @1:1-1:9
+              paragraph @1:2-1:9
+                link "http://www.w.w" "" @1:2-1:9
+                  text "www.w.w" @1:2-1:9
 
             """)
     }
@@ -173,11 +173,11 @@ struct GFMAutolinkSourceRangeTests {
     /// before it.
     @Test("a URL autolink has no empty text before it")
     func noEmptyTextBeforeURL() {
-        #expect(tree("http://a") == """
-            document @1:1-1:9
-              paragraph @1:1-1:9
-                link "http://a" "" @1:1-1:9
-                  text "http://a" @1:1-1:9
+        #expect(tree("http://a.a") == """
+            document @1:1-1:11
+              paragraph @1:1-1:11
+                link "http://a.a" "" @1:1-1:11
+                  text "http://a.a" @1:1-1:11
 
             """)
     }
@@ -214,12 +214,12 @@ struct GFMAutolinkSourceRangeTests {
     /// reconstructed text that can't be placed.
     @Test("an email in an undefined footnote-shaped bracket spanning a hard break is placed")
     func emailInUndefinedFootnoteBracket() {
-        #expect(tree("![^b@.B\\\n]", options: Self.opts.union(.footnotes)) == """
+        #expect(tree("![^b@b.B\\\n]", options: Self.opts.union(.footnotes)) == """
             document @1:1-2:2
               paragraph @1:1-2:2
                 text "![^" @1:1-1:4
-                link "mailto:b@.B" "" @1:4-1:8
-                  text "b@.B" @1:4-1:8
+                link "mailto:b@b.B" "" @1:4-1:9
+                  text "b@b.B" @1:4-1:9
                 linebreak @-
                 text "]" @2:1-2:2
 

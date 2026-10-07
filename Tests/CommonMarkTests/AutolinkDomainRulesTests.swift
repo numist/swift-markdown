@@ -24,13 +24,12 @@ private func dfsAutolinkNodes(
     }
 }
 
-/// GFM autolink domain-acceptance rules that differ between the `://`-scheme URL form and the email form.
-///
-/// cmark-gfm's `://`-scheme autolink (`url_match`, `extensions/autolink.c`) accepts any non-empty domain
-/// whose first character is a valid host character (non-space, non-punctuation) - it does NOT require a
-/// dot (`check_domain` is called with `allow_short = 1`). Its email autolink (`postprocess_text`), by
-/// contrast, requires the domain to contain a dot that is immediately followed by an alphanumeric (its
-/// `np` counter): a trailing dot yields an empty last label and does not count, so `o@b.` is not linked.
+/// GFM autolink domain-acceptance rules (spec "Autolinks (extension)"). An extended www or url
+/// autolink needs a valid domain: segments of alphanumerics, `_` and `-` separated by periods, with at
+/// least one period and no underscore in the last two segments. An extended email autolink's domain is
+/// one or more segments of alphanumerics, `-` and `_` separated by periods, with at least one period,
+/// whose last character is neither `-` nor `_`; a final period is not part of the address. Tests under
+/// `flagOn` pin `.cmarkBugCompatibility`.
 @Suite("GFM autolink domain rules")
 struct AutolinkDomainRulesTests {
 
@@ -53,14 +52,12 @@ struct AutolinkDomainRulesTests {
 
     // MARK: - Divergence 1: a `://`-scheme URL needs no dot in the domain
 
-    @Test("scheme URL with a dotless domain autolinks (flag-OFF)")
-    func schemeURLNoDotAutolinksFlagOff() {
-        // `http://e` - `url_match` calls `check_domain(..., allow_short = 1)`, which accepts a domain with
-        // no dot. The single valid host char `e` after `://` is enough.
+    @Test("scheme URL with a dotless domain is text")
+    func schemeURLNoDotIsTextFlagOff() {
         let ns = nodes(in: "http://e", options: Self.flagOff)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "http://e"])
-        #expect(ns.compactMap(\.url) == ["http://e"])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "http://e"])
+        #expect(ns.compactMap(\.url) == [])
     }
 
     @Test("scheme URL with a dotless domain keeps Quirk M's empty leading sibling (flag-ON)")
@@ -102,14 +99,12 @@ struct AutolinkDomainRulesTests {
         #expect(ns.compactMap(\.url) == [])
     }
 
-    @Test("guard: scheme URL with a trailing underscore links the trimmed host")
+    @Test("guard: scheme URL whose host is dotless once the trailing underscore is trimmed is text")
     func schemeURLTrailingUnderscoreTrims() {
-        // `http://a_` - the first char `a` is a valid host char (no dot required), and the trailing `_`
-        // is peeled by the autolink trim rules, leaving `http://a`.
         let ns = nodes(in: "http://a_", options: Self.flagOff)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "http://a", "_"])
-        #expect(ns.compactMap(\.url) == ["http://a"])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "http://a_"])
+        #expect(ns.compactMap(\.url) == [])
     }
 
     // MARK: - Divergence 2: an email domain's last label must be non-empty (no trailing dot)
@@ -154,23 +149,20 @@ struct AutolinkDomainRulesTests {
         #expect(ns.compactMap(\.url) == [])
     }
 
-    @Test("guard: email with a digit-only last label does not autolink")
-    func emailDigitLastLabelNoAutolink() {
-        // `a@1.2` - both labels end in a digit; the final scanned char `2` is not a letter or `.`.
+    @Test("email with a digit-only last label autolinks")
+    func emailDigitLastLabelAutolinks() {
         let ns = nodes(in: "a@1.2", options: Self.flagOff)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@1.2"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "a@1.2"])
+        #expect(ns.compactMap(\.url) == ["mailto:a@1.2"])
     }
 
-    @Test("guard: email whose last label ends in a digit does not autolink")
-    func emailLastLabelTrailingDigitNoAutolink() {
-        // `a@b.c9` - the last label `c9` starts with a letter but ends in a digit; the final scanned char
-        // `9` fails the letter-or-dot gate.
+    @Test("email whose last label ends in a digit autolinks")
+    func emailLastLabelTrailingDigitAutolinks() {
         let ns = nodes(in: "a@b.c9", options: Self.flagOff)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b.c9"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "a@b.c9"])
+        #expect(ns.compactMap(\.url) == ["mailto:a@b.c9"])
     }
 
     @Test("guard: email with an interior digit but a letter-ending domain autolinks")
@@ -196,24 +188,20 @@ struct AutolinkDomainRulesTests {
         #expect(ns.compactMap(\.url) == [])
     }
 
-    @Test("email whose domain ends at a trailing dot after a digit label does not autolink")
-    func emailDomainDotBoundaryDigitLabelNoAutolink() {
-        // `a@b.c9.` - the scan stops at the trailing `.` (not followed by an alphanumeric); the domain
-        // `b.c9` ends in the digit `9`, which fails the letter-or-dot gate.
+    @Test("email followed by a period after a digit label links without the period")
+    func emailDomainDotBoundaryDigitLabelAutolinks() {
         let ns = nodes(in: "a@b.c9.", options: Self.flagOff)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b.c9."])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "a@b.c9", "."])
+        #expect(ns.compactMap(\.url) == ["mailto:a@b.c9"])
     }
 
-    @Test("email links only the prefix when a dot precedes a non-alphanumeric")
-    func emailDomainDotBoundaryLinksPrefix() {
-        // `a@x.y.-5` - the scan stops at the `.` before `-` (not an alphanumeric), so the domain is `x.y`,
-        // ending in the letter `y` (valid). The link is `mailto:a@x.y`; the remaining `.-5` is after-text.
+    @Test("email domain segment may start with a hyphen")
+    func emailDomainHyphenSegmentAutolinks() {
         let ns = nodes(in: "a@x.y.-5", options: Self.flagOff)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "a@x.y", ".-5"])
-        #expect(ns.compactMap(\.url) == ["mailto:a@x.y"])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "a@x.y.-5"])
+        #expect(ns.compactMap(\.url) == ["mailto:a@x.y.-5"])
     }
 
     @Test("guard: multi-label email with every dot followed by a letter autolinks")
@@ -252,22 +240,20 @@ struct AutolinkDomainRulesTests {
         #expect(ns.compactMap(\.url) == ["mailto:a@b.c_d"])
     }
 
-    @Test("email with an empty first label and an underscore last label autolinks")
-    func emailEmptyFirstLabelUnderscoreLastAutolinks() {
-        // `a@.b_o` - empty first label (leading `.`), last label `b_o` has an `_` and ends in `o`.
+    @Test("email with an empty first label is text")
+    func emailEmptyFirstLabelIsText() {
         let ns = nodes(in: "a@.b_o", options: Self.flagOff)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "a@.b_o"])
-        #expect(ns.compactMap(\.url) == ["mailto:a@.b_o"])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@.b_o"])
+        #expect(ns.compactMap(\.url) == [])
     }
 
-    @Test("email with a hyphen local part and an underscore last label autolinks")
-    func emailHyphenLocalUnderscoreLastAutolinks() {
-        // `-@.b_o` - local part is a lone `-` (a valid GFM local-part char), domain `.b_o`.
+    @Test("email with a hyphen local part and an empty first label is text")
+    func emailHyphenLocalEmptyFirstLabelIsText() {
         let ns = nodes(in: "-@.b_o", options: Self.flagOff)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "-@.b_o"])
-        #expect(ns.compactMap(\.url) == ["mailto:-@.b_o"])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "-@.b_o"])
+        #expect(ns.compactMap(\.url) == [])
     }
 
     @Test("guard: email with an underscore in a non-last label autolinks")
@@ -342,35 +328,41 @@ struct AutolinkDomainRulesTests {
     // fuzzer harness (like `String(decoding:as:UTF8.self)`) repairs an invalid UTF-8 byte to U+FFFD
     // before parsing, so the domain's `�` is three ordinary UTF-8 bytes the zero-copy scan already sees.
 
-    @Test("www domain containing an invalid byte (repaired to U+FFFD) autolinks (both modes)")
+    @Test("www domain beginning with an invalid byte repaired to U+FFFD")
     func wwwInvalidByteDomainAutolinks() {
         // `www.` + 0xFF + `__` - the lone 0xFF is invalid UTF-8, repaired to U+FFFD as the harness
         // decodes it. cmark links `www.�`: the domain scan stops within the U+FFFD, and `autolink_delim`
         // peels the trailing `__`. The U+FFFD's bytes appear verbatim in both the destination and the
         // link text.
         let src = String(decoding: [0x77, 0x77, 0x77, 0x2e, 0xff, 0x5f, 0x5f] as [UInt8], as: UTF8.self)
-        for options in [Self.flagOff, Self.flagOn] {
-            let ns = nodes(in: src, options: options)
-            #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
-            #expect(ns.map(\.text) == [nil, nil, nil, "www.\u{FFFD}", "__"])
-            #expect(ns.compactMap(\.url) == ["http://www.\u{FFFD}"])
-        }
+        let ns = nodes(in: src, options: Self.flagOn)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "www.\u{FFFD}", "__"])
+        #expect(ns.compactMap(\.url) == ["http://www.\u{FFFD}"])
+        // U+FFFD is a symbol, not an alphanumeric, so no valid domain follows `www.`.
+        let shipped = nodes(in: src, options: Self.flagOff)
+        #expect(shipped.map(\.kind) == [.document, .paragraph, .text])
+        #expect(shipped.map(\.text) == [nil, nil, "www.\u{FFFD}__"])
     }
 
-    @Test("guard: www domain with a valid multibyte codepoint still autolinks (both modes)")
+    @Test("www domain with a non-ASCII letter")
     func wwwValidMultibyteDomainAutolinks() {
         // `www.éx y` (é = U+00E9, valid two-byte UTF-8) - the domain scan stops within `é`, the URL body
         // links `www.éx` (up to the space), and ` y` is left as trailing text. Rejecting continuation
         // bytes must not regress ordinary non-ASCII domains.
-        for options in [Self.flagOff, Self.flagOn] {
-            let ns = nodes(in: "www.\u{E9}x y", options: options)
-            #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
-            #expect(ns.map(\.text) == [nil, nil, nil, "www.\u{E9}x", " y"])
-            #expect(ns.compactMap(\.url) == ["http://www.\u{E9}x"])
-        }
+        let ns = nodes(in: "www.\u{E9}x y", options: Self.flagOn)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "www.\u{E9}x", " y"])
+        #expect(ns.compactMap(\.url) == ["http://www.\u{E9}x"])
+        // `éx` is alphanumeric but holds no period, so it is no valid domain; with one it links.
+        let shipped = nodes(in: "www.\u{E9}x y", options: Self.flagOff)
+        #expect(shipped.map(\.kind) == [.document, .paragraph, .text])
+        let dotted = nodes(in: "www.\u{E9}x.y z", options: Self.flagOff)
+        #expect(dotted.map(\.text) == [nil, nil, nil, "www.\u{E9}x.y", " z"])
+        #expect(dotted.compactMap(\.url) == ["http://www.\u{E9}x.y"])
     }
 
-    @Test("scheme URL whose domain holds a U+FFFD before an underscore autolinks (`://` call site)")
+    @Test("scheme URL whose domain holds a U+FFFD before an underscore")
     func schemeURLNonASCIIThenUnderscoreAutolinks() {
         // `http://a` + 0xFF (repaired to U+FFFD) + `_b` - drives `checkDomainAccepted` through the
         // `://`-scheme call site (`schemeURLDomainAccepted`), which shares the same continuation-byte
@@ -380,9 +372,12 @@ struct AutolinkDomainRulesTests {
         // trailing punctuation), linking the whole `http://a�_b`. Without the fix the domain scan would
         // reach the `_` and wrongly reject the URL. `allow_short` means the scheme form needs no dot.
         let src = String(decoding: [0x68, 0x74, 0x74, 0x70, 0x3a, 0x2f, 0x2f, 0x61, 0xff, 0x5f, 0x62] as [UInt8], as: UTF8.self)
-        let ns = nodes(in: src, options: Self.flagOff)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "http://a\u{FFFD}_b"])
+        let ns = nodes(in: src, options: Self.flagOn)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "", nil, "http://a\u{FFFD}_b"])
         #expect(ns.compactMap(\.url) == ["http://a\u{FFFD}_b"])
+        // The domain ends at the symbol U+FFFD, leaving `a`, which holds no period.
+        let shipped = nodes(in: src, options: Self.flagOff)
+        #expect(shipped.map(\.kind) == [.document, .paragraph, .text])
     }
 }

@@ -1,5 +1,8 @@
 Document @1:1-4:3
 └─ Paragraph @3:1-4:3
    ├─ Text @3:1-3:2 "*"
-   └─ Link @3:2-4:2 destination: "|"
-      └─ Text @3:3-3:5 "az"
+   ├─ Link @3:2-3:6 destination: "|"
+   │  └─ Text @3:3-3:5 "az"
+   ├─ Text @3:6-3:7 "["
+   ├─ SoftBreak
+   └─ Text @4:2-4:3 "]"
