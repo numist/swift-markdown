@@ -1,3 +1,4 @@
 Document @1:1-2:6
 └─ Paragraph @1:1-2:6
-   └─ Text @2:1-2:6 "[baz]"
+   └─ Link @2:1-2:6 destination: "/"
+      └─ Text @2:2-2:5 "baz"

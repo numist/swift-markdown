@@ -1,6 +1,5 @@
 Document @1:1-4:13
-├─ Paragraph @1:1-2:7
-│  └─ FootnoteReference @1:1-2:7 label: "abc" index: 1
-└─ FootnoteDefinition @4:1-4:13 label: "abc"
-   └─ Paragraph @4:9-4:13
-      └─ Text @4:9-4:13 "note"
+└─ Paragraph @1:1-2:7
+   ├─ Text @1:1-1:10 "[^abcdef"
+   ├─ SoftBreak
+   └─ Text @2:1-2:7 "xxxxx]"

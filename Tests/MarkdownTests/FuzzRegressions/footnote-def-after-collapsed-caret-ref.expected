@@ -1,3 +1,6 @@
 Document @1:1-2:6
-└─ Paragraph @1:1-1:9
-   └─ Text @1:1-1:9 "[^ [^^]]"
+├─ Paragraph @1:1-1:9
+│  ├─ Text @1:1-1:4 "[^ "
+│  ├─ FootnoteReference @1:4-1:8 label: "^" index: 1
+│  └─ Text @1:8-1:9 "]"
+└─ FootnoteDefinition @2:1-2:6 label: "^"

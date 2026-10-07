@@ -4,4 +4,6 @@ Document @1:1-4:7
    ├─ SoftBreak
    ├─ Text @2:1-2:5 "fmab"
    ├─ SoftBreak
-   └─ Text @3:1-4:7 "]: /�1r[^o[^]: &&"
+   ├─ Text @3:2-3:16 "]: /�1r[^o[^"
+   ├─ SoftBreak
+   └─ Text @4:1-4:7 "f]: &&"

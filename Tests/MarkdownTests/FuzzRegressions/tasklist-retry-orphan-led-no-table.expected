@@ -1,9 +1,15 @@
 Document @1:1-4:6
 └─ UnorderedList @1:1-4:6
-   └─ ListItem @1:1-4:6 checkbox: [x]
-      └─ Paragraph @2:4-4:6
-         ├─ Text @2:4-2:13 "� [x] a|b"
-         ├─ SoftBreak
-         ├─ Text @3:3-3:6 "-|-"
-         ├─ SoftBreak
-         └─ Text @4:3-4:6 "c|d"
+   └─ ListItem @1:1-4:6
+      └─ Table @2:3-4:6 alignments: |-|-|
+         ├─ Head @2:3-2:13
+         │  ├─ Cell @2:3-2:11
+         │  │  └─ Text @2:3-2:11 "2� [x] a"
+         │  └─ Cell @2:12-2:13
+         │     └─ Text @2:12-2:13 "b"
+         └─ Body @4:3-4:6
+            └─ Row @4:3-4:6
+               ├─ Cell @4:3-4:4
+               │  └─ Text @4:3-4:4 "c"
+               └─ Cell @4:5-4:6
+                  └─ Text @4:5-4:6 "d"
