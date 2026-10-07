@@ -2820,7 +2820,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return
         }
         // Reference link definitions stack at the start of a paragraph; any that match are stripped and registered.
-        trimmed = parseDefinitions(in: trimmed)
+        trimmed = parseDefinitions(in: trimmed).trimmingWhitespace(using: self)
         // The paragraph left once its definitions are removed is the block a task list item marker
         // begins (spec "Task list items (extension)"); its separator may be trailing whitespace.
         trimmed = stripTasklistCheckbox(node: node, content: trimmed, trailingSeparator: byte(after: trimmed, in: raw))
