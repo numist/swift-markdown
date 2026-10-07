@@ -282,4 +282,41 @@ struct ContainerTableSourceRangeTests {
 
             """)
     }
+
+    /// A lazy continuation line loses its leading whitespace, so the header is a lone `|` with no cells and no table
+    /// forms, whereas cmark-gfm keeps the split tab's leftover columns ahead of the `|` and reads a one-cell header
+    /// row.
+    @Test("a lazy lone-pipe header after a split tab is paragraph text")
+    func splitTabLonePipeHeaderIsParagraph() {
+        #expect(tree("- >x\n \t|\n  >-|\n") == """
+            document @1:1-3:6
+              list bullet '-' tight @1:1-3:6
+                item @1:1-3:6
+                  block_quote @1:3-3:6
+                    paragraph @1:4-3:6
+                      text "x" @1:4-1:5
+                      softbreak @-
+                      text "|" @2:3-2:4
+                      softbreak @-
+                      text "-|" @3:4-3:6
+
+            """)
+    }
+
+    /// A lazy continuation line loses its leading whitespace, so the header is a lone `|` with no cells and no table
+    /// forms, whereas cmark-gfm keeps the line's leading spaces and reads a one-cell header row.
+    @Test("a lazy lone-pipe header is paragraph text")
+    func lazyLonePipeHeaderIsParagraph() {
+        #expect(tree(">x\n  |\n>-|\n") == """
+            document @1:1-3:4
+              block_quote @1:1-3:4
+                paragraph @1:2-3:4
+                  text "x" @1:2-1:3
+                  softbreak @-
+                  text "|" @2:3-2:4
+                  softbreak @-
+                  text "-|" @3:2-3:4
+
+            """)
+    }
 }

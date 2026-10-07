@@ -61,6 +61,10 @@ struct FootnoteNestedBracketLinkTests {
     private static let fuzzOptions: MarkdownDocument.ParseOptions =
         [.sourcePosition, .cmarkBugCompatibility, .footnotes, .attributes]
 
+    /// The shipped configuration: the same options with bug-compatibility deliberately off, so the collapse never
+    /// fires.
+    private static let shippedOptions: MarkdownDocument.ParseOptions = [.sourcePosition, .footnotes, .attributes]
+
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
     ) -> [(kind: MarkdownNode.Kind, text: String?)] {
@@ -124,6 +128,9 @@ struct FootnoteNestedBracketLinkTests {
         let ns = nodes(in: "[^[]]()", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.compactMap(\.text) == ["^[]"])
+        let shipped = nodes(in: "[^[]]()", options: Self.shippedOptions)
+        #expect(shipped.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(shipped.compactMap(\.text) == ["^[]"])
     }
 
     @Test("control: `[[^[]]()` is literal `[` plus a link whose text is `^[]`")
@@ -131,6 +138,9 @@ struct FootnoteNestedBracketLinkTests {
         let ns = nodes(in: "[[^[]]()", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.compactMap(\.text) == ["[", "^[]"])
+        let shipped = nodes(in: "[[^[]]()", options: Self.shippedOptions)
+        #expect(shipped.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(shipped.compactMap(\.text) == ["[", "^[]"])
     }
 
     // MARK: - Controls: neighbouring shapes with no `()` and no full close
@@ -140,6 +150,9 @@ struct FootnoteNestedBracketLinkTests {
         let ns = nodes(in: "[^[]", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["[^[]"])
+        let shipped = nodes(in: "[^[]", options: Self.shippedOptions)
+        #expect(shipped.map(\.kind) == [.document, .paragraph, .text])
+        #expect(shipped.compactMap(\.text) == ["[^[]"])
     }
 
     @Test("control: `[^[]()` is literal `[` plus an empty inline attribute (attribute path, unaffected)")
@@ -147,6 +160,9 @@ struct FootnoteNestedBracketLinkTests {
         let ns = nodes(in: "[^[]()", options: Self.fuzzOptions)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .attribute])
         #expect(ns.compactMap(\.text) == ["["])
+        let shipped = nodes(in: "[^[]()", options: Self.shippedOptions)
+        #expect(shipped.map(\.kind) == [.document, .paragraph, .text, .attribute])
+        #expect(shipped.compactMap(\.text) == ["["])
     }
 
     // MARK: - The inner `^[…]()` / `^[…](…)` forms an attribute, so the collapse must NOT fire
@@ -158,6 +174,9 @@ struct FootnoteNestedBracketLinkTests {
         #expect(ns.count == 5)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .attribute, .text])
         #expect(ns.compactMap(\.text) == ["[", "]"])
+        let shipped = nodes(in: "[^[]()]", options: Self.shippedOptions)
+        #expect(shipped.map(\.kind) == [.document, .paragraph, .text, .attribute, .text])
+        #expect(shipped.compactMap(\.text) == ["[", "]"])
     }
 
     @Test("`[^[x](y)]`: the inner `^[x](y)` is a non-empty attribute wrapping `x`, so `[` + attribute[`x`] + `]`")
@@ -169,6 +188,10 @@ struct FootnoteNestedBracketLinkTests {
         // are its siblings — a flat kind list alone can't distinguish this from an empty attribute.
         #expect(ns.map(\.depth) == [0, 1, 2, 2, 3, 2])
         #expect(ns.compactMap(\.text) == ["[", "x", "]"])
+        let shipped = depthNodes(in: "[^[x](y)]", options: Self.shippedOptions)
+        #expect(shipped.map(\.kind) == [.document, .paragraph, .text, .attribute, .text, .text])
+        #expect(shipped.map(\.depth) == [0, 1, 2, 2, 3, 2])
+        #expect(shipped.compactMap(\.text) == ["[", "x", "]"])
     }
 
     @Test("control: `[^[]y]`: `^[]y` is not an attribute (no `(`/`[` after `]`), so the collapse fires to `[^[`")
@@ -177,5 +200,50 @@ struct FootnoteNestedBracketLinkTests {
         #expect(ns.count == 3)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["[^["])
+    }
+
+    // MARK: - Shipped configuration: an undefined footnote reference is literal text
+
+    /// An undefined footnote reference is literal text, so the outer `[…]()` is a link whose text is the whole
+    /// `[^[]]`, whereas cmark-gfm truncates the reference to `[^[`.
+    @Test("shipped: `[[^[]]]()` is a link whose text is `[^[]]`")
+    func nestedCaretBracketFormsLinkShipped() {
+        let ns = nodes(in: "[[^[]]]()", options: Self.shippedOptions)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
+        #expect(ns.compactMap(\.text) == ["[^[]]"])
+    }
+
+    /// An undefined footnote reference is literal text, whereas cmark-gfm truncates it to `[^[`.
+    @Test("shipped: `[^[]]` stays literal `[^[]]`")
+    func caretBracketTopLevelShipped() {
+        let ns = nodes(in: "[^[]]", options: Self.shippedOptions)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.compactMap(\.text) == ["[^[]]"])
+    }
+
+    /// An undefined footnote reference is literal text and the text after it is kept, whereas cmark-gfm truncates
+    /// the run to `x[^[`.
+    @Test("shipped: `x[^[]]y` stays literal `x[^[]]y`")
+    func caretBracketKeepsTrailingTextShipped() {
+        let ns = nodes(in: "x[^[]]y", options: Self.shippedOptions)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.compactMap(\.text) == ["x[^[]]y"])
+    }
+
+    /// Brackets with no link destination around an undefined footnote reference are literal text, whereas cmark-gfm
+    /// truncates the run to `[[^[`.
+    @Test("shipped: `[[^[]]]` stays literal `[[^[]]]`")
+    func nestedCaretBracketWithoutParensShipped() {
+        let ns = nodes(in: "[[^[]]]", options: Self.shippedOptions)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.compactMap(\.text) == ["[[^[]]]"])
+    }
+
+    /// An undefined footnote reference is literal text, whereas cmark-gfm truncates it to `[^[`.
+    @Test("shipped: `[^[]y]` stays literal `[^[]y]`")
+    func caretBracketNonAttributeInsideOuterBracketShipped() {
+        let ns = nodes(in: "[^[]y]", options: Self.shippedOptions)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.compactMap(\.text) == ["[^[]y]"])
     }
 }

@@ -110,4 +110,25 @@ struct FootnoteCollapseTrailingAutolinkTests {
         #expect(ns.map(\.text) == [nil, nil, "", nil, "f@.f", "[^["])
         #expect(ns.compactMap(\.url) == ["mailto:f@.f"])
     }
+
+    /// An undefined footnote reference is literal text and nothing in it is dropped, whereas cmark-gfm reconstructs the
+    /// bracket to `[^[` followed by a NUL and so loses the text after it.
+    @Test("flag-OFF: `x[^[]]y` keeps the bracket and the trailing text literal")
+    func plainTrailingTextKeptFlagOff() {
+        let ns = nodes(in: "x[^[]]y", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "x[^[]]y"])
+        #expect(ns.compactMap(\.url).isEmpty)
+    }
+
+    /// The leading email autolinks and the undefined footnote reference after it stays literal text with nothing
+    /// dropped, whereas cmark-gfm truncates the text after the address to `[^[` and adds an empty text node before
+    /// the link.
+    @Test("flag-OFF: `f@.f[^[]]y` links the leading email and keeps the trailing text literal")
+    func emailBeforeBracketKeepsTrailingTextFlagOff() {
+        let ns = nodes(in: "f@.f[^[]]y", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "f@.f", "[^[]]y"])
+        #expect(ns.compactMap(\.url) == ["mailto:f@.f"])
+    }
 }

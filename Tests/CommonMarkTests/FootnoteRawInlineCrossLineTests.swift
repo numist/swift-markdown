@@ -136,4 +136,14 @@ struct FootnoteRawInlineCrossLineTests {
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.text) == ["[^x\n`]"])
     }
+
+    /// The shipped deliverable (bug-compat off) stays spec-correct: the soft break and the real code span both
+    /// survive, so the paragraph is `[^x` + a soft break + a code span + `]`, whereas cmark-gfm truncates the span to
+    /// `` [^x\n`] ``.
+    @Test("bug-compat OFF: mixed newlines keep the soft break and the code span")
+    func mixedBareAndSwallowedNewlinesBugCompatOff() {
+        let ns = nodes(in: "[^x\n`y\nz`]", options: [.sourcePosition, .footnotes])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .softBreak, .codeInline(backtickCount: 1), .text])
+        #expect(ns.compactMap(\.text) == ["[^x", "y z", "]"])
+    }
 }

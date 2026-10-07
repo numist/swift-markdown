@@ -161,4 +161,24 @@ struct AutolinkEmptySiblingTests {
         #expect(ns.map(\.text) == [nil, nil, nil, "https://x.io"])
         #expect(ns.compactMap(\.url) == ["https://x.io"])
     }
+
+    /// GFM's extended email autolink yields just the link followed by the real trailing text, whereas cmark-gfm also
+    /// keeps the empty text node its split leaves before the link.
+    @Test("flag-OFF email with trailing text: just the Link and the real trailing text")
+    func emailTrailingTextFlagOff() {
+        let ns = nodes(in: "o@.x y", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "o@.x", " y"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@.x"])
+    }
+
+    /// GFM's extended email autolink yields just the link followed by the emphasis, whereas cmark-gfm also keeps the
+    /// empty text nodes its split leaves on both sides of the link.
+    @Test("flag-OFF email before emphasis: just the Link and the Emphasis")
+    func emailBeforeEmphasisFlagOff() {
+        let ns = nodes(in: "o@.x*a*", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .emphasis, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "o@.x", nil, "a"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@.x"])
+    }
 }

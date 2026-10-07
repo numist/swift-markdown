@@ -91,4 +91,14 @@ struct ContinuationReindentOvershootRangeTests {
         #expect(texts[0] == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // "e"
         #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 2))   // "c" true column
     }
+
+    /// A lazy continuation line's text keeps the source position of its own bytes (`bc` at `@2:1-2:3`), whereas
+    /// cmark-gfm re-indents it to the block quote's content column 3.
+    @Test("flag-OFF: a lazy continuation line keeps its true columns @2:1-2:3")
+    func specLazyContinuationEnd() throws {
+        let texts = textRanges("> a\nbc\n", options: Self.specOptions)
+        try #require(texts.count == 2)
+        #expect(texts[0] == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // "a"
+        #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 3))   // "bc" true columns
+    }
 }

@@ -168,4 +168,61 @@ struct GFMAutolinkSourceRangeTests {
 
             """)
     }
+
+    /// A URL autolink at the start of a paragraph is just the link, whereas cmark-gfm also leaves an empty text node
+    /// before it.
+    @Test("a URL autolink has no empty text before it")
+    func noEmptyTextBeforeURL() {
+        #expect(tree("http://a") == """
+            document @1:1-1:9
+              paragraph @1:1-1:9
+                link "http://a" "" @1:1-1:9
+                  text "http://a" @1:1-1:9
+
+            """)
+    }
+
+    /// An email autolink that fills its paragraph is just the link, whereas cmark-gfm also leaves empty text nodes on
+    /// both sides of it.
+    @Test("an email autolink has no empty texts beside it")
+    func noEmptyTextsBesideEmail() {
+        #expect(tree("a@b.co") == """
+            document @1:1-1:7
+              paragraph @1:1-1:7
+                link "mailto:a@b.co" "" @1:1-1:7
+                  text "a@b.co" @1:1-1:7
+
+            """)
+    }
+
+    /// The text after an email autolink spans the NUL its U+FFFD replaces and no text precedes the link, whereas
+    /// cmark-gfm also leaves an empty text node before it.
+    @Test("the text after an email autolink spans a NUL")
+    func nulAfterEmailWithoutEmptyText() {
+        #expect(tree("a@b.co\u{0}") == """
+            document @1:1-1:8
+              paragraph @1:1-1:8
+                link "mailto:a@b.co" "" @1:1-1:7
+                  text "a@b.co" @1:1-1:7
+                text "\u{FFFD}" @1:7-1:8
+
+            """)
+    }
+
+    /// A backslash before a line ending is a hard line break and the footnote-shaped bracket matches no definition, so
+    /// the bracket stays text placed on its bytes around the email autolink, whereas cmark-gfm collapses it into
+    /// reconstructed text that can't be placed.
+    @Test("an email in an undefined footnote-shaped bracket spanning a hard break is placed")
+    func emailInUndefinedFootnoteBracket() {
+        #expect(tree("![^b@.B\\\n]", options: Self.opts.union(.footnotes)) == """
+            document @1:1-2:2
+              paragraph @1:1-2:2
+                text "![^" @1:1-1:4
+                link "mailto:b@.B" "" @1:4-1:8
+                  text "b@.B" @1:4-1:8
+                linebreak @-
+                text "]" @2:1-2:2
+
+            """)
+    }
 }

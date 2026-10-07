@@ -114,6 +114,14 @@ struct AngleAutolinkURIDelQuirkTests {
         #expect(text("<http://a\u{7F}>", options: Self.flagOff) == "<http://a\u{7F}>")
     }
 
+    /// CommonMark §6.5 excludes ASCII control characters such as DEL from a URI autolink, so the `<…>` stays literal
+    /// text, whereas cmark-gfm's `_scan_autolink_uri` admits DEL and links it.
+    @Test("flag OFF: `<tp:aDELb>` is NOT a link (literal text)")
+    func flagOffDelMidBodyNotLink() {
+        #expect(linkURL("<tp:a\u{7F}b>", options: Self.flagOff) == nil)
+        #expect(text("<tp:a\u{7F}b>", options: Self.flagOff) == "<tp:a\u{7F}b>")
+    }
+
     // MARK: Agreeing controls — guard against over-broadening (only 0x7F changes under the flag)
 
     @Test("both flags: `<tp:x>` is a link (ordinary URI)")
