@@ -196,11 +196,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// table).
     var paragraphTablePending: [DocumentStorage.Index: Bool] = [:]
 
-    /// The deepest list that has seen a blank line since its last item boundary.
-    ///
-    /// When a new item is added to that list (i.e., the blank line was between sibling items), the list gets marked loose. Cleared on each item open after the check, and stays stale (but harmless) when the list closes.
-    var pendingLooseList: DocumentStorage.Index? = nil
-
     /// Per-kind stretches of scan starts from which a first-closer raw-HTML scan is known to fail in the current `parseInline` pass (`HTMLCloserMisses`). Reset per pass.
     var htmlCloserMisses = HTMLCloserMisses()
 
@@ -4044,7 +4039,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// At list finalize, decide whether the list is loose.
     ///
-    /// A list is loose per CommonMark §5.3 if any item directly contains two block-level children separated by a blank line - i.e., the item has more than one block child AND a blank line was observed inside it. (The other criterion - blank lines between sibling items - is detected eagerly in `openListItem` via `pendingLooseList`.)
+    /// A list is loose per CommonMark §5.3 if any item directly contains two block-level children separated by a blank line - i.e., the item has more than one block child AND a blank line was observed inside it. (The other criterion - a blank line between sibling items - is case (a) below.)
     private mutating func detectLooseList(_ list: DocumentStorage.Index) {
         var loose = false
         var item = storage[list].firstChild
