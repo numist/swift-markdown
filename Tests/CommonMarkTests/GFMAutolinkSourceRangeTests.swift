@@ -174,6 +174,18 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
+    @Test("an email ending in an entity reference after other references spans its own reference")
+    func emailEndingInEntityReferenceAfterOtherReferences() {
+        #expect(tree("&amp;&amp; a@b.&#99;") == """
+            document @1:1-1:21
+              paragraph @1:1-1:21
+                text "&& " @1:1-1:12
+                link "mailto:a@b.c" "" @1:12-1:21
+                  text "a@b.c" @1:12-1:21
+
+            """)
+    }
+
     @Test("an email starting in an entity reference spans the reference")
     func emailStartingInEntityReference() {
         #expect(tree("&#97;@b.c") == """
