@@ -21,7 +21,7 @@ extension BlockParser {
         let chunk: Chunk
         // How the flattened content maps back to source for stamping rows/cells/cell-text:
         //   - `.contiguous`: the arena copy below is a byte-for-byte image of an `inSource` range, so arena offset `A` maps to source `A + delta`. The common no-leading-whitespace table.
-        //   - `.flattened`: arena content carrying a run map - the rows aren't source-contiguous (a container prefix, leading whitespace, or a CRLF separates them), so the paragraph arrived as a segment list, flattened with a run map that images each row's content on its source line (re-based to the table's content column for a re-indented row; see `runParagraphMatchers`), or NULs were replaced and the map images each U+FFFD back to its NUL.
+        //   - `.flattened`: arena content carrying a run map - the rows aren't source-contiguous (a container prefix, leading whitespace, or a CRLF separates them), so the paragraph arrived as a segment list, flattened with a run map that images each row's content on its source line (see `runParagraphMatchers`), or NULs were replaced and the map images each U+FFFD back to its NUL.
         //   - `.none`: positions are off, so nothing is stamped.
         let mode: TableSourceMode
         if inputChunk.inSource {
@@ -206,14 +206,13 @@ extension BlockParser {
         // `nil` when positions are off, leaving the row unstamped.
         // `sourceRanges` is populated only when positions are on, which a non-`nil` projection guarantees. Last row: the paragraph→table chunk trimmed this line's trailing whitespace, so its untrimmed physical extent ends at the table node's own end.
         let untrimmedLineEnd = isLastLine ? projection.map { _ in Int(storage.sourceRanges[parent].end) } : nil
-        let proj = projection.map { RowProjection(table: $0, row: line, physicalLineEnd: untrimmedLineEnd) }
-        // The untrimmed row-content extent's re-based source end, reused for the row end and the rightmost-no-closing-pipe cell.
+        let proj = projection.map { RowProjection(table: $0) }
+        // The untrimmed row-content extent's source end, reused for the row end and the rightmost-no-closing-pipe cell.
         var rowContentEnd: Int? = nil
         if let proj {
             stampStart(rowIdx, arena: line.lowerBound, proj)
             if let untrimmedLineEnd {
-                // The row NODE ends at the line's physical end; the rightmost cell below re-bases the same extent by the row's re-indent shift.
-                rowContentEnd = proj.clamped(untrimmedLineEnd + proj.reindent)
+                rowContentEnd = untrimmedLineEnd
                 storage.setSourceEnd(rowIdx, untrimmedLineEnd)
             } else {
                 rowContentEnd = proj.end(arena: line.upperBound)
@@ -334,7 +333,7 @@ extension BlockParser {
                     // No `\|` was present iff `unescapePipes` returned the range unchanged. For a contiguous
                     // source-mapped table with no escapes, the cell content is a contiguous source slice, so
                     // enqueue a source-backed chunk and inline stamping lands real source positions on the cell's
-                    // text/code/etc. A flattened (re-based) or escaped cell instead parses from its arena copy
+                    // text/code/etc. A flattened or escaped cell instead parses from its arena copy
                     // carrying an arena→source run map (registered on `arenaSourceMaps`); with positions off no map
                     // is registered.
                     let noEscape = cellChunk.offset == cellRange.lowerBound && cellChunk.length == cellRange.count
@@ -344,11 +343,11 @@ extension BlockParser {
                             Chunk(offset: srcLo, length: cellRange.count, inSource: true))))
                     } else {
                         // The cell's arena→source mapping is the table's run map over the cell: one constant-shift
-                        // run for a contiguous table, re-based via the row's run for a `.flattened` one, and split at
+                        // run for a contiguous table, the row's runs for a `.flattened` one, and split at
                         // each U+FFFD so its three bytes image the one NUL. cmark stamps cell inlines by their offset
                         // in the unescaped buffer added to the cell start, ignoring any stripped `\|` backslash
                         // (`unescapedPipesMap`). why:
-                        // table-cell inline positions track the reference's escape-oblivious / re-based columns
+                        // table-cell inline positions track the reference's escape-oblivious columns
                         // unconditionally. With positions off there is no projection, so no mapping is registered.
                         if let projection {
                             let cellMap = projection.runs(from: cellRange.lowerBound, length: cellRange.count, in: self)
@@ -439,55 +438,30 @@ extension BlockParser {
         }
     }
 
-    /// A single row's arena→source projection.
-    ///
-    /// A table row occupies one physical source line, whose content images source runs (split where a U+FFFD images its NUL) that share one re-indent shift: `reindent` is the re-based `sourceOffset` (cmark's escape-oblivious / re-based column) of the run holding the row's last byte, minus its byte-read `physicalOffset` (the row's true physical line, used to place the row's content end).
-    ///
-    /// A re-indent can shift a re-based offset past the end of the row's physical line; every projected offset is clamped to `lineEnd`, the line's terminator (or the source end), so no row or cell range runs onto the next line.
+    /// A single row's arena→source projection: each content byte of the row images a source byte on the row's own
+    /// source line.
     private struct RowProjection {
         let table: TableProjection
-        let reindent: Int
-        let lineEnd: Int
 
-        /// `row` is the row's arena line. `physicalLineEnd` is the physical end of the row's source line when its content was trimmed short of it (the last row); otherwise the row's content runs to its line's terminator.
-        init(table: TableProjection, row: Range<Int>, physicalLineEnd: Int?) {
-            precondition(!row.isEmpty, "a table row holds at least one byte")
-            let (run, runStart) = table.run(covering: row.upperBound - 1)
-            precondition(run.sourceOffset >= 0 && run.physicalOffset >= 0, "a table row's last byte images its source")
-            self.table = table
-            reindent = Int(run.sourceOffset) - Int(run.physicalOffset)
-            lineEnd = physicalLineEnd ?? Int(run.physicalOffset) + (row.upperBound - 1 - table.chunkOffset - runStart) + 1
-        }
-
-        /// `offset`, cut off at the end of the row's physical line.
-        func clamped(_ offset: Int) -> Int {
-            min(offset, lineEnd)
-        }
-
-        /// The re-based source offset imaged by the content byte at arena offset `arena`, before clamping.
-        private func unclampedStart(arena: Int) -> Int {
+        /// The source offset imaged by the content byte at arena offset `arena`.
+        func start(arena: Int) -> Int {
             let (run, runStart) = table.run(covering: arena)
             precondition(run.sourceOffset >= 0, "a table row or cell boundary byte images its source")
             return Int(run.sourceOffset) + (arena - table.chunkOffset - runStart)
         }
 
-        /// The re-based source offset imaged by the content byte at arena offset `arena`.
-        func start(arena: Int) -> Int {
-            clamped(unclampedStart(arena: arena))
-        }
-
-        /// The re-based half-open source end for a range of content ending at arena offset `arena`: just past the source byte its last byte images, so a range ending in a U+FFFD ends just past its NUL.
+        /// The half-open source end for a range of content ending at arena offset `arena`: just past the source byte its last byte images, so a range ending in a U+FFFD ends just past its NUL.
         func end(arena: Int) -> Int {
-            clamped(unclampedStart(arena: arena - 1) + 1)
+            start(arena: arena - 1) + 1
         }
     }
 
-    /// Stamp a node's start from an arena offset, re-basing via the row projection (cmark's escape-oblivious / re-based column).
+    /// Stamp a node's start from an arena offset, through the row projection.
     private mutating func stampStart(_ node: DocumentStorage.Index, arena: Int, _ proj: RowProjection) {
         storage.setSourceStart(node, proj.start(arena: arena))
     }
 
-    /// Stamp a node's half-open end from an arena offset, re-basing via the row projection (see `stampStart`).
+    /// Stamp a node's half-open end from an arena offset, through the row projection.
     private mutating func stampEnd(_ node: DocumentStorage.Index, arena: Int, _ proj: RowProjection) {
         storage.setSourceEnd(node, proj.end(arena: arena))
     }
