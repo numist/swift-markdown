@@ -918,8 +918,7 @@ extension BlockParser {
         // re-parse - `^[][]` drops the trailing `[]`, leaving literal `^[]`.
         var labelKey: String?
         // The inline form completes the construct; what follows it is not part of it.
-        let scansLabel = !matched
-        if scansLabel, let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
+        if !matched, let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
            let lab = matchLinkLabel(labelWindow) {
             // Contiguous window (see `contiguousChunk`): `lab.interior` is a real buffer chunk and
             // `lab.afterEnd` a buffer offset converted back to virtual via the window base.
@@ -927,7 +926,7 @@ extension BlockParser {
             if lab.interior.length > 0 {
                 labelKey = normalizeLabel(chunk: lab.interior)
             }
-        } else if scansLabel, let lab = matchLinkLabel(from: pos, end: end, in: content) {
+        } else if !matched, let lab = matchLinkLabel(from: pos, end: end, in: content) {
             // The following `[…]` straddles a soft-break join (`^[](x)[la\nbel]`), which the contiguous
             // window can't image - it stops at the segment boundary, leaving the closing `]` on the next
             // line unseen. cmark's `link_label` scans a flat buffer, so it crosses the join to the `]` and
