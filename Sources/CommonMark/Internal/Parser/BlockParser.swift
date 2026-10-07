@@ -4315,8 +4315,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         i += 1
-        let lineTabulationAndFormFeed = true
-        i = skipSpacesAndOneLineEnd(from: i, in: chunk, lineTabulationAndFormFeed: lineTabulationAndFormFeed)
+        i = skipSpacesAndOneLineEnd(from: i, in: chunk)
         guard let dest = matchLinkDestination(
             Chunk(offset: i, length: end - i, inSource: inSource)
         ) else {
@@ -4336,21 +4335,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         i = dest.afterEnd
         // Optional title (after spnl). If we find one but the line then doesn't end cleanly, rewind and try a no-title commit instead.
         let beforeTitle = i
-        let afterTitleSpnl = skipSpacesAndOneLineEnd(from: i, in: chunk, lineTabulationAndFormFeed: lineTabulationAndFormFeed)
+        let afterTitleSpnl = skipSpacesAndOneLineEnd(from: i, in: chunk)
         var titleChunk: Chunk = .empty
         var afterAll = -1
         if afterTitleSpnl > beforeTitle,
            let title = matchLinkTitle(
                Chunk(offset: afterTitleSpnl, length: end - afterTitleSpnl, inSource: inSource)
            ) {
-            let afterSpaces = skipSpacesTabs(from: title.afterEnd, in: chunk, lineTabulationAndFormFeed: lineTabulationAndFormFeed)
+            let afterSpaces = skipLineWhitespace(from: title.afterEnd, in: chunk)
             if let lineEnd = skipLineEndOrEOF(from: afterSpaces, in: chunk) {
                 titleChunk = title.chunk
                 afterAll = lineEnd
             }
         }
         if afterAll < 0 {
-            let afterSpaces = skipSpacesTabs(from: dest.afterEnd, in: chunk, lineTabulationAndFormFeed: lineTabulationAndFormFeed)
+            let afterSpaces = skipLineWhitespace(from: dest.afterEnd, in: chunk)
             guard let lineEnd = skipLineEndOrEOF(from: afterSpaces, in: chunk) else {
                 return nil
             }
@@ -4400,7 +4399,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         i += 1
-        i = skipSpacesAndOneLineEnd(from: i, in: chunk, lineTabulationAndFormFeed: false)
+        i = skipSpacesAndOneLineEnd(from: i, in: chunk)
         let attrsStart = i
         while i < end {
             let b = readByte(at: i, in: chunk)

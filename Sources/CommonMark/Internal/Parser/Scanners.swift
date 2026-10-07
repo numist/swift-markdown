@@ -401,14 +401,14 @@ extension BlockParser {
 
     // MARK: - Whitespace
 
-    /// Skip zero or more space and tab bytes, and with `lineTabulationAndFormFeed` also line tabulation
-    /// (U+000B) and form feed (U+000C) bytes, from `cursor` up to the end of `chunk`.
-    internal func skipSpacesTabs(from cursor: Int, in chunk: Chunk, lineTabulationAndFormFeed: Bool) -> Int {
+    /// Skip zero or more space, tab, line tabulation (U+000B) and form feed (U+000C) bytes, from `cursor` up
+    /// to the end of `chunk`.
+    internal func skipLineWhitespace(from cursor: Int, in chunk: Chunk) -> Int {
         let end = chunk.range.upperBound
         var i = cursor
         while i < end {
             let c = readByte(at: i, in: chunk)
-            if !c.isSpaceOrTab && !(lineTabulationAndFormFeed && (c == 0x0B || c == 0x0C)) {
+            if !c.isSpaceOrTab && c != 0x0B && c != 0x0C {
                 break
             }
             i += 1
@@ -416,10 +416,10 @@ extension BlockParser {
         return i
     }
 
-    /// `spnl` from cmark: zero or more spaces/tabs, then *at most one* line end, then more spaces/tabs. Scans from `cursor` up to the end of `chunk`; `lineTabulationAndFormFeed` is as for `skipSpacesTabs`.
-    internal func skipSpacesAndOneLineEnd(from cursor: Int, in chunk: Chunk, lineTabulationAndFormFeed: Bool) -> Int {
+    /// Zero or more whitespace bytes other than line endings (`skipLineWhitespace`), then *at most one* line end, then more of them. Scans from `cursor` up to the end of `chunk`.
+    internal func skipSpacesAndOneLineEnd(from cursor: Int, in chunk: Chunk) -> Int {
         let end = chunk.range.upperBound
-        var i = skipSpacesTabs(from: cursor, in: chunk, lineTabulationAndFormFeed: lineTabulationAndFormFeed)
+        var i = skipLineWhitespace(from: cursor, in: chunk)
         if i >= end {
             return i
         }
@@ -427,7 +427,7 @@ extension BlockParser {
         precondition(c != UInt8(ascii: "\r"), "definition content holds no carriage return: lines split on CR and join with LF")
         if c == UInt8(ascii: "\n") {
             i += 1
-            i = skipSpacesTabs(from: i, in: chunk, lineTabulationAndFormFeed: lineTabulationAndFormFeed)
+            i = skipLineWhitespace(from: i, in: chunk)
         }
         return i
     }
