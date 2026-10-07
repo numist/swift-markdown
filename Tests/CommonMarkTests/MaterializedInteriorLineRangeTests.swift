@@ -19,13 +19,12 @@ import Testing
 /// one arena `Chunk` so the matchers can scan it contiguously (`BlockParser.segmentsCouldMatchMatcher` /
 /// `flattenSegments`). When the paragraph turns out NOT to match (no delimiter row, not a ref-def), that
 /// arena content is what reaches inline parsing. Its arena→source map (`ArenaRun`) tiles the content one
-/// run per source-adjacent line group: a contiguous run (`t\n|`) carries `physicalOffset == sourceOffset`
-/// (no re-indent), a later leading-whitespace line carries `physicalOffset != sourceOffset` (re-indented).
+/// run per source-adjacent line group (a contiguous run such as `t\n|`), each imaging the source where its
+/// bytes sit.
 ///
 /// Stamping an interior-line run on the contiguous arena run must project onto the run's own physical line,
-/// exactly like the multi-segment-source case (`MultiLineSegmentRangeTests`). A contiguous run maps its
-/// source where its bytes sit (`ArenaRun.sourceOffset == physicalOffset`, no re-indent), so its byte
-/// projection is already exact and lands on the run's own line. (Regression for the differential-fuzzer
+/// exactly like the multi-segment-source case (`MultiLineSegmentRangeTests`). Each run maps its source where
+/// its bytes sit, so its byte projection is already exact and lands on the run's own line. (Regression for the differential-fuzzer
 /// `pipemid-*` pairs.)
 @Suite("Materialized (arena) multi-line contiguous run - interior-line inline positions")
 struct MaterializedInteriorLineRangeTests {
