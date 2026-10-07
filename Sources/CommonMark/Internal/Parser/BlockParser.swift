@@ -194,7 +194,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// continuation line - so an ineligible item keeps its `[ ]`/`[x]` as literal paragraph text and
     /// re-indents like a plain bullet. (Empty task items are consumed at open time in
     /// `emptyTaskItemChecked`; this set carries the content-bearing case to finalize, and the strip removes the
-    /// item once it consumes the checkbox.)
+    /// item once it consumes the checkbox.) Populated only under `.cmarkBugCompatibility`; otherwise an item's
+    /// first paragraph decides on its own (`tasklistEligibleItem`).
     var lineAnchoredTaskItems: Set<DocumentStorage.Index> = []
 
     /// The indent, in columns, of each paragraph's SECOND physical line — its first continuation line —
@@ -3364,9 +3365,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // paragraph no raw content (spec "Paragraphs").
             return
         }
-        // GFM tasklist: cmark's tasklist extension consumes the checkbox marker at item-OPEN time
-        // (`open_tasklist_item`), so every finalize matcher below (footnote def, link ref-def, table)
-        // sees the content AFTER the checkbox. Strip it first here to match.
+        // GFM tasklist: under `.cmarkBugCompatibility` the checkbox is stripped first, as cmark's tasklist
+        // extension consumes it at item-OPEN time (`open_tasklist_item`), so every finalize matcher below
+        // (footnote def, link ref-def, table) sees the content AFTER the checkbox. Otherwise it is stripped
+        // from the paragraph left after the definitions, below.
         let beforeCheckbox = trimmed
         let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
         if bugCompatible {
@@ -4953,8 +4955,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Consume a GFM task-list checkbox from `content` - the trimmed first-leaf content of a list item -
     /// setting the item's `.item(checked:)` state and returning the content past the marker + separator.
     /// Returns `content` unchanged when the item is not an eligible task item (or the content doesn't
-    /// begin with a checkbox).
+    /// begin with a checkbox). `trailingSeparator` is the first byte trimmed off `content`'s end, which separates a
+    /// checkbox that fills `content` from what followed it on its line.
     ///
+    /// The shipped parser calls this on a paragraph that is the item's first block, once its definitions are removed
+    /// (spec "Task list items (extension)"), and on the paragraph a table splits off. Under `.cmarkBugCompatibility`:
     /// cmark-gfm consumes the checkbox in `open_tasklist_item` (`extensions/tasklist.c`) as the ITEM
     /// opens, regardless of what that content later becomes - a paragraph, a setext heading, etc. The
     /// rewrite defers that consumption, so this must be called on EVERY path a task item's first line can

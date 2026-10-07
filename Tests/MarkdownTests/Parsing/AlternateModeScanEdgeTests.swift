@@ -26,6 +26,8 @@ struct AlternateModeScanEdgeTests {
         ("a@b", "Document\n└─ Paragraph\n   └─ Text \"a@b\""),
         ("www.a\\_b.c", "Document\n└─ Paragraph\n   └─ Text \"www.a_b.c\""),
         ("http://-x", "Document\n└─ Paragraph\n   └─ Text \"http://-x\""),
+        ("[^a\r\nb]", "Document\n└─ Paragraph\n   └─ Text \"[^]\""),
+        ("a@b.c.", "Document\n└─ Paragraph\n   ├─ Text \"\"\n   ├─ Link destination: \"mailto:a@b.c\"\n   │  └─ Text \"a@b.c\"\n   └─ Text \".\""),
     ] as [(String, String)])
     func scan(_ markdown: String, _ expected: String) {
         #expect(tree(markdown) == expected)
