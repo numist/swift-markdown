@@ -1683,7 +1683,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     reconstructedRefDefParagraphs.insert(para)
                     pending = raw.inSource
                         ? PendingLeaf(node: para, content: .lazy(range: raw.range))
-                        : addChunk(raw, map: sliceRuns(flatMap, from: 0, length: raw.length), to: para, pending: pending)
+                        : addChunk(raw, map: flatMap, to: para, pending: pending)
                     pending = appendNewline(to: para, pending: pending)
                     pending = addLine(span: source, range: firstNonSpace..<lineRange.upperBound, to: para, pending: pending)
                     return pending
