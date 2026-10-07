@@ -141,4 +141,23 @@ struct TaskListSetextHeadingRecognitionTests {
         #expect(shape.headingLevel == 2)
         #expect(shape.headingText == "v")
     }
+
+    @Test("flag OFF control: `- [ ] v` (no underline) is an UNCHECKED task item with a paragraph `v`")
+    func openingLineOnlyIsStillTaskFlagOff() throws {
+        let shape = shape("- [ ] v", options: Self.flagOff)
+        let checked = try #require(shape.itemChecked, "no list item parsed")
+        #expect(checked == .some(false))
+        #expect(shape.headingLevel == nil)
+        #expect(shape.allTexts == ["v"])
+    }
+
+    @Test("flag OFF control: `- v\\n  -` is an ORDINARY item with a level-2 heading `v`")
+    func plainItemSetextHeadingNotTaskFlagOff() throws {
+        let shape = shape("- v\n  -", options: Self.flagOff)
+        let checked = try #require(shape.itemChecked, "no list item parsed")
+        try #require(shape.headingLevel != nil, "no heading parsed")
+        #expect(checked == .some(nil))
+        #expect(shape.headingLevel == 2)
+        #expect(shape.headingText == "v")
+    }
 }

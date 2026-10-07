@@ -153,4 +153,53 @@ struct TaskListCheckboxStrstrQuirkTests {
     func flagOffCheckedWithContent() throws {
         #expect(try checkedState("- [x] foo", options: Self.flagOff) == true)
     }
+
+    /// The checked state comes from the task list item marker alone (GFM task list items), where cmark's line-wide
+    /// `strstr` finds the later `[x]` and checks the item.
+    @Test("flag OFF: `- [ ]   foo [x]` is UNCHECKED (multi-space marker)")
+    func flagOffMultiSpaceMarker() throws {
+        #expect(try checkedState("- [ ]   foo [x]", options: Self.flagOff) == false)
+    }
+
+    /// The checked state comes from the task list item marker alone (GFM task list items), where cmark's line-wide
+    /// `strstr` finds the later `[X]` and checks the item.
+    @Test("flag OFF: `- [ ] a [X] b` is UNCHECKED")
+    func flagOffUppercaseMidLine() throws {
+        #expect(try checkedState("- [ ] a [X] b", options: Self.flagOff) == false)
+    }
+
+    @Test("flag OFF: `- [ ] [x` is UNCHECKED")
+    func flagOffNoClosingBracket() throws {
+        #expect(try checkedState("- [ ] [x", options: Self.flagOff) == false)
+    }
+
+    @Test("flag OFF: `- [ ] (x)` is UNCHECKED")
+    func flagOffParens() throws {
+        #expect(try checkedState("- [ ] (x)", options: Self.flagOff) == false)
+    }
+
+    @Test("flag OFF: `- [ ] ]x[` is UNCHECKED")
+    func flagOffReversedBrackets() throws {
+        #expect(try checkedState("- [ ] ]x[", options: Self.flagOff) == false)
+    }
+
+    @Test("flag OFF: continuation-line `[x]` does NOT flip checked")
+    func flagOffContinuationLineExcluded() throws {
+        #expect(try checkedState("- [ ] a\n  [x]", options: Self.flagOff) == false)
+    }
+
+    @Test("flag OFF: `- [ ] [ ]` is UNCHECKED")
+    func flagOffBothUnchecked() throws {
+        #expect(try checkedState("- [ ] [ ]", options: Self.flagOff) == false)
+    }
+
+    @Test("flag OFF: `- [x] [x]` is CHECKED")
+    func flagOffBothChecked() throws {
+        #expect(try checkedState("- [x] [x]", options: Self.flagOff) == true)
+    }
+
+    @Test("flag OFF: `- [ ] x` is UNCHECKED (plain content)")
+    func flagOffPlainContent() throws {
+        #expect(try checkedState("- [ ] x", options: Self.flagOff) == false)
+    }
 }

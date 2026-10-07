@@ -146,6 +146,23 @@ struct TableEmptyCellSourceRangeTests {
         // Physical columns: `x` at col 2, `y` at col 4 (leading space visible).
         #expect((bodyRow.cells[0].startColumn, bodyRow.cells[0].endColumn, bodyRow.cells[0].text) == (2, 3, "x"))
         #expect((bodyRow.cells[1].startColumn, bodyRow.cells[1].endColumn, bodyRow.cells[1].text) == (4, 5, "y"))
+
+        // An unindented row is unaffected by the option.
+        let plain = tableRows("a|b\n-|-\nx|y")
+        let plainRow = try #require(plain.last, "expected a body row")
+        try #require(plainRow.cells.count == 2, "fixture: expected two body cells, got \(plainRow.cells.count)")
+        #expect((plainRow.cells[0].startColumn, plainRow.cells[0].endColumn, plainRow.cells[0].text) == (1, 2, "x"))
+        #expect((plainRow.cells[1].startColumn, plainRow.cells[1].endColumn, plainRow.cells[1].text) == (3, 4, "y"))
+
+        // Each cell sits at its own physical column, so a leading-whitespace HEADER shifts only its own cells
+        // (cmark re-bases every row onto the header's start column instead).
+        let hdr = tableRows(" a|b\n-|-\nx|y")
+        try #require(hdr.count == 2, "fixture: expected a header row and a body row")
+        try #require(hdr[0].cells.count == 2 && hdr[1].cells.count == 2, "fixture: two cells per row")
+        #expect((hdr[0].cells[0].startColumn, hdr[0].cells[0].endColumn, hdr[0].cells[0].text) == (2, 3, "a"))
+        #expect((hdr[0].cells[1].startColumn, hdr[0].cells[1].endColumn, hdr[0].cells[1].text) == (4, 5, "b"))
+        #expect((hdr[1].cells[0].startColumn, hdr[1].cells[0].endColumn, hdr[1].cells[0].text) == (1, 2, "x"))
+        #expect((hdr[1].cells[1].startColumn, hdr[1].cells[1].endColumn, hdr[1].cells[1].text) == (3, 4, "y"))
     }
 
     /// A whitespace-only cell's end column spans past its closing pipe (untrimmed extent), while the

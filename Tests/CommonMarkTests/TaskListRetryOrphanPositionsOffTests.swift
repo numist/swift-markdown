@@ -38,6 +38,11 @@ struct TaskListRetryOrphanPositionsOffTests {
         [.cmarkBugCompatibility, .tasklist, .sourcePosition],
     ]
 
+    private static let specPositionStates: [MarkdownDocument.ParseOptions] = [
+        [.tasklist],
+        [.tasklist, .sourcePosition],
+    ]
+
     private func htmlLiterals(_ src: String, options: MarkdownDocument.ParseOptions) -> [String] {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> [String] in
             inlineHTMLLiterals(doc.root)
@@ -53,5 +58,14 @@ struct TaskListRetryOrphanPositionsOffTests {
     func orphanInFlattenedParagraph(options: MarkdownDocument.ParseOptions) {
         #expect(htmlLiterals("- >\ta\u{0}<?\n  2\u{0} [x] \n", options: options) == ["<?\n\u{FFFD} "])
         #expect(htmlLiterals("- >a\u{0}<?\n  2\u{0} [x] \n", options: options) == ["<?\n\u{FFFD} "])
+    }
+
+    /// A processing instruction needs a closing `?>` (CommonMark raw HTML), so the unclosed `<?` stays text, where
+    /// cmark's scan takes the orphaned continuation byte and the space after it as the closing `?>`.
+    @Test("without cmark bug compatibility, an unclosed `<?` is not inline HTML", arguments: specPositionStates)
+    func unclosedProcessingInstructionSpecCorrect(options: MarkdownDocument.ParseOptions) {
+        #expect(htmlLiterals("- >\ta<?\n  2\u{0} [x] \n", options: options) == [])
+        #expect(htmlLiterals("- >\ta\u{0}<?\n  2\u{0} [x] \n", options: options) == [])
+        #expect(htmlLiterals("- >a\u{0}<?\n  2\u{0} [x] \n", options: options) == [])
     }
 }

@@ -48,6 +48,18 @@ struct TaskListRetryTabExpandedLineTests {
             """)
     }
 
+    @Test("without tasklist or cmark bug compatibility, the item stays a plain item")
+    func plainItemWithoutTasklistOrBugCompatibility() {
+        #expect(CmarkTreeDump.dump(source, options: []) == """
+            document
+              list ordered start=10 delim=period tight
+                item
+                  paragraph
+                    text "1234567890. [ ] x"
+
+            """)
+    }
+
     /// cmark gives the task item that `taskItem` expects; the rewrite intentionally keeps the plain item.
     @Test("without cmark bug compatibility, the item stays a plain item")
     func plainItemWithoutBugCompatibility() {

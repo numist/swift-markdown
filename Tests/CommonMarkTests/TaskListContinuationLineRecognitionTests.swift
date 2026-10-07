@@ -130,4 +130,9 @@ struct TaskListContinuationLineRecognitionTests {
     func openingLineCheckedFlagOff() throws {
         #expect(try firstChecked("- [x] foo", options: Self.flagOff) == true)
     }
+
+    @Test("flag OFF control: `- [x] a\\n  [x] b` IS a checked task item")
+    func openingLineWithContinuationFlagOff() throws {
+        #expect(try firstChecked("- [x] a\n  [x] b", options: Self.flagOff) == true)
+    }
 }

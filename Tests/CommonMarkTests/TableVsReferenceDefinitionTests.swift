@@ -212,6 +212,40 @@ struct TableVsReferenceDefinitionTests {
         #expect(doc.count == 1)
     }
 
+    /// A complete link reference definition leaves no paragraph behind, so a bare `-` on the next line opens an empty
+    /// bullet list item (CommonMark list items), where cmark keeps the emptied paragraph open and absorbs the `-` as text.
+    @Test("without bug compatibility, a bare `-` after a complete single-line ref-def is an empty list item")
+    func bareDelimiterAfterCompleteReferenceDefinitionSpecCorrect() {
+        #expect(CmarkTreeDump.dump("[o]:o\n-", options: [.tables]) == """
+            document
+              list bullet '-' tight
+                item
+
+            """)
+    }
+
+    /// A complete link reference definition leaves no paragraph behind, so a bare `-` on the next line opens an empty
+    /// bullet list item (CommonMark list items), where cmark keeps the emptied paragraph open and absorbs the `-` as text.
+    @Test("without bug compatibility, a bare `-` after a ref-def with a space before the destination is an empty list item")
+    func bareDelimiterAfterCompleteReferenceDefinitionWithSpaceSpecCorrect() {
+        #expect(CmarkTreeDump.dump("[o]: o\n-", options: [.tables]) == """
+            document
+              list bullet '-' tight
+                item
+
+            """)
+    }
+
+    @Test("without bug compatibility, a PIPE delimiter row after a complete ref-def still forms a table")
+    func pipeDelimiterAfterCompleteReferenceDefinitionStaysTableSpecCorrect() throws {
+        let doc = blocks("[o]:o\n|-")
+        let table = try #require(doc.first, "expected a block, got an empty document")
+        try #require(table.kind == .table, "expected a table, got \(table.kind)")
+        #expect(table.headerCells == ["[o]:o"])
+        #expect(table.bodyRows == [])
+        #expect(doc.count == 1)
+    }
+
     @Test("the #134 incomplete-header table still forms under the fuzzer's option set")
     func incompleteHeaderDelimiterStaysTableUnderBugCompat() throws {
         // `[\n|-\n]:/` (the #134 case) under `.cmarkBugCompatibility`: line 2 `|-` is a pipe delimiter, so

@@ -160,6 +160,16 @@ struct TasklistLazyContinuationRangeTests {
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 8))
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y" at its TRUE column
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
+
+        // The flag-ON test's ten-byte line keeps its TRUE physical columns too.
+        let longRanges = self.ranges(in: "- [ ] x\nyyyyyyyyyy", options: Self.specOptions)
+        try #require(itemChecked(in: longRanges) == .some(.some(false)))
+        let longTexts = self.texts(in: longRanges)
+        try #require(longTexts.count == 2)
+        #expect(longTexts[0]?.lowerBound == Pos(line: 1, column: 7))
+        #expect(longTexts[0]?.upperBound == Pos(line: 1, column: 8))
+        #expect(longTexts[1]?.lowerBound == Pos(line: 2, column: 1))
+        #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 11))
     }
 
     /// The flag-OFF twin of `checkedContinuation`: the checked task item's continuation keeps its TRUE
@@ -175,6 +185,16 @@ struct TasklistLazyContinuationRangeTests {
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 8))
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y" at its TRUE column
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
+
+        // The flag-ON test's ten-byte line keeps its TRUE physical columns too.
+        let longRanges = self.ranges(in: "- [x] x\nyyyyyyyyyy", options: Self.specOptions)
+        try #require(itemChecked(in: longRanges) == .some(.some(true)))
+        let longTexts = self.texts(in: longRanges)
+        try #require(longTexts.count == 2)
+        #expect(longTexts[0]?.lowerBound == Pos(line: 1, column: 7))
+        #expect(longTexts[0]?.upperBound == Pos(line: 1, column: 8))
+        #expect(longTexts[1]?.lowerBound == Pos(line: 2, column: 1))
+        #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 11))
     }
 
     /// The flag-OFF twin of `oneSpaceContinuation`: the one leading space is visible, so `y` keeps its
@@ -188,6 +208,14 @@ struct TasklistLazyContinuationRangeTests {
 
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 2))   // "y" at its TRUE column (leading space visible)
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 3))
+
+        // The flag-ON test's ten-byte line keeps its TRUE physical columns too.
+        let longRanges = self.ranges(in: "- [ ] x\n yyyyyyyyyy", options: Self.specOptions)
+        try #require(itemChecked(in: longRanges) == .some(.some(false)))
+        let longTexts = self.texts(in: longRanges)
+        try #require(longTexts.count == 2)
+        #expect(longTexts[1]?.lowerBound == Pos(line: 2, column: 2))
+        #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 12))
     }
 
     /// The flag-OFF twin of `deeperIndentContinuation`: the four leading spaces are visible, so `y` keeps
@@ -201,6 +229,14 @@ struct TasklistLazyContinuationRangeTests {
 
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 5))   // "y" at its TRUE column (four spaces visible)
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 6))
+
+        // The flag-ON test's ten-byte line keeps its TRUE physical columns too.
+        let longRanges = self.ranges(in: "- [ ] x\n    yyyyyyyyyy", options: Self.specOptions)
+        try #require(itemChecked(in: longRanges) == .some(.some(false)))
+        let longTexts = self.texts(in: longRanges)
+        try #require(longTexts.count == 2)
+        #expect(longTexts[1]?.lowerBound == Pos(line: 2, column: 5))
+        #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 15))
     }
 
     /// The flag-OFF twin of `plainBulletUsesPlainContentColumn`: a plain bullet's continuation keeps its
@@ -214,5 +250,13 @@ struct TasklistLazyContinuationRangeTests {
 
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y" at its TRUE column
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
+
+        // The flag-ON test's ten-byte line keeps its TRUE physical columns too.
+        let longRanges = self.ranges(in: "- x\nyyyyyyyyyy", options: Self.specOptions)
+        try #require(itemChecked(in: longRanges) == .some(Bool?.none))
+        let longTexts = self.texts(in: longRanges)
+        try #require(longTexts.count == 2)
+        #expect(longTexts[1]?.lowerBound == Pos(line: 2, column: 1))
+        #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 11))
     }
 }
