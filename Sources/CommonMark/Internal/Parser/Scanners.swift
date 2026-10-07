@@ -32,7 +32,7 @@ extension BlockParser {
         if readByte(at: start, in: chunk) != UInt8(ascii: "[") {
             return nil
         }
-        let maxLabelLength = maxLinkLabelLength
+        let maxLabelLength = Self.maxLinkLabelLength
         let interiorStart = start + 1
         var i = interiorStart
         var length = 0
@@ -77,7 +77,7 @@ extension BlockParser {
         if start >= end || content[start] != UInt8(ascii: "[") {
             return nil
         }
-        let maxLabelLength = maxLinkLabelLength
+        let maxLabelLength = Self.maxLinkLabelLength
         let interiorStart = start + 1
         var i = interiorStart
         var length = 0
@@ -114,7 +114,7 @@ extension BlockParser {
     /// shared by the link and footnote maps, returns no entry for a label over `MAX_LINK_LABEL_LENGTH`
     /// bytes, measured on the raw, untrimmed text.
     internal func linkLabelFitsLengthCap(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> Bool {
-        let maxLabelLength = maxLinkLabelLength
+        let maxLabelLength = Self.maxLinkLabelLength
         var length = 0
         for i in range {
             length += labelLengthWeight(content[i])
@@ -127,16 +127,12 @@ extension BlockParser {
 
     /// The maximum link-label length that `matchLinkLabel` accepts before rewinding and that
     /// `linkLabelFitsLengthCap` accepts for a shortcut or footnote label, in the units of
-    /// `labelLengthWeight`.
-    /// CommonMark §6.6 caps a label at "at most 999 characters", which the shipped deliverable
-    /// enforces (reject `> 999`).
-    private var maxLinkLabelLength: Int {
-        999
-    }
+    /// `labelLengthWeight`: CommonMark §6.6 caps a label at "at most 999 characters".
+    private static let maxLinkLabelLength = 999
 
     /// A content byte's contribution to the link-label length against `maxLinkLabelLength`.
     ///
-    /// Flag-off counts characters (Unicode code points, CommonMark §2.1): a UTF-8
+    /// Counts characters (Unicode code points, CommonMark §2.1): a UTF-8
     /// continuation byte counts 0 and every other byte, NUL included, counts 1.
     private func labelLengthWeight(_ byte: UInt8) -> Int {
         return byte & 0xC0 == 0x80 ? 0 : 1
