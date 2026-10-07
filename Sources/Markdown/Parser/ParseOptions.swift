@@ -30,20 +30,5 @@ public struct ParseOptions: OptionSet, Sendable {
 
     /// Disable including a `data-sourcepos` attribute on all block elements during parsing.
     public static let disableSourcePosOpts = ParseOptions(rawValue: 1 << 4)
-
-    /// Replicate cmark-gfm's source-position bugs bit-for-bit (for differential qualification). Default off; the shipped parser is spec-correct.
-    @_spi(CmarkBugCompatibility) public static let cmarkBugCompatibility = ParseOptions(rawValue: 1 << 5)
-
-    /// Enable GFM extended autolinks in the comparison config (for differential qualification). Default off; SPI-only so the shipped parser's default surface is unchanged. Fuzzer-driven via the option byte.
-    @_spi(Autolinking) public static let gfmAutolink = ParseOptions(rawValue: 1 << 6)
-
-    /// Parse GFM footnote references (`[^label]`) and definitions (`[^label]:`). SPI-only so the shipped parser's default surface is unchanged; fuzzer-driven via the option byte.
-    @_spi(Footnotes) public static let footnotes = ParseOptions(rawValue: 1 << 7)
-
-    /// Parse the whole input as the inline content of a single paragraph (the CommonMark parser's `.inlineOnly`). SPI-only so the shipped parser's default surface is unchanged; fuzzer-driven via the option byte.
-    @_spi(InlineOnly) public static let inlineOnly = ParseOptions(rawValue: 1 << 8)
-
-    /// ``inlineOnly`` that also keeps whitespace verbatim (the CommonMark parser's `.preserveWhitespace`). SPI-only so the shipped parser's default surface is unchanged; fuzzer-driven via the option byte.
-    @_spi(InlineOnly) public static let preserveWhitespace = ParseOptions(rawValue: 1 << 9 | 1 << 8)
 }
 

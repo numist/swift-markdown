@@ -22,21 +22,9 @@ struct MarkupParser {
     static func parseString(_ string: String, source: URL?, options: ParseOptions) -> Document {
         // Mirror the option set the old C path always used: tables + strikethrough + tasklist
         // extensions, table spans and inline attributes, smart punctuation unless disabled, and source
-        // positions always. GFM autolink and footnotes are enabled only under their respective SPI options
-        // (fuzzer-driven; the shipped default surface is unchanged). cmark-gfm parses `^[…]` inline
+        // positions always. cmark-gfm parses `^[…]` inline
         // attributes and `^[label]:` attribute definitions unconditionally, so `.attributes` is always on.
         var cmOptions: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes]
-        if options.contains(.gfmAutolink) {
-            cmOptions.insert(.gfmAutolink)
-        }
-        if options.contains(.footnotes) {
-            cmOptions.insert(.footnotes)
-        }
-        if options.contains(.preserveWhitespace) {
-            cmOptions.insert(.preserveWhitespace)
-        } else if options.contains(.inlineOnly) {
-            cmOptions.insert(.inlineOnly)
-        }
         if !options.contains(.disableSmartOpts) {
             cmOptions.insert(.smart)
         }
@@ -46,19 +34,6 @@ struct MarkupParser {
         // `data-sourcepos` output, which this AST→Document path never emits). Always track
         // positions here, or the rewrite drops ranges the reference reports.
         cmOptions.insert(.sourcePosition)
-        if options.contains(.cmarkBugCompatibility) {
-            cmOptions.insert(.cmarkBugCompatibility)
-            // With `.disableSourcePosOpts` the old C path leaves `CMARK_OPT_SOURCEPOS` off, and cmark
-            // then never runs `adjust_subj_node_newlines`, so a newline swallowed by a code span or raw
-            // HTML doesn't reset its per-line column cursor. That lengthens the raw byte capture of an
-            // unresolved cross-line footnote reference. Positions are still tracked here (ranges are read
-            // off the AST regardless of the flag), so keep `.sourcePosition` and forward a separate
-            // signal that reproduces only that content quirk. The deliverable stays spec-correct; this is
-            // quarantined to the differential (flag ON + disableSourcePosOpts).
-            if options.contains(.disableSourcePosOpts) {
-                cmOptions.insert(.cmarkSourcePositionsDisabled)
-            }
-        }
 
         // cmark-swift borrows the source for the document's lifetime, so conversion happens inside
         // the nonescaping `withParsedDocument` closure; only the fully-owned `RawMarkup` tree escapes.
@@ -117,14 +92,6 @@ struct MarkupParser {
     private static func attributeString(_ node: borrowing MarkdownNode) -> String {
         if case .attribute(let attributes) = node.stringContent {
             return attributes
-        }
-        return ""
-    }
-
-    /// A footnote reference or definition label.
-    private static func footnoteLabel(_ node: borrowing MarkdownNode) -> String {
-        if case .footnote(let label) = node.stringContent {
-            return label
         }
         return ""
     }
@@ -260,12 +227,9 @@ struct MarkupParser {
             return .strikethrough(parsedRange: parsedRange, children)
         case .attribute:
             return .inlineAttributes(attributes: attributeString(node), parsedRange: parsedRange, children)
-
-        // Footnotes (enabled only under the `.footnotes` SPI option).
-        case .footnoteReference(let index):
-            return .footnoteReference(parsedRange: parsedRange, label: footnoteLabel(node), index: index)
-        case .footnoteDefinition:
-            return .footnoteDefinition(parsedRange: parsedRange, label: footnoteLabel(node), children)
+        case .footnoteReference, .footnoteDefinition:
+            // The parse options never enable footnotes.
+            fatalError("footnote node encountered without footnote parsing")
         @unknown default:
             fatalError("unhandled CommonMark node kind")
         }
