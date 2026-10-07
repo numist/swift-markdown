@@ -781,10 +781,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 var text = unwrap(other)
                 // A tab-expanded current line (`!currentLineMapsToSource`) has `span` pointing at the per-line expanded buffer, not source - appending `span[range]` directly would bake the expanded-tab spaces into the arena as if they were literal content. Map back to the literal source range instead (same rule as the `.none` case above and `addLineSegment`'s materialized branch): cmark expands tabs only for block-structure indentation and keeps them literal in inline content.
                 if !currentLineMapsToSource {
-                    let sourceHigh = materializedSourceOffset(range.upperBound)
-                    let (sourceLow, splitTabSpaces) = materializedSourceStart(bufferStart: range.lowerBound)
-                    assert(splitTabSpaces == 0, "a paragraph continuation's content never begins inside an expanded tab")
-                    text.append(sourceLow..<sourceHigh, of: sourceBytes)
+                    text.append(materializedSourceOffset(range.lowerBound)..<materializedSourceOffset(range.upperBound), of: sourceBytes)
                 } else {
                     // A source-mapped line's `span` is the source itself.
                     text.append(range.lowerBound..<range.upperBound, of: span)
@@ -830,10 +827,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             assert(range.upperBound == span.count, "materialized code/HTML body must extend to the line end")
             return appendMaterializedCodeContent(bufferStart: range.lowerBound, to: node, pending: pending)
         }
-        // A tab-expanded paragraph continuation. Its surviving content - the first non-space byte to the line end - is byte-identical to source: `expandPrefixTabs` only rewrites the prefix and copies the tail verbatim, and the content begins at the first non-space byte, so no expanded-tab space reaches it. Map it back to a zero-copy source segment rather than copying the expanded bytes into the arena. Keeping the content in-source also keeps it readable: a multi-segment inline `ContentSpan` resolves source segments plus the interned `\n` directly, and reads a synthetic arena segment only through the arena snapshot it is handed for exactly the split-tab residual below (see `ContentSpan.multiByte`).
+        // A tab-expanded paragraph continuation. Its surviving content - the first non-space byte to the line end - is byte-identical to source: `expandPrefixTabs` only rewrites the prefix and copies the tail verbatim, and the content begins at the first non-space byte, so no expanded-tab space reaches it. Map it back to a zero-copy source segment rather than copying the expanded bytes into the arena. Keeping the content in-source also keeps it readable: a multi-segment inline `ContentSpan` resolves source segments plus the interned `\n` directly (see `ContentSpan.multiByte`).
         assert(range.upperBound == span.count, "materialized paragraph continuation must extend to the line end")
-        let (sourceStart, splitTabSpaces) = materializedSourceStart(bufferStart: range.lowerBound)
-        assert(splitTabSpaces == 0, "a paragraph continuation's content never begins inside an expanded tab")
+        let sourceStart = materializedSourceOffset(range.lowerBound)
         let lineEnd = currentLineSourceRange.upperBound
         return appendSegment(Segment(offset: Int32(sourceStart), length: Int32(lineEnd - sourceStart), inSource: true), to: node, pending: pending)
     }
