@@ -3454,9 +3454,8 @@ extension BlockParser {
             return nil
         }
         // cmark's `www_match` (`extensions/autolink.c`) gates on `check_domain(data, size, allow_short: 0)`
-        // before scanning the URL body and returns NULL on failure, so a domain bearing an underscore in
-        // either of its last two `.`-separated labels (a host name may not) is never linked. The rejection
-        // is GFM-spec-correct, so it applies in both modes - unlike the bare-`www` over-trim below.
+        // before scanning the URL body and returns NULL on failure. It counts the dot inside `www.` as the
+        // domain's required period, so it links a bare `www` once the trailing `.` is trimmed.
         let bugCompatible = storage.options.contains(.cmarkBugCompatibility)
         guard !bugCompatible || checkDomainAccepted(base: start, end: end, requireDot: true, content: content) else {
             return nil
@@ -3470,18 +3469,6 @@ extension BlockParser {
         // its domain.
         guard bugCompatible || validDomainEnd(start: start + 4, end: trimmedEnd, content: content) != nil else {
             return nil
-        }
-        if trimmedEnd <= start + 4 {
-            // why: nothing survives the trailing-punctuation trim past `www.`, so there is no real domain.
-            // Flag-OFF (spec-correct) this is not a www autolink. Flag-ON reproduce cmark's `www_match`
-            // over-trim: its `check_domain` (the gate above) counts the dot inside `www.` as the domain's
-            // required period whenever the chunk holds at least one byte past `www.` (its `i < size - 1`
-            // bound reaches that dot only then), so cmark links a bare `www` once `autolink_delim` peels the
-            // trailing `.`. `www.` at end-of-input (nothing after) never reaches that dot, so the gate above
-            // already returned nil in both modes.
-            guard storage.options.contains(.cmarkBugCompatibility) else {
-                return nil
-            }
         }
         return GFMAutolinkMatch(urlStart: start, urlEnd: trimmedEnd, form: .www)
     }
@@ -3926,9 +3913,9 @@ extension BlockParser {
         if b < 0x80 {
             return b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "_") || b == UInt8(ascii: "-") ? 1 : nil
         }
-        guard let scalar = Unicode.Scalar(UInt32(Self.decodeUTF8Scalar(at: i, content: content))) else {
-            return nil
-        }
+        let decoded = Unicode.Scalar(UInt32(Self.decodeUTF8Scalar(at: i, content: content)))
+        precondition(decoded != nil, "inline content is valid UTF-8, so a decoded scalar is a Unicode scalar value")
+        let scalar = decoded!
         switch scalar.properties.generalCategory {
         case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
              .decimalNumber, .letterNumber, .otherNumber:
