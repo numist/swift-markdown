@@ -161,7 +161,7 @@ struct TasklistLazyContinuationRangeTests {
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y" at its TRUE column
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
 
-        // The flag-ON test's ten-byte line keeps its TRUE physical columns too.
+        // A ten-byte lazy line keeps its TRUE physical columns too.
         let longRanges = self.ranges(in: "- [ ] x\nyyyyyyyyyy", options: Self.specOptions)
         try #require(itemChecked(in: longRanges) == .some(.some(false)))
         let longTexts = self.texts(in: longRanges)
@@ -186,7 +186,7 @@ struct TasklistLazyContinuationRangeTests {
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y" at its TRUE column
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
 
-        // The flag-ON test's ten-byte line keeps its TRUE physical columns too.
+        // A ten-byte lazy line keeps its TRUE physical columns too.
         let longRanges = self.ranges(in: "- [x] x\nyyyyyyyyyy", options: Self.specOptions)
         try #require(itemChecked(in: longRanges) == .some(.some(true)))
         let longTexts = self.texts(in: longRanges)
@@ -209,7 +209,7 @@ struct TasklistLazyContinuationRangeTests {
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 2))   // "y" at its TRUE column (leading space visible)
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 3))
 
-        // The flag-ON test's ten-byte line keeps its TRUE physical columns too.
+        // A ten-byte lazy line keeps its TRUE physical columns too.
         let longRanges = self.ranges(in: "- [ ] x\n yyyyyyyyyy", options: Self.specOptions)
         try #require(itemChecked(in: longRanges) == .some(.some(false)))
         let longTexts = self.texts(in: longRanges)
@@ -230,7 +230,7 @@ struct TasklistLazyContinuationRangeTests {
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 5))   // "y" at its TRUE column (four spaces visible)
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 6))
 
-        // The flag-ON test's ten-byte line keeps its TRUE physical columns too.
+        // A ten-byte lazy line keeps its TRUE physical columns too.
         let longRanges = self.ranges(in: "- [ ] x\n    yyyyyyyyyy", options: Self.specOptions)
         try #require(itemChecked(in: longRanges) == .some(.some(false)))
         let longTexts = self.texts(in: longRanges)
@@ -251,7 +251,7 @@ struct TasklistLazyContinuationRangeTests {
         #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y" at its TRUE column
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
 
-        // The flag-ON test's ten-byte line keeps its TRUE physical columns too.
+        // A ten-byte lazy line keeps its TRUE physical columns too.
         let longRanges = self.ranges(in: "- x\nyyyyyyyyyy", options: Self.specOptions)
         try #require(itemChecked(in: longRanges) == .some(Bool?.none))
         let longTexts = self.texts(in: longRanges)

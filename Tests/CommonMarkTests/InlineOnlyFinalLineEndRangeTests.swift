@@ -167,7 +167,7 @@ struct InlineOnlyFinalLineEndRangeTests {
     }
 
     /// An email autolink at the start of the text is the paragraph's first node, where cmark-gfm puts an empty text node
-    /// before it and gives the link, its text and the text after it no range.
+    /// before it.
     @Test("the text after an email autolink ends where the final line feed starts, without cmark bug compatibility", arguments: modes)
     func afterEmailAutolinkSpecCompliant(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("a@b.co\n", mode, [.gfmAutolink]) == """

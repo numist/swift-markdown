@@ -145,14 +145,14 @@ class InlineOnlyFootnoteQuirkTests: XCTestCase {
         }
     }
 
-    /// A footnote label cannot hold `[`, so the bracket run stays literal text, where cmark-gfm collapses it to `[^[`.
+    /// A footnote reference label cannot hold an unescaped `[`, so the bracket run stays literal text, where cmark-gfm collapses it to `[^[`.
     func test_footnote_caret_bracket_innerclose_flag_off() {
         for optionByte: UInt8 in [160, 176] {
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^[]\n]\"", surface([91, 94, 91, 93, 10, 93] + [optionByte], cmarkBugCompatible: false))
         }
     }
 
-    /// A footnote label cannot hold `[`, so the bracket run stays literal text, where cmark-gfm collapses it to `[^[`.
+    /// A footnote reference label cannot hold an unescaped `[`, so the bracket run stays literal text, where cmark-gfm collapses it to `[^[`.
     func test_footnote_caret_bracket_spans_empty_flag_off() {
         for optionByte: UInt8 in [160, 176] {
             XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"[^[\n]]\"", surface([91, 94, 91, 10, 93, 93] + [optionByte], cmarkBugCompatible: false))

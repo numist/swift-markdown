@@ -18,7 +18,7 @@ import XCTest
 /// "[^ [^^]]"` — it registers NO footnote definition (and resolves no reference). The rewrite (flag-on)
 /// kept the paragraph literal but still registered a spurious `FootnoteDefinition label: "^"`. Neither the
 /// bare `[^^]:` line on its own nor a def with content reproduces it — the preceding `[^ [^^]]` paragraph
-/// is required. This asserts the flag-on (fuzzer) surface: it must match cmark's no-definition output.
+/// is required. With `.cmarkBugCompatibility` the surface matches cmark's no-definition output.
 class FootnoteDefAfterCaretRefParagraphTests: XCTestCase {
     // "[^ [^^]]" LF "[^^]:"
     private static let bytes: [UInt8] = [

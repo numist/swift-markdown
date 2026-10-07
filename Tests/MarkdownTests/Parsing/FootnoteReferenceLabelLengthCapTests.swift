@@ -174,13 +174,13 @@ class FootnoteReferenceLabelLengthCapTests: XCTestCase {
         XCTAssertEqual(resolvedReference(overCap), surface(referenceAndDefinition(overCap), bugCompatible: false))
     }
 
-    /// Flag-off (shipped): a NUL is one character (the U+FFFD it becomes), so a 999-character label ending
-    /// in one resolves where cmark-gfm counts the replacement's 3 bytes and leaves it literal.
+    /// Flag-off (shipped): a NUL is one character (the U+FFFD it becomes), so a 999-character label ending in
+    /// one resolves where cmark-gfm counts the replacement's 3 bytes and leaves it literal.
     func testFlagOffNULCountsOneCharacter() {
-        let atCap = String(repeating: "a", count: 997)
-        XCTAssertEqual(resolvedReference(atCap + "\u{FFFD}"), surface(referenceAndDefinition(atCap + "\u{0}"), bugCompatible: false))
-        let overCap = String(repeating: "a", count: 998)
-        XCTAssertEqual(resolvedReference(overCap + "\u{FFFD}"), surface(referenceAndDefinition(overCap + "\u{0}"), bugCompatible: false))
+        let prefix997 = String(repeating: "a", count: 997)
+        XCTAssertEqual(resolvedReference(prefix997 + "\u{FFFD}"), surface(referenceAndDefinition(prefix997 + "\u{0}"), bugCompatible: false))
+        let prefix998 = String(repeating: "a", count: 998)
+        XCTAssertEqual(resolvedReference(prefix998 + "\u{FFFD}"), surface(referenceAndDefinition(prefix998 + "\u{0}"), bugCompatible: false))
     }
 
     /// Flag-off (shipped): an over-cap reference is ordinary paragraph text, so its entity decodes, where
@@ -222,9 +222,9 @@ class FootnoteReferenceLabelLengthCapTests: XCTestCase {
         )
     }
 
-    /// Flag-off (shipped): a label spanning the line break holds both lines' characters, over the cap, so it
-    /// stays literal text around a soft break, where cmark-gfm measures a column-captured slice of the
-    /// first line and resolves or collapses that.
+    /// Flag-off (shipped): a footnote reference never spans a line, so the bracket stays literal text around
+    /// a soft break, where cmark-gfm measures a column-captured slice of the first line and resolves or
+    /// collapses that.
     func testFlagOffCrossLineLabelStaysLiteral() {
         for length in [1000, 1001] {
             let label = String(repeating: "a", count: length)
@@ -236,8 +236,8 @@ class FootnoteReferenceLabelLengthCapTests: XCTestCase {
         }
     }
 
-    /// Flag-off (shipped): the cross-line label ending in `é` holds both lines' characters, over the cap, so
-    /// it stays literal where cmark-gfm resolves the cut first-line capture.
+    /// Flag-off (shipped): a footnote reference never spans a line, so the bracket ending its first line in
+    /// `é` stays literal where cmark-gfm resolves the cut first-line capture.
     func testFlagOffCrossLineCutLabelStaysLiteral() {
         let label = String(repeating: "a", count: 999)
         let second = String(repeating: "b", count: 1002)
@@ -247,7 +247,7 @@ class FootnoteReferenceLabelLengthCapTests: XCTestCase {
         )
     }
 
-    /// Flag-off (shipped): a footnote label cannot hold an unescaped `[`, so the whole `[^[…]]` run stays
+    /// Flag-off (shipped): a footnote reference label cannot hold an unescaped `[`, so the whole `[^[…]]` run stays
     /// literal text, where cmark-gfm collapses it to `[^[`.
     func testFlagOffCaretBracketStaysLiteral() {
         let label = String(repeating: "a", count: 1001)
