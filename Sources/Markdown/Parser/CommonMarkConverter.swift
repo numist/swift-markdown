@@ -13,30 +13,20 @@ import Foundation
 
 /// Parses markup source and returns a `Markdown.Document` representing the parsed source.
 ///
-/// This drives the pure-Swift cmark port (`CommonMark`): it parses with the same option set the C
-/// path used, then recursively converts the borrowed, non-copyable `MarkdownNode` tree into an owned
-/// `RawMarkup` tree. All traversal happens inside the parsed document's source-borrow scope; only
-/// fully-owned `RawMarkup` (with `String`s copied out) escapes.
+/// Parsing is done by the `CommonMark` module, whose `MarkdownNode` tree borrows the source; it is
+/// converted into an owned `RawMarkup` tree before the borrow ends.
 struct MarkupParser {
 
     static func parseString(_ string: String, source: URL?, options: ParseOptions) -> Document {
-        // Mirror the option set the old C path always used: tables + strikethrough + tasklist
-        // extensions, table spans and inline attributes, smart punctuation unless disabled, and source
-        // positions always. cmark-gfm parses `^[…]` inline attributes and `^[label]:` attribute
-        // definitions unconditionally, so `.attributes` is always on.
+        // Footnotes stay off: `Markup` has no footnote node.
         var cmOptions: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes]
         if !options.contains(.disableSmartOpts) {
             cmOptions.insert(.smart)
         }
-        // cmark writes source ranges onto AST nodes regardless of `CMARK_OPT_SOURCEPOS`, and
-        // swift-markdown reads them straight off the AST, so the reference `Document` carries
-        // ranges even with `.disableSourcePosOpts` (that option only suppresses rendered
-        // `data-sourcepos` output, which this AST→Document path never emits). Always track
-        // positions here, or the rewrite drops ranges the reference reports.
+        // Every parsed `Markup` carries a source range. `.disableSourcePosOpts` governs only the
+        // rendered `data-sourcepos` attribute, which a `Document` never contains.
         cmOptions.insert(.sourcePosition)
 
-        // cmark-swift borrows the source for the document's lifetime, so conversion happens inside
-        // the nonescaping `withParsedDocument` closure; only the fully-owned `RawMarkup` tree escapes.
         let raw = MarkdownDocument.withParsedDocument(string, options: cmOptions) { document in
             convert(document.root, source: source, options: options)
         }
@@ -49,10 +39,8 @@ struct MarkupParser {
 
     /// Map a `MarkdownNode`'s source range to swift-markdown's `SourceRange`.
     ///
-    /// cmark-swift already reports 1-based lines, 1-based UTF-8 **byte** columns, and an `upperBound`
-    /// positioned just past the node's last byte — i.e. exactly the adjusted end the old converter
-    /// produced via `endColumn + 1`. Inline code-span ranges likewise already span their backticks. So
-    /// this is a straight pass-through; the only thing added is the source `URL`.
+    /// Both use 1-based lines and 1-based UTF-8 byte columns with an exclusive `upperBound`, so only
+    /// the source `URL` is added.
     private static func range(_ node: borrowing MarkdownNode, source: URL?) -> SourceRange? {
         guard let r = node.sourceRange else { return nil }
         let start = SourceLocation(line: r.lowerBound.line, column: r.lowerBound.column, source: source)
@@ -100,11 +88,11 @@ struct MarkupParser {
 
     /// Convert the subtree rooted at `root` into `RawMarkup`.
     ///
-    /// Iterative (explicit heap stack) rather than recursive: documents can nest thousands of levels
-    /// deep (e.g. 15k nested block quotes), which would overflow the call stack. `accStack[d]` holds
-    /// the converted children accumulated for the open ancestor at depth `d`; a node is built once all
-    /// its children are collected (post-order). Tables are built atomically by `convertTable` and not
-    /// descended into, since their head/body regrouping needs the original node structure.
+    /// Iterative rather than recursive, because block quotes and lists can nest deeply enough to
+    /// overflow the call stack. `accStack[d]` holds the converted children accumulated for the open
+    /// ancestor at depth `d`; a node is built once all its children are collected (post-order). Tables
+    /// are built whole by `convertTable` and not descended into, since grouping their rows into head
+    /// and body needs the original node structure.
     private static func convert(_ root: borrowing MarkdownNode, source: URL?, options: ParseOptions) -> RawMarkup {
         var accStack: [[RawMarkup]] = [[]]
         var node = copy root
@@ -234,15 +222,14 @@ struct MarkupParser {
         }
     }
 
-    /// Convert a `.table` node, regrouping cmark-swift's flat header/body rows into swift-markdown's
-    /// `tableHead` + `tableBody` shape and deriving per-column alignments from the header cells.
-    /// Tables are shallow, so cell contents are converted via the (iterative) `convert` driver.
+    /// Convert a `.table` node, grouping its header row and body rows into `tableHead` and `tableBody`
+    /// and taking per-column alignments from the header cells.
     private static func convertTable(_ node: borrowing MarkdownNode, parsedRange: SourceRange?, source: URL?, options: ParseOptions) -> RawMarkup {
         var header: RawMarkup?
         var bodyRows: [RawMarkup] = []
         var columnAlignments: [Table.ColumnAlignment?] = []
-        // The body has no cmark node of its own, so its range is synthesized: from the first body row's
-        // start to the table's end (matching cmark/swift-markdown), or nil when there are no body rows.
+        // The parser has no table body node, so the body's source range runs from the first body row's
+        // start to the table's end, or is nil when there are no body rows.
         var firstBodyRowStart: SourceLocation?
 
         node.children.forEach { row in
@@ -280,7 +267,6 @@ struct MarkupParser {
         }
 
         let head = header ?? .tableHead(parsedRange: nil, columns: [])
-        // Body spans the first body row's start through the table's end.
         let bodyRange: SourceRange?
         if let start = firstBodyRowStart, let tableEnd = parsedRange?.upperBound {
             bodyRange = start..<tableEnd

@@ -102,7 +102,7 @@ struct PendingBlockDirective {
         if line.lex("(") != nil {
             parseState = .argumentsText
             // There may be garbage after the left parenthesis `(`, but we'll
-            // still consider subsequent lines for argument text, so we'll
+            // consider subsequent lines for argument text regardless, so we'll
             // indicate acceptance either way at this point.
             _ = parseArgumentsText(from: line)
             return true
@@ -175,7 +175,7 @@ struct PendingBlockDirective {
             parseState = .done
             endLocation = line.location!
         } else {
-            // If there is still some content on this line
+            // If there is remaining content on this line
             // Consider them to be lineRun
             // "@xx { yy": "yy" will be ignored
             // "@xx { yy }": "yy" will be parsed
@@ -347,9 +347,8 @@ struct TrimmedLine {
             case " ":
                 return count + 1
             case "\t":
-                // Align up to units of 4.
-                // We're using 4 instead of 8 here because cmark has traditionally
-                // considered a tab to be equivalent to 4 spaces.
+                // Per the spec's Tabs section, tabs that define block structure
+                // behave as spaces with a tab stop of 4 characters.
                 return (count + 4) & ~0b11
             default:
                 fatalError("Non-whitespace character found while calculating equivalent indentation column count")
@@ -682,8 +681,8 @@ private enum ParseContainer: CustomStringConvertible {
             let indentationColumnCount = indentationAdjustment(under: parent)
 
             // Trim up to that number of whitespace characters off.
-            // We need to keep track of what we removed because cmark will report different source locations than what we
-            // had in the source. We'll adjust those when we get them back.
+            // The parser reports source locations relative to the trimmed lines, so keep track of what is removed
+            // in order to adjust those locations afterward.
             let trimmedIndentationAndLines = lines.map { line -> (line: TrimmedLine,
                                                                   indentation: Int) in
                 var trimmedLine = line
@@ -692,16 +691,16 @@ private enum ParseContainer: CustomStringConvertible {
                 return (trimmedLine, indentation)
             }
 
-            // Build the logical block of text that cmark will see.
+            // Build the logical block of text that the parser will see.
             let logicalText = trimmedIndentationAndLines
                 .map { $0.line.text }
                 .joined(separator: "\n")
 
-            // Ask cmark to parse it. Now we have a Markdown `Document` consisting
-            // of the contents of this line run.
+            // Parse it into a Markdown `Document` consisting of the contents of
+            // this line run.
             let parsedSubdocument = MarkupParser.parseString(logicalText, source: lines.first?.source, options: options)
 
-            // Now, we'll adjust the columns of all of the source positions as
+            // Adjust the columns of all of the source positions as
             // needed to offset that indentation trimming we did above.
             // Note that the child identifiers under this document will start at
             // 0, so we will need to adjust those as well, because child identifiers
@@ -855,8 +854,8 @@ struct ParseContainerStack {
                                                           name: name.text,
                                                           endLocation: name.range!.upperBound)
 
-        // There may be garbage after a block directive opening but we were
-        // still able to open a new block directive, so we'll consider the
+        // There may be garbage after a block directive opening, but the new
+        // block directive opens regardless, so we'll consider the
         // rest of the line to be accepted regardless of what comes after.
         _ = pendingBlockDirective.accept(remainder)
 

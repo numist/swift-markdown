@@ -134,8 +134,8 @@ public extension BlockDirective {
         }
     }
 
-    /// The source location from which the directive's name was parsed, if it
-    /// was parsed from source.
+    /// The source location of the directive's name, if the directive is
+    /// parsed from source.
     var nameLocation: SourceLocation? {
         guard case let .blockDirective(_, nameLocation, _) = _data.raw.markup.data else {
             fatalError("\(self) markup wrapped unexpected \(_data.raw)")
@@ -144,7 +144,7 @@ public extension BlockDirective {
         return nameLocation
     }
 
-    /// The source range from which the directive's name was parsed, if it was
+    /// The source range of the directive's name, if the directive is
     /// parsed from source.
     var nameRange: SourceRange? {
         guard let start = nameLocation else {

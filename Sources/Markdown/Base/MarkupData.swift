@@ -134,7 +134,7 @@ public struct _MarkupData {
         return parent._data.root
     }
 
-    /// The source range of the element if it was parsed from text; otherwise, nil.
+    /// The source range of the element if it is parsed from text; otherwise, nil.
     var range: SourceRange? {
         return raw.markup.parsedRange
     }
@@ -162,7 +162,7 @@ public struct _MarkupData {
         }
     }
 
-    /// Returns a new `MarkupData` with the given child now at the `index`.
+    /// Returns a new `MarkupData` with the given child at the `index`.
     func substitutingChild(_ rawChild: RawMarkup, at index: Int, preserveRange: Bool = false) -> Markup {
         let newRaw = raw.markup.substitutingChild(rawChild, at: index, preserveRange: preserveRange)
         return makeMarkup(replacingSelf(newRaw))

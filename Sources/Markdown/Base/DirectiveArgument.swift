@@ -31,10 +31,10 @@ public struct DirectiveArgumentText: Equatable, Sendable {
 
     /// Errors parsing name-value arguments from argument text segments.
     public enum ParseError: Equatable, Sendable {
-        /// A duplicate argument was given.
+        /// An argument appears more than once.
         case duplicateArgument(name: String, firstLocation: SourceLocation, duplicateLocation: SourceLocation)
 
-        /// A character was expected but not found at a source location.
+        /// An expected character is missing at a source location.
         case missingExpectedCharacter(Character, location: SourceLocation)
         
         /// Unexpected character at a source location.
@@ -55,8 +55,8 @@ public struct DirectiveArgumentText: Equatable, Sendable {
         /// The index from which parsing should start.
         public var parseIndex: String.Index
 
-        /// The range from which a segment was extracted from a line
-        /// of source, or `nil` if it was provided by other means.
+        /// The range from which a segment is extracted from a line
+        /// of source, or `nil` if it is provided by other means.
         public var range: SourceRange?
 
         /// The segment's text starting from ``parseIndex``.
@@ -68,8 +68,8 @@ public struct DirectiveArgumentText: Equatable, Sendable {
         /// - Parameters:
         ///   - untrimmedText: the segment's untrimmed text from which arguments can be parsed.
         ///   - parseIndex: The index from which parsing should start.
-        ///   - range: The range from which a segment was extracted from a line
-        ///     of source, or `nil` if the argument text was provided by other means.
+        ///   - range: The range from which a segment is extracted from a line
+        ///     of source, or `nil` if the argument text is provided by other means.
         init(untrimmedText: String, parseIndex: String.Index? = nil, range: SourceRange? = nil) {
             self.untrimmedText = untrimmedText
             self.parseIndex = parseIndex ?? untrimmedText.startIndex
@@ -145,9 +145,9 @@ public struct DirectiveArgumentText: Equatable, Sendable {
         ///   - line: the trimmed line from which to parse
         ///   - required: whether the character is required
         ///   - allowEscape: whether to allow the character to be escaped
-        ///   - diagnoseIfNotFound: if `true` and the character was both required and not found, emit a diagnostic
+        ///   - diagnoseIfNotFound: if `true` and the character is both required and not found, emit a diagnostic
         ///   - parseErrors: an array to update with any errors encountered while parsing
-        /// - Returns: `true` if the character was found.
+        /// - Returns: `true` if the character is found.
         func parseCharacter(_ character: Character,
                             from line: inout TrimmedLine,
                             required: Bool,
@@ -372,16 +372,16 @@ public struct DirectiveArgument: Equatable, Sendable {
     /// The name of the argument.
     public var name: String
 
-    /// The range of the argument name if it was parsed from source text.
+    /// The range of the argument name if it is parsed from source text.
     public var nameRange: SourceRange?
 
     /// The value of the argument.
     public var value: String
 
-    /// The range of the argument value if it was parsed from source text.
+    /// The range of the argument value if it is parsed from source text.
     public var valueRange: SourceRange?
 
-    /// `true` if the argument value was followed by a comma.
+    /// `true` if a comma follows the argument value.
     public var hasTrailingComma: Bool
 }
 

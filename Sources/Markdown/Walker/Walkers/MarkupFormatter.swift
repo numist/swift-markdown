@@ -357,7 +357,7 @@ public struct MarkupFormatter: MarkupWalker {
     /// unnecessary String copies aren't made.
     ///
     /// Since the formatted result is only ever appended to, we can use
-    /// prior state to erase what was printed since the last state save.
+    /// prior state to erase what is printed after the last state save.
     struct State {
         /// The current length of the formatted result.
         ///
@@ -368,7 +368,7 @@ public struct MarkupFormatter: MarkupWalker {
         /// content is printed.
         var queuedNewlines = 0
 
-        /// The number of empty lines up to now.
+        /// The number of consecutive empty lines at the end of the result.
         var newlineStreak = 0
 
         /// The length of the last line.
@@ -617,7 +617,7 @@ public struct MarkupFormatter: MarkupWalker {
                 // unintentionally starting a new paragraph.
                 // However, there is one exception:
                 // we might already be right at the edge of a line when
-                // this method was called.
+                // this method is called.
                 if state.lastLineLength + word.count >= lineLimit.maxLength {
                     queueNewline()
                 }
@@ -643,7 +643,7 @@ public struct MarkupFormatter: MarkupWalker {
         }
     }
 
-    /// Restore state to a previous state, trimming off what was printed since then.
+    /// Restore state to a previous state, trimming off what is printed after it.
     mutating func restoreState(to previousState: State) {
         result.removeLast(state.currentLength - previousState.currentLength)
         state = previousState
@@ -807,7 +807,7 @@ public struct MarkupFormatter: MarkupWalker {
         softWrapPrint("`\(inlineCode.code)`", for: inlineCode)
 
         // Splitting inline code elements is allowed if it contains spaces.
-        // If printing with automatic wrapping still put us over the line,
+        // If printing with automatic wrapping puts us over the line anyway,
         // prefer to print it on the next line to give as much opportunity
         // to keep the contents on one line.
         if inlineCode.indexInParent > 0 && (isOverPreferredLineLimit || state.effectiveLineNumber > savedState.effectiveLineNumber) {
@@ -839,7 +839,7 @@ public struct MarkupFormatter: MarkupWalker {
         printImage()
 
         // Image elements' source URLs can't be split. If wrapping the alt text
-        // of an image still put us over the line, prefer to print it on the
+        // of an image puts us over the line anyway, prefer to print it on the
         // next line to give as much opportunity to keep the alt text contents on one line.
         if image.indexInParent > 0 && (isOverPreferredLineLimit || state.effectiveLineNumber > savedState.effectiveLineNumber) {
             restoreState(to: savedState)
@@ -876,7 +876,7 @@ public struct MarkupFormatter: MarkupWalker {
             printRegularLink()
 
             // Link elements' destination URLs can't be split. If wrapping the link text
-            // of a link still put us over the line, prefer to print it on the
+            // of a link puts us over the line anyway, prefer to print it on the
             // next line to give as much opportunity to keep the link text contents on one line.
             if link.indexInParent > 0 && (isOverPreferredLineLimit || state.effectiveLineNumber > savedState.effectiveLineNumber) {
                 restoreState(to: savedState)
@@ -1034,7 +1034,7 @@ public struct MarkupFormatter: MarkupWalker {
             finalColumnWidths.dropFirst(column).prefix(colspan).reduce(0, +)
         }
 
-        // We now know the width that each printed column will be.
+        // At this point the width of each printed column is known.
 
         /// Each of the header cells expanded to the right dimensions by
         /// extending each line with spaces to fit the uniform column width.

@@ -112,8 +112,7 @@ struct MarkupTreeDumper: MarkupWalker {
     private var lineIndentPrefix: String {
         var prefix = ""
         for (depth, element) in path.enumerated().reversed() {
-            // The last child's index is `childCount - 1` (O(1)). `children.reversed()` has no `.first`, so
-            // `children.reversed().first` resolves to the standard library's copying `Sequence.reversed()`.
+            // `children.reversed()` resolves to `Sequence.reversed()`, which copies every sibling.
             guard let parent = element.parent,
                 parent.childCount - 1 != element.indexInParent else {
                     if depth > 0 {
@@ -158,10 +157,9 @@ struct MarkupTreeDumper: MarkupWalker {
     /**
      Dump the tree rooted at `root`, emitting one node per `visit` in depth-first, pre-order.
 
-     Traversal uses an explicit iterator stack rather than recursion so that arbitrarily deep trees
-     (e.g. hundreds of nested block quotes) do not overflow the call stack. `path` holds the ancestor
-     chain of the node currently being emitted, exactly as the recursive descent maintained it, so the
-     edge-drawing indentation in `lineIndentPrefix` is unchanged.
+     Traversal uses an explicit iterator stack rather than recursion so that deeply nested trees do
+     not overflow the call stack. `path` holds the ancestors of the node being emitted, which
+     `lineIndentPrefix` uses to draw the tree's edges.
 
      - parameter root: The element to dump, together with its entire subtree.
      */

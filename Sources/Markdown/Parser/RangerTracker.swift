@@ -24,8 +24,7 @@ struct RangeTracker {
     /// Add a source range and increment the next child identifier.
     ///
     /// - parameter range: An optional ``SourceRange``. This may be `nil` for
-    ///   some elements for which cmark doesn't track a range, such as
-    ///   soft breaks.
+    ///   elements that have no source range.
     mutating func add(_ range: SourceRange?) {
         if let range = range {
             totalRange.widen(toFit: range)

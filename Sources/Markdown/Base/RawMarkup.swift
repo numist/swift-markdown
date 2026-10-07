@@ -86,7 +86,7 @@ public struct RawMarkupHeader {
     /// The number of elements in this subtree, including this one.
     let subtreeCount: Int
 
-    /// The range of a raw markup element if it was parsed from source; otherwise, `nil`.
+    /// The range of a raw markup element if it is parsed from source; otherwise, `nil`.
     ///
     /// > Warning: This should only ever be mutated by `RangeAdjuster` while
     /// > parsing. **Do not** expose this through any public API.
@@ -149,7 +149,7 @@ final class RawMarkup: ManagedBuffer<RawMarkupHeader, RawMarkup> {
         return header.subtreeCount
     }
 
-    /// The range of the element if it was parsed from source; otherwise, `nil`.
+    /// The range of the element if it is parsed from source; otherwise, `nil`.
     var parsedRange: SourceRange? {
         return header.parsedRange
     }
