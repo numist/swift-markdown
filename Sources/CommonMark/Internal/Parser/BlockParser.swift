@@ -2567,11 +2567,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Trim trailing whitespace off the last segment (matching `Chunk.trimming(using:)`), in place. Interior segments - the newline joins and any hard-break trailing spaces before them - are untouched. A last segment trimmed to zero length is harmless (read as empty).
     ///
-    /// The first segment is a paragraph's opening line, which starts at its first non-space byte, so there is no leading whitespace to trim
-    private func trimSegments(_ segs: consuming UniqueArray<Segment>, trimLeading: Bool = true) -> UniqueArray<Segment> {
+    /// The first segment is a paragraph's opening line, which starts at its first non-space byte, so there is no leading whitespace to trim.
+    private func trimSegments(_ segs: consuming UniqueArray<Segment>) -> UniqueArray<Segment> {
         var segs = segs
         precondition(segs.count > 0, "a paragraph's segment list starts with its opening line")
-        precondition(!trimLeading || !segmentByte(segs[0], 0).isSpaceTabOrNewline, "a paragraph's opening line starts at its first non-space byte")
+        precondition(!segmentByte(segs[0], 0).isSpaceTabOrNewline, "a paragraph's opening line starts at its first non-space byte")
         let li = segs.count - 1
         var last = segs[li]
         var len = Int(last.length)
@@ -2856,8 +2856,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 runParagraphMatchers(node: node, raw: raw, map: map)
             case .segments(let segs):
                 // Multi-line non-contiguous body held as zero-copy source segments. Trim, then only materialize (flatten) if it could match a finalize matcher; plain prose stays segments.
-                let tablePending = storage.options.contains(.tables) && (paragraphTablePending[node] ?? false)
-                let trimmed = trimSegments(segs, trimLeading: !tablePending)
+                let trimmed = trimSegments(segs)
                 if segmentsCouldMatchMatcher(trimmed) || segmentsEndInControlWhitespace(trimmed) {
                     // Flatten for the chunk-based matchers, capturing the arena→source run map so a continuation line's inline content is still stamped (matchers that survive re-seed the map via `runParagraphMatchers`).
                     var map: [ArenaRun] = []
@@ -2873,7 +2872,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let map = drained.map
             switch consume drained.content {
             case .chunk(let raw):
-                let trimmed = atxHeadingEnd == nil ? raw.trimmingWhitespace(using: self) : raw.trimming(using: self)
+                // An ATX heading's content range already excludes its surrounding spaces and tabs.
+                let trimmed = atxHeadingEnd == nil ? raw.trimmingWhitespace(using: self) : raw
                 if !trimmed.isEmpty {
                     if positionsEnabled, !map.isEmpty {
                         arenaSourceMaps[node] = sliceRuns(map, from: trimmed.offset - raw.offset, length: trimmed.length)
