@@ -22,8 +22,8 @@ struct MarkupParser {
     static func parseString(_ string: String, source: URL?, options: ParseOptions) -> Document {
         // Mirror the option set the old C path always used: tables + strikethrough + tasklist
         // extensions, table spans and inline attributes, smart punctuation unless disabled, and source
-        // positions always. cmark-gfm parses `^[…]` inline
-        // attributes and `^[label]:` attribute definitions unconditionally, so `.attributes` is always on.
+        // positions always. cmark-gfm parses `^[…]` inline attributes and `^[label]:` attribute
+        // definitions unconditionally, so `.attributes` is always on.
         var cmOptions: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes]
         if !options.contains(.disableSmartOpts) {
             cmOptions.insert(.smart)

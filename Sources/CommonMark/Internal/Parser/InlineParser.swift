@@ -2357,6 +2357,7 @@ extension BlockParser {
             var i = start + 1
             while i < end {
                 let b = content[i]
+                assert(b != 0, "inline content holds no NUL: the block parser replaces it with U+FFFD")
                 if b == first {
                     return i + 1
                 }

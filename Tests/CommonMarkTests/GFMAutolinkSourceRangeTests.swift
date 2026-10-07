@@ -165,8 +165,8 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// An email address that ends in an entity reference has no source bytes of its own, so the link and its text have
-    /// no source range.
+    /// An email address whose last character comes from an entity reference is not a run of source bytes, so the link
+    /// and its text have no source range.
     @Test("an email ending in an entity reference has no source range")
     func emailEndingInEntityReference() {
         #expect(tree("a@b.&#99;") == """

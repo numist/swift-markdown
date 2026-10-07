@@ -20,12 +20,12 @@ internal struct Segment: Equatable {
 
     /// The original-source byte offset this segment's content maps to for source-position stamping, when it differs from `offset` (the byte-read offset).
     ///
-    /// Equal to `offset` in the overwhelmingly common case - the content is stamped where its bytes physically sit. It diverges only for a re-indented paragraph continuation line: cmark strips a continuation line's leading whitespace but reports the surviving content at the block's content column (`block_offset`; column 1 at the top level), not at its true first-non-space column. Such a segment therefore reads its bytes from `offset` (past the stripped whitespace) while mapping its source positions from `sourceOffset` (the block-content column).
+    /// Equal to `offset` in the overwhelmingly common case - the content is stamped where its bytes physically sit.
     ///
-    /// For an `inSource == false` segment, `sourceOffset` is the one source byte that every byte of the segment stands for - a split tab's leftover columns, emitted as spaces, stand for the tab byte - or `-1` when the segment has no source image (the interned `\n` join and other arena-only content, which no inline node starts or ends on).
+    /// For an `inSource == false` segment, `sourceOffset` is the one source byte that every byte of the segment stands for or `-1` when the segment has no source image (the interned `\n` join and other arena-only content, which no inline node starts or ends on).
     internal var sourceOffset: Int32
 
-    /// `sourceOffset` defaults to `offset` for a source segment (the content is stamped where it sits) and to `-1` (no source image) for an arena segment; pass it explicitly only to re-indent a continuation line's source mapping, or to name the source byte an arena segment stands for.
+    /// `sourceOffset` defaults to `offset` for a source segment (the content is stamped where it sits) and to `-1` (no source image) for an arena segment.
     internal init(offset: Int32, length: Int32, inSource: Bool, sourceOffset: Int32? = nil) {
         self.offset = offset
         self.length = length
@@ -47,13 +47,13 @@ internal struct Segment: Equatable {
 ///
 /// A `sourceOffset < 0` marks a synthetic gap - the interned `"\n"` line-join between reconstructed lines, or an arena-only line with no source pre-image - which stays position-less (`nil`), matching cmark's position-less soft breaks. Runs are contiguous and ordered (they tile the content from its first byte), so the map walks exactly like the multi-segment `Segment` list, minus the byte reads (bytes come from the flat arena span). This lets inline stamping recover per-line source columns for content that was flattened into one arena chunk (a non-contiguous setext heading), and in the single-run case it expresses the constant shift of a `\|`-unescaped table cell.
 ///
-/// `physicalOffset` is the `Segment.offset` analog: the run's byte-read source offset, which always sits on the run's own physical source line even when `sourceOffset` re-indents a continuation line to its block-content column and thereby overshoots that line. It equals `sourceOffset` for content that images its source where its bytes sit (a top-level line, or the constant-shift table cell). A source-mapped table row uses it to place the row's content end on its true physical line (see `TableParser.rowProjection`); `< 0` marks a synthetic gap with no physical image.
+/// `physicalOffset` is the `Segment.offset` analog: the run's byte-read source offset, which always sits on the run's own physical source line. It equals `sourceOffset` for content that images its source where its bytes sit (a top-level line, or the constant-shift table cell). A source-mapped table row uses it to place the row's content end on its true physical line (see `TableParser.rowProjection`); `< 0` marks a synthetic gap with no physical image.
 internal struct ArenaRun: Equatable {
     internal var length: Int32
     internal var sourceOffset: Int32
     internal var physicalOffset: Int32
 
-    /// `physicalOffset` defaults to `sourceOffset` (the run images its source where its bytes sit); pass it explicitly only when a re-indented continuation line's byte-read offset differs from its re-indented source mapping.
+    /// `physicalOffset` defaults to `sourceOffset` (the run images its source where its bytes sit).
     internal init(length: Int32, sourceOffset: Int32, physicalOffset: Int32? = nil) {
         self.length = length
         self.sourceOffset = sourceOffset

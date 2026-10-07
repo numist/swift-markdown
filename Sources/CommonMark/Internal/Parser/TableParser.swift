@@ -441,7 +441,7 @@ extension BlockParser {
 
     /// A single row's arena→source projection.
     ///
-    /// A table row occupies one physical source line, whose content images source runs (split where a U+FFFD images its NUL, or where a split tab's leftover columns image the tab) that share one re-indent shift: `reindent` is the re-based `sourceOffset` (cmark's escape-oblivious / re-based column) of the run holding the row's last byte, minus its byte-read `physicalOffset` (the row's true physical line, used to place the row's content end).
+    /// A table row occupies one physical source line, whose content images source runs (split where a U+FFFD images its NUL) that share one re-indent shift: `reindent` is the re-based `sourceOffset` (cmark's escape-oblivious / re-based column) of the run holding the row's last byte, minus its byte-read `physicalOffset` (the row's true physical line, used to place the row's content end).
     ///
     /// A re-indent can shift a re-based offset past the end of the row's physical line; every projected offset is clamped to `lineEnd`, the line's terminator (or the source end), so no row or cell range runs onto the next line.
     private struct RowProjection {
@@ -623,7 +623,7 @@ extension BlockParser {
         return alignments
     }
 
-    /// Split `line` into cells on unescaped `|`. Strips a single trailing `|` if present (with optional surrounding whitespace), and a single leading `|` only when the row's first byte is that pipe (no whitespace before it). `hadClosingPipe` reports whether a trailing `|` was stripped, so the caller can tell a rightmost cell capped by a pipe from one that runs to the line end. `leadingWhitespace` is the number of leading space/tab bytes trimmed before the first cell, which cmark scans as that cell's bytes.
+    /// Split `line` into cells on unescaped `|`. Strips a single trailing `|` if present (with optional surrounding whitespace), and a single leading `|` only when the row's first byte is that pipe (no whitespace before it). `hadClosingPipe` reports whether a trailing `|` was stripped, so the caller can tell a rightmost cell capped by a pipe from one that runs to the line end. `leadingWhitespace` is zero: a row starts at its first non-space byte.
     private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool, hadLeadingPipe: Bool, leadingWhitespace: Int) {
         var s = line.lowerBound
         var e = line.upperBound

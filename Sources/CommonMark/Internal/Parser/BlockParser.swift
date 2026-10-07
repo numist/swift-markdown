@@ -305,7 +305,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var delimiters = UniqueArray<DelimiterRecord>()
         var brackets = UniqueArray<BracketRecord>()
         
-        // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content) and `segEndScratch` its running virtual end offsets; `runScratch` holds a stable copy of a flattened block's arena→source run map and `runEndScratch` its running end offsets; All owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
+        // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content) and `segEndScratch` its running virtual end offsets; `runScratch` holds a stable copy of a flattened block's arena→source run map and `runEndScratch` its running end offsets. All owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
         var scratch = UniqueArray<UInt8>()
         var segScratch = UniqueArray<Segment>()
         var segEndScratch = UniqueArray<Int>()
@@ -785,7 +785,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // A tab-expanded current line (`!currentLineMapsToSource`) has `span` pointing at the per-line expanded buffer, not source - appending `span[range]` directly would bake the expanded-tab spaces into the arena as if they were literal content. Map back to the literal source range instead (same rule as the `.none` case above and `addLineSegment`'s materialized branch): cmark expands tabs only for block-structure indentation and keeps them literal in inline content.
                 if !currentLineMapsToSource {
                     let sourceHigh = materializedSourceOffset(range.upperBound)
-                    let sourceLow = materializedSourceStart(bufferStart: range.lowerBound).sourceStart
+                    let (sourceLow, splitTabSpaces) = materializedSourceStart(bufferStart: range.lowerBound)
+                    assert(splitTabSpaces == 0, "a paragraph continuation's content never begins inside an expanded tab")
                     text.append(sourceLow..<sourceHigh, of: sourceBytes)
                 } else {
                     // A source-mapped line's `span` is the source itself.
@@ -2577,7 +2578,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Trim trailing whitespace off the last segment (matching `Chunk.trimming(using:)`), in place. Interior segments - the newline joins and any hard-break trailing spaces before them - are untouched. A last segment trimmed to zero length is harmless (read as empty).
     ///
-    /// The first segment is a paragraph's opening line, which starts at its first non-space byte, so there is no leading whitespace to trim - except in a table-pending node's header row (pass `trimLeading: false`), which keeps a lazy continuation's preserved residual, since cmark builds the header row from the raw paragraph content and never trims its leading edge (that residual becomes the header's empty leading cell).
+    /// The first segment is a paragraph's opening line, which starts at its first non-space byte, so there is no leading whitespace to trim
     private func trimSegments(_ segs: consuming UniqueArray<Segment>, trimLeading: Bool = true) -> UniqueArray<Segment> {
         var segs = segs
         precondition(segs.count > 0, "a paragraph's segment list starts with its opening line")
@@ -2689,7 +2690,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             if len > 0 {
                 if seg.inSource {
-                    // A source segment images its (re-indented) source range - `sourceOffset` re-indents a continuation line to its block-content column; otherwise it equals `offset`. `physicalOffset` (the segment's byte-read `offset`) stays on the run's physical source line so inline stamping can anchor a re-indented run there.
+                    // A source segment images its source range. `physicalOffset` is the segment's byte-read `offset`.
                     map.append(ArenaRun(length: Int32(len), sourceOffset: seg.sourceOffset, physicalOffset: seg.offset))
                 } else {
                     // The interned `\n` join, or an arena-only line: a synthetic gap.
@@ -2804,11 +2805,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         precondition(!tablePending || (paragraphSecondLineIndent[node] != nil && paragraphSecondLineLazy[node] != nil), "a table-pending paragraph recorded its second line's indent and laziness when that line arrived")
         if tablePending && paragraphSecondLineIndent[node]! < 4 && !paragraphSecondLineLazy[node]! {
             // cmark's header is the raw paragraph content (never ref-def-stripped), so the table parser sees
-            // the content before `parseDefinitions` touches it. cmark also never trims the header row's
-            // LEADING edge: a lazy continuation's residual leading whitespace (kept by `addLineSegment` and
-            // preserved through finalize for a table-pending node) is the header's empty leading cell
-            // (` |` → `Cell colspan: 0`, not the zero-column lone-pipe `|`). So build from the leading-
-            // preserving `raw`.
+            // the content before `parseDefinitions` touches it.
             let tableContent = raw.trimmingTrailing(using: self)
             // Rows that aren't source-contiguous (a container prefix, leading whitespace, or a CRLF between
             // them) make the paragraph a segment list, so its content reaches here flattened with a run map
@@ -2883,9 +2880,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 runParagraphMatchers(node: node, raw: raw, map: map)
             case .segments(let segs):
                 // Multi-line non-contiguous body held as zero-copy source segments. Trim, then only materialize (flatten) if it could match a finalize matcher; plain prose stays segments.
-                // A table-pending node keeps its header row's leading residual (a lazy continuation's
-                // preserved whitespace, promoted to the first line by a multi-line split): cmark builds the
-                // header row from the untrimmed content, so that residual is the header's empty leading cell.
                 let tablePending = storage.options.contains(.tables) && (paragraphTablePending[node] ?? false)
                 let trimmed = trimSegments(segs, trimLeading: !tablePending)
                 if segmentsCouldMatchMatcher(trimmed) || segmentsEndInControlWhitespace(trimmed) {
@@ -3467,7 +3461,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private static let processingInstructionEnd = Array("?>".utf8)
     private static let cdataEnd = Array("]]>".utf8)
 
-    /// Compare a byte range to an ASCII string case-insensitively (for tag matching).
+    /// Compare a byte range to a lowercase ASCII string case-insensitively (for tag matching).
     private func bytesEqualASCIICaseInsensitive(span: Span<UInt8>, range: Range<Int>, target: [UInt8]) -> Bool {
         let len = range.upperBound - range.lowerBound
         if len != target.count {

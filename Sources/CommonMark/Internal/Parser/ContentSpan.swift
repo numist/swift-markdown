@@ -148,7 +148,7 @@ internal struct ContentSpan: ~Escapable {
         return UInt8(ascii: "\n")
     }
 
-    /// The original-source byte offsets for the content byte at `offset`: `source` is the offset it is stamped at, and `physical` the offset of the byte as read, which sits on the byte's own source line. They differ only for a re-indented continuation line, whose `source` is moved to its block-content column (and may then lie past the end of its line). Single-segment source content maps identity (the offset already IS a source offset); single-segment arena content resolves through its arena→source run map; multi-segment resolves through the segment list.
+    /// The original-source byte offsets for the content byte at `offset`: `source` is the offset it is stamped at, and `physical` the offset of the byte as read, which sits on the byte's own source line. Single-segment source content maps identity (the offset already IS a source offset); single-segment arena content resolves through its arena→source run map; multi-segment resolves through the segment list.
     ///
     /// `offset` always images a source byte: callers resolve only an inline node's first and last bytes, and no inline node starts or ends on a byte without a source image, such as a line join (a soft or hard break is position-less, and the text before it ends at the join).
     @inlinable
@@ -169,7 +169,7 @@ internal struct ContentSpan: ~Escapable {
         let i = segmentIndex(covering: offset)
         precondition(i < segments.count, "an inline node's source range lies inside its multi-segment content")
         let seg = segments[i]
-        // Map through `sourceOffset` (re-indents a continuation line to its block-content column); the byte-read `offset` is the physical image.
+        // Map through `sourceOffset`; the byte-read `offset` is the physical image.
         precondition(seg.inSource, "an inline node's first and last bytes image source bytes")
         let local = offset - segmentStart(i)
         return (Int(seg.sourceOffset) + local, Int(seg.offset) + local)

@@ -45,4 +45,18 @@ struct BlockQuoteLineJoinScanTests {
 
             """)
     }
+
+    /// A link title that is never closed is no title (spec "Links"), so the bracket and parenthesis stay text.
+    @Test("an unclosed link title continuing onto the next line forms no link")
+    func unclosedLinkTitle() {
+        #expect(CmarkTreeDump.dump("> x [a](b \"c\n> d)", options: [.sourcePosition], sourceRanges: true) == """
+            document @1:1-2:5
+              block_quote @1:1-2:5
+                paragraph @1:3-2:5
+                  text "x [a](b \\"c" @1:3-1:13
+                  softbreak @-
+                  text "d)" @2:3-2:5
+
+            """)
+    }
 }
