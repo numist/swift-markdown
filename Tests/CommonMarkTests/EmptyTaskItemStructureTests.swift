@@ -31,21 +31,14 @@ private func firstListItem(
     return found
 }
 
-/// Block structure of an EMPTY GFM task-list item (`- [ ] ` / `- [x]\t` - a checkbox followed by
-/// only trailing whitespace, nothing else on the line).
+/// Block structure of a GFM task-list item whose marker line holds only the checkbox and trailing
+/// whitespace (`- [ ] ` / `- [x]\t`).
 ///
-/// cmark-gfm's tasklist extension consumes the checkbox when the list ITEM opens
-/// (`open_tasklist_item`), so such an item has no first child: it stays EMPTY, exactly like a plain
-/// `- ` empty item. A following UNINDENTED non-blank line therefore closes the item and starts a
-/// fresh top-level paragraph rather than lazily continuing the (nonexistent) item paragraph. A line
-/// indented to the item's content column still continues it (the item then holds a paragraph and
-/// keeps its checkbox). The rewrite recognizes the checkbox at finalize (`runParagraphMatchers`,
-/// #65), which cannot see the empty case (there is no paragraph to finalize); it is caught at
-/// item-open time instead. This is a STRUCTURAL match (which blocks form): the empty-item recognition
-/// fix is unconditional - it is not gated on `.cmarkBugCompatibility` (flag-ON and flag-OFF produce an
-/// identical tree for every case here), so these assertions parse with the shipped default options.
-///
-/// Positions are the `dump --ref` (cmark-gfm) oracle for each source.
+/// The marker line is not blank, so it opens the item's paragraph (spec "List items"), which a
+/// following line continues, lazily or indented (spec "Paragraph continuation text"). The paragraph
+/// begins with a task list item marker followed by whitespace, so the item is a task item (spec "Task
+/// list items (extension)"); the marker is replaced by the checkbox, and a paragraph left with no
+/// content is removed.
 @Suite("Empty GFM task-list item block structure")
 struct EmptyTaskItemStructureTests {
 
@@ -83,30 +76,14 @@ struct EmptyTaskItemStructureTests {
         nodes.filter { $0.kind == .paragraph }.map { $0.range }
     }
 
-    /// True if ANY item in the tree was recognized as a task item (checkbox set). The negative
-    /// controls below use this to prove the checkbox was NOT recognized anywhere.
-    private func anyTaskItem(
-        in nodes: [(kind: MarkdownNode.Kind, range: Range<Pos>?)]
-    ) -> Bool {
-        for entry in nodes {
-            if case .item(let checked) = entry.kind, checked != nil { return true }
-        }
-        return false
-    }
-
-    @Test("empty task item is childless and does not swallow a following unindented line")
-    func emptyTaskItemDoesNotSwallowNextLine() throws {
-        // "- [ ] " (checkbox, only trailing space) then "x" (unindented). Oracle `emptytask-min`.
+    @Test("a marker-only task item line is continued lazily by an unindented line")
+    func emptyTaskItemLineContinuedLazily() throws {
+        // "- [ ] " (checkbox, only trailing space) then "x" (unindented, a lazy continuation).
         let (nodes, item) = analyze("- [ ] \nx", options: Self.options)
-        // Fixture-sanity: the item is a RECOGNIZED unchecked task item - not a plain bullet, and not
-        // a paragraph whose literal text happens to be "[ ]". Without this the emptiness claim below
-        // could pass against a structure that never involved a checkbox at all.
         let firstItem = try #require(item, "no list item parsed")
         try #require(firstItem.checked == .some(false), "expected an UNCHECKED task item")
-        // The core claim: the item is EMPTY (no child paragraph), so `x` is not swallowed.
-        #expect(firstItem.childCount == 0)
-        #expect(itemRange(in: nodes) == Pos(line: 1, column: 1)..<Pos(line: 1, column: 7))
-        // `x` is a SEPARATE top-level paragraph on line 2.
+        #expect(firstItem.childCount == 1)
+        #expect(itemRange(in: nodes) == Pos(line: 1, column: 1)..<Pos(line: 2, column: 2))
         let paras = paragraphs(in: nodes)
         try #require(paras.count == 1)
         #expect(paras[0]?.lowerBound == Pos(line: 2, column: 1))
@@ -115,13 +92,13 @@ struct EmptyTaskItemStructureTests {
 
     @Test("empty task item followed by a blank line then text")
     func emptyTaskItemBeforeBlankThenText() throws {
-        // "- [ ] " then a blank line then "x". Reference: item empty @1:1-1:7, list end extends to
-        // @2:1 (the blank line), `x` a separate paragraph @3:1-3:2.
+        // "- [ ] " then a blank line then "x": the item is empty and runs to the blank line @1:1-2:1,
+        // `x` a separate paragraph @3:1-3:2.
         let (nodes, item) = analyze("- [ ] \n\nx", options: Self.options)
         let firstItem = try #require(item)
         try #require(firstItem.checked == .some(false))
         #expect(firstItem.childCount == 0)
-        #expect(itemRange(in: nodes) == Pos(line: 1, column: 1)..<Pos(line: 1, column: 7))
+        #expect(itemRange(in: nodes) == Pos(line: 1, column: 1)..<Pos(line: 2, column: 1))
         let paras = paragraphs(in: nodes)
         try #require(paras.count == 1)
         #expect(paras[0]?.lowerBound == Pos(line: 3, column: 1))
@@ -141,10 +118,8 @@ struct EmptyTaskItemStructureTests {
 
     @Test("empty task item followed by an INDENTED line continues the item")
     func emptyTaskItemContinuesOnIndentedLine() throws {
-        // "- [ ] " then "  x" (indented to the item's content column). The reference CONTINUES the
-        // item: it gains a paragraph @2:3-2:4 and keeps its checkbox; item spans @1:1-2:4. This is
-        // the boundary control proving the fix quarantines the empty case (unindented) from a
-        // genuine continuation.
+        // "- [ ] " then "  x" (indented to the item's content column): the item keeps its checkbox and
+        // holds the paragraph @2:3-2:4; item spans @1:1-2:4.
         let (nodes, item) = analyze("- [ ] \n  x", options: Self.options)
         let firstItem = try #require(item)
         try #require(firstItem.checked == .some(false))
@@ -156,42 +131,38 @@ struct EmptyTaskItemStructureTests {
         #expect(paras[0]?.upperBound == Pos(line: 2, column: 4))
     }
 
-    @Test("checked empty task item with a TAB separator")
+    @Test("checked marker-only task item line with a TAB separator")
     func emptyCheckedTaskItemTabSeparator() throws {
-        // "- [x]\t" (tab after the checkbox) then "x". Reference: checked item empty @1:1-1:7,
-        // `x` a separate paragraph @2:1-2:2.
+        // "- [x]\t" (tab after the checkbox) then "x", a lazy continuation of the item's paragraph.
         let (nodes, item) = analyze("- [x]\t\nx", options: Self.options)
         let firstItem = try #require(item)
         try #require(firstItem.checked == .some(true), "expected a CHECKED task item")
-        #expect(firstItem.childCount == 0)
-        #expect(itemRange(in: nodes) == Pos(line: 1, column: 1)..<Pos(line: 1, column: 7))
+        #expect(firstItem.childCount == 1)
+        #expect(itemRange(in: nodes) == Pos(line: 1, column: 1)..<Pos(line: 2, column: 2))
         let paras = paragraphs(in: nodes)
         try #require(paras.count == 1)
         #expect(paras[0]?.lowerBound == Pos(line: 2, column: 1))
         #expect(paras[0]?.upperBound == Pos(line: 2, column: 2))
     }
 
-    @Test("block-quoted empty checkbox is NOT a task item (only top-level lists recognize checkboxes)")
-    func blockQuotedEmptyCheckboxIsNotRecognized() throws {
-        // cmark's `scan_tasklist` scans the whole line from offset 0 and requires the checkbox be
-        // preceded only by spaces + one list marker; the `>` breaks the match, so `> - [ ] ` is an
-        // ORDINARY item whose paragraph text is the literal `[ ]`. The open-time detection must
-        // replicate that line-start anchoring rather than firing for every list item. Oracle:
-        // `emptytask-bq-ctl`.
+    @Test("a block-quoted marker-only item is a task item")
+    func blockQuotedEmptyCheckboxIsRecognized() throws {
         let (nodes, item) = analyze("> - [ ] ", options: Self.options)
         let firstItem = try #require(item, "no list item parsed")
-        #expect(firstItem.checked == nil)                 // ordinary item, NOT a task item
-        #expect(firstItem.childCount == 1)                // holds the `[ ]` paragraph
-        #expect(!anyTaskItem(in: nodes))                  // no checkbox recognized anywhere
-        #expect(!paragraphs(in: nodes).isEmpty)           // `[ ]` survives as paragraph content
+        #expect(firstItem.checked == .some(false))
+        #expect(firstItem.childCount == 0)
+        #expect(itemRange(in: nodes) == Pos(line: 1, column: 3)..<Pos(line: 1, column: 9))
+        #expect(paragraphs(in: nodes).isEmpty)
     }
 
-    @Test("nested empty checkbox is NOT a task item (a second marker breaks scan_tasklist)")
-    func nestedEmptyCheckboxIsNotRecognized() {
-        // `- - [ ] `: the inner list marker is preceded by the OUTER marker, so `scan_tasklist` fails
-        // and the inner item is ordinary with literal `[ ]` text. Oracle: `emptytask-nest-ctl`.
+    @Test("a nested marker-only item sharing its line with the outer marker is a task item")
+    func nestedEmptyCheckboxIsRecognized() {
         let (nodes, _) = analyze("- - [ ] ", options: Self.options)
-        #expect(!anyTaskItem(in: nodes))                  // no checkbox recognized at any nesting
-        #expect(!paragraphs(in: nodes).isEmpty)           // `[ ]` survives as paragraph content
+        let checks = nodes.compactMap { entry -> Bool?? in
+            if case .item(let checked) = entry.kind { return .some(checked) }
+            return nil
+        }
+        #expect(checks == [nil, .some(false)])
+        #expect(paragraphs(in: nodes).isEmpty)
     }
 }

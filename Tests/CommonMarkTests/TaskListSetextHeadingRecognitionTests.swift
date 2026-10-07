@@ -107,17 +107,18 @@ struct TaskListSetextHeadingRecognitionTests {
         #expect(!shape.allTexts.contains { $0.contains("[x]") })
     }
 
-    // MARK: - Unconditional: the deliverable (flag OFF) anchors recognition the same way
+    // MARK: - Shipped parser
 
-    @Test("flag OFF: `- [ ] v\\n  -` is an UNCHECKED task item with a level-2 heading `v` (unconditional)")
-    func taskItemSetextHeadingRecognizedFlagOff() throws {
+    /// A task list item's first block must be a paragraph (spec "Task list items (extension)"), so an item
+    /// whose first block is a setext heading is an ordinary item and the heading keeps `[ ]` as text.
+    @Test("`- [ ] v\\n  -` is an ordinary item with a level-2 heading `[ ] v`")
+    func taskItemSetextHeadingNotRecognizedFlagOff() throws {
         let shape = shape("- [ ] v\n  -", options: Self.flagOff)
         let checked = try #require(shape.itemChecked, "no list item parsed")
         try #require(shape.headingLevel != nil, "no heading parsed")
-        #expect(checked == .some(false))
+        #expect(checked == nil)
         #expect(shape.headingLevel == 2)
-        #expect(shape.headingText == "v")
-        #expect(!shape.allTexts.contains { $0.contains("[ ]") })
+        #expect(shape.headingText == "[ ] v")
     }
 
     // MARK: - Controls (guard against over-correction)

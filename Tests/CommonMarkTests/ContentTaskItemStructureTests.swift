@@ -36,20 +36,10 @@ private func textLiterals(_ node: borrowing MarkdownNode, into out: inout [Strin
 
 /// Block structure of a CONTENT-bearing GFM task-list item (`- [ ] x` and its nested variants).
 ///
-/// cmark-gfm recognizes a task checkbox via `scan_tasklist`, which scans the whole physical line from
-/// offset 0 as `spacechar* <one list marker> spacechar+ <checkbox> spacechar+ …`. A block-quote `>`
-/// prefix OR a second (outer) list marker on the same line before the checkbox breaks that scan, so a
-/// checkbox is recognized ONLY when the marker is preceded on its own physical line by nothing but
-/// whitespace. This is a PHYSICAL-LINE property, not block-nesting depth: a block-nested item that sits
-/// alone on its own indented line IS recognized (the indentation is the `spacechar*` prefix), while an
-/// item sharing its line with a `>` or an outer marker is not. The rewrite records that line-anchoring
-/// at item-open time (`lineAnchoredTaskItems`) and gates the finalize-time recognition on it, so an
-/// item sharing its line with a `>` / outer marker keeps its `[ ]`/`[x]` as literal paragraph text.
-///
-/// STRUCTURAL match (whether a checkbox is set and whether `[ ]` stays literal): the tasklist
-/// recognition fix is unconditional - it is not gated on `.cmarkBugCompatibility` (flag-ON and
-/// flag-OFF produce an identical tree for every case here), so these assertions parse with the shipped
-/// default options.
+/// A task list item is a list item whose first block is a paragraph beginning with a task list item
+/// marker (spec "Task list items (extension)"). That depends only on the item's own first paragraph, so
+/// an item is recognized however deeply it is nested and whatever container markers precede it on its
+/// line.
 @Suite("Content-bearing GFM task-list item block structure")
 struct ContentTaskItemStructureTests {
 
@@ -110,64 +100,54 @@ struct ContentTaskItemStructureTests {
         #expect(checks[0] == .some(false))
     }
 
-    // MARK: - Nested / block-quoted items are NOT recognized (negative controls)
+    // MARK: - Nested / block-quoted items
 
-    @Test("block-quoted content task item is NOT recognized (literal `[ ]`)")
-    func blockQuotedContentTaskNotRecognized() throws {
-        // `> - [ ] x`: the `>` breaks `scan_tasklist`, so the item is ordinary and its paragraph keeps
-        // the literal `[ ] x`. Oracle: `nesttask-bq`.
+    @Test("block-quoted content task item is recognized")
+    func blockQuotedContentTaskRecognized() throws {
         let (checks, texts) = analyze("> - [ ] x", options: Self.options)
         try #require(checks.count == 1, "expected exactly one list item, got \(checks)")
-        #expect(checks[0] == nil)                          // ordinary item, NOT a task item
-        #expect(texts.contains("[ ] x"))                    // marker survives as literal text
+        #expect(checks[0] == .some(false))
+        #expect(texts == ["x"])
     }
 
-    @Test("outer-list-nested content task item is NOT recognized (a second marker breaks scan_tasklist)")
-    func nestedContentTaskNotRecognized() throws {
-        // `- - [ ] x`: the inner marker is preceded by the OUTER marker. Oracle: `nesttask-list`.
+    @Test("content task item sharing its line with an outer list marker is recognized")
+    func nestedContentTaskRecognized() throws {
         let (checks, texts) = analyze("- - [ ] x", options: Self.options)
         try #require(checks.count == 2, "expected outer + inner items, got \(checks)")
-        #expect(!checks.contains { $0 != nil })            // no checkbox at any nesting level
-        #expect(texts.contains("[ ] x"))
+        #expect(checks == [nil, .some(false)])
+        #expect(texts == ["x"])
     }
 
-    @Test("three-deep nested content task item is NOT recognized")
-    func threeDeepNestedContentTaskNotRecognized() throws {
-        // `- - - [ ] x`: the innermost marker is preceded by two outer markers. Only the innermost item
-        // holds the `[ ] x` paragraph; the outer items hold nested lists (never a checkbox paragraph).
+    @Test("three-deep nested content task item is recognized")
+    func threeDeepNestedContentTaskRecognized() throws {
         let (checks, texts) = analyze("- - - [ ] x", options: Self.options)
         try #require(checks.count == 3, "expected three nested items, got \(checks)")
-        #expect(!checks.contains { $0 != nil })
-        #expect(texts.contains("[ ] x"))
+        #expect(checks == [nil, nil, .some(false)])
+        #expect(texts == ["x"])
     }
 
-    @Test("content task item inside a block quote inside a list is NOT recognized")
-    func taskInBlockQuoteInListNotRecognized() throws {
-        // `- > - [ ] x`: list item > block quote > list item. The innermost marker is preceded by
-        // `- > `, a non-space prefix, so `scan_tasklist` fails.
+    @Test("content task item inside a block quote inside a list is recognized")
+    func taskInBlockQuoteInListRecognized() throws {
         let (checks, texts) = analyze("- > - [ ] x", options: Self.options)
         try #require(checks.count == 2, "expected outer + inner items, got \(checks)")
-        #expect(!checks.contains { $0 != nil })
-        #expect(texts.contains("[ ] x"))
+        #expect(checks == [nil, .some(false)])
+        #expect(texts == ["x"])
     }
 
-    @Test("content task item nested in an ORDERED item is NOT recognized")
-    func orderedNestedContentTaskNotRecognized() throws {
-        // `1. - [ ] x`: the inner bullet marker is preceded by the ordered `1. ` marker.
+    @Test("content task item nested in an ORDERED item is recognized")
+    func orderedNestedContentTaskRecognized() throws {
         let (checks, texts) = analyze("1. - [ ] x", options: Self.options)
         try #require(checks.count == 2, "expected outer ordered + inner bullet items, got \(checks)")
-        #expect(!checks.contains { $0 != nil })
-        #expect(texts.contains("[ ] x"))
+        #expect(checks == [nil, .some(false)])
+        #expect(texts == ["x"])
     }
 
-    // MARK: - Block-nested BUT alone on its own line IS recognized (physical-line, not block-depth)
+    // MARK: - Block-nested on its own line
 
     @Test("block-nested content task item alone on its own indented line IS recognized")
     func blockNestedButLineAnchoredIsRecognized() throws {
-        // `- a` then `  - [ ] b`: `b` is block-nested (a sub-list of item `a`), but its marker is alone
-        // on its physical line preceded only by spaces, so `scan_tasklist` matches from offset 0 and the
-        // checkbox IS recognized. This pins the PHYSICAL-LINE semantics: recognition does not depend on
-        // block-nesting depth. `a` is an ordinary item (nil); `b` is an unchecked task item.
+        // `- a` then `  - [ ] b`: `b` is a sub-list item of `a`; `a` is an ordinary item (nil) and `b`
+        // an unchecked task item.
         let (checks, texts) = analyze("- a\n  - [ ] b", options: Self.options)
         try #require(checks.count == 2, "expected outer `a` + nested `b` items, got \(checks)")
         #expect(checks == [nil, false])                    // `a` ordinary, `b` recognized unchecked task

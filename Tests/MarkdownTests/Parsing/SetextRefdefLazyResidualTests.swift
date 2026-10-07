@@ -132,11 +132,11 @@ class SetextRefdefLazyResidualTests: XCTestCase {
             surface(">>[a]:u\n>  b\n>>=\n", cmarkBugCompatible: false))
     }
 
-    /// Flag-off (shipped): a setext heading's content is stripped of leading whitespace, where cmark-gfm
-    /// keeps the lazy line's leading space after the checkbox and definition.
+    /// `[ ] [a]:u` does not begin with a link reference definition, so it is heading text, and a heading is
+    /// not the paragraph a task list item must begin with (spec "Task list items (extension)").
     func testTaskCheckboxThenRefDefFlagOff() {
         XCTAssertEqual(
-            "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [ ]\n      └─ Heading level: 1\n         └─ Text \"b\"",
+            "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 1\n         ├─ Text \"[ ] [a]:u\"\n         ├─ SoftBreak\n         └─ Text \"b\"",
             surface("- [ ] [a]:u\n b\n  =\n", cmarkBugCompatible: false))
     }
 
@@ -150,9 +150,10 @@ class SetextRefdefLazyResidualTests: XCTestCase {
             surface(">a\n b\n>=\n", cmarkBugCompatible: false))
     }
 
+    /// A heading is not the paragraph a task list item must begin with (spec "Task list items (extension)").
     func testTaskCheckboxGapFlagOff() {
         XCTAssertEqual(
-            "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [ ]\n      └─ Heading level: 1\n         └─ Text \"b\"",
+            "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 1\n         └─ Text \"[ ]  \tb\"",
             surface("- [ ]  \tb\n  =\n", cmarkBugCompatible: false))
     }
 }

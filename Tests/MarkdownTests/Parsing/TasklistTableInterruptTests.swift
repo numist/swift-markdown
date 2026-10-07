@@ -38,22 +38,24 @@ class TasklistTableInterruptTests: XCTestCase {
     /// Every compare-surface variant a probe must agree on: both `.cmarkBugCompatibility` states, with
     /// source positions both off (the fuzzed `0x7c` options) and on (a different pending-content
     /// representation reaches the table split).
-    private func surfaces(_ markdown: String) -> [String] {
+    private func surfaces(_ markdown: String, cmarkBugCompatible: Bool) -> [String] {
         var result: [String] = []
-        for cmarkBugCompatible in [true, false] {
-            for positions in [false, true] {
-                var options = Self.fuzzedBits
-                if cmarkBugCompatible { options.insert(.cmarkBugCompatibility) }
-                if positions { options.remove(.disableSourcePosOpts) }
-                result.append(Document(parsing: markdown, options: options).debugDescription(options: []))
-            }
+        for positions in [false, true] {
+            var options = Self.fuzzedBits
+            if cmarkBugCompatible { options.insert(.cmarkBugCompatibility) }
+            if positions { options.remove(.disableSourcePosOpts) }
+            result.append(Document(parsing: markdown, options: options).debugDescription(options: []))
         }
         return result
     }
 
-    private func assertSurface(_ markdown: String, _ expected: String, file: StaticString = #filePath, line: UInt = #line) {
-        for actual in surfaces(markdown) {
+    /// Asserts `expected` in both `.cmarkBugCompatibility` states, or `shipped` for the shipped parser when given.
+    private func assertSurface(_ markdown: String, _ expected: String, shipped: String? = nil, file: StaticString = #filePath, line: UInt = #line) {
+        for actual in surfaces(markdown, cmarkBugCompatible: true) {
             XCTAssertEqual(expected, actual, file: file, line: line)
+        }
+        for actual in surfaces(markdown, cmarkBugCompatible: false) {
+            XCTAssertEqual(shipped ?? expected, actual, file: file, line: line)
         }
     }
 
@@ -144,7 +146,7 @@ class TasklistTableInterruptTests: XCTestCase {
         let markdown = "- [ ] a [x]\n  b|\n  -|"
         let flagOn = Self.taskItemWithTable(checkbox: "[x]", paragraph: ["a [x]"], head: "b")
         let flagOff = Self.taskItemWithTable(checkbox: "[ ]", paragraph: ["a [x]"], head: "b")
-        let actual = surfaces(markdown)
+        let actual = surfaces(markdown, cmarkBugCompatible: true) + surfaces(markdown, cmarkBugCompatible: false)
         XCTAssertEqual([flagOn, flagOn, flagOff, flagOff], actual)
     }
 
@@ -174,7 +176,10 @@ class TasklistTableInterruptTests: XCTestCase {
     /// consumes it, and the heading holds only the remaining line.
     func testSetextHeadingAfterTaskItemRefDef() {
         let expected = "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Heading level: 1\n         └─ Text \"b\""
-        assertSurface("- [x] [a]: /u\n  b\n  ===", expected)
+        // `[x] [a]: /u` does not begin with a link reference definition, so it is heading text, and a
+        // heading is not the paragraph a task list item must begin with (spec "Task list items (extension)").
+        let shipped = "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 1\n         ├─ Text \"[x] [a]: /u\"\n         ├─ SoftBreak\n         └─ Text \"b\""
+        assertSurface("- [x] [a]: /u\n  b\n  ===", expected, shipped: shipped)
     }
 
     /// Nothing but a ref-def precedes the underline, so no heading forms: cmark keeps the paragraph open
@@ -182,7 +187,8 @@ class TasklistTableInterruptTests: XCTestCase {
     /// surface as a paragraph `===`.
     func testSetextUnderlineAfterTaskItemRefDefOnly() {
         let expected = "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         └─ Text \"===\""
-        assertSurface("- [x] [a]: /u\n  ===", expected)
+        let shipped = "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 1\n         └─ Text \"[x] [a]: /u\""
+        assertSurface("- [x] [a]: /u\n  ===", expected, shipped: shipped)
     }
 
     // MARK: - Guards (already matching cmark)
@@ -201,12 +207,25 @@ class TasklistTableInterruptTests: XCTestCase {
             "         ├─ Paragraph",
             "         │  └─ Text \"[x] a\"",
         ] + Self.table(head: "b", indent: "         ")
-        assertSurface("> - [x] a\n>   b|\n>   -|", expected.joined(separator: "\n"))
+        // The item's first paragraph begins with a task list item marker, whatever precedes the list
+        // marker on its line (spec "Task list items (extension)").
+        let shipped = [
+            "Document",
+            "└─ BlockQuote",
+            "   └─ UnorderedList",
+            "      └─ ListItem checkbox: [x]",
+            "         ├─ Paragraph",
+            "         │  └─ Text \"a\"",
+        ] + Self.table(head: "b", indent: "         ")
+        assertSurface("> - [x] a\n>   b|\n>   -|", expected.joined(separator: "\n"), shipped: shipped.joined(separator: "\n"))
     }
 
     func testTableIsWholeFirstParagraph() {
         let expected = ["Document", "└─ UnorderedList", "   └─ ListItem checkbox: [x]"] + Self.table(head: "a", indent: "      ")
-        assertSurface("- [x] |a|\n  |-|", expected.joined(separator: "\n"))
+        // The header row `[x] |a|` has two cells and the delimiter row one, so no table forms (spec "Tables
+        // (extension)") and the paragraph begins with the task list item marker.
+        let shipped = "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         ├─ Text \"|a|\"\n         ├─ SoftBreak\n         └─ Text \"|-|\""
+        assertSurface("- [x] |a|\n  |-|", expected.joined(separator: "\n"), shipped: shipped)
     }
 
     func testTableAfterBlankTaskLine() {
@@ -216,10 +235,14 @@ class TasklistTableInterruptTests: XCTestCase {
 
     func testSetextHeadingKeepsCheckbox() {
         let expected = "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [ ]\n      └─ Heading level: 2\n         ├─ Text \"a\"\n         ├─ SoftBreak\n         └─ Text \"b\""
-        assertSurface("- [ ] a\n  b\n  ---", expected)
+        // A heading is not the paragraph a task list item must begin with (spec "Task list items (extension)").
+        let shipped = "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 2\n         ├─ Text \"[ ] a\"\n         ├─ SoftBreak\n         └─ Text \"b\""
+        assertSurface("- [ ] a\n  b\n  ---", expected, shipped: shipped)
     }
 
     func testRefDefOnlyTaskItem() {
-        assertSurface("- [x] [a]: /u", "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]")
+        // `[x] [a]: /u` does not begin with a link reference definition, so `[a]: /u` is the paragraph's text.
+        let shipped = "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         └─ Text \"[a]: /u\""
+        assertSurface("- [x] [a]: /u", "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]", shipped: shipped)
     }
 }

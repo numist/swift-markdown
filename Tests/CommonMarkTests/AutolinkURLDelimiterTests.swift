@@ -164,24 +164,25 @@ struct AutolinkURLDelimiterTests {
         #expect(ns.compactMap(\.url) == ["http://l>>"])
     }
 
-    // MARK: - VT/FF are not cmark whitespace: kept in the URL
+    // MARK: - A paragraph's final VT/FF is removed before the URL is scanned
 
-    @Test("a trailing vertical tab (0x0B) stays in the URL")
-    func verticalTabKept() throws {
-        // cmark's body scan uses `cmark_isspace`, which excludes VT (0x0B); the rewrite must not treat it
-        // as a boundary (its HTML `isASCIISpace` does, which was the bug).
+    // The paragraph's raw content has its final whitespace removed, and the spec's whitespace includes
+    // line tabulation and form feed (spec "Paragraphs"), so neither ends the URL.
+
+    @Test("a trailing vertical tab (0x0B) is not part of the URL")
+    func verticalTabRemoved() throws {
         let ns = nodes(in: "http://l\u{0B}", options: Self.flagOn)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.compactMap(\.url) == ["http://l\u{0B}"])
+        #expect(ns.compactMap(\.url) == ["http://l"])
     }
 
-    @Test("a trailing form feed (0x0C) stays in the URL")
-    func formFeedKept() throws {
+    @Test("a trailing form feed (0x0C) is not part of the URL")
+    func formFeedRemoved() throws {
         let ns = nodes(in: "http://l\u{0C}", options: Self.flagOn)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.compactMap(\.url) == ["http://l\u{0C}"])
+        #expect(ns.compactMap(\.url) == ["http://l"])
     }
 
     // MARK: - Regression controls (already matching cmark; must stay matching)

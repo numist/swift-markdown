@@ -20,7 +20,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
 
     private static let compatibilityModes: [MarkdownDocument.ParseOptions] = [[], [.cmarkBugCompatibility]]
 
-    @Test("a later paragraph's leading checkbox stays text", arguments: compatibilityModes)
+    @Test("a later paragraph's leading checkbox stays text", arguments: [MarkdownDocument.ParseOptions.cmarkBugCompatibility])
     func laterCheckboxStaysText(mode: MarkdownDocument.ParseOptions) {
         #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x]\n", options: mode.union(.tasklist)) == """
             document
@@ -46,7 +46,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
             """)
     }
 
-    @Test("a later checkbox followed by text stays text", arguments: compatibilityModes)
+    @Test("a later checkbox followed by text stays text", arguments: [MarkdownDocument.ParseOptions.cmarkBugCompatibility])
     func laterCheckboxWithTextStaysText(mode: MarkdownDocument.ParseOptions) {
         #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x] foo\n", options: mode.union(.tasklist)) == """
             document
@@ -72,7 +72,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
             """)
     }
 
-    @Test("a later paragraph shorter than a checkbox is kept whole", arguments: compatibilityModes)
+    @Test("a later paragraph shorter than a checkbox is kept whole", arguments: [MarkdownDocument.ParseOptions.cmarkBugCompatibility])
     func laterShortParagraph(mode: MarkdownDocument.ParseOptions) {
         #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  ab\n", options: mode.union(.tasklist)) == """
             document
@@ -100,7 +100,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
 
     @Test(
         "a later checkbox line before a table stays a paragraph",
-        arguments: compatibilityModes, [
+        arguments: [MarkdownDocument.ParseOptions.cmarkBugCompatibility], [
             "- [ ] [a]: /u\n\n  [x]\nh|h\n  -|-\n",     // lazy header line
             "- [ ] [a]: /u\n\n  [x]\n  h|h\n  -|-\n",   // indented header line
         ]
@@ -136,6 +136,46 @@ struct TaskListDefinitionOnlyOpeningLineTests {
                 item
                   paragraph
                     text "[ ] [a]: /u"
+                  paragraph
+                    text "[x]"
+                  table
+                    table_header
+                      table_cell align=none colspan=1 rowspan=1
+                        text "h"
+                      table_cell align=none colspan=1 rowspan=1
+                        text "h"
+
+            """)
+    }
+}
+
+/// `[ ] [a]: /u` does not begin with a link reference definition, so it is the item's first paragraph,
+/// which begins with a task list item marker (spec "Task list items (extension)"); the later paragraph's
+/// `[x]` is text.
+@Suite("Task item whose first paragraph holds a definition-shaped remainder")
+struct TaskListDefinitionShapedRemainderTests {
+    @Test("a later paragraph's leading checkbox is text")
+    func laterCheckboxIsText() {
+        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x] foo\n", options: .tasklist) == """
+            document
+              list bullet '-' loose
+                tasklist unchecked
+                  paragraph
+                    text "[a]: /u"
+                  paragraph
+                    text "[x] foo"
+
+            """)
+    }
+
+    @Test("a later checkbox line before a table is a paragraph")
+    func laterCheckboxBeforeTable() {
+        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x]\n  h|h\n  -|-\n", options: [.tasklist, .tables]) == """
+            document
+              list bullet '-' loose
+                tasklist unchecked
+                  paragraph
+                    text "[a]: /u"
                   paragraph
                     text "[x]"
                   table

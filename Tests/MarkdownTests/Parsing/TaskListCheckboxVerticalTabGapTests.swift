@@ -35,6 +35,9 @@ class TaskListCheckboxVerticalTabGapTests: XCTestCase {
     func testCheckboxRecognizedPastVerticalTabGap() {
         let expected = "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         ├─ Text \"]\"\n         ├─ SoftBreak\n         └─ Text \"`\""
         XCTAssertEqual(expected, surface(cmarkBugCompatible: true))
-        XCTAssertEqual(expected, surface(cmarkBugCompatible: false))
+        // The paragraph's initial line tabulation is removed (spec "Paragraphs"), so it begins with the
+        // marker, and its content is what follows the marker's whitespace.
+        let shipped = "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         └─ Text \"`\""
+        XCTAssertEqual(shipped, surface(cmarkBugCompatible: false))
     }
 }

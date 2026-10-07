@@ -32,7 +32,7 @@ class TaskListLazyContinuationTests: XCTestCase {
         let bytes: [UInt8] = [0x2d, 0x20, 0x5b, 0x20, 0x5d, 0x20, 0x7c, 0x0a, 0x20, 0x20, 0x2d, 0x7c, 0x0a, 0x7c]
         let expected = "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [ ]\n      └─ Paragraph\n         ├─ Text \"|\"\n         ├─ SoftBreak\n         ├─ Text \"-|\"\n         ├─ SoftBreak\n         └─ Text \"|\""
         XCTAssertEqual(expected, surface(bytes, options: 0x75, cmarkBugCompatible: true))
-        XCTAssertEqual(expected, surface(bytes, options: 0x75, cmarkBugCompatible: false))
+        XCTAssertEqual(Self.shippedTable(lastLine: "|"), surface(bytes, options: 0x75, cmarkBugCompatible: false))
     }
 
     /// Clean variant with a plain third line: `- [ ] |` / `  -|` / `z`.
@@ -40,6 +40,13 @@ class TaskListLazyContinuationTests: XCTestCase {
         let bytes: [UInt8] = [0x2d, 0x20, 0x5b, 0x20, 0x5d, 0x20, 0x7c, 0x0a, 0x20, 0x20, 0x2d, 0x7c, 0x0a, 0x7a]
         let expected = "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [ ]\n      └─ Paragraph\n         ├─ Text \"|\"\n         ├─ SoftBreak\n         ├─ Text \"-|\"\n         ├─ SoftBreak\n         └─ Text \"z\""
         XCTAssertEqual(expected, surface(bytes, options: 0x00, cmarkBugCompatible: true))
-        XCTAssertEqual(expected, surface(bytes, options: 0x00, cmarkBugCompatible: false))
+        XCTAssertEqual(Self.shippedTable(lastLine: "z"), surface(bytes, options: 0x00, cmarkBugCompatible: false))
+    }
+
+    /// The shipped parser's tree: `[ ] |` over `-|` is a one-column table, so the item's first block is
+    /// no paragraph and the item is no task item (spec "Task list items (extension)"); a table takes no
+    /// lazy continuation, so the last line is a paragraph after the list.
+    private static func shippedTable(lastLine: String) -> String {
+        "Document\n├─ UnorderedList\n│  └─ ListItem\n│     └─ Table alignments: |-|\n│        ├─ Head\n│        │  └─ Cell\n│        │     └─ Text \"[ ]\"\n│        └─ Body\n└─ Paragraph\n   └─ Text \"\(lastLine)\""
     }
 }

@@ -141,13 +141,15 @@ struct LinkDestinationControlCharQuirkTests {
         #expect(count == 0, "flag-ON should collapse to no blocks (ref-def forms); got \(count)")
     }
 
-    @Test("flag OFF: `[?]:\\u{0B}` is not a ref-def — paragraph text is `[?]:\u{0B}` (spec-correct)")
+    /// A link reference definition needs a destination, and the paragraph's final whitespace, here a line
+    /// tabulation, is removed (spec "Paragraphs").
+    @Test("`[?]:\\u{0B}` is not a ref-def — paragraph text is `[?]:`")
     func flagOffRefDefFacetB() throws {
         let text = MarkdownDocument.withParsedDocument("[?]:\u{0B}", options: Self.flagOff) { doc -> String? in
             firstText(doc.root)
         }
         // Fixture-sanity: a text node must exist, so the content claim can't pass against an empty tree.
-        #expect(try #require(text, "expected a paragraph text node") == "[?]:\u{0B}")
+        #expect(try #require(text, "expected a paragraph text node") == "[?]:")
     }
 
     // MARK: Agreeing controls — space/tab still terminate under BOTH flags (guard over-broadening)

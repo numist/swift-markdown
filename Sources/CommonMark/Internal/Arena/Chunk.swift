@@ -37,24 +37,34 @@ internal struct Chunk: Equatable, Hashable {
 
     /// Return a copy narrowed to drop leading and trailing ASCII whitespace (space, tab, `\n`, `\r`), reading bytes through `parser` (which resolves this chunk's buffer via `inSource`).
     internal func trimming(using parser: borrowing BlockParser) -> Chunk {
-        var lo = 0
-        var hi = length
-        while lo < hi, parser.readByte(at: offset + lo, in: self).isSpaceTabOrNewline {
-            lo += 1
-        }
-        while hi > lo, parser.readByte(at: offset + hi - 1, in: self).isSpaceTabOrNewline {
-            hi -= 1
-        }
-        return extracting(lo..<hi)
+        trimming(using: parser, leading: true, where: \.isSpaceTabOrNewline)
     }
 
     /// Return a copy narrowed to drop TRAILING ASCII whitespace only (space, tab, `\n`, `\r`), preserving any leading whitespace. Used for the paragraph / flag-ON setext-heading content that reaches inline parsing after ref-def stripping: a lazy-continuation line's leading whitespace can survive at the front (flag-ON the block parser keeps that residual, `BlockParser.addLineSegment`), and cmark does not re-strip it - the ref-def parser consumes the earlier line through its newline, leaving the residual as literal text (`* [o]:e\n ~` -> Text " ~").
     internal func trimmingTrailing(using parser: borrowing BlockParser) -> Chunk {
+        trimming(using: parser, leading: false, where: \.isSpaceTabOrNewline)
+    }
+
+    /// Return a copy narrowed to drop leading and trailing whitespace characters as the spec defines them -
+    /// space, tab, line feed, line tabulation, form feed and carriage return - the removal that forms a
+    /// paragraph's or setext heading's raw content (spec "Paragraphs", "Setext headings").
+    internal func trimmingWhitespace(using parser: borrowing BlockParser) -> Chunk {
+        parser.storage.options.contains(.cmarkBugCompatibility)
+            ? trimming(using: parser)
+            : trimming(using: parser, leading: true, where: \.isASCIISpace)
+    }
+
+    @inline(__always)
+    private func trimming(using parser: borrowing BlockParser, leading: Bool, where isTrimmed: (UInt8) -> Bool) -> Chunk {
+        var lo = 0
         var hi = length
-        while hi > 0, parser.readByte(at: offset + hi - 1, in: self).isSpaceTabOrNewline {
+        while leading, lo < hi, isTrimmed(parser.readByte(at: offset + lo, in: self)) {
+            lo += 1
+        }
+        while hi > lo, isTrimmed(parser.readByte(at: offset + hi - 1, in: self)) {
             hi -= 1
         }
-        return extracting(0..<hi)
+        return extracting(lo..<hi)
     }
 }
 

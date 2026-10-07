@@ -118,12 +118,13 @@ struct TaskListContinuationLineRecognitionTests {
         #expect(try firstChecked("- [x] a\n  [x] b", options: Self.flagOn) == true)
     }
 
-    // MARK: Unconditional — the deliverable (flag OFF) anchors recognition the same way
+    // MARK: Shipped parser
 
-    @Test("flag OFF: `-\\n  [x] foo` is an ORDINARY item (anchoring is unconditional, not a quirk)")
-    func continuationNotRecognizedFlagOff() throws {
-        #expect(try firstChecked("-\n  [x] foo", options: Self.flagOff) == nil)
-        #expect(!hasTaskItem("-\n  [x] foo", options: Self.flagOff))
+    /// The item's first block is the paragraph `[x] foo`, which begins with a task list item marker
+    /// (spec "Task list items (extension)"), whatever line it starts on.
+    @Test("`-\\n  [x] foo` is a checked task item")
+    func continuationRecognizedFlagOff() throws {
+        #expect(try firstChecked("-\n  [x] foo", options: Self.flagOff) == true)
     }
 
     @Test("flag OFF control: `- [x] foo` IS a checked task item")

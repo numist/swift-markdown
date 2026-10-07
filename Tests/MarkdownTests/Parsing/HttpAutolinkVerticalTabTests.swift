@@ -37,10 +37,11 @@ class HttpAutolinkVerticalTabTests: XCTestCase {
             surface(cmarkBugCompatible: true))
     }
 
-    /// Flag-off (shipped): a domain-less `http://` is not a valid autolink — it stays literal text.
+    /// A domain-less `http://` is not a valid autolink (spec "Autolinks (extension)"), and the paragraph's
+    /// final whitespace, a line tabulation here, is removed (spec "Paragraphs").
     func testBareHttpStaysTextFlagOff() {
         XCTAssertEqual(
-            "Document\n└─ Paragraph\n   └─ Text \"http://\u{b}\"",
+            "Document\n└─ Paragraph\n   └─ Text \"http://\"",
             surface(cmarkBugCompatible: false))
     }
 }

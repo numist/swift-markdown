@@ -1,10 +1,10 @@
 Document @1:1-2:6
 └─ UnorderedList @1:1-2:6
-   └─ ListItem @1:1-2:6 checkbox: [x]
-      └─ Table @1:7-2:6 alignments: |-|-|
-         ├─ Head @1:7-1:10
-         │  ├─ Cell @1:7-1:8
-         │  │  └─ Text @1:7-1:8 "a"
+   └─ ListItem @1:1-2:6
+      └─ Table @1:3-2:6 alignments: |-|-|
+         ├─ Head @1:3-1:10
+         │  ├─ Cell @1:3-1:8
+         │  │  └─ Text @1:3-1:8 "[x] a"
          │  └─ Cell @1:9-1:10
          │     └─ Text @1:9-1:10 "b"
          └─ Body
