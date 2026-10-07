@@ -167,7 +167,7 @@ extension BlockParser {
         storage.options.contains(.cmarkBugCompatibility) || (next?.isASCIIPunct ?? false)
     }
 
-    /// Parse a link destination - either `<...>` (no internal `<`, `>`, or unescaped newline) or a bare URL (no whitespace, balanced parens up to depth 32, ASCII `\X` escapes).
+    /// Parse a link destination - either `<...>` (no internal `<`, `>`, or unescaped newline) or a bare URL (no ASCII space or control character, balanced parens up to depth 32, ASCII `\X` escapes).
     internal func matchLinkDestination(_ chunk: Chunk) -> LinkDestinationMatch? {
         let start = chunk.offset
         let end = chunk.range.upperBound
@@ -193,17 +193,11 @@ extension BlockParser {
             }
             return nil
         }
-        // why: cmark's bare-destination scan (`manual_scan_link_url_2`, `src/inlines.c`) ends a
-        // destination only on `cmark_isspace` = {space, tab, `\n`, `\r`} (the `cmark_ctype_class`
-        // class-1 bytes), so vertical tab (0x0B) and form feed (0x0C) are NOT terminators and cmark
-        // keeps them as literal destination content. CommonMark §6.5 excludes ASCII control characters
-        // (which VT/FF are) from a bare destination, so terminating there is spec-correct - the shipped
-        // deliverable does so (`isASCIISpace`). Under `.cmarkBugCompatibility` (adopted only by the
-        // differential fuzzer) we reproduce cmark's bug and stop only on {space, tab, `\n`, `\r`}.
-        // The two predicates differ by exactly VT/FF; other bytes are unaffected.
+        // A bare destination contains no ASCII space or control character (spec "Links"). A NUL stands
+        // for U+FFFD (spec "Insecure characters"), so it is destination content.
         let bugCompat = storage.options.contains(.cmarkBugCompatibility)
         func terminatesDestination(_ b: UInt8) -> Bool {
-            bugCompat ? b.isSpaceTabOrNewline : b.isASCIISpace
+            bugCompat ? b.isSpaceTabOrNewline : b == UInt8(ascii: " ") || (b != 0 && b < 0x20) || b == 0x7F
         }
         if terminatesDestination(first) {
             return nil
