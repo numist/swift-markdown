@@ -99,46 +99,11 @@ struct TableEmptyCellSourceRangeTests {
         }
     }
 
-    /// A body row with LEADING whitespace re-bases its cell columns to the table's content column under
-    /// `.cmarkBugCompatibility` (the differential-fuzzer surface): cmark measures cell offsets from the
-    /// row's first non-space, then adds the table start column (`row_from_string(input + first_nonspace,
-    /// …)` + `parent->start_column + cell->start_offset` in `extensions/table.c`), so the leading
-    /// whitespace is invisible. Before the fix these rows lost ALL cell/row source positions.
-    @Test("cmark-compat: a leading-whitespace row's cell columns are re-based (leading whitespace invisible)")
-    func leadingWhitespaceReBasedCells() throws {
-        let opts: MarkdownDocument.ParseOptions = [.tables, .tableSpans, .sourcePosition, .cmarkBugCompatibility]
-
-        // Body-row leading space: `x` is physically at col 2 but re-bases to col 1.
-        let body = tableRows("a|b\n-|-\n x|y", options: opts)
-        let bodyRow = try #require(body.last, "expected a body row")
-        try #require(bodyRow.cells.count == 2, "fixture: expected two body cells, got \(bodyRow.cells.count)")
-        try #require(bodyRow.cells.allSatisfy { $0.startColumn > 0 }, "fixture: leading-space cells must be positioned, not dropped")
-        #expect((bodyRow.cells[0].startColumn, bodyRow.cells[0].endColumn, bodyRow.cells[0].text) == (1, 2, "x"))
-        #expect((bodyRow.cells[1].startColumn, bodyRow.cells[1].endColumn, bodyRow.cells[1].text) == (3, 4, "y"))
-        // Leading whitespace is invisible: the re-based columns equal an unindented row's.
-        let plain = tableRows("a|b\n-|-\nx|y", options: opts)
-        let plainRow = try #require(plain.last, "expected a body row")
-        #expect(bodyRow.cells.map { [$0.startColumn, $0.endColumn] } == plainRow.cells.map { [$0.startColumn, $0.endColumn] })
-
-        // A leading-whitespace HEADER sets the table start column that every row re-bases to (col 2 here),
-        // shifting even the unindented body row's cells right onto it. The shift pushes `y` past the body
-        // line's end at column 4, so its cell is cut off there.
-        let hdr = tableRows(" a|b\n-|-\nx|y", options: opts)
-        try #require(hdr.count == 2, "fixture: expected a header row and a body row")
-        try #require(hdr[0].cells.count == 2 && hdr[1].cells.count == 2, "fixture: two cells per row")
-        #expect((hdr[0].cells[0].startColumn, hdr[0].cells[0].endColumn, hdr[0].cells[0].text) == (2, 3, "a"))
-        #expect((hdr[0].cells[1].startColumn, hdr[0].cells[1].endColumn, hdr[0].cells[1].text) == (4, 5, "b"))
-        #expect((hdr[1].cells[0].startColumn, hdr[1].cells[0].endColumn, hdr[1].cells[0].text) == (2, 3, "x"))
-        #expect((hdr[1].cells[1].startColumn, hdr[1].cells[1].endColumn, hdr[1].cells[1].text) == (4, 4, "y"))
-    }
-
-    /// The deliverable (without `.cmarkBugCompatibility`) is spec-correct: a leading-whitespace row's
-    /// cells keep their TRUE physical columns (the leading whitespace is visible) — the cmark-compat
-    /// re-base above is quarantined to the differential. The fix's other half applies here too: the
+    /// The deliverable is spec-correct: a leading-whitespace row's
+    /// cells keep their TRUE physical columns (the leading whitespace is visible). The fix's other half applies here too: the
     /// cells are positioned, not dropped.
     @Test("spec: a leading-whitespace row's cells keep their physical columns and are positioned")
     func leadingWhitespacePhysicalCellsSpecCorrect() throws {
-        // Default helper: no `.cmarkBugCompatibility`.
         let body = tableRows("a|b\n-|-\n x|y")
         let bodyRow = try #require(body.last, "expected a body row")
         try #require(bodyRow.cells.count == 2, "fixture: expected two body cells, got \(bodyRow.cells.count)")

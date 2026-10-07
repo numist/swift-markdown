@@ -20,25 +20,13 @@ import Testing
 /// that checkbox-adjusted content column, so a lazy continuation line re-bases there - four columns
 /// further right than a plain bullet's continuation would.
 ///
-/// This is the Quirk E continuation re-indent (`.cmarkBugCompatibility`, adopted only by the
-/// differential fuzzer). The basic/1-space cases mirror the `tasklazy-*` fuzzer oracle pairs; the
-/// deeper-indent case is reasoned from cmark's single re-indent rule (every continuation line lands
-/// at the fixed content column), validated by the oracle-backed cases here.
 /// The flag-off assertions are the guardrail proving the shipped default keeps TRUE physical columns.
-///
-/// A re-based line's bytes are reported to the right of where they sit, so its end lies past the end of its
-/// physical line; no range may run past that line, so the end is cut off there. Each flag-ON continuation line is
-/// ten bytes long, so its re-based start still lies on the line while its end is cut off at the line's end.
 @Suite("Task-list item lazy-continuation source ranges (Quirk E)")
 struct TasklistLazyContinuationRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// cmark bug-compatibility ON, tasklist enabled - the differential-fuzzer configuration.
-    private static let quirkOptions: MarkdownDocument.ParseOptions =
-        [.tasklist, .sourcePosition, .cmarkBugCompatibility]
-
-    /// The shipped configuration: tasklist + source positions on, bug-compatibility OFF.
+    /// The shipped configuration: tasklist + source positions on.
     private static let specOptions: MarkdownDocument.ParseOptions =
         [.tasklist, .sourcePosition]
 
@@ -73,84 +61,10 @@ struct TasklistLazyContinuationRangeTests {
         ranges.filter { $0.kind == .text }.map { $0.range }
     }
 
-    @Test("unchecked task item: lazy continuation re-bases to the checkbox-adjusted content column")
-    func uncheckedContinuation() throws {
-        // "- [ ] x" then "yyyyyyyyyy" (no indent, lazy). The checkbox `[ ] ` (cols 3-6) shifts the paragraph
-        // content to column 7, so cmark re-bases the lazy continuation there: it starts @2:7 (four
-        // columns right of a plain bullet's @2:3), and its end is cut off at the line's end, column 11.
-        let ranges = ranges(in: "- [ ] x\nyyyyyyyyyy", options: Self.quirkOptions)
-        try #require(itemChecked(in: ranges) == .some(.some(false)))  // a task item, unchecked
-        let texts = texts(in: ranges)
-        try #require(texts.count == 2)
-
-        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 7))   // "x"
-        #expect(texts[0]?.upperBound == Pos(line: 1, column: 8))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 7))   // re-based to content col 7
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 11))  // cut off at the line's end
-    }
-
-    @Test("checked task item: lazy continuation re-bases to the checkbox-adjusted content column")
-    func checkedContinuation() throws {
-        // "- [x] x" then "yyyyyyyyyy". `[x] ` is the same four columns as `[ ] `, so the continuation re-bases
-        // to start @2:7, and its end is cut off at the line's end, column 11.
-        let ranges = ranges(in: "- [x] x\nyyyyyyyyyy", options: Self.quirkOptions)
-        try #require(itemChecked(in: ranges) == .some(.some(true)))   // a task item, checked
-        let texts = texts(in: ranges)
-        try #require(texts.count == 2)
-
-        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 7))   // "x"
-        #expect(texts[0]?.upperBound == Pos(line: 1, column: 8))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 7))   // re-based to content col 7
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 11))  // cut off at the line's end
-    }
-
-    @Test("task item lazy continuation preserves one leading space on top of the checkbox base")
-    func oneSpaceContinuation() throws {
-        // "- [ ] x" then " yyyyyyyyyy" (one leading space, lazy). cmark keeps a lazy line's residual whitespace,
-        // so the text starts at residual(1) + content col 7 = @2:8, and its end is cut off at the line's
-        // end, column 12.
-        let ranges = ranges(in: "- [ ] x\n yyyyyyyyyy", options: Self.quirkOptions)
-        try #require(itemChecked(in: ranges) == .some(.some(false)))
-        let texts = texts(in: ranges)
-        try #require(texts.count == 2)
-
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 8))   // residual + col 7
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 12))  // cut off at the line's end
-    }
-
-    @Test("deeper-indent matched task-item continuation re-bases to the checkbox-adjusted column")
-    func deeperIndentContinuation() throws {
-        // "- [ ] x" then "    yyyyyyyyyy" (four leading spaces). Indent 4 matches the item, so cmark discards the
-        // line's leading whitespace and re-bases the text to the fixed content column 7, so it starts @2:7;
-        // its re-based end, column 17, is cut off at the line's end, column 15. Reasoned from cmark's
-        // re-indent rule (matched continuation → content col).
-        let ranges = ranges(in: "- [ ] x\n    yyyyyyyyyy", options: Self.quirkOptions)
-        try #require(itemChecked(in: ranges) == .some(.some(false)))
-        let texts = texts(in: ranges)
-        try #require(texts.count == 2)
-
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 7))   // re-based to content col 7
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 15))  // cut off at the line's end
-    }
-
-    @Test("plain bullet continuation re-bases to the plain content column (no checkbox width added)")
-    func plainBulletUsesPlainContentColumn() throws {
-        // "- x" then "yyyyyyyyyy": a plain bullet, no checkbox. The continuation re-bases to the plain content
-        // column 3, NOT 7 - no checkbox width is added where there is no checkbox. Its end is cut off at
-        // the line's end, column 11.
-        let ranges = ranges(in: "- x\nyyyyyyyyyy", options: Self.quirkOptions)
-        try #require(itemChecked(in: ranges) == .some(Bool?.none))   // an ordinary (non-task) item
-        let texts = texts(in: ranges)
-        try #require(texts.count == 2)
-
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 3))   // plain content col 3
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 11))  // cut off at the line's end
-    }
-
     @Test("flag-off: task-item continuation keeps its TRUE physical column")
     func flagOffKeepsTrueColumn() throws {
-        // The shipped default (bug-compat OFF) keeps the continuation at its physical column: `y` at
-        // column 1 (@2:1-2:2), spec-correct - the re-base is quarantined behind `.cmarkBugCompatibility`.
+        // The shipped default keeps the continuation at its physical column: `y` at
+        // column 1 (@2:1-2:2), spec-correct.
         let ranges = ranges(in: "- [ ] x\ny", options: Self.specOptions)
         try #require(itemChecked(in: ranges) == .some(.some(false)))  // still a task item flag-off
         let texts = texts(in: ranges)
@@ -172,8 +86,8 @@ struct TasklistLazyContinuationRangeTests {
         #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 11))
     }
 
-    /// The flag-OFF twin of `checkedContinuation`: the checked task item's continuation keeps its TRUE
-    /// physical column @2:1 rather than the flag-ON re-base to the checkbox-adjusted content column.
+    /// The checked task item's continuation keeps its TRUE
+    /// physical column @2:1.
     @Test("flag-off: checked task-item continuation keeps its TRUE physical column")
     func flagOffCheckedKeepsTrueColumn() throws {
         let ranges = ranges(in: "- [x] x\ny", options: Self.specOptions)
@@ -197,8 +111,8 @@ struct TasklistLazyContinuationRangeTests {
         #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 11))
     }
 
-    /// The flag-OFF twin of `oneSpaceContinuation`: the one leading space is visible, so `y` keeps its
-    /// TRUE physical column @2:2 rather than the flag-ON residual-plus-content-column re-base.
+    /// The one leading space is visible, so `y` keeps its
+    /// TRUE physical column @2:2.
     @Test("flag-off: one-space task-item continuation keeps its TRUE physical column")
     func flagOffOneSpaceKeepsTrueColumn() throws {
         let ranges = ranges(in: "- [ ] x\n y", options: Self.specOptions)
@@ -218,8 +132,8 @@ struct TasklistLazyContinuationRangeTests {
         #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 12))
     }
 
-    /// The flag-OFF twin of `deeperIndentContinuation`: the four leading spaces are visible, so `y` keeps
-    /// its TRUE physical column @2:5 rather than the flag-ON re-base to the content column.
+    /// The four leading spaces are visible, so `y` keeps
+    /// its TRUE physical column @2:5.
     @Test("flag-off: deeper-indent task-item continuation keeps its TRUE physical column")
     func flagOffDeeperIndentKeepsTrueColumn() throws {
         let ranges = ranges(in: "- [ ] x\n    y", options: Self.specOptions)
@@ -239,8 +153,8 @@ struct TasklistLazyContinuationRangeTests {
         #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 15))
     }
 
-    /// The flag-OFF twin of `plainBulletUsesPlainContentColumn`: a plain bullet's continuation keeps its
-    /// TRUE physical column @2:1 rather than the flag-ON re-base to the plain content column.
+    /// A plain bullet's continuation keeps its
+    /// TRUE physical column @2:1.
     @Test("flag-off: plain-bullet continuation keeps its TRUE physical column")
     func flagOffPlainBulletKeepsTrueColumn() throws {
         let ranges = ranges(in: "- x\ny", options: Self.specOptions)

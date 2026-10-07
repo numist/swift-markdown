@@ -24,16 +24,12 @@ import Testing
 /// a setext heading (`processLine` PHASE 2c) never reaches that path, so before this fix the checkbox was
 /// neither reflected in the item's `.item(checked:)` state nor stripped from the heading text.
 ///
-/// This is RECOGNITION anchoring, so — like the anchoring controls in `EmptyTaskItemStructureTests` and
-/// `TaskListContinuationLineRecognitionTests` — the behavior is UNCONDITIONAL: flag-ON and flag-OFF
-/// produce the same tree. (Contrast `TaskListCheckboxStrstrQuirkTests`, where only the checked-STATE scan
-/// is a `.cmarkBugCompatibility` quirk.) These assertions parse without `.sourcePosition`.
+/// These assertions parse without `.sourcePosition`.
 ///
 /// Regression for the fuzzer divergence minimized from `- [ ] v\n  -` (option-independent).
 @Suite("GFM task-list checkbox recognition when the item content is a setext heading")
 struct TaskListSetextHeadingRecognitionTests {
 
-    private static let flagOn: MarkdownDocument.ParseOptions = [.tasklist, .cmarkBugCompatibility]
     private static let flagOff: MarkdownDocument.ParseOptions = [.tasklist]
 
     /// A flattened view of the first list item and the first heading in a parsed document.
@@ -81,32 +77,6 @@ struct TaskListSetextHeadingRecognitionTests {
         }
     }
 
-    // MARK: - The finding: a task item whose content resolves to a setext heading
-
-    @Test("flag ON: `- [ ] v\\n  -` is an UNCHECKED task item whose content is a level-2 heading `v`")
-    func taskItemSetextHeadingRecognized() throws {
-        let shape = shape("- [ ] v\n  -", options: Self.flagOn)
-        // Fixture-sanity: a list item AND a heading must exist, so the assertions can't pass vacuously
-        // against a tree that has neither.
-        let checked = try #require(shape.itemChecked, "no list item parsed")
-        try #require(shape.headingLevel != nil, "no heading parsed")
-        #expect(checked == .some(false))                    // recognized, UNCHECKED
-        #expect(shape.headingLevel == 2)                    // dash underline → level-2 setext heading
-        #expect(shape.headingText == "v")                   // checkbox stripped
-        #expect(!shape.allTexts.contains { $0.contains("[ ]") })   // no literal `[ ]` anywhere
-    }
-
-    @Test("flag ON: `- [x] v\\n  -` is a CHECKED task item whose content is a level-2 heading `v`")
-    func checkedTaskItemSetextHeadingRecognized() throws {
-        let shape = shape("- [x] v\n  -", options: Self.flagOn)
-        let checked = try #require(shape.itemChecked, "no list item parsed")
-        try #require(shape.headingLevel != nil, "no heading parsed")
-        #expect(checked == .some(true))                     // recognized, CHECKED
-        #expect(shape.headingLevel == 2)
-        #expect(shape.headingText == "v")
-        #expect(!shape.allTexts.contains { $0.contains("[x]") })
-    }
-
     // MARK: - Shipped parser
 
     /// A task list item's first block must be a paragraph (spec "Task list items (extension)"), so an item
@@ -122,26 +92,6 @@ struct TaskListSetextHeadingRecognitionTests {
     }
 
     // MARK: - Controls (guard against over-correction)
-
-    @Test("control: `- [ ] v` (no underline) is an UNCHECKED task item with a paragraph `v`")
-    func openingLineOnlyIsStillTask() throws {
-        let shape = shape("- [ ] v", options: Self.flagOn)
-        let checked = try #require(shape.itemChecked, "no list item parsed")
-        #expect(checked == .some(false))                    // still a recognized task item
-        #expect(shape.headingLevel == nil)                  // content is a paragraph, not a heading
-        #expect(shape.allTexts.contains("v"))               // marker stripped
-        #expect(!shape.allTexts.contains { $0.contains("[ ]") })
-    }
-
-    @Test("control: `- v\\n  -` is an ORDINARY item with a level-2 heading `v` (no spurious checkbox)")
-    func plainItemSetextHeadingNotTask() throws {
-        let shape = shape("- v\n  -", options: Self.flagOn)
-        let checked = try #require(shape.itemChecked, "no list item parsed")
-        try #require(shape.headingLevel != nil, "no heading parsed")
-        #expect(checked == .some(nil))                      // ordinary bullet, NOT a task item
-        #expect(shape.headingLevel == 2)
-        #expect(shape.headingText == "v")
-    }
 
     @Test("flag OFF control: `- [ ] v` (no underline) is an UNCHECKED task item with a paragraph `v`")
     func openingLineOnlyIsStillTaskFlagOff() throws {

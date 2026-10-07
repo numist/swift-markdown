@@ -33,29 +33,16 @@ private func inlineHTMLCount(_ node: borrowing MarkdownNode) -> Int {
 /// (`if (c == '!' && (subj->flags & FLAG_SKIP_HTML_COMMENT) == 0)`), so a comment overrun ALSO suppresses
 /// later CDATA and declaration matches in the same run.
 ///
-/// This is a `[ref-b4b]` quirk: reproduced ONLY under `.cmarkBugCompatibility` (adopted by the
-/// differential fuzzer). The shipped deliverable (flag OFF) stays spec-correct — CommonMark 0.31 §6.6
+/// The shipped deliverable (flag OFF) stays spec-correct — CommonMark 0.31 §6.6
 /// attempts each construct independently, so a later well-formed construct is recognized regardless of an
-/// earlier overrun. The quirk is STRUCTURAL (an `.htmlInline` node appears or not), gated on
-/// `.cmarkBugCompatibility` alone with no positions dependency; these tests parse without `.sourcePosition`.
+/// earlier overrun. These tests parse without `.sourcePosition`.
 ///
 /// Every input carries a leading `x` so the `<`-construct is parsed as INLINE HTML inside a paragraph
-/// rather than as a leading HTML block (block start conditions require the marker at line start). The two
-/// fuzzer artifacts that motivated this fix carried a leading `\u{FFFD}` (from NUL→U+FFFD materialization)
-/// which serves the same purpose.
-///
-/// Observability of the four flags: PI and COMMENT are directly observable (a later `<?…?>`, or a later
-/// empty comment `<!-->`/`<!--->`, matches without the terminator the earlier overrun ruled out). The
-/// COMMENT flag is additionally observable through the bang gate (a comment overrun suppresses a later
-/// well-formed `<![CDATA[…]]>` / `<!DOCTYPE …>`). The CDATA and DECLARATION *own* flags are inert on
-/// output — a CDATA/declaration overrun means no `]]>` / `>` exists through end-of-input, so no later
-/// CDATA/declaration in the same run could have matched anyway — but the flags are still set to mirror
-/// cmark's control flow; the own-flag paths below lock that behavior in (identical under both flags).
+/// rather than as a leading HTML block (block start conditions require the marker at line start).
 @Suite("Inline raw-HTML overrun skip-flag quirk")
 struct InlineHTMLScanSkipQuirkTests {
 
     private static let flagOff: MarkdownDocument.ParseOptions = []
-    private static let flagOn: MarkdownDocument.ParseOptions = [.cmarkBugCompatibility]
 
     private func htmlCount(
         _ src: String, options: MarkdownDocument.ParseOptions
@@ -65,80 +52,11 @@ struct InlineHTMLScanSkipQuirkTests {
         }
     }
 
-    // MARK: Flag ON — reproduce cmark's overrun-skip (all-literal, no `.htmlInline`)
-
-    @Test("flag ON: `x<?<??>` — PI overrun makes the later `<?` stay literal")
-    func flagOnPIOverrunSkipsLater() {
-        // The first `<?` greedily consumes `<??>` (cmark's PI body admits a lone `>` and pairs each `?`
-        // with its following byte), leaving no room for the framing `?>`, so it overruns EOF and sets the
-        // PI skip flag. The second `<?` is then skipped; all bytes stay literal.
-        #expect(htmlCount("x<?<??>", options: Self.flagOn) == 0)
-    }
-
-    @Test("flag ON: `x<!--<!--->` — comment overrun makes the later empty comment stay literal")
-    func flagOnCommentOverrunSkipsLater() {
-        // The first `<!--` body scans to EOF without a valid `-->` closer (strict grammar), setting the
-        // comment skip flag. The later empty comment `<!--->` (which needs no `-->`) is then suppressed.
-        #expect(htmlCount("x<!--<!--->", options: Self.flagOn) == 0)
-    }
-
-    @Test("flag ON: `x<!--<![CDATA[y]]>` — comment overrun suppresses the later CDATA (bang gate)")
-    func flagOnCommentOverrunSuppressesCDATA() {
-        // The comment overrun sets the comment skip flag, which gates the whole `<!` dispatch, so the
-        // otherwise-well-formed `<![CDATA[y]]>` is never attempted.
-        #expect(htmlCount("x<!--<![CDATA[y]]>", options: Self.flagOn) == 0)
-    }
-
-    @Test("flag ON: `x<!--<!DOCTYPE html>` — comment overrun suppresses the later declaration (bang gate)")
-    func flagOnCommentOverrunSuppressesDeclaration() {
-        #expect(htmlCount("x<!--<!DOCTYPE html>", options: Self.flagOn) == 0)
-    }
-
-    // MARK: Flag ON controls — a well-formed construct is recognized; skip fires only AFTER an overrun
-
-    @Test("flag ON control: a single well-formed PI is recognized")
-    func flagOnControlSinglePI() {
-        #expect(htmlCount("x<?php?>", options: Self.flagOn) == 1)
-    }
-
-    @Test("flag ON control: two well-formed PIs (no overrun) are BOTH recognized")
-    func flagOnControlTwoPIs() {
-        #expect(htmlCount("x<?a?><?b?>", options: Self.flagOn) == 2)
-    }
-
-    @Test("flag ON control: a single well-formed comment is recognized")
-    func flagOnControlSingleComment() {
-        #expect(htmlCount("x<!--y-->", options: Self.flagOn) == 1)
-    }
-
-    @Test("flag ON control: a single well-formed CDATA is recognized")
-    func flagOnControlSingleCDATA() {
-        #expect(htmlCount("x<![CDATA[y]]>", options: Self.flagOn) == 1)
-    }
-
-    @Test("flag ON control: a single well-formed declaration is recognized")
-    func flagOnControlSingleDeclaration() {
-        #expect(htmlCount("x<!DOCTYPE html>", options: Self.flagOn) == 1)
-    }
-
-    // MARK: CDATA / declaration own-flag paths — inert on output (identical under both flags)
-
-    @Test("own-flag: `x<![CDATA[a <![CDATA[b` — CDATA overrun, later CDATA stays literal (flag ON)")
-    func cdataOverrunOwnFlagOn() {
-        // No `]]>` exists through EOF, so neither CDATA can close. Exercises the CDATA skip-flag SET path.
-        #expect(htmlCount("x<![CDATA[a <![CDATA[b", options: Self.flagOn) == 0)
-    }
+    // MARK: CDATA / declaration own-flag paths — inert on output
 
     @Test("own-flag: `x<![CDATA[a <![CDATA[b` — literal under flag OFF too (inert)")
     func cdataOverrunOwnFlagOff() {
         #expect(htmlCount("x<![CDATA[a <![CDATA[b", options: Self.flagOff) == 0)
-    }
-
-    @Test("own-flag: `x<!A x <!B y` — declaration overrun, later declaration stays literal (flag ON)")
-    func declarationOverrunOwnFlagOn() {
-        // No `>` exists through EOF, so neither declaration can close. Exercises the declaration
-        // skip-flag SET path.
-        #expect(htmlCount("x<!A x <!B y", options: Self.flagOn) == 0)
     }
 
     @Test("own-flag: `x<!A x <!B y` — literal under flag OFF too (inert)")

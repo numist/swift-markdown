@@ -20,7 +20,7 @@ import Testing
 /// The rewrite's `splitCells` trimmed cell edges with space/tab only, so FF/VT right after a pipe
 /// leaked into the next cell's text, and a trailing `|` then VT/FF became a spurious empty cell. This
 /// suite pins cmark's pipe-boundary whitespace behavior across header, delimiter, and body rows. It is
-/// a spec-aligned `[fix]` (VT/FF are CommonMark §2.1 whitespace), asserted WITHOUT `.cmarkBugCompatibility`.
+/// a spec-aligned `[fix]` (VT/FF are CommonMark §2.1 whitespace).
 @Suite("Table cell pipe-boundary whitespace")
 struct TableCellPipeWhitespaceTests {
 

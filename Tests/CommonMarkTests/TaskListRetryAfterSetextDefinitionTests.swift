@@ -15,26 +15,10 @@ import CommonMark
 /// underline `===`, then a lazy line holding a NUL and a checkbox. cmark resolves the definition when it scans the
 /// underline and keeps the underline as paragraph text. On the lazy line its tasklist extension advances three bytes
 /// into the NUL's U+FFFD, so the item is checked and the paragraph's last line starts with a replacement character.
-/// With `.cmarkBugCompatibility` the rewrite reproduces that tree, with and without source positions.
 @Suite("Tasklist retry after a definition-only setext paragraph")
 struct TaskListRetryAfterSetextDefinitionTests {
 
     private static let positionModes: [MarkdownDocument.ParseOptions] = [[], [.sourcePosition]]
-
-    @Test("the lazy line keeps its replacement character after the underline", arguments: positionModes)
-    func lazyLineAfterUnderline(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("- > [a]:\n  > u\n  > ===\n  1\u{0} [x] b\n", options: mode.union([.tasklist, .cmarkBugCompatibility])) == """
-            document
-              list bullet '-' tight
-                tasklist checked
-                  block_quote
-                    paragraph
-                      text "==="
-                      softbreak
-                      text "\u{FFFD} [x] b"
-
-            """)
-    }
 
     /// An item whose first block is a block quote is not a task item (GFM task list items), so the lazy line keeps its
     /// text with only the NUL replaced, where cmark checks the item and drops the line's leading `1`.

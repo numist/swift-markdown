@@ -21,7 +21,7 @@ import Testing
 /// prebuilt `dump --new-off` oracle (the deliverable surface) for the same input plus a `0x00`
 /// options byte; that byte selects exactly this option set (`disableSmartOpts` off → `.smart`,
 /// `disableSourcePosOpts` off → `.sourcePosition`, GFM tables/strikethrough/tasklist/tableSpans
-/// always on, `cmarkBugCompatibility` off), so `Self.opts` == the deliverable configuration.
+/// always on), so `Self.opts` == the deliverable configuration.
 ///
 /// Where the deliverable diverges from cmark, cmark is the buggy side; the divergence is annotated
 /// `// cmark differs:` with the quirk it stems from and the flag-OFF (spec-correct) value is asserted.
@@ -30,7 +30,7 @@ struct InlinePositionEncodingTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// The full GFM deliverable configuration, WITHOUT `.cmarkBugCompatibility`. Byte-for-byte the
+    /// The full GFM deliverable configuration. Byte-for-byte the
     /// option set `dump --new-off` uses for a `0x00` options byte (see `CommonMarkConverter`).
     private static let opts: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]

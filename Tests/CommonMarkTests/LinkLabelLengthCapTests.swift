@@ -29,21 +29,18 @@ private func collectLinkURLs(_ node: borrowing MarkdownNode, into out: inout [St
 /// The maximum link-label length cmark accepts is `MAX_LINK_LABEL_LENGTH` (1000): `link_label`
 /// rejects only `length > 1000` (`src/inlines.c`), so it accepts a 1000-character label. CommonMark
 /// §6.6 caps a label at "at most 999 characters", so 1000 is a cmark off-by-one. The shipped
-/// deliverable is spec-correct (reject `> 999`); under `.cmarkBugCompatibility` (adopted only by the
-/// differential fuzzer) it reproduces cmark and accepts up to 1000. cmark's single constant governs
+/// deliverable is spec-correct (reject `> 999`). cmark's single constant governs
 /// every label site, so these tests pin both the block reference-definition label scanner and the
-/// inline (contiguous + multi-segment) reference label scanners at the boundary in both flag modes.
+/// inline (contiguous + multi-segment) reference label scanners at the boundary.
 @Suite("Link label length cap - cmark MAX_LINK_LABEL_LENGTH")
 struct LinkLabelLengthCapTests {
 
     /// A label of `n` `a` bytes (no escapes, so scanned length == `n`).
     private func label(_ n: Int) -> String { String(repeating: "a", count: n) }
 
-    /// The highest label length that resolves in each flag mode: 999 spec-correct, 1000 under
-    /// `.cmarkBugCompatibility`.
+    /// The highest label length that resolves: 999 spec-correct.
     private static let modes: [(options: MarkdownDocument.ParseOptions, cap: Int)] = [
         (options: [], cap: 999),
-        (options: [.cmarkBugCompatibility], cap: 1000),
     ]
 
     // MARK: - Block reference-definition label scanner (`parseOneLinkDefinition`)
@@ -97,9 +94,7 @@ struct LinkLabelLengthCapTests {
 
     /// A cross-line full reference `[t][A\nB]` inside a block quote drives the multi-segment
     /// `matchLinkLabel(from:end:in:)` overload (the contiguous window can't image the straddling
-    /// label). Its scanned length counts the newline join, so at the flag-ON cap (500 + 1 + 499 =
-    /// 1000) the reference resolves — which it could not if that overload's cap were left ungated.
-    /// Flag-OFF the same input yields no link, though there the definition `[A B]: /u` (1000
+    /// label). Flag-OFF the same input yields no link, though there the definition `[A B]: /u` (1000
     /// contiguous chars) is already rejected by the contiguous scanner, so no key is ever registered.
     /// The definition normalizes to the same key as the reference (interior whitespace collapses to
     /// one space), which is why both labels must be the same length.
@@ -109,10 +104,6 @@ struct LinkLabelLengthCapTests {
         let left = label(500)
         let right = label(499)
         let source = "[\(left) \(right)]: /u\n\n>[t][\(left)\n\(right)]"
-
-        MarkdownDocument.withParsedDocument(source, options: [.cmarkBugCompatibility]) { doc in
-            #expect(linkURLs(doc) == ["/u"], "flag-ON: a 1000-length cross-line label must resolve")
-        }
 
         MarkdownDocument.withParsedDocument(source, options: []) { doc in
             #expect(linkURLs(doc).isEmpty, "flag-OFF: the 1000-char definition is rejected, so nothing resolves")

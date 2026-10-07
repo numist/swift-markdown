@@ -16,7 +16,7 @@ import Testing
 /// can't underline it: `r\n|-\n-` → Table + a bullet list; `r\n|-\n=` → Table with a `=` body row. The
 /// rewrite detected tables at finalize, so its during-parse setext-underline handling fired first and
 /// turned `r\n|-` into a level-2 heading. Fixed by skipping the setext transform when the paragraph is
-/// table-pending. Spec-aligned `[fix]`, asserted WITHOUT `.cmarkBugCompatibility`.
+/// table-pending. Spec-aligned `[fix]`.
 @Suite("Table-pending paragraph vs setext underline")
 struct TableVsSetextTests {
 

@@ -19,8 +19,7 @@ import Testing
 /// That flush runs BEFORE `handle_newline` classifies the break, so cmark emits the empty node the same
 /// way whether the break is soft or a trailing-space hard break. When the empty node follows a text run
 /// (e.g. a literal `]`) `cmark_consolidate_text_nodes` merges it in, extending the text's end column over
-/// the stripped spaces; after a non-text inline it survives as a standalone empty `Text`. Both are the
-/// `.cmarkBugCompatibility` quirk, covered flag-on by the `brkhb-*` fuzzer regression pairs. This suite
+/// the stripped spaces; after a non-text inline it survives as a standalone empty `Text`. This suite
 /// is the flag-off guardrail proving the shipped (spec-correct) parser drops the whitespace-only run: no
 /// empty text node survives, and a literal `]` before the break keeps its 1-character source range.
 @Suite("Empty text before hard break (spec-correct)")
@@ -28,7 +27,7 @@ struct EmptyTextBeforeHardBreakTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// The shipped configuration: source positions on, cmark bug-compatibility deliberately OFF.
+    /// The shipped configuration: source positions on.
     private static let specOptions: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 

@@ -41,13 +41,6 @@ private func firstText(_ node: borrowing MarkdownNode) -> String? {
     return found
 }
 
-// The number of immediate children of `node` (used to assert the document root has no blocks).
-private func childCount(_ node: borrowing MarkdownNode) -> Int {
-    var n = 0
-    node.children.forEach { _ in n += 1 }
-    return n
-}
-
 /// cmark-gfm's bare link-destination scanner (`manual_scan_link_url_2`, `src/inlines.c`) terminates a
 /// bare `(...)` / reference-definition destination only on `cmark_isspace` = {space, tab, `\n`, `\r`}
 /// (the `cmark_ctype_class` class-1 bytes) or an unbalanced `)`. Vertical tab (VT, 0x0B) and form feed
@@ -55,20 +48,14 @@ private func childCount(_ node: borrowing MarkdownNode) -> Int {
 ///
 /// That contradicts CommonMark §6.5 — a *bare* link destination "does not include ASCII control
 /// characters", and VT/FF are ASCII controls (U+0000–U+001F) — so terminating a bare destination at
-/// VT/FF is spec-correct. This is therefore a `[ref-b4b]` quirk: reproduced ONLY under
-/// `.cmarkBugCompatibility` (adopted by the differential fuzzer); the shipped deliverable (flag OFF)
-/// stays spec-correct and terminates at VT/FF.
+/// VT/FF is spec-correct.
 ///
-/// The quirk is structural (the retained VT changes the destination content and, for a ref-def, whether
-/// the definition forms at all — collapsing the document to no blocks), so it gates on
-/// `.cmarkBugCompatibility` alone with no positions dependency; these tests parse without
-/// `.sourcePosition`. The angle-bracket `<...>` destination form allows control chars in both cmark and
+/// The angle-bracket `<...>` destination form allows control chars in both cmark and
 /// the spec and is unaffected.
 @Suite("Bare link-destination VT/FF control-char quirk")
 struct LinkDestinationControlCharQuirkTests {
 
     private static let flagOff: MarkdownDocument.ParseOptions = []
-    private static let flagOn: MarkdownDocument.ParseOptions = [.cmarkBugCompatibility]
 
     private func linkURL(
         _ src: String, options: MarkdownDocument.ParseOptions
@@ -78,28 +65,7 @@ struct LinkDestinationControlCharQuirkTests {
         }
     }
 
-    // MARK: Facet A — inline bare destination (VT/FF kept as content flag ON)
-
-    @Test("flag ON: `[](\\u{FFFD}\\u{0B})` keeps the VT — dest is `\u{FFFD}\u{0B}`")
-    func flagOnInlineFacetA() {
-        // The fuzzer artifact was `[](` + 0xE2 (repaired to U+FFFD) + VT + `)`.
-        #expect(linkURL("[](\u{FFFD}\u{0B})", options: Self.flagOn) == "\u{FFFD}\u{0B}")
-    }
-
-    @Test("flag ON: `[](a\\u{0B}b)` keeps the interior VT — dest is `a\u{0B}b`")
-    func flagOnInlineInteriorVT() {
-        #expect(linkURL("[](a\u{0B}b)", options: Self.flagOn) == "a\u{0B}b")
-    }
-
-    @Test("flag ON: `[](a\\u{0B})` keeps the trailing VT — dest is `a\u{0B}`")
-    func flagOnInlineTrailingVT() {
-        #expect(linkURL("[](a\u{0B})", options: Self.flagOn) == "a\u{0B}")
-    }
-
-    @Test("flag ON: `[](a\\u{0C}b)` keeps the interior FF — dest is `a\u{0C}b`")
-    func flagOnInlineInteriorFF() {
-        #expect(linkURL("[](a\u{0C}b)", options: Self.flagOn) == "a\u{0C}b")
-    }
+    // MARK: Facet A — inline bare destination
 
     @Test("flag OFF: `[](\\u{FFFD}\\u{0B})` drops the VT — dest is `\u{FFFD}` (spec-correct)")
     func flagOffInlineFacetA() {
@@ -125,21 +91,7 @@ struct LinkDestinationControlCharQuirkTests {
         #expect(linkURL("[](a\u{0C}b)", options: Self.flagOff) == nil)
     }
 
-    // MARK: Facet B — reference-definition bare destination (VT forms the dest flag ON)
-
-    @Test("flag ON: `[?]:\\u{0B}` forms a valid (unused) ref-def — document has no blocks")
-    func flagOnRefDefFacetB() {
-        let count = MarkdownDocument.withParsedDocument("[?]:\u{0B}", options: Self.flagOn) { doc in
-            childCount(doc.root)
-        }
-        // Fixture-sanity: prove the input is meaningful (not a vacuous "empty tree passes anything")
-        // by confirming the SAME input yields exactly one block (a paragraph) with the flag OFF.
-        let offCount = MarkdownDocument.withParsedDocument("[?]:\u{0B}", options: Self.flagOff) { doc in
-            childCount(doc.root)
-        }
-        #expect(offCount == 1, "flag-OFF should produce one paragraph block; got \(offCount)")
-        #expect(count == 0, "flag-ON should collapse to no blocks (ref-def forms); got \(count)")
-    }
+    // MARK: Facet B — reference-definition bare destination
 
     /// A link reference definition needs a destination, and the paragraph's final whitespace, here a line
     /// tabulation, is removed (spec "Paragraphs").
@@ -152,23 +104,20 @@ struct LinkDestinationControlCharQuirkTests {
         #expect(try #require(text, "expected a paragraph text node") == "[?]:")
     }
 
-    // MARK: Agreeing controls — space/tab still terminate under BOTH flags (guard over-broadening)
+    // MARK: Agreeing controls — space/tab still terminate (guard over-broadening)
 
     @Test("`[](a b)` forms no link under either flag (space terminates the dest)")
     func spaceTerminatesBothFlags() {
-        #expect(linkURL("[](a b)", options: Self.flagOn) == nil)
         #expect(linkURL("[](a b)", options: Self.flagOff) == nil)
     }
 
     @Test("`[](a\tb)` forms no link under either flag (tab terminates the dest)")
     func tabTerminatesBothFlags() {
-        #expect(linkURL("[](a\tb)", options: Self.flagOn) == nil)
         #expect(linkURL("[](a\tb)", options: Self.flagOff) == nil)
     }
 
     @Test("`[](ab)` is a link with dest `ab` under both flags (positive control)")
     func plainDestBothFlags() {
-        #expect(linkURL("[](ab)", options: Self.flagOn) == "ab")
         #expect(linkURL("[](ab)", options: Self.flagOff) == "ab")
     }
 }

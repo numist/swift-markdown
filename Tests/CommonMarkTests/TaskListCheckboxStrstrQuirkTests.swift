@@ -34,16 +34,12 @@ private func firstItemChecked(_ node: borrowing MarkdownNode) -> Bool?? {
 /// token is `[ ]` (`- [ ] [x]` → CHECKED). The leading token still determines WHERE the checkbox is and
 /// whether the item is a task item at all; only the checked/unchecked STATE carries the bug.
 ///
-/// This is a `[ref-b4b]` quirk: reproduced ONLY under `.cmarkBugCompatibility` (adopted by the
-/// differential fuzzer). The shipped deliverable (flag OFF) stays spec-correct — the checked state comes
-/// from the leading token alone. The quirk is STRUCTURAL (the checked flag prints in `debugDescription`
-/// as `ListItem checkbox: [x]`/`[ ]`), so it is gated on `.cmarkBugCompatibility` alone, with no positions
-/// dependency; these tests parse without `.sourcePosition`.
+/// The shipped deliverable (flag OFF) stays spec-correct — the checked state comes
+/// from the leading token alone.
 @Suite("GFM task-list checkbox strstr-over-the-line quirk")
 struct TaskListCheckboxStrstrQuirkTests {
 
     private static let flagOff: MarkdownDocument.ParseOptions = [.tasklist]
-    private static let flagOn: MarkdownDocument.ParseOptions = [.tasklist, .cmarkBugCompatibility]
 
     private func checkedState(
         _ src: String, options: MarkdownDocument.ParseOptions
@@ -54,77 +50,6 @@ struct TaskListCheckboxStrstrQuirkTests {
         // Fixture-sanity: a list item must exist, so a checked/unchecked claim can't pass vacuously
         // against a tree with no item at all.
         return try #require(state, "no list item parsed")
-    }
-
-    // MARK: Flag ON — reproduce cmark's bug
-
-    @Test("flag ON: `- [ ] [x]` is CHECKED (later token flips it)")
-    func flagOnLaterTokenFlipsChecked() throws {
-        #expect(try checkedState("- [ ] [x]", options: Self.flagOn) == true)
-    }
-
-    @Test("flag ON: `- [ ] x [x] y` is CHECKED (substring anywhere on the line)")
-    func flagOnSubstringMidLine() throws {
-        #expect(try checkedState("- [ ] x [x] y", options: Self.flagOn) == true)
-    }
-
-    @Test("flag ON: `- [ ]   foo [x]` is CHECKED (multi-space marker)")
-    func flagOnMultiSpaceMarker() throws {
-        #expect(try checkedState("- [ ]   foo [x]", options: Self.flagOn) == true)
-    }
-
-    @Test("flag ON: `- [ ] a [X] b` is CHECKED (uppercase X counts)")
-    func flagOnUppercaseMidLine() throws {
-        #expect(try checkedState("- [ ] a [X] b", options: Self.flagOn) == true)
-    }
-
-    @Test("flag ON: `- [ ] [X]` is CHECKED (uppercase)")
-    func flagOnUppercaseToken() throws {
-        #expect(try checkedState("- [ ] [X]", options: Self.flagOn) == true)
-    }
-
-    @Test("flag ON: `- [ ] [x` is UNCHECKED (no closing bracket, no `[x]` substring)")
-    func flagOnNoClosingBracket() throws {
-        #expect(try checkedState("- [ ] [x", options: Self.flagOn) == false)
-    }
-
-    @Test("flag ON: `- [ ] (x)` is UNCHECKED (parens are not brackets)")
-    func flagOnParens() throws {
-        #expect(try checkedState("- [ ] (x)", options: Self.flagOn) == false)
-    }
-
-    @Test("flag ON: `- [ ] ]x[` is UNCHECKED (no `[x]` substring)")
-    func flagOnReversedBrackets() throws {
-        #expect(try checkedState("- [ ] ]x[", options: Self.flagOn) == false)
-    }
-
-    @Test("flag ON: continuation-line `[x]` does NOT flip checked (scan is line-scoped)")
-    func flagOnContinuationLineExcluded() throws {
-        // `- [ ] a` then a continuation line `  [x]` indented to the item's content column. cmark's
-        // strstr only sees the checkbox's own (first) physical line, so the line-2 `[x]` is excluded.
-        #expect(try checkedState("- [ ] a\n  [x]", options: Self.flagOn) == false)
-    }
-
-    // Agreeing controls (leading token already decides; strstr must not disagree).
-
-    @Test("flag ON control: `- [x] [ ]` is CHECKED (leading token self-matches)")
-    func flagOnControlCheckedToken() throws {
-        #expect(try checkedState("- [x] [ ]", options: Self.flagOn) == true)
-    }
-
-    @Test("flag ON control: `- [ ] [ ]` is UNCHECKED")
-    func flagOnControlBothUnchecked() throws {
-        #expect(try checkedState("- [ ] [ ]", options: Self.flagOn) == false)
-    }
-
-    @Test("flag ON control: `- [x] [x]` is CHECKED")
-    func flagOnControlBothChecked() throws {
-        #expect(try checkedState("- [x] [x]", options: Self.flagOn) == true)
-    }
-
-    @Test("flag ON control: `- [ ] x` is UNCHECKED (plain content)")
-    func flagOnControlPlainContent() throws {
-        #expect(try checkedState("- [ ] x", options: Self.flagOn) == false)
     }
 
     // MARK: Flag OFF — the deliverable stays spec-correct (leading token only)

@@ -84,18 +84,6 @@ struct TabExpandedParagraphContentTests {
             """)
     }
 
-    @Test("a tab-expanded line after a setext underline left as text keeps its tab", arguments: positionModes)
-    func afterUnderlineLeftAsText(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("[a\n ]:b\n=\n**\tx", options: mode.union(.cmarkBugCompatibility)) == """
-            document
-              paragraph
-                text "="
-                softbreak
-                text "**\\tx"
-
-            """)
-    }
-
     @Test("a tab-expanded line after a setext underline left as text keeps its tab, without cmark bug compatibility", arguments: positionModes)
     func afterUnderlineLeftAsTextSpecCompliant(mode: MarkdownDocument.ParseOptions) {
         #expect(CmarkTreeDump.dump("[a\n ]:b\n=\n**\tx", options: mode) == """

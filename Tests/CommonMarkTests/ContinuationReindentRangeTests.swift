@@ -21,16 +21,14 @@ import Testing
 /// leading whitespace - so a more-indented continuation line's text lands at the wrong (leftward)
 /// column, and the resulting tree is internally inconsistent (the text node's end column can sit
 /// before its own paragraph's end column, which is computed from the true line width). That
-/// inconsistency is the tell that this is a cmark bug, not spec behavior. cmark's re-indent is the
-/// `.cmarkBugCompatibility` quirk, covered by the `s560-*` / `s12-*` / `b1-multiseg-*` fuzzer
-/// regression pairs (which parse flag-on); this suite is the flag-off guardrail proving the default
-/// parser is spec-correct.
+/// inconsistency is the tell that this is a cmark bug, not spec behavior. This suite is the flag-off guardrail
+/// proving the default parser is spec-correct.
 @Suite("Paragraph continuation-line source ranges (spec-correct)")
 struct ContinuationReindentRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// The shipped configuration: source positions on, cmark bug-compatibility deliberately OFF.
+    /// The shipped configuration: source positions on.
     private static let specOptions: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
@@ -153,10 +151,9 @@ struct ContinuationReindentRangeTests {
         // continuation absorbed into the blockquote paragraph. The paragraph's content column is 3
         // (from line 1's `foo`). Spec-correct, `baz` keeps its TRUE column: the two spaces are cols
         // 1-2, so `baz` is @2:3-2:6 - consistent with the paragraph/block-quote end @2:6, and the
-        // re-indent is off entirely. cmark, flag-on, does NOT strip a lazy line's leading whitespace
+        // re-indent is off entirely. cmark does NOT strip a lazy line's leading whitespace
         // (unlike a matched continuation), so it reports `baz` at `true_col + block_offset` = @2:5-2:8
-        // (the `bqlazy-2sp` fuzzer pair). This is the flag-off guardrail proving the flag-on
-        // preserve-leading-whitespace base is quarantined behind `.cmarkBugCompatibility`.
+        // (the `bqlazy-2sp` fuzzer pair).
         let ranges = ranges(in: "> foo\n  baz")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 2)

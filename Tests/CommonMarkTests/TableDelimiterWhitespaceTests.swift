@@ -25,8 +25,7 @@ import Testing
 ///
 /// FF/VT are cell whitespace ONLY inside a delimiter marker. CR (U+000D) is a line terminator, not cell
 /// whitespace; an interior FF/VT still invalidates a cell; and a column-count mismatch is still not a
-/// table. This is a spec-aligned `[fix]` (FF/VT are CommonMark whitespace, §2.1), asserted WITHOUT
-/// `.cmarkBugCompatibility`.
+/// table. This is a spec-aligned `[fix]` (FF/VT are CommonMark whitespace, §2.1).
 @Suite("Table delimiter-row FF/VT whitespace")
 struct TableDelimiterWhitespaceTests {
 
@@ -76,7 +75,7 @@ struct TableDelimiterWhitespaceTests {
     }
 
     /// The first top-level block of `source`, classified as paragraph / heading / table.
-    /// Parsed with `.tables` but WITHOUT `.cmarkBugCompatibility`.
+    /// Parsed with `.tables`.
     private func firstBlock(_ source: String) -> Block {
         MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> Block in
             var blocks: [Block] = []

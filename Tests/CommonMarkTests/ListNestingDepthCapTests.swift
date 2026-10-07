@@ -16,8 +16,7 @@ import Testing
 /// depth is counted per line, so N block quotes followed by a list marker put the marker at depth N+1:
 /// the list opens while N+1 is below the cap and is suppressed - the marker folds into a paragraph as
 /// text - once it reaches the cap. Block quotes themselves are uncapped. cmark applies this to bullet
-/// AND ordered lists, and it is intentional (not a bug), so the cap holds regardless of
-/// `.cmarkBugCompatibility`.
+/// AND ordered lists, and it is intentional (not a bug).
 @Suite("List nesting depth cap - cmark MAX_LIST_DEPTH")
 struct ListNestingDepthCapTests {
 
@@ -48,8 +47,7 @@ struct ListNestingDepthCapTests {
         kinds.reduce(0) { if case .blockQuote = $1 { return $0 + 1 }; return $0 }
     }
 
-    /// Both flag modes: the cap is cmark's intentional behavior, not gated on `.cmarkBugCompatibility`.
-    private static let flagModes: [MarkdownDocument.ParseOptions] = [[], [.cmarkBugCompatibility]]
+    private static let flagModes: [MarkdownDocument.ParseOptions] = [[]]
 
     /// Just below the cap - 98 block quotes put the bullet marker at depth 99 (< 100) - so the list opens.
     /// At the cap - 99 block quotes put it at depth 100 - the marker stays paragraph text and no list opens.

@@ -18,8 +18,7 @@ import Testing
 /// `indented && !maybe_lazy && !blank` branch opens a code block (blocks.c:1325); `add_child` cannot nest
 /// a code block under the table, so the table — with whatever body rows it had — closes and the code block
 /// starts at the container's ancestor. The rewrite detects tables at paragraph-finalize and instead
-/// absorbed the indented line as a body row; this suite pins the break-out. Spec-aligned `[fix]`, asserted
-/// WITHOUT `.cmarkBugCompatibility`.
+/// absorbed the indented line as a body row; this suite pins the break-out. Spec-aligned `[fix]`.
 @Suite("Indented line after a table delimiter row opens indented code")
 struct TableIndentedBreakoutTests {
 

@@ -16,12 +16,9 @@ import CommonMark
 @Suite("Code fence info string with a literal backslash")
 struct CodeFenceInfoBackslashTests {
 
-    @Test(
-        "a backslash before a letter stays literal and the entity decodes",
-        arguments: [MarkdownDocument.ParseOptions(), [.cmarkBugCompatibility]]
-    )
-    func literalBackslash(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("```\\a&amp;\nx\n```\n", options: mode) == """
+    @Test("a backslash before a letter stays literal and the entity decodes")
+    func literalBackslash() {
+        #expect(CmarkTreeDump.dump("```\\a&amp;\nx\n```\n", options: []) == """
             document
               code_block "\\\\a&" "x\\n"
 

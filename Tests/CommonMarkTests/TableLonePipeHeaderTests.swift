@@ -15,7 +15,7 @@ import Testing
 /// columns, matching cmark's `row_from_string` (cells are created only inside its scan loop, which the
 /// consumed leading pipe never enters). The rewrite counted it as one empty cell, so a `|` header
 /// spuriously matched a 1-column delimiter and formed a table (`|\n-|` → Table) where cmark keeps a
-/// paragraph (0 vs 1 columns). Spec-aligned `[fix]`, asserted WITHOUT `.cmarkBugCompatibility`.
+/// paragraph (0 vs 1 columns). Spec-aligned `[fix]`.
 @Suite("Lone-pipe table row column count")
 struct TableLonePipeHeaderTests {
 

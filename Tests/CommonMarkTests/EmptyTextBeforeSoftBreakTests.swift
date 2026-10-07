@@ -29,14 +29,13 @@ internal func dfsKindsAndText(
 /// cmark-gfm's text-flush path (`src/inlines.c` `parse_inline`) creates a `.text` node from the run,
 /// then `cmark_chunk_rtrim` strips its content to empty at the line-end char but leaves the now-empty
 /// node in the tree carrying its pre-strip source range. So cmark emits an empty `Text` spanning the
-/// trailing whitespace between the inline and the break. That empty node is the `.cmarkBugCompatibility`
-/// quirk, covered flag-on by the `emptytext-*` fuzzer regression pairs. This suite is the flag-off
+/// trailing whitespace between the inline and the break. This suite is the flag-off
 /// guardrail proving the shipped (spec-correct) parser drops the whitespace-only run: no empty text
 /// node survives between the inline and the soft break.
 @Suite("Empty text before soft break (spec-correct)")
 struct EmptyTextBeforeSoftBreakTests {
 
-    /// The shipped configuration: source positions on, cmark bug-compatibility deliberately OFF.
+    /// The shipped configuration: source positions on.
     private static let specOptions: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 

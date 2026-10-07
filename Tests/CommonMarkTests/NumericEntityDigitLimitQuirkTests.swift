@@ -33,15 +33,12 @@ private func collectText(_ node: borrowing MarkdownNode, into out: inout String,
 /// still decodes to U+FFFD, so an 8-digit decimal ref such as `&#98665435;` becomes U+FFFD in cmark
 /// while the spec (and the rewrite) leaves it literal.
 ///
-/// This is a `[ref-b4b]` quirk: reproduced ONLY under `.cmarkBugCompatibility` (adopted by the
-/// differential fuzzer). The shipped deliverable (flag OFF) stays spec-correct — an 8+-digit decimal
-/// ref, or a 7+-digit hex ref, stays literal. Valid 1–7-digit decimal / 1–6-digit hex refs decode
-/// identically under both flags.
+/// The shipped deliverable (flag OFF) stays spec-correct — an 8+-digit decimal
+/// ref, or a 7+-digit hex ref, stays literal.
 @Suite("Numeric character reference digit-limit quirk")
 struct NumericEntityDigitLimitQuirkTests {
 
     private static let flagOff: MarkdownDocument.ParseOptions = []
-    private static let flagOn: MarkdownDocument.ParseOptions = [.cmarkBugCompatibility]
 
     private static let replacement = "\u{FFFD}"
     private static let maxScalar = "\u{10FFFF}"
@@ -59,28 +56,6 @@ struct NumericEntityDigitLimitQuirkTests {
         // against a tree that parsed to no text at all.
         try #require(count >= 1, "no text node parsed")
         return out
-    }
-
-    // MARK: Flag ON — reproduce cmark's looser 8-digit acceptance
-
-    @Test("flag ON: `&#98665435;` (8 decimal digits) decodes to U+FFFD")
-    func flagOnDecimalEightDigitsFinding() throws {
-        #expect(try text("&#98665435;", options: Self.flagOn) == Self.replacement)
-    }
-
-    @Test("flag ON: `&#12345678;` (8 decimal digits) decodes to U+FFFD")
-    func flagOnDecimalEightDigits() throws {
-        #expect(try text("&#12345678;", options: Self.flagOn) == Self.replacement)
-    }
-
-    @Test("flag ON: `&#x1234567;` (7 hex digits) decodes to U+FFFD")
-    func flagOnHexSevenDigits() throws {
-        #expect(try text("&#x1234567;", options: Self.flagOn) == Self.replacement)
-    }
-
-    @Test("flag ON: `&#x12345678;` (8 hex digits) decodes to U+FFFD")
-    func flagOnHexEightDigits() throws {
-        #expect(try text("&#x12345678;", options: Self.flagOn) == Self.replacement)
     }
 
     // MARK: Flag OFF — the deliverable stays spec-correct (7 decimal / 6 hex)
@@ -105,11 +80,11 @@ struct NumericEntityDigitLimitQuirkTests {
         #expect(try text("&#x12345678;", options: Self.flagOff) == "&#x12345678;")
     }
 
-    // MARK: Agreeing controls — decode identically under both flags
+    // MARK: Agreeing controls
 
     @Test("controls: valid 1–7 decimal / 1–6 hex refs and 9+-digit rejects agree under both flags")
     func agreeingControls() throws {
-        for options in [Self.flagOff, Self.flagOn] {
+        for options in [Self.flagOff] {
             // In-range values decode to their scalar.
             #expect(try text("&#65;", options: options) == "A")
             #expect(try text("&#x41;", options: options) == "A")
@@ -123,7 +98,7 @@ struct NumericEntityDigitLimitQuirkTests {
             // Surrogate codepoints (U+D800…U+DFFF) also map to U+FFFD, decimal and hex alike.
             #expect(try text("&#55296;", options: options) == Self.replacement)
             #expect(try text("&#xDFFF;", options: options) == Self.replacement)
-            // 9+ digits exceed even cmark's looser cap of 8, so they stay literal under both flags
+            // 9+ digits exceed even cmark's looser cap of 8, so they stay literal
             // (the hex case also guards against integer overflow while accumulating the codepoint).
             #expect(try text("&#123456789;", options: options) == "&#123456789;")
             #expect(try text("&#x123456789;", options: options) == "&#x123456789;")

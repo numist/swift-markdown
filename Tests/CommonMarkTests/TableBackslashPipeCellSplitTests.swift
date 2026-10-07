@@ -23,7 +23,7 @@ import Testing
 /// The rewrite previously escaped a pipe only after an ODD number of backslashes (it skipped two bytes per
 /// backslash), so `\\|` (two backslashes) wrongly split the pipe off as a delimiter — producing a spurious
 /// extra cell (colspan 2 with `.tableSpans`, text `\`) instead of a single cell whose text is `|`. GFM
-/// tables are defined by cmark, so this behavior is unconditional (NOT gated on `.cmarkBugCompatibility`).
+/// tables are defined by cmark, so this behavior is unconditional.
 @Suite("Table backslash-before-pipe cell splitting")
 struct TableBackslashPipeCellSplitTests {
 

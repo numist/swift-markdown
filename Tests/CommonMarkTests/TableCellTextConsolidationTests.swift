@@ -18,7 +18,7 @@ import Testing
 /// decoded entities, and smart-quote glyphs as their OWN text nodes; only a post-parse consolidation pass
 /// merges them. The paragraph path consolidates after `parseInline`; a table cell is inline-parsed on the
 /// table path, so it must consolidate there too. This is a differential-qualification `[fix]` tracked
-/// unconditionally (adjacent text nodes should always be one node), NOT gated on `.cmarkBugCompatibility`.
+/// unconditionally (adjacent text nodes should always be one node).
 ///
 /// The merged node's literal is the concatenation of the runs, and its source range spans the first run's
 /// start through the last run's end. Columns are 1-based and half-open on the end, matching the
@@ -194,28 +194,9 @@ struct TableCellTextConsolidationTests {
         #expect(range.0 == 1 && range.1 == 1)
     }
 
-    /// The flattened (leading-whitespace, re-based) cell path also consolidates. A leading space on the
-    /// body row makes the paragraph non-contiguous, so it materializes with an arena→source run map
-    /// (`.flattened` mode) — a distinct arena-copy branch from the `\|`-escape one. The re-based body cell
-    /// ` [x` still coalesces its bracket-literal + text into one `Text "[x"`. Under `.cmarkBugCompatibility`
-    /// the leading whitespace re-bases invisibly (the cell starts at column 1, not its physical column 2);
-    /// consolidation only unions the pre-stamped ranges, so the re-base is preserved.
-    @Test("a flattened (leading-whitespace re-based) cell consolidates its text runs")
-    func flattenedCellConsolidates() throws {
-        let rows = tableCellChildren("a|b\n-|-\n [x|y", options: [.tables, .sourcePosition, .cmarkBugCompatibility])
-        try #require(rows.count == 2, "fixture: expected a header row and a body row, got \(rows.count)")
-        try #require(rows[1].count == 2, "fixture: expected two body cells, got \(rows[1].count)")
-        let cell = rows[1][0]
-        try #require(cell.count == 1, "fixture: flattened cell must coalesce to one node, got \(cell.map(\.kind))")
-        #expect(cell[0].kind == .text)
-        #expect(cell[0].literal == "[x")
-        // Re-based onto the body row: line 3, column 1 through 3 (the leading space is invisible).
-        #expect(cell[0].range.map { $0 == (3, 1, 3, 3) } == true)
-    }
-
-    /// The flag-OFF twin of `flattenedCellConsolidates`: the same flattened (leading-whitespace) cell
-    /// consolidates identically, but keeps its TRUE physical column — the leading space is visible, so
-    /// `[x` sits at cols 2–4 rather than the flag-ON re-based cols 1–3.
+    /// A flattened (leading-whitespace) cell
+    /// consolidates, and keeps its TRUE physical column — the leading space is visible, so
+    /// `[x` sits at cols 2–4.
     @Test("flag-OFF: a flattened (leading-whitespace) cell consolidates and keeps its physical column")
     func flattenedCellConsolidatesSpecCorrect() throws {
         let rows = tableCellChildren("a|b\n-|-\n [x|y", options: Self.posOpts)

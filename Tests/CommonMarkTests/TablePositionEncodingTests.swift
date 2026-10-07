@@ -33,7 +33,7 @@ struct TablePositionEncodingTests {
 
     /// The deliverable option set: exactly what the Markdown wrapper (and `dump --new-off`, options
     /// byte 0x00) enables — GFM tables + spans + strikethrough + tasklist, smart punctuation, and
-    /// source positions. NO `.cmarkBugCompatibility`, so this is the shipped, spec-correct surface.
+    /// source positions.
     static let opts: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]
 

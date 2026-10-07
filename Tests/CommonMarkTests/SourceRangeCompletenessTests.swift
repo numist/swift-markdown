@@ -174,15 +174,12 @@ struct SourceRangeCompletenessTests {
         }
     }
 
-    /// The ratchet with every spec example nested in each `Container`, in the shipped configuration and with
-    /// `.cmarkBugCompatibility`. A nested block's lines aren't contiguous in the source (each carries its container's
+    /// The ratchet with every spec example nested in each `Container`, in the shipped configuration. A nested block's lines aren't contiguous in the source (each carries its container's
     /// prefix), so this covers content that maps back to source line by line: notably the GFM tables section's
     /// tables, whose rows, cells and cell inlines must each be placed on their own source line.
-    @Test("every non-exempt node carries a valid source range when nested in a container", arguments: Container.allCases, [
-        MarkdownDocument.ParseOptions(), .cmarkBugCompatibility,
-    ])
-    func everyNonExemptNestedNodeHasValidRange(container: Container, compatibility: MarkdownDocument.ParseOptions) throws {
-        let audit = try Self.audit(options: Self.options.union(compatibility), rewrite: container.nest)
+    @Test("every non-exempt node carries a valid source range when nested in a container", arguments: Container.allCases)
+    func everyNonExemptNestedNodeHasValidRange(container: Container) throws {
+        let audit = try Self.audit(options: Self.options, rewrite: container.nest)
 
         #expect(audit.totalNodes > 3000)
         #expect(audit.exemptFillerCells == 2)

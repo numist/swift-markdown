@@ -15,12 +15,9 @@ import XCTest
 ///
 /// The old C path set `CMARK_OPT_SOURCEPOS` only when `disableSourcePosOpts` was unset, and with it
 /// off cmark flattened these two constructs' END onto their start line (`(startLine, startColumn +
-/// tokenByteLength)`), ignoring the interior break. That flat end is the `.cmarkBugCompatibility`
-/// quirk, reproduced ONLY for the differential and only when `.disableSourcePosOpts` is also set
-/// (covered by the `rawinline-*` fuzzer regression pairs, which parse flag-on). This suite is the
-/// deliverable-side guardrail: it parses with `.disableSourcePosOpts` but WITHOUT
-/// `.cmarkBugCompatibility`, proving the shipped parser tracks the precise end regardless of
-/// `.disableSourcePosOpts` - the flat behavior is quarantined to the differential.
+/// tokenByteLength)`), ignoring the interior break. This suite is the
+/// deliverable-side guardrail: it parses with `.disableSourcePosOpts`, proving the shipped parser tracks
+/// the precise end regardless of `.disableSourcePosOpts`.
 class FlatRawInlineEndTests: XCTestCase {
     /// A two-line code span ends at its closing backtick's physical position (byte-projected @2:3),
     /// not at cmark's sourcepos-off flat @1:6. `.disableSourcePosOpts` alone does not flatten it.
@@ -70,9 +67,7 @@ class FlatRawInlineEndTests: XCTestCase {
 
     /// The persistent-flat-cursor half of the quirk is likewise quarantined: the text FOLLOWING a
     /// newline-crossing code span keeps its true physical position in the deliverable, even with
-    /// `.disableSourcePosOpts`. Under `.cmarkBugCompatibility` + `.disableSourcePosOpts` (the
-    /// differential) cmark instead stamps the trailing `8` flat on line 1 - covered by the `qiflat-*`
-    /// fuzzer regression pairs. Here the shipped parser reports the physical @2:2.
+    /// `.disableSourcePosOpts`. Here the shipped parser reports the physical @2:2.
     func testTextAfterMultilineCodeSpanKeepsPhysicalLine() {
         let text = "`\n`8"
 

@@ -23,7 +23,6 @@ struct CodeSpanLazyContinuationRangeTests {
     private typealias Pos = MarkdownNode.SourcePosition
 
     private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition]
-    private static let quirkOptions: MarkdownDocument.ParseOptions = [.sourcePosition, .cmarkBugCompatibility]
 
     /// The source ranges of every `.codeInline` node, in document order.
     private func codeSpanRanges(
@@ -83,16 +82,14 @@ struct CodeSpanLazyContinuationRangeTests {
         #expect(spans[0] == Pos(line: 2, column: 3)..<Pos(line: 3, column: 2))
     }
 
-    // MARK: - Top-level control (no re-indent, no overshoot on either flag)
+    // MARK: - Top-level control (no re-indent, no overshoot)
 
     /// Guardrail: a top-level multi-line code span has block content column 1, so there is no
-    /// re-indent and both flags agree at `@2:1-3:2`.
+    /// re-indent: `@2:1-3:2`.
     @Test("top-level multi-line code span is @2:1-3:2 both flags")
     func topLevelControl() throws {
-        for options in [Self.quirkOptions, Self.specOptions] {
-            let spans = codeSpanRanges("o\n`\n`", options: options)
-            try #require(spans.count == 1)
-            #expect(spans[0] == Pos(line: 2, column: 1)..<Pos(line: 3, column: 2))
-        }
+        let spans = codeSpanRanges("o\n`\n`", options: Self.specOptions)
+        try #require(spans.count == 1)
+        #expect(spans[0] == Pos(line: 2, column: 1)..<Pos(line: 3, column: 2))
     }
 }

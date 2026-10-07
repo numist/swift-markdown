@@ -23,8 +23,7 @@ private func dfsKindText(
     }
 }
 
-/// A footnotes bug-compatibility divergence the differential fuzzer found against cmark-gfm (via
-/// swift-markdown@main): an unresolved footnote-shaped bracket whose `]` lands on a later line than its
+/// An unresolved footnote-shaped bracket whose `]` lands on a later line than its
 /// `[`, where the spanning newline is swallowed by a raw-scan inline (a code span or raw HTML) rather
 /// than being a bare soft break.
 ///
@@ -36,11 +35,7 @@ private func dfsKindText(
 /// verbatim rather than collapsing to `[^]`. With source positions on, the same newline resets the
 /// cursor and the label underflows, collapsing to `[^]`.
 ///
-/// The rewrite always tracks positions (ranges are read off the AST regardless of the flag), so it
-/// carries a separate `.cmarkSourcePositionsDisabled` signal — forwarded by the Markdown layer only
-/// alongside `.cmarkBugCompatibility` when `.disableSourcePosOpts` is set — to reproduce this
-/// source-positions-off content quirk. The shipped deliverable (bug-compat off) never sets it and stays
-/// spec-correct: the interior parses as a real code span / raw HTML.
+/// The shipped deliverable stays spec-correct: the interior parses as a real code span / raw HTML.
 @Suite("Cross-line footnote raw-inline (code span / HTML) reconstruction")
 struct FootnoteRawInlineCrossLineTests {
 
@@ -55,30 +50,6 @@ struct FootnoteRawInlineCrossLineTests {
         }
     }
 
-    /// Bug-compat ON with source positions OFF (the differential target): the code-span newline does not
-    /// reset the cursor, so the interior stays in the raw byte capture — `` [^`\n`] `` reconstructs as one
-    /// verbatim text node, backticks and newline included.
-    @Test("bug-compat ON, sourcepos OFF: code-span interior kept verbatim (`` [^`\\n`] ``)")
-    func codeSpanSourcePosOffKeepsRawInterior() {
-        let ns = nodes(
-            in: "[^`\n`]",
-            options: [.sourcePosition, .cmarkBugCompatibility, .cmarkSourcePositionsDisabled, .footnotes])
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.compactMap(\.text) == ["[^`\n`]"])
-    }
-
-    /// Bug-compat ON with source positions ON: cmark's `adjust_subj_node_newlines` runs, so the code-span
-    /// newline resets the per-line column and the captured label underflows to empty, collapsing the whole
-    /// span to `[^]`. The `.cmarkSourcePositionsDisabled` fix must NOT change this regime.
-    @Test("bug-compat ON, sourcepos ON: code-span span collapses to `[^]`")
-    func codeSpanSourcePosOnCollapses() {
-        let ns = nodes(
-            in: "[^`\n`]",
-            options: [.sourcePosition, .cmarkBugCompatibility, .footnotes])
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.compactMap(\.text) == ["[^]"])
-    }
-
     /// The shipped deliverable (bug-compat off) stays spec-correct: the interior is a real code span, so
     /// the paragraph is `[^` + a code span + `]` (the span's single newline normalizes to one space).
     @Test("bug-compat OFF: code-span interior parses as a real code span")
@@ -88,19 +59,6 @@ struct FootnoteRawInlineCrossLineTests {
         #expect(ns.compactMap(\.text) == ["[^", " ", "]"])
     }
 
-    /// The same quirk for the other raw-scan inline, raw HTML: cmark gates its cursor reset on
-    /// `CMARK_OPT_SOURCEPOS` for inline HTML too (`src/inlines.c` `handle_pointy_brace`), so with source
-    /// positions off a comment's interior newline stays in the raw capture — `[^<!--\n-->]` reconstructs
-    /// verbatim.
-    @Test("bug-compat ON, sourcepos OFF: raw-HTML interior kept verbatim (`[^<!--\\n-->]`)")
-    func rawHTMLSourcePosOffKeepsRawInterior() {
-        let ns = nodes(
-            in: "[^<!--\n-->]",
-            options: [.sourcePosition, .cmarkBugCompatibility, .cmarkSourcePositionsDisabled, .footnotes])
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.compactMap(\.text) == ["[^<!--\n-->]"])
-    }
-
     /// The shipped deliverable (bug-compat off) stays spec-correct: the interior is a real inline-HTML
     /// comment, so the paragraph is `[^` + the comment + `]`.
     @Test("bug-compat OFF: raw-HTML interior parses as a real inline-HTML comment")
@@ -108,33 +66,6 @@ struct FootnoteRawInlineCrossLineTests {
         let ns = nodes(in: "[^<!--\n-->]", options: [.sourcePosition, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .htmlInline, .text])
         #expect(ns.compactMap(\.text) == ["[^", "<!--\n-->", "]"])
-    }
-
-    /// Raw HTML, bug-compat ON with source positions ON: cmark's `adjust_subj_node_newlines` runs, so the
-    /// comment's newline resets the per-line column; the captured label reads just the one byte past the
-    /// `^` (`<`), reconstructing `[^<]`. The `.cmarkSourcePositionsDisabled` fix must NOT change this.
-    @Test("bug-compat ON, sourcepos ON: raw-HTML span reconstructs to `[^<]`")
-    func rawHTMLSourcePosOnResetsColumn() {
-        let ns = nodes(
-            in: "[^<!--\n-->]",
-            options: [.sourcePosition, .cmarkBugCompatibility, .footnotes])
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.compactMap(\.text) == ["[^<]"])
-    }
-
-    /// Mixed newlines, bug-compat ON with source positions OFF: a bare soft break (`\n` after `x`) resets
-    /// the per-line column, but the code-span newline (inside `` `y\nz` ``) does not — so cmark's raw
-    /// capture starts after the soft break and runs verbatim across the code-span newline. Guards the
-    /// content-offset alignment between recording (parse cursor) and measurement
-    /// (`footnoteCapturedLabelLength`) when both kinds of newline occur in one span: `` [^x\n`y\nz`] `` ->
-    /// `` [^x\n`] ``.
-    @Test("bug-compat ON, sourcepos OFF: bare break resets, code-span break does not (`` [^x\\n`] ``)")
-    func mixedBareAndSwallowedNewlines() {
-        let ns = nodes(
-            in: "[^x\n`y\nz`]",
-            options: [.sourcePosition, .cmarkBugCompatibility, .cmarkSourcePositionsDisabled, .footnotes])
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.compactMap(\.text) == ["[^x\n`]"])
     }
 
     /// The shipped deliverable (bug-compat off) stays spec-correct: the soft break and the real code span both

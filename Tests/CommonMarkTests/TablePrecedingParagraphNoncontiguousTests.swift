@@ -51,7 +51,7 @@ fileprivate func dumpTree(_ source: String, options: MarkdownDocument.ParseOptio
 /// header and the preceding lines must be reconstructed from the stored segments rather than a single
 /// source range.
 ///
-/// Parsed with `.tables` but WITHOUT `.cmarkBugCompatibility`: a table interrupting a paragraph is
+/// Parsed with `.tables`: a table interrupting a paragraph is
 /// spec-aligned, so this is an unconditional structural `[fix]`.
 @Suite("GFM table interrupts a non-contiguous paragraph, taking its last line as header")
 struct TablePrecedingParagraphNoncontiguousTests {

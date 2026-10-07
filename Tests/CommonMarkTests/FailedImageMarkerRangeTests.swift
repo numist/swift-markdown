@@ -34,15 +34,13 @@ internal func firstTextLiteral(_ node: borrowing MarkdownNode) -> String? {
 /// When `![` opens an image that never resolves (no matching reference definition, no inline
 /// destination), the `![` collapses into literal text. The resulting text node's range must cover
 /// its whole literal, starting at the `!` - not after the `![`, which would leave the range and
-/// literal inconsistent. This is the spec-correct default (cmark-gfm stamps `@1:1`); the
-/// `.cmarkBugCompatibility` flag is not involved. The `imgstart-*` fuzzer regression pairs cover
-/// the flag-on surface; this is the flag-off guardrail.
+/// literal inconsistent. This is the spec-correct default (cmark-gfm stamps `@1:1`); this is the flag-off guardrail.
 @Suite("Failed image-marker literal source range (spec-correct)")
 struct FailedImageMarkerRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// The shipped configuration: source positions on, cmark bug-compatibility deliberately OFF.
+    /// The shipped configuration: source positions on.
     private static let specOptions: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 

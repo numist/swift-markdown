@@ -19,7 +19,7 @@ import Testing
 /// and its enclosing container close so the line starts a fresh paragraph at the container's ancestor
 /// (document) level. The rewrite detects tables at finalize, so it used to absorb the lazy line into the
 /// block-quote paragraph and turn the accumulated content into a table body row. This suite pins cmark's
-/// break-out. Spec-aligned `[fix]`, asserted WITHOUT `.cmarkBugCompatibility`.
+/// break-out. Spec-aligned `[fix]`.
 @Suite("Table lazy-continuation body row")
 struct TableLazyBodyRowTests {
 

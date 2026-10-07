@@ -36,15 +36,11 @@ private func dfsAutolinkNodes(
 /// These cases exercise every ordering the fuzzer surfaced: a flanking `_` folded INTO the local part
 /// (`_@b.c`, `a_@b.c`, `x _@b.c`), an email that must be found INSIDE a resolved emphasis (`_a@b.c_`),
 /// and a `_..._` run that consumes the delimiters so the residual `@b.c` has an empty local part and
-/// must NOT link (`_a_@b.c`). Flag-OFF is the spec-correct deliverable (no empty siblings); flag-ON
-/// reproduces cmark's Quirk M empty `before`/`after` text nodes.
+/// must NOT link (`_a_@b.c`). Flag-OFF is the spec-correct deliverable (no empty siblings).
 @Suite("GFM email autolink post-pass (emphasis ordering)")
 struct AutolinkEmailPostPassTests {
 
-    /// The differential-fuzzer configuration: GFM autolink on, cmark bug-compatibility on.
-    private static let flagOn: MarkdownDocument.ParseOptions = [.gfmAutolink, .cmarkBugCompatibility]
-
-    /// The shipped configuration: GFM autolink on, bug-compatibility deliberately off.
+    /// The shipped configuration: GFM autolink on.
     private static let flagOff: MarkdownDocument.ParseOptions = [.gfmAutolink]
 
     private func nodes(
@@ -70,27 +66,11 @@ struct AutolinkEmailPostPassTests {
         #expect(ns.compactMap(\.url) == ["mailto:_@b.c"])
     }
 
-    @Test("`_@b.c` flag-ON: empty before/after siblings (Quirk M)")
-    func leadingUnderscoreFlagOn() {
-        let ns = nodes(in: "_@b.c", options: Self.flagOn)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, "", nil, "_@b.c", ""])
-        #expect(ns.compactMap(\.url) == ["mailto:_@b.c"])
-    }
-
     @Test("`a_@b.c`: local part is `a_`, whole thing links")
     func wordThenUnderscoreFlagOff() {
         let ns = nodes(in: "a_@b.c", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "a_@b.c"])
-        #expect(ns.compactMap(\.url) == ["mailto:a_@b.c"])
-    }
-
-    @Test("`a_@b.c` flag-ON: empty before/after siblings")
-    func wordThenUnderscoreFlagOn() {
-        let ns = nodes(in: "a_@b.c", options: Self.flagOn)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, "", nil, "a_@b.c", ""])
         #expect(ns.compactMap(\.url) == ["mailto:a_@b.c"])
     }
 
@@ -100,14 +80,6 @@ struct AutolinkEmailPostPassTests {
         let ns = nodes(in: "x _@b.c", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "x ", nil, "_@b.c"])
-        #expect(ns.compactMap(\.url) == ["mailto:_@b.c"])
-    }
-
-    @Test("`x _@b.c` flag-ON: real before-text `x `, empty after")
-    func spaceThenUnderscoreFlagOn() {
-        let ns = nodes(in: "x _@b.c", options: Self.flagOn)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, "x ", nil, "_@b.c", ""])
         #expect(ns.compactMap(\.url) == ["mailto:_@b.c"])
     }
 
@@ -123,14 +95,6 @@ struct AutolinkEmailPostPassTests {
         #expect(ns.compactMap(\.url) == ["mailto:a@b.c"])
     }
 
-    @Test("`_a@b.c_` flag-ON: empty siblings live INSIDE the emphasis")
-    func emailInsideEmphasisFlagOn() {
-        let ns = nodes(in: "_a@b.c_", options: Self.flagOn)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .emphasis, .text, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "", nil, "a@b.c", ""])
-        #expect(ns.compactMap(\.url) == ["mailto:a@b.c"])
-    }
-
     // MARK: - Emphasis consumes the delimiters, leaving an empty local part
 
     @Test("`_a_@b.c`: emphasis consumes both `_`; residual `@b.c` has no local part → no link")
@@ -138,14 +102,6 @@ struct AutolinkEmailPostPassTests {
         // `_a_` resolves to Emphasis(Text "a"); the trailing `@b.c` starts the text node, so the email's
         // backward scan hits the node start with an empty local part and rejects. No link.
         let ns = nodes(in: "_a_@b.c", options: Self.flagOff)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .emphasis, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "a", "@b.c"])
-        #expect(ns.compactMap(\.url) == [])
-    }
-
-    @Test("`_a_@b.c` flag-ON: identical (no email match → no empty siblings)")
-    func emphasisConsumesUnderscoresFlagOn() {
-        let ns = nodes(in: "_a_@b.c", options: Self.flagOn)
         #expect(ns.map(\.kind) == [.document, .paragraph, .emphasis, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "a", "@b.c"])
         #expect(ns.compactMap(\.url) == [])
@@ -163,13 +119,6 @@ struct AutolinkEmailPostPassTests {
         #expect(ns.compactMap(\.url) == ["mailto:a@b.c", "mailto:x@y.z"])
     }
 
-    @Test("`a@b.c x@y.z` flag-ON: empty leading/trailing siblings bound the run")
-    func twoEmailsInOneRunFlagOn() {
-        let ns = nodes(in: "a@b.c x@y.z", options: Self.flagOn)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, "", nil, "a@b.c", " ", nil, "x@y.z", ""])
-        #expect(ns.compactMap(\.url) == ["mailto:a@b.c", "mailto:x@y.z"])
-    }
 }
 
 /// A recognized `mailto:` / `xmpp:` scheme immediately before an email is FOLDED into the autolink.
@@ -190,10 +139,7 @@ struct AutolinkEmailPostPassTests {
 @Suite("GFM email autolink protocol-prefix folding (mailto:/xmpp:)")
 struct AutolinkProtocolPrefixTests {
 
-    /// The differential-fuzzer configuration: GFM autolink on, cmark bug-compatibility on.
-    private static let flagOn: MarkdownDocument.ParseOptions = [.gfmAutolink, .cmarkBugCompatibility]
-
-    /// The shipped configuration: GFM autolink on, bug-compatibility deliberately off.
+    /// The shipped configuration: GFM autolink on.
     private static let flagOff: MarkdownDocument.ParseOptions = [.gfmAutolink]
 
     private func nodes(
@@ -214,14 +160,6 @@ struct AutolinkProtocolPrefixTests {
         let ns = nodes(in: "mailto:x@a.b", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "mailto:x@a.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:x@a.b"])
-    }
-
-    @Test("`mailto:x@a.b` flag-ON: empty before/after siblings bound the folded link")
-    func mailtoFoldsFlagOn() {
-        let ns = nodes(in: "mailto:x@a.b", options: Self.flagOn)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, "", nil, "mailto:x@a.b", ""])
         #expect(ns.compactMap(\.url) == ["mailto:x@a.b"])
     }
 
@@ -257,14 +195,6 @@ struct AutolinkProtocolPrefixTests {
         let ns = nodes(in: "x mailto:a@b.c", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "x ", nil, "mailto:a@b.c"])
-        #expect(ns.compactMap(\.url) == ["mailto:a@b.c"])
-    }
-
-    @Test("`x mailto:a@b.c` flag-ON: real before-text `x `, empty after")
-    func schemeAfterTextFlagOn() {
-        let ns = nodes(in: "x mailto:a@b.c", options: Self.flagOn)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, "x ", nil, "mailto:a@b.c", ""])
         #expect(ns.compactMap(\.url) == ["mailto:a@b.c"])
     }
 

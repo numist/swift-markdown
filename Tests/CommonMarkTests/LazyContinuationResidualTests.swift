@@ -30,16 +30,11 @@ private func dfsContent(
 /// — a code span — then captures that residual, while TEXT does not (cmark's inline `handle_newline`
 /// strips leading whitespace after a soft break).
 ///
-/// cmark preserving lazy-continuation residual — vs the spec, which skips leading whitespace on every
-/// paragraph continuation line — is the QUIRK E behaviour quarantined behind `.cmarkBugCompatibility`
-/// (the same quirk covers the source-column re-indent; see `ContinuationReindentRangeTests`). So flag-ON
-/// a code span across a lazy continuation reproduces cmark's residual-bearing literal, while flag-OFF the
-/// shipped parser stays spec-correct (residual stripped). TEXT is stripped either way. Covered by the
-/// `lazyres-*` fuzzer regression pairs (flag-ON); this suite is the deliverable-facing spec assertion.
+/// The spec skips leading whitespace on every paragraph continuation line, so the shipped parser stays
+/// spec-correct (residual stripped). TEXT is stripped either way. This suite is the deliverable-facing spec assertion.
 @Suite("Lazy-continuation residual in code-span content")
 struct LazyContinuationResidualTests {
 
-    private static let quirkOptions: MarkdownDocument.ParseOptions = [.sourcePosition, .cmarkBugCompatibility]
     private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition]
 
     private func content(_ src: String, _ options: MarkdownDocument.ParseOptions) -> [(kind: MarkdownNode.Kind, literal: String?)] {
@@ -54,39 +49,18 @@ struct LazyContinuationResidualTests {
         nodes.first { if case .codeInline = $0.kind { return true } else { return false } }?.literal
     }
 
-    @Test("flag-ON: code span across a lazy blockquote continuation KEEPS the residual space")
-    func codeSpanLazyBlockquote_flagOn_keepsResidual() {
-        // "> `x" then " y`" (no `>` marker, one leading space → lazy continuation). cmark's buffer keeps
-        // the residual space, so the code span content is `x` + (newline→space) + (residual space) + `y`.
-        let nodes = content("> `x\n y`", Self.quirkOptions)
-        #expect(firstCodeInline(nodes) == "x  y")
-    }
-
-    @Test("flag-ON: two residual spaces are all preserved in the code span")
-    func codeSpanLazyBlockquote_flagOn_twoSpaces() {
-        // "> `x" then "  y`" (two leading spaces). content = `x` + (newline→space) + two residual spaces + `y`.
-        let nodes = content("> `x\n  y`", Self.quirkOptions)
-        #expect(firstCodeInline(nodes) == "x   y")
-    }
-
     @Test("flag-OFF (shipped): two residual spaces are stripped — spec-correct")
     func codeSpanLazyBlockquote_flagOff_twoSpaces() throws {
-        // Twin of `codeSpanLazyBlockquote_flagOn_twoSpaces`. The deliverable strips the residual leading
+        // The deliverable strips the residual leading
         // whitespace regardless of its width, so the span content is `x` + (newline→space) + `y`.
         let nodes = content("> `x\n  y`", Self.specOptions)
         let literal = try #require(firstCodeInline(nodes), "fixture must contain a code span")
         #expect(literal == "x y")
     }
 
-    @Test("flag-ON: code span across a lazy LIST continuation keeps the residual space")
-    func codeSpanLazyList_flagOn_keepsResidual() {
-        let nodes = content("- `x\n y`", Self.quirkOptions)
-        #expect(firstCodeInline(nodes) == "x  y")
-    }
-
     @Test("flag-OFF (shipped): the lazy LIST continuation residual is stripped — spec-correct")
     func codeSpanLazyList_flagOff_stripsResidual() throws {
-        // Twin of `codeSpanLazyList_flagOn_keepsResidual`. Same spec-correct stripping as the block-quote
+        // Same spec-correct stripping as the block-quote
         // case, over a LIST container: `x` + (newline→space) + `y`.
         let nodes = content("- `x\n y`", Self.specOptions)
         let literal = try #require(firstCodeInline(nodes), "fixture must contain a code span")
@@ -104,11 +78,9 @@ struct LazyContinuationResidualTests {
     @Test("plain text across the same lazy continuation stays stripped (both flags)")
     func plainTextLazyContinuation_staysStripped() {
         // "> a" then " b" (lazy continuation, one leading space). The residual must NOT bleed into the
-        // second text node under either flag: TEXT is `a`, a soft break, then `b` (not " b").
-        for options in [Self.quirkOptions, Self.specOptions] {
-            let nodes = content("> a\n b", options)
-            let texts = nodes.filter { $0.kind == .text }.map { $0.literal }
-            #expect(texts == ["a", "b"], "options=\(options.rawValue)")
-        }
+        // second text node: TEXT is `a`, a soft break, then `b` (not " b").
+        let nodes = content("> a\n b", Self.specOptions)
+        let texts = nodes.filter { $0.kind == .text }.map { $0.literal }
+        #expect(texts == ["a", "b"])
     }
 }

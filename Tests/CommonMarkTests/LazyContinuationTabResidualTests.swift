@@ -35,15 +35,11 @@ private func dfsContent(
 /// then captures that tab, while TEXT does not (the inline parser's `handle_newline` skips leading
 /// spaces AND tabs after a soft break).
 ///
-/// Flag-ON (`.cmarkBugCompatibility`, the differential-fuzzer surface) reproduces cmark: the tab is
-/// carried into the code-span / raw-HTML content. Flag-OFF (the shipped, spec-correct parser) strips
+/// Flag-OFF (the shipped, spec-correct parser) strips
 /// the residual - identical to a leading-space lazy continuation and to the no-block-quote controls.
-/// This is a strict extension of Quirk E to the tab case; flag-OFF behaviour is unchanged.
 @Suite("Lazy-continuation TAB residual in literal inlines")
 struct LazyContinuationTabResidualTests {
 
-    private static let quirkOptions: MarkdownDocument.ParseOptions = [.cmarkBugCompatibility]
-    private static let quirkOptionsPos: MarkdownDocument.ParseOptions = [.sourcePosition, .cmarkBugCompatibility]
     private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition]
 
     private func content(_ src: String, _ options: MarkdownDocument.ParseOptions) -> [(kind: MarkdownNode.Kind, literal: String?)] {
@@ -70,36 +66,6 @@ struct LazyContinuationTabResidualTests {
     private static let codeSpanTop = "\u{60}\n\t\u{60}"        // `` ` `` LF TAB `` ` `` (no block quote)
     private static let htmlTagTop = "<i\n\t>"                  // `<i` LF TAB `>` (no block quote)
     private static let htmlCommentTop = "0<!--\n\t-->"         // `0<!--` LF TAB `-->` (no block quote)
-
-    // MARK: - Flag ON: the literal inline KEEPS the tab (matches cmark)
-
-    @Test("flag-ON: code span across a lazy blockquote continuation KEEPS the residual tab")
-    func codeSpanLazyBlockquote_flagOn_keepsTab() throws {
-        for options in [Self.quirkOptions, Self.quirkOptionsPos] {
-            let nodes = content(Self.codeSpanBQ, options)
-            let literal = try #require(firstCodeInline(nodes), "fixture must contain a code span (options=\(options.rawValue))")
-            // Content = (newline→space) + (literal residual tab). No strip (does not end in a space).
-            #expect(literal == " \t", "options=\(options.rawValue)")
-        }
-    }
-
-    @Test("flag-ON: raw-HTML tag across a lazy blockquote continuation KEEPS the residual tab")
-    func htmlTagLazyBlockquote_flagOn_keepsTab() throws {
-        for options in [Self.quirkOptions, Self.quirkOptionsPos] {
-            let nodes = content(Self.htmlTagBQ, options)
-            let literal = try #require(firstHTMLInline(nodes), "fixture must contain inline HTML (options=\(options.rawValue))")
-            #expect(literal == "<i\n\t>", "options=\(options.rawValue)")
-        }
-    }
-
-    @Test("flag-ON: raw-HTML comment across a lazy blockquote continuation KEEPS the residual tab")
-    func htmlCommentLazyBlockquote_flagOn_keepsTab() throws {
-        for options in [Self.quirkOptions, Self.quirkOptionsPos] {
-            let nodes = content(Self.htmlCommentBQ, options)
-            let literal = try #require(firstHTMLInline(nodes), "fixture must contain inline HTML (options=\(options.rawValue))")
-            #expect(literal == "<!--\n\t-->", "options=\(options.rawValue)")
-        }
-    }
 
     // MARK: - Flag OFF (shipped): the residual tab is stripped - spec-correct, UNCHANGED
 
@@ -128,29 +94,23 @@ struct LazyContinuationTabResidualTests {
 
     @Test("control: no-blockquote code span strips the tab identically under both flags")
     func codeSpanTopLevel_bothFlags_stripTab() throws {
-        for options in [Self.quirkOptions, Self.quirkOptionsPos, Self.specOptions] {
-            let nodes = content(Self.codeSpanTop, options)
-            let literal = try #require(firstCodeInline(nodes), "fixture must contain a code span (options=\(options.rawValue))")
-            #expect(literal == " ", "options=\(options.rawValue)")
-        }
+        let nodes = content(Self.codeSpanTop, Self.specOptions)
+        let literal = try #require(firstCodeInline(nodes), "fixture must contain a code span")
+        #expect(literal == " ")
     }
 
     @Test("control: no-blockquote raw-HTML tag strips the tab identically under both flags")
     func htmlTagTopLevel_bothFlags_stripTab() throws {
-        for options in [Self.quirkOptions, Self.quirkOptionsPos, Self.specOptions] {
-            let nodes = content(Self.htmlTagTop, options)
-            let literal = try #require(firstHTMLInline(nodes), "fixture must contain inline HTML (options=\(options.rawValue))")
-            #expect(literal == "<i\n>", "options=\(options.rawValue)")
-        }
+        let nodes = content(Self.htmlTagTop, Self.specOptions)
+        let literal = try #require(firstHTMLInline(nodes), "fixture must contain inline HTML")
+        #expect(literal == "<i\n>")
     }
 
     @Test("control: no-blockquote raw-HTML comment strips the tab identically under both flags")
     func htmlCommentTopLevel_bothFlags_stripTab() throws {
-        for options in [Self.quirkOptions, Self.quirkOptionsPos, Self.specOptions] {
-            let nodes = content(Self.htmlCommentTop, options)
-            let literal = try #require(firstHTMLInline(nodes), "fixture must contain inline HTML (options=\(options.rawValue))")
-            #expect(literal == "<!--\n-->", "options=\(options.rawValue)")
-        }
+        let nodes = content(Self.htmlCommentTop, Self.specOptions)
+        let literal = try #require(firstHTMLInline(nodes), "fixture must contain inline HTML")
+        #expect(literal == "<!--\n-->")
     }
 
     // MARK: - TEXT is stripped either way (the carried tab must not bleed into a text node)
@@ -158,11 +118,9 @@ struct LazyContinuationTabResidualTests {
     @Test("plain text across the tab lazy continuation stays stripped (both flags)")
     func plainTextLazyBlockquoteTab_staysStripped() {
         // "> a" then "\tb" (lazy continuation, leading tab). The residual tab must NOT reach the second
-        // text node under either flag: the inline whitespace-skip strips a leading tab from text flow.
-        for options in [Self.quirkOptions, Self.quirkOptionsPos, Self.specOptions] {
-            let nodes = content(">a\n\tb", options)
-            let texts = nodes.filter { $0.kind == .text }.map { $0.literal }
-            #expect(texts == ["a", "b"], "options=\(options.rawValue)")
-        }
+        // text node: the inline whitespace-skip strips a leading tab from text flow.
+        let nodes = content(">a\n\tb", Self.specOptions)
+        let texts = nodes.filter { $0.kind == .text }.map { $0.literal }
+        #expect(texts == ["a", "b"])
     }
 }

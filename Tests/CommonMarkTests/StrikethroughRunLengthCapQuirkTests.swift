@@ -60,16 +60,13 @@ private func strikethroughCount(_ node: borrowing MarkdownNode) -> Int {
 /// The CommonMark spec has NO such 100-cap: a run of length ≥ 3 is simply not a valid strikethrough
 /// delimiter, so a length-101 run never pairs. This is a pure cmark fixed-buffer artifact.
 ///
-/// This is a `[ref-b4b]` quirk: reproduced ONLY under `.cmarkBugCompatibility` (adopted by the
-/// differential fuzzer). The shipped deliverable (flag OFF) stays spec-correct — a strikethrough forms
+/// The shipped deliverable (flag OFF) stays spec-correct — a strikethrough forms
 /// only for a genuinely valid delimiter run (length 1 or 2) pairing with an equal-length opener, so
-/// every `N ≥ 3` (including the `100·k + L` cases) stays literal. Ordinary short runs pair identically
-/// under both flags.
+/// every `N ≥ 3` (including the `100·k + L` cases) stays literal.
 @Suite("GFM strikethrough delimiter run-length 100-cap quirk")
 struct StrikethroughRunLengthCapQuirkTests {
 
     private static let flagOff: MarkdownDocument.ParseOptions = [.strikethrough]
-    private static let flagOn: MarkdownDocument.ParseOptions = [.strikethrough, .cmarkBugCompatibility]
 
     /// The concatenated inner text of the first `.strikethrough` node, or nil if none forms.
     private func strikeText(_ src: String, options: MarkdownDocument.ParseOptions) -> String? {
@@ -90,59 +87,6 @@ struct StrikethroughRunLengthCapQuirkTests {
     // `)` gives the strikethrough some non-tilde content so a formed node is unambiguous.
     private func input(openerLen: Int, tailCount: Int) -> String {
         "**" + String(repeating: "~", count: openerLen) + ")" + String(repeating: "~", count: tailCount)
-    }
-
-    // MARK: Flag ON — reproduce cmark's 100-cap chunking (forms iff N mod 100 == L)
-
-    @Test("flag ON: L=1, N=101 forms (101 mod 100 == 1); content is `)` + 100 tildes")
-    func flagOnL1N101() throws {
-        let src = input(openerLen: 1, tailCount: 101)
-        let content = try #require(strikeText(src, options: Self.flagOn), "strikethrough must form")
-        #expect(content == ")" + String(repeating: "~", count: 100))
-        #expect(strikeCount(src, options: Self.flagOn) == 1)
-    }
-
-    @Test("flag ON: L=1, N=201 forms (201 mod 100 == 1); content is `)` + 200 tildes")
-    func flagOnL1N201() throws {
-        let src = input(openerLen: 1, tailCount: 201)
-        let content = try #require(strikeText(src, options: Self.flagOn), "strikethrough must form")
-        #expect(content == ")" + String(repeating: "~", count: 200))
-        #expect(strikeCount(src, options: Self.flagOn) == 1)
-    }
-
-    @Test("flag ON: L=2, N=102 forms (102 mod 100 == 2); content is `)` + 100 tildes")
-    func flagOnL2N102() throws {
-        let src = input(openerLen: 2, tailCount: 102)
-        let content = try #require(strikeText(src, options: Self.flagOn), "strikethrough must form")
-        #expect(content == ")" + String(repeating: "~", count: 100))
-        #expect(strikeCount(src, options: Self.flagOn) == 1)
-    }
-
-    @Test("flag ON: the OPENER run is capped too (101-tilde opener → length-1 opener + closer)")
-    func flagOnOpenerChunked() throws {
-        // `**` + 101 `~` + `)` + `~`. The 101-tilde opener chunks into a length-100 literal token (not a
-        // delimiter) + a final length-1 opener, which pairs with the trailing length-1 closer around `)`.
-        let src = "**" + String(repeating: "~", count: 101) + ")~"
-        let content = try #require(strikeText(src, options: Self.flagOn), "strikethrough must form")
-        #expect(content == ")")
-        #expect(strikeCount(src, options: Self.flagOn) == 1)
-    }
-
-    // Non-forming boundaries flag ON (N mod 100 != L): no strikethrough, all literal.
-
-    @Test("flag ON: L=1, N=100 does NOT form (100 mod 100 == 0)")
-    func flagOnL1N100() {
-        #expect(strikeText(input(openerLen: 1, tailCount: 100), options: Self.flagOn) == nil)
-    }
-
-    @Test("flag ON: L=1, N=102 does NOT form (102 mod 100 == 2 != 1)")
-    func flagOnL1N102() {
-        #expect(strikeText(input(openerLen: 1, tailCount: 102), options: Self.flagOn) == nil)
-    }
-
-    @Test("flag ON: L=1, N=200 does NOT form (200 mod 100 == 0)")
-    func flagOnL1N200() {
-        #expect(strikeText(input(openerLen: 1, tailCount: 200), options: Self.flagOn) == nil)
     }
 
     // MARK: Flag OFF — the deliverable stays spec-correct (a length ≥ 3 run is never a delimiter)
@@ -176,11 +120,11 @@ struct StrikethroughRunLengthCapQuirkTests {
         #expect(strikeText("**" + String(repeating: "~", count: 101) + ")~", options: Self.flagOff) == nil)
     }
 
-    // MARK: Ordinary controls — unchanged under BOTH flags
+    // MARK: Ordinary controls
 
     @Test("controls: short runs pair (or not) identically under both flags")
     func ordinaryControls() {
-        for options in [Self.flagOff, Self.flagOn] {
+        for options in [Self.flagOff] {
             // `~x~` and `~~x~~` form a strikethrough with content "x".
             #expect(strikeText("~x~", options: options) == "x")
             #expect(strikeCount("~x~", options: options) == 1)
@@ -197,20 +141,7 @@ struct StrikethroughRunLengthCapQuirkTests {
         }
     }
 
-    // MARK: doubleTilde composition — the cap only sets per-chunk length; the length gate still applies
-
-    @Test("flag ON + doubleTilde: L=2/N=102 forms, but L=1/N=101 does NOT (single tilde rejected)")
-    func flagOnDoubleTildeComposition() throws {
-        // Under `.strikethroughDoubleTilde` only length-2 runs are valid delimiters. The 100-cap changes
-        // only each chunk's length, so the final `N mod 100` token still has to be length 2 to pair:
-        // L=2/N=102 forms (final token length 2), while L=1/N=101 (final token length 1) does not.
-        let options: MarkdownDocument.ParseOptions = [.strikethrough, .strikethroughDoubleTilde, .cmarkBugCompatibility]
-        let formed = try #require(
-            strikeText(input(openerLen: 2, tailCount: 102), options: options),
-            "L=2/N=102 must form under doubleTilde")
-        #expect(formed == ")" + String(repeating: "~", count: 100))
-        #expect(strikeText(input(openerLen: 1, tailCount: 101), options: options) == nil)
-    }
+    // MARK: doubleTilde composition
 
     /// Under `.strikethroughDoubleTilde` only a two-tilde run delimits strikethrough, so a 102-tilde closer never
     /// closes one, where cmark-gfm reads its final two tildes as a closer of their own.

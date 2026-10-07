@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@_spi(CmarkBugCompatibility) @testable import Markdown
+@testable import Markdown
 import XCTest
 
 /// Resolution of a reference link whose text is a setext heading, when the reference definition's label
@@ -19,14 +19,13 @@ import XCTest
 /// the reference unresolved (kept as literal text) only when the reference link was the content of a
 /// SETEXT heading; ATX headings and paragraphs already resolved, and an ASCII-label setext heading
 /// resolved too — so the defect was the NUL-in-definition-label × setext interaction. Resolving is
-/// spec-correct, so both flag states resolve. Position-free compare surface.
+/// spec-correct. Position-free compare surface.
 ///
 /// Expected strings use explicit `\u{…}` escapes for the text content (U+FFFD, U+0001, U+2019) so an
 /// invisible control byte cannot be dropped when authoring the literal.
 class SetextHeadingNulLabelRefResolutionTests: XCTestCase {
-    private func surface(_ bytes: [UInt8], cmarkBugCompatible: Bool) -> String {
-        var options = ParseOptions(rawValue: 0)
-        if cmarkBugCompatible { options.insert(.cmarkBugCompatibility) }
+    private func surface(_ bytes: [UInt8]) -> String {
+        let options = ParseOptions(rawValue: 0)
         return Document(parsing: String(decoding: bytes, as: UTF8.self), options: options)
             .debugDescription(options: [])
     }
@@ -36,8 +35,7 @@ class SetextHeadingNulLabelRefResolutionTests: XCTestCase {
     func testNulLabelRefResolvesInSetextHeading() {
         let bytes: [UInt8] = [0x5b, 0x61, 0x00, 0x5d, 0x3a, 0x6c, 0x0a, 0x5b, 0x61, 0x00, 0x5d, 0x0a, 0x2d]
         let expected = "Document\n└─ Heading level: 2\n   └─ Link destination: \"l\"\n      └─ Text \"a\u{FFFD}\""
-        XCTAssertEqual(expected, surface(bytes, cmarkBugCompatible: true))
-        XCTAssertEqual(expected, surface(bytes, cmarkBugCompatible: false))
+        XCTAssertEqual(expected, surface(bytes))
     }
 
     /// The fuzzer artifact: definition and reference labels are byte-different (a `0xFF` run vs a NUL run)
@@ -51,7 +49,6 @@ class SetextHeadingNulLabelRefResolutionTests: XCTestCase {
             0x5b, 0x62, 0x61, 0x72, 0x27, 0x01, 0x00, 0x00, 0x00, 0x5d, 0x0a, 0x2d,
         ]
         let expected = "Document\n└─ Heading level: 2\n   └─ Link destination: \"l\"\n      └─ Text \"bar\u{2019}\u{0001}\u{FFFD}\u{FFFD}\u{FFFD}\""
-        XCTAssertEqual(expected, surface(bytes, cmarkBugCompatible: true))
-        XCTAssertEqual(expected, surface(bytes, cmarkBugCompatible: false))
+        XCTAssertEqual(expected, surface(bytes))
     }
 }

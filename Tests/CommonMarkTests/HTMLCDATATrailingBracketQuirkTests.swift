@@ -21,15 +21,12 @@ import Testing
 /// the extra `]` (and then the `>`) as content, pushing the assumed closer past end-of-input, so it rejects
 /// the section and the `<` stays literal text.
 ///
-/// This is a `[ref-b4b]` quirk reproduced ONLY under `.cmarkBugCompatibility` (adopted by the differential
-/// fuzzer). The shipped deliverable (flag OFF) stays spec-correct (0.31). Recognition is STRUCTURAL (an
-/// `.htmlInline` node vs literal `.text`), so it is gated on the flag alone; these tests parse without
+/// The shipped deliverable (flag OFF) stays spec-correct (0.31). These tests parse without
 /// `.sourcePosition`.
 @Suite("Inline CDATA cmark trailing-bracket quirk")
 struct HTMLCDATATrailingBracketQuirkTests {
 
     private static let flagOff: MarkdownDocument.ParseOptions = []
-    private static let flagOn: MarkdownDocument.ParseOptions = [.cmarkBugCompatibility]
 
     /// Parse `src` and return the first `.htmlInline` literal (or nil if none) plus the concatenated
     /// `.text` literals of the first paragraph. The leading `o` in every fixture must survive as text, so a
@@ -47,22 +44,6 @@ struct HTMLCDATATrailingBracketQuirkTests {
         return (html, text)
     }
 
-    // MARK: Flag ON — reproduce cmark's rejection of a content run ending in a lone `]`
-
-    @Test("flag ON: `<![CDATA[]]]>` (empty content + trailing `]`) is NOT CDATA; stays literal text")
-    func flagOnEmptyTrailingBracketRejected() throws {
-        let result = try parse("o<![CDATA[]]]>", options: Self.flagOn)
-        #expect(result.html == nil)
-        #expect(result.text.contains("<![CDATA[]]]>"))
-    }
-
-    @Test("flag ON: `<![CDATA[x]]]>` (content ending in `]`) is NOT CDATA; stays literal text")
-    func flagOnContentTrailingBracketRejected() throws {
-        let result = try parse("o<![CDATA[x]]]>", options: Self.flagOn)
-        #expect(result.html == nil)
-        #expect(result.text.contains("<![CDATA[x]]]>"))
-    }
-
     // MARK: Flag OFF — the deliverable stays spec-correct (CommonMark 0.31)
 
     @Test("flag OFF: `<![CDATA[]]]>` (empty content + trailing `]`) IS inline HTML")
@@ -75,15 +56,15 @@ struct HTMLCDATATrailingBracketQuirkTests {
         #expect(try parse("o<![CDATA[x]]]>", options: Self.flagOff).html == "<![CDATA[x]]]>")
     }
 
-    // MARK: Agreeing controls — recognized identically under BOTH flags
+    // MARK: Agreeing controls
 
-    @Test("both flags: `<![CDATA[xx]]>` (normal) is inline HTML", arguments: [Self.flagOff, Self.flagOn])
-    func normalCDATARecognized(options: MarkdownDocument.ParseOptions) throws {
-        #expect(try parse("o<![CDATA[xx]]>", options: options).html == "<![CDATA[xx]]>")
+    @Test("both flags: `<![CDATA[xx]]>` (normal) is inline HTML")
+    func normalCDATARecognized() throws {
+        #expect(try parse("o<![CDATA[xx]]>", options: Self.flagOff).html == "<![CDATA[xx]]>")
     }
 
-    @Test("both flags: `<![CDATA[]]>` (empty content) is inline HTML", arguments: [Self.flagOff, Self.flagOn])
-    func emptyCDATARecognized(options: MarkdownDocument.ParseOptions) throws {
-        #expect(try parse("o<![CDATA[]]>", options: options).html == "<![CDATA[]]>")
+    @Test("both flags: `<![CDATA[]]>` (empty content) is inline HTML")
+    func emptyCDATARecognized() throws {
+        #expect(try parse("o<![CDATA[]]>", options: Self.flagOff).html == "<![CDATA[]]>")
     }
 }

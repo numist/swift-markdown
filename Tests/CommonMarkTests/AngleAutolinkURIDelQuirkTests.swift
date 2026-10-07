@@ -48,15 +48,12 @@ private func collectText(_ node: borrowing MarkdownNode) -> String {
 /// (`_scan_autolink_email`) uses explicit alnum + punctuation classes that never include 0x7F, so ONLY the
 /// URI form diverges.
 ///
-/// This is a `[ref-b4b]` quirk: reproduced ONLY under `.cmarkBugCompatibility` (adopted by the differential
-/// fuzzer). The shipped deliverable (flag OFF) stays spec-correct — DEL is rejected, so the `<…>` stays
-/// literal text. The quirk is STRUCTURAL (a `.link` node appears vs. not), so it is gated on
-/// `.cmarkBugCompatibility` alone with no positions dependency; these tests parse without `.sourcePosition`.
+/// The shipped deliverable (flag OFF) stays spec-correct — DEL is rejected, so the `<…>` stays
+/// literal text. These tests parse without `.sourcePosition`.
 @Suite("Angle URI-autolink DEL (0x7F) quirk")
 struct AngleAutolinkURIDelQuirkTests {
 
     private static let flagOff: MarkdownDocument.ParseOptions = []
-    private static let flagOn: MarkdownDocument.ParseOptions = [.cmarkBugCompatibility]
 
     private func linkURL(
         _ src: String, options: MarkdownDocument.ParseOptions
@@ -72,31 +69,6 @@ struct AngleAutolinkURIDelQuirkTests {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> String in
             collectText(doc.root)
         }
-    }
-
-    // MARK: Flag ON — reproduce cmark admitting DEL into the URI body
-
-    @Test("flag ON: `<tp:\\u{7F}>` is a link (DEL admitted)")
-    func flagOnDelIsLink() throws {
-        let url = try #require(linkURL("<tp:\u{7F}>", options: Self.flagOn), "expected an autolink")
-        #expect(url == "tp:\u{7F}")
-    }
-
-    @Test("flag ON: `<tp:\\u{7F}>` link text carries the DEL")
-    func flagOnDelLinkText() {
-        #expect(text("<tp:\u{7F}>", options: Self.flagOn) == "tp:\u{7F}")
-    }
-
-    @Test("flag ON: `<tp:aDELb>` is a link (DEL mid-body)")
-    func flagOnDelMidBody() throws {
-        let url = try #require(linkURL("<tp:a\u{7F}b>", options: Self.flagOn), "expected an autolink")
-        #expect(url == "tp:a\u{7F}b")
-    }
-
-    @Test("flag ON: `<http://aDEL>` is a link (DEL in URL)")
-    func flagOnDelInHttpURL() throws {
-        let url = try #require(linkURL("<http://a\u{7F}>", options: Self.flagOn), "expected an autolink")
-        #expect(url == "http://a\u{7F}")
     }
 
     // MARK: Flag OFF — the deliverable stays spec-correct (DEL rejected → literal text)
@@ -122,23 +94,20 @@ struct AngleAutolinkURIDelQuirkTests {
         #expect(text("<tp:a\u{7F}b>", options: Self.flagOff) == "<tp:a\u{7F}b>")
     }
 
-    // MARK: Agreeing controls — guard against over-broadening (only 0x7F changes under the flag)
+    // MARK: Agreeing controls — guard against over-broadening
 
     @Test("both flags: `<tp:x>` is a link (ordinary URI)")
     func bothPlainURILinks() {
         #expect(linkURL("<tp:x>", options: Self.flagOff) == "tp:x")
-        #expect(linkURL("<tp:x>", options: Self.flagOn) == "tp:x")
     }
 
     @Test("both flags: `<tp:\\u{1F}>` is NOT a link (0x1F C0 control rejected either way)")
     func bothC0ControlNotLink() {
         #expect(linkURL("<tp:\u{1F}>", options: Self.flagOff) == nil)
-        #expect(linkURL("<tp:\u{1F}>", options: Self.flagOn) == nil)
     }
 
     @Test("both flags: `<tp:\\u{0B}>` is NOT a link (VT control rejected either way)")
     func bothVTControlNotLink() {
         #expect(linkURL("<tp:\u{0B}>", options: Self.flagOff) == nil)
-        #expect(linkURL("<tp:\u{0B}>", options: Self.flagOn) == nil)
     }
 }

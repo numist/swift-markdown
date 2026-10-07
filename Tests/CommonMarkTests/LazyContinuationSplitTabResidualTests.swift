@@ -36,19 +36,11 @@ private func dfsContent(
 /// two spaces at nest-depth 2 (tab starts at column 2 after the consumed prefix -> 4 - 2), one at
 /// depth 3 (column 3 -> 4 - 3).
 ///
-/// The rewrite reproduces this within its zero-copy model by materializing ONLY the leftover spaces into
-/// the arena as one non-source segment interleaved among the source-backed segments (the multi-segment
-/// arena-content extension); the surrounding source stays a borrowed slice, and any following LITERAL
-/// tab is preserved by the source segment that begins just past the split tab.
-///
-/// Flag-ON (`.cmarkBugCompatibility`, the differential-fuzzer surface) reproduces cmark's synthetic
-/// spaces. Flag-OFF (the shipped, spec-correct parser) strips the residual entirely - identical to a
-/// no-block-quote control. This is a strict extension of Quirk E; flag-OFF behaviour is unchanged.
+/// Flag-OFF (the shipped, spec-correct parser) strips the residual entirely - identical to a
+/// no-block-quote control.
 @Suite("Lazy-continuation split-tab synthetic-space residual in code spans")
 struct LazyContinuationSplitTabResidualTests {
 
-    private static let quirkOptions: MarkdownDocument.ParseOptions = [.cmarkBugCompatibility]
-    private static let quirkOptionsPos: MarkdownDocument.ParseOptions = [.sourcePosition, .cmarkBugCompatibility]
     private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition]
 
     private func content(_ src: String, _ options: MarkdownDocument.ParseOptions) -> [(kind: MarkdownNode.Kind, literal: String?)] {
@@ -75,53 +67,6 @@ struct LazyContinuationSplitTabResidualTests {
     private static let noTab = "> > \u{60}x\n>y\u{60}"             // no tab -> just the newline join
     private static let markerSpaceTab = "> > \u{60}x\n> \ty\u{60}" // `> ` consumes to the tab stop cleanly
 
-    // MARK: - Flag ON: the code span KEEPS the synthetic leftover-column spaces (matches cmark)
-
-    @Test("flag-ON: depth-2 lazy split-tab yields three synthetic spaces")
-    func depth2_flagOn() throws {
-        for options in [Self.quirkOptions, Self.quirkOptionsPos] {
-            let literal = try #require(firstCodeInline(content(Self.depth2Spaced, options)),
-                                       "fixture must contain a code span (options=\(options.rawValue))")
-            #expect(literal == "x   y", "options=\(options.rawValue)")
-        }
-    }
-
-    @Test("flag-ON: tight `>>` nest yields the same three synthetic spaces")
-    func depth2Tight_flagOn() throws {
-        for options in [Self.quirkOptions, Self.quirkOptionsPos] {
-            let literal = try #require(firstCodeInline(content(Self.depth2Tight, options)),
-                                       "fixture must contain a code span (options=\(options.rawValue))")
-            #expect(literal == "x   y", "options=\(options.rawValue)")
-        }
-    }
-
-    @Test("flag-ON: leftover-column count is independent of the opener content")
-    func depth2LongOpen_flagOn() throws {
-        for options in [Self.quirkOptions, Self.quirkOptionsPos] {
-            let literal = try #require(firstCodeInline(content(Self.depth2LongOpen, options)),
-                                       "fixture must contain a code span (options=\(options.rawValue))")
-            #expect(literal == "xx   y", "options=\(options.rawValue)")
-        }
-    }
-
-    @Test("flag-ON: only the split tab becomes spaces; a following literal tab stays literal")
-    func depth2SecondTab_flagOn() throws {
-        for options in [Self.quirkOptions, Self.quirkOptionsPos] {
-            let literal = try #require(firstCodeInline(content(Self.depth2SecondTab, options)),
-                                       "fixture must contain a code span (options=\(options.rawValue))")
-            #expect(literal == "x   \ty", "options=\(options.rawValue)")
-        }
-    }
-
-    @Test("flag-ON: depth-3 leftover column count is two synthetic spaces")
-    func depth3_flagOn() throws {
-        for options in [Self.quirkOptions, Self.quirkOptionsPos] {
-            let literal = try #require(firstCodeInline(content(Self.depth3, options)),
-                                       "fixture must contain a code span (options=\(options.rawValue))")
-            #expect(literal == "x  y", "options=\(options.rawValue)")
-        }
-    }
-
     // MARK: - Flag OFF (shipped): the residual is stripped - spec-correct, UNCHANGED
 
     @Test("flag-OFF: every split-tab shape strips to the bare newline join")
@@ -137,23 +82,14 @@ struct LazyContinuationSplitTabResidualTests {
 
     @Test("control: no tab yields just the newline-join space under both flags")
     func noTab_control() throws {
-        for options in [Self.quirkOptions, Self.quirkOptionsPos, Self.specOptions] {
-            let literal = try #require(firstCodeInline(content(Self.noTab, options)),
-                                       "fixture must contain a code span (options=\(options.rawValue))")
-            #expect(literal == "x y", "options=\(options.rawValue)")
-        }
+        let literal = try #require(firstCodeInline(content(Self.noTab, Self.specOptions)),
+                                   "fixture must contain a code span")
+        #expect(literal == "x y")
     }
 
     @Test("control: marker+space consuming the partial keeps a clean literal tab (flag-ON), strips flag-OFF")
     func markerSpaceTab_control() throws {
-        // `> ` consumes exactly to the tab stop, so no tab is split: flag-ON carries the LITERAL tab
-        // (the existing zero-copy #137 carry), flag-OFF strips it. Guards that the split-tab branch does
-        // not perturb the clean-boundary carry.
-        for options in [Self.quirkOptions, Self.quirkOptionsPos] {
-            let literal = try #require(firstCodeInline(content(Self.markerSpaceTab, options)),
-                                       "fixture must contain a code span (options=\(options.rawValue))")
-            #expect(literal == "x \ty", "options=\(options.rawValue)")
-        }
+        // `> ` consumes exactly to the tab stop, so no tab is split: flag-OFF strips it.
         #expect(firstCodeInline(content(Self.markerSpaceTab, Self.specOptions)) == "x y")
     }
 
@@ -167,23 +103,8 @@ struct LazyContinuationSplitTabResidualTests {
     func textFlowSoftBreak_stripsResidual() {
         // `> > x` / `>\ty` - no code span, no backslash. The inline whitespace-skip after a soft break
         // consumes the synthetic residual, so it never reaches a text node (spec-correct in text flow).
-        for options in [Self.quirkOptions, Self.quirkOptionsPos, Self.specOptions] {
-            let nodes = content("> > x\n>\ty", options)
-            #expect(texts(nodes) == ["x", "y"], "options=\(options.rawValue)")
-        }
-    }
-
-    @Test("text flow: a backslash hard break keeps the synthetic residual as literal text (flag-ON)")
-    func textFlowBackslashHardBreak_keepsResidual() {
-        // `> > x\` / `>\ty` - a backslash hard break, after which cmark's `handle_backslash` does NOT skip
-        // the next line's leading whitespace, so the synthetic split-tab residual survives as literal text
-        // (`x`, hard break, `  y`). This is the text-flow sibling of the code-span cases and the regression
-        // guard for a text run STRADDLING the synthetic arena segment into the following source segment.
-        for options in [Self.quirkOptions, Self.quirkOptionsPos] {
-            let nodes = content("> > x\\\n>\ty", options)
-            #expect(texts(nodes) == ["x", "  y"], "options=\(options.rawValue)")
-            #expect(nodes.contains { $0.kind == .lineBreak }, "fixture must contain a hard line break (options=\(options.rawValue))")
-        }
+        let nodes = content("> > x\n>\ty", Self.specOptions)
+        #expect(texts(nodes) == ["x", "y"])
     }
 
     @Test("text flow: flag-OFF strips the backslash-break residual to the first non-space")

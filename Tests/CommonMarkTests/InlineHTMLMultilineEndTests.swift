@@ -18,8 +18,7 @@ import Testing
 /// (`src/inlines.c` ~304) overwrites the node's `end_column` with a raw byte count since the last
 /// interior newline, skipping the `+ 1 + column_offset + block_offset` that `make_literal` applies
 /// to a single-line node's end column - so the end lands on the last byte's own column (the closing
-/// `>`), not the half-open (last-byte + 1). That flat end is the `.cmarkBugCompatibility` quirk,
-/// covered by the `htmlml-*` fuzzer regression pairs (which parse flag-on). This suite is the
+/// `>`), not the half-open (last-byte + 1). This suite is the
 /// flag-off guardrail proving the default (shipped, spec-correct) parser reports the ordinary
 /// half-open end that every single-line node uses. A single-line span carries no interior newline
 /// and is unchanged either way.
@@ -28,7 +27,7 @@ struct InlineHTMLMultilineEndTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// Source positions on, cmark bug-compatibility deliberately OFF (the shipped default).
+    /// Source positions on (the shipped default).
     private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition]
 
     /// The source range of the first `.htmlInline` node when `src` is parsed spec-correct.

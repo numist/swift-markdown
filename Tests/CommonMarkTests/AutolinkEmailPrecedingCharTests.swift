@@ -35,10 +35,7 @@ private func dfsAutolinkNodes(
 @Suite("GFM email autolink preceding-character")
 struct AutolinkEmailPrecedingCharTests {
 
-    /// The differential-fuzzer configuration: GFM autolink on, cmark bug-compatibility on.
-    private static let flagOn: MarkdownDocument.ParseOptions = [.gfmAutolink, .cmarkBugCompatibility]
-
-    /// The shipped configuration: GFM autolink on, bug-compatibility deliberately off.
+    /// The shipped configuration: GFM autolink on.
     private static let flagOff: MarkdownDocument.ParseOptions = [.gfmAutolink]
 
     private func nodes(
@@ -61,15 +58,6 @@ struct AutolinkEmailPrecedingCharTests {
         let ns = nodes(in: "<o@e.e", options: Self.flagOff)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "<", nil, "o@e.e"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
-    }
-
-    @Test("flag-ON: email after a leading `<` keeps Quirk M's empty trailing sibling")
-    func emailAfterAngleFlagOn() {
-        // Same match; flag-ON reproduces cmark's empty `after` node: Text "<" + Link + Text "o@e.e" + Text "".
-        let ns = nodes(in: "<o@e.e", options: Self.flagOn)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, "<", nil, "o@e.e", ""])
         #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 

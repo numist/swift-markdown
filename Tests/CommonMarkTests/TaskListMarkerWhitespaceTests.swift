@@ -17,7 +17,7 @@ import Testing
 /// not just one separator. The rewrite consumed a fixed `[x] ` (checkbox + one space), leaking any
 /// extra whitespace into the content ("- [x]  a" → " a" instead of "a"). A trailing whitespace
 /// separator is still REQUIRED (cmark's `scan_tasklist`): `[x]a` with no space stays literal text.
-/// Spec-aligned `[fix]`, asserted WITHOUT `.cmarkBugCompatibility`.
+/// Spec-aligned `[fix]`.
 @Suite("Task-list marker whitespace")
 struct TaskListMarkerWhitespaceTests {
 

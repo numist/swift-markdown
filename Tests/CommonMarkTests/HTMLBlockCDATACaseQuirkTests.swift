@@ -24,14 +24,11 @@ import Testing
 /// type-5 HTML block for `<![cdata[`, `<![CDAtA[`, … The trailing `[` is a literal bracket (only `[`
 /// reaches `return 5`), so `<![CDATAx` — no second bracket — stays a paragraph in cmark too.
 ///
-/// This is a `[ref-b4b]` quirk reproduced ONLY under `.cmarkBugCompatibility` (adopted by the
-/// differential fuzzer). HTML-block recognition is STRUCTURAL (an `.htmlBlock` node vs a `.paragraph`
-/// of literal text), so it is gated on the flag alone; these tests parse without `.sourcePosition`.
+/// These tests parse without `.sourcePosition`.
 @Suite("HTML block type-5 CDATA case-insensitive start quirk")
 struct HTMLBlockCDATACaseQuirkTests {
 
     private static let flagOff: MarkdownDocument.ParseOptions = []
-    private static let flagOn: MarkdownDocument.ParseOptions = [.cmarkBugCompatibility]
 
     /// Concatenated literal content of `node` and its descendants (DFS). For a single-line HTML block
     /// this is the block body; for a paragraph it is the run of text.
@@ -63,29 +60,6 @@ struct HTMLBlockCDATACaseQuirkTests {
         return (block.0, text)
     }
 
-    // MARK: Flag ON — reproduce cmark's case-insensitive CDATA opener
-
-    @Test("flag ON: `<![CDAtA[` (lowercase t) opens an HTML block")
-    func flagOnMixedCase() throws {
-        let block = try firstBlock("<![CDAtA[", options: Self.flagOn)
-        #expect(block.kind == .htmlBlock)
-        #expect(block.text == "<![CDAtA[")
-    }
-
-    @Test("flag ON: `<![cdata[` (all lowercase) opens an HTML block")
-    func flagOnAllLowercase() throws {
-        let block = try firstBlock("<![cdata[", options: Self.flagOn)
-        #expect(block.kind == .htmlBlock)
-        #expect(block.text == "<![cdata[")
-    }
-
-    @Test("flag ON control: exact `<![CDATA[` still opens an HTML block")
-    func flagOnExact() throws {
-        let block = try firstBlock("<![CDATA[", options: Self.flagOn)
-        #expect(block.kind == .htmlBlock)
-        #expect(block.text == "<![CDATA[")
-    }
-
     // MARK: Flag OFF — the deliverable stays spec-correct (case-sensitive CDATA)
 
     @Test("flag OFF: `<![CDAtA[` (lowercase t) is a paragraph")
@@ -109,41 +83,35 @@ struct HTMLBlockCDATACaseQuirkTests {
         #expect(block.text == "<![CDATA[")
     }
 
-    // MARK: Agreeing controls under BOTH flags (guard against over-broadening)
+    // MARK: Agreeing controls (guard against over-broadening)
 
     /// `<![CDATAx` has no second `[`. cmark's scanner requires the literal trailing `[` (only `[`
     /// reaches `return 5`; anything else backtracks to `return 0`), so it is a paragraph in cmark, and
     /// case-insensitivity must not change that. Verified from `scanners.c` state `yy451` (`if (yych=='[')`).
     @Test("both flags: `<![CDATAx` (no trailing bracket) is a paragraph")
     func noTrailingBracket() throws {
-        for options in [Self.flagOff, Self.flagOn] {
-            let block = try firstBlock("<![CDATAx", options: options)
-            #expect(block.kind == .paragraph)
-            #expect(block.text == "<![CDATAx")
-        }
+        let block = try firstBlock("<![CDATAx", options: Self.flagOff)
+        #expect(block.kind == .paragraph)
+        #expect(block.text == "<![CDATAx")
     }
 
     /// `<!x` (lowercase letter after `<!`) is not a start for any HTML block type: type 4 needs an
-    /// uppercase letter (`'<!' [A-Z]`, a case-SENSITIVE character class, not loosened by the flag) and
-    /// the CDATA branch needs `<![`. So it is a paragraph in cmark under both flags. Verified from
+    /// uppercase letter (`'<!' [A-Z]`, a case-SENSITIVE character class) and
+    /// the CDATA branch needs `<![`. So it is a paragraph in cmark. Verified from
     /// `scanners.c` state `yy297` (lowercase falls through to `return 0`).
     @Test("both flags: `<!x` (lowercase after `<!`) is a paragraph")
     func lowercaseAfterBang() throws {
-        for options in [Self.flagOff, Self.flagOn] {
-            let block = try firstBlock("<!x", options: options)
-            #expect(block.kind == .paragraph)
-            #expect(block.text == "<!x")
-        }
+        let block = try firstBlock("<!x", options: Self.flagOff)
+        #expect(block.kind == .paragraph)
+        #expect(block.text == "<!x")
     }
 
     /// `<!DOCTYPE html>` is a type-4 start (`<!` + uppercase `D`) in cmark and the deliverable alike,
-    /// so it opens an HTML block under both flags — the CDATA change must not disturb type 4.
+    /// so it opens an HTML block — the CDATA change must not disturb type 4.
     @Test("both flags: `<!DOCTYPE html>` opens an HTML block (type 4 unchanged)")
     func type4Declaration() throws {
-        for options in [Self.flagOff, Self.flagOn] {
-            let block = try firstBlock("<!DOCTYPE html>", options: options)
-            #expect(block.kind == .htmlBlock)
-            #expect(block.text == "<!DOCTYPE html>")
-        }
+        let block = try firstBlock("<!DOCTYPE html>", options: Self.flagOff)
+        #expect(block.kind == .htmlBlock)
+        #expect(block.text == "<!DOCTYPE html>")
     }
 }

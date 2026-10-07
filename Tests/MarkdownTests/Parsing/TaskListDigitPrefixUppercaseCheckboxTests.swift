@@ -8,57 +8,33 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@_spi(CmarkBugCompatibility) @testable import Markdown
+@testable import Markdown
 import XCTest
 
-/// An uppercase `[X]` on a childless item's later digit-prefixed line is recognized like `[x]`.
-///
-/// Ground truth is cmark-gfm (flag-ON). cmark's `open_tasklist_item` retries on a childless item's later
-/// line, where its `[0-9]+.` pattern lets the byte after the digits be any character (see
-/// `TaskListDigitPrefixCheckboxTests`). The lowercase `[x]` form already matches; the uppercase `[X]` form
-/// must set `checkbox: [x]` the same way. Position-free compare surface.
 class TaskListDigitPrefixUppercaseCheckboxTests: XCTestCase {
-    private func surface(_ markdown: String, cmarkBugCompatible: Bool = true) -> String {
-        Document(parsing: markdown, options: cmarkBugCompatible ? [.cmarkBugCompatibility] : []).debugDescription(options: [])
-    }
-
-    func testUppercaseCheckboxThenTab() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         └─ Text \"[X]\"", surface("+\n  2- [X]\t"))
-    }
-
-    func testUppercaseCheckboxThenContent() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         └─ Text \"[X] a\"", surface("+\n  2- [X] a"))
+    private func surface(_ markdown: String) -> String {
+        Document(parsing: markdown, options: []).debugDescription(options: [])
     }
 
     /// Flag-off (spec-correct): a paragraph beginning `2-` has no task list item marker (GFM task list
     /// items), so the item has no checkbox and the line stays paragraph text whole, where cmark's
     /// later-line checkbox retry checks the item.
     func testUppercaseCheckboxThenContentFlagOff() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2- [X] a\"", surface("+\n  2- [X] a", cmarkBugCompatible: false))
-    }
-
-    func testMultiDigitUppercaseCheckbox() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         └─ Text \"[X]\"", surface("+\n  12- [X]\t"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2- [X] a\"", surface("+\n  2- [X] a"))
     }
 
     /// Flag-off (spec-correct): a paragraph beginning `12-` has no task list item marker (GFM task list
     /// items), so the item has no checkbox and the line stays paragraph text whole, where cmark's
     /// later-line checkbox retry checks the item.
     func testMultiDigitUppercaseCheckboxFlagOff() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"12- [X]\"", surface("+\n  12- [X]\t", cmarkBugCompatible: false))
-    }
-
-    /// The `[0-9]+.` wildcard consumes one UTF-8 scalar, not one byte (`ext_scanners.c` decodes a
-    /// multi-byte sequence there), so a 2-byte scalar after the digit still leaves the space the pattern needs.
-    func testMultiByteScalarAfterDigit() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         └─ Text \"[x]\"", surface("+\n  2\u{E9} [x] "))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"12- [X]\"", surface("+\n  12- [X]\t"))
     }
 
     /// Flag-off (spec-correct): a paragraph beginning `2é` has no task list item marker (GFM task list
     /// items), so the item has no checkbox and the line stays paragraph text whole, where cmark's
     /// later-line checkbox retry checks the item.
     func testMultiByteScalarAfterDigitFlagOff() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{E9} [x]\"", surface("+\n  2\u{E9} [x] ", cmarkBugCompatible: false))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{E9} [x]\"", surface("+\n  2\u{E9} [x] "))
     }
 
     /// Flag-off (spec-correct): no checkbox; the whole continuation line stays paragraph text.

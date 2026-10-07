@@ -16,14 +16,13 @@ import Testing
 /// A matched continuation line (indented to the block's content column) already sits at that column,
 /// so its surviving content byte-projects onto its true source column - the same as any source-backed
 /// run. This is the deliverable (spec-correct) guardrail that a matched continuation's inline nodes
-/// keep their byte-projected range; it is flag-independent (flag-ON `.cmarkBugCompatibility` produces
-/// the same range for this matched node, since the re-indent maps it to the column it already holds).
+/// keep their byte-projected range.
 @Suite("Arena text-node end in multi-segment content")
 struct ArenaTextEndRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// Source positions on, smart punctuation on (the shipped default; bug-compatibility off).
+    /// Source positions on, smart punctuation on (the shipped default).
     private static let specOptions: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart]
 

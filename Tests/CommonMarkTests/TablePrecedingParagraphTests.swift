@@ -20,7 +20,7 @@ import Testing
 ///
 /// The rewrite detected tables only when the delimiter was a paragraph's SECOND physical line, so a
 /// header preceded by earlier paragraph text (`x\na\n|-`) stayed one paragraph. These assert the split.
-/// Parsed with `.tables` but WITHOUT `.cmarkBugCompatibility`: this is a spec-aligned structural `[fix]`.
+/// Parsed with `.tables`: this is a spec-aligned structural `[fix]`.
 @Suite("GFM table delimiter interrupts a paragraph, taking its last line as header")
 struct TablePrecedingParagraphTests {
 

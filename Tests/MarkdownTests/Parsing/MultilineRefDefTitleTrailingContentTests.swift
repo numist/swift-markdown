@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@_spi(CmarkBugCompatibility) @testable import Markdown
+@testable import Markdown
 import XCTest
 
 /// Block structure for a multiline link reference definition whose title is on a continuation line that
@@ -18,13 +18,11 @@ import XCTest
 /// Ground truth is cmark-gfm. cmark-gfm keeps the continuation-line title on the definition even though
 /// non-whitespace (`![f]`) follows it on that line, so the image resolves WITH the title. That violates the
 /// CommonMark rule that no further character may follow a title (spec example 209; and cmark's own
-/// single-line behavior drops the title when content trails it). So flag-on reproduces cmark's quirk (the
-/// image keeps the title); flag-off stays spec-correct — the title is dropped, `"title"` becomes paragraph
-/// text, and the image has no title. Position-free compare surface.
+/// single-line behavior drops the title when content trails it). The title is dropped, `"title"` becomes
+/// paragraph text, and the image has no title. Position-free compare surface.
 class MultilineRefDefTitleTrailingContentTests: XCTestCase {
-    private func surface(_ bytes: [UInt8], cmarkBugCompatible: Bool) -> String {
-        var options = ParseOptions(rawValue: 0)
-        if cmarkBugCompatible { options.insert(.cmarkBugCompatibility) }
+    private func surface(_ bytes: [UInt8]) -> String {
+        let options = ParseOptions(rawValue: 0)
         return Document(parsing: String(decoding: bytes, as: UTF8.self), options: options)
             .debugDescription(options: [])
     }
@@ -34,11 +32,8 @@ class MultilineRefDefTitleTrailingContentTests: XCTestCase {
     func testNulTitleWithTrailingImage() {
         let bytes: [UInt8] = [0x5b, 0x66, 0x5d, 0x3a, 0x26, 0x0a, 0x22, 0x00, 0x22, 0x21, 0x5b, 0x66, 0x5d]
         XCTAssertEqual(
-            "Document\n└─ Paragraph\n   ├─ Text \"“�”\"\n   └─ Image source: \"&\" title: \"�\"\n      └─ Text \"f\"",
-            surface(bytes, cmarkBugCompatible: true))
-        XCTAssertEqual(
             "Document\n└─ Paragraph\n   ├─ Text \"“�”\"\n   └─ Image source: \"&\"\n      └─ Text \"f\"",
-            surface(bytes, cmarkBugCompatible: false))
+            surface(bytes))
     }
 
     /// The same shape with an ordinary ASCII title, isolating the multiline-trailing-content trigger from
@@ -46,10 +41,7 @@ class MultilineRefDefTitleTrailingContentTests: XCTestCase {
     func testAsciiTitleWithTrailingImage() {
         let bytes: [UInt8] = [0x5b, 0x66, 0x5d, 0x3a, 0x26, 0x0a, 0x22, 0x78, 0x22, 0x21, 0x5b, 0x66, 0x5d]
         XCTAssertEqual(
-            "Document\n└─ Paragraph\n   ├─ Text \"“x”\"\n   └─ Image source: \"&\" title: \"x\"\n      └─ Text \"f\"",
-            surface(bytes, cmarkBugCompatible: true))
-        XCTAssertEqual(
             "Document\n└─ Paragraph\n   ├─ Text \"“x”\"\n   └─ Image source: \"&\"\n      └─ Text \"f\"",
-            surface(bytes, cmarkBugCompatible: false))
+            surface(bytes))
     }
 }

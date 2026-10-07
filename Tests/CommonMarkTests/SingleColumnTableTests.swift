@@ -78,9 +78,7 @@ struct SingleColumnTableTests {
     }
 
     /// The first block of `source`, classified as a paragraph / heading / table (with table shape).
-    /// `.none` when the document has no blocks. Parsed with `.tables` but WITHOUT
-    /// `.cmarkBugCompatibility`: single-column detection is an unconditional structural `[fix]`, so it
-    /// must hold with the deliverable's flags.
+    /// `.none` when the document has no blocks. Parsed with `.tables`.
     private func firstBlock(
         _ source: String,
         options: MarkdownDocument.ParseOptions = [.tables]

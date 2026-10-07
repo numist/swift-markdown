@@ -21,7 +21,7 @@ import Testing
 ///
 /// The rewrite unescaped pipes only in the split cell text (finding #123), not in the preceding-paragraph
 /// text, so a code span there kept its `\|`. This is the code-span facet of the same mechanism. GFM tables
-/// are defined by cmark, so this is unconditional (NOT gated on `.cmarkBugCompatibility`).
+/// are defined by cmark, so this is unconditional.
 @Suite("Table preceding-paragraph code-span pipe unescaping")
 struct TableCodeSpanPipeUnescapeTests {
 

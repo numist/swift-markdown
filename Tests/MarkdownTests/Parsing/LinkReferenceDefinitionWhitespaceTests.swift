@@ -8,15 +8,15 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@_spi(CmarkBugCompatibility) import Markdown
+import Markdown
 import Testing
 
 /// A link reference definition allows whitespace after its colon, between its destination and title, and
 /// after its destination or title on its last line, and line tabulation (U+000B) and form feed (U+000C) are
 /// whitespace characters (spec "Link reference definitions", "Characters and lines").
 struct LinkReferenceDefinitionWhitespaceTests {
-    private func tree(_ markdown: String, options: ParseOptions = []) -> String {
-        Document(parsing: markdown, options: options).debugDescription(options: .printSourceLocations)
+    private func tree(_ markdown: String) -> String {
+        Document(parsing: markdown).debugDescription(options: .printSourceLocations)
     }
 
     /// The title of the first link in the last block of `markdown`.
@@ -87,18 +87,6 @@ struct LinkReferenceDefinitionWhitespaceTests {
             │  └─ Text @1:1-1:9 "[a]: b\u{0B}c"
             └─ Paragraph @3:1-3:4
                └─ Text @3:1-3:4 "[a]"
-            """)
-    }
-
-    @Test func formFeedAfterTitleWithCmarkBugCompatibility() {
-        #expect(tree("[a]: b \"t\"\u{0C}\nc\n\n[a]", options: .cmarkBugCompatibility) == """
-            Document @1:1-4:4
-            ├─ Paragraph @1:1-2:2
-            │  ├─ Text @1:1-1:12 "[a]: b “t”\u{0C}"
-            │  ├─ SoftBreak
-            │  └─ Text @2:1-2:2 "c"
-            └─ Paragraph @4:1-4:4
-               └─ Text @4:1-4:4 "[a]"
             """)
     }
 }

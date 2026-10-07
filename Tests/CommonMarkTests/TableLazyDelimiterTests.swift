@@ -17,7 +17,7 @@ import Testing
 /// So `>o` / `--` (the `--` lazily continues the block-quote paragraph, with no `>`) is a paragraph in
 /// cmark, not a table. When the delimiter line carries the block-quote prefix (`>o` / `>|-`), the table
 /// forms normally. The rewrite detects tables at finalize and previously couldn't see the laziness, so
-/// it wrongly formed a table. Spec-aligned `[fix]`, asserted WITHOUT `.cmarkBugCompatibility`.
+/// it wrongly formed a table. Spec-aligned `[fix]`.
 @Suite("Table lazy-continuation delimiter row")
 struct TableLazyDelimiterTests {
 

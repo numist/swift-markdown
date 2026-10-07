@@ -18,23 +18,9 @@ import CommonMark
 @Suite("Task item whose opening paragraph is only a reference definition")
 struct TaskListDefinitionOnlyOpeningLineTests {
 
-    private static let compatibilityModes: [MarkdownDocument.ParseOptions] = [[], [.cmarkBugCompatibility]]
-
-    @Test("a later paragraph's leading checkbox stays text", arguments: [MarkdownDocument.ParseOptions.cmarkBugCompatibility])
-    func laterCheckboxStaysText(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x]\n", options: mode.union(.tasklist)) == """
-            document
-              list bullet '-' tight
-                tasklist unchecked
-                  paragraph
-                    text "[x]"
-
-            """)
-    }
-
-    @Test("without tasklist, both paragraphs are text", arguments: compatibilityModes)
-    func laterCheckboxWithoutTasklist(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x]\n", options: mode) == """
+    @Test("without tasklist, both paragraphs are text")
+    func laterCheckboxWithoutTasklist() {
+        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x]\n", options: []) == """
             document
               list bullet '-' loose
                 item
@@ -46,21 +32,9 @@ struct TaskListDefinitionOnlyOpeningLineTests {
             """)
     }
 
-    @Test("a later checkbox followed by text stays text", arguments: [MarkdownDocument.ParseOptions.cmarkBugCompatibility])
-    func laterCheckboxWithTextStaysText(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x] foo\n", options: mode.union(.tasklist)) == """
-            document
-              list bullet '-' tight
-                tasklist unchecked
-                  paragraph
-                    text "[x] foo"
-
-            """)
-    }
-
-    @Test("without tasklist, a later checkbox followed by text stays text", arguments: compatibilityModes)
-    func laterCheckboxWithTextWithoutTasklist(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x] foo\n", options: mode) == """
+    @Test("without tasklist, a later checkbox followed by text stays text")
+    func laterCheckboxWithTextWithoutTasklist() {
+        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  [x] foo\n", options: []) == """
             document
               list bullet '-' loose
                 item
@@ -72,21 +46,9 @@ struct TaskListDefinitionOnlyOpeningLineTests {
             """)
     }
 
-    @Test("a later paragraph shorter than a checkbox is kept whole", arguments: [MarkdownDocument.ParseOptions.cmarkBugCompatibility])
-    func laterShortParagraph(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  ab\n", options: mode.union(.tasklist)) == """
-            document
-              list bullet '-' tight
-                tasklist unchecked
-                  paragraph
-                    text "ab"
-
-            """)
-    }
-
-    @Test("without tasklist, a later short paragraph is kept whole", arguments: compatibilityModes)
-    func laterShortParagraphWithoutTasklist(mode: MarkdownDocument.ParseOptions) {
-        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  ab\n", options: mode) == """
+    @Test("without tasklist, a later short paragraph is kept whole")
+    func laterShortParagraphWithoutTasklist() {
+        #expect(CmarkTreeDump.dump("- [ ] [a]: /u\n\n  ab\n", options: []) == """
             document
               list bullet '-' loose
                 item
@@ -94,43 +56,19 @@ struct TaskListDefinitionOnlyOpeningLineTests {
                     text "[ ] [a]: /u"
                   paragraph
                     text "ab"
-
-            """)
-    }
-
-    @Test(
-        "a later checkbox line before a table stays a paragraph",
-        arguments: [MarkdownDocument.ParseOptions.cmarkBugCompatibility], [
-            "- [ ] [a]: /u\n\n  [x]\nh|h\n  -|-\n",     // lazy header line
-            "- [ ] [a]: /u\n\n  [x]\n  h|h\n  -|-\n",   // indented header line
-        ]
-    )
-    func laterCheckboxBeforeTable(mode: MarkdownDocument.ParseOptions, source: String) {
-        #expect(CmarkTreeDump.dump(source, options: mode.union([.tasklist, .tables])) == """
-            document
-              list bullet '-' tight
-                tasklist unchecked
-                  paragraph
-                    text "[x]"
-                  table
-                    table_header
-                      table_cell align=none colspan=1 rowspan=1
-                        text "h"
-                      table_cell align=none colspan=1 rowspan=1
-                        text "h"
 
             """)
     }
 
     @Test(
         "without tasklist, a later checkbox line before a table stays a paragraph",
-        arguments: compatibilityModes, [
+        arguments: [
             "- [ ] [a]: /u\n\n  [x]\nh|h\n  -|-\n",     // lazy header line
             "- [ ] [a]: /u\n\n  [x]\n  h|h\n  -|-\n",   // indented header line
         ]
     )
-    func laterCheckboxBeforeTableWithoutTasklist(mode: MarkdownDocument.ParseOptions, source: String) {
-        #expect(CmarkTreeDump.dump(source, options: mode.union(.tables)) == """
+    func laterCheckboxBeforeTableWithoutTasklist(source: String) {
+        #expect(CmarkTreeDump.dump(source, options: .tables) == """
             document
               list bullet '-' loose
                 item

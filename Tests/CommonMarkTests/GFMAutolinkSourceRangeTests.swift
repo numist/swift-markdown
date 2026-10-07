@@ -12,8 +12,7 @@ import Testing
 import CommonMark
 
 /// Source ranges of GFM autolinks (`.gfmAutolink`): a bare URL, a `www.` domain, and an email address. The link and
-/// its text span the matched bytes. With `.cmarkBugCompatibility` the empty text nodes cmark-gfm leaves beside an
-/// autolink are kept, each with an empty range where it sits. Columns are 1-based UTF-8 byte offsets and each end is
+/// its text span the matched bytes. Columns are 1-based UTF-8 byte offsets and each end is
 /// half-open.
 @Suite("Source ranges of GFM autolinks")
 struct GFMAutolinkSourceRangeTests {
@@ -63,36 +62,6 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// The empty text before the URL sits where the URL starts. cmark-gfm gives it the scheme's columns,
-    /// `@1:1-1:5`, and leaves the link without a range.
-    @Test("with cmark bug compatibility, the empty text before a URL autolink has an empty range")
-    func emptyTextBeforeURL() {
-        #expect(tree("http://a", options: Self.opts.union(.cmarkBugCompatibility)) == """
-            document @1:1-1:9
-              paragraph @1:1-1:9
-                text "" @1:1-1:1
-                link "http://a" "" @1:1-1:9
-                  text "http://a" @1:1-1:9
-
-            """)
-    }
-
-    /// The empty text before the address sits where the address starts, and the empty text after it where it
-    /// ends. cmark-gfm gives the first `@1:1-1:7`, and leaves the link, its text and the empty text after it
-    /// without a range.
-    @Test("with cmark bug compatibility, the empty texts beside an email autolink have empty ranges")
-    func emptyTextsBesideEmail() {
-        #expect(tree("a@b.co", options: Self.opts.union(.cmarkBugCompatibility)) == """
-            document @1:1-1:7
-              paragraph @1:1-1:7
-                text "" @1:1-1:1
-                link "mailto:a@b.co" "" @1:1-1:7
-                  text "a@b.co" @1:1-1:7
-                text "" @1:7-1:7
-
-            """)
-    }
-
     /// A NUL makes the paragraph's text a copy with the NUL replaced by U+FFFD; the address is still placed on its
     /// source bytes, and the U+FFFD before it on the NUL.
     @Test("an email autolink after a NUL spans the address")
@@ -116,36 +85,6 @@ struct GFMAutolinkSourceRangeTests {
                 text "\u{2019}" @1:1-1:2
                 link "mailto:a@b.co" "" @1:2-1:8
                   text "a@b.co" @1:2-1:8
-
-            """)
-    }
-
-    @Test("with cmark bug compatibility, the text after an email autolink spans a NUL")
-    func nulAfterEmail() {
-        #expect(tree("a@b.co\u{0}", options: Self.opts.union(.cmarkBugCompatibility)) == """
-            document @1:1-1:8
-              paragraph @1:1-1:8
-                text "" @1:1-1:1
-                link "mailto:a@b.co" "" @1:1-1:7
-                  text "a@b.co" @1:1-1:7
-                text "\u{FFFD}" @1:7-1:8
-
-            """)
-    }
-
-    /// With `.cmarkBugCompatibility` and footnotes, a footnote-shaped bracket whose `]` is on the next line collapses
-    /// into reconstructed text with no source image of its own, so neither the address found in it nor the text
-    /// before the address can be placed. That text keeps where the bracket starts, as an empty range; the link and the
-    /// text after it have no range, as in cmark-gfm.
-    @Test("with cmark bug compatibility, the text before an email in a collapsed footnote bracket keeps its start")
-    func emailInCollapsedFootnoteBracket() {
-        #expect(tree("![^b@.B\\\n]", options: Self.opts.union([.footnotes, .cmarkBugCompatibility])) == """
-            document @1:1-2:2
-              paragraph @1:1-2:2
-                text "![^" @1:1-1:1
-                link "mailto:b@.B" "" @-
-                  text "b@.B" @-
-                text "\\\\\\n]" @-
 
             """)
     }

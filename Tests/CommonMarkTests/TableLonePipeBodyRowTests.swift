@@ -17,8 +17,7 @@ import Testing
 /// so `n_columns == 0` and the row does not match. The open table therefore closes and the line is
 /// re-dispatched as a fresh block (a paragraph). The rewrite detects tables at paragraph-finalize
 /// and autocompleted the accumulated lone-pipe line into a spurious one-empty-cell body row; this
-/// suite pins cmark's table-termination. Spec-aligned `[fix]`, asserted WITHOUT
-/// `.cmarkBugCompatibility`.
+/// suite pins cmark's table-termination. Spec-aligned `[fix]`.
 @Suite("Lone-pipe table body row terminates the table")
 struct TableLonePipeBodyRowTests {
 

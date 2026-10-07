@@ -28,15 +28,11 @@ private func dfsAutolinkNodes(
 /// autolink needs a valid domain: segments of alphanumerics, `_` and `-` separated by periods, with at
 /// least one period and no underscore in the last two segments. An extended email autolink's domain is
 /// one or more segments of alphanumerics, `-` and `_` separated by periods, with at least one period,
-/// whose last character is neither `-` nor `_`; a final period is not part of the address. Tests under
-/// `flagOn` pin `.cmarkBugCompatibility`.
+/// whose last character is neither `-` nor `_`; a final period is not part of the address.
 @Suite("GFM autolink domain rules")
 struct AutolinkDomainRulesTests {
 
-    /// The differential-fuzzer configuration: GFM autolink on, cmark bug-compatibility on.
-    private static let flagOn: MarkdownDocument.ParseOptions = [.gfmAutolink, .cmarkBugCompatibility]
-
-    /// The shipped configuration: GFM autolink on, bug-compatibility deliberately off.
+    /// The shipped configuration: GFM autolink on.
     private static let flagOff: MarkdownDocument.ParseOptions = [.gfmAutolink]
 
     private func nodes(
@@ -58,16 +54,6 @@ struct AutolinkDomainRulesTests {
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "http://e"])
         #expect(ns.compactMap(\.url) == [])
-    }
-
-    @Test("scheme URL with a dotless domain keeps Quirk M's empty leading sibling (flag-ON)")
-    func schemeURLNoDotAutolinksFlagOn() {
-        // Same match; flag-ON reproduces cmark's empty `before` node left by `cmark_node_unput` rewinding
-        // the scheme letters out of the (scheme-only) preceding text node.
-        let ns = nodes(in: "http://e", options: Self.flagOn)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "", nil, "http://e"])
-        #expect(ns.compactMap(\.url) == ["http://e"])
     }
 
     @Test("guard: scheme URL with a dot still autolinks")
@@ -289,19 +275,16 @@ struct AutolinkDomainRulesTests {
     // Like the `://`-scheme form, cmark's `www_match` (`extensions/autolink.c`) gates on
     // `check_domain(data, size, allow_short: 0)` before scanning the URL body, so a `www.` domain
     // bearing an underscore in either of its last two `.`-separated labels is rejected outright. The
-    // rejection is GFM-spec-correct (a host name may not contain an underscore), so it applies in both
-    // modes - unlike the bare-`www` over-trim quirk, which is flag-ON only.
+    // rejection is GFM-spec-correct (a host name may not contain an underscore).
 
     @Test("www domain with an underscore in its last label does not autolink (both modes)")
     func wwwUnderscoreLastLabelNoAutolink() {
         // `www.a_b x` - the domain's last two labels are `www` and `a_b`; `a_b` has an underscore, so
         // cmark's `check_domain` returns 0 and the whole run stays plain text.
-        for options in [Self.flagOff, Self.flagOn] {
-            let ns = nodes(in: "www.a_b x", options: options)
-            #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-            #expect(ns.map(\.text) == [nil, nil, "www.a_b x"])
-            #expect(ns.compactMap(\.url) == [])
-        }
+        let ns = nodes(in: "www.a_b x", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "www.a_b x"])
+        #expect(ns.compactMap(\.url) == [])
     }
 
     @Test("guard: www domain with an underscore outside its last two labels still autolinks (both modes)")
@@ -309,12 +292,10 @@ struct AutolinkDomainRulesTests {
         // `www.a_b.c.d x` - the underscore is in `a_b`, which is NOT among the last two labels (`c`, `d`),
         // so `check_domain` accepts the domain and the URL links. The boundary between this and the
         // rejected case above is exactly cmark's last-two-labels rule.
-        for options in [Self.flagOff, Self.flagOn] {
-            let ns = nodes(in: "www.a_b.c.d x", options: options)
-            #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
-            #expect(ns.map(\.text) == [nil, nil, nil, "www.a_b.c.d", " x"])
-            #expect(ns.compactMap(\.url) == ["http://www.a_b.c.d"])
-        }
+        let ns = nodes(in: "www.a_b.c.d x", options: Self.flagOff)
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "www.a_b.c.d", " x"])
+        #expect(ns.compactMap(\.url) == ["http://www.a_b.c.d"])
     }
 
     // MARK: - Divergence 7: the domain scan stops inside a non-ASCII codepoint
@@ -331,14 +312,8 @@ struct AutolinkDomainRulesTests {
     @Test("www domain beginning with an invalid byte repaired to U+FFFD")
     func wwwInvalidByteDomainAutolinks() {
         // `www.` + 0xFF + `__` - the lone 0xFF is invalid UTF-8, repaired to U+FFFD as the harness
-        // decodes it. cmark links `www.�`: the domain scan stops within the U+FFFD, and `autolink_delim`
-        // peels the trailing `__`. The U+FFFD's bytes appear verbatim in both the destination and the
-        // link text.
+        // decodes it.
         let src = String(decoding: [0x77, 0x77, 0x77, 0x2e, 0xff, 0x5f, 0x5f] as [UInt8], as: UTF8.self)
-        let ns = nodes(in: src, options: Self.flagOn)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "www.\u{FFFD}", "__"])
-        #expect(ns.compactMap(\.url) == ["http://www.\u{FFFD}"])
         // U+FFFD is a symbol, not an alphanumeric, so no valid domain follows `www.`.
         let shipped = nodes(in: src, options: Self.flagOff)
         #expect(shipped.map(\.kind) == [.document, .paragraph, .text])
@@ -347,13 +322,6 @@ struct AutolinkDomainRulesTests {
 
     @Test("www domain with a non-ASCII letter")
     func wwwValidMultibyteDomainAutolinks() {
-        // `www.éx y` (é = U+00E9, valid two-byte UTF-8) - the domain scan stops within `é`, the URL body
-        // links `www.éx` (up to the space), and ` y` is left as trailing text. Rejecting continuation
-        // bytes must not regress ordinary non-ASCII domains.
-        let ns = nodes(in: "www.\u{E9}x y", options: Self.flagOn)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "www.\u{E9}x", " y"])
-        #expect(ns.compactMap(\.url) == ["http://www.\u{E9}x"])
         // `éx` is alphanumeric but holds no period, so it is no valid domain; with one it links.
         let shipped = nodes(in: "www.\u{E9}x y", options: Self.flagOff)
         #expect(shipped.map(\.kind) == [.document, .paragraph, .text])
@@ -364,18 +332,8 @@ struct AutolinkDomainRulesTests {
 
     @Test("scheme URL whose domain holds a U+FFFD before an underscore")
     func schemeURLNonASCIIThenUnderscoreAutolinks() {
-        // `http://a` + 0xFF (repaired to U+FFFD) + `_b` - drives `checkDomainAccepted` through the
-        // `://`-scheme call site (`schemeURLDomainAccepted`), which shares the same continuation-byte
-        // fix. cmark's `check_domain` breaks inside the U+FFFD (its `is_valid_hostchar` fails on the
-        // continuation byte) before reaching the `_`, so the underscore-in-last-label rule never fires;
-        // the forward URL scan then reclaims `_b` and `autolink_delim` keeps it (the last char `b` is not
-        // trailing punctuation), linking the whole `http://a�_b`. Without the fix the domain scan would
-        // reach the `_` and wrongly reject the URL. `allow_short` means the scheme form needs no dot.
+        // `http://a` + 0xFF (repaired to U+FFFD) + `_b`.
         let src = String(decoding: [0x68, 0x74, 0x74, 0x70, 0x3a, 0x2f, 0x2f, 0x61, 0xff, 0x5f, 0x62] as [UInt8], as: UTF8.self)
-        let ns = nodes(in: src, options: Self.flagOn)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "", nil, "http://a\u{FFFD}_b"])
-        #expect(ns.compactMap(\.url) == ["http://a\u{FFFD}_b"])
         // The domain ends at the symbol U+FFFD, leaving `a`, which holds no period.
         let shipped = nodes(in: src, options: Self.flagOff)
         #expect(shipped.map(\.kind) == [.document, .paragraph, .text])

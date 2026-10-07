@@ -8,12 +8,12 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@_spi(CmarkBugCompatibility) import Markdown
+import Markdown
 import Testing
 
 /// Coverage for the `^[…](attrs)` extended-attribute inline form scanned over multi-segment content,
 /// exercised through the exact comparison surface the differential fuzzer uses
-/// (`Document.debugDescription(options: .printSourceLocations)` with `.cmarkBugCompatibility`).
+/// (`Document.debugDescription(options: .printSourceLocations)`).
 ///
 /// A block-quote / list body whose `(attrs)` spans lines is parsed as multi-segment content: the
 /// interior straddles the interned-newline segment joining the two source lines. cmark reads its
@@ -25,27 +25,12 @@ import Testing
 @Suite("Multi-segment attribute surface")
 struct MultiSegmentAttributeSurfaceTests {
 
-    private static func surface(_ markdown: String, options: ParseOptions = [.cmarkBugCompatibility]) -> String {
-        Document(parsing: markdown, options: options)
+    private static func surface(_ markdown: String) -> String {
+        Document(parsing: markdown)
             .debugDescription(options: .printSourceLocations)
     }
 
-    @Test(arguments: [
-        ("> ^[a](\n> b)", "\nb"),
-        ("> ^[hi](\n> x)", "\nx"),
-        ("- ^[a](\n  b)", "\nb"),
-        (">^[a](b\n>c)", "b\nc"),
-    ])
-    func crossLineAttributeForms(_ markdown: String, _ expectedAttributes: String) {
-        let rendered = Self.surface(markdown)
-        #expect(!rendered.isEmpty)
-        // The `(attrs)` interior spans the line join; the form still resolves to an attribute whose
-        // string carries the interior newline (reading it forces the arena materialization).
-        #expect(rendered.contains("InlineAttributes"))
-        #expect(rendered.contains("attributes: `\(expectedAttributes)`"))
-    }
-
-    /// The same cross-line forms with `.cmarkBugCompatibility` off: the attribute spans the line join and
+    /// Cross-line forms: the attribute spans the line join and
     /// keeps the interior newline, as cmark-gfm's does.
     @Test(arguments: [
         ("> ^[a](\n> b)", """
@@ -83,42 +68,7 @@ struct MultiSegmentAttributeSurfaceTests {
             """),
     ])
     func crossLineAttributeFormsFlagOff(_ markdown: String, _ expected: String) {
-        #expect(Self.surface(markdown, options: []) == expected)
-    }
-
-    /// A trailing `[label]` following an `^[](attrs)` attribute is consumed by cmark's `link_label`,
-    /// which scans a flat buffer and does not rewind on a match — so the bracket pair produces no output.
-    /// When the content is multi-segment (here a block-quote body, whose stripped `>` prefixes leave the
-    /// lines non-contiguous) the trailing label can straddle a soft-break join, landing the closing `]` in
-    /// a later segment that a contiguous-only scan never reaches — the scan must still cross the join and
-    /// consume the pair.
-    @Test(arguments: [ParseOptions.cmarkBugCompatibility])
-    func trailingBracketAfterAttributeConsumed(_ options: ParseOptions) {
-        // Single-line control: contiguous content, the trailing `[y]` is consumed.
-        #expect(Document(parsing: "^[](x)[y]", options: options).debugDescription() == """
-            Document
-            └─ Paragraph
-               └─ InlineAttributes attributes: `x`
-            """)
-        // Multi-segment: the trailing `[\nc]` straddles the block-quote line join, so the closing `]` sits
-        // in a later segment; the pair must still be consumed, leaving no literal `[` / `]` text.
-        #expect(Document(parsing: ">a^[](x)[\n>c]", options: options).debugDescription() == """
-            Document
-            └─ BlockQuote
-               └─ Paragraph
-                  ├─ Text "a"
-                  └─ InlineAttributes attributes: `x`
-            """)
-        // Multi-segment reference form: the join-straddling label `[a\nb]` normalizes to `a b`, resolves
-        // against the `^[a b]:` attribute reference, and overwrites the inline `(ignore)` attributes —
-        // cmark's `link_label` crosses the join to match the definition (`handle_close_bracket_attribute`).
-        #expect(Document(parsing: "^[a b]: color: red\n\n>x^[](ignore)[a\n>b]", options: options).debugDescription() == """
-            Document
-            └─ BlockQuote
-               └─ Paragraph
-                  ├─ Text "x"
-                  └─ InlineAttributes attributes: `color: red`
-            """)
+        #expect(Self.surface(markdown) == expected)
     }
 
     /// An inline attribute's `(attributes)` form completes it, so a following `[label]` is not part of it and

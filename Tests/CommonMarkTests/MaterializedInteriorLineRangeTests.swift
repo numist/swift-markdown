@@ -37,7 +37,6 @@ struct MaterializedInteriorLineRangeTests {
     // `segmentsCouldMatchMatcher` flatten a pipe-bearing paragraph into arena content (the path under
     // test). Without it the paragraph stays multi-segment source and the arena branch is never exercised.
     private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition, .tables, .strikethrough, .tasklist, .tableSpans]
-    private static let quirkOptions: MarkdownDocument.ParseOptions = [.sourcePosition, .tables, .strikethrough, .tasklist, .tableSpans, .cmarkBugCompatibility]
 
     private func ranges(
         _ source: String, options: MarkdownDocument.ParseOptions
@@ -72,26 +71,4 @@ struct MaterializedInteriorLineRangeTests {
         #expect(texts[2] == Pos(line: 3, column: 2)..<Pos(line: 3, column: 5))   // "baz" (spec: true column)
     }
 
-    /// Flag-ON (differential-fuzzer configuration). The `pipemid-*` oracle values (minted from cmark-gfm):
-    /// each interior contiguous-line run keeps its own physical line's position; only the final
-    /// re-indented line moves to column 1.
-    @Test("flag-ON: interior-line pipe stamps on its own line, final line re-indents to col 1")
-    func quirkInteriorPipe() throws {
-        let texts = ranges("t\n|\n b", options: Self.quirkOptions).filter { $0.kind == .text }.map(\.range)
-        try #require(texts.count == 3)
-        #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 2))   // "t"
-        #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 2))   // "|" (interior line, own line)
-        #expect(texts[2] == Pos(line: 3, column: 1)..<Pos(line: 3, column: 2))   // "b" re-indented to col 1
-    }
-
-    /// Flag-ON, pipe on line 1 (failed table candidate, still materialized): the interior `bar` stamps on
-    /// line 2, the final re-indented `baz` moves to column 1.
-    @Test("flag-ON: interior line after a line-1 pipe stamps on its own line")
-    func quirkInteriorAfterLine1Pipe() throws {
-        let texts = ranges("|foo\nbar\n baz", options: Self.quirkOptions).filter { $0.kind == .text }.map(\.range)
-        try #require(texts.count == 3)
-        #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 5))   // "|foo"
-        #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 4))   // "bar" on line 2
-        #expect(texts[2] == Pos(line: 3, column: 1)..<Pos(line: 3, column: 4))   // "baz" re-indented to col 1
-    }
 }

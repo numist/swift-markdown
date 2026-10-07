@@ -17,8 +17,7 @@ import Testing
 /// reported column by its byte count (2 for `é`/`U+00E9`, 3 for `€`/`U+20AC`, 4 for `😀`/`U+1F600`,
 /// 3 for a combining sequence `e` + `U+0301`, 3 for `U+FFFD`) while a TAB counts as one byte (no
 /// expansion). Every asserted value is the flag-OFF surface (`dump --new-off`, the shipped parser
-/// with `[.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]` and NO
-/// `.cmarkBugCompatibility`); each was confirmed against `dump --ref` (cmark-gfm) and, where the two
+/// with `[.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]`); each was confirmed against `dump --ref` (cmark-gfm) and, where the two
 /// disagree, the flag-OFF value is spec-correct by byte-offset reasoning and cmark's is a quirk
 /// (marked `// cmark differs`).
 @Suite("Block source positions — Unicode encodings")
@@ -297,7 +296,7 @@ struct BlockPositionEncodingTests {
         // line-2 column 1, so the deliverable stamps "b" @2:1-2:2 — the true byte position.
         // cmark differs: reports "b" @2:3-2:4, re-indenting the continuation to the blockquote's
         // content column (a phantom column past line 2's single byte) — quirk E (paragraph
-        // continuation-line re-indent), reproduced only under .cmarkBugCompatibility.
+        // continuation-line re-indent).
         let out = parse("> a\nb")
         try #require(shape(out) == ["document", "blockQuote", "paragraph", "text", "softBreak", "text"])
         #expect(out[3].range == r(1, 3, 1, 4))   // "a"
@@ -388,8 +387,7 @@ struct BlockPositionEncodingTests {
     func listLazyContinuation() throws {
         // "- a\nb": line 2 "b" is a LAZY continuation (indented below the item content column). The
         // deliverable stamps it at its true byte position @2:1-2:2. cmark differs: reports "b"
-        // @2:3-2:4, re-indenting to the list content column — quirk E, reproduced only under
-        // .cmarkBugCompatibility.
+        // @2:3-2:4, re-indenting to the list content column — quirk E.
         let out = parse("- a\nb")
         try #require(shape(out) == ["document", "list", "item", "paragraph", "text", "softBreak", "text"])
         #expect(out[4].range == r(1, 3, 1, 4))   // "a"

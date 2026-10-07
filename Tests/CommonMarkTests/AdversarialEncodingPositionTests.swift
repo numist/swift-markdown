@@ -17,7 +17,7 @@ import Testing
 // `sourceRange.upperBound` is the offset just PAST the node's last byte (half-open). Every
 // asserted position was taken from the deliverable oracle
 //   dump --new-off <bytes + 0x00 options byte>
-// which parses with exactly this suite's option set (see `opts`) and no `.cmarkBugCompatibility`.
+// which parses with exactly this suite's option set (see `opts`).
 // Every case here also equals `dump --ref` (cmark-gfm): the byte accounting for multi-codepoint
 // graphemes, combining marks, and U+FFFD repair matches the reference on all of them, so there are
 // no `// cmark differs:` sites in this suite.
@@ -32,8 +32,7 @@ struct AdversarialEncodingPositionTests {
 
     /// The deliverable option set. Identical to what `dump --new-off` applies for a `0x00` options
     /// byte (`MarkupParser` always enables tables/strikethrough/tasklist/tableSpans + source
-    /// positions, and smart punctuation unless disabled) and deliberately WITHOUT
-    /// `.cmarkBugCompatibility`, so these positions are the shipped, spec-correct behavior.
+    /// positions, and smart punctuation unless disabled), so these positions are the shipped, spec-correct behavior.
     private static let opts: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]
 
