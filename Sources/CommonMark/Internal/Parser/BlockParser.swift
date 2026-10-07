@@ -56,7 +56,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var content: PendingContent
     }
 
-    /// Either a single source-range slice (`.lazy`, addressable directly into `BlockParser.source` with no copy) or a materialized byte buffer (`.materialized`, populated when the content needed synthesized newlines, came from a tab-expanded line, or was further appended to).
+    /// A single source-range slice (`.lazy`, addressable directly into `BlockParser.source` with no copy), a materialized byte buffer (`.materialized`: arena content re-seeded when an underline line is examined, plus the lines appended to it), or a segment list (`.segments`).
     ///
     /// Single-line paragraphs/headings parsed from the original source stay `.lazy` until `materializePendingContent` emits them as a `Chunk(inSource: true)`.
     ///
@@ -66,7 +66,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case materialized(MaterializedText)
         /// An ordered segment list.
         ///
-        /// Used for code/HTML block bodies: each body line is a zero-copy source `Segment` (or an arena copy for a non-source-mapped, e.g. tab-expanded, line) and each line join is the shared `newlineSegment`. Drained at finalize into a multi-segment `ContentRef` with no source bytes copied. Only produced for nodes that are never inline-parsed (`.codeBlock` / `.htmlBlock`).
+        /// Each line is a zero-copy source `Segment` (or, for a code/HTML block body line that splits a tab, an arena copy) and each line join is the shared `newlineSegment`. Used for code/HTML block bodies, and for paragraph lines that are not contiguous in the source. Drained at finalize into a multi-segment `ContentRef` with no source bytes copied.
         case segments(UniqueArray<Segment>)
     }
 
@@ -1467,7 +1467,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Split a materialized paragraph (a byte buffer with embedded newlines) into a preceding paragraph
-    /// plus a header-only re-seed, each carrying its part of the buffer's run map.
+    /// plus a header-only re-seed, each carrying its part of the buffer's run map. A paragraph is materialized
+    /// when its definitions were restored while an underline line was examined (`processLine` PHASE 2c) and
+    /// its lines were not contiguous in the source.
     private mutating func splitMaterializedHeader(_ node: DocumentStorage.Index, text: consuming MaterializedText) -> PendingLeaf? {
         var lastNewline = -1
         for k in 0..<text.count where text[k] == UInt8(ascii: "\n") {
