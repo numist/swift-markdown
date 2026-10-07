@@ -614,7 +614,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Consolidation runs unconditionally, in every parse mode including inline-only (swift-cmark `src/blocks.c` `cmark_parser_finish` calls `cmark_consolidate_text_nodes` with no option gate), so failed delimiters, entities and escapes merge with their neighbouring text.
     ///
     /// `image` maps the leaf's content back to source when it is one arena chunk with a source image.
-    private mutating func finishInlines(_ leaf: DocumentStorage.Index, image: ContentImage? = nil) {
+    private mutating func finishInlines(_ leaf: DocumentStorage.Index, image: ContentImage?) {
         consolidateTextNodes(leaf)
         // GFM email autolinks are detected over the consolidated inline tree, matching cmark's autolink
         // `postprocess` (which runs after emphasis + `cmark_consolidate_text_nodes`).
@@ -2701,7 +2701,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Run the paragraph finalize-time matchers on a single flat content `Chunk`: GFM table detection, then the paragraph's raw content (`paragraphContent`) - which it queues for inline parsing, or drops the node if nothing remains.
     ///
     /// Factored out so both the flat-content path and the (eligibility-gated) segment path can reuse it. `map` is the content's arena→source run map (empty for source-backed content): when the content was flattened from a non-contiguous segment list it carries per-line source columns, and when NULs were replaced it images each U+FFFD back to its NUL. It is sliced to the surviving `contentChunk` window and stamped on the node so the inline pass can stamp positions.
-    private mutating func runParagraphMatchers(node: DocumentStorage.Index, raw: Chunk, map: [ArenaRun] = []) {
+    private mutating func runParagraphMatchers(node: DocumentStorage.Index, raw: Chunk, map: [ArenaRun]) {
         let trimmed = raw.trimmingWhitespace(using: self)
         if trimmed.isEmpty {
             // A non-blank line can still hold only line tabulations and form feeds, which leave the
