@@ -196,19 +196,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// table).
     var paragraphTablePending: [DocumentStorage.Index: Bool] = [:]
 
-    /// Paragraphs whose leading reference-link definitions the PHASE-2c setext reconstruction
-    /// resolved (and registered) and then RESTORED into the buffer.
-    ///
-    /// cmark drops a ref-def from a paragraph's content buffer the instant its setext-underline scan
-    /// resolves it (`src/blocks.c` `resolve_reference_link_definitions`), so those bytes are gone before any
-    /// GFM table can open over the paragraph. The reconstruction instead keeps them so a later paragraph
-    /// finalize can re-extract them (matching cmark's absorbed-setext-line quirk). That reuse breaks when a
-    /// table forms first: `detectPendingTable` splits the earlier lines into a preceding paragraph WITHOUT
-    /// ref-def extraction (cmark's `try_inserting_table_header_paragraph`, correct for the general case where
-    /// the ref-defs were never resolved), leaking the restored definitions back as a spurious paragraph. The
-    /// split consults this set to drop the same leading definitions cmark had already removed.
-    var reconstructedRefDefParagraphs: Set<DocumentStorage.Index> = []
-
     /// The deepest list that has seen a blank line since its last item boundary.
     ///
     /// When a new item is added to that list (i.e., the blank line was between sibling items), the list gets marked loose. Cleared on each item open after the check, and stays stale (but harmless) when the list closes.
@@ -1428,59 +1415,37 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let trailingSeparator = trimmedLastLength < Int(untrimmedLastLine.length)
             ? segmentByte(untrimmedLastLine, trimmedLastLength)
             : nil
-        if reconstructedRefDefParagraphs.contains(node) {
-            // A PHASE-2c reconstruction restored the leading ref-defs cmark had already resolved off
-            // its buffer (see `reconstructedRefDefParagraphs`). Flatten the preceding lines to strip those
-            // definitions - as cmark did - and emit only the non-def remainder as the preceding paragraph so
-            // the reconstructed underline-line-turned-header doesn't leak them back. When nothing else
-            // preceded the header the table opens with no preceding paragraph.
+        let precedingNode = insertTablePrecedingParagraph(before: node)
+        // Stamp the preceding lines' source span, read through a borrow so `preceding` can then be
+        // consumed by `intern`.
+        if positionsEnabled {
+            let span = segmentsSourceSpan(preceding)
+            storage.setSourceStart(precedingNode, span.start)
+            storage.setSourceEnd(precedingNode, span.end)
+        }
+        // A NUL (feed-time U+FFFD) or a `\|` (cmark's table `unescape_pipes`) in the split-off preceding
+        // lines forces a flatten into one normalized arena chunk with both substitutions applied: this
+        // content bypasses `drainLeaf`, so it is normalized here at its own intern (see `ContentSpan`
+        // for why a segment list can't carry the replacement).
+        let substitutes = segmentsContainNUL(preceding) || segmentsContainEscapedPipe(preceding)
+        let trimsControlWhitespace = segmentsEndInControlWhitespace(preceding)
+        let mayHoldDefinition = segmentsCouldMatchMatcher(preceding)
+        if substitutes || trimsControlWhitespace || mayHoldDefinition {
             var map: [ArenaRun] = []
             let flat = flattenSegments(preceding, map: &map)
-            let trimmed = flat.trimmingWhitespace(using: self)
-            let stripped = paragraphContent(of: node, trimmed: trimmed, trailingSeparator: byte(after: trimmed, in: flat))
-            if !stripped.isEmpty {
-                let precedingNode = insertTablePrecedingParagraph(before: node)
-                let strippedMap = positionsEnabled ? sliceRuns(map, from: stripped.offset - flat.offset, length: stripped.length) : []
-                if positionsEnabled {
-                    let span = sourceSpan(of: strippedMap)
+            if let content = tableSplitParagraphContent(flat.trimmingWhitespace(using: self), in: flat, node: precedingNode, fallbackSeparator: trailingSeparator) {
+                if positionsEnabled, !content.isEmpty {
+                    let span = sourceSpan(of: sliceRuns(map, from: content.offset - flat.offset, length: content.length))
                     storage.setSourceStart(precedingNode, span.start)
                     storage.setSourceEnd(precedingNode, span.end)
                 }
-                enqueueTablePrecedingContent(stripped, map: strippedMap, of: precedingNode)
+                let contentMap = positionsEnabled ? sliceRuns(map, from: content.offset - flat.offset, length: content.length) : []
+                enqueueTablePrecedingContent(content, map: contentMap, of: precedingNode)
+            } else {
+                storage.unlinkChild(precedingNode)
             }
         } else {
-            let precedingNode = insertTablePrecedingParagraph(before: node)
-            // Stamp the preceding lines' source span, read through a borrow so `preceding` can then be
-            // consumed by `intern`.
-            if positionsEnabled {
-                let span = segmentsSourceSpan(preceding)
-                storage.setSourceStart(precedingNode, span.start)
-                storage.setSourceEnd(precedingNode, span.end)
-            }
-            // A NUL (feed-time U+FFFD) or a `\|` (cmark's table `unescape_pipes`) in the split-off preceding
-            // lines forces a flatten into one normalized arena chunk with both substitutions applied: this
-            // content bypasses `drainLeaf`, so it is normalized here at its own intern (see `ContentSpan`
-            // for why a segment list can't carry the replacement).
-            let substitutes = segmentsContainNUL(preceding) || segmentsContainEscapedPipe(preceding)
-            let trimsControlWhitespace = segmentsEndInControlWhitespace(preceding)
-            let mayHoldDefinition = segmentsCouldMatchMatcher(preceding)
-            if substitutes || trimsControlWhitespace || mayHoldDefinition {
-                var map: [ArenaRun] = []
-                let flat = flattenSegments(preceding, map: &map)
-                if let content = tableSplitParagraphContent(flat.trimmingWhitespace(using: self), in: flat, node: precedingNode, fallbackSeparator: trailingSeparator) {
-                    if positionsEnabled, !content.isEmpty {
-                        let span = sourceSpan(of: sliceRuns(map, from: content.offset - flat.offset, length: content.length))
-                        storage.setSourceStart(precedingNode, span.start)
-                        storage.setSourceEnd(precedingNode, span.end)
-                    }
-                    let contentMap = positionsEnabled ? sliceRuns(map, from: content.offset - flat.offset, length: content.length) : []
-                    enqueueTablePrecedingContent(content, map: contentMap, of: precedingNode)
-                } else {
-                    storage.unlinkChild(precedingNode)
-                }
-            } else {
-                pendingInlines.append((precedingNode, storage.intern(preceding)))
-            }
+            pendingInlines.append((precedingNode, storage.intern(preceding)))
         }
         if positionsEnabled {
             storage.setSourceStart(node, segmentsSourceSpan(header).start)
@@ -1674,9 +1639,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 )
                 if continuesParagraph {
                     // These leading definitions are registered already; restoring them below lets the
-                    // paragraph's finalize remove them again, and a table that forms first drops them in its
-                    // split (`detectPendingTable`) rather than leak them back as a paragraph.
-                    reconstructedRefDefParagraphs.insert(para)
+                    // paragraph's finalize, or the split of a table that forms first, remove them again.
                     pending = raw.inSource
                         ? PendingLeaf(node: para, content: .lazy(range: raw.range))
                         : addChunk(raw, map: flatMap, to: para, pending: pending)
