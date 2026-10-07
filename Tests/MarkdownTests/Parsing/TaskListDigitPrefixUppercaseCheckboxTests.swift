@@ -18,8 +18,8 @@ import XCTest
 /// `TaskListDigitPrefixCheckboxTests`). The lowercase `[x]` form already matches; the uppercase `[X]` form
 /// must set `checkbox: [x]` the same way. Position-free compare surface.
 class TaskListDigitPrefixUppercaseCheckboxTests: XCTestCase {
-    private func surface(_ markdown: String) -> String {
-        Document(parsing: markdown, options: [.cmarkBugCompatibility]).debugDescription(options: [])
+    private func surface(_ markdown: String, cmarkBugCompatible: Bool = true) -> String {
+        Document(parsing: markdown, options: cmarkBugCompatible ? [.cmarkBugCompatibility] : []).debugDescription(options: [])
     }
 
     func testUppercaseCheckboxThenTab() {
@@ -30,14 +30,35 @@ class TaskListDigitPrefixUppercaseCheckboxTests: XCTestCase {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         └─ Text \"[X] a\"", surface("+\n  2- [X] a"))
     }
 
+    /// Flag-off (spec-correct): a paragraph beginning `2-` has no task list item marker (GFM task list
+    /// items), so the item has no checkbox and the line stays paragraph text whole, where cmark's
+    /// later-line checkbox retry checks the item.
+    func testUppercaseCheckboxThenContentFlagOff() {
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2- [X] a\"", surface("+\n  2- [X] a", cmarkBugCompatible: false))
+    }
+
     func testMultiDigitUppercaseCheckbox() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         └─ Text \"[X]\"", surface("+\n  12- [X]\t"))
+    }
+
+    /// Flag-off (spec-correct): a paragraph beginning `12-` has no task list item marker (GFM task list
+    /// items), so the item has no checkbox and the line stays paragraph text whole, where cmark's
+    /// later-line checkbox retry checks the item.
+    func testMultiDigitUppercaseCheckboxFlagOff() {
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"12- [X]\"", surface("+\n  12- [X]\t", cmarkBugCompatible: false))
     }
 
     /// The `[0-9]+.` wildcard consumes one UTF-8 scalar, not one byte (`ext_scanners.c` decodes a
     /// multi-byte sequence there), so a 2-byte scalar after the digit still leaves the space the pattern needs.
     func testMultiByteScalarAfterDigit() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         └─ Text \"[x]\"", surface("+\n  2\u{E9} [x] "))
+    }
+
+    /// Flag-off (spec-correct): a paragraph beginning `2é` has no task list item marker (GFM task list
+    /// items), so the item has no checkbox and the line stays paragraph text whole, where cmark's
+    /// later-line checkbox retry checks the item.
+    func testMultiByteScalarAfterDigitFlagOff() {
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{E9} [x]\"", surface("+\n  2\u{E9} [x] ", cmarkBugCompatible: false))
     }
 
     /// Flag-off (spec-correct): no checkbox; the whole continuation line stays paragraph text.
