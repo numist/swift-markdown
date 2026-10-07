@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@_spi(CmarkBugCompatibility) @_spi(Footnotes) @testable import Markdown
+@testable import Markdown
 import XCTest
 
 /// Nested block-quote markers separated by raw tabs, on a line whose tabs reach block parsing unexpanded
@@ -18,7 +18,7 @@ import XCTest
 /// columns: the optional column after `>` fully consumes a tab that ends one column later (a tab starting
 /// at column 3 mod 4) and only partially consumes a wider one. Every tab stop, depth, and marker spacing
 /// must nest and strip indentation exactly as the same line would parse on its own. The expected trees
-/// follow CommonMark's tab-stop rules, which cmark implements here, so both flag states must agree.
+/// follow CommonMark's tab-stop rules, which cmark implements here.
 /// Position-free compare surface.
 class BlockQuoteTabColumnMatrixTests: XCTestCase {
     private static let listFence = "Document\n├─ UnorderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n"
@@ -49,13 +49,9 @@ class BlockQuoteTabColumnMatrixTests: XCTestCase {
         return head + lines.joined(separator: "\n")
     }
 
-    private func assertSurface(_ expected: String, _ markdown: String, options baseOptions: ParseOptions = [], file: StaticString = #filePath, line: UInt = #line) {
-        for flag in [true, false] {
-            var options = baseOptions
-            if flag { options.insert(.cmarkBugCompatibility) }
-            let actual = Document(parsing: markdown, options: options).debugDescription(options: [])
-            XCTAssertEqual(expected, actual, "cmarkBugCompatibility: \(flag), input: \(markdown.debugDescription)", file: file, line: line)
-        }
+    private func assertSurface(_ expected: String, _ markdown: String, file: StaticString = #filePath, line: UInt = #line) {
+        let actual = Document(parsing: markdown).debugDescription(options: [])
+        XCTAssertEqual(expected, actual, "input: \(markdown.debugDescription)", file: file, line: line)
     }
 
     /// `>`×k TAB `>`: the tab after the k-th marker is consumed (fully at k ≡ 3 mod 4, partially
@@ -130,15 +126,5 @@ class BlockQuoteTabColumnMatrixTests: XCTestCase {
         let continued = "Document\n└─ BlockQuote\n   └─ UnorderedList\n      └─ ListItem\n         └─ BlockQuote\n            └─ CodeBlock language: none\n               x"
         assertSurface(continued, "> - > ```\n>\t>x")
         assertSurface(continued, "> - > ```\n> \t>x")
-    }
-
-    /// A footnote definition's continuation indent (four columns) is likewise measured from the column
-    /// the outer prefix reached: a tab left partially consumed by `>` or by a `- ` item's content indent
-    /// spans only to its tab stop, so ` x` after it is three columns in and the definition closes.
-    func testFootnoteContinuationIndentAfterPartiallyConsumedTab() {
-        let reference = "Document\n├─ Paragraph\n│  └─ FootnoteReference label: \"a\" index: 1\n"
-        let definition = "└─ FootnoteDefinition label: \"a\"\n   └─ CodeBlock language: none\n"
-        assertSurface(reference + "├─ BlockQuote\n│  └─ Paragraph\n│     └─ Text \"x\"\n" + definition, "[^a]\n\n> [^a]: ```\n>\t x", options: .footnotes)
-        assertSurface(reference + "├─ UnorderedList\n│  └─ ListItem\n│     └─ Paragraph\n│        └─ Text \"x\"\n" + definition, "[^a]\n\n- [^a]: ```\n \t x", options: .footnotes)
     }
 }

@@ -8,17 +8,12 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@_spi(CmarkBugCompatibility) @_spi(InlineOnly) @testable import Markdown
+@testable import Markdown
 import XCTest
 
-/// Minimized differential-fuzzer artifact; the expected surface is the cmark-gfm reference's output bytes.
+/// Minimized differential-fuzzer artifact.
 /// Input is `[markdown …][option byte]`, split as the fuzzer does. Position-free compare surface.
 class EntityNoncharacterFuzzArtifactTests: XCTestCase {
-    func testFuzzedArtifact() {
-        let (markdown, options) = FuzzRegressionTests.splitInput([38, 35, 54, 53, 53, 51, 52, 59, 0])!
-        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"\u{fffd}\"", Document(parsing: markdown, options: options.union(.cmarkBugCompatibility)).debugDescription(options: []))
-    }
-
     /// `&#65534;` decodes to the noncharacter U+FFFE, a valid code point CommonMark keeps, whereas cmark-gfm
     /// emits an invalid byte that its Swift bridge repairs to U+FFFD.
     func testFuzzedArtifactWithoutBugCompatibility() {

@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@_spi(CmarkBugCompatibility) @_spi(InlineOnly) @testable import Markdown
+@testable import Markdown
 import XCTest
 
 /// Covers the tree dumper's block-directive argument printing without source locations (the
@@ -17,7 +17,6 @@ import XCTest
 class TreeDumperDirectiveArgumentsWithoutPositionsTests: XCTestCase {
     func testDirectiveArgumentsPrintedWithoutPositions() {
         let (markdown, options) = FuzzRegressionTests.splitInput([64, 107, 40, 80, 10, 106, 9])!
-        XCTAssertEqual("Document\n└─ BlockDirective name: \"k\"\n   ├─ Argument text segments:\n   |    \"P\"\n   |    \"j\"", Document(parsing: markdown, options: options.union(.cmarkBugCompatibility)).debugDescription(options: []))
         XCTAssertEqual("Document\n└─ BlockDirective name: \"k\"\n   ├─ Argument text segments:\n   |    \"P\"\n   |    \"j\"", Document(parsing: markdown, options: options).debugDescription(options: []))
     }
 }

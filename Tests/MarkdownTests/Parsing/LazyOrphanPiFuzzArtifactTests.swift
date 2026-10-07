@@ -8,17 +8,12 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@_spi(CmarkBugCompatibility) @_spi(InlineOnly) @testable import Markdown
+@testable import Markdown
 import XCTest
 
-/// Minimized differential-fuzzer artifact; the expected surface is the cmark-gfm reference's output bytes.
+/// Minimized differential-fuzzer artifact.
 /// Input is `[markdown …][option byte]`, split as the fuzzer does. Position-free compare surface.
 class LazyOrphanPiFuzzArtifactTests: XCTestCase {
-    func testFuzzedArtifact() {
-        let (markdown, options) = FuzzRegressionTests.splitInput([45, 32, 62, 250, 60, 63, 10, 32, 32, 50, 0, 32, 91, 120, 93, 32, 0])!
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"\u{fffd}\"\n            ├─ InlineHTML <?\n\u{fffd} \n            └─ Text \"[x]\"", Document(parsing: markdown, options: options.union(.cmarkBugCompatibility)).debugDescription(options: []))
-    }
-
     /// Flag-off (shipped): `<?` without a closing `?>` is not a processing instruction and `[x]` after other
     /// content is not a task checkbox, so both stay text, where cmark-gfm scans an unterminated processing
     /// instruction and checks the item.

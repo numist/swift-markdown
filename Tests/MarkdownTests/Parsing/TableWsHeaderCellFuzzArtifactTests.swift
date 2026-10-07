@@ -8,17 +8,12 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@_spi(CmarkBugCompatibility) @_spi(InlineOnly) @testable import Markdown
+@testable import Markdown
 import XCTest
 
-/// Minimized differential-fuzzer artifact; the expected surface is the cmark-gfm reference's output bytes.
+/// Minimized differential-fuzzer artifact.
 /// Input is `[markdown …][option byte]`, split as the fuzzer does. Position-free compare surface.
 class TableWsHeaderCellFuzzArtifactTests: XCTestCase {
-    func testFuzzedArtifact() {
-        let (markdown, options) = FuzzRegressionTests.splitInput([62, 120, 10, 32, 32, 124, 10, 62, 45, 124, 10])!
-        XCTAssertEqual("Document\n└─ BlockQuote\n   ├─ Paragraph\n   │  └─ Text \"x\"\n   └─ Table alignments: |-|\n      ├─ Head\n      │  └─ Cell\n      └─ Body", Document(parsing: markdown, options: options.union(.cmarkBugCompatibility)).debugDescription(options: []))
-    }
-
     /// Flag-off (shipped) strips a lazy continuation line's leading whitespace like any paragraph line's
     /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the spaces
     /// and opens a table headed by a whitespace cell.
