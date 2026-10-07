@@ -70,6 +70,7 @@ extension BlockParser {
         let smartEnabled = storage.options.contains(.smart)
 
         htmlCloserMisses = HTMLCloserMisses()
+        characterReferenceSources.removeAll(keepingCapacity: true)
 
         while cursor < endOffset {
             let byte = content[cursor]
@@ -172,6 +173,10 @@ extension BlockParser {
                     // Convert the scanner-returned buffer offset back to a virtual content offset via the window base (identity for single-segment content).
                     let afterSemi = cursor + (entity.afterSemi - window.offset)
                     stampInline(textIdx, cursor, afterSemi, content: content)
+                    if positionsEnabled {
+                        let source = storage.sourceRanges[textIdx]
+                        characterReferenceSources.append((decoded.range, Int(source.start)..<Int(source.end)))
+                    }
                     cursor = afterSemi
                     pendingTextStart = cursor
                     continue
@@ -3106,21 +3111,11 @@ extension BlockParser {
             storage[current].data = .literal(beforeRef)
             let emailRef = subContentRef(of: ref, from: auto.urlStart, to: auto.urlEnd)
             let email = positionsEnabled ? sourceSpan(of: emailRef, image: image) : nil
-            if positionsEnabled {
-                let currentStart = storage.sourceRanges[current].start
-                storage.sourceRanges[current] = .unset
-                if let email {
-                    storage.setSourceStart(current, currentStart >= 0 ? min(currentStart, email.start) : email.start)
-                    storage.setSourceEnd(current, email.start)
-                } else if beforeRef.totalLength > 0, let before = sourceSpan(of: beforeRef, image: image) {
-                    // An address with no source image (in reconstructed text, or ending in an entity) leaves the run before it placed by its own bytes.
-                    storage.setSourceStart(current, before.start)
-                    storage.setSourceEnd(current, before.end)
-                } else if currentStart >= 0 {
-                    // Neither the address nor the run before it has a source image, so the run keeps only where it starts.
-                    storage.setSourceStart(current, currentStart)
-                    storage.setSourceEnd(current, currentStart)
-                }
+            if let email {
+                let currentStart = Int(storage.sourceRanges[current].start)
+                precondition(currentStart >= 0, "a text run is placed before an address splits it")
+                storage.setSourceStart(current, min(currentStart, email.start))
+                storage.setSourceEnd(current, email.start)
             }
 
             // The link node and its single text child (the visible email address).
@@ -3255,23 +3250,45 @@ extension BlockParser {
         return storage.intern(Chunk(offset: offset, length: buf.count, inSource: false))
     }
 
-    /// The source extent of the non-empty `ref`'s bytes: from its first byte to just past its last, each resolved through `sourceOffset(of:local:image:)`, or `nil` when either end has no source image.
-    private func sourceSpan(of ref: ContentRef, image: ContentImage?) -> (start: Int, end: Int)? {
+    /// The source extent of the non-empty `ref`'s bytes: from the start of the source its first byte stands for to
+    /// the end of the source its last byte stands for (`sourceRange(of:local:image:)`).
+    private func sourceSpan(of ref: ContentRef, image: ContentImage?) -> (start: Int, end: Int) {
         precondition(ref.count > 0 && ref.totalLength > 0, "an email address holds at least one byte")
         let firstSeg = storage.segments[Int(ref.first)]
         let lastSeg = storage.segments[Int(ref.first) + Int(ref.count) - 1]
-        guard let first = sourceOffset(of: firstSeg, local: 0, image: image),
-              let last = sourceOffset(of: lastSeg, local: Int(lastSeg.length) - 1, image: image) else {
-            return nil
-        }
-        return (first, last + 1)
+        let first = sourceRange(of: firstSeg, local: 0, image: image)
+        let last = sourceRange(of: lastSeg, local: Int(lastSeg.length) - 1, image: image)
+        return (first.lowerBound, last.upperBound)
     }
 
-    /// The source offset of byte `local` of `seg`: a source segment's own byte, or an arena byte of the leaf's content imaged by `image`.
-    private func sourceOffset(of seg: Segment, local: Int, image: ContentImage?) -> Int? {
+    /// The source bytes that byte `local` of `seg`, an address's, stands for: a source segment's own byte, an arena
+    /// byte of the leaf's content imaged by `image`, or the whole character reference a decoded byte comes from.
+    /// Every other arena text is punctuation no address holds.
+    private func sourceRange(of seg: Segment, local: Int, image: ContentImage?) -> Range<Int> {
         if seg.inSource {
-            return Int(seg.offset) + local
+            let offset = Int(seg.offset) + local
+            return offset..<(offset + 1)
         }
-        return image?.sourceOffset(ofArenaByte: Int(seg.offset) + local)
+        let arena = Int(seg.offset) + local
+        if let offset = image?.sourceOffset(ofArenaByte: arena) {
+            return offset..<(offset + 1)
+        }
+        return characterReferenceSource(ofArenaByte: arena)
+    }
+
+    /// The source range of the character reference decoded into arena byte `offset` in this pass.
+    private func characterReferenceSource(ofArenaByte offset: Int) -> Range<Int> {
+        var lo = 0
+        var hi = characterReferenceSources.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if characterReferenceSources[mid].arena.upperBound > offset {
+                hi = mid
+            } else {
+                lo = mid + 1
+            }
+        }
+        precondition(lo < characterReferenceSources.count && characterReferenceSources[lo].arena.contains(offset), "an address's arena byte outside the leaf's content comes from a character reference")
+        return characterReferenceSources[lo].source
     }
 }

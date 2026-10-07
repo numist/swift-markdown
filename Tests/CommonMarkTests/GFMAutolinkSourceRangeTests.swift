@@ -89,19 +89,17 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// The first address's last byte comes from the entity `&#111;`, which has no source byte of its own, so that
-    /// address can't be placed and its link has no range, as in cmark-gfm; the text before it is placed by its own
-    /// byte, the NUL. The second address is placed; the text between the two, whose start isn't known, starts where the
-    /// second address does. cmark-gfm gives the text before the first address the whole paragraph, `@1:1-1:22`, counting the NUL as three columns.
-    @Test("an email autolink ending in an entity has no range")
+    /// The first address's last character comes from the character reference `&#111;`, so that address ends just
+    /// past the reference's `;`. The text before it is the NUL, and the text between the two addresses is the space.
+    @Test("an email autolink ending in a character reference ends past the reference")
     func emailEndingInEntity() {
         #expect(tree("\u{0}a@b.c&#111; x@y.zz") == """
             document @1:1-1:20
               paragraph @1:1-1:20
                 text "\u{FFFD}" @1:1-1:2
-                link "mailto:a@b.co" "" @-
-                  text "a@b.co" @-
-                text " " @1:14-1:14
+                link "mailto:a@b.co" "" @1:2-1:13
+                  text "a@b.co" @1:2-1:13
+                text " " @1:13-1:14
                 link "mailto:x@y.zz" "" @1:14-1:20
                   text "x@y.zz" @1:14-1:20
 
@@ -165,15 +163,38 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// An email address whose last character comes from an entity reference is not a run of source bytes, so the link
-    /// and its text have no source range.
-    @Test("an email ending in an entity reference has no source range")
+    @Test("an email ending in an entity reference spans the reference")
     func emailEndingInEntityReference() {
         #expect(tree("a@b.&#99;") == """
             document @1:1-1:10
               paragraph @1:1-1:10
-                link "mailto:a@b.c" "" @-
-                  text "a@b.c" @-
+                link "mailto:a@b.c" "" @1:1-1:10
+                  text "a@b.c" @1:1-1:10
+
+            """)
+    }
+
+    @Test("an email starting in an entity reference spans the reference")
+    func emailStartingInEntityReference() {
+        #expect(tree("&#97;@b.c") == """
+            document @1:1-1:10
+              paragraph @1:1-1:10
+                link "mailto:a@b.c" "" @1:1-1:10
+                  text "a@b.c" @1:1-1:10
+
+            """)
+    }
+
+    @Test("an email ending in an entity reference on a block quote's second line spans the reference")
+    func emailEndingInEntityReferenceOnContinuationLine() {
+        #expect(tree("> x\n> a@b.&#99;") == """
+            document @1:1-2:12
+              block_quote @1:1-2:12
+                paragraph @1:3-2:12
+                  text "x" @1:3-1:4
+                  softbreak @-
+                  link "mailto:a@b.c" "" @2:3-2:12
+                    text "a@b.c" @2:3-2:12
 
             """)
     }

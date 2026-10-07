@@ -199,6 +199,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Per-kind stretches of scan starts from which a first-closer raw-HTML scan is known to fail in the current `parseInline` pass (`HTMLCloserMisses`). Reset per pass.
     var htmlCloserMisses = HTMLCloserMisses()
 
+    /// The character references decoded in the current `parseInline` pass, with positions tracked, in arena order:
+    /// each pair is the decoded bytes' arena range and the reference's source range, `&` through `;`. Reset per pass.
+    var characterReferenceSources: [(arena: Range<Int>, source: Range<Int>)] = []
+
     // MARK: - Init
     
     @_lifetime(copy source)
