@@ -1688,8 +1688,8 @@ extension BlockParser {
                     // The joined bytes equal cmark's paragraph buffer for a MATCHED continuation, whose leading
                     // whitespace the block parser strips just as cmark does (blocks.c:1465). A LAZY continuation
                     // (block quote / list) is the case cmark treats differently: it preserves that line's residual
-                    // leading whitespace (blocks.c:1408). Flag-OFF the block parser begins every continuation at its first
-                    // non-space, so the residual never enters the join - spec-correct.
+                    // leading whitespace (blocks.c:1408). The block parser begins every continuation at its first
+                    // non-space, so the residual never enters the join.
                     let contentChunk = materializedChunk(start: openEnd, end: i, content: content)
                     return CodeSpanMatch(content: contentChunk, afterClose: closeEnd, backtickCount: runLength)
                 }
@@ -1880,8 +1880,7 @@ extension BlockParser {
         // Scan body until `>`.
         // why: cmark's `_scan_autolink_uri` (swift-cmark `src/scanners.re`) matches the URI body with the
         // class `[^\x00-\x20<>]*`, which excludes 0x00–0x20 and `<`/`>` but NOT DEL (0x7F). DEL is an ASCII
-        // control character, so the spec excludes it and the deliverable (flag OFF) rejects it; cmark
-        // wrongly admits it.
+        // control character, which the spec excludes from an absolute URI, so it rejects the autolink.
         let bodyStart = start + 1
         while i < end {
             let b = content[i]
@@ -2193,11 +2192,11 @@ extension BlockParser {
         return Self.scanRawHTMLCloser("-->", from: bodyStart, end: end, content: content, misses: &htmlCloserMisses.comment)
     }
 
-    /// Match `<![CDATA[…]]>`. Flag-OFF (spec-correct, CommonMark 0.31 §6.6) the content is any run not
-    /// containing `]]>`, closed by the first `]]>`.
+    /// Match `<![CDATA[…]]>`. Per CommonMark 0.31 §6.6 the content is any run not containing `]]>`, closed by
+    /// the first `]]>`.
     private mutating func matchHTMLCDATA(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         // Need `<![CDATA[`. The two brackets are literal; the letters `CDATA` are matched
-        // case-SENSITIVELY per CommonMark start condition 5 (spec-correct, flag OFF).
+        // case-SENSITIVELY per CommonMark start condition 5.
         let prefixLen = 9
         if start + prefixLen > end {
             return nil
@@ -2239,8 +2238,8 @@ extension BlockParser {
 
     /// Match `<?…?>`. Body may be empty; scans for the first `?>` terminator rejecting NUL bytes.
     ///
-    /// Flag-OFF (the spec-correct deliverable, CommonMark 0.31 §6.6) the body is any string of
-    /// characters not including `?>`, so this stops at the FIRST `?>`.
+    /// Per CommonMark 0.31 §6.6 the body is any string of characters not including `?>`, so this stops at the
+    /// FIRST `?>`.
     private mutating func matchHTMLProcessingInstruction(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
         return Self.scanRawHTMLCloser("?>", from: start + 2, end: end, content: content, misses: &htmlCloserMisses.processingInstruction)
     }
@@ -3017,9 +3016,7 @@ extension BlockParser {
     /// the whole tree; a link's own text - including a bare URL / email link just emitted - is never
     /// re-scanned as more link text.
     ///
-    /// Flag-OFF, since a link nested in a link is
-    /// invalid HTML/CommonMark, the spec-correct deliverable never autolinks inside a link and skips its
-    /// subtree.
+    /// A link may not contain another link, so the pass never autolinks inside a link and skips its subtree.
     /// `image` maps the leaf's arena content back to source, when its content is a single arena chunk with a source image.
     mutating func gfmEmailAutolinkPass(_ parent: DocumentStorage.Index, image: ContentImage?) {
         var child = storage[parent].firstChild
@@ -3155,7 +3152,7 @@ extension BlockParser {
                 storage.setSourceEnd(tailIdx, max(nodeEnd, email.end))
             }
 
-            // Flag-OFF: an empty `before` / `between` run is not a real text node, so drop it.
+            // An empty `before` / `between` run is not a real text node, so drop it.
             if beforeRef.totalLength == 0 {
                 storage.unlinkChild(current)
             }
@@ -3165,7 +3162,7 @@ extension BlockParser {
             i = auto.urlEnd
             didSplit = true
         }
-        // Flag-OFF: drop the final tail run if the split left it empty. Only ever a residual this pass
+        // Drop the final tail run if the split left it empty. Only ever a residual this pass
         // produced (`didSplit`), never a pre-existing `@`-free node.
         if didSplit, case .literal(let last) = storage[current].data, last.totalLength == 0 {
             storage.unlinkChild(current)

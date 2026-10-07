@@ -1907,7 +1907,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     deepestMatched = node
                 } else if isBlank {
                     // why: CommonMark counts a whitespace-only line as blank (§4.9), so
-                    // flag-OFF keeps the definition open on any blank line.
+                    // any blank line keeps the definition open.
                     cursor = firstNonSpace
                     prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
                     deepestMatched = node
@@ -3437,7 +3437,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return 2
         }
         // Type 5: `<![CDATA[`. The two brackets are literal; the letters `CDATA` are matched
-        // case-SENSITIVELY per CommonMark start condition 5 (spec-correct, flag OFF).
+        // case-SENSITIVELY per CommonMark start condition 5.
         if next == UInt8(ascii: "!"),
            after + 7 < range.upperBound,
            source[after + 1] == UInt8(ascii: "["),
