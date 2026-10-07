@@ -1,1 +1,4 @@
 Document @1:1-1:11
+└─ FootnoteDefinition @1:1-1:11 label: "["
+   └─ Paragraph @1:6-1:11
+      └─ FootnoteReference @1:6-1:11 label: "[" index: 1
