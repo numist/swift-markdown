@@ -16,9 +16,9 @@ import Testing
 struct EscapedCaretImageTrailingWhitespaceTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink, .footnotes]
 
-    /// Flag-off, a backslash-escaped caret makes `![\^…]` plain text, so the brackets stay literal with the image
-    /// `!` kept and the line's trailing whitespace stripped.
-    @Test func testEscapedCaretStaysLiteralWithoutBugCompatibility() {
+    /// With no matching link reference definition, `![\^…]` is literal text, `!` included, and the line's trailing
+    /// whitespace is stripped.
+    @Test func testEscapedCaretStaysLiteral() {
         let cases: [(markdown: String, expected: String)] = [
             ("![\\^a] ", """
                 document

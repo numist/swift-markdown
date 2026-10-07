@@ -11,7 +11,7 @@
 import Testing
 @testable import CommonMark
 
-@Suite("Content projection prototype")
+@Suite("Node content projection")
 struct NodeContentTests {
 
     @Test("link content in one switch - single-segment spans")
@@ -60,7 +60,7 @@ struct NodeContentTests {
             walk(doc.root)
             #expect(info == "swift")
             #expect(bodyJoined == "a\nb\n")
-            #expect(segmentCount > 1)   // proves the body stays segmented (zero-copy), not collapsed to one span
+            #expect(segmentCount > 1)   // the body borrows each source line rather than copying them into one span
             }
         }
     }

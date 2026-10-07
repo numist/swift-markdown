@@ -13,7 +13,7 @@ import Testing
 
 /// Inline-only parsing extracts leading link reference definitions and turns a backslash before a line ending into a
 /// hard line break.
-@Suite("Inline-only reference definitions and hard breaks")
+@Suite("Inline-only link reference definitions and hard line breaks")
 struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     private static let inlineOnly: MarkdownDocument.ParseOptions = [
@@ -151,8 +151,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
             """)
     }
 
-    /// cmark keeps the paragraph (now empty, or whitespace-only) after extracting every definition: its
-    /// empty-paragraph removal is gated off in inline-only modes.
+    /// The paragraph remains after every definition is extracted, empty or holding only whitespace.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func definitionFollowedOnlyByWhitespace(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("[a]: /u\n", options: options) == """
@@ -173,8 +172,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
             """)
     }
 
-    /// cmark's bare-destination scan fails when the destination reaches the very end of the input, which
-    /// only inline-only content (no newline appended to its final line) can hit.
+    /// A definition whose bare destination reaches the end of the input is text.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func definitionDestinationAtEndOfInputStaysLiteral(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("[a]: /u\n[b]: /v", options: options) == """
@@ -272,7 +270,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
               paragraph
 
             """)
-        // NUL forces the arena path; the definition is still consumed and the NUL becomes U+FFFD.
+        // The NUL becomes U+FFFD (Insecure characters) and doesn't stop the definition being consumed.
         #expect(TreeDump.dump("[a]: /u\n\u{0}[a]", options: options) == """
             document
               paragraph

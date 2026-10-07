@@ -169,8 +169,8 @@ struct AttributeSyntaxDisabledTests {
     }
 
     /// A line that starts with `^` is not a link reference definition, so a label split across lines stays paragraph
-    /// text with a soft break.
-    @Test("an attribute definition whose label spans a soft break is a paragraph")
+    /// text with a soft line break.
+    @Test("an attribute definition whose label spans a soft line break is a paragraph")
     func crossLineDefinitionIsParagraph() {
         #expect(tree("^[la\nbel]: color: blue\n\n^[content][la bel]", Self.plain) == """
             document @1:1-4:19
@@ -207,9 +207,9 @@ struct AttributeSyntaxDisabledTests {
 
     // MARK: - Close-bracket handling
 
-    /// `[](` newline `)` is an inline link with an empty destination, because whitespace around a destination may
+    /// `[](`, a line ending, then `)` is an inline link with an empty destination, because whitespace around a destination may
     /// include a line ending.
-    @Test("an empty inline attribute spanning a soft break is an empty link")
+    @Test("an empty inline attribute spanning a soft line break is an empty link")
     func attributeTextSpanningSoftBreakIsLink() {
         #expect(tree(" ^[](\n)", Self.plain) == """
             document @1:1-2:2
@@ -334,7 +334,7 @@ struct AttributeSyntaxDisabledTests {
 
     // MARK: - Multi-line content
 
-    /// `[a](` newline `b)` is an inline link whose destination follows a line ending inside the block quote.
+    /// `[a](`, a line ending, then `b)` is an inline link inside the block quote.
     @Test("a cross-line inline attribute in a block quote is a link")
     func crossLineAttributeInBlockQuoteIsLink() {
         #expect(tree("> ^[a](\n> b)", Self.plain) == """
@@ -348,7 +348,7 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// `[a](` newline `b)` is an inline link whose destination follows a line ending inside the list item.
+    /// `[a](`, a line ending, then `b)` is an inline link inside the list item.
     @Test("a cross-line inline attribute in a list item is a link")
     func crossLineAttributeInListItemIsLink() {
         #expect(tree("- ^[a](\n  b)", Self.plain) == """
@@ -552,12 +552,10 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// A footnote definition's label ends at its first `]`, so `[^[]:` defines the label `[`, which the reference
-    /// `[^[]]` (label `[]`) doesn't match; the reference is text and the unreferenced definition is dropped.
+    /// A footnote definition's label may not hold an unescaped `[`, as a link label may not (spec "Links"), so
+    /// `[^[]: note` is paragraph text and `[^[]]` matches no definition.
     @Test("a footnote-shaped bracket holding `^[` doesn't resolve to a `[` definition")
     func caretBracketDoesNotResolveToBracketDefinition() {
-        // A definition label may not hold an unescaped `[`, as a link label may not (spec "Links"), so here
-        // `[^[]: note` is paragraph text.
         #expect(tree("[^[]: note\n\n[^[]]", Self.footnotes) == """
             document @1:1-3:6
               paragraph @1:1-1:11
@@ -593,7 +591,7 @@ struct AttributeSyntaxDisabledTests {
     /// An undefined footnote reference is text, and `f@.f` is no extended email autolink because its domain starts
     /// with a period (spec "Autolinks (extension)").
     @Test("an email-shaped run with an empty first domain segment after a footnote-shaped bracket holding `^[` is text")
-    func emailAfterCaretBracketAutolinksWithoutEmptyText() {
+    func emailWithEmptyDomainSegmentAfterCaretBracketIsText() {
         #expect(tree("[^[]]f@.f", Self.footnotesAutolink) == """
             document @1:1-1:10
               paragraph @1:1-1:10
@@ -605,7 +603,7 @@ struct AttributeSyntaxDisabledTests {
     /// `f@.f` is no extended email autolink because its domain starts with a period (spec "Autolinks (extension)"),
     /// and the undefined footnote reference after it is text.
     @Test("an email-shaped run with an empty first domain segment before a footnote-shaped bracket holding `^[` is text")
-    func textAfterEmailAndCaretBracketIsKeptWithoutEmptyText() {
+    func emailWithEmptyDomainSegmentBeforeCaretBracketIsText() {
         #expect(tree("f@.f[^[]]y", Self.footnotesAutolink) == """
             document @1:1-1:11
               paragraph @1:1-1:11

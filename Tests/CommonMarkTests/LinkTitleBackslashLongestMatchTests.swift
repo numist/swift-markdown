@@ -11,23 +11,9 @@
 import Testing
 @testable import CommonMark
 
-/// cmark's link-title scanner (`scan_link_title`, re2c `['] (escaped_char|[^'\x00])* [']` plus the
-/// `"…"` and `(…)` forms in `src/scanners.re`) is a *longest-match* DFA. At a `\` it keeps both
-/// readings alive at once — the byte as the start of an `escaped_char` (backslash + ASCII
-/// punctuation) AND the byte as an ordinary body byte (`[^'\x00]` includes `\`) — and closes on the
-/// furthest reachable delimiter. An eager left-to-right "always escape `\X`" scan diverges when a `\`
-/// precedes the closing delimiter and there is no later delimiter to escape onto: cmark reads the `\`
-/// as a body byte and closes on the following delimiter, where the eager scan consumes the delimiter
-/// and never finds a close.
-///
-/// Input `[](a` + newline + `'\')`:
-/// - the destination scan stops at the newline (a newline is terminating whitespace in a bare
-///   destination), giving destination `a`;
-/// - the spacechars between destination and title skip the newline;
-/// - the title `'\'` closes on the *second* quote (the `\` is body, not an escape), interior `\`.
-///
-/// So cmark forms an inline link with empty text, destination `a`, and title `\`. The eager scan
-/// never matched the title, so the whole `[]((` stayed literal text split by a soft break.
+/// A link title (Links) is the longest delimited match available: a `\` before the closing quote
+/// escapes it only when a later quote can close the title; otherwise the `\` is a literal backslash
+/// and that quote closes the title.
 @Suite("Link title backslash longest match")
 struct LinkTitleBackslashLongestMatchTests {
 
@@ -68,25 +54,20 @@ struct LinkTitleBackslashLongestMatchTests {
         }
     }
 
-    // MARK: - FIX: the finding
-
+    /// The destination ends at the line ending, which then separates it from the title `'\'`.
     @Test("empty-text link whose title backslash precedes the closing quote")
-    func findingBackslashBeforeCloseQuote() throws {
+    func backslashBeforeCloseQuote() throws {
         let source = "[](a\n'\\')"
         let (top, inlines) = structure(source)
         #expect(top == [.paragraph])
-        // Fixture sanity: the whole construct collapses to a single inline link (not the buggy
-        // text / soft-break / text split).
         #expect(inlines == [.link])
 
         let link = firstLink(source)
-        try #require(link.found)  // fixture sanity: a link must exist
+        try #require(link.found)
         #expect(link.url == "a")
         #expect(link.title == "\\")
         #expect(!link.hasText)
     }
-
-    // MARK: - GUARD: currently-matching cases stay matching
 
     @Test("plain single-char destination")
     func plainDestination() throws {
@@ -106,17 +87,16 @@ struct LinkTitleBackslashLongestMatchTests {
         #expect(!link.hasText)
     }
 
-    /// A bare destination includes parentheses only when they are escaped or balanced (spec "Links").
+    /// A bare destination includes parentheses only when they are escaped or balanced (Links).
     @Test("unbalanced open paren destination stopped by a space is no link")
     func openParenDestinationStoppedBySpace() throws {
         let link = firstLink("[](( )")
         #expect(!link.found)
     }
 
-    @Test("empty destination across a newline")
-    func emptyDestinationAcrossNewline() throws {
-        // `[](` + newline + `)`: the newline is skipped as spacechars before the destination scan, so
-        // the destination is empty and the `)` closes the link.
+    /// Whitespace, including a line ending, may precede the destination, which is then empty.
+    @Test("empty destination across a line ending")
+    func emptyDestinationAcrossLineEnding() throws {
         let link = firstLink("[](\n)")
         try #require(link.found)
         #expect(link.url == "")
@@ -124,11 +104,9 @@ struct LinkTitleBackslashLongestMatchTests {
         #expect(!link.hasText)
     }
 
+    /// A later quote can close the title, so the `\'` is a backslash escape.
     @Test("escaped closing quote extends the title to a later quote")
     func escapedCloseQuoteExtendsTitle() throws {
-        // `[](a '\'')`: the `\'` escapes the first inner quote, so the title `'\''` closes on the
-        // LAST quote (interior `\'` → `'`). This is the case where escaping DOES yield the longest
-        // match, and must keep working.
         let link = firstLink("[](a '\\'')")
         try #require(link.found)
         #expect(link.url == "a")

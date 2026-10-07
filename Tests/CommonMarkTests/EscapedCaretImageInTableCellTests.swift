@@ -11,7 +11,7 @@
 import CommonMark
 import Testing
 
-/// An escaped-caret image `![\^…]` inside a GFM table cell.
+/// An escaped-caret image `![\^…]` in or next to a table (Tables (extension)).
 @Suite("Escaped-caret image in a table cell")
 struct EscapedCaretImageInTableCellTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink, .footnotes]
@@ -41,9 +41,9 @@ struct EscapedCaretImageInTableCellTests {
 
         """
 
-    /// Flag-off, a backslash-escaped caret makes `![\^…]` plain text, so the brackets stay literal with the image
-    /// `!` kept and nothing read past the `]`.
-    @Test func testEscapedCaretStaysLiteralWithoutBugCompatibility() {
+    /// With no matching link reference definition, `![\^…]` is literal text, `!` included, and the cell ends at its
+    /// own `|` or line ending.
+    @Test func testEscapedCaretStaysLiteral() {
         let cases: [(markdown: String, expected: String)] = [
             ("o\n|-\n![\\^\u{14}]", Self.singleColumn("![^\\u{14}]")),
             ("o\n|-\n![\\^a]", Self.singleColumn("![^a]")),

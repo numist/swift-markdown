@@ -10,14 +10,15 @@
 
 import CommonMark
 
-/// Renders a parsed tree one node per line, two spaces of indent per depth, using cmark-gfm's node type names
-/// (`cmark_node_get_type_string`), so a test can compare the whole tree with a literal taken from cmark-gfm.
+/// Renders a parsed tree one node per line, two spaces of indent per depth, so a test can compare the whole tree
+/// with a literal.
 ///
-/// Each line is the type name followed by the node's defining values: the literal of text-like nodes, the info string
-/// and body of a code block, the URL and title of a link or image, the heading level, a list's marker, start,
-/// delimiter and tightness, the checkbox state of a task item, the alignment and span of a table cell, and the label of
-/// a footnote definition or the number of a footnote reference. Quoted values escape `\`, `"`, newline and tab, and
-/// write any other control character or DEL as `\u{XX}`.
+/// Each line is a snake_case name for the node's kind (`block_quote`, `table_header`, `tasklist`, ...) followed by
+/// the node's defining values: the literal of text-like nodes, the info string and body of a code block, the URL and
+/// title of a link or image, the heading level, a list's marker, start, delimiter and tightness, the checkbox state of
+/// a task list item, the alignment and span of a table cell, and the label of a footnote definition or the number of a
+/// footnote reference. Quoted values escape `\`, `"`, line feed and tab, and write any other control character or DEL
+/// as `\u{…}` in uppercase hexadecimal.
 ///
 /// With `sourceRanges`, each line ends with the node's source range as `@line:column-line:column` (the end is
 /// half-open), or `@-` for a node without one.

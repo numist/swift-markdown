@@ -11,13 +11,13 @@
 import CommonMark
 import Testing
 
-/// Footnote-shaped brackets in inline-only mode.
+/// Inline-only mode has no footnote definitions, so a footnote-shaped bracket is text.
 @Suite("Footnote-shaped brackets in inline-only mode")
-struct InlineOnlyFootnoteQuirkTests {
+struct InlineOnlyFootnoteShapedBracketTests {
     private static let inlineOnly: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes, .inlineOnly]
     private static let preserveWhitespace: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes, .preserveWhitespace]
 
-    @Test func test_footnote_multiline_label_flag_off() {
+    @Test func test_footnote_multiline_label() {
         #expect(TreeDump.dump(String(decoding: [91, 94, 10, 128, 93] as [UInt8], as: UTF8.self), options: Self.inlineOnly) == """
             document
               paragraph
@@ -32,8 +32,7 @@ struct InlineOnlyFootnoteQuirkTests {
             """)
     }
 
-    /// A footnote reference label cannot hold an unescaped `[`, so the bracket run stays literal text.
-    @Test func test_footnote_caret_bracket_innerclose_flag_off() {
+    @Test func test_footnote_caret_bracket_innerclose() {
         #expect(TreeDump.dump("[^[]\n]", options: Self.inlineOnly) == """
             document
               paragraph
@@ -48,8 +47,7 @@ struct InlineOnlyFootnoteQuirkTests {
             """)
     }
 
-    /// A footnote reference label cannot hold an unescaped `[`, so the bracket run stays literal text.
-    @Test func test_footnote_caret_bracket_spans_empty_flag_off() {
+    @Test func test_footnote_caret_bracket_spans_empty() {
         #expect(TreeDump.dump("[^[\n]]", options: Self.inlineOnly) == """
             document
               paragraph
@@ -64,8 +62,7 @@ struct InlineOnlyFootnoteQuirkTests {
             """)
     }
 
-    /// An escaped `^` is a literal caret, so the text keeps its single `]`.
-    @Test func test_footnote_escaped_caret_crossline_flag_off() {
+    @Test func test_footnote_escaped_caret_crossline() {
         #expect(TreeDump.dump("[\\^\nx]", options: Self.inlineOnly) == """
             document
               paragraph
@@ -80,8 +77,7 @@ struct InlineOnlyFootnoteQuirkTests {
             """)
     }
 
-    /// An escaped `^` is a literal caret, so the text keeps its leading `!`.
-    @Test func test_footnote_escaped_caret_image_flag_off() {
+    @Test func test_footnote_escaped_caret_image() {
         #expect(TreeDump.dump("![\\^x]", options: Self.inlineOnly) == """
             document
               paragraph
@@ -96,7 +92,7 @@ struct InlineOnlyFootnoteQuirkTests {
             """)
     }
 
-    @Test func test_footnote_multiline_collapse_blockquote_flag_off() {
+    @Test func test_footnote_multiline_label_after_greater_than() {
         #expect(TreeDump.dump(String(decoding: [62, 91, 94, 10, 128, 93] as [UInt8], as: UTF8.self), options: Self.inlineOnly) == """
             document
               paragraph
@@ -111,7 +107,7 @@ struct InlineOnlyFootnoteQuirkTests {
             """)
     }
 
-    @Test func test_footnote_multiline_label_multibyte_flag_off() {
+    @Test func test_footnote_multiline_label_multibyte() {
         #expect(TreeDump.dump(String(decoding: [91, 94, 10, 128, 112, 93] as [UInt8], as: UTF8.self), options: Self.inlineOnly) == """
             document
               paragraph
@@ -126,7 +122,7 @@ struct InlineOnlyFootnoteQuirkTests {
             """)
     }
 
-    @Test func test_probe_crossline_plain_label_flag_off() {
+    @Test func test_footnote_crossline_label() {
         #expect(TreeDump.dump("a[^x\ny]b", options: Self.inlineOnly) == """
             document
               paragraph
@@ -141,7 +137,7 @@ struct InlineOnlyFootnoteQuirkTests {
             """)
     }
 
-    @Test func test_probe_crossline_crlf_label_flag_off() {
+    @Test func test_footnote_crossline_crlf_label() {
         #expect(TreeDump.dump("[^a\r\nb]", options: Self.inlineOnly) == """
             document
               paragraph
@@ -156,8 +152,8 @@ struct InlineOnlyFootnoteQuirkTests {
             """)
     }
 
-    /// Backticks form a code span whose line ending becomes a space.
-    @Test func test_probe_codespan_newline_resets_flag_off() {
+    /// The line ending inside the code span becomes a space (Code spans).
+    @Test func test_footnote_label_containing_code_span() {
         #expect(TreeDump.dump("[^`a\nb`\nc]", options: Self.inlineOnly) == """
             document
               paragraph
@@ -176,8 +172,7 @@ struct InlineOnlyFootnoteQuirkTests {
             """)
     }
 
-    /// An escaped `^` is a literal caret, so the text keeps its single `]`.
-    @Test func test_probe_escaped_caret_crossline_long_flag_off() {
+    @Test func test_footnote_escaped_caret_crossline_long() {
         #expect(TreeDump.dump("[\\^abcdef\nxxxxx]", options: Self.inlineOnly) == """
             document
               paragraph
@@ -192,8 +187,7 @@ struct InlineOnlyFootnoteQuirkTests {
             """)
     }
 
-    /// An escaped `^` is a literal caret, so the text keeps its leading `!`.
-    @Test func test_probe_escaped_caret_image_crossline_flag_off() {
+    @Test func test_footnote_escaped_caret_image_crossline() {
         #expect(TreeDump.dump("![\\^a\nb]", options: Self.inlineOnly) == """
             document
               paragraph
@@ -208,8 +202,7 @@ struct InlineOnlyFootnoteQuirkTests {
             """)
     }
 
-    /// An escaped `^` is a literal caret, so the text is the source with its `!` and no extra `]`.
-    @Test func test_probe_escaped_caret_image_trailing_newline_flag_off() {
+    @Test func test_footnote_escaped_caret_image_trailing_line_ending() {
         #expect(TreeDump.dump("![\\^x]\n", options: Self.inlineOnly) == """
             document
               paragraph

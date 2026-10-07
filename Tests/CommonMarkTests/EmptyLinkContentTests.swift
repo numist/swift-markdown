@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// A link written with an empty destination and no title, `[a]()`, vends empty URL and title spans through the
-/// borrowed `content` API, matching cmark-gfm's empty `cmark_node_get_url`/`cmark_node_get_title`.
+/// A link with an empty destination and no title, `[a]()`, vends empty URL and title spans through the borrowed
+/// `content` API.
 @Suite("Empty link destination content")
 struct EmptyLinkContentTests {
 

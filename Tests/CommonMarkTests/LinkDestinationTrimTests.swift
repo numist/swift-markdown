@@ -11,24 +11,12 @@
 import Testing
 @testable import CommonMark
 
-/// Link-destination whitespace trimming, matching cmark's `cmark_clean_url` (`src/inlines.c`):
-/// "Clean a URL: remove surrounding whitespace, and remove `\` that escape punctuation." It does
-/// BOTH a `cmark_chunk_trim` (strip leading/trailing whitespace) AND backslash-escape / entity
-/// removal. The rewrite already did the escape removal (`unescapeURLChunk`) but not the trim, so an
-/// angle-bracket destination kept its surrounding whitespace. Both destination sites — the inline
-/// link `(url "title")` and the `[label]: dest` reference definition — build the destination the same
-/// way, so both diverged identically.
-///
-/// The trim uses cmark's `cmark_isspace` set = {space, tab, `\n`, `\r`} (the `cmark_ctype_class`
-/// table's class-1 bytes; it does NOT include VT/FF), matched here by the `isSpaceTabOrNewline`
-/// predicate via `Chunk.trimming(using:)`. INTERIOR whitespace is preserved. Titles use
-/// `cmark_clean_title`, which does NOT trim, so the title path is deliberately untouched.
+/// The parser strips spaces, tabs and line endings from both ends of a link destination, in an inline link and in a
+/// link reference definition, and keeps whitespace inside it. A link title keeps all its whitespace.
 @Suite("Link destination whitespace trimming")
 struct LinkDestinationTrimTests {
 
     /// (destination url, title) of the first `.link` node in DFS order; nil fields if no link exists.
-    /// Reads each node's `url()`/`title()` projection, forcing the arena/source materialization of the
-    /// destination and title chunks.
     private func firstLink(
         _ source: String, options: MarkdownDocument.ParseOptions = []
     ) -> (url: String?, title: String?) {
@@ -49,7 +37,7 @@ struct LinkDestinationTrimTests {
         }
     }
 
-    // MARK: - FIX: inline-link destination whitespace is trimmed
+    // MARK: - Inline link destinations
 
     @Test("all-whitespace angle destination trims to empty (single space)")
     func inlineAllWhitespaceSingle() {
@@ -71,62 +59,58 @@ struct LinkDestinationTrimTests {
         #expect(firstLink("[](<a >)").url == "a")
     }
 
-    @Test("leading whitespace is trimmed AND the escape is still removed")
+    @Test("leading whitespace is trimmed and the backslash escape resolves")
     func inlineLeadingTrimAndUnescape() {
-        // `< \!a>`: after trimming the leading space, `\!` unescapes to `!` → "!a".
         #expect(firstLink("[](< \\!a>)").url == "!a")
     }
 
-    // MARK: - FIX: reference-definition destination whitespace is trimmed (same helper)
+    // MARK: - Link reference definition destinations
 
-    @Test("ref-def leading whitespace is trimmed")
+    @Test("link reference definition leading whitespace is trimmed")
     func refDefLeadingTrimmed() {
         #expect(firstLink("[x]: < a>\n\n[x]").url == "a")
     }
 
-    @Test("ref-def all-whitespace destination trims to empty")
+    @Test("link reference definition all-whitespace destination trims to empty")
     func refDefAllWhitespace() {
         #expect(firstLink("[x]: < >\n\n[x]").url == "")
     }
 
-    // MARK: - LEAVE: interior whitespace is preserved
+    // MARK: - Interior whitespace
 
     @Test("interior whitespace in an inline destination is kept")
     func inlineInteriorKept() {
         #expect(firstLink("[](<a b>)").url == "a b")
     }
 
-    @Test("interior whitespace in a ref-def destination is kept")
+    @Test("interior whitespace in a link reference definition destination is kept")
     func refDefInteriorKept() {
         #expect(firstLink("[x]: <a b>\n\n[x]").url == "a b")
     }
 
-    // MARK: - LEAVE: backslash-escape removal is unaffected
+    // MARK: - Backslash escapes
 
-    @Test("angle destination backslash-escape removal still works")
+    @Test("a backslash escape in an angle destination resolves")
     func angleEscapeRemoval() {
-        // `<a\>b>`: the escaped `>` is part of the destination and unescapes to `>`.
         #expect(firstLink("[](<a\\>b>)").url == "a>b")
     }
 
-    @Test("bare destination backslash-escape removal still works")
+    @Test("a backslash escape in a bare destination resolves")
     func bareEscapeRemoval() {
         #expect(firstLink("[](a\\)b)").url == "a)b")
     }
 
-    // MARK: - LEAVE: titles are NOT trimmed (cmark_clean_title has no trim)
+    // MARK: - Link titles
 
-    @Test("a title with no surrounding space is unaffected")
+    @Test("a title with no surrounding space is kept as is")
     func titleNoSpaceUnaffected() {
         let link = firstLink("[](<a> \"t\")")
         #expect(link.url == "a")
         #expect(link.title == "t")
     }
 
-    @Test("surrounding whitespace inside a title is preserved (trim is destination-only)")
+    @Test("whitespace at the ends of a title is kept")
     func titleSurroundingSpacePreserved() {
-        // cmark_clean_title does not trim, so the title keeps its interior spaces; only the
-        // destination is trimmed.
         let link = firstLink("[](<a> \" t \")")
         #expect(link.url == "a")
         #expect(link.title == " t ")

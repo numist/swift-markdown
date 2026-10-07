@@ -11,11 +11,9 @@
 import Testing
 import CommonMark
 
-/// A task item's checkbox belongs to the item's opening line: cmark-gfm consumes it as the item opens
-/// (`open_tasklist_item`, extensions/tasklist.c). When that line's paragraph holds nothing but a reference
-/// definition, the paragraph disappears and a later paragraph becomes the item's first child, but that
-/// paragraph's leading `[x]` is ordinary text and the item keeps the opening line's unchecked state.
-@Suite("Task item whose opening paragraph is only a reference definition")
+/// Without `.tasklist`, `[ ] [a]: /u` does not begin with a link reference definition (Link reference
+/// definitions), so it is the item's first paragraph and a later `[x]` is text.
+@Suite("List item whose opening line is a checkbox before a definition")
 struct TaskListDefinitionOnlyOpeningLineTests {
 
     @Test("without tasklist, both paragraphs are text")
@@ -88,9 +86,9 @@ struct TaskListDefinitionOnlyOpeningLineTests {
 }
 
 /// `[ ] [a]: /u` does not begin with a link reference definition, so it is the item's first paragraph,
-/// which begins with a task list item marker (spec "Task list items (extension)"); the later paragraph's
+/// which begins with a task list item marker (Task list items (extension)); the later paragraph's
 /// `[x]` is text.
-@Suite("Task item whose first paragraph holds a definition-shaped remainder")
+@Suite("Task list item whose first paragraph holds a definition-shaped remainder")
 struct TaskListDefinitionShapedRemainderTests {
     @Test("a later paragraph's leading checkbox is text")
     func laterCheckboxIsText() {

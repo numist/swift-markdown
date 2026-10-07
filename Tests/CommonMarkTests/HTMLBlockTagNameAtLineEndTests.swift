@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// A type-6 HTML block start whose tag name runs to the end of the line, `<div` with nothing after it. The tag name may be
-/// followed by whitespace, `>`, `/>` or the line end (cmark's `html_block_start` scanner), so the line opens an HTML block.
+/// Under HTML block start condition 6 (HTML blocks) the tag name may be followed by the end of the line, so `<div` alone
+/// on a line opens an HTML block.
 @Suite("HTML block tag name at the line end")
 struct HTMLBlockTagNameAtLineEndTests {
 

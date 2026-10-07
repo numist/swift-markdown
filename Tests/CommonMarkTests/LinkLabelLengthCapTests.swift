@@ -11,8 +11,7 @@
 import Testing
 @testable import CommonMark
 
-/// DFS-collect every `.link` node's destination URL, in document order. File-scope + `borrowing
-/// MarkdownNode` to satisfy the noncopyable-borrow rules (see `dfs`).
+/// Every `.link` node's destination URL, in document order.
 private func linkURLs(_ doc: borrowing MarkdownDocument) -> [String] {
     var out: [String] = []
     collectLinkURLs(doc.root, into: &out)
@@ -26,40 +25,31 @@ private func collectLinkURLs(_ node: borrowing MarkdownNode, into out: inout [St
     node.children.forEach { collectLinkURLs($0, into: &out) }
 }
 
-/// The maximum link-label length cmark accepts is `MAX_LINK_LABEL_LENGTH` (1000): `link_label`
-/// rejects only `length > 1000` (`src/inlines.c`), so it accepts a 1000-character label. CommonMark
-/// §6.6 caps a label at "at most 999 characters", so 1000 is a cmark off-by-one. The shipped
-/// deliverable is spec-correct (reject `> 999`). cmark's single constant governs
-/// every label site, so these tests pin both the block reference-definition label scanner and the
-/// inline (contiguous + multi-segment) reference label scanners at the boundary.
-@Suite("Link label length cap - cmark MAX_LINK_LABEL_LENGTH")
+/// A link label has at most 999 characters inside its brackets (Links). This holds for the label of a link reference
+/// definition and for the label of a reference link, including one that spans a line ending.
+@Suite("Link label length cap")
 struct LinkLabelLengthCapTests {
 
     /// A label of `n` `a` bytes (no escapes, so scanned length == `n`).
     private func label(_ n: Int) -> String { String(repeating: "a", count: n) }
 
-    /// The highest label length that resolves: 999 spec-correct.
-    private static let modes: [(options: MarkdownDocument.ParseOptions, cap: Int)] = [
+    /// Parse options paired with the longest label that resolves under them.
+    private static let cases: [(options: MarkdownDocument.ParseOptions, cap: Int)] = [
         (options: [], cap: 999),
     ]
 
-    // MARK: - Block reference-definition label scanner (`parseOneLinkDefinition`)
+    // MARK: - Link reference definitions
 
-    /// A lone reference definition `[label]: /u` is registered — and thus consumed to no block — only
-    /// when its label passes the cap. Over the cap the whole line falls through to a paragraph of
-    /// literal text. The presence/absence of that paragraph isolates the block reference-definition
-    /// label scanner (`parseOneLinkDefinition` → the contiguous `matchLinkLabel`).
+    /// A link reference definition produces no block, so over the cap the line is a paragraph.
     @Test("reference definition registers at the cap but not one past it")
     func referenceDefinitionLabelCap() {
-        for (options, cap) in Self.modes {
-            // At the cap: the definition is valid, so the line is consumed and no block remains.
+        for (options, cap) in Self.cases {
             MarkdownDocument.withParsedDocument("[\(label(cap))]: /u", options: options) { doc in
                 let kinds = dfs(doc).map(\.kind)
                 #expect(!kinds.contains(.paragraph),
                         "options=\(options.rawValue): a \(cap)-char definition must be consumed")
             }
 
-            // One past the cap: the label scan rewinds, so the line stays a literal paragraph.
             MarkdownDocument.withParsedDocument("[\(label(cap + 1))]: /u", options: options) { doc in
                 let nodes = dfs(doc)
                 #expect(nodes.map(\.kind).contains(.paragraph),
@@ -70,14 +60,11 @@ struct LinkLabelLengthCapTests {
         }
     }
 
-    // MARK: - Inline shortcut reference label scanner (contiguous `matchLinkLabel`)
+    // MARK: - Shortcut reference links
 
-    /// A shortcut reference `[label]` (same label as its definition, so both scans see the same
-    /// length) resolves to a link only at or below the cap; one past it the reference stays literal
-    /// text. Exercises the inline reference label scanner together with the definition scanner.
     @Test("shortcut reference resolves at the cap but not one past it")
     func shortcutReferenceLabelCap() {
-        for (options, cap) in Self.modes {
+        for (options, cap) in Self.cases {
             MarkdownDocument.withParsedDocument("[\(label(cap))]: /u\n\n[\(label(cap))]", options: options) { doc in
                 #expect(linkURLs(doc) == ["/u"],
                         "options=\(options.rawValue): a \(cap)-char reference must resolve")
@@ -90,33 +77,25 @@ struct LinkLabelLengthCapTests {
         }
     }
 
-    // MARK: - Multi-segment full-reference label scanner (`matchLinkLabel(from:end:in:)`)
+    // MARK: - Full reference links across a line ending
 
-    /// A cross-line full reference `[t][A\nB]` inside a block quote drives the multi-segment
-    /// `matchLinkLabel(from:end:in:)` overload (the contiguous window can't image the straddling
-    /// label). Flag-OFF the same input yields no link, though there the definition `[A B]: /u` (1000
-    /// contiguous chars) is already rejected by the contiguous scanner, so no key is ever registered.
-    /// The definition normalizes to the same key as the reference (interior whitespace collapses to
-    /// one space), which is why both labels must be the same length.
-    @Test("cross-line full reference respects the gated cap")
+    /// The definition's label and the reference's label, which spans a line ending in a block quote, normalize to the
+    /// same label (Links). Both are 1000 characters, so the reference doesn't resolve.
+    @Test("a 1000-character full reference label across a line ending does not resolve")
     func multiSegmentReferenceLabelCap() {
-        // 500 + newline + 499 = 1000 scanned bytes; normalizes to a 500-a / space / 499-a key.
         let left = label(500)
         let right = label(499)
         let source = "[\(left) \(right)]: /u\n\n>[t][\(left)\n\(right)]"
 
         MarkdownDocument.withParsedDocument(source, options: []) { doc in
-            #expect(linkURLs(doc).isEmpty, "flag-OFF: the 1000-char definition is rejected, so nothing resolves")
+            #expect(linkURLs(doc).isEmpty, "the 1000-character label defines nothing, so nothing resolves")
         }
     }
 
-    // MARK: - Labels past the spec cap, without cmark bug compatibility
+    // MARK: - Labels past the cap
 
-    /// CommonMark §6.6 caps a link label at 999 characters, so the 1000- and 1001-character labels that
-    /// cmark-gfm's 1000 cap splits between accepted and rejected are both rejected: each definition line
-    /// stays a literal paragraph and each shortcut reference stays literal text.
-    @Test("flag OFF: 1000- and 1001-character labels neither define nor resolve")
-    func overCapLabelsWithoutCompatibility() {
+    @Test("1000- and 1001-character labels neither define nor resolve")
+    func overCapLabelsNeitherDefineNorResolve() {
         for length in [1000, 1001] {
             MarkdownDocument.withParsedDocument("[\(label(length))]: /u", options: []) { doc in
                 let nodes = dfs(doc)

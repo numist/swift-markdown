@@ -11,23 +11,18 @@
 import Testing
 @testable import CommonMark
 
-/// Source ranges for a GFM strikethrough whose opener and closer sit on different physical lines
-/// (the run spans one or more soft breaks).
-///
-/// The deliverable reports such a strikethrough's END on the CLOSER's real physical line (the
-/// byte-projected half-open end past the closer run). A single-line strikethrough's opener and closer
-/// share a line, so it is unchanged. These are the deliverable (spec-correct) guardrails.
+/// Source ranges of a strikethrough (Strikethrough (extension)) whose opening and closing tildes may sit
+/// on different lines. The range ends just past the closing tildes, on their own line.
 @Suite("Multi-line strikethrough source ranges")
 struct MultiLineStrikethroughEndTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// The shipped configuration: source positions on, cmark bug-compatibility deliberately OFF.
     private static let specOptions: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
     /// The source range of the first `.strikethrough` node (DFS order) when `src` is parsed with
-    /// `options`. Returns `nil` if no strikethrough forms, so callers can `#require` fixture sanity.
+    /// `options`, or `nil` if no strikethrough forms.
     private func strikethroughRange(in src: String, options: MarkdownDocument.ParseOptions) -> Range<Pos>? {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> Range<Pos>? in
@@ -40,7 +35,7 @@ struct MultiLineStrikethroughEndTests {
         }
     }
 
-    /// Every node kind in DFS order (for fixture-sanity assertions about nesting).
+    /// Every node kind in DFS order.
     private func kinds(in src: String, options: MarkdownDocument.ParseOptions) -> [MarkdownNode.Kind] {
         MarkdownDocument.withParsedDocument(src, options: options) {
             doc -> [MarkdownNode.Kind] in
@@ -50,67 +45,53 @@ struct MultiLineStrikethroughEndTests {
         }
     }
 
-    @Test("flag-off: a two-line strikethrough ends on the closer's real line (spec-correct)")
-    func twoLineSpecCorrect() throws {
-        // `~~a` on line 1, `b~~` on line 2. Spec-correct the end is the closer run's half-open column
-        // on its OWN line: the last `~` is at line 2 col 3 (b=1, ~=2, ~=3), so the half-open end is
-        // @2:4 - the closer's real line.
+    @Test("a two-line strikethrough ends on the closer's line")
+    func twoLine() throws {
         let range = try #require(strikethroughRange(in: "~~a\nb~~", options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 2, column: 4))
     }
 
-    @Test("flag-off: a three-line strikethrough ends on the closer's real line (spec-correct)")
-    func threeLineSpecCorrect() throws {
-        // `~~a` / `bb` / `cc~~`. The closer `~~` ends at line 3 col 5 (c=1, c=2, ~=3, ~=4, half-open 5).
+    @Test("a three-line strikethrough ends on the closer's line")
+    func threeLine() throws {
         let range = try #require(strikethroughRange(in: "~~a\nbb\ncc~~", options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 3, column: 5))
     }
 
-    @Test("flag-off: a two-line single-tilde strikethrough ends on the closer's real line")
-    func singleTildeSpecCorrect() throws {
-        // `~a` on line 1, `b~` on line 2. Closer `~` at line 2 col 2 (b=1, ~=2), half-open @2:3.
+    @Test("a two-line single-tilde strikethrough ends on the closer's line")
+    func singleTilde() throws {
         let range = try #require(strikethroughRange(in: "~a\nb~", options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 2, column: 3))
     }
 
-    @Test("flag-off: a single-line strikethrough spans opener through closer")
-    func singleLineSpecCorrect() throws {
-        // `~~a~~`: opener and closer on line 1, so the byte-projected half-open end (@1:6) already sits
-        // on the opener's line. (Single-line strikethroughs never crossed a line, so this was identical
-        // flag-on/flag-off even before the position-override machinery was removed.)
+    @Test("a single-line strikethrough spans opener through closer")
+    func singleLine() throws {
         let range = try #require(strikethroughRange(in: "~~a~~", options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 1, column: 6))
     }
 
-    @Test("flag-off: a strikethrough closing before a soft break keeps its real range (no cross)")
-    func closesBeforeSoftBreakSpecCorrect() throws {
-        // `~~ab~~\ncd`: the strikethrough closes on line 1 (the soft break follows it), so it never
-        // crosses a line: @1:1-1:7.
+    @Test("a strikethrough closing before a soft line break stays on its line")
+    func closesBeforeSoftBreak() throws {
         let range = try #require(strikethroughRange(in: "~~ab~~\ncd", options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 1, column: 7))
     }
 
-    @Test("flag-off: a strikethrough nested in emphasis crossing a line ends on the closer's real line")
-    func nestedInEmphasisSpecCorrect() throws {
-        // `*~~a\nb~~*`: emphasis wraps a two-line strikethrough. Fixture sanity: both nodes must form.
+    @Test("a two-line strikethrough nested in emphasis ends on the closer's line")
+    func nestedInEmphasis() throws {
         let src = "*~~a\nb~~*"
         let allKinds = kinds(in: src, options: Self.specOptions)
         #expect(allKinds.contains(.emphasis), "fixture must form an emphasis wrapper")
-        // The `~~` opener is at line 1 col 2 (after `*`); the closer `~~` ends at line 2 col 4 (half-open).
         let range = try #require(strikethroughRange(in: src, options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 2))
         #expect(range.upperBound == Pos(line: 2, column: 4))
     }
 
-    @Test("flag-off: a strikethrough crossing a backslash hard break ends on the closer's real line")
-    func backslashHardBreakSpecCorrect() throws {
-        // `~~a\<newline>b~~`: a matched strikethrough spanning a backslash hard break. Flag-off (the
-        // shipped default) byte-projects the closer onto its real physical line 2, half-open @2:4.
+    @Test("a strikethrough crossing a backslash hard line break ends on the closer's line")
+    func backslashHardBreak() throws {
         let range = try #require(strikethroughRange(in: "~~a\\\nb~~", options: Self.specOptions))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 2, column: 4))

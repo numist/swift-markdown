@@ -11,18 +11,12 @@
 import Testing
 @testable import CommonMark
 
-/// Source range for a text node on a MATCHED, multi-segment paragraph continuation line.
-///
-/// A matched continuation line (indented to the block's content column) already sits at that column,
-/// so its surviving content byte-projects onto its true source column - the same as any source-backed
-/// run. This is the deliverable (spec-correct) guardrail that a matched continuation's inline nodes
-/// keep their byte-projected range.
-@Suite("Arena text-node end in multi-segment content")
+/// Source ranges of text on a paragraph continuation line indented to its list item's content column.
+@Suite("Text source range on an indented continuation line")
 struct ArenaTextEndRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// Source positions on, smart punctuation on (the shipped default).
     private static let specOptions: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart]
 
@@ -35,21 +29,18 @@ struct ArenaTextEndRangeTests {
         return out
     }
 
-    @Test("a matched continuation text node keeps its byte-projected column")
-    func matchedContinuationKeepsByteProjectedColumn() throws {
-        // " - b" then "   c" (3-space MATCHED continuation, no smart-punct rewrite → a single plain
-        // source text node) then "  d". The matched continuation `c` sits at the block content column,
-        // so it byte-projects to its true @2:4-2:5 on its own physical line.
+    @Test("text on an indented continuation line starts at its own source column")
+    func indentedContinuationKeepsSourceColumn() throws {
         let texts = textNodes(in: " - b\n   c\n  d")
         try #require(texts.count == 3, "expected b / c / d text nodes")
         try #require(texts[1].literal == "c", "expected a plain `c` text node, got \(String(describing: texts[1].literal))")
 
-        #expect(texts[1].range?.lowerBound == Pos(line: 2, column: 4))   // "c" at its own column
-        #expect(texts[1].range?.upperBound == Pos(line: 2, column: 5))   // end on line 2
+        #expect(texts[1].range?.lowerBound == Pos(line: 2, column: 4))
+        #expect(texts[1].range?.upperBound == Pos(line: 2, column: 5))
     }
 }
 
-// File-scope + `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (see `dfsRanges`).
+/// Depth-first: every text node's literal and source range.
 private func collectText(
     _ node: borrowing MarkdownNode,
     into out: inout [(literal: String?, range: Range<MarkdownNode.SourcePosition>?)]

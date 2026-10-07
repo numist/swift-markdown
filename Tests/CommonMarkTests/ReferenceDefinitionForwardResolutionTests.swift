@@ -12,7 +12,7 @@ import Testing
 @testable import CommonMark
 
 // DFS-render each node as an indented `kind[:detail]` line, so a whole tree can be asserted at once.
-// File-scope + `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (see `dfsRanges`).
+// File-scope so the walk can borrow each noncopyable `MarkdownNode`.
 internal func describeTree(_ node: borrowing MarkdownNode, depth: Int, into out: inout [String]) {
     let label: String
     switch node.kind {
@@ -32,20 +32,12 @@ internal func describeTree(_ node: borrowing MarkdownNode, depth: Int, into out:
     }
 }
 
-/// Link reference definitions are document-global: a reference resolves against a definition that
-/// appears LATER in the document, including one nested inside a container (a list item), and the
-/// reference's label may span a soft line break.
-///
-/// cmark collects every definition into `parser->refmap` during parsing — `try_parsing_reference`
-/// runs at paragraph finalize wherever a paragraph closes, containers included — and resolves
-/// references only afterward, during inline processing (`handle_close_bracket`, `src/inlines.c`),
-/// against the complete map. So the order and nesting of a definition relative to its reference does
-/// not matter, and a multi-line `[label]` reference matches a definition registered for the
-/// whitespace-normalized label.
+/// A link reference definition applies to the whole document (Link reference definitions): a
+/// reference resolves against a definition that appears later, including one inside a list item, and
+/// the reference's label may span a line ending.
 @Suite("Forward / nested link reference definition resolution")
 struct ReferenceDefinitionForwardResolutionTests {
 
-    /// The shipped parser's source-position configuration.
     private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition]
 
     private func tree(_ src: String, options: MarkdownDocument.ParseOptions) -> [String] {
@@ -56,8 +48,8 @@ struct ReferenceDefinitionForwardResolutionTests {
         }
     }
 
-    @Test("without cmark bug compatibility: multi-line reference resolves against a definition nested in a later list item")
-    func multiLineReferenceResolvesAgainstNestedForwardDefinitionSpecCompliant() throws {
+    @Test("multi-line reference resolves against a definition nested in a later list item")
+    func multiLineReferenceResolvesAgainstNestedForwardDefinition() throws {
         let lines = tree(" ][ar\n]\n- [ar]:[", options: Self.specOptions)
         try #require(lines.contains("  list"), "fixture must form a list; got \(lines)")
         #expect(lines == [
@@ -72,8 +64,8 @@ struct ReferenceDefinitionForwardResolutionTests {
         ])
     }
 
-    @Test("without cmark bug compatibility: single-line reference resolves against a definition nested in a later list item")
-    func singleLineReferenceResolvesAgainstNestedForwardDefinitionSpecCompliant() throws {
+    @Test("single-line reference resolves against a definition nested in a later list item")
+    func singleLineReferenceResolvesAgainstNestedForwardDefinition() throws {
         let lines = tree(" ][ar]\n- [ar]:[", options: Self.specOptions)
         try #require(lines.contains("  list"), "fixture must form a list; got \(lines)")
         #expect(lines == [
@@ -87,8 +79,8 @@ struct ReferenceDefinitionForwardResolutionTests {
         ])
     }
 
-    @Test("without cmark bug compatibility: reference resolves against a definition defined LATER at top level")
-    func referenceResolvesAgainstLaterTopLevelDefinitionSpecCompliant() throws {
+    @Test("reference resolves against a definition defined LATER at top level")
+    func referenceResolvesAgainstLaterTopLevelDefinition() throws {
         let lines = tree("[a]\n\n[a]: /u", options: Self.specOptions)
         try #require(lines.contains(where: { $0.contains("link:") }), "fixture must form a link; got \(lines)")
         #expect(lines == [
@@ -99,8 +91,8 @@ struct ReferenceDefinitionForwardResolutionTests {
         ])
     }
 
-    @Test("without cmark bug compatibility: reference resolves against a definition defined LATER inside a list item")
-    func referenceResolvesAgainstLaterNestedDefinitionSpecCompliant() throws {
+    @Test("reference resolves against a definition defined LATER inside a list item")
+    func referenceResolvesAgainstLaterNestedDefinition() throws {
         let lines = tree("[a]\n\n- [a]: /u", options: Self.specOptions)
         try #require(lines.contains("  list"), "fixture must form a list; got \(lines)")
         #expect(lines == [

@@ -11,7 +11,7 @@
 import Testing
 @testable import CommonMark
 
-// DFS-collect each node's kind and source range. File-scope + `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (see code-conventions: bind docs to locals, use file-scope helpers).
+// DFS-collect each node's kind and source range. File-scope so the walk can borrow each noncopyable `MarkdownNode`.
 internal func dfsRanges(
     _ node: borrowing MarkdownNode,
     into out: inout [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?)]
@@ -115,11 +115,8 @@ struct SourcePositionTests {
 
     @Test("empty list item extends into a trailing tab continuation line")
     func emptyItemTabContinuation() throws {
-        // A bare `-` opens an empty item whose content column is 2. cmark's item-continuation
-        // rule tests `indent >= content column` before the blank/first-child check, so a
-        // following whitespace-only line whose expanded indent reaches column 2 extends the
-        // (still childless) item onto it: a tab expands to 4 columns >= 2. The end column is
-        // the raw byte offset past the tab (1 tab -> col 2), per the zero-copy source model.
+        // A whitespace-only line that reaches the empty item's content column (2) extends the item. A
+        // tab is 4 columns but one byte, so the item ends at column 2.
         try MarkdownDocument.withParsedDocument("-\n\t", options: .sourcePosition) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         dfsRanges(doc.root, into: &ranges)
@@ -128,8 +125,6 @@ struct SourcePositionTests {
         #expect(item.upperBound == Pos(line: 2, column: 2))
         }
 
-        // Two tabs push the end column one byte further: end is the raw byte offset past the
-        // whitespace, so column = tab count + 1 (@2:3), not the expanded column.
         try MarkdownDocument.withParsedDocument("-\n\t\t", options: .sourcePosition) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         dfsRanges(doc.root, into: &ranges)
@@ -138,8 +133,7 @@ struct SourcePositionTests {
         #expect(item.upperBound == Pos(line: 2, column: 3))
         }
 
-        // Control: a lone trailing space is only 1 column, below the content column 2, so the
-        // empty item does NOT extend - it ends on line 1 (@1:2), as a truly blank line would.
+        // One space falls short of the content column, so the item ends on line 1.
         try MarkdownDocument.withParsedDocument("-\n ", options: .sourcePosition) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         dfsRanges(doc.root, into: &ranges)
@@ -151,16 +145,8 @@ struct SourcePositionTests {
 
     @Test("a nested empty list item extends onto a blank line only when the blank reaches its OWN content column")
     func nestedEmptyItemBlankLineExtent() throws {
-        // `- -` opens an outer empty item (marker col 1, content column 3) that itself contains an
-        // inner empty item (marker col 3, content column 5). cmark's item continuation tests
-        // `indent >= marker_offset + padding` per item, measuring each item's indent relative to the
-        // prefix its ancestors already consumed - so a childless item extends onto a following blank
-        // line only when that blank reaches its OWN content column, not a shallower ancestor's.
-
-        // Blank indent 2 reaches the OUTER content column (3, i.e. 2 columns of indent past the start)
-        // but NOT the inner's (5). So the outer extends onto the blank line while the inner - childless
-        // and short of its own content column - ends on its marker line. (Regression: the rewrite used
-        // to measure the inner against the outer's content column and wrongly extend it to @2:3.)
+        // `- -` is an outer item (content column 3) holding an empty inner item (content column 5).
+        // Two spaces reach only the outer item's content column.
         try MarkdownDocument.withParsedDocument("- -\n  \n", options: .sourcePosition) { doc in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)
@@ -172,8 +158,7 @@ struct SourcePositionTests {
             #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // inner does NOT extend
         }
 
-        // Boundary: 4 columns of indent reach the inner content column (5) exactly, so BOTH the outer
-        // and the (childless) inner item extend onto the blank line.
+        // Four spaces reach the inner item's content column.
         try MarkdownDocument.withParsedDocument("- -\n    \n", options: .sourcePosition) { doc in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)
@@ -182,14 +167,11 @@ struct SourcePositionTests {
             let outer = try #require(items[0])
             let inner = try #require(items[1])
             #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 2, column: 5))
-            #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 2, column: 5))   // inner extends: indent == its content column
+            #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 2, column: 5))   // inner extends
         }
 
-        // Three levels (`- + *`, distinct bullets so it is genuine nesting, not a thematic break) with
-        // a blank whose indent (5) lands BETWEEN the middle item's content column (5) and the inner's
-        // (7). The outer and middle both stay open - the middle because it still has a child (the inner
-        // list) - while the innermost, childless and short of its own content column, ends on its marker
-        // line. Pins exactly which level extends when the indent falls between two nesting levels.
+        // Distinct bullets nest three items rather than form a thematic break. Five spaces reach the
+        // middle item's content column but not the empty innermost item's (7).
         try MarkdownDocument.withParsedDocument("- + *\n     \n", options: .sourcePosition) { doc in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)

@@ -123,7 +123,7 @@ struct ParagraphTests {
         }
     }
 
-    @Test("trailing newline doesn't produce extra empty paragraph")
+    @Test("a trailing line ending doesn't produce an extra empty paragraph")
     func trailingNewline() {
         let source = "alone\n"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -132,12 +132,12 @@ struct ParagraphTests {
         }
     }
 
-    @Test("CRLF and lone CR are treated as line terminators inline")
+    @Test("CRLF and lone CR are line endings")
     func crlfHandling() {
         let source = "one\r\ntwo\rthree"
         MarkdownDocument.withParsedDocument(source) { doc in
         let texts = dfs(doc).compactMap { $0.literal }
-        // Whole input is one paragraph with softbreaks between each line.
+        // One paragraph with a soft line break between each line.
         #expect(texts == ["one", "two", "three"])
         }
     }
@@ -205,7 +205,7 @@ struct ATXHeadingTests {
         }
     }
 
-    @Test("up to 3 leading spaces still parses as heading")
+    @Test("up to 3 leading spaces parses as heading")
     func leadingSpaces() {
         let source = "   ### heading"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -297,7 +297,7 @@ struct ThematicBreakTests {
         }
     }
 
-    @Test("more than three markers are still a single thematic break")
+    @Test("more than three markers are a single thematic break")
     func manyMarkers() {
         let source = "------------"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -315,7 +315,7 @@ struct ThematicBreakTests {
         }
     }
 
-    @Test("up to 3 leading spaces still parses as thematic break")
+    @Test("up to 3 leading spaces parses as thematic break")
     func leadingSpaces() {
         let source = "   ---"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -347,7 +347,7 @@ struct ThematicBreakTests {
         let source = "-*-"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
-        // The `*` delimiter run has no matching closer, so the pieces stay as text - and adjacent text is coalesced into one node (cmark's consolidate_text_nodes).
+        // The `*` delimiter run has no matching closer, so the line is a single text node.
         #expect(kinds == [.document, .paragraph, .text])
         }
     }
@@ -518,7 +518,7 @@ struct IndentedCodeTests {
         }
     }
 
-    @Test("trailing newline on a code block is always present")
+    @Test("a code block's content always ends in a line ending")
     func trailingNewline() {
         let source = "    foo\n"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -527,7 +527,7 @@ struct IndentedCodeTests {
         }
     }
 
-    @Test("multiple indented lines join with newlines")
+    @Test("multiple indented lines join with line endings")
     func multipleLines() {
         let source = "    foo\n    bar\n    baz"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -671,10 +671,8 @@ struct FencedCodeTests {
 
     @Test("info string in a tab-indented list item")
     func infoStringInTabIndentedListItem() {
-        // A list marker followed by a tab is tab-materialized (`*\t` expands to `*   `), so the fence
-        // matcher measures the info-string bounds against a transient per-line buffer, not the source.
-        // Those bounds must be mapped back to source or the language tag reads the wrong bytes. The
-        // trailing ``` opens a second, top-level fence (empty info) that never closes.
+        // The tab after `*` is expanded into a copy of the line, whose bytes are offset from the source. The
+        // unindented ``` line opens a second, top-level fence with an empty info string.
         let source = "*\t```n\na\n```"
         MarkdownDocument.withParsedDocument(source) { doc in
             let blocks = codeBlocks(doc)
@@ -684,9 +682,8 @@ struct FencedCodeTests {
 
     @Test("unclosed info string in a tab-indented list item does not crash")
     func unclosedInfoStringInTabIndentedListItem() {
-        // Regression: the tab-materialized buffer is longer than the source, so the mismeasured info
-        // offset ran past the source buffer and trapped with "Index range out of bounds". The rewrite
-        // must never crash, and the language tag must still read correctly.
+        // The tab-expanded copy of the line is longer than the source, and the info string runs to the end of
+        // input.
         let source = "*\t```n"
         MarkdownDocument.withParsedDocument(source) { doc in
             let blocks = codeBlocks(doc)
@@ -696,9 +693,7 @@ struct FencedCodeTests {
 
     @Test("escaped info string in a tab-indented list item is decoded")
     func escapedInfoStringInTabIndentedListItem() {
-        // The info bounds are measured against the materialized buffer, then remapped to source and
-        // fed to the escape/entity decoder against `sourceBytes`. A backslash escape (`\+`) must
-        // decode to the canonical language tag, reading the correct source bytes throughout.
+        // Per Backslash escapes, `\+` in the info string is `+`.
         let source = "*\t```foo\\+bar\nx\n```"
         MarkdownDocument.withParsedDocument(source) { doc in
             let blocks = codeBlocks(doc)
@@ -717,7 +712,7 @@ struct FencedCodeTests {
 
     @Test("backtick fence info may not contain backticks")
     func backticksInInfoRejected() {
-        // The opening fence with a backtick in its info is rejected; line is paragraph text. (A bare `` ``` `` on a later line would still start a fresh fence - that's why this test uses a single line with no follow-up.)
+        // A single line, because a later ``` line would open a fence of its own.
         let source = "```foo`bar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1262,9 +1257,6 @@ struct HTMLBlockTests {
 
     @Test("type 4: requires an uppercase ASCII letter after `<!`")
     func type4RequiresUppercaseLetter() {
-        // Start condition 4 is `<!` followed by an *uppercase* ASCII letter (cmark
-        // scanners.re: `'<!' [A-Z]`). A lowercase letter does not open a type-4 block,
-        // so the line is an ordinary paragraph.
         MarkdownDocument.withParsedDocument("<!Baz") { doc in
         let kinds = dfs(doc).map { $0.kind }
         #expect(kinds == [.document, .htmlBlock])
@@ -1336,7 +1328,8 @@ struct HTMLBlockTests {
         let source = "<foo>\nbar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
-        // With type-7 HTML block detection, `<foo>` at column 0 starts an HTML block (type 7) rather than a paragraph. The block ends on the next blank line, so `bar` is absorbed into the same block.
+        // `<foo>` is a complete open tag alone on its line, so it starts a type 7 HTML block, which ends at a blank
+        // line and so includes `bar`.
         #expect(kinds == [.document, .htmlBlock])
         }
     }
@@ -1361,9 +1354,8 @@ struct HTMLBlockTests {
         }
     }
 
-    // CommonMark's HTML-tag whitespace is `spacechar = [ \t\v\f\r\n]` (cmark scanners.re), so
-    // vertical tab (0x0B) and form feed (0x0C) separate a tag name from what follows exactly like
-    // space and tab. A tag whose name is followed by VT/FF is still a valid HTML-block start.
+    // Line tabulation and form feed are whitespace characters (Characters and lines), so they end a tag name
+    // as a space does.
 
     @Test("type 1: form feed after a raw-text tag name starts an HTML block")
     func type1FormFeedWhitespace() {
@@ -1393,11 +1385,9 @@ struct HTMLBlockTests {
         }
     }
 
-    // cmark's type-7 start condition requires the rest of the line after the tag to be `[\t\n\f ]*`
-    // (scanners.re): form feed counts as trailing whitespace, but vertical tab does NOT - it isn't in
-    // that class, even though it IS a `spacechar` inside the tag. The two classes differ, so this is
-    // asserted separately from the intra-tag cases above.
-    @Test("type 7: form feed trailing the tag still starts an HTML block")
+    // After a type 7 open tag, the rest of the line may hold spaces, tabs and form feeds, but not a line
+    // tabulation.
+    @Test("type 7: form feed trailing the tag starts an HTML block")
     func type7TrailingFormFeed() {
         MarkdownDocument.withParsedDocument("<a>\u{0C}") { doc in
             let kinds = dfs(doc).map { $0.kind }
@@ -1413,10 +1403,7 @@ struct HTMLBlockTests {
         }
     }
 
-    // cmark's type-7 tag grammar (scanners.re) defines `unquotedvalue = [^ \t\r\n\v\f"'=<>`\x00]+`: the
-    // `+` requires at least one character, so an attribute with an empty unquoted value makes the whole
-    // tag invalid and the line is NOT an HTML block. An empty *quoted* value (`""`/`''`) is still valid.
-    // This mirrors the inline HTML scanner's non-empty guard so block and inline HTML agree.
+    // An unquoted attribute value is nonempty, while a quoted one may be empty (Raw HTML).
     @Test("type 7: empty unquoted attribute value does not start an HTML block")
     func type7EmptyUnquotedValueIsParagraph() {
         for source in ["<a b=>", "<a b= >"] {
@@ -1601,12 +1588,12 @@ struct ReferenceDefinitionTests {
         }
     }
 
-    @Test("def with title on same line but trailing junk fails the title")
+    @Test("text after the title on its line leaves no definition")
     func titleWithTrailingJunk() {
-        // Per cmark: if a title is found but the line doesn't end cleanly afterwards, the parser rewinds to the no-title commit. The dest's line must then end cleanly itself.
+        // Per Link reference definitions, only spaces or tabs may follow the title on its line. Without the title,
+        // the destination is followed by other text on its line, so there is no definition.
         let source = "[foo]: /url \"title\" extra\n\nhello"
         MarkdownDocument.withParsedDocument(source) { doc in
-        // Without title fallback, the def line "[foo]: /url \"title\" extra" doesn't end cleanly after the dest either ("\"title\" extra" is junk). So no def is registered and the whole thing is a paragraph.
         #expect(doc._storage.referenceMap["foo"] == nil)
         #expect(dfs(doc).map(\.kind).contains(.paragraph))
         }
@@ -1658,12 +1645,11 @@ struct TasklistTests {
         }
     }
 
-    @Test("default-disabled: [ ] stays as text in item")
+    @Test("without the tasklist option, [ ] is text in the item")
     func defaultDisabled() {
         let source = "- [ ] foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstItem(doc)
-        // `[` is a bracket, no ref-def, falls back to text - but the parser emits it as raw text. Either way isChecked should be nil.
         #expect(info.checked == nil)
         }
     }
@@ -1735,11 +1721,10 @@ struct TasklistTests {
 
     @Test("non-first paragraph in item is not a task marker")
     func nonFirstParagraphIsNotMarker() {
-        // The second paragraph in the same item shouldn't be treated as a task marker even if it starts with [ ] .
+        // Per Task list items (extension), only the item's first block can begin with the marker.
         let source = "- foo\n\n  [ ] bar"
         MarkdownDocument.withParsedDocument(source, options: .tasklist) { doc in
         let info = Self.firstItem(doc)
-        // First paragraph is "foo" - no marker - item is not a task item.
         #expect(info.checked == nil)
         }
     }
@@ -1779,7 +1764,7 @@ struct TableTests {
         return rows
     }
 
-    @Test("default-disabled: pipe lines stay as paragraph")
+    @Test("without the tables option, pipe lines are a paragraph")
     func defaultDisabled() {
         let source = "| a | b |\n|---|---|\n| 1 | 2 |"
         MarkdownDocument.withParsedDocument(source) { doc in

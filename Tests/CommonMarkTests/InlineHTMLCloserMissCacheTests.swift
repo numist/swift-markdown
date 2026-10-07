@@ -11,8 +11,7 @@
 import Testing
 @testable import CommonMark
 
-// Literals of every `.htmlInline` node in the tree, in document order. File-scope + `borrowing MarkdownNode`
-// to satisfy the noncopyable-borrow rules.
+/// The literals of every raw HTML node in the tree, in document order.
 private func inlineHTMLLiterals(_ node: borrowing MarkdownNode) -> [String] {
     var literals: [String] = []
     if case .htmlInline = node.kind {
@@ -24,12 +23,11 @@ private func inlineHTMLLiterals(_ node: borrowing MarkdownNode) -> [String] {
     return literals
 }
 
-/// An unclosed raw-HTML opener (`<!--`, `<?`, `<!X `, `<![CDATA[`) scans to its closer, a NUL, or the end of
-/// the inline content. Once a scan of one kind has failed from some offset, a later opener of that kind whose
-/// scan starts inside the failed stretch is known to fail too, without rescanning. These cases pin down that
-/// every construct that must still match does - the empty comments, closers that overlap a later opener, the
-/// other kinds, and later paragraphs - and that every opener inside a failed stretch stays literal.
-@Suite("Inline raw-HTML closer miss cache")
+/// An unclosed raw HTML opener (`<!--`, `<?`, `<!X `, `<![CDATA[`) scans to its closer, a NUL, or the end of the
+/// inline content. Once a scan of one kind fails from some offset, a later opener of that kind whose scan starts inside
+/// the failed stretch fails too, without a rescan. Every opener inside a failed stretch stays literal, while the empty
+/// comments, closers that overlap a later opener, the other kinds and later paragraphs match.
+@Suite("Inline raw HTML closer miss cache")
 struct InlineHTMLCloserMissCacheTests {
 
     private func htmlLiterals(_ src: String, options: MarkdownDocument.ParseOptions) -> [String] {
@@ -57,8 +55,8 @@ struct InlineHTMLCloserMissCacheTests {
         #expect(htmlLiterals("x<!--a <!-->", options: []) == ["<!--a <!-->"])
     }
 
-    @Test("flag OFF: a later `<!--->` closes an earlier comment at its `-->`")
-    func flagOffLaterDashEmptyCommentClosesEarlierComment() {
+    @Test("a later `<!--->` closes an earlier comment at its `-->`")
+    func laterDashEmptyCommentClosesEarlierComment() {
         #expect(htmlLiterals("x<!--a <!--->", options: []) == ["<!--a <!--->"])
     }
 
@@ -95,7 +93,7 @@ struct InlineHTMLCloserMissCacheTests {
         #expect(htmlLiterals("x<?a <!B b>", options: []) == ["<!B b>"])
     }
 
-    // Every raw-HTML construct ends in `>`, so after a failed declaration nothing later in the run can match.
+    // Every raw HTML construct ends in `>`, so after a failed declaration nothing later in the run can match.
     @Test("a failed CDATA leaves later declarations and processing instructions matchable")
     func failedCDATALeavesOtherKinds() {
         #expect(htmlLiterals("x<![CDATA[a <!B b>", options: []) == ["<!B b>"])
@@ -107,8 +105,8 @@ struct InlineHTMLCloserMissCacheTests {
         #expect(htmlLiterals("x<!--a <?b?>", options: []) == ["<?b?>"])
     }
 
-    @Test("flag OFF: a failed comment leaves later CDATA and declarations matchable")
-    func flagOffFailedCommentLeavesBangForms() {
+    @Test("a failed comment leaves later CDATA and declarations matchable")
+    func failedCommentLeavesBangForms() {
         #expect(htmlLiterals("x<!--a <![CDATA[b]]>", options: []) == ["<![CDATA[b]]>"])
         #expect(htmlLiterals("x<!--a <!B b>", options: []) == ["<!B b>"])
     }
@@ -125,8 +123,8 @@ struct InlineHTMLCloserMissCacheTests {
 
     // MARK: NUL
 
-    // NUL is replaced with U+FFFD before inline parsing (CommonMark §2.3), so these pin the observable
-    // behaviour; the closer scan's NUL-stop branch is not reached through them.
+    // A NUL is replaced with U+FFFD before inline parsing (Insecure characters), so these cases don't reach the
+    // closer scan's stop at a NUL.
 
     @Test("a NUL in a construct's body is replaced and does not end the closer search")
     func nulDoesNotEndCloserSearch() {

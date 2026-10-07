@@ -11,23 +11,14 @@
 import Testing
 @testable import CommonMark
 
-/// Source ranges for a paragraph continuation line inside a GFM *task-list* item.
-///
-/// A task-list item (`- [ ] x` / `- [x] x`) has its checkbox marker (`[ ] ` / `[x] `, four
-/// columns) consumed by the tasklist extension *after* the list marker, so the item's paragraph
-/// content begins four columns past the plain-bullet content column (at the text after the
-/// checkbox). cmark-gfm fixes the paragraph's continuation-line re-indent base (`block_offset`) at
-/// that checkbox-adjusted content column, so a lazy continuation line re-bases there - four columns
-/// further right than a plain bullet's continuation would.
-///
-/// The flag-off assertions are the guardrail proving the shipped default keeps TRUE physical columns.
-@Suite("Task-list item lazy-continuation source ranges (Quirk E)")
+/// A paragraph continuation line in a task list item has a source range that starts at the line's first
+/// content byte, whatever the width of the checkbox on the opening line.
+@Suite("Task list item continuation line source ranges")
 struct TasklistLazyContinuationRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// The shipped configuration: tasklist + source positions on.
-    private static let specOptions: MarkdownDocument.ParseOptions =
+    private static let options: MarkdownDocument.ParseOptions =
         [.tasklist, .sourcePosition]
 
     private func ranges(
@@ -41,9 +32,8 @@ struct TasklistLazyContinuationRangeTests {
         }
     }
 
-    /// The task-list item's `checked` state, or `nil` if the item isn't a task item. Fixture-sanity:
-    /// a `nil` here means the checkbox was never recognized, so the test would be validating a plain
-    /// bullet rather than the task-item re-base it claims to.
+    /// The first list item's `checked` state (`.some(nil)` for an item without a checkbox), or `nil` if
+    /// there is no list item.
     private func itemChecked(
         in ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)]
     ) -> Bool?? {
@@ -61,22 +51,20 @@ struct TasklistLazyContinuationRangeTests {
         ranges.filter { $0.kind == .text }.map { $0.range }
     }
 
-    @Test("flag-off: task-item continuation keeps its TRUE physical column")
-    func flagOffKeepsTrueColumn() throws {
-        // The shipped default keeps the continuation at its physical column: `y` at
-        // column 1 (@2:1-2:2), spec-correct.
-        let ranges = ranges(in: "- [ ] x\ny", options: Self.specOptions)
-        try #require(itemChecked(in: ranges) == .some(.some(false)))  // still a task item flag-off
+    @Test("an unchecked task list item's lazy continuation line starts at column 1")
+    func uncheckedLazyContinuationColumn() throws {
+        let ranges = ranges(in: "- [ ] x\ny", options: Self.options)
+        try #require(itemChecked(in: ranges) == .some(.some(false)))
         let texts = texts(in: ranges)
         try #require(texts.count == 2)
 
         #expect(texts[0]?.lowerBound == Pos(line: 1, column: 7))   // "x" content after checkbox
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 8))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y" at its TRUE column
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y"
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
 
-        // A ten-byte lazy line keeps its TRUE physical columns too.
-        let longRanges = self.ranges(in: "- [ ] x\nyyyyyyyyyy", options: Self.specOptions)
+        // A ten-byte line starts at the same column.
+        let longRanges = self.ranges(in: "- [ ] x\nyyyyyyyyyy", options: Self.options)
         try #require(itemChecked(in: longRanges) == .some(.some(false)))
         let longTexts = self.texts(in: longRanges)
         try #require(longTexts.count == 2)
@@ -86,22 +74,20 @@ struct TasklistLazyContinuationRangeTests {
         #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 11))
     }
 
-    /// The checked task item's continuation keeps its TRUE
-    /// physical column @2:1.
-    @Test("flag-off: checked task-item continuation keeps its TRUE physical column")
-    func flagOffCheckedKeepsTrueColumn() throws {
-        let ranges = ranges(in: "- [x] x\ny", options: Self.specOptions)
+    @Test("a checked task list item's lazy continuation line starts at column 1")
+    func checkedLazyContinuationColumn() throws {
+        let ranges = ranges(in: "- [x] x\ny", options: Self.options)
         try #require(itemChecked(in: ranges) == .some(.some(true)))
         let texts = texts(in: ranges)
         try #require(texts.count == 2)
 
         #expect(texts[0]?.lowerBound == Pos(line: 1, column: 7))   // "x" content after checkbox
         #expect(texts[0]?.upperBound == Pos(line: 1, column: 8))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y" at its TRUE column
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y"
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
 
-        // A ten-byte lazy line keeps its TRUE physical columns too.
-        let longRanges = self.ranges(in: "- [x] x\nyyyyyyyyyy", options: Self.specOptions)
+        // A ten-byte line starts at the same column.
+        let longRanges = self.ranges(in: "- [x] x\nyyyyyyyyyy", options: Self.options)
         try #require(itemChecked(in: longRanges) == .some(.some(true)))
         let longTexts = self.texts(in: longRanges)
         try #require(longTexts.count == 2)
@@ -111,20 +97,18 @@ struct TasklistLazyContinuationRangeTests {
         #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 11))
     }
 
-    /// The one leading space is visible, so `y` keeps its
-    /// TRUE physical column @2:2.
-    @Test("flag-off: one-space task-item continuation keeps its TRUE physical column")
-    func flagOffOneSpaceKeepsTrueColumn() throws {
-        let ranges = ranges(in: "- [ ] x\n y", options: Self.specOptions)
+    @Test("a one-space-indented continuation line starts after the space")
+    func oneSpaceContinuationColumn() throws {
+        let ranges = ranges(in: "- [ ] x\n y", options: Self.options)
         try #require(itemChecked(in: ranges) == .some(.some(false)))
         let texts = texts(in: ranges)
         try #require(texts.count == 2)
 
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 2))   // "y" at its TRUE column (leading space visible)
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 2))   // "y" after the space
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 3))
 
-        // A ten-byte lazy line keeps its TRUE physical columns too.
-        let longRanges = self.ranges(in: "- [ ] x\n yyyyyyyyyy", options: Self.specOptions)
+        // A ten-byte line starts at the same column.
+        let longRanges = self.ranges(in: "- [ ] x\n yyyyyyyyyy", options: Self.options)
         try #require(itemChecked(in: longRanges) == .some(.some(false)))
         let longTexts = self.texts(in: longRanges)
         try #require(longTexts.count == 2)
@@ -132,20 +116,18 @@ struct TasklistLazyContinuationRangeTests {
         #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 12))
     }
 
-    /// The four leading spaces are visible, so `y` keeps
-    /// its TRUE physical column @2:5.
-    @Test("flag-off: deeper-indent task-item continuation keeps its TRUE physical column")
-    func flagOffDeeperIndentKeepsTrueColumn() throws {
-        let ranges = ranges(in: "- [ ] x\n    y", options: Self.specOptions)
+    @Test("a four-space-indented continuation line starts after the spaces")
+    func fourSpaceContinuationColumn() throws {
+        let ranges = ranges(in: "- [ ] x\n    y", options: Self.options)
         try #require(itemChecked(in: ranges) == .some(.some(false)))
         let texts = texts(in: ranges)
         try #require(texts.count == 2)
 
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 5))   // "y" at its TRUE column (four spaces visible)
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 5))   // "y" after the spaces
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 6))
 
-        // A ten-byte lazy line keeps its TRUE physical columns too.
-        let longRanges = self.ranges(in: "- [ ] x\n    yyyyyyyyyy", options: Self.specOptions)
+        // A ten-byte line starts at the same column.
+        let longRanges = self.ranges(in: "- [ ] x\n    yyyyyyyyyy", options: Self.options)
         try #require(itemChecked(in: longRanges) == .some(.some(false)))
         let longTexts = self.texts(in: longRanges)
         try #require(longTexts.count == 2)
@@ -153,20 +135,18 @@ struct TasklistLazyContinuationRangeTests {
         #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 15))
     }
 
-    /// A plain bullet's continuation keeps its
-    /// TRUE physical column @2:1.
-    @Test("flag-off: plain-bullet continuation keeps its TRUE physical column")
-    func flagOffPlainBulletKeepsTrueColumn() throws {
-        let ranges = ranges(in: "- x\ny", options: Self.specOptions)
-        try #require(itemChecked(in: ranges) == .some(Bool?.none))   // an ordinary (non-task) item
+    @Test("a list item without a checkbox has the same continuation line range")
+    func plainBulletContinuationColumn() throws {
+        let ranges = ranges(in: "- x\ny", options: Self.options)
+        try #require(itemChecked(in: ranges) == .some(Bool?.none))   // no checkbox
         let texts = texts(in: ranges)
         try #require(texts.count == 2)
 
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y" at its TRUE column
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y"
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
 
-        // A ten-byte lazy line keeps its TRUE physical columns too.
-        let longRanges = self.ranges(in: "- x\nyyyyyyyyyy", options: Self.specOptions)
+        // A ten-byte line starts at the same column.
+        let longRanges = self.ranges(in: "- x\nyyyyyyyyyy", options: Self.options)
         try #require(itemChecked(in: longRanges) == .some(Bool?.none))
         let longTexts = self.texts(in: longRanges)
         try #require(longTexts.count == 2)

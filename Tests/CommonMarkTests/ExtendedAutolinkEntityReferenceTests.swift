@@ -15,9 +15,10 @@ import Testing
 struct ExtendedAutolinkEntityReferenceTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink]
 
-    /// An entity reference after an extended autolink's domain stays literal in the autolink.
+    /// An entity reference after an extended autolink's domain is part of the autolink and stays literal; only a
+    /// trailing one is excluded (Autolinks (extension)).
     @Test
-    func testGFMExtendedAutolinkWithoutBugCompatibility() {
+    func testEntityReferenceInsideAutolinkStaysLiteral() {
         #expect(TreeDump.dump("http://a.a&amp;b", options: Self.options) == """
             document
               paragraph

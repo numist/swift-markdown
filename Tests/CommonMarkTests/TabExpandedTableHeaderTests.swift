@@ -11,10 +11,9 @@
 import Testing
 import CommonMark
 
-/// A table header line inside a block quote whose `>` is followed by a tab. The block-quote prefix consumes one
-/// column of the tab and the remaining columns become spaces, so the header line's content is expanded rather than
-/// borrowed from the source; with source positions off, that expanded line is the whole paragraph when the
-/// delimiter row arrives.
+/// A table header line inside a block quote whose `>` is followed by a tab. The block quote marker consumes one
+/// column of the tab (Tabs) and the remaining columns become spaces, so the header line's content is expanded rather
+/// than a slice of the source.
 @Suite("Table header from a tab-expanded line")
 struct TabExpandedTableHeaderTests {
 

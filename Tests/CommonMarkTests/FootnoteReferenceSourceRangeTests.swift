@@ -64,7 +64,7 @@ struct FootnoteReferenceSourceRangeTests {
     }
 
     /// A footnote reference's label is all the text between its brackets, so `abcdef xxxxx` matches no definition and
-    /// the bracket stays text, whereas cmark-gfm resolves it by the label bytes it captures (`abc`).
+    /// the bracket stays text.
     @Test("a bracket whose label spans a line break and matches no definition is text")
     func crossLineUnmatchedLabelIsText() {
         #expect(tree("[^abcdef\nxxxxx]\n\n[^abc]: d") == """
@@ -77,8 +77,7 @@ struct FootnoteReferenceSourceRangeTests {
             """)
     }
 
-    /// A backslash-escaped caret is a literal `^`, so the bracket is not a footnote reference and stays text, whereas
-    /// cmark-gfm resolves it by the label bytes it captures past the backslash (`abc`).
+    /// A backslash-escaped caret is a literal `^` (Backslash escapes), so the bracket is not a footnote reference.
     @Test("an escaped-caret bracket is text")
     func escapedCaretBracketIsText() {
         #expect(tree("[\\^abcdef\nxxxxx]\n\n[^abc]: d") == """
@@ -91,8 +90,8 @@ struct FootnoteReferenceSourceRangeTests {
             """)
     }
 
-    /// A backslash-escaped caret is a literal `^`, so `![\^…]` is neither an image nor a footnote reference and stays
-    /// text, whereas cmark-gfm resolves it by the label bytes it captures past the backslash (`abc`).
+    /// A backslash-escaped caret is a literal `^` (Backslash escapes), so `![\^…]` is neither an image nor a footnote
+    /// reference.
     @Test("an image-shaped escaped-caret bracket is text")
     func imageShapedEscapedCaretBracketIsText() {
         #expect(tree("![\\^abcdef\nxxxxx]\n\n[^abc]: d") == """

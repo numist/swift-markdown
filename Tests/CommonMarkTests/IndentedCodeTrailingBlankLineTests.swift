@@ -11,12 +11,12 @@
 import Testing
 import CommonMark
 
-/// An indented code block whose last line holds only whitespace beyond the code indent. Trailing blank lines are not
-/// part of an indented code block (CommonMark §4.4), so the whitespace-only line is dropped from the body.
+/// Blank lines following an indented code block are not part of it (Indented code blocks), so a final line holding only
+/// whitespace beyond the code indent is dropped from the block's content.
 @Suite("Indented code trailing whitespace-only line")
 struct IndentedCodeTrailingBlankLineTests {
 
-    @Test("a trailing whitespace-only line is dropped from the body")
+    @Test("a trailing whitespace-only line is dropped from the content")
     func trailingWhitespaceLineDropped() {
         #expect(TreeDump.dump("\t a\n\t  \n", options: []) == """
             document

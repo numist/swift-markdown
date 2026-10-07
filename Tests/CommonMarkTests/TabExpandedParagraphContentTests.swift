@@ -84,8 +84,9 @@ struct TabExpandedParagraphContentTests {
             """)
     }
 
-    @Test("a tab-expanded line after a setext underline left as text keeps its tab, without cmark bug compatibility", arguments: positionModes)
-    func afterUnderlineLeftAsTextSpecCompliant(mode: MarkdownDocument.ParseOptions) {
+    /// The `=` line follows only a link reference definition, so it is paragraph text rather than a setext heading underline.
+    @Test("a tab-expanded line after an `=` line that is paragraph text keeps its tab", arguments: positionModes)
+    func afterUnderlineLeftAsText(mode: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("[a\n ]:b\n=\n**\tx", options: mode) == """
             document
               paragraph

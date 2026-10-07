@@ -11,9 +11,7 @@
 import Testing
 @testable import CommonMark
 
-// DFS-collect each node's kind, text literal, and (for links) destination URL. File-scope +
-// `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (see
-// AutolinkEmailPostPassTests.dfsAutolinkNodes).
+// Depth-first: each node's kind, text literal, and (for links) destination URL.
 private func dfsAutolinkNodes(
     _ node: borrowing MarkdownNode,
     into out: inout [(kind: MarkdownNode.Kind, text: String?, url: String?)]
@@ -24,27 +22,13 @@ private func dfsAutolinkNodes(
     }
 }
 
-/// The backward local-part scan of a GFM email autolink must not rewind past a preceding candidate's
-/// forward-scan break point.
-///
-/// cmark-gfm's `postprocess_text` (`extensions/autolink.c`) runs a single monotonic cursor `start + offset`.
-/// When a `local@domain` candidate's FORWARD domain scan breaks at a char the domain grammar rejects
-/// (e.g. `+`, or a `.` not immediately followed by an alphanumeric), cmark advances `offset` past that
-/// break point (`offset += max_rewind + link_end`). The NEXT `@`'s backward local-part scan is bounded by
-/// `max_rewind = at - (data + start + offset)`, so it can only rewind back to that advanced cursor - never
-/// into the abandoned candidate's local part.
-///
-/// The subtlety: cmark's backward scan DOES accept `+` (and `.`) as local-part chars (`strchr(".+-_", c)`),
-/// so `+`/`.` are not themselves rewind boundaries. The boundary is created by the forward domain scan
-/// breaking on those chars, which advances the cursor. This is why `.`, `-`, `_`, and alphanumerics rewind
-/// THROUGH (the forward scan CONTINUES on `-`, `_`, alnum, and `.`-followed-by-alnum, so no cursor advance
-/// happens between the two `@`s), while `+` (always breaks) and a boundary `.` (breaks when not followed by
-/// alnum) act as left boundaries for the next email's local part.
-@Suite("GFM email autolink backward local-part rewind boundary (forward-scan break)")
+/// Extended email autolinks (Autolinks (extension)) are recognized left to right. When a candidate address is
+/// rejected, the next address's local part starts no earlier than the character that ended the candidate's
+/// domain: `+`, or a `.` not followed by an alphanumeric, ends a domain, while `-`, `_`, alphanumerics and a
+/// `.` followed by an alphanumeric continue it.
+@Suite("Extended email autolink local part after a rejected candidate")
 struct AutolinkEmailLocalRewindBoundaryTests {
 
-    /// The shipped configuration: GFM autolink on, cmark bug-compatibility off (the spec-correct
-    /// deliverable, so empty `before`/`after` siblings are dropped).
     private static let options: MarkdownDocument.ParseOptions = [.gfmAutolink]
 
     private func nodes(
@@ -58,12 +42,8 @@ struct AutolinkEmailLocalRewindBoundaryTests {
         }
     }
 
-    // MARK: - Fixture sanity: the node-walk is meaningful (a valid email really does link)
-
-    @Test("fixture sanity: a plain valid email links with a synthetic `mailto:`")
-    func fixtureSanity() throws {
-        // Guards against a vacuous pass: if the walk returned a degenerate tree, this valid email would fail
-        // to produce the [.document, .paragraph, .link, .text] shape with a `mailto:` URL.
+    @Test("a plain email links with a `mailto:` destination")
+    func plainEmailLinks() throws {
         let ns = nodes(in: "a@b.c")
         try #require(ns.count == 4, "expected document > paragraph > link > text")
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
@@ -71,12 +51,11 @@ struct AutolinkEmailLocalRewindBoundaryTests {
         #expect(try #require(ns.compactMap(\.url).first) == "mailto:a@b.c")
     }
 
-    // MARK: - `+` breaks the forward scan, bounding the next local part
+    // MARK: - `+` ends a domain
 
     @Test("`l@o+@b.b`: the `+` bounds the second local part; before-text `l@o`")
     func plusBoundsLocalPart() {
-        // `l@o` fails (domain `o` has no dot, and the scan breaks at `+`), advancing the cursor to the `+`.
-        // The second `@`'s local part may only rewind back to the `+`, so it is `+@b.b`, leaving `l@o` before.
+        // `l@o` is rejected (its domain has no period), and its domain ends at `+`.
         let ns = nodes(in: "l@o+@b.b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "l@o", nil, "+@b.b"])
@@ -99,51 +78,49 @@ struct AutolinkEmailLocalRewindBoundaryTests {
         #expect(ns.compactMap(\.url) == ["mailto:+c@d.d"])
     }
 
-    // MARK: - Controls that ALREADY MATCH: `.`, `-`, `_`, alnum rewind THROUGH (forward scan continues)
+    // MARK: - `.`, `-`, `_` and alphanumerics continue a domain
 
-    @Test("`l@o.p@b.b`: `.`-followed-by-alnum rewinds through; before-text `l@`")
-    func dotRewindsThrough() {
+    @Test("`l@o.p@b.b`: the local part is `o.p`; before-text `l@`")
+    func dotContinuesDomain() {
         let ns = nodes(in: "l@o.p@b.b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o.p@b.b"])
         #expect(ns.compactMap(\.url) == ["mailto:o.p@b.b"])
     }
 
-    @Test("`l@o-p@b.b`: `-` rewinds through; before-text `l@`")
-    func hyphenRewindsThrough() {
+    @Test("`l@o-p@b.b`: the local part is `o-p`; before-text `l@`")
+    func hyphenContinuesDomain() {
         let ns = nodes(in: "l@o-p@b.b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o-p@b.b"])
         #expect(ns.compactMap(\.url) == ["mailto:o-p@b.b"])
     }
 
-    @Test("`l@o_p@b.b`: `_` rewinds through; before-text `l@`")
-    func underscoreRewindsThrough() {
+    @Test("`l@o_p@b.b`: the local part is `o_p`; before-text `l@`")
+    func underscoreContinuesDomain() {
         let ns = nodes(in: "l@o_p@b.b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o_p@b.b"])
         #expect(ns.compactMap(\.url) == ["mailto:o_p@b.b"])
     }
 
-    @Test("`l@abc@b.b`: alphanumerics rewind through; before-text `l@`")
-    func alnumRewindsThrough() {
+    @Test("`l@abc@b.b`: the local part is `abc`; before-text `l@`")
+    func alnumContinuesDomain() {
         let ns = nodes(in: "l@abc@b.b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "l@", nil, "abc@b.b"])
         #expect(ns.compactMap(\.url) == ["mailto:abc@b.b"])
     }
 
-    @Test("`l@+@b.b`: `+` at the local-part start; nothing before it to keep; before-text `l@`")
+    @Test("`l@+@b.b`: the local part is `+`; before-text `l@`")
     func plusAtStart() {
-        // The `@` between `l` and `+` stops the backward scan regardless of the floor, so the local part is
-        // `+` no matter where the floor sits - a guard that the boundary rule does not over-correct here.
         let ns = nodes(in: "l@+@b.b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "l@", nil, "+@b.b"])
         #expect(ns.compactMap(\.url) == ["mailto:+@b.b"])
     }
 
-    @Test("`xy@ab@c.c`: an alnum-only first local part rewinds through; before-text `xy@`")
+    @Test("`xy@ab@c.c`: the local part is `ab`; before-text `xy@`")
     func alnumFirstLocalPart() {
         let ns = nodes(in: "xy@ab@c.c")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
@@ -151,25 +128,18 @@ struct AutolinkEmailLocalRewindBoundaryTests {
         #expect(ns.compactMap(\.url) == ["mailto:ab@c.c"])
     }
 
-    // MARK: - A `.` NOT immediately followed by an alnum also breaks the forward scan
+    // MARK: - A `.` not followed by an alphanumeric ends a domain
 
-    @Test("`a@b.+@c.c`: a `.`-then-`+` boundary bounds the second local part to `.+`; before-text `a@b`")
+    @Test("`a@b.+@c.c`: the local part is `.+`; before-text `a@b`")
     func dotThenPlusBoundary() {
-        // The first candidate `a@b` breaks at the `.` (it is followed by `+`, not an alnum), advancing the
-        // cursor to the `.`. The second `@`'s backward scan rewinds through `+` and `.` only to that cursor,
-        // giving local part `.+`, so the link is `.+@c.c` with before-text `a@b`. Same class as the `+`
-        // cases - a forward-scan break creates the boundary - with the break driven by a boundary `.`.
         let ns = nodes(in: "a@b.+@c.c")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "a@b", nil, ".+@c.c"])
         #expect(ns.compactMap(\.url) == ["mailto:.+@c.c"])
     }
 
-    @Test("`a@b..c@d.d`: a doubled `.` (first not followed by alnum) bounds the second local part to `..c`")
+    @Test("`a@b..c@d.d`: the local part is `..c`; before-text `a@b`")
     func doubledDotBoundary() {
-        // The first candidate `a@b` breaks at the first `.` of `..` (it is followed by another `.`, not an
-        // alnum), advancing the cursor. The second `@`'s backward scan rewinds through `..c` only to that
-        // cursor, giving local part `..c` and before-text `a@b`.
         let ns = nodes(in: "a@b..c@d.d")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "a@b", nil, "..c@d.d"])

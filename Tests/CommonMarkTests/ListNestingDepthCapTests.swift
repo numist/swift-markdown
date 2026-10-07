@@ -11,13 +11,10 @@
 import Testing
 @testable import CommonMark
 
-/// A single line may open at most `BlockParser.maxListNesting` (100) containers before it stops opening
-/// lists, matching cmark's `MAX_LIST_DEPTH` gate in `open_new_blocks` (`depth < MAX_LIST_DEPTH`). The
-/// depth is counted per line, so N block quotes followed by a list marker put the marker at depth N+1:
-/// the list opens while N+1 is below the cap and is suppressed - the marker folds into a paragraph as
-/// text - once it reaches the cap. Block quotes themselves are uncapped. cmark applies this to bullet
-/// AND ordered lists, and it is intentional (not a bug).
-@Suite("List nesting depth cap - cmark MAX_LIST_DEPTH")
+/// A list marker opens a list only while it is below the nesting cap of `BlockParser.maxListNesting`
+/// (100) containers on its line; at the cap the marker is paragraph text. Depth counts every container
+/// the line opens, so N block quotes put the marker at depth N+1. Block quotes themselves are uncapped.
+@Suite("List nesting depth cap")
 struct ListNestingDepthCapTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
@@ -47,21 +44,19 @@ struct ListNestingDepthCapTests {
         kinds.reduce(0) { if case .blockQuote = $1 { return $0 + 1 }; return $0 }
     }
 
-    private static let flagModes: [MarkdownDocument.ParseOptions] = [[]]
+    private static let optionSets: [MarkdownDocument.ParseOptions] = [[]]
 
     /// Just below the cap - 98 block quotes put the bullet marker at depth 99 (< 100) - so the list opens.
     /// At the cap - 99 block quotes put it at depth 100 - the marker stays paragraph text and no list opens.
     @Test("bullet list opens at depth 99 but not at the cap (depth 100)")
     func bulletListCappedAtMaxDepth() throws {
-        for options in Self.flagModes {
-            // 98 quotes: the marker is the 99th container on the line, below the cap, so a list opens.
+        for options in Self.optionSets {
             try parseKinds(String(repeating: ">", count: 98) + "- ", options: options) { kinds in
                 #expect(blockQuoteCount(kinds) == 98, "fixture must nest 98 block quotes; got \(blockQuoteCount(kinds))")
                 #expect(listCount(kinds) == 1, "options=\(options.rawValue): expected a list just below the cap")
                 #expect(itemCount(kinds) == 1)
             }
 
-            // 99 quotes: the marker is the 100th container, at the cap, so it stays text - no list.
             try parseKinds(String(repeating: ">", count: 99) + "- ", options: options) { kinds in
                 #expect(blockQuoteCount(kinds) == 99, "fixture must nest 99 block quotes; got \(blockQuoteCount(kinds))")
                 #expect(listCount(kinds) == 0, "options=\(options.rawValue): list must be suppressed at the cap")
@@ -71,10 +66,10 @@ struct ListNestingDepthCapTests {
         }
     }
 
-    /// The cap applies to ordered lists identically (cmark gates `parse_list_marker` for both).
+    /// The cap applies to ordered lists identically.
     @Test("ordered list opens at depth 99 but not at the cap (depth 100)")
     func orderedListCappedAtMaxDepth() throws {
-        for options in Self.flagModes {
+        for options in Self.optionSets {
             try parseKinds(String(repeating: ">", count: 98) + "1. ", options: options) { kinds in
                 #expect(blockQuoteCount(kinds) == 98, "fixture must nest 98 block quotes; got \(blockQuoteCount(kinds))")
                 #expect(listCount(kinds) == 1, "options=\(options.rawValue): expected an ordered list just below the cap")

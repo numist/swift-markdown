@@ -11,30 +11,16 @@
 import Testing
 @testable import CommonMark
 
-/// Coverage for source-position stamping of inline runs on the 2nd+ physical line of a **materialized**
-/// (single-segment arena) multi-line contiguous run.
-///
-/// A paragraph whose first line satisfies a finalize-time matcher's necessary condition - a GFM-table
-/// header `|`, or a leading `[` (ref-def / footnote / tasklist) - is flattened from its segment list into
-/// one arena `Chunk` so the matchers can scan it contiguously (`BlockParser.segmentsCouldMatchMatcher` /
-/// `flattenSegments`). When the paragraph turns out NOT to match (no delimiter row, not a ref-def), that
-/// arena content is what reaches inline parsing. Its arena→source map (`ArenaRun`) tiles the content one
-/// run per source-adjacent line group (a contiguous run such as `t\n|`), each imaging the source where its
-/// bytes sit.
-///
-/// Stamping an interior-line run on the contiguous arena run must project onto the run's own physical line,
-/// exactly like the multi-segment-source case (`MultiLineSegmentRangeTests`). Each run maps its source where
-/// its bytes sit, so its byte projection is already exact and lands on the run's own line.
-@Suite("Materialized (arena) multi-line contiguous run - interior-line inline positions")
+/// A paragraph that could be a table or begin with a link reference definition, footnote definition or
+/// checkbox has its content materialized into the arena. When it turns out to be a plain paragraph, each
+/// inline's source range lies on its own source line, as for unmaterialized content.
+@Suite("Source ranges of inlines on later lines of a materialized paragraph")
 struct MaterializedInteriorLineRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    // The GFM extension set the public `Document(parsing:options:)` API enables by default
-    // (`CommonMarkConverter`), plus source positions. `.tables` is load-bearing here: it is what makes
-    // `segmentsCouldMatchMatcher` flatten a pipe-bearing paragraph into arena content (the path under
-    // test). Without it the paragraph stays multi-segment source and the arena branch is never exercised.
-    private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition, .tables, .strikethrough, .tasklist, .tableSpans]
+    // `.tables` makes a paragraph containing a `|` a table candidate, which materializes its content.
+    private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .tables, .strikethrough, .tasklist, .tableSpans]
 
     private func ranges(
         _ source: String, options: MarkdownDocument.ParseOptions
@@ -46,27 +32,23 @@ struct MaterializedInteriorLineRangeTests {
         return out
     }
 
-    /// The deliverable (flag-OFF, spec-correct default): a pipe on an interior line of a materialized
-    /// paragraph keeps its true byte-projected position - `|` at `@2:1-2:2`, on its own physical line.
-    /// A future change to the arena stamping path must not regress this.
-    @Test("flag-OFF: interior-line pipe is stamped @2:1-2:2")
-    func specInteriorPipe() throws {
-        let texts = ranges("t\n|\n b", options: Self.specOptions).filter { $0.kind == .text }.map(\.range)
+    @Test("A pipe on an interior line spans 2:1-2:2")
+    func interiorLinePipe() throws {
+        let texts = ranges("t\n|\n b", options: Self.options).filter { $0.kind == .text }.map(\.range)
         try #require(texts.count == 3)
         #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 2))   // "t"
         #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 2))   // "|" (interior line)
-        #expect(texts[2] == Pos(line: 3, column: 2)..<Pos(line: 3, column: 3))   // "b" (spec: true column)
+        #expect(texts[2] == Pos(line: 3, column: 2)..<Pos(line: 3, column: 3))   // "b"
     }
 
-    /// The deliverable, pipe on line 1 (a legitimate but failed table candidate, so still materialized):
-    /// the interior-line `bar` keeps its true position `@2:1`.
-    @Test("flag-OFF: interior line after a line-1 pipe is stamped @2:1-2:4")
-    func specInteriorAfterLine1Pipe() throws {
-        let texts = ranges("|foo\nbar\n baz", options: Self.specOptions).filter { $0.kind == .text }.map(\.range)
+    /// A `|` on line 1 makes the paragraph a table candidate; it has no delimiter row, so it stays a paragraph.
+    @Test("An interior line after a first-line pipe spans 2:1-2:4")
+    func interiorLineAfterFirstLinePipe() throws {
+        let texts = ranges("|foo\nbar\n baz", options: Self.options).filter { $0.kind == .text }.map(\.range)
         try #require(texts.count == 3)
         #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 5))   // "|foo"
         #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 4))   // "bar" (interior line)
-        #expect(texts[2] == Pos(line: 3, column: 2)..<Pos(line: 3, column: 5))   // "baz" (spec: true column)
+        #expect(texts[2] == Pos(line: 3, column: 2)..<Pos(line: 3, column: 5))   // "baz"
     }
 
 }

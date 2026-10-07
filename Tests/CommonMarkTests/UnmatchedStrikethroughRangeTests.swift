@@ -11,25 +11,19 @@
 import Testing
 @testable import CommonMark
 
-/// Source ranges for an *unmatched* strikethrough (`~`/`~~`) run - a delimiter run that never
-/// pairs into a strikethrough, so it survives as literal text.
-///
-/// The parser stamps such a run with a normal, width-bearing range - its true character span,
-/// exactly like any other literal text run - the spec-correct behavior. (cmark-gfm's
-/// `strikethrough.c` `match` sets only `start_column`, leaving `end_column == 0`, so it reports a
-/// degenerate zero-width range; the rewrite does not reproduce that non-compliant position.)
-@Suite("Unmatched strikethrough source ranges (spec-correct)")
+/// A `~` or `~~` run that closes no strikethrough is literal text (Strikethrough (extension)), and its
+/// source range covers its bytes like any other text.
+@Suite("Unmatched strikethrough source ranges")
 struct UnmatchedStrikethroughRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// The shipped configuration: source positions on, cmark bug-compatibility deliberately OFF.
-    private static let specOptions: MarkdownDocument.ParseOptions =
+    private static let options: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
-    /// The source range of the first text node, in DFS order, when `src` is parsed spec-correct.
+    /// The source range of the first text node, in DFS order.
     private func firstTextRange(in src: String) -> Range<Pos>? {
-        let ranges = MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
+        let ranges = MarkdownDocument.withParsedDocument(src, options: Self.options) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)
@@ -38,27 +32,22 @@ struct UnmatchedStrikethroughRangeTests {
         return ranges.first { $0.kind == .text }?.range
     }
 
-    @Test("standalone unmatched ~ gets a normal, width-bearing range")
+    @Test("standalone unmatched ~ has a range covering it")
     func standaloneSingleTilde() {
-        // A lone `~` is one byte at column 1; spec-correct it spans its own character (@1:1-1:2),
-        // not cmark's zero-width @1:1.
         let range = firstTextRange(in: "~")
         #expect(range?.lowerBound == Pos(line: 1, column: 1))
         #expect(range?.upperBound == Pos(line: 1, column: 2))
     }
 
-    @Test("standalone unmatched ~~ gets a normal, width-bearing range")
+    @Test("standalone unmatched ~~ has a range covering it")
     func standaloneDoubleTilde() {
-        // `~~` is two bytes; spec-correct it spans both (@1:1-1:3), not cmark's zero-width @1:1.
         let range = firstTextRange(in: "~~")
         #expect(range?.lowerBound == Pos(line: 1, column: 1))
         #expect(range?.upperBound == Pos(line: 1, column: 3))
     }
 
-    @Test("trailing unmatched ~ merges into a normally-ranged text run")
+    @Test("trailing unmatched ~ merges into the preceding text run")
     func trailingTilde() {
-        // `a~`: the `a` and the trailing `~` consolidate into one text node. Spec-correct the merged
-        // run ends past the `~` (@1:1-1:3); cmark's zero-width `~` collapses the merge to @1:1.
         let range = firstTextRange(in: "a~")
         #expect(range?.lowerBound == Pos(line: 1, column: 1))
         #expect(range?.upperBound == Pos(line: 1, column: 3))

@@ -22,10 +22,10 @@ struct MaterializedContentSourceRangeTests {
         TreeDump.dump(source, options: options, sourceRanges: true)
     }
 
-    /// The table starts on line 3 with its header row, the first line left once the definition is resolved, where
-    /// cmark-gfm starts it on line 1 with the paragraph.
-    @Test("without cmark bug compatibility: a definition-only paragraph left open by a setext underline")
-    func tableAfterResolvedDefinitionSpecCompliant() {
+    /// The `=` line cannot underline a paragraph holding only a link reference definition (Setext headings), so
+    /// it stays paragraph text, and the delimiter row `-|` makes it the header row of a table starting on line 3.
+    @Test("a table whose header row follows a link reference definition starts at the header row")
+    func tableAfterResolvedDefinition() {
         #expect(tree("[b\n ]:o\n=\n-|\na", options: Self.specOpts) == """
             document @1:1-5:2
               table @3:1-5:2
@@ -39,10 +39,10 @@ struct MaterializedContentSourceRangeTests {
             """)
     }
 
-    /// A task list item's checkbox must open its paragraph, so `2\u{0} [x]` leaves an ordinary list item whose text
-    /// starts at the `2` and counts the NUL as its one source byte, where cmark-gfm finds a checked checkbox there.
-    @Test("without cmark bug compatibility: a list item line holding a NUL before a checkbox")
-    func lineHoldingNULSpecCompliant() {
+    /// A task list item marker must begin the paragraph (Task list items (extension)), so the `[x]` after `2` is
+    /// text. The NUL, replaced by U+FFFD, spans its one source byte.
+    @Test("a list item line holding a NUL before a checkbox")
+    func lineHoldingNULBeforeCheckbox() {
         #expect(tree("+\n  2\u{0} [x] *u*", options: Self.specOpts) == """
             document @1:1-2:13
               list bullet '+' tight @1:1-2:13

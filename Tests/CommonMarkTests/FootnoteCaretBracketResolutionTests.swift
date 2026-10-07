@@ -22,7 +22,7 @@ struct FootnoteCaretBracketResolutionTests {
     }
 
     @Test
-    func withoutCompatibilityBracketStaysLiteral() {
+    func bracketStaysLiteral() {
         #expect(Self.surface("[^[]]\n\n[^\\[]: n") == """
             document
               paragraph
@@ -39,7 +39,7 @@ struct FootnoteCaretBracketResolutionTests {
 
     /// A footnote-shaped bracket whose caret is followed by `[` is no footnote reference, so it stays literal text,
     /// even beside a definition of the escaped label `\[`. A definition label may not hold an unescaped `[`, as a
-    /// link label may not (spec "Links"), so `[^[]:` defines nothing.
+    /// link label may not (Links), so `[^[]:` defines nothing.
     @Test(arguments: [
             ("[^[]]\n\n[^\\[]: n", """
                 document
@@ -124,7 +124,7 @@ struct FootnoteCaretBracketResolutionTests {
                     text "[^[]]"
 
                 """),    ] as [(String, String)])
-    func withoutCompatibilityEveryBracketStaysLiteral(_ markdown: String, _ expected: String) {
+    func everyBracketStaysLiteral(_ markdown: String, _ expected: String) {
         #expect(Self.surface(markdown) == expected)
     }
 }

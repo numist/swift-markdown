@@ -11,25 +11,17 @@
 import Testing
 @testable import CommonMark
 
-/// Source ranges for the END of the two raw-scan inlines (code spans, inline HTML) whose token
-/// crosses a newline.
-///
-/// The deliverable stamps the precise byte-projected end: one past the token's last content byte on
-/// its own physical line. These guardrails pin that end for the shipped parser.
-@Suite("Flat raw-inline (code span / inline HTML) end ranges")
-struct FlatRawInlineEndTests {
+/// A code span that crosses a line ending ends just past its closing backtick string, on the line that
+/// holds it.
+@Suite("Code span across a line ending: end of source range")
+struct CrossLineCodeSpanEndRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// `` `a\nb` `` : a code span spanning two lines. Precise end @2:3 (its closing backtick's line).
     private static let codeSpanSource = "`a\nb`"
 
-    /// `` ` `\n `x `` : a one-backtick code span opening after a leading space on line 1 and closing after
-    /// a leading space on line 2. Precise half-open end @2:3 (one past the closing backtick on line 2).
     private static let leadingSpaceCodeSpanSource = " `\n `x"
 
-    /// `` `\n`8 `` : a two-line code span (`` `\n` ``) FOLLOWED by text `8`. The trailing `8` is stamped
-    /// on its physical line 2 (@2:2).
     private static let codeSpanFollowSource = "`\n`8"
 
     /// The source range of the first node whose kind satisfies `match`, parsing `src` with `options`.
@@ -58,7 +50,7 @@ struct FlatRawInlineEndTests {
                        in: Self.leadingSpaceCodeSpanSource, options: options)
     }
 
-    /// Every text node's range in DFS order, parsing `src` with `options`.
+    /// Every text node's source range in depth-first order, parsing `src` with `options`.
     private func textRanges(in src: String, options: MarkdownDocument.ParseOptions) -> [Range<Pos>?] {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> [Range<Pos>?] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
@@ -67,30 +59,27 @@ struct FlatRawInlineEndTests {
         }
     }
 
-    @Test("a two-line code span keeps its precise end (positions on)")
+    @Test("a two-line code span ends after its closing backtick")
     func codeSpanPrecise() throws {
         let range = try #require(codeSpanRange(options: [.sourcePosition]))
         #expect(range.lowerBound == Pos(line: 1, column: 1))
         #expect(range.upperBound == Pos(line: 2, column: 3))
     }
 
-    @Test("a two-line leading-space code span keeps its precise end (positions on)")
+    @Test("a two-line code span closed after leading whitespace ends after its closing backtick")
     func codeSpanLeadingSpacePrecise() throws {
-        // The code span's end is one past its closing backtick's real column on line 2. The closing
-        // line ` `x` puts the backtick at column 2, so the half-open end is @2:3.
         let range = try #require(leadingSpaceCodeSpanRange(options: [.sourcePosition]))
         #expect(range.lowerBound == Pos(line: 1, column: 2))
         #expect(range.upperBound == Pos(line: 2, column: 3))
     }
 
-    // MARK: - The text FOLLOWING a newline-crossing raw inline
+    // MARK: - Text after the code span
 
-    @Test("text after a two-line code span keeps its physical position (positions on)")
-    func followingTextPreciseNoQuirk() throws {
+    @Test("text after a two-line code span starts on the closing line")
+    func followingTextOnClosingLine() throws {
         let texts = textRanges(in: Self.codeSpanFollowSource, options: [.sourcePosition])
         let range = try #require(texts.first ?? nil, "fixture must have a text node after the code span")
         #expect(texts.count == 1)  // fixture sanity: exactly the trailing `8`
-        // Physical: `8` is on line 2 (` `8`), one past the closing backtick at column 1.
         #expect(range.lowerBound == Pos(line: 2, column: 2))
         #expect(range.upperBound == Pos(line: 2, column: 3))
     }

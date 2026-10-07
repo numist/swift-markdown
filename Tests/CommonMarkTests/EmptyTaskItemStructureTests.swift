@@ -11,9 +11,8 @@
 import Testing
 @testable import CommonMark
 
-// Depth-first: the checked state and direct-child count of the first list item, or nil if there is
-// none. File-scope + `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (see
-// code-conventions: use file-scope helpers, don't capture the borrow across the tree walk).
+/// The checked state and direct-child count of the first list item in depth-first order, or nil if
+/// there is none.
 private func firstListItem(
     _ node: borrowing MarkdownNode
 ) -> (checked: Bool?, childCount: Int)? {
@@ -31,20 +30,19 @@ private func firstListItem(
     return found
 }
 
-/// Block structure of a GFM task-list item whose marker line holds only the checkbox and trailing
+/// Block structure of a task list item whose first line holds only the checkbox and trailing
 /// whitespace (`- [ ] ` / `- [x]\t`).
 ///
-/// The marker line is not blank, so it opens the item's paragraph (spec "List items"), which a
-/// following line continues, lazily or indented (spec "Paragraph continuation text"). The paragraph
-/// begins with a task list item marker followed by whitespace, so the item is a task item (spec "Task
-/// list items (extension)"); the marker is replaced by the checkbox, and a paragraph left with no
-/// content is removed.
-@Suite("Empty GFM task-list item block structure")
+/// The line is not blank, so it opens the item's paragraph (List items), which a following line
+/// continues as paragraph continuation text, indented or as a lazy continuation line. The paragraph
+/// begins with a task list item marker followed by whitespace, so the item is a task list item (Task
+/// list items (extension)); the marker becomes the checkbox, and a paragraph left with no content is
+/// removed.
+@Suite("Empty task list item block structure")
 struct EmptyTaskItemStructureTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// The shipped default: tasklist + positions.
     private static let options: MarkdownDocument.ParseOptions =
         [.tasklist, .sourcePosition]
 
@@ -76,12 +74,11 @@ struct EmptyTaskItemStructureTests {
         nodes.filter { $0.kind == .paragraph }.map { $0.range }
     }
 
-    @Test("a marker-only task item line is continued lazily by an unindented line")
+    @Test("a checkbox-only task list item line is continued by a lazy continuation line")
     func emptyTaskItemLineContinuedLazily() throws {
-        // "- [ ] " (checkbox, only trailing space) then "x" (unindented, a lazy continuation).
         let (nodes, item) = analyze("- [ ] \nx", options: Self.options)
         let firstItem = try #require(item, "no list item parsed")
-        try #require(firstItem.checked == .some(false), "expected an UNCHECKED task item")
+        try #require(firstItem.checked == .some(false), "expected an unchecked task list item")
         #expect(firstItem.childCount == 1)
         #expect(itemRange(in: nodes) == Pos(line: 1, column: 1)..<Pos(line: 2, column: 2))
         let paras = paragraphs(in: nodes)
@@ -90,10 +87,8 @@ struct EmptyTaskItemStructureTests {
         #expect(paras[0]?.upperBound == Pos(line: 2, column: 2))
     }
 
-    @Test("empty task item followed by a blank line then text")
+    @Test("empty task list item followed by a blank line then text")
     func emptyTaskItemBeforeBlankThenText() throws {
-        // "- [ ] " then a blank line then "x": the item is empty and runs to the blank line @1:1-2:1,
-        // `x` a separate paragraph @3:1-3:2.
         let (nodes, item) = analyze("- [ ] \n\nx", options: Self.options)
         let firstItem = try #require(item)
         try #require(firstItem.checked == .some(false))
@@ -105,9 +100,8 @@ struct EmptyTaskItemStructureTests {
         #expect(paras[0]?.upperBound == Pos(line: 3, column: 2))
     }
 
-    @Test("empty task item as the last line (EOF)")
+    @Test("empty task list item as the last line")
     func emptyTaskItemAtEOF() throws {
-        // "- [ ] " with nothing after: item empty @1:1-1:7, no paragraph anywhere.
         let (nodes, item) = analyze("- [ ] ", options: Self.options)
         let firstItem = try #require(item)
         try #require(firstItem.checked == .some(false))
@@ -116,10 +110,8 @@ struct EmptyTaskItemStructureTests {
         #expect(paragraphs(in: nodes).isEmpty)
     }
 
-    @Test("empty task item followed by an INDENTED line continues the item")
+    @Test("empty task list item followed by an indented line continues the item")
     func emptyTaskItemContinuesOnIndentedLine() throws {
-        // "- [ ] " then "  x" (indented to the item's content column): the item keeps its checkbox and
-        // holds the paragraph @2:3-2:4; item spans @1:1-2:4.
         let (nodes, item) = analyze("- [ ] \n  x", options: Self.options)
         let firstItem = try #require(item)
         try #require(firstItem.checked == .some(false))
@@ -131,12 +123,11 @@ struct EmptyTaskItemStructureTests {
         #expect(paras[0]?.upperBound == Pos(line: 2, column: 4))
     }
 
-    @Test("checked marker-only task item line with a TAB separator")
+    @Test("checked checkbox-only task list item line with a tab separator")
     func emptyCheckedTaskItemTabSeparator() throws {
-        // "- [x]\t" (tab after the checkbox) then "x", a lazy continuation of the item's paragraph.
         let (nodes, item) = analyze("- [x]\t\nx", options: Self.options)
         let firstItem = try #require(item)
-        try #require(firstItem.checked == .some(true), "expected a CHECKED task item")
+        try #require(firstItem.checked == .some(true), "expected a checked task list item")
         #expect(firstItem.childCount == 1)
         #expect(itemRange(in: nodes) == Pos(line: 1, column: 1)..<Pos(line: 2, column: 2))
         let paras = paragraphs(in: nodes)
@@ -145,7 +136,7 @@ struct EmptyTaskItemStructureTests {
         #expect(paras[0]?.upperBound == Pos(line: 2, column: 2))
     }
 
-    @Test("a block-quoted marker-only item is a task item")
+    @Test("a checkbox-only item in a block quote is a task list item")
     func blockQuotedEmptyCheckboxIsRecognized() throws {
         let (nodes, item) = analyze("> - [ ] ", options: Self.options)
         let firstItem = try #require(item, "no list item parsed")
@@ -155,7 +146,7 @@ struct EmptyTaskItemStructureTests {
         #expect(paragraphs(in: nodes).isEmpty)
     }
 
-    @Test("a nested marker-only item sharing its line with the outer marker is a task item")
+    @Test("a nested checkbox-only item on the outer item's first line is a task list item")
     func nestedEmptyCheckboxIsRecognized() {
         let (nodes, _) = analyze("- - [ ] ", options: Self.options)
         let checks = nodes.compactMap { entry -> Bool?? in

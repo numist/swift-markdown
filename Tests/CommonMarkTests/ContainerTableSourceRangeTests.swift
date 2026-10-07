@@ -14,17 +14,12 @@ import CommonMark
 /// Source ranges of a GFM table nested in a container: a block quote, a list item, both, a container whose prefix is
 /// a tab, and a table whose header is a lazy continuation line.
 ///
-/// A nested table's lines aren't contiguous in the source (each carries its container's prefix), so the table is
-/// built from a copy of its lines, and every row, cell and cell inline is placed back on its source line through that
-/// copy's map to the source. Columns are 1-based UTF-8 byte offsets and each end is half-open. A test's doc comment
-/// notes where cmark-gfm's range differs.
-///
-/// A short row's padded filler cell has no source text, so it has no range here, and cmark-gfm gives it column 0,
-/// which swift-markdown also reads as no range.
+/// A nested table's lines aren't contiguous in the source (each carries its container's prefix), yet every row, cell
+/// and cell inline has the source range of its own bytes. A short row's filler cell has no source text, so it has no
+/// source range.
 @Suite("Source ranges of tables nested in containers")
 struct ContainerTableSourceRangeTests {
 
-    /// The shipped option set: what the Markdown wrapper enables.
     static let opts: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]
 
@@ -116,10 +111,7 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// The body row `\td|e` is indented by one tab byte, so `d` is at byte column 2 and the row, its cells and their
-    /// text start one column left of cmark-gfm's, which counts the tab as the two columns of indent it stands for
-    /// (`@3:3-3:5` for the row, `@3:3-3:4` and `@3:5-3:6` for the cells and their text). The row's end is the line's
-    /// end in both.
+    /// The body row `\td|e` is indented by one tab byte, so `d` is at byte column 2.
     @Test("a table in a list item whose continuation lines are indented by a tab")
     func tabIndentedListItem() {
         #expect(tree("-\tb|c\n\t-|-\n\td|e") == """
@@ -141,10 +133,7 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// The header `b|c` is a lazy continuation of the block quote's paragraph, so it sits at the start of line 2.
-    /// cmark-gfm places the table and its header on the paragraph's first line instead, at the columns of the header's
-    /// bytes within the joined paragraph text (`@1:3-3:6` for the table, `@1:3-1:8` for the header row, `@1:5-1:6` and
-    /// `@1:7-1:8` for the cells and their text), and gives the paragraph `a` no range.
+    /// The header `b|c` is a lazy continuation line of the block quote's paragraph, so it starts at column 1 of line 2.
     @Test("a table in a block quote whose header is a lazy continuation line")
     func lazyHeader() {
         #expect(tree("> a\nb|c\n> -|-") == """
@@ -162,10 +151,7 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// The paragraph line before the header becomes its own paragraph. cmark-gfm places the table and its header on
-    /// that paragraph's line, at the columns of the header's bytes within the joined paragraph text (`@1:3-3:6` for the
-    /// table, `@1:3-1:8` for the header row, `@1:5-1:6` and `@1:7-1:8` for the cells and their text), and gives the
-    /// paragraph `a` no range.
+    /// The paragraph line before the header row stays a paragraph, and the table starts on the header row's line.
     @Test("a table in a list item after a paragraph line")
     func listItemWithPrecedingParagraph() {
         #expect(tree("- a\n  b|c\n  -|-") == """
@@ -184,8 +170,8 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// The cell spans its source bytes `b\|x`. Its text `b|x` drops the backslash, so the text's range starts with the
-    /// cell's and is one byte shorter, as in cmark-gfm.
+    /// The cell spans its source bytes `b\|x`. Its text `b|x` drops the backslash, so the text's source range starts
+    /// with the cell's and is one byte shorter.
     @Test("a table in a block quote with an escaped pipe in a cell")
     func escapedPipe() {
         #expect(tree("> b\\|x|c\n> -|-") == """
@@ -236,9 +222,8 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// A lazy continuation line loses its leading whitespace, so the header is a lone `|` with no cells and no table
-    /// forms, whereas cmark-gfm keeps the split tab's leftover columns ahead of the `|` and reads a one-cell header
-    /// row.
+    /// A lazy continuation line's leading whitespace, including a partially consumed tab's remaining columns, is not
+    /// paragraph content, so the header row is a lone `|` with no cells and no table forms.
     @Test("a lazy lone-pipe header after a split tab is paragraph text")
     func splitTabLonePipeHeaderIsParagraph() {
         #expect(tree("- >x\n \t|\n  >-|\n") == """
@@ -256,8 +241,8 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// A lazy continuation line loses its leading whitespace, so the header is a lone `|` with no cells and no table
-    /// forms, whereas cmark-gfm keeps the line's leading spaces and reads a one-cell header row.
+    /// A lazy continuation line's leading whitespace is not paragraph content, so the header row is a lone `|` with no
+    /// cells and no table forms.
     @Test("a lazy lone-pipe header is paragraph text")
     func lazyLonePipeHeaderIsParagraph() {
         #expect(tree(">x\n  |\n>-|\n") == """

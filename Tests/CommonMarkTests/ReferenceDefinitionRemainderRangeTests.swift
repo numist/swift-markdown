@@ -11,22 +11,17 @@
 import Testing
 @testable import CommonMark
 
-/// Source ranges for the inline content that REMAINS after leading link reference definitions are
-/// stripped off the front of a paragraph.
-///
-/// The parser reports the surviving content at its TRUE physical position: a paragraph whose first
-/// N lines are reference definitions stamps the remaining text on the physical line it actually
-/// occupies, and the paragraph (or setext heading) itself starts at the first remaining content byte.
-@Suite("Reference-definition remainder source ranges (spec-correct)")
+/// Source ranges of the content that follows link reference definitions at the start of a paragraph.
+/// The remaining text keeps its own lines, and the paragraph or setext heading starts at its first byte.
+@Suite("Reference-definition remainder source ranges")
 struct ReferenceDefinitionRemainderRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// The shipped configuration.
     private static let specOptions: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
-    /// DFS-collect every node's kind and source range when `src` is parsed spec-correct.
+    /// DFS-collect every node's kind and source range.
     private func ranges(in src: String) -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] {
         MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
@@ -44,11 +39,8 @@ struct ReferenceDefinitionRemainderRangeTests {
         ranges.first { $0.kind == kind }?.range
     }
 
-    @Test("content after a one-line ref-def keeps its true line, not the paragraph's start line")
+    @Test("content after a one-line ref-def keeps its own line")
     func singleLineRefDef() throws {
-        // "[foo]: /url" on line 1 is a reference definition; "bar" on line 2 is the surviving content.
-        // `bar` keeps its TRUE line: @2:1-2:4, the physical line it occupies, and the paragraph starts
-        // there too.
         let ranges = ranges(in: "[foo]: /url\nbar")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 1)
@@ -58,15 +50,12 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 2, column: 1))
         #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 4))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))   // "bar" on its true line
+        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))   // "bar"
         #expect(texts[0]?.upperBound == Pos(line: 2, column: 4))
     }
 
-    @Test("setext heading content after a one-line ref-def keeps its true line")
+    @Test("setext heading content after a one-line ref-def keeps its own line")
     func setextHeadingRefDef() throws {
-        // "[foo]: /url" (line 1) is a reference definition; "bar" (line 2) is the surviving content,
-        // which the "===" underline (line 3) promotes to a setext heading. `bar` keeps its TRUE line
-        // @2:1-2:4, and the heading runs from there to the end of its underline line.
         let ranges = ranges(in: "[foo]: /url\nbar\n===")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 1)
@@ -74,15 +63,12 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.heading(level: 1), in: ranges)?.lowerBound == Pos(line: 2, column: 1))
         #expect(firstRange(.heading(level: 1), in: ranges)?.upperBound == Pos(line: 3, column: 4))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))   // "bar" on its true line
+        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))   // "bar"
         #expect(texts[0]?.upperBound == Pos(line: 2, column: 4))
     }
 
-    @Test("content after a multi-line-label ref-def keeps its true line")
+    @Test("content after a multi-line-label ref-def keeps its own line")
     func multiLineLabelRefDef() throws {
-        // The reference definition "[\nfoo\n]: /url" spans lines 1-3 (its label runs across two
-        // newlines); "bar" on line 4 is the surviving content. `bar` and its paragraph keep their TRUE
-        // line @4:1-4:4.
         let ranges = ranges(in: "[\nfoo\n]: /url\nbar")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 1)
@@ -92,14 +78,12 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 4, column: 1))
         #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 4, column: 4))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 4, column: 1))   // "bar" on its true line
+        #expect(texts[0]?.lowerBound == Pos(line: 4, column: 1))   // "bar"
         #expect(texts[0]?.upperBound == Pos(line: 4, column: 4))
     }
 
-    @Test("every remaining line keeps its own true line after a ref-def")
+    @Test("every remaining line keeps its own line after a ref-def")
     func multipleRemainingLines() throws {
-        // "[foo]: /url" on line 1 is the ref-def; "bar" (line 2) and "baz" (line 3) both survive.
-        // Each keeps its TRUE line: `bar` @2:1-2:4, `baz` @3:1-3:4, and the paragraph runs @2:1-3:4.
         let ranges = ranges(in: "[foo]: /url\nbar\nbaz")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 2)
@@ -109,17 +93,14 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 2, column: 1))
         #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 3, column: 4))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))   // "bar" on its true line
+        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))   // "bar"
         #expect(texts[0]?.upperBound == Pos(line: 2, column: 4))
-        #expect(texts[1]?.lowerBound == Pos(line: 3, column: 1))   // "baz" on its true line
+        #expect(texts[1]?.lowerBound == Pos(line: 3, column: 1))   // "baz"
         #expect(texts[1]?.upperBound == Pos(line: 3, column: 4))
     }
 
-    @Test("nested inline content after a ref-def keeps its true line, whole subtree")
+    @Test("nested inline content after a ref-def keeps its own line, whole subtree")
     func nestedInlineRemainder() throws {
-        // "[foo]: /url" (line 1) is the ref-def; "a *b* c" (line 2) is the surviving content, which
-        // parses to Text "a ", an Emphasis wrapping Text "b", and Text " c". EVERY node of that subtree
-        // keeps its TRUE line 2, and the paragraph runs @2:1-2:8.
         let ranges = ranges(in: "[foo]: /url\na *b* c")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 3)
@@ -127,7 +108,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 2, column: 1))
         #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 8))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))   // "a " on its true line
+        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))   // "a "
         #expect(texts[0]?.upperBound == Pos(line: 2, column: 3))
         #expect(firstRange(.emphasis, in: ranges)?.lowerBound == Pos(line: 2, column: 3))   // "*b*"
         #expect(firstRange(.emphasis, in: ranges)?.upperBound == Pos(line: 2, column: 6))
@@ -137,11 +118,8 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(texts[2]?.upperBound == Pos(line: 2, column: 8))
     }
 
-    @Test("a blank line between ref-def and content is a separate paragraph - no shift")
+    @Test("a blank line between ref-def and content starts a separate paragraph")
     func blankSeparatorIsSeparateParagraph() throws {
-        // "[foo]: /url" (line 1), a blank line (line 2), then "bar" (line 3). The blank line ends the
-        // former ref-def paragraph, so `bar` is its OWN paragraph with no leading def to strip - there
-        // is nothing to strip. `bar` is @3:1-3:4.
         let ranges = ranges(in: "[foo]: /url\n\nbar")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 1)
@@ -149,17 +127,12 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 3, column: 1))
         #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 3, column: 4))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 3, column: 1))   // "bar" on its true line
+        #expect(texts[0]?.lowerBound == Pos(line: 3, column: 1))   // "bar"
         #expect(texts[0]?.upperBound == Pos(line: 3, column: 4))
     }
 
-    @Test("indented remainder lines after a ref-def keep their true physical lines")
-    func indentedRemainderKeepsTrueLines() throws {
-        // "[a]:" (line 1) and "/b" (line 2) are a two-line reference definition; the INDENTED lines
-        // " c" (line 3) and " d" (line 4) are the surviving content. The leading space on each
-        // continuation line makes the surviving paragraph body non-contiguous (a source-backed segment
-        // list, not one source range). Each surviving line keeps its TRUE physical line and column:
-        // `c` @3:2, `d` @4:2, and the paragraph runs @3:2-4:3.
+    @Test("indented remainder lines after a ref-def keep their own lines")
+    func indentedRemainderKeepsOwnLines() throws {
         let ranges = ranges(in: "[a]:\n/b\n c\n d")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 2)
@@ -169,9 +142,9 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 3, column: 2))
         #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 4, column: 3))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 3, column: 2))   // "c" on its true line/column
+        #expect(texts[0]?.lowerBound == Pos(line: 3, column: 2))   // "c"
         #expect(texts[0]?.upperBound == Pos(line: 3, column: 3))
-        #expect(texts[1]?.lowerBound == Pos(line: 4, column: 2))   // "d" on its true line/column
+        #expect(texts[1]?.lowerBound == Pos(line: 4, column: 2))   // "d"
         #expect(texts[1]?.upperBound == Pos(line: 4, column: 3))
     }
 }

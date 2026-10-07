@@ -11,11 +11,9 @@
 import Testing
 import CommonMark
 
-/// A table whose header line is indented, `  a|b`, followed by a body row `x` at column 1. cmark re-bases body-row
-/// columns to the header's indent, so it reports the row as starting at 3:3 but ending at 3:1 (inclusive), an inverted
-/// range. The rewrite reports the row's true extent.
-@Suite("Table body row with an inverted re-based range")
-struct TableBodyRowInvertedRangeTests {
+/// A body row's source range covers its own line, independent of the header row's indentation.
+@Suite("Table body row source range after an indented header row")
+struct TableBodyRowAfterIndentedHeaderRangeTests {
 
     private let source = "  a|b\n-|-\nx\n"
 
@@ -33,8 +31,8 @@ struct TableBodyRowInvertedRangeTests {
         }
     }
 
-    @Test("without cmark bug compatibility the row spans its own line")
-    func trueRangeWithoutBugCompatibility() {
+    @Test("a body row at column 1 after an indented header row spans its own line")
+    func bodyRowSpansItsOwnLine() {
         let start = MarkdownNode.SourcePosition(line: 3, column: 1)
         let end = MarkdownNode.SourcePosition(line: 3, column: 2)
         #expect(bodyRowRange(options: [.tables, .sourcePosition]) == .some(start..<end))

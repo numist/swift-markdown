@@ -11,8 +11,7 @@
 import CommonMark
 import Testing
 
-/// Flag-OFF follows CommonMark: any whitespace-only line is blank and keeps the definition open. Position-free
-/// compare surface.
+/// A whitespace-only line is a blank line (Characters and lines), so it keeps an open footnote definition open.
 @Suite("Footnote definition across a whitespace-only line")
 struct EmptyFootnoteDefinitionWhitespaceLineTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink, .footnotes]
@@ -21,7 +20,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
         TreeDump.dump(markdown, options: Self.options)
     }
 
-    @Test func testEmptyLineControl() {
+    @Test func testEmptyLineKeepsDefinitionOpen() {
         #expect(surface("- [^a]:\n\n\t\t\"") == """
             document
               list bullet '-' tight
@@ -30,7 +29,6 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
             """)
     }
 
-    /// A top-level whitespace-only line of 1-3 spaces closes the definition; 4 spaces reach its content column and continue it.
     @Test func testTopLevelSpaceOnlyLines() {
         #expect(surface("[^a]:\n    \n    x\n\n[^a]") == """
             document
@@ -43,7 +41,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
             """)
     }
 
-    @Test func testParagraphAfterWhitespaceLineControl() {
+    @Test func testUnderindentedLineAfterWhitespaceLineClosesDefinition() {
         #expect(surface("- [^a]: x\n \n  y") == """
             document
               list bullet '-' tight
@@ -63,8 +61,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
             """)
     }
 
-    /// Flag-OFF (spec-correct): a whitespace-only line is a blank line, so the definition continues past it.
-    @Test func testSpecCorrectDefinitionContinuesPastWhitespaceLine() {
+    @Test func testDefinitionContinuesPastWhitespaceLine() {
         #expect(surface("- [^a]:\n \n      x\n\n[^a]") == """
             document
               list bullet '-' tight
@@ -78,9 +75,9 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
             """)
     }
 
-    /// A whitespace-only line is a blank line, so the definition stays open and the indented content after it
-    /// joins the definition (dropped with it when unreferenced).
-    @Test func testSpecCorrectDefinitionHoldsContentAfterWhitespaceLine() {
+    /// Indented content after a whitespace-only line belongs to the definition, and is dropped with it when the
+    /// definition is unreferenced.
+    @Test func testDefinitionHoldsContentAfterWhitespaceLine() {
         let emptyItem = """
             document
               list bullet '-' tight

@@ -16,8 +16,8 @@ import Foundation
 #endif
 @testable import CommonMark
 
-// DFS-collect each node's kind, source range, and leaf-ness. File-scope + `borrowing
-// MarkdownNode` to satisfy the noncopyable-borrow rules (see SourcePositionTests.dfsRanges).
+/// Collects each node's kind, source range and whether it is a leaf, in depth-first order.
+// File scope with a `borrowing` parameter because `MarkdownNode` is noncopyable.
 internal func dfsCompleteness(
     _ node: borrowing MarkdownNode,
     into out: inout [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)]
@@ -38,46 +38,27 @@ struct SourceRangeCompletenessTests {
         return SpecParser.parse(text)
     }
 
-    /// The qualified comparison surface: the GFM extensions the rewrite is being qualified
-    /// against, plus source-position tracking. Applied uniformly to every example rather than
-    /// the per-example spec annotations, so the invariant covers the whole surface. Deliberately
-    /// excludes `.gfmAutolink` and `.footnotes`, which are outside the qualified surface.
+    /// Every example parses with these options rather than its own spec annotation, so each check
+    /// covers every example.
     private static let options: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
-    /// Every node the parser produces on the qualified surface carries a valid source range -
-    /// present, and not inverted (`lowerBound <= upperBound`) - except for a small, justified
-    /// exempt set that is position-less on BOTH the rewrite and the cmark-gfm reference:
-    ///
-    /// - `.softBreak` / `.lineBreak`: cmark never stamps a position on a break, and the rewrite
-    ///   matches (all 104 breaks in the corpus are nil, none carries a stray range).
-    /// - Empty GFM table filler cells: a `.tableCell` with no children pads a short body row out
-    ///   to the header's column count. It has no content, and cmark creates it with start_column
-    ///   0 (see `extensions/table.c`, the body-row padding loop), which swift-markdown's converter
-    ///   maps to a nil range. So it is genuinely position-less on both sides.
-    ///
-    /// This is a presence/ordering ratchet, not a value check: known wrong-but-stamped ranges
-    /// (e.g. multi-line link end columns, single-range continuation paragraphs) do not trip it,
-    /// because they produce a stamped range, not nil. A nil range on any other node - an
-    /// out-of-order range collapses to nil upstream (see the ordering note below) - is a
-    /// genuinely unstamped case and a regression.
+    /// Every node has a source range whose start is not after its end, except soft and hard line
+    /// breaks and the empty cells inserted into a body row with fewer cells than the header row
+    /// (Tables (extension)), none of which has a source range. This checks presence and order, not values.
     @Test("every non-exempt node carries a valid source range")
     func everyNonExemptNodeHasValidRange() throws {
         let audit = try Self.audit(options: Self.options)
 
-        // Fixture sanity: the corpus and the walk must both be substantial, so a vacuous setup
-        // (empty corpus, or a walk that never descends into children) fails loudly.
+        // Fixture sanity: an empty corpus or a walk that never descends into children fails loudly.
         #expect(audit.totalNodes > 3000)
-        // Pin the filler-cell exemption to its verified population (the two padding cells in the
-        // GFM tables section). Because an out-of-order range collapses to nil, a childless
-        // .tableCell going nil when it should carry a range would otherwise be silently exempted;
-        // asserting the exact count makes the ratchet trip if that population ever changes shape,
-        // forcing a re-triage against the reference.
+        // The tables section inserts exactly two empty cells; pinning the count keeps a childless
+        // cell that should have a source range from passing as one of them.
         #expect(audit.exemptFillerCells == 2)
         #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
     }
 
-    /// The same ratchet with every `o` in every example replaced by a NUL. Block parsing materializes
+    /// The same check with every `o` in every example replaced by a NUL. Block parsing materializes
     /// NUL-bearing content into the arena (each NUL becomes U+FFFD) instead of taking the zero-copy source
     /// slice, so this covers content that must map back to source through an arena run map: paragraphs,
     /// headings, table cells, and the inlines within them. A letter is replaced rather than a NUL inserted, so
@@ -122,10 +103,10 @@ struct SourceRangeCompletenessTests {
         #expect(failures.isEmpty, Comment(rawValue: failures.prefix(25).joined(separator: "\n")))
     }
 
-    /// The same ratchet over inline-only parsing (`.inlineOnly`, and `.preserveWhitespace` which
-    /// implies it), where each whole spec example becomes one paragraph of inline content. Each
-    /// example also runs with CRLF line endings, which inline-only parsing normalizes through an
-    /// arena copy rather than the zero-copy source slice the LF-only corpus takes.
+    /// The same check over inline-only parsing (`.inlineOnly`, and `.preserveWhitespace`, which
+    /// implies it), where each spec example becomes one paragraph of inline content. Each example
+    /// also runs with CRLF line endings, which inline-only parsing normalizes through an arena copy
+    /// rather than a zero-copy source slice.
     @Test("every non-exempt node carries a valid source range in inline-only parsing", arguments: [
         MarkdownDocument.ParseOptions.inlineOnly, .preserveWhitespace,
     ], ["\n", "\r\n"])
@@ -134,12 +115,12 @@ struct SourceRangeCompletenessTests {
 
         // Fixture sanity: every example yields at least a document, a paragraph, and a child.
         #expect(audit.totalNodes > 3000)
-        // Inline-only parsing builds no tables, so there are no filler cells to exempt.
+        // Inline-only parsing builds no tables.
         #expect(audit.exemptFillerCells == 0)
         #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
     }
 
-    /// A container to nest every spec example in, by rewriting each of its lines.
+    /// A container to nest every spec example in, by prefixing each of its lines.
     enum Container: String, CaseIterable, Sendable {
         /// Every line prefixed with `> `.
         case blockQuote
@@ -157,7 +138,7 @@ struct SourceRangeCompletenessTests {
 
         func nest(_ markdown: String) -> String {
             var lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-            // The example's final newline ends its last line; it is not a line of its own to prefix.
+            // The example's final line ending ends its last line; it is not a line of its own to prefix.
             let trailingNewline = lines.last == ""
             if trailingNewline { lines.removeLast() }
             let (first, rest): (String, String) = switch self {
@@ -174,22 +155,23 @@ struct SourceRangeCompletenessTests {
         }
     }
 
-    /// The ratchet with every spec example nested in each `Container`, in the shipped configuration. A nested block's lines aren't contiguous in the source (each carries its container's
-    /// prefix), so this covers content that maps back to source line by line: notably the GFM tables section's
-    /// tables, whose rows, cells and cell inlines must each be placed on their own source line.
+    /// The same check with every spec example nested in each `Container`. A nested block's lines aren't
+    /// contiguous in the source (each carries its container's prefix), so this covers content that maps
+    /// back to source line by line: notably tables, whose rows, cells and cell inlines must each lie on
+    /// their own source line.
     @Test("every non-exempt node carries a valid source range when nested in a container", arguments: Container.allCases)
     func everyNonExemptNestedNodeHasValidRange(container: Container) throws {
-        let audit = try Self.audit(options: Self.options, rewrite: container.nest)
+        let audit = try Self.audit(options: Self.options, transform: container.nest)
 
         #expect(audit.totalNodes > 3000)
         #expect(audit.exemptFillerCells == 2)
         #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
     }
 
-    /// Parse every spec example with `options`, its markdown passed through `rewrite`, and collect each
-    /// node that lacks a valid source range, skipping the exempt set documented on
+    /// Parses every spec example with `options`, its markdown passed through `transform`, and collects each
+    /// node that lacks a valid source range, skipping the exemptions documented on
     /// `everyNonExemptNodeHasValidRange`.
-    private static func audit(options: MarkdownDocument.ParseOptions, rewrite: (String) -> String = { $0 }) throws -> (totalNodes: Int, exemptFillerCells: Int, failures: [String]) {
+    private static func audit(options: MarkdownDocument.ParseOptions, transform: (String) -> String = { $0 }) throws -> (totalNodes: Int, exemptFillerCells: Int, failures: [String]) {
         let examples = try Self.loadSpec()
         #expect(examples.count > 600)
 
@@ -199,14 +181,13 @@ struct SourceRangeCompletenessTests {
 
         for ex in examples {
             var nodes: [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)] = []
-            let markdown = rewrite(ex.markdown)
+            let markdown = transform(ex.markdown)
             MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
                 dfsCompleteness(doc.root, into: &nodes)
             }
             totalNodes += nodes.count
 
             for node in nodes {
-                // Breaks are position-less on both sides.
                 switch node.kind {
                 case .softBreak, .lineBreak:
                     continue
@@ -215,9 +196,7 @@ struct SourceRangeCompletenessTests {
                 }
 
                 guard let range = node.range else {
-                    // An empty table filler cell (a childless .tableCell) pads a short body row out
-                    // to the header's column count; it is position-less on both sides. Every other
-                    // nil range is an unstamped regression.
+                    // A childless table cell is one inserted into a body row with fewer cells than the header row.
                     if case .tableCell = node.kind, node.isLeaf {
                         exemptFillerCells += 1
                         continue
@@ -225,11 +204,8 @@ struct SourceRangeCompletenessTests {
                     failures.append("#\(ex.number) [\(ex.section)] \(node.kind): nil sourceRange; input=\(markdown.debugDescription)")
                     continue
                 }
-                // A non-nil range is well-ordered by construction: `MarkdownNode.sourceRange` (via
-                // StorageView) collapses any start > end to nil, and Swift's half-open Range cannot
-                // represent inversion. So an out-of-order range surfaces as nil and is caught above;
-                // this restates the requirement's `lowerBound <= upperBound` invariant defensively,
-                // in case that upstream contract ever changes.
+                // `MarkdownNode.sourceRange` reports a start after its end as nil, which the guard above
+                // catches; this check holds if that contract changes.
                 if range.lowerBound > range.upperBound {
                     failures.append("#\(ex.number) [\(ex.section)] \(node.kind): inverted range \(range); input=\(markdown.debugDescription)")
                 }

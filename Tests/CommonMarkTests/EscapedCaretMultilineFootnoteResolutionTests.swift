@@ -11,14 +11,14 @@
 import CommonMark
 import Testing
 
-/// A cross-line escaped-caret `[\^…]` whose captured label matches a definition resolves as a footnote.
-@Suite("Cross-line escaped-caret footnote-shaped bracket")
+/// A footnote-shaped bracket that spans a line ending is literal text unless it is a footnote reference whose whole
+/// label matches a definition: a backslash-escaped caret never opens one, and a definition matching only the bracket's
+/// first line does not match.
+@Suite("Footnote-shaped bracket across a line ending")
 struct EscapedCaretMultilineFootnoteResolutionTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink, .footnotes]
 
-    /// Flag-off, a backslash-escaped caret makes `[\^…]` plain text and a footnote reference never spans a line,
-    /// so the bracket stays literal around its soft break.
-    @Test func testBracketStaysLiteralWithoutBugCompatibility() {
+    @Test func testBracketStaysLiteral() {
         let atCap = String(repeating: "a", count: 1000)
         let overCap = String(repeating: "a", count: 1001)
         let cases: [(markdown: String, expected: String)] = [

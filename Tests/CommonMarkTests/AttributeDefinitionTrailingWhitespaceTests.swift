@@ -11,8 +11,8 @@
 import CommonMark
 import Testing
 
-/// An attribute definition's value is cleaned like a link destination (cmark's `cmark_clean_attributes`):
-/// trimmed even when more paragraph content follows it, with escapes and entities decoded.
+/// An attribute definition's value is trimmed, even when more paragraph content follows it, and its backslash
+/// escapes and entity references are decoded.
 @Suite("Attribute definition value trimming")
 struct AttributeDefinitionTrailingWhitespaceTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink]
@@ -107,8 +107,8 @@ struct AttributeDefinitionTrailingWhitespaceTests {
             """)
     }
 
-    /// A whitespace-only value line can't form an empty value: the separator skip crosses one line end, so
-    /// the value is the next line's content.
+    /// The whitespace after the `:` may include one line ending, so a whitespace-only value line takes its value
+    /// from the next line.
     @Test
     func testWhitespaceOnlyValueLineTakesNextLine() {
         #expect(TreeDump.dump("^[][$]\n\n^[$]: \t \nx \nz", options: Self.options) == """
@@ -145,9 +145,9 @@ struct AttributeDefinitionTrailingWhitespaceTests {
             """)
     }
 
-    /// Flag-OFF shares the link destination's spec-correct single pass: `\&` escapes the `&`, so `amp;` stays literal.
+    /// `\&` escapes the `&`, so `amp;` is literal.
     @Test
-    func testEscapeBeforeEntityWithoutBugCompatibility() {
+    func testEscapeBeforeEntity() {
         #expect(TreeDump.dump("^[][$]\n\n^[$]:\\&amp; \nx", options: Self.options) == """
             document
               paragraph
@@ -158,9 +158,8 @@ struct AttributeDefinitionTrailingWhitespaceTests {
             """)
     }
 
-    /// The trim is not a cmark quirk, so the flag-OFF deliverable trims too.
     @Test
-    func testTrimmedWithoutBugCompatibility() {
+    func testTrimmedBeforeLazyContinuationLine() {
         #expect(TreeDump.dump("^[][$]\n- ^[$]:l \nx", options: Self.options) == """
             document
               paragraph
@@ -173,9 +172,9 @@ struct AttributeDefinitionTrailingWhitespaceTests {
             """)
     }
 
-    /// Control: a definition that isn't at the start of a paragraph is never formed, so its line stays literal.
+    /// A definition that doesn't start a paragraph is paragraph text.
     @Test
-    func testLastLineControl() {
+    func testDefinitionAfterParagraphTextIsLiteral() {
         #expect(TreeDump.dump("^[][$]\n^[$]:l \n", options: Self.options) == """
             document
               paragraph

@@ -10,7 +10,7 @@
 
 import CommonMark
 
-/// Minimal HTML renderer for cmark-swift's AST, used by the spec-parity test suite. Lives in the test target so the library stays parser-only; it's not a public API.
+/// A minimal HTML renderer for the parser's node tree, for checking the parser against the spec examples. It lives in the test target so the library stays parser-only.
 internal enum HTMLRenderer {
 
     internal static func render(_ doc: borrowing MarkdownDocument, tagfilter: Bool = false) -> String {
@@ -152,10 +152,10 @@ internal enum HTMLRenderer {
                 out += "<sup class=\"footnote-ref\"><a href=\"#fn-\(escapedLabel)\" id=\"fnref-\(escapedLabel)\" data-footnote-ref>\(index)</a></sup>"
             }
         case .footnoteDefinition:
-            // Footnote defs are typically gathered into a footnote section at the end of the document; for spec-test parity we render them inline (the spec tests rarely exercise footnotes).
+            // No spec example has a footnote definition, so it renders in place rather than in a footnote section at the end of the document.
             renderChildren(node, into: &out, tight: false, tagfilter: tagfilter)
         case .attribute:
-            // Fork-specific; render the children's text only.
+            // An inline attribute renders as its content alone.
             renderChildren(node, into: &out, tight: false, tagfilter: tagfilter)
         case .customBlock, .customInline:
             renderChildren(node, into: &out, tight: false, tagfilter: tagfilter)
@@ -189,13 +189,12 @@ internal enum HTMLRenderer {
         tagfilter: Bool
     ) {
         var firstChild = true
-        // Tracks whether the previous emitted child was a tight-rendered paragraph (text only, no trailing `\n`). If so, the next block sibling needs a separating `\n`. Other block children already end with their own `\n`, so an extra one would produce a stray blank line in the output.
+        // Every block but a tight paragraph ends in its own `\n`.
         var prevWasTightParagraph = false
         item.children.forEach { child in
             let isParagraph = child.kind == .paragraph
             if tight && isParagraph {
-                // In a tight list item, EVERY paragraph is unwrapped.
-                // Only insert a leading `\n` when needed: the previous child either was a tight paragraph (no trailing `\n`), or - for the first paragraph after the marker - we want a clean `<li>`-attached layout when the first child is a paragraph AND there ARE later children.
+                // A tight list renders its items' paragraphs without `<p>` tags (Lists), so a paragraph after another paragraph needs its own separating `\n`.
                 if !firstChild && prevWasTightParagraph {
                     out += "\n"
                 }
@@ -203,10 +202,10 @@ internal enum HTMLRenderer {
                 prevWasTightParagraph = true
             } else {
                 if firstChild {
-                    // Loose item - opener gets a newline before any block child. Tight item with a non-paragraph first child (e.g., a code block) also wants the newline.
+                    // Any first child other than a tight paragraph starts on the line after `<li>`.
                     out += "\n"
                 } else if prevWasTightParagraph {
-                    // Tight paragraph emitted (no `<p>`, no trailing `\n`), followed by a block sibling - separate with `\n`.
+                    // A tight paragraph has no trailing `\n` to separate it from the next block.
                     out += "\n"
                 }
                 renderNode(child, into: &out, tight: tight, tagfilter: tagfilter)
@@ -307,7 +306,7 @@ internal enum HTMLRenderer {
 
     // MARK: - Helpers
 
-    /// GFM tagfilter extension: replace `<` with `&lt;` for a fixed set of "disallowed" raw HTML tags so that potentially dangerous tags don't render. Match is case-insensitive on the tag name. Only invoked when the test enables the `tagfilter` extension.
+    /// The tag names whose raw HTML `<` renders as `&lt;` when `tagfilter` is set, matched case-insensitively (Disallowed Raw HTML (extension)).
     private static let disallowedTags: [String] = [
         "title", "textarea", "style", "xmp", "iframe",
         "noembed", "noframes", "script", "plaintext"
@@ -364,7 +363,7 @@ internal enum HTMLRenderer {
         }
     }
 
-    /// Replace `\<ASCII punct>` sequences with the punctuation character, per CommonMark backslash-escape rules. Used by link/image URL and title rendering since the parser preserves the original bytes.
+    /// Replaces each backslash-escaped ASCII punctuation character with the character itself (Backslash escapes).
     private static func unescapeBackslashes(_ s: String) -> String {
         var out: [UInt8] = []
         out.reserveCapacity(s.utf8.count)
@@ -399,7 +398,7 @@ internal enum HTMLRenderer {
         }
     }
 
-    /// HTML-escape `&`, `<`, `>`, `"` per cmark behavior. Non-ASCII bytes pass through unchanged so the resulting String preserves the source's UTF-8 encoding.
+    /// HTML-escapes `&`, `<`, `>` and `"`. All other bytes, including non-ASCII ones, pass through unchanged.
     internal static func htmlEscape(_ s: String) -> String {
         var out: [UInt8] = []
         out.reserveCapacity(s.utf8.count)
@@ -415,7 +414,7 @@ internal enum HTMLRenderer {
         return String(decoding: out, as: UTF8.self)
     }
 
-    /// Percent-encode characters in a URL per cmark/houdini rules. Bytes that need escaping: control chars, space, `<`, `>`, `"`, `\\`, `` ` ``, `^`, `{`, `|`, `}`, plus all non-ASCII. `&` becomes `&amp;` (HTML-escaped, not percent-encoded). `%` is preserved if followed by 2 hex digits (already-encoded sequences); otherwise percent-encoded.
+    /// Escapes a URL for an HTML attribute. Control characters, space, DEL, non-ASCII bytes and `"`, `<`, `>`, `[`, `\\`, `]`, `^`, `` ` ``, `{`, `|`, `}` are percent-encoded. `&` becomes `&amp;`. A `%` followed by two hex digits passes through; any other `%` is percent-encoded.
     internal static func escapeURL(_ s: String) -> String {
         var out: [UInt8] = []
         out.reserveCapacity(s.utf8.count)

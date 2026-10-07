@@ -11,11 +11,11 @@
 import CommonMark
 import Testing
 
-/// Definition lookup for a footnote-shaped bracket whose `]` lands on a later line.
-///
-/// A footnote reference never spans a line, so the bracket stays literal text around a soft break.
-@Suite("Footnote cross-line truncated capture lookup")
-struct FootnoteCrossLineTruncatedCaptureLookupTests {
+/// A footnote-shaped bracket whose `]` is on a later line resolves only against a definition matching its whole label.
+/// A definition whose label holds U+FFFD in place of the bracket's first-line characters does not match, so the
+/// bracket stays literal text around the soft line break.
+@Suite("Footnote-shaped bracket across a line ending: definition lookup")
+struct FootnoteCrossLineBracketLookupTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes]
 
     private static func surface(_ markdown: String) -> String {
@@ -23,7 +23,7 @@ struct FootnoteCrossLineTruncatedCaptureLookupTests {
     }
 
     @Test
-    func withoutCompatibilityBracketStaysLiteral() {
+    func bracketStaysLiteral() {
         #expect(Self.surface("[^\u{2003}\nxxxx]\n\n[^\u{FFFD}\u{FFFD}]: n") == """
             document
               paragraph
@@ -42,7 +42,6 @@ struct FootnoteCrossLineTruncatedCaptureLookupTests {
             """)
     }
 
-    /// Flag-off a footnote reference never spans a line, so the bracket stays literal text around a soft break.
     @Test(arguments: [
             ("[^\u{2003}\nxxxx]\n\n[^\u{FFFD}\u{FFFD}]: n", """
                 document
@@ -93,7 +92,7 @@ struct FootnoteCrossLineTruncatedCaptureLookupTests {
 
                 """),
     ])
-    func withoutCompatibilityTruncatedCaptureStaysLiteral(_ markdown: String, _ expected: String) {
+    func everyBracketStaysLiteral(_ markdown: String, _ expected: String) {
         #expect(Self.surface(markdown) == expected)
     }
 }

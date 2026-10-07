@@ -11,18 +11,14 @@
 import Testing
 @testable import CommonMark
 
-/// Coverage for source-position stamping of a plain-text run that FOLLOWS a multi-line inline (code span
-/// or emphasis) on the last content line of a re-indented multi-segment paragraph - a blockquote or
-/// list-item paragraph whose lazy continuations are joined as a segment list.
-///
-/// Flag-OFF (the shipped default) is spec-correct: the trailing text run carries its true byte-projected
-/// position on its own physical line.
-@Suite("Trailing text after a multi-line inline in a re-indented container paragraph")
+/// A text run that follows an inline spanning a line ending, in a block quote paragraph with lazy
+/// continuation lines, has a source range on its own line.
+@Suite("Trailing text after a multi-line inline in a block quote paragraph")
 struct TrailingTextAfterMultiLineInlineTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition]
+    private static let options: MarkdownDocument.ParseOptions = [.sourcePosition]
 
     private func textRanges(
         _ source: String, options: MarkdownDocument.ParseOptions
@@ -34,11 +30,9 @@ struct TrailingTextAfterMultiLineInlineTests {
         return out.filter { $0.kind == .text }.map(\.range)
     }
 
-    /// The deliverable (flag-OFF, spec-correct default): the trailing `o` after a multi-line code span in a
-    /// blockquote paragraph carries its true byte-projected position on its own physical line (`@2:2-2:3`).
-    @Test("flag-OFF: text after a multi-line code span is stamped on its own line")
-    func specTrailingTextStamped() throws {
-        let texts = textRanges("> `\n`o\nx", options: Self.specOptions)
+    @Test("text after a multi-line code span has a source range on its own line")
+    func trailingTextRangeOnItsLine() throws {
+        let texts = textRanges("> `\n`o\nx", options: Self.options)
         try #require(texts.count == 2)
         #expect(texts[0] == Pos(line: 2, column: 2)..<Pos(line: 2, column: 3))   // "o"
         #expect(texts[1] == Pos(line: 3, column: 1)..<Pos(line: 3, column: 2))   // "x"

@@ -11,9 +11,7 @@
 import Testing
 @testable import CommonMark
 
-// DFS-collect each node's kind, text literal, and (for links) destination URL. File-scope +
-// `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (see
-// AutolinkEmptySiblingTests.dfsAutolinkNodes).
+// Depth-first: each node's kind, text literal, and (for links) destination URL.
 private func dfsInLinkNodes(
     _ node: borrowing MarkdownNode,
     into out: inout [(kind: MarkdownNode.Kind, text: String?, url: String?)]
@@ -24,22 +22,12 @@ private func dfsInLinkNodes(
     }
 }
 
-/// A bare GFM email inside an existing link's text.
-///
-/// cmark's autolink `postprocess` (`extensions/autolink.c`) tracks link context with a single `in_link`
-/// BOOLEAN, not a nesting depth: entering a link arms it and exiting ANY link clears it. So when a link
-/// is nested inside another link's text - e.g. the angle autolink `<M@C>` in `[<M@C>B@.B]()` - exiting
-/// the inner autolink clears `in_link`, and the OUTER link's remaining text (`B@.B`) is autolinked into a
-/// nested email link with the empty `before`/`after` Text siblings the extension always emits.
-///
-/// A link nested in a link is invalid HTML/CommonMark, so the shipped (spec-correct) parser leaves the
-/// bare email as text. A bare email in plain paragraph text (not inside any link) autolinks
-/// identically in both modes - the control that the traversal change does not perturb normal autolinking.
-@Suite("GFM bare email inside link text (cmark bug-for-bug)")
+/// Links may not contain other links (Links), so an email address in link text is not an extended email
+/// autolink.
+@Suite("Extended email autolinks in link text")
 struct AutolinkEmailInLinkTextTests {
 
-    /// The shipped configuration: GFM autolink on.
-    private static let flagOff: MarkdownDocument.ParseOptions = [.gfmAutolink]
+    private static let options: MarkdownDocument.ParseOptions = [.gfmAutolink]
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
@@ -52,25 +40,17 @@ struct AutolinkEmailInLinkTextTests {
         }
     }
 
-    // MARK: - Flag OFF: spec-correct, the bare email stays text
-
-    @Test("flag-OFF: bare email inside link text is NOT autolinked")
-    func bareEmailInLinkTextFlagOff() {
-        // A link inside a link is invalid (spec "Links"), so `B@b.c` stays text in the link's text.
-        let ns = nodes(in: "[x B@b.c]()", options: Self.flagOff)
+    @Test("an email address inside link text is text")
+    func bareEmailInLinkText() {
+        let ns = nodes(in: "[x B@b.c]()", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "x B@b.c"])
         #expect(ns.compactMap(\.url) == [""])
     }
 
-    // MARK: - Both modes: a bare email in plain text (no enclosing link) is unchanged
-
-    @Test("bare email in plain paragraph text autolinks identically in BOTH modes")
-    func bareEmailInPlainTextBothModes() {
-        // `x B@b.B y` - the email is NOT inside a link; genuine text on both sides means no empty siblings.
-        // This is the control: the in-link traversal change
-        // must not perturb ordinary email autolinking.
-        let ns = nodes(in: "x B@b.B y", options: Self.flagOff)
+    @Test("an email address in paragraph text autolinks")
+    func bareEmailInPlainText() {
+        let ns = nodes(in: "x B@b.B y", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, "x ", nil, "B@b.B", " y"])
         #expect(ns.compactMap(\.url) == ["mailto:B@b.B"])

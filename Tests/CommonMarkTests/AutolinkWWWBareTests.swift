@@ -11,9 +11,7 @@
 import Testing
 @testable import CommonMark
 
-// DFS-collect each node's kind, text literal, and (for links) destination URL. File-scope +
-// `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (see
-// AutolinkDomainRulesTests.dfsAutolinkNodes).
+// Depth-first: each node's kind, text literal, and (for links) destination URL.
 private func dfsAutolinkNodes(
     _ node: borrowing MarkdownNode,
     into out: inout [(kind: MarkdownNode.Kind, text: String?, url: String?)]
@@ -24,21 +22,12 @@ private func dfsAutolinkNodes(
     }
 }
 
-/// A `www.` with no valid domain after it: the shipped deliverable never autolinks it, but cmark-gfm does.
-///
-/// GFM's `www.` autolink requires a valid domain (at least one period, non-empty segments) after `www.`, so
-/// the spec-correct deliverable (flag-OFF) leaves a domain-less `www.` as plain text. cmark-gfm's
-/// `www_match` (`extensions/autolink.c`) over-trims: its `check_domain(data, size, allow_short: 0)` counts
-/// the period *inside* `www.` toward the required-dot gate whenever the chunk holds at least one byte past
-/// `www.` (its loop bound `i < size - 1` reaches that period only then), so it links a bare `www`
-/// (destination `http://www`) once `autolink_delim` peels the trailing `.`. `www.` at end-of-input has
-/// nothing after it, so the period is never counted and neither implementation links it. The over-trim is a
-/// cmark defect; flag-OFF stays spec-correct.
-@Suite("GFM www autolink domain-less over-trim")
+/// An extended www autolink needs a valid domain after `www.` (Autolinks (extension)), so a `www.` without one is
+/// text.
+@Suite("Extended www autolink without a domain")
 struct AutolinkWWWBareTests {
 
-    /// The shipped configuration: GFM autolink on.
-    private static let flagOff: MarkdownDocument.ParseOptions = [.gfmAutolink]
+    private static let options: MarkdownDocument.ParseOptions = [.gfmAutolink]
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
@@ -51,47 +40,33 @@ struct AutolinkWWWBareTests {
         }
     }
 
-    // MARK: - The deliverable does not link a domain-less `www.` (flag-OFF, spec-correct)
-
-    @Test("domain-less `www.` before a boundary stays plain text (flag-OFF)")
-    func domainlessWWWNotLinkedFlagOff() {
-        // `www. x` - after `www.` there is only a space, so there is no valid domain. GFM requires one, so
-        // the deliverable leaves the whole run as text.
-        let ns = nodes(in: "www. x", options: Self.flagOff)
+    @Test("`www.` followed by a space is text")
+    func domainlessWWWNotLinked() {
+        let ns = nodes(in: "www. x", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "www. x"])
         #expect(ns.compactMap(\.url) == [])
     }
 
-    // MARK: - `www.` at end-of-input: neither mode links it
-
-    @Test("`www.` at end-of-input stays plain text (flag-OFF)")
-    func wwwAtEndOfInputNotLinkedFlagOff() {
-        // Nothing follows `www.`, so cmark's `check_domain` loop (`i < size - 1`) never reaches the period;
-        // `np == 0` and no link is produced.
-        let ns = nodes(in: "www.", options: Self.flagOff)
+    @Test("`www.` at the end of the input is text")
+    func wwwAtEndOfInputNotLinked() {
+        let ns = nodes(in: "www.", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "www."])
         #expect(ns.compactMap(\.url) == [])
     }
 
-    // MARK: - Guard: a real domain still autolinks in BOTH modes (unchanged)
-
-    @Test("guard: `www.a.b` with a real domain autolinks (flag-OFF)")
-    func validDomainAutolinksFlagOff() {
-        let ns = nodes(in: "www.a.b x", options: Self.flagOff)
+    @Test("`www.a.b` autolinks")
+    func validDomainAutolinks() {
+        let ns = nodes(in: "www.a.b x", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "www.a.b", " x"])
         #expect(ns.compactMap(\.url) == ["http://www.a.b"])
     }
 
-    // MARK: - Guard: the over-trim still honors `check_domain`'s underscore rejection
-
-    @Test("guard: a domain-less `www._` is rejected in both modes")
-    func domainlessWWWUnderscoreRejectedBothModes() {
-        // `www._ x` trims to a bare `www`, but cmark's `check_domain` rejects an underscore in the domain's
-        // last two labels (`www`, `_`), so it does not link.
-        let ns = nodes(in: "www._ x", options: Self.flagOff)
+    @Test("`www._` is text")
+    func domainlessWWWUnderscoreNotLinked() {
+        let ns = nodes(in: "www._ x", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "www._ x"])
         #expect(ns.compactMap(\.url) == [])

@@ -18,7 +18,7 @@ private let autolinkOptions: MarkdownDocument.ParseOptions = [.tables, .striketh
 /// last two segments. An extended email autolink's domain is one or more such segments separated by
 /// periods, with at least one period, ending in neither `-` nor `_` (spec "Autolinks (extension)").
 @Suite("Extended autolink domains")
-struct AutolinkDomainSpecTests {
+struct ExtendedAutolinkDomainTests {
     private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: autolinkOptions, sourceRanges: true)
     }

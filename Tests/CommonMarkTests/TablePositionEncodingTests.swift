@@ -11,29 +11,16 @@
 import Testing
 @testable import CommonMark
 
-/// Source-position coverage for the two highest-risk stamping paths under multibyte Unicode:
-/// GFM **table cells** and **arena/materialized** content (tab-expanded lines, `\|`-escaped cells).
-/// Both are inline-parsed from an arena copy whose byte offsets are re-mapped back to the source
-/// (`ArenaRun`), so a multibyte character or a tab is exactly where that remap could drift.
+/// Source ranges under multibyte UTF-8 in table cells, `\|`-escaped cells and tab-indented content.
+/// Columns count bytes from the line start, plus one.
 ///
-/// Columns are 1-based UTF-8 **byte** offsets; `upperBound.column` is half-open (one past the node's
-/// last byte). Every asserted value is the DELIVERABLE (flag-OFF) surface, cross-checked against
-/// `dump --new-off <input, trailing 0x00>` and reasoned from the byte layout. Where the deliverable
-/// diverges from cmark-gfm, the divergence is a documented Quirk-E-family re-index quirk (the leading-
-/// whitespace table-row re-base and the paragraph continuation re-indent) — the deliverable keeps the
-/// SPEC-CORRECT physical byte column while cmark discards the leading whitespace. Those cases assert the
-/// flag-OFF value and flag the divergence with a `// cmark differs` comment.
-///
-/// Encoding classes exercised: ASCII, `é` (2 bytes), `€` (3 bytes), `😀` (4 bytes), `e´` (combining,
-/// 3 bytes), literal `U+FFFD` (3 bytes), and TAB.
-@Suite("Table & arena source positions — Unicode encodings")
+/// Encodings exercised: ASCII, `é` (2 bytes), `€` (3 bytes), `😀` (4 bytes), `e´` (combining,
+/// 3 bytes), literal `U+FFFD` (3 bytes), and tab.
+@Suite("Table and tab-indented source positions — Unicode encodings")
 struct TablePositionEncodingTests {
 
     typealias Pos = MarkdownNode.SourcePosition
 
-    /// The deliverable option set: exactly what the Markdown wrapper (and `dump --new-off`, options
-    /// byte 0x00) enables — GFM tables + spans + strikethrough + tasklist, smart punctuation, and
-    /// source positions.
     static let opts: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]
 
@@ -50,8 +37,7 @@ struct TablePositionEncodingTests {
         let range: Range<Pos>
         /// Concatenated literal text of the cell's inline children.
         let text: String
-        /// The first positioned inline child's source range (the cell's Text run), stamped by the
-        /// inline pass — a separate path from the cell node's own range.
+        /// The first positioned inline child's source range (the cell's Text run).
         let textRange: Range<Pos>?
     }
 
@@ -61,9 +47,8 @@ struct TablePositionEncodingTests {
         let cells: [Cell]
     }
 
-    /// Rows (header first, then body rows in order) of the first top-level `.table` in `source`,
-    /// parsed with the deliverable options. Each cell carries its span, range, literal text, and the
-    /// range of its first inline Text run. Fixed table depth, so plain `.forEach` (no recursion).
+    /// Rows (header first, then body rows in order) of the first top-level `.table` in `source`.
+    /// Each cell carries its span, range, literal text, and the range of its first inline Text run.
     private func tableRows(_ source: String) -> [Row] {
         MarkdownDocument.withParsedDocument(source, options: Self.opts) { doc -> [Row] in
             var rows: [Row] = []
@@ -92,8 +77,7 @@ struct TablePositionEncodingTests {
         }
     }
 
-    /// DFS-collect every node's (kind, literal, range) in document order — used for the non-table
-    /// arena/tab cases (list items, code blocks, paragraph continuations).
+    /// Every node's (kind, literal, range) in document order.
     private func nodes(_ source: String) -> [EncNode] {
         MarkdownDocument.withParsedDocument(source, options: Self.opts) { doc -> [EncNode] in
             var out: [EncNode] = []
@@ -102,11 +86,9 @@ struct TablePositionEncodingTests {
         }
     }
 
-    // MARK: - Multi-column tables, multibyte inside cells (contiguous zero-copy path)
+    // MARK: - Multi-column tables, multibyte inside cells
 
-    /// `éx` in the first body cell: `é` is 2 bytes, so the cell/Text run ends one byte later than an
-    /// ASCII cell would. Matches cmark and is byte-exact.
-    @Test("multi-column: multibyte at a body cell's start remaps to true byte columns")
+    @Test("multi-column: multibyte at a body cell's start counts its bytes")
     func bodyCellMultibyteStart() throws {
         // Body line 3 `éx|y`: é@bytes0-1 (cols1-2), x@byte2 (col3), |@byte3 (col4), y@byte4 (col5).
         let rows = tableRows("a|b\n-|-\n\u{E9}x|y")
@@ -148,8 +130,8 @@ struct TablePositionEncodingTests {
         #expect(body.range == r(3, 1, 3, 7))
     }
 
-    /// A combining sequence (`e` + U+0301, 3 bytes) inside a cell: the base + combining mark contribute
-    /// three byte-columns, `x` a fourth. cmark and the rewrite both count bytes, not grapheme clusters.
+    /// A combining sequence (`e` + U+0301, 3 bytes) inside a cell: columns count bytes, not grapheme
+    /// clusters.
     @Test("multi-column: a combining sequence in a cell counts its bytes")
     func bodyCellCombining() throws {
         // Body line 3 `e´x|y`: e@byte0 (col1), U+0301@bytes1-2 (cols2-3), x@byte3 (col4).
@@ -163,8 +145,7 @@ struct TablePositionEncodingTests {
         #expect(body.range == r(3, 1, 3, 7))
     }
 
-    /// A literal U+FFFD (3 bytes) already present in the source (NOT a NUL replacement) is passed through
-    /// and counted as three byte-columns.
+    /// A U+FFFD written in the source, rather than replacing a NUL, counts its three bytes.
     @Test("multi-column: a literal U+FFFD cell counts three byte-columns")
     func bodyCellReplacementChar() throws {
         // Body line 3 `x|�`: x@byte0 (col1), |@byte1 (col2), U+FFFD@bytes2-4 (cols3-5).
@@ -176,8 +157,8 @@ struct TablePositionEncodingTests {
         #expect(body.cells[1].textRange == r(3, 3, 3, 6))
     }
 
-    /// Multibyte in the MIDDLE column of a three-column row: the columns to its right must be pushed by
-    /// the multibyte width, not by a fixed per-cell stride.
+    /// Multibyte in the middle column of a three-column row shifts the cells to its right by its byte
+    /// width.
     @Test("multi-column: multibyte in the middle column shifts the right column by its byte width")
     func middleColumnMultibyte() throws {
         // Body line 3 `x|é|z`: x@byte0 (col1), |@byte1 (col2), é@bytes2-3 (cols3-4), |@byte4 (col5), z@byte5 (col6).
@@ -192,7 +173,7 @@ struct TablePositionEncodingTests {
         #expect(body.range == r(3, 1, 3, 7))
     }
 
-    /// Multibyte in the HEADER row: the header cell/Text/Head ranges all widen by the multibyte bytes.
+    /// Multibyte in the header row widens the header's cell, Text and row ranges by its bytes.
     @Test("multi-column: multibyte in the header widens the header ranges")
     func headerMultibyte() throws {
         // Header line 1 `€x|y`: €@bytes0-2 (cols1-3), x@byte3 (col4), |@byte4 (col5), y@byte5 (col6).
@@ -204,12 +185,10 @@ struct TablePositionEncodingTests {
         #expect(head.cells[0].range == r(1, 1, 1, 5))       // `€x` ends before the pipe
         #expect(head.cells[0].textRange == r(1, 1, 1, 5))
         #expect(head.cells[1].range == r(1, 6, 1, 7))       // `y`
-        // Body row is unaffected ASCII.
         #expect(rows[1].cells.map(\.range) == [r(3, 1, 3, 2), r(3, 3, 3, 4)])
     }
 
-    /// Multibyte in BOTH the header and the body: each row's columns are computed independently from its
-    /// own bytes.
+    /// Each row's columns come from its own bytes.
     @Test("multi-column: independent multibyte in header and body")
     func headerAndBodyMultibyte() throws {
         // Header `é|b`: é@cols1-2, |@col3, b@col4. Body `c|€`: c@col1, |@col2, €@cols3-5.
@@ -259,15 +238,11 @@ struct TablePositionEncodingTests {
         #expect(rows[1].cells[0].textRange == r(3, 2, 3, 5))
     }
 
-    // MARK: - \|-escaped cells (arena-copy path), multibyte around the escaped pipe
+    // MARK: - \|-escaped cells, multibyte around the escaped pipe
 
-    /// A `\|`-escaped cell takes the arena-copy path: `unescapePipes` strips the backslash, so the cell's
-    /// inline runs are parsed from an arena copy and mapped back by a CONSTANT delta. cmark maps this
-    /// escape-obliviously (it does NOT re-widen the removed backslash), so the Text run's END lands one
-    /// byte short of the true source end — the rewrite reproduces cmark's constant-delta mapping exactly
-    /// (unconditional, FINDINGS #11/#13). This case pins that the multibyte around the escaped pipe still
-    /// survives the arena→source remap.
-    @Test("arena: \\|-escaped header cell keeps multibyte through the arena remap")
+    /// The Text run's source range starts at the cell's start and is as long as its unescaped literal, so
+    /// it ends one byte before the cell does.
+    @Test("escaped pipe: \\|-escaped header cell counts the bytes around the pipe")
     func escapedPipeHeaderCellMultibyte() throws {
         // Header line 1 `é\|€|c`: é@bytes0-1 (cols1-2), \@byte2 (col3), |@byte3 (col4),
         // €@bytes4-6 (cols5-7), |@byte7 (col8, cell separator), c@byte8 (col9).
@@ -277,17 +252,13 @@ struct TablePositionEncodingTests {
         try #require(head.cells.count == 2 && head.cells[0].text == "\u{E9}|\u{20AC}" && head.cells[1].text == "c",
                      "fixture: escaped-pipe cell literal `é|€`")
         #expect(head.cells[0].range == r(1, 1, 1, 8))       // cell ends at the separator pipe (col8)
-        // Text run: escape-oblivious end at col7 (arena end mapped by a delta of 0), NOT the byte-true
-        // col8 — this matches cmark by design.  // cmark differs: n/a (rewrite reproduces cmark here)
         #expect(head.cells[0].textRange == r(1, 1, 1, 7))
         #expect(head.cells[1].range == r(1, 9, 1, 10))      // `c`
         #expect(head.cells[1].textRange == r(1, 9, 1, 10))
         #expect(head.range == r(1, 1, 1, 10))
     }
 
-    /// The same arena path with a 4-byte emoji after the escaped pipe: the emoji's four bytes are carried
-    /// through the arena copy unchanged, so only the removed backslash shifts the constant delta.
-    @Test("arena: \\|-escaped header cell keeps a 4-byte emoji through the arena remap")
+    @Test("escaped pipe: \\|-escaped header cell counts a 4-byte emoji")
     func escapedPipeHeaderCellEmoji() throws {
         // Header line 1 `x\|😀|y`: x@byte0 (col1), \@byte1 (col2), |@byte2 (col3),
         // 😀@bytes3-6 (cols4-7), |@byte7 (col8), y@byte8 (col9).
@@ -297,13 +268,11 @@ struct TablePositionEncodingTests {
         try #require(head.cells.count == 2 && head.cells[0].text == "x|\u{1F600}" && head.cells[1].text == "y",
                      "fixture: escaped-pipe cell literal `x|😀`")
         #expect(head.cells[0].range == r(1, 1, 1, 8))       // cell ends at the separator pipe
-        #expect(head.cells[0].textRange == r(1, 1, 1, 7))   // escape-oblivious end (matches cmark)
+        #expect(head.cells[0].textRange == r(1, 1, 1, 7))   // as long as the unescaped literal
         #expect(head.cells[1].range == r(1, 9, 1, 10))      // `y`
     }
 
-    /// The arena path exercised on a BODY row rather than the header, with multibyte around the escaped
-    /// pipe.
-    @Test("arena: \\|-escaped body cell keeps multibyte through the arena remap")
+    @Test("escaped pipe: \\|-escaped body cell counts the bytes around the pipe")
     func escapedPipeBodyCellMultibyte() throws {
         // Body line 3 `é\|€|c`, same byte layout as the header case.
         let rows = tableRows("a|b\n-|-\n\u{E9}\\|\u{20AC}|c")
@@ -312,16 +281,14 @@ struct TablePositionEncodingTests {
         try #require(body.cells.count == 2 && body.cells[0].text == "\u{E9}|\u{20AC}" && body.cells[1].text == "c",
                      "fixture: escaped-pipe body cell literal `é|€`")
         #expect(body.cells[0].range == r(3, 1, 3, 8))       // cell ends at the separator pipe
-        #expect(body.cells[0].textRange == r(3, 1, 3, 7))   // escape-oblivious end (matches cmark)
+        #expect(body.cells[0].textRange == r(3, 1, 3, 7))   // as long as the unescaped literal
         #expect(body.cells[1].range == r(3, 9, 3, 10))      // `c`
         #expect(body.cells[1].textRange == r(3, 9, 3, 10))
         #expect(body.range == r(3, 1, 3, 10))
     }
 
-    // MARK: - Tab-materialized content, multibyte (matches cmark, byte-exact)
+    // MARK: - Tab-indented content, multibyte
 
-    /// A list item whose content follows a TAB after the marker: the content is materialized (the tab is
-    /// expanded in an arena), yet the inline Text run maps back to its TRUE source byte column.
     @Test("tab: list-item content after a tab maps back to its source byte column")
     func listItemContentAfterTab() throws {
         // Line 1 `-\téx`: -@byte0 (col1), \t@byte1 (col2), é@bytes2-3 (cols3-4), x@byte4 (col5).
@@ -333,21 +300,16 @@ struct TablePositionEncodingTests {
         #expect(text?.range == r(1, 3, 1, 6))               // `éx` ends past x
     }
 
-    /// An indented code block whose leading tab supplies exactly the 4-column indent, with multibyte in
-    /// the body: the body starts at the byte after the tab and its end counts the multibyte bytes.
     @Test("tab: indented code block, leading tab + multibyte body")
     func indentedCodeLeadingTab() throws {
         // Line 1 `\tcodeé`: \t@byte0 (col1, the indent), c@byte1 (col2) … é@bytes5-6 (cols6-7).
         let nodes = nodes("\tcode\u{E9}")
         let code = nodes.first { $0.kind.isCodeBlock }
-        // Code-block bodies carry a synthesized trailing newline (not a source byte, so the range ends
-        // at é).
+        // The literal's trailing line ending is not in the source, so the range ends after `é`.
         try #require(code?.literal == "code\u{E9}\n", "fixture: code body `codeé`")
         #expect(code?.range == r(1, 2, 1, 8))               // body starts at col2, ends past é (col8)
     }
 
-    /// An indented code block with an INTERIOR tab (kept literally in the body) plus multibyte: the
-    /// interior tab counts as a single byte-column, and the multibyte tail counts its bytes.
     @Test("tab: indented code block, interior tab kept literally + multibyte")
     func indentedCodeInteriorTab() throws {
         // Line 1 `\tco\tdeé`: \t@byte0 (indent), c@byte1, o@byte2, \t@byte3 (interior, kept),
@@ -358,8 +320,6 @@ struct TablePositionEncodingTests {
         #expect(code?.range == r(1, 2, 1, 9))               // body starts at col2, ends past é (col9)
     }
 
-    /// An indented code block whose leading indent is TWO tabs: the first tab is the 4-column indent, the
-    /// second becomes a residual tab in the body. Positions still track true source bytes.
     @Test("tab: indented code block, excess leading tab becomes a body byte")
     func indentedCodeExcessTab() throws {
         // Line 1 `\t\tcodeé`: \t@byte0 (indent), \t@byte1 (residual, kept in body), c@byte2 … é@bytes6-7.
@@ -369,8 +329,6 @@ struct TablePositionEncodingTests {
         #expect(code?.range == r(1, 2, 1, 9))               // body starts at col2 (after the first tab)
     }
 
-    /// An indented code block indented by two spaces + a tab (the tab completes the 4-column indent): the
-    /// body starts at the byte after the tab, with no residual whitespace, and counts its multibyte tail.
     @Test("tab: indented code block, spaces then a tab complete the indent")
     func indentedCodeSpacesThenTab() throws {
         // Line 1 `  \tcodeé`: space@byte0 (col1), space@byte1 (col2), \t@byte2 (col3, completes the
@@ -381,8 +339,6 @@ struct TablePositionEncodingTests {
         #expect(code?.range == r(1, 4, 1, 10))              // body starts at col4, ends past é (col10)
     }
 
-    /// A list item after a tab whose content also contains an interior tab, with multibyte: both the
-    /// content start (after the marker tab) and the interior tab count true source bytes.
     @Test("tab: list-item content after a tab, with an interior tab + multibyte")
     func listItemAfterTabInteriorTab() throws {
         // Line 1 `-\téx\ty`: -@byte0 (col1), \t@byte1 (col2), é@bytes2-3 (cols3-4), x@byte4 (col5),
@@ -393,12 +349,9 @@ struct TablePositionEncodingTests {
         #expect(text?.range == r(1, 3, 1, 8))               // content @col3, ends past y (col8)
     }
 
-    // MARK: - Divergences: flag-OFF spec-correct, cmark differs (Quirk-E-family re-index)
+    // MARK: - Leading whitespace
 
-    /// A body row with LEADING whitespace, with multibyte content. The deliverable keeps the row's TRUE
-    /// PHYSICAL columns (the leading space is visible); cmark re-bases the cells to the table's start
-    /// column, making the leading whitespace invisible. Assert the spec-correct flag-OFF value.
-    @Test("divergence: a leading-whitespace body row keeps physical columns under multibyte")
+    @Test("an indented multibyte body row's cells start after its leading whitespace")
     func leadingWhitespaceBodyRowMultibyte() throws {
         // Body line 3 ` éx|y`: space@byte0 (col1), é@bytes1-2 (cols2-3), x@byte3 (col4), |@byte4 (col5),
         // y@byte5 (col6).
@@ -406,20 +359,15 @@ struct TablePositionEncodingTests {
         try #require(rows.count == 2, "fixture: header + body row")
         let body = rows[1]
         try #require(body.cells.count == 2 && body.cells.allSatisfy { $0.range.lowerBound.column > 0 },
-                     "fixture: leading-ws cells must be positioned, not dropped")
+                     "fixture: cells must have source ranges")
         try #require(body.cells[0].text == "\u{E9}x" && body.cells[1].text == "y", "fixture: cell literals")
-        // cmark differs: re-bases to the table start column — `éx`@3:1-3:4, `y`@3:5-3:6, Row@3:1 (leading
-        // space invisible) — Quirk E family (leading-whitespace table-row re-base, FINDINGS #64/#71).
-        #expect(body.range == r(3, 2, 3, 7))                // physical: row content starts at col2
-        #expect(body.cells[0].range == r(3, 2, 3, 5))       // `éx` at its true column (space visible)
+        #expect(body.range == r(3, 2, 3, 7))
+        #expect(body.cells[0].range == r(3, 2, 3, 5))       // `éx`
         #expect(body.cells[0].textRange == r(3, 2, 3, 5))
         #expect(body.cells[1].range == r(3, 6, 3, 7))       // `y`
     }
 
-    /// A leading-whitespace HEADER (with multibyte) sets cmark's table start column, which cmark then
-    /// re-bases every row to — INCLUDING an unindented body row. The deliverable agrees on the header's
-    /// own physical columns but keeps the body row at its own true (unindented) columns. Assert flag-OFF.
-    @Test("divergence: a leading-whitespace multibyte header does not re-base an unindented body row")
+    @Test("an indented multibyte header row does not shift an unindented body row")
     func leadingWhitespaceHeaderMultibyte() throws {
         // Header line 1 ` é|b`: space@byte0 (col1), é@bytes1-2 (cols2-3), |@byte3 (col4), b@byte4 (col5).
         // Body line 3 `x|y`: x@byte0 (col1), |@byte1 (col2), y@byte2 (col3).
@@ -427,22 +375,17 @@ struct TablePositionEncodingTests {
         try #require(rows.count == 2, "fixture: header + body row")
         try #require(rows[0].cells.count == 2 && rows[1].cells.count == 2, "fixture: two cells per row")
         try #require(rows[0].cells[0].text == "\u{E9}" && rows[1].cells.map(\.text) == ["x", "y"], "fixture: literals")
-        // Header: both the deliverable and cmark keep the header's physical columns (é@1:2).
         #expect(rows[0].range == r(1, 2, 1, 6))
         #expect(rows[0].cells[0].range == r(1, 2, 1, 4))    // `é`
         #expect(rows[0].cells[1].range == r(1, 5, 1, 6))    // `b`
-        // Body: cmark differs: re-bases the unindented body row to the header's start column —
-        // `x`@3:2-3:3, `y`@3:4-3:5, Row@3:2 — Quirk E family (FINDINGS #64/#71). Deliverable keeps the
-        // body's own physical columns.
-        #expect(rows[1].range == r(3, 1, 3, 4))             // physical: unindented body row at col1
+        #expect(rows[1].range == r(3, 1, 3, 4))
         #expect(rows[1].cells[0].range == r(3, 1, 3, 2))    // `x`
         #expect(rows[1].cells[1].range == r(3, 3, 3, 4))    // `y`
     }
 
-    /// A paragraph continuation line that BEGINS WITH A TAB, with multibyte: the deliverable keeps the
-    /// continuation's TRUE physical column (after the tab byte); cmark re-indents the continuation to the
-    /// paragraph's fixed content column, discarding the tab. Assert the spec-correct flag-OFF value.
-    @Test("divergence: a tab-led paragraph continuation keeps its physical column under multibyte")
+    /// The continuation line's leading tab is stripped from the paragraph's content (Paragraphs), so its
+    /// Text run starts after the tab.
+    @Test("a tab-indented multibyte paragraph continuation line starts after its tab")
     func paragraphContinuationLeadingTab() throws {
         // Line 1 `foo`, line 2 `\tbar€`: \t@byte0 (col1), b@byte1 (col2) … €@bytes4-6 (cols5-7).
         let nodes = nodes("foo\n\tbar\u{20AC}")
@@ -452,14 +395,12 @@ struct TablePositionEncodingTests {
                      "fixture: two text runs `foo` / `bar€`")
         #expect(para?.range == r(1, 1, 2, 8))
         #expect(texts[0].range == r(1, 1, 1, 4))            // `foo`
-        // cmark differs: re-indents the continuation to the top-level content column — `bar€`@2:1-2:7
-        // (the tab discarded) — Quirk E (paragraph continuation-line re-indent, FINDINGS #31/#53).
-        #expect(texts[1].range == r(2, 2, 2, 8))            // physical: `bar€` after the tab byte (col2)
+        #expect(texts[1].range == r(2, 2, 2, 8))            // `bar€`
     }
 }
 
-/// A node's kind, its literal text (if any), and its source range — the DFS unit for the non-table
-/// arena/tab cases. File-scope struct + helper to satisfy the noncopyable-borrow recursion rules.
+/// A node's kind, its literal text (if any), and its source range. File-scope because a recursive walk
+/// over `borrowing MarkdownNode` can't be an instance-method closure.
 private struct EncNode {
     let kind: MarkdownNode.Kind
     let literal: String?

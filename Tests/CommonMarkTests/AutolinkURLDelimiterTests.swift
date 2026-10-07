@@ -22,15 +22,13 @@ private func dfsAutolinkNodes(
     }
 }
 
-/// GFM `://`-scheme (and `www.`) autolink URL boundary + trailing-punctuation rules (spec "Autolinks
-/// (extension)"): after a valid domain, a URL runs to the first space or `<`; trailing `? ! . , : * _ ~`
-/// are not part of it, nor is an unmatched trailing `)` or an entity-like `&name;` tail.
-@Suite("GFM autolink URL boundary and trailing punctuation")
+/// After its domain, an extended url or www autolink runs to the first space or `<` (Autolinks (extension)), so
+/// `>` is part of it. Extended autolink path validation then removes trailing `? ! . , : * _ ~`, an unmatched
+/// trailing `)`, and a trailing `&` + ASCII letters + `;`; the parser also removes a trailing `'`, `"` or other `;`.
+@Suite("Extended autolink end and trailing punctuation")
 struct AutolinkURLDelimiterTests {
 
-    /// The shipped configuration: GFM autolink on. The boundary/trim rules are unconditional (GFM is
-    /// cmark-defined), so they are identical flag-ON and flag-OFF; this exercises the clean deliverable tree.
-    private static let flagOn: MarkdownDocument.ParseOptions = [.gfmAutolink]
+    private static let options: MarkdownDocument.ParseOptions = [.gfmAutolink]
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
@@ -43,41 +41,36 @@ struct AutolinkURLDelimiterTests {
         }
     }
 
-    // MARK: - The two fuzzer hits
-
-    @Test("hit: `http://a.l>` keeps the trailing `>` in the URL")
-    func hitGreaterThanKept() throws {
-        // cmark's URL body scan ends only at whitespace or `<`; `>` is an ordinary URL byte and
-        // `autolink_delim` never trims it, so the whole `http://a.l>` is the link.
-        let ns = nodes(in: "http://a.l>", options: Self.flagOn)
+    @Test("`http://a.l>` links with the `>` in its text")
+    func greaterThanKeptInLinkText() throws {
+        let ns = nodes(in: "http://a.l>", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l>"])
         #expect(ns.compactMap(\.url) == ["http://a.l>"])
     }
 
-    @Test("hit: `http://a.m'` trims the trailing `'`")
-    func hitApostropheTrimmed() throws {
-        // `'` is in cmark's `autolink_delim` peel set, so it is split off as text.
-        let ns = nodes(in: "http://a.m'", options: Self.flagOn)
+    @Test("`http://a.m'` links with the `'` as trailing text")
+    func apostropheTrimmedToText() throws {
+        let ns = nodes(in: "http://a.m'", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "http://a.m", "'"])
         #expect(ns.compactMap(\.url) == ["http://a.m"])
     }
 
-    // MARK: - Each diverging trailing/boundary character
+    // MARK: - Trailing characters
 
-    @Test("`>` is kept as a URL byte, not a boundary")
+    @Test("`>` is part of the URL")
     func greaterThanKept() throws {
-        let ns = nodes(in: "http://a.l>", options: Self.flagOn)
+        let ns = nodes(in: "http://a.l>", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.compactMap(\.url) == ["http://a.l>"])
     }
 
     @Test("trailing `'` is trimmed")
     func apostropheTrimmed() throws {
-        let ns = nodes(in: "http://a.l'", options: Self.flagOn)
+        let ns = nodes(in: "http://a.l'", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l", "'"])
@@ -86,7 +79,7 @@ struct AutolinkURLDelimiterTests {
 
     @Test("trailing `\"` is trimmed")
     func doubleQuoteTrimmed() throws {
-        let ns = nodes(in: "http://a.l\"", options: Self.flagOn)
+        let ns = nodes(in: "http://a.l\"", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l", "\""])
@@ -95,33 +88,29 @@ struct AutolinkURLDelimiterTests {
 
     @Test("trailing `;` with no entity is trimmed")
     func semicolonTrimmed() throws {
-        // No `&` precedes the `;`, so cmark's `autolink_delim` falls to its `else link_end--` branch and
-        // drops just the `;` (the rewrite previously kept it, only trimming a matched `&…;`).
-        let ns = nodes(in: "http://a.l;", options: Self.flagOn)
+        let ns = nodes(in: "http://a.l;", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l", ";"])
         #expect(ns.compactMap(\.url) == ["http://a.l"])
     }
 
-    // MARK: - Entity-aware `;` handling
+    // MARK: - Entity-like `;` tails
 
-    @Test("trailing `&…;` entity tail (letters only) is split off whole")
+    @Test("a trailing `&` + letters + `;` is removed whole")
     func semicolonEntityStripped() throws {
-        // `&zq;` is `&` + ASCII letters + `;`; cmark's back-scan finds the `&` and removes the whole tail.
-        // `&zq;` is not a recognized entity, so the split-off text stays literal.
-        let ns = nodes(in: "http://a.x/&zq;", options: Self.flagOn)
+        // `&zq;` is not an entity reference, so the trailing text is literal.
+        let ns = nodes(in: "http://a.x/&zq;", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "http://a.x/", "&zq;"])
         #expect(ns.compactMap(\.url) == ["http://a.x/"])
     }
 
-    @Test("trailing `&…;` with a digit is NOT an entity: only the `;` is trimmed")
+    @Test("with a digit between `&` and `;`, only the `;` is removed")
     func semicolonEntityWithDigitOnlyTrimsSemicolon() throws {
-        // cmark's `;` back-scan uses `cmark_isalpha` (letters only). `&am2;` has a digit, so the scan stops
-        // at `2` (not the `&`) and only the `;` is dropped; `&am2` stays in the URL.
-        let ns = nodes(in: "http://a.l/&am2;", options: Self.flagOn)
+        // A digit between `&` and `;` leaves only the `;` to remove.
+        let ns = nodes(in: "http://a.l/&am2;", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l/&am2", ";"])
@@ -130,9 +119,9 @@ struct AutolinkURLDelimiterTests {
 
     // MARK: - Multi-trailing sequences
 
-    @Test("`http://a.l');` peels `;`, then the unbalanced `)`, then `'`")
+    @Test("`http://a.l');` removes `;`, then the unbalanced `)`, then `'`")
     func multiTrailingApostropheParenSemicolon() throws {
-        let ns = nodes(in: "http://a.l');", options: Self.flagOn)
+        let ns = nodes(in: "http://a.l');", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l", "');"])
@@ -141,7 +130,7 @@ struct AutolinkURLDelimiterTests {
 
     @Test("`http://a.l>.` keeps `>` and trims the trailing `.`")
     func multiTrailingGreaterThanDot() throws {
-        let ns = nodes(in: "http://a.l>.", options: Self.flagOn)
+        let ns = nodes(in: "http://a.l>.", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l>", "."])
@@ -150,21 +139,21 @@ struct AutolinkURLDelimiterTests {
 
     @Test("`http://a.l>>` keeps both trailing `>`")
     func multiTrailingDoubleGreaterThan() throws {
-        let ns = nodes(in: "http://a.l>>", options: Self.flagOn)
+        let ns = nodes(in: "http://a.l>>", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l>>"])
         #expect(ns.compactMap(\.url) == ["http://a.l>>"])
     }
 
-    // MARK: - A paragraph's final VT/FF is removed before the URL is scanned
+    // MARK: - Whitespace at the end of a paragraph
 
     // The paragraph's raw content has its final whitespace removed, and the spec's whitespace includes
     // line tabulation and form feed (spec "Paragraphs"), so neither ends the URL.
 
     @Test("a trailing vertical tab (0x0B) is not part of the URL")
     func verticalTabRemoved() throws {
-        let ns = nodes(in: "http://a.l\u{0B}", options: Self.flagOn)
+        let ns = nodes(in: "http://a.l\u{0B}", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.compactMap(\.url) == ["http://a.l"])
@@ -172,87 +161,85 @@ struct AutolinkURLDelimiterTests {
 
     @Test("a trailing form feed (0x0C) is not part of the URL")
     func formFeedRemoved() throws {
-        let ns = nodes(in: "http://a.l\u{0C}", options: Self.flagOn)
+        let ns = nodes(in: "http://a.l\u{0C}", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.compactMap(\.url) == ["http://a.l"])
     }
 
-    // MARK: - Regression controls (already matching cmark; must stay matching)
+    // MARK: - Trailing punctuation and parentheses
 
-    @Test("control: trailing `.` is trimmed")
-    func controlDotTrimmed() throws {
-        let ns = nodes(in: "http://a.l.", options: Self.flagOn)
+    @Test("trailing `.` is trimmed")
+    func dotTrimmed() throws {
+        let ns = nodes(in: "http://a.l.", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l", "."])
         #expect(ns.compactMap(\.url) == ["http://a.l"])
     }
 
-    @Test("control: trailing `!` is trimmed")
-    func controlBangTrimmed() throws {
-        let ns = nodes(in: "http://a.l!", options: Self.flagOn)
+    @Test("trailing `!` is trimmed")
+    func bangTrimmed() throws {
+        let ns = nodes(in: "http://a.l!", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l", "!"])
         #expect(ns.compactMap(\.url) == ["http://a.l"])
     }
 
-    @Test("control: a lone unbalanced trailing `)` is trimmed")
-    func controlUnbalancedParenTrimmed() throws {
-        let ns = nodes(in: "http://a.l)", options: Self.flagOn)
+    @Test("a lone unbalanced trailing `)` is trimmed")
+    func unbalancedParenTrimmed() throws {
+        let ns = nodes(in: "http://a.l)", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l", ")"])
         #expect(ns.compactMap(\.url) == ["http://a.l"])
     }
 
-    @Test("control: `<` ends the URL body")
-    func controlLessThanBoundary() throws {
-        let ns = nodes(in: "http://a.l<", options: Self.flagOn)
+    @Test("`<` ends the URL")
+    func lessThanBoundary() throws {
+        let ns = nodes(in: "http://a.l<", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.compactMap(\.url) == ["http://a.l"])
     }
 
-    @Test("control: balanced parentheses are kept")
-    func controlBalancedParensKept() throws {
-        let ns = nodes(in: "http://e.com/(a)", options: Self.flagOn)
+    @Test("balanced parentheses are kept")
+    func balancedParensKept() throws {
+        let ns = nodes(in: "http://e.com/(a)", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.compactMap(\.url) == ["http://e.com/(a)"])
     }
 
-    @Test("control: only the extra unbalanced `)` is trimmed")
-    func controlExtraParenTrimmed() throws {
-        let ns = nodes(in: "http://e.com/(a))", options: Self.flagOn)
+    @Test("only the extra unbalanced `)` is trimmed")
+    func extraParenTrimmed() throws {
+        let ns = nodes(in: "http://e.com/(a))", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.text) == [nil, nil, nil, "http://e.com/(a)", ")"])
         #expect(ns.compactMap(\.url) == ["http://e.com/(a)"])
     }
 
-    @Test("control: the remaining peel-set characters `, ? : * _ ~` are each trimmed")
-    func controlRemainingPeelSetTrimmed() throws {
-        // The rest of cmark's `autolink_delim` peel set, one per case, so every member is exercised
-        // directly rather than only via a shared switch arm. Each splits off as trailing text.
+    @Test("trailing `,`, `?`, `:`, `*`, `_` and `~` are each trimmed")
+    func remainingTrailingPunctuationTrimmed() throws {
         for ch in [",", "?", ":", "*", "_", "~"] {
-            let ns = nodes(in: "http://a.l" + ch, options: Self.flagOn)
+            let ns = nodes(in: "http://a.l" + ch, options: Self.options)
             try #require(ns.map(\.kind).contains(.link))
             #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l", ch])
             #expect(ns.compactMap(\.url) == ["http://a.l"])
         }
     }
 
-    // MARK: - `www.` form shares the same body scan + trim
+    // MARK: - Extended www autolinks
 
-    @Test("www: trailing `'` is trimmed (shared trim)")
+    @Test("www: trailing `'` is trimmed")
     func wwwApostropheTrimmed() throws {
-        let ns = nodes(in: "www.a.b'", options: Self.flagOn)
+        let ns = nodes(in: "www.a.b'", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "www.a.b", "'"])
         #expect(ns.compactMap(\.url) == ["http://www.a.b"])
     }
 
-    @Test("www: trailing `>` is kept (shared body scan)")
+    @Test("www: trailing `>` is kept")
     func wwwGreaterThanKept() throws {
-        let ns = nodes(in: "www.a.b>", options: Self.flagOn)
+        let ns = nodes(in: "www.a.b>", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "www.a.b>"])

@@ -11,16 +11,13 @@
 import Testing
 @testable import CommonMark
 
-/// A tab that immediately follows a block-quote marker (`>`) and feeds a fenced code body must be
-/// PARTIALLY consumed: the marker takes `>` plus one optional following COLUMN (cmark's
-/// `parse_block_quote_prefix`), so a straddling tab has its remaining columns surfaced as leading
-/// spaces in the code content (cmark's `partially_consumed_tab`; blocks.c `add_line`). The rewrite
-/// previously advanced past the whole tab byte, dropping those leftover columns.
-@Suite("Block-quote-prefix tab feeding a fenced code body")
+/// A block quote marker is `>` plus an optional following space (Block quotes). When a tab follows the `>`, the
+/// marker takes one of the tab's columns and the rest are indentation (Tabs), so on a fenced code block's
+/// content line they become leading spaces of the content.
+@Suite("Tab after a block quote marker in a fenced code block")
 struct BlockQuotePrefixTabFencedCodeTests {
 
-    // FIX: `>` is column 1, so the tab at column 2 spans columns 2-4 (3 wide); the marker consumes one
-    // optional column, leaving two columns that materialize as two content spaces.
+    // The tab spans columns 2-4.
     @Test("tab right after `>` leaves two content spaces")
     func tabAfterMarkerLeavesTwoSpaces() {
         MarkdownDocument.withParsedDocument(">```\n>\t") { doc in
@@ -30,7 +27,6 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // FIX: the two leftover tab columns precede the literal `x`.
     @Test("tab right after `>` then content keeps the leftover spaces before the content")
     func tabAfterMarkerThenContent() {
         MarkdownDocument.withParsedDocument(">```\n>\tx") { doc in
@@ -40,9 +36,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // FIX: the opening fence carries a trailing space (`> ` + backticks), but the body line is `>\t`
-    // (no space), so the tab still straddles the marker's optional column and leaves two spaces.
-    @Test("opening fence with a trailing space, body tab still leaves two spaces")
+    @Test("a space after `>` on the opening fence line, a tab on the content line, leaves two spaces")
     func openingFenceSpaceBodyTab() {
         MarkdownDocument.withParsedDocument("> ```\n>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
@@ -51,9 +45,8 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // FIX: doubly nested. After `>>` the column is 2, so the tab at column 2 spans columns 2-3 (2
-    // wide); one optional column is consumed, leaving a single content space.
-    @Test("tab after a doubly-nested `>>` leaves one content space")
+    // The tab spans columns 3-4.
+    @Test("tab after a nested `>>` leaves one content space")
     func tabAfterNestedMarkers() {
         MarkdownDocument.withParsedDocument(">>```\n>>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
@@ -62,8 +55,6 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // GUARD: a space between `>` and the tab is itself the marker's optional column, so the tab is
-    // then literal code content - not split. Must stay untouched.
     @Test("space then tab keeps the tab as literal code content")
     func spaceThenTabIsLiteral() {
         MarkdownDocument.withParsedDocument("> ```\n> \t") { doc in
@@ -73,10 +64,9 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // GUARD: the sibling fence-indent strip site (no block quote). A one-space-indented fence strips
-    // one column; the body tab at column 0 spans columns 0-3 (4 wide), losing one column to the strip
-    // and leaving three content spaces.
-    @Test("indented-fence body tab splits at the fence-indent boundary (unchanged)")
+    // Per Fenced code blocks, a fence indented one space removes one space of indentation from each content
+    // line; the remaining three columns of the tab stay.
+    @Test("a content line tab under a one-space-indented fence leaves three spaces")
     func indentedFenceBodyTab() {
         MarkdownDocument.withParsedDocument(" ```\n\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
@@ -85,10 +75,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // GUARD: the sibling list-item content-indent strip site. The two spaces satisfy the item's
-    // content column exactly, so the following tab is literal code content - not split. Must stay
-    // untouched.
-    @Test("list-item fenced body tab stays literal after the content indent (unchanged)")
+    @Test("a tab after a list item's content indentation stays literal in a fenced code block")
     func listItemFenceBodyTab() {
         MarkdownDocument.withParsedDocument("- ```\n  \tx") { doc in
             let kinds = dfs(doc).map(\.kind)
@@ -97,9 +84,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // GUARD: a non-fenced-code context. `>\tx` on one line pre-expands its prefix tab to spaces, so
-    // the leftover columns are stripped as paragraph leading whitespace (content is just `x`).
-    @Test("tab after `>` in a paragraph strips to first content (unchanged)")
+    @Test("tab after `>` before a paragraph is stripped as leading whitespace")
     func tabAfterMarkerParagraph() {
         MarkdownDocument.withParsedDocument(">\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
@@ -108,9 +93,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // GUARD: a non-fenced-code context. `>\t# h` is an ATX heading whose leading whitespace is
-    // stripped; content is `h`.
-    @Test("tab after `>` before an ATX heading strips to the heading text (unchanged)")
+    @Test("tab after `>` before an ATX heading is stripped as leading whitespace")
     func tabAfterMarkerHeading() {
         MarkdownDocument.withParsedDocument(">\t# h") { doc in
             let kinds = dfs(doc).map(\.kind)
@@ -119,12 +102,10 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // FIX: the tab straddle only splits when the code body actually continues. Here the inner `>` is
-    // absent on the body line, so the deeper block quote fails to match and the code block closes; the
-    // tail (`x`) is re-dispatched as a fresh block. The partially-consumed tab must NOT then count as
-    // indented-code indentation: cmark keeps only the tab's leftover columns (< 4) as indent, so `x`
-    // becomes a Paragraph under the outer quote, never an indented code block.
-    @Test("dropped inner `>` re-dispatches the tail as a paragraph, not indented code")
+    // Without the inner `>`, the inner block quote and its code block close. The two leftover columns of the
+    // tab are fewer than the four an indented code block needs, so `x` starts a paragraph in the outer block
+    // quote.
+    @Test("a missing inner `>` leaves the rest of the line a paragraph, not indented code")
     func nestedInnerMarkerAbsentReDispatchesParagraph() {
         MarkdownDocument.withParsedDocument(">>```\n>\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
@@ -134,9 +115,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // GUARD: the same dropped-inner-`>` shape with a blank tail keeps only the empty nested code block
-    // (the failed inner marker closes nothing else, and the blank line adds no content).
-    @Test("dropped inner `>` with a blank tail keeps just the empty nested code block")
+    @Test("a missing inner `>` before a blank rest of line leaves just the empty code block")
     func nestedInnerMarkerAbsentBlankTail() {
         MarkdownDocument.withParsedDocument(">>```\n>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
@@ -145,13 +124,8 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // FIX: a tab ALSO sits after `>` on the OPENING fence line. cmark stores `fence_offset` in raw
-    // SOURCE bytes (`first_nonspace - offset`), so the tab straddling the marker's optional column and
-    // the fence counts as a SINGLE byte (fence_offset 1) even though it spans two leftover columns. On
-    // the body line the block-quote marker consumes one optional column of the tab (column 1 → 2) and
-    // the fence-indent strip consumes ONE more (fence_offset 1), leaving one column as a content space.
-    // The rewrite previously measured the fence offset on the tab-expanded opening line (two columns),
-    // stripping the whole tab and dropping the content.
+    // The opening fence's indentation counts the partially consumed tab as one space, so a content line loses
+    // one column of its tab to the marker and one to the fence indentation, leaving one content space.
     @Test("tab after `>` on the opening fence line leaves one content space")
     func openingLineTabFenceOffsetLeavesOneSpace() {
         MarkdownDocument.withParsedDocument(">\t```\n>\t") { doc in
@@ -161,7 +135,6 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // FIX: the same opening-line tab, with content on the body line: one leftover column precedes `x`.
     @Test("tab after `>` on the opening fence line keeps one space before content")
     func openingLineTabFenceOffsetThenContent() {
         MarkdownDocument.withParsedDocument(">\t```\n>\tx") { doc in

@@ -10,9 +10,9 @@
 
 @testable import CommonMark
 
-// Test-only String / Segments conveniences.
+// Test-target `String` and `Segments` accessors for a node's content.
 //
-// The String accessors are built on the always-available `node.stringContent` projection, so they compile (and the assertions that use them run) on every deployment target. `literalSegments()` vends the borrowed `Segments` (UTF8Span) form and is therefore gated to OS 26+. These live in the test target only - they are not part of the shipping API.
+// The `String` accessors use `stringContent`, which is available on every deployment target. `literalSegments()` vends the borrowed `Segments` (`UTF8Span`) form, which requires OS 26.
 extension MarkdownNode {
 
     borrowing func literal() -> String? {
@@ -27,7 +27,7 @@ extension MarkdownNode {
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @_lifetime(borrow self)
     borrowing func literalSegments() -> Segments {
-        // `content` vends a `~Copyable` view whose payload can only be borrowed in place, never moved out - so re-derive the `Segments` from the record data here (mirroring `content`'s own body).
+        // `content`'s payload is `~Copyable` and can only be borrowed in place, so the `Segments` are derived from the record data the same way `content` derives them.
         switch _view.record(at: _index).data {
         case .literal(let ref): return Segments(view: _view, ref: ref)
         case .codeBlock(_, let body): return Segments(view: _view, ref: body)

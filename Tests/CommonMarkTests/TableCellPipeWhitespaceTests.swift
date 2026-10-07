@@ -11,21 +11,15 @@
 import Testing
 @testable import CommonMark
 
-/// GFM table cell splitting around PIPES: cmark consumes whitespace after every pipe via
-/// `scan_table_cell_end = [|] spacechar*` with `spacechar = [ \t\v\f]` (space, tab, vertical-tab
-/// U+000B, form-feed U+000C). So VT/FF immediately following a pipe is NOT part of the next cell, and
-/// a trailing `|` followed only by VT/FF is still a closing pipe. Cell CONTENT is otherwise trimmed by
-/// `cmark_strbuf_trim` (space/tab only — VT/FF NOT adjacent to a pipe stays content).
-///
-/// The rewrite's `splitCells` trimmed cell edges with space/tab only, so FF/VT right after a pipe
-/// leaked into the next cell's text, and a trailing `|` then VT/FF became a spurious empty cell. This
-/// suite pins cmark's pipe-boundary whitespace behavior across header, delimiter, and body rows. It is
-/// a spec-aligned `[fix]` (VT/FF are CommonMark §2.1 whitespace).
+/// Under Tables (extension), spaces between pipes and cell content are trimmed. Directly after a pipe, the parser
+/// also skips tabs, line tabulations (U+000B) and form feeds (U+000C), which are whitespace characters, so a trailing
+/// pipe followed only by them closes its row. Elsewhere, only spaces and tabs are trimmed from a cell's edges, and a
+/// line tabulation or form feed is cell content.
 @Suite("Table cell pipe-boundary whitespace")
 struct TableCellPipeWhitespaceTests {
 
     private static let ff = "\u{0C}"  // form feed
-    private static let vt = "\u{0B}"  // vertical tab
+    private static let vt = "\u{0B}"  // line tabulation
 
     /// Every row's cell texts, `[header, body1, ...]`, for the first `.table` in the tree; `nil` if none.
     private func tableRows(_ source: String) -> [[String]]? {
@@ -70,81 +64,71 @@ struct TableCellPipeWhitespaceTests {
         }
     }
 
-    // MARK: - FIX: FF/VT after a pipe is consumed (not cell content), matching scan_table_cell_end
+    // MARK: - Whitespace after a pipe
 
-    @Test("form-feed after an interior header pipe is not part of the next cell")
+    @Test("a form feed after an interior header pipe is not part of the next cell")
     func interiorHeaderFormFeed() throws {
-        // `a|<FF>b` : cmark's cell_end eats `|<FF>`, so cell 2 is "b" (not "<FF>b").
         let rows = try #require(tableRows("a|\(Self.ff)b\n-|-"))
         #expect(rows.first == ["a", "b"])
     }
 
-    @Test("form-feed after an interior body pipe is not part of the next cell")
+    @Test("a form feed after an interior body pipe is not part of the next cell")
     func interiorBodyFormFeed() throws {
         let rows = try #require(tableRows("a|b\n-|-\nc|\(Self.ff)d"))
         #expect(rows == [["a", "b"], ["c", "d"]])
     }
 
-    @Test("a trailing pipe then form-feed is a closing pipe on the delimiter row")
+    @Test("a trailing pipe then a form feed is a closing pipe on the delimiter row")
     func delimiterTrailingPipeFormFeed() throws {
-        // `d\n-|<FF>` : the `|<FF>` is a closing pipe (1-column delimiter), so a table forms.
         let rows = try #require(tableRows("d\n-|\(Self.ff)"))
         #expect(rows == [["d"]])
     }
 
-    @Test("a trailing pipe then vertical-tab is a closing pipe on the delimiter row")
+    @Test("a trailing pipe then a line tabulation is a closing pipe on the delimiter row")
     func delimiterTrailingPipeVerticalTab() throws {
         let rows = try #require(tableRows("d\n-|\(Self.vt)"))
         #expect(rows == [["d"]])
     }
 
-    @Test("a trailing pipe then form-feed in the header closes the row (column mismatch, no table)")
+    @Test("a trailing pipe then a form feed closes the header row, so a three-cell delimiter row forms no table")
     func trailingHeaderPipeFormFeedMismatch() {
-        // `a|b|<FF>` : the `|<FF>` closes the header at 2 columns; the delimiter `-|-|-` has 3 ⇒ mismatch
-        // ⇒ NOT a table (a paragraph). The rewrite previously kept `<FF>` as a spurious 3rd cell.
+        // The header row and delimiter row must have the same number of cells.
         #expect(firstBlockKind("a|b|\(Self.ff)\n-|-|-") == "paragraph")
     }
 
-    // MARK: - LEAVE: guards that must stay correct
+    // MARK: - Other cell edges
 
-    @Test("form-feed BEFORE a pipe stays cell content")
+    @Test("a form feed before a pipe is cell content")
     func formFeedBeforePipeIsContent() throws {
-        // `a<FF>|b` : the FF is trailing content of cell 1 (not adjacent-after a pipe); cmark's
-        // strbuf_trim (space/tab) keeps it, so cell 1 is "a<FF>".
         let rows = try #require(tableRows("a\(Self.ff)|b\n-|-"))
         #expect(rows.first == ["a\(Self.ff)", "b"])
     }
 
-    @Test("leading form-feed on a first cell with NO leading pipe stays cell content")
+    @Test("a form feed starting a first cell with no leading pipe is cell content")
     func leadingFormFeedFirstCellNoPipe() throws {
-        // `<FF>a|b` : the first cell is not pipe-preceded, so there is no `scan_table_cell_end`
-        // internal_offset to consume the FF; cmark's only trim is strbuf_trim (space/tab), which keeps
-        // the leading FF. Cell 1 is "<FF>a" — NOT "a".
         let rows = try #require(tableRows("\(Self.ff)a|b\n-|-"))
         #expect(rows.first == ["\(Self.ff)a", "b"])
     }
 
-    @Test("leading vertical-tab on a first cell with NO leading pipe stays cell content")
+    @Test("a line tabulation starting a first cell with no leading pipe is cell content")
     func leadingVerticalTabFirstCellNoPipe() throws {
         let rows = try #require(tableRows("\(Self.vt)a|b\n-|-"))
         #expect(rows.first == ["\(Self.vt)a", "b"])
     }
 
-    @Test("leading form-feed on a first cell WITH a leading pipe is consumed")
+    @Test("a form feed after a leading pipe is skipped")
     func leadingFormFeedFirstCellWithPipe() throws {
-        // `|<FF>a|b` : the leading pipe makes cell 1 pipe-preceded, so cmark's cell_end consumes the FF;
-        // cell 1 is "a".
         let rows = try #require(tableRows("|\(Self.ff)a|b\n-|-"))
         #expect(rows.first == ["a", "b"])
     }
 
-    @Test("a trailing pipe then form-feed in a BODY row keeps the row's cells (count tolerated)")
+    @Test("a trailing pipe then a form feed closes a body row")
     func trailingBodyPipeFormFeed() throws {
         let rows = try #require(tableRows("a|b\n-|-\nc|d|\(Self.ff)"))
         #expect(rows == [["a", "b"], ["c", "d"]])
     }
 
-    @Test("a bare trailing pipe still forms a table")
+    @Test("a delimiter row with a trailing pipe forms a one-column table")
     func bareTrailingPipe() throws {
         let rows = try #require(tableRows("d\n-|"))
         #expect(rows == [["d"]])
@@ -152,7 +136,7 @@ struct TableCellPipeWhitespaceTests {
 
     @Test("an escaped pipe is not a cell separator")
     func escapedPipeNotSeparator() {
-        // `a\|b` has no unescaped pipe ⇒ 1-column header "a|b"; `-|-` has 2 ⇒ mismatch ⇒ paragraph.
+        // A one-cell header row doesn't match a two-cell delimiter row.
         #expect(firstBlockKind("a\\|b\n-|-") == "paragraph")
     }
 }

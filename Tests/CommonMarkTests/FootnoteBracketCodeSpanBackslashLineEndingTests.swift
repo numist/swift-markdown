@@ -13,12 +13,12 @@ import Testing
 
 /// A cross-line footnote-shaped bracket whose line ending sits inside a code span after a backslash.
 @Suite("Footnote-shaped bracket around a code span holding a backslash and a line ending")
-struct FootnoteCollapseCodeSpanBackslashNewlineTests {
+struct FootnoteBracketCodeSpanBackslashLineEndingTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink, .footnotes]
 
-    /// Flag-off the bracket's label matches no footnote definition, so the bracket stays literal around the code
-    /// span, raw HTML or image it holds.
-    @Test func testBracketStaysLiteralWithoutBugCompatibility() {
+    /// With no footnote definition, the bracket is literal text around the code span, raw HTML or image it holds. A
+    /// backslash before a line ending there is literal, not a hard line break (Hard line breaks).
+    @Test func testBracketStaysLiteral() {
         let cases: [(markdown: String, expected: String)] = [
             ("[^`\\\n`]", """
                 document

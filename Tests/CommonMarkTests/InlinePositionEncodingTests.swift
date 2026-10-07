@@ -11,27 +11,14 @@
 import Testing
 @testable import CommonMark
 
-/// Permanent regression net for the DELIVERABLE (flag-OFF) source positions of inline constructs
-/// across Unicode encoding classes. The differential fuzzer is dropping position matching, so this
-/// suite becomes the sole guard on the shipped parser's inline source ranges.
-///
-/// A `SourcePosition.column` is a 1-based UTF-8 **byte** offset within its line, so a leading
-/// multi-byte scalar advances the column by its byte count (é = 2, € = 3, 😀 = 4, U+FFFD = 3, a
-/// combining mark = its own 2 bytes). Every asserted value below was confirmed against the
-/// prebuilt `dump --new-off` oracle (the deliverable surface) for the same input plus a `0x00`
-/// options byte; that byte selects exactly this option set (`disableSmartOpts` off → `.smart`,
-/// `disableSourcePosOpts` off → `.sourcePosition`, GFM tables/strikethrough/tasklist/tableSpans
-/// always on), so `Self.opts` == the deliverable configuration.
-///
-/// Where the deliverable diverges from cmark, cmark is the buggy side; the divergence is annotated
-/// `// cmark differs:` with the quirk it stems from and the flag-OFF (spec-correct) value is asserted.
+/// Source positions of inline constructs across Unicode encodings. A `SourcePosition.column` is a 1-based UTF-8 byte
+/// offset within its line, so a multi-byte scalar advances the column by its byte count (é = 2, € = 3, 😀 = 4,
+/// U+FFFD = 3, a combining mark = its own 2 bytes).
 @Suite("Inline source positions — Unicode encodings")
 struct InlinePositionEncodingTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// The full GFM deliverable configuration. Byte-for-byte the
-    /// option set `dump --new-off` uses for a `0x00` options byte (see `CommonMarkConverter`).
     private static let opts: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]
 
@@ -361,7 +348,7 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == range(1, 3, 1, 13))
         #expect(n[4].range == range(1, 4, 1, 12))
 
-        // Email autolink: destination gets a "mailto:" prefix; the range still spans the source.
+        // Email autolink: the destination gets a "mailto:" prefix, and the range spans the source.
         n = nodes("<a@b.c>")
         try #require(n.map(\.kind) == [.document, .paragraph, .link, .text])
         try #require(n[2].url == "mailto:a@b.c" && n[3].literal == "a@b.c")
@@ -405,9 +392,9 @@ struct InlinePositionEncodingTests {
         #expect(n[4].range == range(1, 10, 1, 11))
     }
 
-    // MARK: - Entities
+    // MARK: - Entity and numeric character references
 
-    @Test("entities — source range spans the raw entity bytes; literal is the decoded scalar")
+    @Test("character references — source range spans the reference; literal is the decoded scalar")
     func entities() throws {
         // &amp; → "&": 5 raw source bytes (cols 1..5), literal one char.
         var n = nodes("&amp;")
@@ -434,9 +421,9 @@ struct InlinePositionEncodingTests {
         #expect(n[2].range == range(1, 1, 1, 8))
     }
 
-    // MARK: - Hard breaks (two trailing spaces)
+    // MARK: - Hard line breaks (two trailing spaces)
 
-    @Test("hard break (two spaces) — preceding text ends at its content; break carries no range")
+    @Test("hard line break (two spaces) — preceding text ends at its content; break carries no range")
     func hardBreakTwoSpaces() throws {
         // "a  \nb": text "a" range ends at its last byte, col 2, not over the 2 stripped spaces;
         // the LineBreak has no source range; "b" is line 2 col 1.
@@ -466,14 +453,11 @@ struct InlinePositionEncodingTests {
         #expect(n[4].range == range(2, 1, 2, 5))
     }
 
-    // MARK: - Hard breaks (backslash) — DELIVERABLE-CORRECT / cmark-buggy
+    // MARK: - Hard line breaks (backslash)
 
-    @Test("hard break (backslash) — following text is on line 2 (cmark keeps it on line 1: Quirk D)")
+    @Test("hard line break (backslash) — following text is on line 2")
     func hardBreakBackslash() throws {
-        // "a\\\nb": the `\` (col 2) is consumed into the LineBreak, so text "a" stops at col 2.
-        // The following text "b" is line 2 col 1 (spec-correct).
-        // cmark differs: Text "b" @1:4-1:5 — quirk D (cmark's backslash hard break does not reset
-        // its inline column cursor, so "b" keeps a flat line-1 column; the deliverable advances the line).
+        // "a\\\nb": the `\` (col 2) belongs to the line break, so text "a" stops at col 2.
         var n = nodes("a\\\nb")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .lineBreak, .text])
         try #require(n[2].literal == "a" && n[4].literal == "b")
@@ -483,7 +467,6 @@ struct InlinePositionEncodingTests {
         #expect(n[4].range == range(2, 1, 2, 2))
 
         // Leading é (2 bytes): text "é" cols 1-2, `\` at col 3; following "b" is line 2 col 1.
-        // cmark differs: Text "b" @1:5-1:6 — quirk D.
         n = nodes("\u{E9}\\\nb")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .lineBreak, .text])
         try #require(n[2].literal == "\u{E9}" && n[4].literal == "b")
@@ -492,9 +475,9 @@ struct InlinePositionEncodingTests {
         #expect(n[4].range == range(2, 1, 2, 2))
     }
 
-    // MARK: - Soft breaks
+    // MARK: - Soft line breaks
 
-    @Test("soft break — line advance; break carries no range; multibyte on either line")
+    @Test("soft line break — line advance; break carries no range; multibyte on either line")
     func softBreak() throws {
         // "a\nb": text "a" cols 1-2 (owns nothing extra), SoftBreak no range, "b" line 2 col 1.
         var n = nodes("a\nb")
@@ -533,9 +516,7 @@ private struct InlineNodeInfo {
     let range: Range<MarkdownNode.SourcePosition>?
 }
 
-// File-scope + `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (matches the other
-// source-position suites' DFS collectors). `literal()`, `url()`, `title()` are the test-target
-// helpers in `NodeContentLegacyHelpers.swift`.
+/// Appends a snapshot of `node` and each of its descendants to `out` in document order.
 private func collectInlineNodes(
     _ node: borrowing MarkdownNode,
     into out: inout [InlineNodeInfo]

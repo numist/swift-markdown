@@ -32,8 +32,8 @@ struct BasicTests {
         }
     }
 
-    @Test("non-empty source produces stub paragraph + text (placeholder behavior)")
-    func stubParagraph() {
+    @Test("a single line of text parses to a paragraph holding one text node")
+    func singleLineParagraph() {
         let source = "hello"
         MarkdownDocument.withParsedDocument(source) { doc in
         let root = doc.root

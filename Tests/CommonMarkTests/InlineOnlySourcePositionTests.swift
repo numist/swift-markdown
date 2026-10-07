@@ -50,7 +50,7 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// A CRLF is normalized to one `\n` in the content but still occupies two source bytes, so line 2 starts after both.
+    /// A CRLF is one `\n` in the content and two source bytes, so line 2 starts after both.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func crlfLineEnding(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("a\r\nb *c*", options: options, sourceRanges: true) == """
@@ -61,7 +61,7 @@ struct InlineOnlySourcePositionTests {
                   text "c" @2:4-2:5
 
             """)
-        // The normalized `\n` images the LF, so text ending at a CRLF covers both bytes and ends at the next line's start...
+        // The `\n` stands for the LF, so text ending at a CRLF covers both bytes and ends at the next line's start...
         #expect(TreeDump.dump("a\r\n*b*", options: options, sourceRanges: true) == """
             document @1:1-2:4
               paragraph @1:1-2:4
@@ -107,7 +107,7 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// A NUL ending the input, after a CRLF: the U+FFFD text ends at the source's last byte, not two bytes past it.
+    /// A NUL ending the input, after a CRLF: the U+FFFD text ends at the source's last byte.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func trailingNULAfterCRLF(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("a\r\n*b*\u{0}", options: options, sourceRanges: true) == """
@@ -178,7 +178,7 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// Leading reference definitions are consumed from the normalized CRLF content; what remains keeps its original-source positions.
+    /// Leading link reference definitions are consumed across CRLF line endings, and the remaining text keeps its source positions.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func leadingReferenceDefinitionWithCRLF(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("[a]: /u\r\n\r\n[a]", options: options, sourceRanges: true) == """

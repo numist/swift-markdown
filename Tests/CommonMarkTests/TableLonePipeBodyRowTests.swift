@@ -11,13 +11,8 @@
 import Testing
 @testable import CommonMark
 
-/// A body-row line that scans to ZERO table columns (a lone `|`, optionally padded with
-/// delimiter-marker whitespace) is not a table row. cmark's `matches` calls `row_from_string`,
-/// which creates cells only inside its scan loop; the consumed leading pipe never enters the loop,
-/// so `n_columns == 0` and the row does not match. The open table therefore closes and the line is
-/// re-dispatched as a fresh block (a paragraph). The rewrite detects tables at paragraph-finalize
-/// and autocompleted the accumulated lone-pipe line into a spurious one-empty-cell body row; this
-/// suite pins cmark's table-termination. Spec-aligned `[fix]`.
+/// A line holding only a leading pipe (Tables (extension)), optionally with whitespace, has no cells. It
+/// is not a body row, so it closes the table and starts a paragraph.
 @Suite("Lone-pipe table body row terminates the table")
 struct TableLonePipeBodyRowTests {
 
@@ -68,12 +63,10 @@ struct TableLonePipeBodyRowTests {
         }
     }
 
-    // MARK: - FIX: a zero-column body row closes the table and starts a paragraph
+    // MARK: - Lone pipe
 
     @Test("a lone-pipe body row after a single-column header is not a table row")
     func lonePipeBodyRowSingleColumn() throws {
-        // `f\n|-\n|` : header `f` (1 column) + delimiter `|-`, then a lone `|` body line. cmark:
-        // Table(header "f", empty body) + Paragraph "|".
         let s = analyze("f\n|-\n|")
         try #require(s.hasTable, "fixture: expected a table to form from the header + delimiter")
         try #require(s.tableHeaderRows == 1, "fixture: expected exactly one header row")
@@ -84,8 +77,6 @@ struct TableLonePipeBodyRowTests {
 
     @Test("a lone-pipe body row after a multi-column header is not a table row")
     func lonePipeBodyRowMultiColumn() throws {
-        // `a|b\n-|-\n|` : header `a|b` (2 columns) + delimiter `-|-`, then a lone `|` body line. cmark:
-        // Table(header "a","b", empty body) + Paragraph "|". The class is column-count-agnostic.
         let s = analyze("a|b\n-|-\n|")
         try #require(s.hasTable, "fixture: expected a two-column table to form")
         try #require(s.tableHeaderRows == 1, "fixture: expected exactly one header row")
@@ -94,11 +85,10 @@ struct TableLonePipeBodyRowTests {
         #expect(s.topParagraphTexts == ["|"])
     }
 
-    // MARK: - LEAVE guards: rows that DO scan to a cell stay in the table
+    // MARK: - Rows with cells
 
     @Test("a leading+trailing pipe body row is one empty cell, kept as a table row")
     func doublePipeBodyRowStaysARow() throws {
-        // `||` scans to ONE (empty) cell, so it continues the table as a body row - no break-out.
         let s = analyze("f\n|-\n||")
         try #require(s.hasTable, "fixture: expected a table to form")
         #expect(s.tableBodyRows == 1)
@@ -106,7 +96,7 @@ struct TableLonePipeBodyRowTests {
         #expect(s.topParagraphTexts.isEmpty)
     }
 
-    @Test("an ordinary content body row is unaffected")
+    @Test("a body row with content is a table row")
     func contentBodyRowStaysARow() throws {
         let s = analyze("a|b\n-|-\nc|d")
         try #require(s.hasTable, "fixture: expected a table to form")

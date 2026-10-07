@@ -61,7 +61,6 @@ struct SegmentsTests {
     @Test("literalSegments equals literal() across a multi-line paragraph")
     func multiLineParagraph() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        // A multi-line paragraph exercises the contiguity fast path: its text runs are source ranges; the iterator must still reproduce literal().
         let source = "first line\nsecond line\nthird line"
         MarkdownDocument.withParsedDocument(source) { doc in
         var pieces: [String] = []
@@ -118,7 +117,6 @@ struct SegmentsTests {
         MarkdownDocument.withParsedDocument(source) { doc in
         let root = doc.root
         root.children.forEach { paragraph in
-            // A paragraph has no literal content of its own.
             let isEmpty = paragraph.literalSegments().isEmpty
             #expect(isEmpty)
         }

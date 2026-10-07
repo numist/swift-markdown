@@ -12,7 +12,7 @@ import CommonMark
 import Testing
 
 /// Many footnote references and many uses of a link reference with a long destination in one paragraph: every
-/// footnote reference and every link reference resolves (spec "Link reference definitions"; GFM "Footnotes").
+/// footnote reference and every link reference resolves.
 @Suite("Footnote references beside link references")
 struct FootnoteReferencesBesideLinkReferencesTests {
 

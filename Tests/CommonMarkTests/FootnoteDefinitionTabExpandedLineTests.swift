@@ -11,9 +11,7 @@
 import Testing
 import CommonMark
 
-/// A footnote definition opened on a line whose block-quote prefix is followed by a tab. The parser expands that
-/// tab into spaces in a copy of the line, so the definition's label must be read back from the original source
-/// rather than at its offset in the expanded copy, whether or not source positions are tracked.
+/// A footnote definition opened after a block quote marker and a tab (Tabs), with and without source positions.
 @Suite("Footnote definition on a tab-expanded line")
 struct FootnoteDefinitionTabExpandedLineTests {
 

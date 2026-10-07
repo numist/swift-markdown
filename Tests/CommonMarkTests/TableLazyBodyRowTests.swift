@@ -11,16 +11,10 @@
 import Testing
 @testable import CommonMark
 
-/// Once a GFM table has opened inside a container (a header line + a delimiter line that BOTH carry the
-/// container's prefix), a subsequent LAZY continuation line (one WITHOUT the container's `>` / list-indent
-/// prefix) cannot be a table body row. cmark opens the table while processing the delimiter line
-/// (`try_opening_table_block`), so by the time the lazy line arrives the open block is a TABLE, not a
-/// paragraph; the lazy-paragraph branch in `add_text_to_container` therefore does not fire, and the table
-/// and its enclosing container close so the line starts a fresh paragraph at the container's ancestor
-/// (document) level. The rewrite detects tables at finalize, so it used to absorb the lazy line into the
-/// block-quote paragraph and turn the accumulated content into a table body row. This suite pins cmark's
-/// break-out. Spec-aligned `[fix]`.
-@Suite("Table lazy-continuation body row")
+/// Laziness applies only to paragraph continuation text (Block quotes, List items). Once a table opens in a
+/// container, a following line without the container's prefix is not a lazy continuation line: it closes
+/// the table and the container and starts a new paragraph.
+@Suite("Table followed by a line without its container's prefix")
 struct TableLazyBodyRowTests {
 
     private struct Shape {
@@ -28,7 +22,7 @@ struct TableLazyBodyRowTests {
         var topKinds: [MarkdownNode.Kind] = []
         /// The first table found anywhere in the tree, if any.
         var hasTable = false
-        /// A table was found as a descendant of a top-level block quote.
+        /// The first table is a descendant of a top-level block quote.
         var blockQuoteContainsTable = false
         /// Header / body row counts of the first table found.
         var tableHeaderRows = 0
@@ -58,9 +52,9 @@ struct TableLazyBodyRowTests {
             }
             return
         }
-        var nowInBQ = insideBlockQuote
-        if case .blockQuote = node.kind { nowInBQ = true }
-        node.children.forEach { recordFirstTable($0, insideBlockQuote: nowInBQ, shape: &shape) }
+        var inBlockQuote = insideBlockQuote
+        if case .blockQuote = node.kind { inBlockQuote = true }
+        node.children.forEach { recordFirstTable($0, insideBlockQuote: inBlockQuote, shape: &shape) }
     }
 
     private func analyze(_ source: String) -> Shape {
@@ -81,32 +75,29 @@ struct TableLazyBodyRowTests {
         }
     }
 
-    // MARK: - FIX: a lazy body row breaks out of the table and its container
+    // MARK: - Unprefixed lines close the table and its container
 
-    @Test("a lazy body row closes the table + block quote and starts a document paragraph")
+    @Test("an unprefixed row closes the table and block quote and starts a paragraph")
     func lazyBodyRowBreaksOut() throws {
         let s = analyze(">a|b\n>-|-\nc|d")
-        // Fixture sanity: a table did form inside the block quote.
         try #require(s.hasTable && s.blockQuoteContainsTable, "fixture: expected a table inside the block quote")
         try #require(s.tableHeaderRows == 1, "fixture: expected exactly one header row")
-        // The table is header-only; the lazy `c|d` became a top-level paragraph, NOT a body row.
         #expect(s.tableBodyRows == 0)
         #expect(s.topKinds == [.blockQuote, .paragraph])
         #expect(s.topParagraphTexts == ["c|d"])
     }
 
-    @Test("two lazy lines after the delimiter form ONE document paragraph")
+    @Test("two unprefixed lines after the delimiter row form one paragraph")
     func twoLazyLinesFormOneParagraph() throws {
         let s = analyze(">a|b\n>-|-\nc|d\ne|f")
         try #require(s.hasTable && s.blockQuoteContainsTable, "fixture: expected a table inside the block quote")
         #expect(s.tableBodyRows == 0)
         #expect(s.topKinds == [.blockQuote, .paragraph])
-        // Both lazy lines join into a single top-level paragraph (a soft break between them).
         try #require(s.topParagraphTexts.count == 1, "expected exactly one top-level paragraph")
         #expect(s.topParagraphHasSoftBreak == [true])
     }
 
-    @Test("lazy non-table text after the delimiter breaks out to a document paragraph")
+    @Test("unprefixed text without pipes after the delimiter row starts a paragraph")
     func lazyNonTableTextBreaksOut() throws {
         let s = analyze(">a|b\n>-|-\nxy")
         try #require(s.hasTable && s.blockQuoteContainsTable, "fixture: expected a table inside the block quote")
@@ -115,26 +106,19 @@ struct TableLazyBodyRowTests {
         #expect(s.topParagraphTexts == ["xy"])
     }
 
-    @Test("a lazy body row breaks out of a LIST-ITEM container too (signal is container-agnostic)")
+    @Test("a row not indented to a list item's content closes the table and list")
     func lazyBodyRowBreaksOutOfListItem() throws {
-        // The break-out signal is `currentLineIsLazyContinuation` (some open container's prefix failed),
-        // not block-quote-specific: `c|d` is not indented to the item's content column, so it is a lazy
-        // continuation and breaks out. cmark: List › Item › Table(header only) + document Paragraph "c|d".
         let s = analyze("- a|b\n  -|-\nc|d")
         try #require(s.hasTable, "fixture: expected a table to have formed in the list item")
         #expect(s.tableBodyRows == 0)
-        // The list is the first top-level block; the broken-out paragraph is a second top-level block.
-        try #require(s.topKinds.count == 2, "expected the list plus a broken-out paragraph, got \(s.topKinds)")
+        try #require(s.topKinds.count == 2, "expected the list plus a paragraph, got \(s.topKinds)")
         #expect(s.topParagraphTexts == ["c|d"])
     }
 
-    // MARK: - Boundary: a matched body row THEN a lazy line
+    // MARK: - Prefixed body rows
 
-    @Test("a matched body row keeps its table row; a following lazy line still breaks out")
+    @Test("a prefixed body row stays in the table; a following unprefixed line starts a paragraph")
     func matchedBodyThenLazyBreaksOut() throws {
-        // `>c|d` is a prefix-matched body row (stays in the table); the later un-prefixed `e|f` is a lazy
-        // continuation that breaks out. cmark: BlockQuote › Table(header + body "c","d") + document
-        // Paragraph "e|f".
         let s = analyze(">a|b\n>-|-\n>c|d\ne|f")
         try #require(s.hasTable && s.blockQuoteContainsTable, "fixture: expected a table inside the block quote")
         #expect(s.tableBodyRows == 1)
@@ -142,20 +126,17 @@ struct TableLazyBodyRowTests {
         #expect(s.topParagraphTexts == ["e|f"])
     }
 
-    // MARK: - LEAVE: a prefixed body row and a plain (no-container) table still get a body row
-
-    @Test("a PREFIXED body row still becomes a table body row inside the block quote")
+    @Test("a prefixed body row is a table body row inside the block quote")
     func prefixedBodyRowStaysInTable() throws {
         let s = analyze(">a|b\n>-|-\n>c|d")
         try #require(s.hasTable && s.blockQuoteContainsTable, "fixture: expected a table inside the block quote")
         #expect(s.tableBodyRows == 1)
-        // No break-out: the block quote is the sole top-level block, no stray paragraph.
         #expect(s.topKinds == [.blockQuote])
         #expect(s.topParagraphTexts.isEmpty)
     }
 
-    @Test("a plain (no-container) table still gets its body row")
-    func plainTableStillGetsBodyRow() throws {
+    @Test("a table outside any container gets its body row")
+    func plainTableGetsBodyRow() throws {
         let s = analyze("a|b\n-|-\nc|d")
         try #require(s.hasTable && !s.blockQuoteContainsTable, "fixture: expected a top-level table")
         #expect(s.tableBodyRows == 1)

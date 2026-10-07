@@ -11,7 +11,7 @@
 import CommonMark
 import Testing
 
-/// A `^` row-span cell preceded by a vertical tab or form feed is still a row-span marker.
+/// A `^` row-span cell preceded by a vertical tab or form feed is a row-span marker.
 @Suite("Row-span marker after vertical whitespace")
 struct TableRowspanCaretAfterVerticalWhitespaceTests {
 
@@ -105,7 +105,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
             """)
     }
 
-    /// A header cell has no row above to span into, so it keeps its `^` text but still carries rowspan 0.
+    /// A header cell has no row above to span into, so it keeps its `^` text while carrying rowspan 0.
     @Test func verticalTabBeforeCaretInHeader() {
         #expect(TreeDump.dump("|\u{B}^|\n|-|", options: Self.options) == """
             document
@@ -117,7 +117,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
             """)
     }
 
-    /// The row's first cell with no leading pipe is not pipe-preceded, so its leading VT is content, not padding.
+    /// Without a leading pipe, a leading VT in the row's first cell is content, not padding.
     @Test func verticalTabBeforeCaretWithoutLeadingPipeStaysLiteral() {
         #expect(TreeDump.dump("a|b\n-|-\n\u{B}^|x", options: Self.options) == """
             document
@@ -151,7 +151,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
             """)
     }
 
-    @Test func verticalTabBeforeCaretFlagOff() {
+    @Test func verticalTabBeforeCaret() {
         #expect(TreeDump.dump("a\n|-\n|\u{B}^", options: Self.options) == """
             document
               table

@@ -11,14 +11,14 @@
 import CommonMark
 import Testing
 
-/// A `[^[` footnote collapse whose trailing bracket pair spans a line ending.
+/// A bracket opening `[^[`, followed by a bracket pair that spans a line ending.
 @Suite("Footnote-shaped bracket holding an attribute opener across a line ending")
 struct FootnoteCaretBracketNewlineInLabelTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink, .footnotes]
 
-    /// A footnote-shaped bracket holding `^[` is no footnote reference, so it stays literal, and a `[…]` label after
-    /// the inline-attribute text that names no attribute definition is text too.
-    @Test func testBracketStaysLiteralWithoutBugCompatibility() {
+    /// `[^[` opens no footnote reference, because a label may not contain an unescaped `[` (Links), and `^[]` followed
+    /// by `[` rather than `(` is not inline attributes. The brackets stay literal text unless a later pair forms a link.
+    @Test func testBracketStaysLiteral() {
         let cases: [(markdown: String, expected: String)] = [
             ("[^[][\n]]", """
                 document

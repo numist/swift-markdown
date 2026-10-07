@@ -11,9 +11,7 @@
 import Testing
 @testable import CommonMark
 
-// DFS-collect each node's kind, text literal, and (for links) destination URL. File-scope +
-// `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (see
-// AutolinkEmailPostPassTests.dfsAutolinkNodes).
+// Depth-first: each node's kind, text literal, and (for links) destination URL.
 private func dfsAutolinkNodes(
     _ node: borrowing MarkdownNode,
     into out: inout [(kind: MarkdownNode.Kind, text: String?, url: String?)]
@@ -24,17 +22,15 @@ private func dfsAutolinkNodes(
     }
 }
 
-/// A GFM email autolink whose forward domain scan runs into a SECOND `@`.
+/// An extended email autolink candidate whose domain runs into a second `@`.
 ///
 /// The first candidate is abandoned and the match restarts from the second `@`, with the run between the
 /// two `@`s as the new local part. The restarted address is an extended email autolink only when its own
 /// domain is valid (spec "Autolinks (extension)"): one or more segments separated by periods, with at least
 /// one period.
-@Suite("GFM email autolink second-`@` restart (stateful goto found_at)")
+@Suite("Extended email autolink candidate with a second `@`")
 struct AutolinkEmailTrailingAtTests {
 
-    /// The shipped configuration: GFM autolink on, cmark bug-compatibility off (the spec-correct
-    /// deliverable, so empty `before`/`after` siblings are dropped).
     private static let options: MarkdownDocument.ParseOptions = [.gfmAutolink]
 
     private func nodes(
@@ -48,12 +44,8 @@ struct AutolinkEmailTrailingAtTests {
         }
     }
 
-    // MARK: - Fixture sanity: the node-walk is meaningful (a valid email really does link)
-
-    @Test("fixture sanity: a plain valid email links with a synthetic `mailto:`")
-    func fixtureSanity() throws {
-        // Guards against a vacuous pass: if the walk returned a degenerate tree, this valid email would fail
-        // to produce the [.document, .paragraph, .link, .text] shape with a `mailto:` URL.
+    @Test("a plain email links with a `mailto:` destination")
+    func plainEmailLinks() throws {
         let ns = nodes(in: "a@b.c")
         try #require(ns.count == 4, "expected document > paragraph > link > text")
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
@@ -61,19 +53,18 @@ struct AutolinkEmailTrailingAtTests {
         #expect(try #require(ns.compactMap(\.url).first) == "mailto:a@b.c")
     }
 
-    // MARK: - The restart fails (empty tail after the last `@`): no link
+    // MARK: - Nothing follows the last `@`
 
-    @Test("`o@.e@`: restart at the trailing `@` finds no domain → no link")
+    @Test("`o@.e@`: the second `@` has no domain after it, so the run is text")
     func trailingAtNoLink() {
-        // The first candidate `o@.e` is abandoned at the second `@`; the restart (local part `.e`) has an
-        // empty domain, so it fails and the whole run stays one plain text node.
+        // The candidate restarted at the second `@` has an empty domain.
         let ns = nodes(in: "o@.e@")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "o@.e@"])
         #expect(ns.compactMap(\.url) == [])
     }
 
-    @Test("`d@.d@`: same shape → no link")
+    @Test("`d@.d@` is text")
     func trailingAtNoLinkD() {
         let ns = nodes(in: "d@.d@")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
@@ -81,7 +72,7 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.compactMap(\.url) == [])
     }
 
-    @Test("`o@.o@`: same shape → no link")
+    @Test("`o@.o@` is text")
     func trailingAtNoLinkO() {
         let ns = nodes(in: "o@.o@")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
@@ -89,7 +80,7 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.compactMap(\.url) == [])
     }
 
-    @Test("`a@.d@`: same shape → no link")
+    @Test("`a@.d@` is text")
     func trailingAtNoLinkA() {
         let ns = nodes(in: "a@.d@")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
@@ -99,44 +90,39 @@ struct AutolinkEmailTrailingAtTests {
 
     // MARK: - The restarted address needs a period in its own domain
 
-    @Test("`o@.e@b`: the restarted `.e@b` has a dotless domain → no link")
+    @Test("`o@.e@b`: `.e@b` has a domain without a period, so the run is text")
     func restartNeedsOwnPeriod() {
         let ns = nodes(in: "o@.e@b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "o@.e@b"])
     }
 
-    @Test("`a@b.c@d`: the restarted `b.c@d` has a dotless domain → no link")
+    @Test("`a@b.c@d`: `b.c@d` has a domain without a period, so the run is text")
     func restartWithValidPrefixNeedsOwnPeriod() {
         let ns = nodes(in: "a@b.c@d")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "a@b.c@d"])
     }
 
-    @Test("`a@b@c.d`: restart links `b@c.d` on its own valid domain, before-text `a@`")
+    @Test("`a@b@c.d`: `b@c.d` links, with before-text `a@`")
     func restartLinksOnOwnDomain() {
-        // The domain scan of `a@b` meets `@`, the restart treats `b` as the new local part, and the domain
-        // `c.d` has its own period, so `b@c.d` links.
         let ns = nodes(in: "a@b@c.d")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "a@", nil, "b@c.d"])
         #expect(ns.compactMap(\.url) == ["mailto:b@c.d"])
     }
 
-    @Test("`o@.e@ x@y.z`: a failed `@`-chain does not swallow the valid email after it")
+    @Test("`o@.e@ x@y.z`: the valid email after a rejected `@` run links")
     func failedChainThenValidEmail() {
-        // The `o@.e@` chain fails (empty tail after the last `@`) and is consumed as before-text up to the
-        // valid `x@y.z`, which links. Guards the failure path's forward skip: it must resume PAST the failed
-        // chain without over-skipping the following email.
         let ns = nodes(in: "o@.e@ x@y.z")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, "o@.e@ ", nil, "x@y.z"])
         #expect(ns.compactMap(\.url) == ["mailto:x@y.z"])
     }
 
-    // MARK: - Positive controls: valid emails must keep linking (no over-correction)
+    // MARK: - Valid addresses
 
-    @Test("`o@e.e`: the bare valid email still links")
+    @Test("`o@e.e` links")
     func bareEmailLinks() {
         let ns = nodes(in: "o@e.e")
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
@@ -144,17 +130,16 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
-    @Test("`o@e.e `: a trailing space is stripped before inline parse; the email links, no after-text")
+    @Test("`o@e.e `: the email links with no after-text")
     func emailTrailingSpaceLinks() {
-        // CommonMark strips a paragraph's trailing spaces before inline parsing, so the text node the
-        // post-pass sees is already `o@e.e`: the whole node links and there is no after-text.
+        // A paragraph's final spaces are stripped before inline parsing (Paragraphs).
         let ns = nodes(in: "o@e.e ")
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, "o@e.e"])
         #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
-    @Test("`@o@e.e`: a leading `@` is skipped (empty local part); the real email links after `@`")
+    @Test("`@o@e.e`: the leading `@` has an empty local part; `o@e.e` links")
     func leadingAtLinks() {
         let ns = nodes(in: "@o@e.e")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
@@ -162,7 +147,7 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
-    @Test("`o@e.ex`: a letter after the domain (not `@`) extends the last label; the email links")
+    @Test("`o@e.ex`: the email links")
     func emailTrailingLetterLinks() {
         let ns = nodes(in: "o@e.ex")
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
@@ -170,9 +155,9 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.compactMap(\.url) == ["mailto:o@e.ex"])
     }
 
-    // MARK: - Standalone non-linkers (controls): these must NOT link on their own
+    // MARK: - Addresses whose domain has no period
 
-    @Test("`.e@b`: standalone, the lone dot is in the local part (domain has none) → no link")
+    @Test("`.e@b` is text: its domain has no period")
     func standaloneDotLocalNoLink() {
         let ns = nodes(in: ".e@b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
@@ -180,7 +165,7 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.compactMap(\.url) == [])
     }
 
-    @Test("`e@b`: standalone, domain `b` has no dot → no link")
+    @Test("`e@b` is text: its domain has no period")
     func standaloneNoDotNoLink() {
         let ns = nodes(in: "e@b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
@@ -188,7 +173,7 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.compactMap(\.url) == [])
     }
 
-    @Test("`b.c@d`: standalone, the dot is in the local part (domain `d` has none) → no link")
+    @Test("`b.c@d` is text: its domain has no period")
     func standaloneDotLocalDomainNoDotNoLink() {
         let ns = nodes(in: "b.c@d")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
@@ -196,7 +181,7 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.compactMap(\.url) == [])
     }
 
-    @Test("`b@d`: standalone, domain `d` has no dot → no link")
+    @Test("`b@d` is text: its domain has no period")
     func standaloneShortNoLink() {
         let ns = nodes(in: "b@d")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])

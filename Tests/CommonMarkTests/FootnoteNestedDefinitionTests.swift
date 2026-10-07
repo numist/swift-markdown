@@ -12,11 +12,9 @@ import CommonMark
 import Testing
 
 /// A footnote definition opener followed on the same line by another opener nests the second
-/// definition inside the first. cmark-gfm's `process_footnotes` (blocks.c) registers definitions on
-/// the tree walk's EXIT events, so an inner definition registers before the one enclosing it, and
-/// the first-registered definition of a label wins (`sort_map`, map.c). A referenced definition moves
-/// to the document root out of whatever encloses it; every other definition is dropped with its
-/// remaining content.
+/// definition inside the first. An inner definition registers before the one enclosing it, and the
+/// first definition registered for a label wins. A referenced definition moves to the document root
+/// out of whatever encloses it; every other definition is dropped with its remaining content.
 @Suite("Nested footnote definitions")
 struct FootnoteNestedDefinitionTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes]
@@ -79,7 +77,7 @@ struct FootnoteNestedDefinitionTests {
     /// The indented line continues only the outer definition, so its paragraph is lost with the
     /// losing outer duplicate.
     @Test
-    func testOuterDuplicateContentAfterNewlineIsDropped() {
+    func testOuterDuplicateContentAfterBlankLineIsDropped() {
         #expect(TreeDump.dump("[^b]\n[^b]:[^b]:A\n\n    C\n", options: Self.options) == """
             document
               paragraph
@@ -122,7 +120,7 @@ struct FootnoteNestedDefinitionTests {
             """)
     }
 
-    /// A same-label definition nested through a block quote still closes first and wins; the losing
+    /// A same-label definition nested through a block quote closes first and wins; the losing
     /// outer definition is dropped with its emptied block quote.
     @Test
     func testInnerDuplicateThroughBlockQuote() {

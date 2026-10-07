@@ -11,9 +11,7 @@
 import Testing
 @testable import CommonMark
 
-// DFS-collect each node's kind, text literal, and (for `^[…]`) attribute string. File-scope +
-// `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (see
-// AutolinkEmailPrecedingCharTests.dfsAutolinkNodes).
+/// Appends each node's kind, literal and attribute string to `out` in document order.
 private func dfsAttributeNodes(
     _ node: borrowing MarkdownNode,
     into out: inout [(kind: MarkdownNode.Kind, text: String?, attrs: String?)]
@@ -27,8 +25,7 @@ private func dfsAttributeNodes(
 @Suite("Inline-attribute `^[` close-bracket handling")
 struct InlineAttributesBracketTests {
 
-    /// The shipped parser's configuration.
-    private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition, .attributes]
+    private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .attributes]
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
@@ -41,66 +38,66 @@ struct InlineAttributesBracketTests {
         }
     }
 
-    @Test("flag OFF: `^[](` newline `)` forms one attribute whose text is the newline")
-    func attributeTextSpansSoftBreakWithoutCompatibility() {
-        let ns = nodes(in: " ^[](\n)", options: Self.specOptions)
+    @Test("`^[](` line ending `)` forms one attribute whose text is the line ending")
+    func attributeTextSpansSoftBreak() {
+        let ns = nodes(in: " ^[](\n)", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .attribute])
         #expect(ns.compactMap(\.attrs) == ["\n"])
         #expect(ns.compactMap(\.text) == [])
     }
 
-    @Test("flag OFF: `^[](x)` forms an attribute")
-    func inlineAttributeSingleLineWithoutCompatibility() {
-        let ns = nodes(in: "^[](x)", options: Self.specOptions)
+    @Test("`^[](x)` forms an attribute")
+    func inlineAttributeSingleLine() {
+        let ns = nodes(in: "^[](x)", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .attribute])
         #expect(ns.compactMap(\.attrs) == ["x"])
         #expect(ns.compactMap(\.text) == [])
     }
 
-    @Test("flag OFF: ` ^[](x)` (leading space, no newline) forms an attribute")
-    func inlineAttributeLeadingSpaceWithoutCompatibility() {
-        let ns = nodes(in: " ^[](x)", options: Self.specOptions)
+    @Test("` ^[](x)` (leading space, no line ending) forms an attribute")
+    func inlineAttributeLeadingSpace() {
+        let ns = nodes(in: " ^[](x)", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .attribute])
         #expect(ns.compactMap(\.attrs) == ["x"])
         #expect(ns.compactMap(\.text) == [])
     }
 
-    @Test("flag OFF: `^[x](/u)` keeps its inner text child and attribute string")
-    func inlineAttributeWithInnerTextWithoutCompatibility() {
-        let ns = nodes(in: "^[x](/u)", options: Self.specOptions)
+    @Test("`^[x](/u)` keeps its inner text child and attribute string")
+    func inlineAttributeWithInnerText() {
+        let ns = nodes(in: "^[x](/u)", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .attribute, .text])
         #expect(ns.compactMap(\.attrs) == ["/u"])
         #expect(ns.compactMap(\.text) == ["x"])
     }
 
-    @Test("flag OFF: `[][]` (no caret) stays literal `[][]`")
-    func plainEmptyBracketsWithoutCompatibility() {
-        let ns = nodes(in: "[][]", options: Self.specOptions)
+    @Test("`[][]` (no caret) stays literal `[][]`")
+    func plainEmptyBrackets() {
+        let ns = nodes(in: "[][]", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.attrs) == [])
         #expect(ns.compactMap(\.text) == ["[][]"])
     }
 
-    @Test("flag OFF: `^[]` alone stays literal `^[]`")
-    func emptyAttributeAloneWithoutCompatibility() {
-        let ns = nodes(in: "^[]", options: Self.specOptions)
+    @Test("`^[]` alone stays literal `^[]`")
+    func emptyAttributeAlone() {
+        let ns = nodes(in: "^[]", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.attrs) == [])
         #expect(ns.compactMap(\.text) == ["^[]"])
     }
 
-    @Test("flag OFF: `^[]x` keeps the trailing text")
-    func emptyAttributeFollowedByTextWithoutCompatibility() {
-        let ns = nodes(in: "^[]x", options: Self.specOptions)
+    @Test("`^[]x` keeps the trailing text")
+    func emptyAttributeFollowedByText() {
+        let ns = nodes(in: "^[]x", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.attrs) == [])
         #expect(ns.compactMap(\.text) == ["^[]x"])
     }
 
     /// The inline form completes the attribute, so a following label naming an attribute definition is text.
-    @Test("flag OFF: a label following an inline form is text")
-    func inlineAttributeThenResolvedReferenceWithoutCompatibility() {
-        let ns = nodes(in: "^[lbl]: color: blue\n\n^[](x)[lbl]", options: Self.specOptions)
+    @Test("a label following an inline form is text")
+    func labelAfterInlineAttributeIsText() {
+        let ns = nodes(in: "^[lbl]: color: blue\n\n^[](x)[lbl]", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .attribute, .text])
         #expect(ns.compactMap(\.attrs) == ["x"])
         #expect(ns.compactMap(\.text) == ["[lbl]"])

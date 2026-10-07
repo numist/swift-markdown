@@ -11,9 +11,7 @@
 import Testing
 @testable import CommonMark
 
-// DFS-collect each node's kind, text literal, and (for links) destination URL. File-scope +
-// `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (see
-// AutolinkSchemePrecedingCharTests.dfsAutolinkNodes).
+// Depth-first: each node's kind, text literal, and (for links) destination URL.
 private func dfsAutolinkNodes(
     _ node: borrowing MarkdownNode,
     into out: inout [(kind: MarkdownNode.Kind, text: String?, url: String?)]
@@ -24,18 +22,12 @@ private func dfsAutolinkNodes(
     }
 }
 
-/// A GFM `://`-scheme autolink recognizes its scheme (`http`/`https`/`ftp`) case-INSENSITIVELY, and
-/// preserves the source case in both the link destination and the visible text.
-///
-/// cmark-gfm's `sd_autolink_issafe` (`extensions/autolink.c`) validates the rewound scheme run with
-/// `strncasecmp`, so `HTTP://`, `Http://`, `hTTp://`, `HTTPS://`, `FTP://` are all recognized. The
-/// destination and text come straight from the source chunk (`cmark_chunk_dup`), so the mixed case is
-/// preserved verbatim — cmark links the literal text as-is.
-@Suite("GFM scheme autolink case-insensitive scheme")
+/// The scheme of an extended url autolink (Autolinks (extension)) matches `http://`, `https://` or `ftp://` in any
+/// case, and the destination and link text keep the source's case.
+@Suite("Extended url autolink scheme case")
 struct AutolinkSchemeCaseTests {
 
-    /// The shipped configuration: GFM autolink on, bug-compatibility deliberately off.
-    private static let flagOff: MarkdownDocument.ParseOptions = [.gfmAutolink]
+    private static let options: MarkdownDocument.ParseOptions = [.gfmAutolink]
 
     private func nodes(
         in src: String, options: MarkdownDocument.ParseOptions
@@ -48,16 +40,13 @@ struct AutolinkSchemeCaseTests {
         }
     }
 
-    /// Assert that `src` parses to a lone `Link(link)` at the paragraph level whose visible text is `link`
-    /// (no preceding `.text` node), i.e. the whole source is one autolink with case preserved.
+    /// Assert that `src` parses to a paragraph holding only a link to `link` whose text is `link`.
     private func expectWholeSourceLinks(_ src: String, link: String) {
-        let ns = nodes(in: src, options: Self.flagOff)
+        let ns = nodes(in: src, options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
         #expect(ns.map(\.text) == [nil, nil, nil, link])
         #expect(ns.compactMap(\.url) == [link])
     }
-
-    // MARK: - The fix: the scheme literal matches case-insensitively, source case preserved
 
     @Test("upper-case `HTTP://` links, preserving case")
     func upperHTTP() {
@@ -84,28 +73,22 @@ struct AutolinkSchemeCaseTests {
         expectWholeSourceLinks("FTP://x.io", link: "FTP://x.io")
     }
 
-    // MARK: - Guards
-
-    @Test("guard: lower-case `http://` still links")
+    @Test("lower-case `http://` links")
     func lowerHTTP() {
         expectWholeSourceLinks("http://e.e", link: "http://e.e")
     }
 
-    @Test("guard: an unrecognized scheme (`xttp://`) does NOT link, case aside")
+    @Test("another scheme (`xttp://`) is text")
     func unrecognizedSchemeNoLink() {
-        // `xttp` is not `http`/`https`/`ftp` in any case, so the scheme is unsafe and nothing links.
-        let ns = nodes(in: "xttp://e", options: Self.flagOff)
+        let ns = nodes(in: "xttp://e", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "xttp://e"])
         #expect(ns.compactMap(\.url) == [])
     }
 
-    @Test("guard: the `www.` form stays case-SENSITIVE (`WWW.` does not link)")
-    func wwwStaysCaseSensitive() {
-        // Only the `://`-scheme literal folds case. cmark's `www_match` matches `"www."` with `memcmp`
-        // (case-sensitive), so upper-case `WWW.e.f` must NOT autolink even though `www.e.f` does. This
-        // pins the asymmetry the fix preserves: `bytesEqual`'s default stays exact for the `www.` caller.
-        let ns = nodes(in: "WWW.e.f", options: Self.flagOff)
+    @Test("`WWW.` is not `www.`, so it is text")
+    func wwwIsCaseSensitive() {
+        let ns = nodes(in: "WWW.e.f", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "WWW.e.f"])
         #expect(ns.compactMap(\.url) == [])

@@ -11,18 +11,9 @@
 import Testing
 @testable import CommonMark
 
-/// Adjacent inline `.text` pieces inside a GFM table cell must coalesce into a single `.text` node, the
-/// same way the paragraph inline path does — cmark runs `cmark_consolidate_text_nodes` over every node's
-/// inlines uniformly (`src/iterator.c`), including table cells (`extensions/table.c` builds cell inlines
-/// through the shared inline parser). The rewrite's inline parser emits bracket literals (`[`/`]`),
-/// decoded entities, and smart-quote glyphs as their OWN text nodes; only a post-parse consolidation pass
-/// merges them. The paragraph path consolidates after `parseInline`; a table cell is inline-parsed on the
-/// table path, so it must consolidate there too. This is a differential-qualification `[fix]` tracked
-/// unconditionally (adjacent text nodes should always be one node).
-///
-/// The merged node's literal is the concatenation of the runs, and its source range spans the first run's
-/// start through the last run's end. Columns are 1-based and half-open on the end, matching the
-/// `debugDescription` surface the differential fuzzer compares.
+/// Adjacent text in a table cell, including bracket literals, decoded entity references and smart
+/// punctuation, forms a single `.text` node. Its literal is the concatenation of the runs, and its source
+/// range spans from the first run's start to the last run's end.
 @Suite("Table cell text consolidation")
 struct TableCellTextConsolidationTests {
 
@@ -83,11 +74,9 @@ struct TableCellTextConsolidationTests {
 
     private static let posOpts: MarkdownDocument.ParseOptions = [.tables, .sourcePosition]
 
-    // MARK: - Bracket literal (RED without the fix)
+    // MARK: - Merged runs
 
-    /// A bracket literal adjacent to text merges into one `.text` node spanning both, with source
-    /// positions on. Header cell `[t` of `[t\n|-` → one `Text "[t"` at 1:1–1:3.
-    @Test("a bracket literal merges with adjacent text in a cell (positions on)")
+    @Test("a bracket literal merges with adjacent text in a cell")
     func bracketMergesWithText() throws {
         let rows = tableCellChildren("[t\n|-", options: Self.posOpts)
         try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
@@ -98,8 +87,7 @@ struct TableCellTextConsolidationTests {
         #expect(cell[0].range.map { $0 == (1, 1, 1, 3) } == true)
     }
 
-    /// A decoded entity merges with the surrounding text. `a&amp;t` → one `Text "a&t"` at 1:1–1:8
-    /// (the entity's raw source width, 5 bytes, is preserved in the range even though it decodes to `&`).
+    /// The source range covers the entity reference's five source bytes, not its one-byte decoded form.
     @Test("a decoded entity merges with surrounding text in a cell")
     func entityMergesWithText() throws {
         let rows = tableCellChildren("a&amp;t\n|-", options: Self.posOpts)
@@ -111,31 +99,22 @@ struct TableCellTextConsolidationTests {
         #expect(cell[0].range.map { $0 == (1, 1, 1, 8) } == true)
     }
 
-    /// A cell mixing an entity, a bracket literal, and a smart-quote glyph coalesces to one `.text` node
-    /// spanning the whole cell content (minimal analogue of the `tblcons-orig` fuzzer artifact). The exact
-    /// merged glyph sequence is validated end-to-end by that oracle pair; here we pin the structural
-    /// property (one node) and the preserved range. `.smart` turns the `"` into a curly glyph, its own
-    /// text node pre-consolidation.
-    @Test("entity + bracket + smart-quote coalesce to one text node in a cell")
+    @Test("entity + bracket + smart quote form one text node in a cell")
     func entityBracketSmartQuoteMerge() throws {
-        // Cell content `["&amp;` (7 source bytes → columns 1–7, half-open end 8): `[` bracket literal,
-        // `"` smart-quote glyph, `&amp;` decoded entity — three separate text nodes before consolidation.
         let rows = tableCellChildren("[\"&amp;\n|-", options: [.tables, .sourcePosition, .smart])
         try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
         let cell = rows[0][0]
         try #require(cell.count == 1, "fixture: cell must coalesce to one inline child, got \(cell.map(\.kind))")
         #expect(cell[0].kind == .text)
         let literal = try #require(cell[0].literal, "fixture: merged node must be text")
-        // Bounds pin the merge without transcribing the smart-quote glyph: begins with the bracket,
-        // ends with the decoded ampersand.
+        // Checks the ends rather than transcribing the curly quote.
         #expect(literal.hasPrefix("["))
         #expect(literal.hasSuffix("&"))
         #expect(cell[0].range.map { $0 == (1, 1, 1, 8) } == true)
     }
 
-    // MARK: - Controls (GREEN before and after the fix)
+    // MARK: - Boundaries
 
-    /// Plain contiguous text in a cell is already a single node (nothing to merge) — the boundary control.
     @Test("plain cell text is a single node")
     func plainCellTextSingleNode() throws {
         let rows = tableCellChildren("ab\n|-", options: Self.posOpts)
@@ -145,9 +124,6 @@ struct TableCellTextConsolidationTests {
         #expect(cell[0].literal == "ab")
     }
 
-    /// Only ADJACENT `.text` siblings merge: an emphasis run between two text runs stays a separate node,
-    /// and the text on either side is NOT pulled across it. Cell `a*b*c` → `Text "a"`, `Emphasis`, `Text
-    /// "c"` (three children), with the emphasis wrapping its own `Text "b"`.
     @Test("emphasis is not merged into adjacent cell text")
     func emphasisBoundaryNotMerged() throws {
         let rows = tableCellChildren("a*b*c\n|-", options: Self.posOpts)
@@ -157,15 +133,12 @@ struct TableCellTextConsolidationTests {
         #expect(cell.map(\.kind) == [.text, .emphasis, .text])
         #expect(cell[0].literal == "a")
         #expect(cell[2].literal == "c")
-        // The emphasis wraps a single (already-plain) text node.
         #expect(cell[1].grandchildKinds == [.text])
         #expect(cell[1].grandchildLiterals == "b")
     }
 
-    // MARK: - Multiple rows and the escaped-pipe (arena-copy) cell path
+    // MARK: - Rows and escaped pipes
 
-    /// Every row's cells consolidate independently — not just the header. Header `a|b`, body rows `[x|]y`
-    /// and `m[|n]`: each two-column body cell coalesces its bracket-literal + text into one node.
     @Test("each row's cells consolidate independently")
     func multiRowConsolidation() throws {
         let rows = tableCellChildren("a|b\n-|-\n[x|]y\nm[|n]", options: Self.posOpts)
@@ -177,36 +150,28 @@ struct TableCellTextConsolidationTests {
         #expect(rows[2][1].count == 1 && rows[2][1][0].literal == "n]")
     }
 
-    /// The escaped-pipe cell path (a `\|` forces the arena-copy branch: content is unescaped into the
-    /// arena and parsed from there with a run map) consolidates too. Cell `x\|[y` unescapes to `x|[y` →
-    /// text `x`, text `|`, bracket `[`, text `y` — four nodes that merge to one `Text "x|[y"`.
-    @Test("an escaped-pipe (arena-copy) cell consolidates its text runs")
+    @Test("a cell with an escaped pipe merges the pipe with its neighbouring text")
     func escapedPipeCellConsolidates() throws {
         let rows = tableCellChildren("x\\|[y\n|-", options: Self.posOpts)
         try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
         let cell = rows[0][0]
         try #require(cell.count == 1, "fixture: escaped-pipe cell must coalesce to one node, got \(cell.map(\.kind))")
         #expect(cell[0].kind == .text)
-        // Proves the `\|` was unescaped (a literal pipe survives) AND that the arena-copy path consolidated.
         #expect(cell[0].literal == "x|[y")
-        // The merged node carries a source range starting at the cell's first column on line 1.
         let range = try #require(cell[0].range, "fixture: merged node must be positioned")
         #expect(range.0 == 1 && range.1 == 1)
     }
 
-    /// A flattened (leading-whitespace) cell
-    /// consolidates, and keeps its TRUE physical column — the leading space is visible, so
-    /// `[x` sits at cols 2–4.
-    @Test("flag-OFF: a flattened (leading-whitespace) cell consolidates and keeps its physical column")
-    func flattenedCellConsolidatesSpecCorrect() throws {
+    /// Leading whitespace is trimmed from the cell, so the merged node starts at column 2.
+    @Test("a cell with leading whitespace merges its text runs")
+    func leadingWhitespaceCellConsolidates() throws {
         let rows = tableCellChildren("a|b\n-|-\n [x|y", options: Self.posOpts)
         try #require(rows.count == 2, "fixture: expected a header row and a body row, got \(rows.count)")
         try #require(rows[1].count == 2, "fixture: expected two body cells, got \(rows[1].count)")
         let cell = rows[1][0]
-        try #require(cell.count == 1, "fixture: flattened cell must coalesce to one node, got \(cell.map(\.kind))")
+        try #require(cell.count == 1, "fixture: cell must coalesce to one node, got \(cell.map(\.kind))")
         #expect(cell[0].kind == .text)
         #expect(cell[0].literal == "[x")
-        // Physical columns: line 3, cols 2–4 (the leading space is visible flag-OFF).
         #expect(cell[0].range.map { $0 == (3, 2, 3, 4) } == true)
     }
 }

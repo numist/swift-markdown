@@ -11,19 +11,9 @@
 import Testing
 @testable import CommonMark
 
-/// Splitting a GFM table row into cells decides whether a `|` is a cell delimiter or an escaped literal by
-/// looking at the byte immediately before it. cmark's row splitter scans each cell with the re2c pattern
-/// `table_cell = (escaped_char | [^|\r\n])+` (`extensions/ext_scanners.re`), where `escaped_char` is a
-/// backslash followed by any ASCII punctuation (including `\` and `|`). Because re2c takes the LONGEST
-/// match, a `|` is pulled into the cell as an escaped pipe whenever the byte directly before it is a
-/// backslash — the run of backslashes ahead of that last one is always consumable, so parity does not
-/// matter. cmark's `unescape_pipes` (`extensions/table.c`) then drops only the backslash sitting directly
-/// before a `|`, and inline parsing resolves the remaining escapes.
-///
-/// The rewrite previously escaped a pipe only after an ODD number of backslashes (it skipped two bytes per
-/// backslash), so `\\|` (two backslashes) wrongly split the pipe off as a delimiter — producing a spurious
-/// extra cell (colspan 2 with `.tableSpans`, text `\`) instead of a single cell whose text is `|`. GFM
-/// tables are defined by cmark, so this behavior is unconditional.
+/// Under Tables (extension), a `|` directly after a backslash is part of the cell's content rather than a cell
+/// delimiter, however many backslashes precede it. The backslash directly before the `|` is removed, and inline
+/// parsing resolves the remaining backslash escapes.
 @Suite("Table backslash-before-pipe cell splitting")
 struct TableBackslashPipeCellSplitTests {
 
@@ -55,9 +45,7 @@ struct TableBackslashPipeCellSplitTests {
         }
     }
 
-    /// The finding: body row `\\|` (two backslashes + pipe). The trailing pipe is escaped by the backslash
-    /// directly before it, so the row is ONE cell whose content unescapes to `\|` and inline-parses to `|`.
-    /// The rewrite used to split the pipe off (colspan 2, text `\`).
+    /// With the backslash before the `|` removed, the cell's content is `\|`, an escaped `|`.
     @Test("two backslashes before a pipe keep it in a single cell")
     func twoBackslashesEscapePipe() throws {
         let rows = tableCells("o\n|-\n\\\\|", options: [.tables, .tableSpans])
@@ -67,7 +55,6 @@ struct TableBackslashPipeCellSplitTests {
         #expect(rows[1][0].text == "|")
     }
 
-    /// Control that already matched: a single backslash escapes the pipe (`\|` → one cell, text `|`).
     @Test("one backslash before a pipe keeps it in a single cell")
     func oneBackslashEscapesPipe() throws {
         let rows = tableCells("o\n|-\n\\|", options: [.tables, .tableSpans])
@@ -77,10 +64,7 @@ struct TableBackslashPipeCellSplitTests {
         #expect(rows[1][0].text == "|")
     }
 
-    /// Control: another even-count case, `\\\\|` (four backslashes + pipe). The pipe is still escaped (byte
-    /// before it is a backslash), so it stays one cell. `unescape_pipes` drops only the backslash directly
-    /// before the pipe, leaving `\\\|`; inline parsing then resolves `\\` → `\` and `\|` → `|`, so the cell
-    /// text is `\|` (backslash then pipe).
+    /// With the backslash before the `|` removed, the cell's content is `\\\|`: an escaped `\` and an escaped `|`.
     @Test("four backslashes before a pipe keep it in a single cell")
     func fourBackslashesEscapePipe() throws {
         let rows = tableCells("o\n|-\n\\\\\\\\|", options: [.tables, .tableSpans])
@@ -90,8 +74,7 @@ struct TableBackslashPipeCellSplitTests {
         #expect(rows[1][0].text == "\\|")
     }
 
-    /// Control: an UNescaped pipe still splits the row into two cells (no backslash before it).
-    @Test("an unescaped pipe still splits a body row into two cells")
+    @Test("an unescaped pipe splits a body row into two cells")
     func unescapedPipeSplits() throws {
         let rows = tableCells("x|y\n-|-\na|b", options: [.tables, .tableSpans])
         try #require(rows.count == 2, "fixture: expected a header row and a body row, got \(rows.count)")

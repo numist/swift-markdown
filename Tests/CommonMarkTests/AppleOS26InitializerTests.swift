@@ -11,7 +11,8 @@
 import Testing
 @testable import CommonMark
 
-/// Coverage for the `@available(anyAppleOS 26)` returning initializers (`init(parsing: String)` and `init(parsing: UTF8Span)`) and the `UTF8Span`-returning `source` accessor. These are the zero-copy borrowing entry points that only exist where `UTF8Span` does (OS 26+); the always-available `withParsedDocument` path is covered pervasively elsewhere. Each test guards on availability so it runs on new-enough hosts and is a no-op on older ones.
+/// The `init(parsing:)` initializers and the `source` accessor, which exist only where `UTF8Span` does. Each test
+/// returns early on older OSes.
 @Suite("anyAppleOS 26 initializers")
 struct AppleOS26InitializerTests {
 

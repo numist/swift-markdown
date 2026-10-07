@@ -11,10 +11,9 @@
 import Testing
 import CommonMark
 
-/// Source ranges of GFM autolinks (`.gfmAutolink`): a bare URL, a `www.` domain, and an email address. The link and
-/// its text span the matched bytes. Columns are 1-based UTF-8 byte offsets and each end is
-/// half-open.
-@Suite("Source ranges of GFM autolinks")
+/// Source ranges of extended autolinks (Autolinks (extension)): a bare URL, a `www.` domain, and an email address. The
+/// link and its text span the matched bytes. Columns are 1-based UTF-8 byte offsets and each end is half-open.
+@Suite("Source ranges of extended autolinks")
 struct GFMAutolinkSourceRangeTests {
 
     private static let opts: MarkdownDocument.ParseOptions = [.sourcePosition, .gfmAutolink]
@@ -23,8 +22,6 @@ struct GFMAutolinkSourceRangeTests {
         TreeDump.dump(source, options: options, sourceRanges: true)
     }
 
-    /// cmark-gfm stretches the `(` to `@1:1-1:6` and starts the link at `@1:1`, because it rewinds over the scheme
-    /// after emitting it as text.
     @Test("a URL autolink spans the URL")
     func url() {
         #expect(tree("(http://e.e") == """
@@ -37,7 +34,6 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// cmark-gfm starts the link at `@1:1`, the paragraph's line start.
     @Test("a www autolink spans the domain")
     func www() {
         #expect(tree(" www.w.w") == """
@@ -62,8 +58,7 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// A NUL makes the paragraph's text a copy with the NUL replaced by U+FFFD; the address is still placed on its
-    /// source bytes, and the U+FFFD before it on the NUL.
+    /// The U+FFFD that replaces a NUL (Insecure characters) spans the NUL, and the address spans its own bytes.
     @Test("an email autolink after a NUL spans the address")
     func emailAfterNUL() {
         #expect(tree("\u{0}a@b.co") == """
@@ -76,7 +71,7 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// The curly quote that replaces `'` isn't a source byte, but the text holding it still spans the `'`.
+    /// The curly quote that replaces `'` spans the `'`.
     @Test("the text before an email autolink spans a smart quote")
     func smartQuoteBeforeEmail() {
         #expect(tree("'a@b.co", options: Self.opts.union(.smart)) == """
@@ -92,7 +87,7 @@ struct GFMAutolinkSourceRangeTests {
     /// The first address's last character comes from the character reference `&#111;`, so that address ends just
     /// past the reference's `;`. The text before it is the NUL, and the text between the two addresses is the space.
     @Test("an email autolink ending in a character reference ends past the reference")
-    func emailEndingInEntity() {
+    func emailEndingInCharacterReferenceBeforeAnotherEmail() {
         #expect(tree("\u{0}a@b.c&#111; x@y.zz") == """
             document @1:1-1:20
               paragraph @1:1-1:20
@@ -106,8 +101,6 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// A URL autolink at the start of a paragraph is just the link, whereas cmark-gfm also leaves an empty text node
-    /// before it.
     @Test("a URL autolink has no empty text before it")
     func noEmptyTextBeforeURL() {
         #expect(tree("http://a.a") == """
@@ -119,8 +112,6 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// An email autolink that fills its paragraph is just the link, whereas cmark-gfm also leaves empty text nodes on
-    /// both sides of it.
     @Test("an email autolink has no empty texts beside it")
     func noEmptyTextsBesideEmail() {
         #expect(tree("a@b.co") == """
@@ -132,8 +123,7 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// The text after an email autolink spans the NUL its U+FFFD replaces and no text precedes the link, whereas
-    /// cmark-gfm also leaves an empty text node before it.
+    /// The U+FFFD that replaces a NUL spans the NUL, and no text precedes the link.
     @Test("the text after an email autolink spans a NUL")
     func nulAfterEmailWithoutEmptyText() {
         #expect(tree("a@b.co\u{0}") == """
@@ -146,10 +136,9 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// A backslash before a line ending is a hard line break and the footnote-shaped bracket matches no definition, so
-    /// the bracket stays text placed on its bytes around the email autolink, whereas cmark-gfm collapses it into
-    /// reconstructed text that can't be placed.
-    @Test("an email in an undefined footnote-shaped bracket spanning a hard break is placed")
+    /// A backslash before a line ending is a hard line break (Hard line breaks), and `[^b@b.B` matches no footnote
+    /// definition, so the bracket is text spanning its own bytes on either side of the email autolink.
+    @Test("an email in an undefined footnote-shaped bracket across a hard line break spans the address")
     func emailInUndefinedFootnoteBracket() {
         #expect(tree("![^b@b.B\\\n]", options: Self.opts.union(.footnotes)) == """
             document @1:1-2:2
@@ -163,8 +152,8 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    @Test("an email ending in an entity reference spans the reference")
-    func emailEndingInEntityReference() {
+    @Test("an email ending in a character reference spans the reference")
+    func emailEndingInCharacterReference() {
         #expect(tree("a@b.&#99;") == """
             document @1:1-1:10
               paragraph @1:1-1:10
@@ -174,8 +163,8 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    @Test("an email ending in an entity reference after other references spans its own reference")
-    func emailEndingInEntityReferenceAfterOtherReferences() {
+    @Test("an email ending in a character reference after other references spans its own reference")
+    func emailEndingInCharacterReferenceAfterOtherReferences() {
         #expect(tree("&amp;&amp; a@b.&#99;") == """
             document @1:1-1:21
               paragraph @1:1-1:21
@@ -186,8 +175,8 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    @Test("an email starting in an entity reference spans the reference")
-    func emailStartingInEntityReference() {
+    @Test("an email starting in a character reference spans the reference")
+    func emailStartingInCharacterReference() {
         #expect(tree("&#97;@b.c") == """
             document @1:1-1:10
               paragraph @1:1-1:10
@@ -197,8 +186,8 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    @Test("an email ending in an entity reference on a block quote's second line spans the reference")
-    func emailEndingInEntityReferenceOnContinuationLine() {
+    @Test("an email ending in a character reference on a block quote's second line spans the reference")
+    func emailEndingInCharacterReferenceOnContinuationLine() {
         #expect(tree("> x\n> a@b.&#99;") == """
             document @1:1-2:12
               block_quote @1:1-2:12

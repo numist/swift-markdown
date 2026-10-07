@@ -11,16 +11,16 @@
 import CommonMark
 import Testing
 
-/// cmark-gfm's `process_footnotes` numbers only the references that survive in the
-/// finalized tree, in document order, and appends definitions in that index order.
+/// Footnote references are numbered in document order among those that remain in the final tree, and
+/// definitions are appended in that index order.
 @Suite("Footnote reference numbering")
 struct FootnoteDiscardedReferenceNumberingTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes]
 
-    /// Flag-off (shipped): `[^ …]` is not a footnote reference, so the inner `[^a]` survives and takes
-    /// index 1 ahead of `[^b]`.
+    /// `[^ [^a]]` is not a footnote reference, since its label holds unescaped brackets (Links), so the
+    /// inner `[^a]` takes index 1 ahead of `[^b]`.
     @Test
-    func testFlagOffInnerReferenceTakesFirstIndex() {
+    func testInnerReferenceTakesFirstIndex() {
         #expect(TreeDump.dump("[^ [^a]] [^b]\n\n[^a]: A\n\n[^b]: B\n", options: Self.options) == """
             document
               paragraph
@@ -38,10 +38,9 @@ struct FootnoteDiscardedReferenceNumberingTests {
             """)
     }
 
-    /// Flag-off (shipped): the surviving inner `[^a]` orders definition `a` first and the later `[^a]`
-    /// reuses its index.
+    /// The inner `[^a]` orders definition `a` first, and the later `[^a]` reuses its index.
     @Test
-    func testFlagOffInnerReferenceOrdersDefinitions() {
+    func testInnerReferenceOrdersDefinitions() {
         #expect(TreeDump.dump("[^ [^a]] [^b] [^a]\n\n[^a]: A\n\n[^b]: B\n", options: Self.options) == """
             document
               paragraph
@@ -61,9 +60,9 @@ struct FootnoteDiscardedReferenceNumberingTests {
             """)
     }
 
-    /// Flag-off numbers references in the same document pre-order.
+    /// A reference inside a footnote definition is numbered at the definition's place in the source.
     @Test
-    func testFlagOffReferencesNumberInDocumentPreOrder() {
+    func testReferencesNumberInDocumentPreOrder() {
         #expect(TreeDump.dump("[^a]: see [^b]\n\n> - q [^c] [^b]\n\n[^b]: x\n\n[^c]: y\n\ntext [^a]\n", options: Self.options) == """
             document
               block_quote

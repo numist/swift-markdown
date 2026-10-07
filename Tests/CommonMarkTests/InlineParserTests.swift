@@ -11,7 +11,7 @@
 import Testing
 @testable import CommonMark
 
-/// Walk all inline children of the first paragraph (or heading) in the document, returning a compact `(kind, literal)` list. Useful for asserting inline parser output.
+/// Walk all inline children of the first paragraph (or heading) in the document, returning a compact `(kind, literal)` list.
 internal func paragraphInlines(_ doc: borrowing MarkdownDocument) -> [(kind: MarkdownNode.Kind, literal: String?)] {
     var out: [(MarkdownNode.Kind, String?)] = []
     let root = doc.root
@@ -145,11 +145,8 @@ struct CodeSpanTests {
 
     @Test("greedy matching finds all valid spans after an unmatched longer run")
     func greedySpansAfterUnmatchedLongerRun() throws {
-        // Spec-correct default: the unmatched opening two-backtick run
-        // folds into leading text, then BOTH `b` and `d` form as code spans. cmark's per-subject
-        // backtick-closer cache makes it MISS the trailing `d` span after the longer run scans to the
-        // end (a stale-cache quirk); the deliverable finds
-        // every valid span.
+        // The opening two-backtick run has no closing run of equal length, so it is text (Code spans) and the
+        // single backticks after it pair into two code spans.
         let source = "``a`b`c`d`"
         try MarkdownDocument.withParsedDocument(source) { doc in
             let inlines = paragraphInlines(doc)
@@ -178,16 +175,10 @@ struct CodeSpanTests {
         }
     }
 
-    @Test("multi-line span reconstructs its full content across a soft break")
+    @Test("multi-line span reconstructs its full content across a soft line break")
     func multiLineSpanAcrossSoftBreak() {
-        // `x` on line 1, ` y` on line 2 of one paragraph. A matched paragraph continuation strips its
-        // leading whitespace, so the paragraph's content joins the two lines as `x\ny`; the code span
-        // between the backticks normalizes the interior newline to a space, giving `x y`. The span's
-        // bytes straddle the soft-break segment boundary of the (non-contiguous) multi-segment
-        // paragraph, so the content can't be a zero-copy contiguous source slice - it must be
-        // materialized from the joined segments (cmark reads the same joined paragraph buffer). Before
-        // the fix the span read a single-segment window and truncated to `x  ` (dropping `y`, keeping
-        // the stripped continuation space).
+        // A paragraph's raw content strips each line's initial whitespace (Paragraphs), so the content is `x\ny`,
+        // and the code span turns the line ending into a space (Code spans).
         let source = "`x\n y`"
         MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
@@ -200,7 +191,7 @@ struct CodeSpanTests {
 @Suite("Inline parser - line breaks")
 struct LineBreakTests {
 
-    @Test("plain newline becomes a soft break")
+    @Test("plain line ending becomes a soft line break")
     func softBreak() {
         let source = "foo\nbar"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -210,7 +201,7 @@ struct LineBreakTests {
         }
     }
 
-    @Test("two trailing spaces before newline produce a hard break")
+    @Test("two trailing spaces before a line ending produce a hard line break")
     func hardBreakSpaces() {
         let source = "foo  \nbar"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -222,7 +213,7 @@ struct LineBreakTests {
         }
     }
 
-    @Test("backslash before newline produces a hard break")
+    @Test("backslash before a line ending produces a hard line break")
     func hardBreakBackslash() {
         let source = "foo\\\nbar"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -234,7 +225,7 @@ struct LineBreakTests {
         }
     }
 
-    @Test("single trailing space is not a hard break")
+    @Test("single trailing space is not a hard line break")
     func singleSpaceIsSoft() {
         let source = "foo \nbar"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -246,7 +237,7 @@ struct LineBreakTests {
         }
     }
 
-    @Test("3+ trailing spaces still produce a hard break")
+    @Test("3+ trailing spaces produce a hard line break")
     func manySpaces() {
         let source = "foo   \nbar"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -257,7 +248,7 @@ struct LineBreakTests {
         }
     }
 
-    @Test("multiple soft breaks in a paragraph")
+    @Test("multiple soft line breaks in a paragraph")
     func multipleSoftBreaks() {
         let source = "a\nb\nc"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -267,7 +258,7 @@ struct LineBreakTests {
         }
     }
 
-    @Test("hard and soft breaks mixed")
+    @Test("hard and soft line breaks mixed")
     func mixed() {
         let source = "a  \nb\nc"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -278,7 +269,7 @@ struct LineBreakTests {
     }
 }
 
-@Suite("Inline parser - HTML entities")
+@Suite("Inline parser - entity and numeric character references")
 struct EntityTests {
 
     @Test("named: amp")
@@ -286,7 +277,7 @@ struct EntityTests {
         let source = "foo &amp; bar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
-        // Adjacent text is coalesced into one node (cmark's consolidate_text_nodes).
+        // Adjacent text is coalesced into one node.
         #expect(inlines.count == 1)
         #expect(inlines[0].literal == "foo & bar")
         }
@@ -361,7 +352,6 @@ struct EntityTests {
 
     @Test("numeric for non-ASCII codepoint")
     func numericNonASCII() {
-        // &#x2026; → … (U+2026)
         let source = "&#x2026;"
         MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
@@ -417,12 +407,10 @@ struct EntityTests {
         }
     }
 
-    /// A valid entity on a paragraph's indented lazy-continuation line. The leading indent is
-    /// stripped, so the paragraph's lines aren't source-contiguous and its content is
-    /// *multi-segment* - addressed by virtual offsets that index no single buffer. The `&` scan
-    /// must read real in-bounds bytes and still decode (`&amp;` → `&`) rather than trap.
-    @Test("valid entity decodes on an indented lazy-continuation line (multi-segment)")
-    func entityDecodesOnLazyContinuation() {
+    /// A paragraph's raw content strips each line's initial whitespace (Paragraphs), so its lines are not contiguous in
+    /// the source.
+    @Test("valid entity decodes on an indented continuation line")
+    func entityDecodesOnIndentedContinuation() {
         let source = "k\n &amp;x"
         MarkdownDocument.withParsedDocument(source) { doc in
             let inlines = paragraphInlines(doc)
@@ -431,11 +419,8 @@ struct EntityTests {
         }
     }
 
-    /// A non-matching `&` (no closing `;`) on the same multi-segment continuation line stays a
-    /// literal `&` followed by literal `[`. Exercises the no-entity path, which must also stay in
-    /// bounds for multi-segment content.
-    @Test("non-entity `&` on an indented lazy-continuation line stays literal (multi-segment)")
-    func nonEntityAmpersandOnLazyContinuation() {
+    @Test("non-entity `&` on an indented continuation line stays literal")
+    func nonEntityAmpersandOnIndentedContinuation() {
         let source = "k\n &["
         MarkdownDocument.withParsedDocument(source) { doc in
             let inlines = paragraphInlines(doc)
@@ -724,12 +709,8 @@ struct InlineHTMLTests {
 
     @Test("multi-line tag reconstructs its literal with the continuation's leading whitespace stripped")
     func multiLineTagStripsContinuationIndent() {
-        // `<e` on line 1, ` e="">` on line 2: the whitespace inside the tag (here the soft break) is
-        // valid tag whitespace, so the tag spans both lines. A paragraph strips each continuation
-        // line's leading whitespace, so the reconstructed literal joins the two lines with a single
-        // `\n` and NO leading space - `<e\ne="">` (cmark reads the same stripped paragraph buffer).
-        // The tag's bytes straddle the soft-break segment boundary, so the literal can't be a
-        // zero-copy contiguous source slice; it must be materialized from the joined segments.
+        // An open tag may contain a line ending (Raw HTML), and a paragraph's raw content strips each line's initial
+        // whitespace (Paragraphs), so the literal is `<e\ne="">`.
         let source = "<e\n e=\"\">"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = paragraphInlines(doc).map { $0.kind }
@@ -742,7 +723,7 @@ struct InlineHTMLTests {
 @Suite("Inline parser - emphasis / strong")
 struct EmphasisTests {
 
-    /// Render the inline tree of the first paragraph as a flat list of `(kind, literal-or-empty)` in DFS order - useful for asserting on the emphasis nesting structure produced by the delimiter stack.
+    /// Render the inline tree of the first paragraph as a flat list of `(kind, literal-or-empty)` in DFS order.
     private static func dfsInlines(_ doc: borrowing MarkdownDocument) -> [(MarkdownNode.Kind, String)] {
         var out: [(MarkdownNode.Kind, String)] = []
         let root = doc.root
@@ -1089,7 +1070,7 @@ struct LinkImageTests {
         }
     }
 
-    @Test("[foo] without ref-def stays as text")
+    @Test("[foo] without a link reference definition stays as text")
     func shortcutNoMatch() {
         let source = "[foo]"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -1144,7 +1125,7 @@ struct LinkImageTests {
     func nestedLinksDisallowed() {
         let source = "[outer [inner](/i)](/o)"
         MarkdownDocument.withParsedDocument(source) { doc in
-        // Inner link matches; outer doesn't (no_link_openers).
+        // Links may not contain other links (Links), so the inner link matches and the outer `[` is text.
         var linkUrls: [String] = []
         let root = doc.root
         root.children.forEach { block in
@@ -1162,7 +1143,7 @@ struct LinkImageTests {
     func imageContainsLink() {
         let source = "![alt with [link](/i)](/img.png)"
         MarkdownDocument.withParsedDocument(source) { doc in
-        // Image matches; the inner link also matches because images don't disable the link opener.
+        // An image description may contain a link (Images).
         var hasImage = false
         var hasInnerLink = false
         let root = doc.root
@@ -1259,7 +1240,7 @@ struct ExtendedAttributeTests {
         let source = "^[x](a\\)b)"
         MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         let info = Self.firstAttribute(doc)
-        // The `\)` is an escape; cmark preserves the backslash in the chunk.
+        // The attribute string keeps the backslash of an escaped `)`.
         #expect(info.attrs == "a\\)b")
         }
     }
@@ -1303,10 +1284,10 @@ struct ExtendedAttributeTests {
         }
     }
 
-    @Test("reference def whose label spans a soft break resolves")
+    @Test("reference def whose label spans a soft line break resolves")
     func crossLineReferenceDef() {
-        // cmark scans the label over the paragraph's flat buffer, so a `^[..]:` definition whose label
-        // straddles a soft break is captured normally (`la\nbel` → `la bel`) and produces no visible node.
+        // Matching normalizes the label's line ending to a space, as for a link label (Links), and the definition
+        // produces no node.
         let source = "^[la\nbel]: color: blue\n\n^[content][la bel]"
         MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         #expect(doc._storage.attributeReferenceMap["la bel"] != nil)
@@ -1444,7 +1425,7 @@ struct StrikethroughTests {
         }
     }
 
-    @Test("doubleTilde flag rejects single tilde")
+    @Test("doubleTilde option rejects single tilde")
     func doubleTildeFlagRejects() {
         let source = "~foo~"
         MarkdownDocument.withParsedDocument(source, options: [.strikethrough, .strikethroughDoubleTilde]) { doc in
@@ -1452,7 +1433,7 @@ struct StrikethroughTests {
         }
     }
 
-    @Test("doubleTilde flag accepts double tilde")
+    @Test("doubleTilde option accepts double tilde")
     func doubleTildeFlagAccepts() {
         let source = "~~foo~~"
         MarkdownDocument.withParsedDocument(source, options: [.strikethrough, .strikethroughDoubleTilde]) { doc in
@@ -1479,14 +1460,10 @@ struct StrikethroughTests {
         return count
     }
 
-    /// A closer must not reach past a mismatched-length intervening `~` run to pair with a farther
-    /// equal-length opener. cmark-gfm's generic delimiter walk (`S_process_emphasis`) accepts the
-    /// *nearest* flanking opener; the strikethrough `insert` callback then finds the lengths differ
-    /// and removes both delimiters (closer back through opener), so the farther opener never pairs.
-    /// The only reason the same shape on one line already matches is that the intervening `~~` there
-    /// is also can-close, which the generic flanking rule rejects as an opener; across a softbreak the
-    /// intervening `~~` is can-open-only, so cmark selects and then discards it. No strikethrough forms.
-    @Test("mismatched intervening run across a softbreak suppresses the far pairing")
+    /// The `~~` that starts line 2 follows a line ending, so it is left-flanking only and can open but not close
+    /// (Emphasis and strong emphasis). It is the nearest opener to the closing `~`, and the two runs differ in length,
+    /// so no strikethrough forms and the `~` on line 1 doesn't pair either.
+    @Test("mismatched intervening run across a soft line break suppresses the far pairing")
     func mismatchedInterveningAcrossSoftbreak() {
         let source = "~a\n~~b~"
         MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
@@ -1495,22 +1472,19 @@ struct StrikethroughTests {
         }
     }
 
-    /// Fixture sanity + guard against over-suppression: the same shape on ONE line still forms a
-    /// strikethrough, pairing the outer len-1 tildes across the interior `~~` (which becomes content).
-    @Test("one-line control still pairs the outer tildes across an interior run")
-    func oneLineControlStillPairs() throws {
+    /// On one line the interior `~~` is both left- and right-flanking, so the outer tildes pair around it.
+    @Test("on one line the outer tildes pair across an interior run")
+    func oneLineOuterTildesPair() throws {
         let source = "~a~~b~"
         try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
             let inner = Self.firstStrikethrough(doc)
-            let content = try #require(inner, "one-line control must form a strikethrough")
+            let content = try #require(inner, "the outer tildes must form a strikethrough")
             #expect(content == "a~~b")
             #expect(Self.strikethroughCount(doc) == 1)
         }
     }
 
-    /// Guard against over-suppression: a matched-length pair that spans a softbreak DOES form a
-    /// strikethrough (opener on line 1, closer on line 2, both len 1). cmark forms this.
-    @Test("matched-length pair forms across a softbreak")
+    @Test("matched-length pair forms across a soft line break")
     func matchedPairAcrossSoftbreak() {
         let source = "~a\nb~"
         MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
@@ -1518,8 +1492,6 @@ struct StrikethroughTests {
         }
     }
 
-    /// The line-2 first run being len 1 (not len 2) is the single differentiator: here the `~b~` on
-    /// line 2 pairs locally and the line-1 `~` is orphaned. One strikethrough, content "b".
     @Test("line-2 local pairing leaves the line-1 opener orphaned")
     func lineTwoLocalPairing() throws {
         let source = "~a\n~b~"
@@ -1531,9 +1503,7 @@ struct StrikethroughTests {
         }
     }
 
-    /// Mirror of the RED case with the mismatched run adjacent to the closer side rather than the
-    /// opener side: `~~b~` on line 1, `~a` on line 2. The line-1 closer `~` cannot pair with the
-    /// len-2 `~~` opener, and the line-2 `~` is an opener with no following closer. No strikethrough.
+    /// The `~` ending line 1 can't pair with the longer `~~` opener, and the `~` on line 2 has no closer.
     @Test("mismatched run near the closer side forms nothing")
     func mismatchedRunNearCloser() {
         let source = "~~b~\n~a"
@@ -1542,9 +1512,6 @@ struct StrikethroughTests {
         }
     }
 
-    /// A three-line span: the mismatched intervening `~~` still suppresses the far pairing exactly as
-    /// in the two-line case; the trailing len-1 closer on line 3 consumes the line-2 `~~` and neither
-    /// the line-1 opener nor any farther delimiter forms a strikethrough.
     @Test("mismatched intervening run suppresses pairing across a three-line span")
     func mismatchedInterveningThreeLines() {
         let source = "~a\nx\n~~b~"
@@ -1590,11 +1557,8 @@ struct StrikethroughTests {
         return inlines
     }
 
-    // cmark scans emphasis/strikethrough delimiter flanking with `cmark_utf8proc_is_space`
-    // (`src/utf8.c`), whose ASCII members are space, tab, LF, CR, and FF (0x0C) - but NOT vertical
-    // tab (0x0B). So a VT between tildes is a non-space neighbour: each `~` is left/right-flanking
-    // against it and the pair forms a strikethrough. The strikethrough's content is the VT byte
-    // itself, which the debug surface renders invisibly (appearing as an "empty" strikethrough).
+    // VT (U+000B) is not a Unicode whitespace character (Characters and lines), so tildes around it are both left- and
+    // right-flanking and pair.
     @Test("VT between tildes pairs into a strikethrough")
     func verticalTabPairs() {
         MarkdownDocument.withParsedDocument("~\u{0B}~", options: .strikethrough) { doc in
@@ -1625,9 +1589,7 @@ struct StrikethroughTests {
         }
     }
 
-    // Guards for the flanking whitespace boundary the VT fix must NOT disturb. FF (0x0C), space, and
-    // tab are all flanking spaces in `cmark_utf8proc_is_space`, so tildes around them are non-flanking
-    // and stay literal - no strikethrough forms.
+    // FF, space and tab are Unicode whitespace characters, so tildes around them are not flanking.
     @Test("FF between tildes stays literal")
     func formFeedStaysLiteral() {
         MarkdownDocument.withParsedDocument("~\u{0C}~", options: .strikethrough) { doc in
@@ -1649,8 +1611,7 @@ struct StrikethroughTests {
         }
     }
 
-    // Fixture sanity: ordinary non-space content between tildes pairs into a strikethrough as always.
-    @Test("non-space content between tildes still pairs")
+    @Test("non-space content between tildes pairs")
     func contentBetweenTildesPairs() {
         MarkdownDocument.withParsedDocument("~x~", options: .strikethrough) { doc in
             #expect(Self.strikethroughCount(doc) == 1)
@@ -1826,7 +1787,7 @@ struct FootnoteTests {
             ref = (node.footnoteLabel(), index)
         }
         if node.kind == .footnoteDefinition, def == nil {
-            // refCount is internal, but we can derive it via reflection of the node's data through public API. Since there's no public accessor for refCount yet, leave it nil and verify only label.
+            // A definition's reference count has no public accessor, so only its label is checked.
             def = (node.footnoteLabel(), nil)
         }
         node.children.forEach { child in
@@ -1854,7 +1815,7 @@ struct FootnoteTests {
         }
     }
 
-    @Test("reference before definition still parses")
+    @Test("reference before definition parses")
     func refThenDef() {
         let source = "ref [^a]\n\n[^a]: body"
         MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
@@ -1890,8 +1851,6 @@ struct FootnoteTests {
 
     @Test("unresolved reference becomes literal text")
     func unresolvedRef() {
-        // cmark turns a `[^label]` with no matching definition back into literal text; the rewrite
-        // matches by not emitting a reference node when the label doesn't resolve.
         let source = "see [^missing]"
         MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         let info = Self.firstFootnotes(doc)
@@ -1903,7 +1862,7 @@ struct FootnoteTests {
 
     @Test("definition produces a footnoteDefinition + paragraph child")
     func definitionStructure() {
-        // The definition must be referenced to survive — cmark drops unreferenced definitions.
+        // An unreferenced footnote definition is dropped.
         let source = "[^a]: hello world\n\nsee [^a]"
         MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         var found = false
@@ -1924,7 +1883,7 @@ struct FootnoteTests {
 
     @Test("[^x] without `^` interior stays as link/text")
     func noFootnoteWithoutCaret() throws {
-        // `[x]` should still try as a shortcut ref link, fail, emit `]` text.
+        // `[x]` is a shortcut reference link candidate with no definition, so it is text.
         let source = "[x]"
         MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         let kinds = paragraphInlines(doc).map(\.kind)

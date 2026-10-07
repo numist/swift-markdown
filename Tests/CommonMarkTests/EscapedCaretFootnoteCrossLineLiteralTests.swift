@@ -11,12 +11,9 @@
 import CommonMark
 import Testing
 
-/// Inline structure for a backslash-escaped-caret `[\^…]` (and its image form `![\^…]`) footnote-shaped
-/// bracket that spans a soft line break, with footnotes enabled.
-///
-/// Flag-off stays spec-correct (a paragraph with a soft break, both source lines preserved). Position-free
-/// compare surface.
-@Suite("Escaped-caret footnote-shaped bracket across a line break")
+/// A bracket whose caret is backslash-escaped, `[\^…]` or `![\^…]`, is not a footnote reference; across a
+/// soft line break it stays literal text on both lines.
+@Suite("Escaped-caret footnote-shaped bracket across a soft line break")
 struct EscapedCaretFootnoteCrossLineLiteralTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink, .footnotes]
 

@@ -13,7 +13,7 @@ import Testing
 
 @Suite("Inline-only parsing of empty and blank input")
 struct InlineOnlyBlankInputTests {
-    /// cmark opens the paragraph for any input line, even a blank or BOM-only one, and keeps it empty; only input with no bytes at all has no line and so no paragraph.
+    /// Any input line, even a blank or BOM-only one, opens the paragraph; input with no bytes has no line and so no paragraph.
     @Test(arguments: [
         [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .inlineOnly],
         [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .preserveWhitespace],

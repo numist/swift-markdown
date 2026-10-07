@@ -70,10 +70,8 @@ struct TableSpanTests {
 
     // MARK: - colspan beyond the column count
 
-    // cmark accumulates colspan over the whole parsed row (`row_from_string`'s `row->n_columns`
-    // grows past the table's column count); trailing empty cells beyond the column count still
-    // grow the surviving cell's colspan, which cmark never caps. The row is then truncated to the
-    // column count for emit, but the surviving cells keep their (uncapped) colspan.
+    // Excess cells are ignored (Tables (extension)), but `||` fillers beyond the column count
+    // add to the colspan of the last cell kept, which is not capped at the column count.
 
     @Test("one trailing `||` grows a single-column cell's colspan past the column count")
     func colspanExceedsColumnCountByOne() {
@@ -111,7 +109,7 @@ struct TableSpanTests {
         #expect(rows[1].map(\.columns) == [4, 0])
     }
 
-    // MARK: - colspan guards (must not regress)
+    // MARK: - colspan within the column count
 
     @Test("a single-column cell with a trailing pipe has no colspan")
     func singleColumnNoColspan() {
@@ -148,7 +146,7 @@ struct TableSpanTests {
         | ^ | z |
         """
         let rows = MarkdownDocument.withParsedDocument(source, options: [.tables, .tableSpans]) { tableSpans($0) }
-        // First body row: `x` now spans two rows.
+        // First body row: `x` spans two rows.
         #expect(rows[1].map(\.rows) == [2, 1])
         #expect(rows[1].map(\.text) == ["x", "y"])
         // Second body row: the `^` cell is a 0-row filler with its marker text suppressed.
@@ -165,7 +163,7 @@ struct TableSpanTests {
         | " | z |
         """
         let rows = MarkdownDocument.withParsedDocument(source, options: [.tables, .tableSpans]) { tableSpans($0) }
-        // `"` is ordinary content (curly-quote smart is off): no span, text preserved.
+        // Without `.smart`, `"` stays a straight quote.
         #expect(rows[1].map(\.rows) == [1, 1])
         #expect(rows[2].map(\.rows) == [1, 1])
         #expect(rows[2][0].text == "\"")

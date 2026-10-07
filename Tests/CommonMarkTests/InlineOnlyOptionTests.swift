@@ -11,14 +11,11 @@
 import Testing
 @testable import CommonMark
 
-/// Tests for the extended parse options `.inlineOnly` and `.preserveWhitespace`.
+/// The parse options `.inlineOnly` and `.preserveWhitespace`.
 ///
-/// Ground-truth behavior at the parser / AST level:
-///  - No block containers are ever opened. The entire input collapses into a *single* `.paragraph`. Markers like `#`, `* `, `> `, `---`, ` ``` ` and 4-space indents stay literal text rather than producing headings / lists / quotes / thematic breaks / code blocks.
-///  - Inline syntax is still parsed (emphasis, code spans, links, …).
-///  - Newlines between source lines (including blank lines) are preserved verbatim inside the paragraph's text rather than splitting it or becoming soft breaks.
-///  - Leading and trailing whitespace is preserved.
-///  - At the parser level `.inlineOnly` and `.preserveWhitespace` produce an identical tree; the whitespace *collapsing* that distinguishes Foundation's two modes happens in a higher rendering layer, not in the parser.
+/// Neither opens a block container: the whole input is one paragraph, so block markers such as `#`, `* `, `> `, `---`,
+/// ` ``` ` and a 4-space indent are text, and line endings, blank lines and leading and trailing whitespace stay in the
+/// paragraph's text. Inline syntax is parsed. The two options produce the same tree.
 @Suite("Parse options - inlineOnly / preserveWhitespace")
 struct InlineOnlyOptionTests {
 
@@ -36,7 +33,7 @@ struct InlineOnlyOptionTests {
         paragraphInlines(doc).map { ($0.kind, $0.literal) }
     }
 
-    /// A compact recursive dump of the whole tree - used to compare two parses for AST equality.
+    /// A compact recursive dump of the whole tree, for comparing two parses.
     private func dump(_ doc: borrowing MarkdownDocument) -> String {
         var out = ""
         func walk(_ node: borrowing MarkdownNode, _ depth: Int) {
@@ -63,14 +60,13 @@ struct InlineOnlyOptionTests {
         #expect(block?.kind == .paragraph)
         #expect(block?.count == 1)
 
-        // The `#` and `* ` markers stay literal, and the blank line is kept as `\n\n`.
         let inlines = inlines(doc)
         #expect(inlines.map(\.kind) == [.text])
         #expect(inlines.first?.literal == "# heading\n\n* item")
         }
     }
 
-    @Test("inlineOnly still parses inline emphasis and code spans")
+    @Test("inlineOnly parses inline emphasis and code spans")
     func inlineOnlyKeepsInlineSyntax() {
         let source = "# *em* and `code`"
         MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
@@ -81,7 +77,6 @@ struct InlineOnlyOptionTests {
         #expect(inlines.map(\.kind) == [.text, .emphasis, .text, .codeInline(backtickCount: 1)])
         #expect(inlines.map(\.literal) == ["# ", nil, " and ", "code"])
 
-        // The emphasis wraps a `text` node carrying its content.
         var emphasisText: String?
         let root = doc.root
         root.children.forEach { block in
@@ -95,7 +90,7 @@ struct InlineOnlyOptionTests {
         }
     }
 
-    @Test("inlineOnly still parses links")
+    @Test("inlineOnly parses links")
     func inlineOnlyParsesLinks() {
         let source = "see [text](http://example.com) ok"
         MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
@@ -122,7 +117,6 @@ struct InlineOnlyOptionTests {
         let source = "    indented code"
         MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
 
-        // A normal parse would make this a `.codeBlock`; inline-only keeps the leading spaces as literal paragraph text.
         #expect(soleBlock(doc)?.kind == .paragraph)
         let inlines = inlines(doc)
         #expect(inlines.map(\.kind) == [.text])
@@ -130,7 +124,7 @@ struct InlineOnlyOptionTests {
         }
     }
 
-    @Test("inlineOnly leaves a blockquote marker as literal text")
+    @Test("inlineOnly leaves a block quote marker as literal text")
     func inlineOnlyNoBlockQuote() {
         let source = "> not a quote"
         MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { doc in
@@ -141,7 +135,7 @@ struct InlineOnlyOptionTests {
     }
 
     @Test(
-        "inline-only modes consolidate adjacent text nodes, as cmark's cmark_parser_finish does in every mode",
+        "inline-only modes consolidate adjacent text nodes",
         arguments: [
             ("_f", "_f"),
             ("[t", "[t"),
@@ -163,7 +157,6 @@ struct InlineOnlyOptionTests {
 
     @Test("preserveWhitespace is a superset that includes inlineOnly")
     func preserveWhitespaceImpliesInlineOnly() {
-        // Pure option-set composition - independent of the parser implementation.
         #expect(MarkdownDocument.ParseOptions.preserveWhitespace.contains(.inlineOnly))
     }
 
@@ -176,16 +169,14 @@ struct InlineOnlyOptionTests {
         #expect(block?.kind == .paragraph)
         #expect(block?.count == 1)
 
-        // Leading indent, the run of interior spaces, the blank lines, and the trailing spaces all survive verbatim in a single text node.
         let inlines = inlines(doc)
         #expect(inlines.map(\.kind) == [.text])
         #expect(inlines.first?.literal == "   leading   spaces\n\n\ntrailing  ")
         }
     }
 
-    @Test("preserveWhitespace and inlineOnly produce an identical parser AST")
+    @Test("preserveWhitespace and inlineOnly produce an identical tree")
     func preserveWhitespaceMatchesInlineOnlyAST() {
-        // The whitespace-collapsing that distinguishes Foundation's two interpreted-syntax modes happens above the parser; at the AST level the two options are equivalent.
         let source = "  # x\n\n  *y*  \n\n> z"
         MarkdownDocument.withParsedDocument(source, options: .inlineOnly) { inlineOnly in
             MarkdownDocument.withParsedDocument(source, options: .preserveWhitespace) { preserve in

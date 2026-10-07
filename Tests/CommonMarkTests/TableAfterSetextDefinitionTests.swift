@@ -11,10 +11,9 @@
 import Testing
 import CommonMark
 
-/// A block-quoted paragraph made of a link reference definition followed by a setext underline `===`, then a table.
-/// cmark resolves the definition when it scans the underline, finds no content left, and keeps the underline as
-/// paragraph text (blocks.c, `resolve_reference_link_definitions`); the table then splits off that paragraph. The
-/// rewrite drops the empty paragraph and starts a new one at the underline, which gives cmark's tree. Source positions are off unless a test runs both modes.
+/// A block-quoted link reference definition followed by `===`, then a table. As under Link reference definitions,
+/// `===` follows no paragraph content, so it is paragraph text rather than a setext heading underline; the table
+/// takes its header row from that paragraph's last line (Tables (extension)).
 @Suite("Table after a definition-only setext paragraph")
 struct TableAfterSetextDefinitionTests {
 

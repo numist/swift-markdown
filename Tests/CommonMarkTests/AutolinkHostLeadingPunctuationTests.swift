@@ -11,7 +11,8 @@
 import CommonMark
 import Testing
 
-/// A GFM extended autolink whose host begins with a multi-byte punctuation or whitespace character.
+/// A valid domain holds only alphanumerics, `_` and `-` (Autolinks (extension)), so a host that begins with a
+/// non-ASCII punctuation or space character is not an extended autolink.
 @Suite("Extended autolink host beginning with punctuation")
 struct AutolinkHostLeadingPunctuationTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink]
@@ -24,41 +25,40 @@ struct AutolinkHostLeadingPunctuationTests {
         "document\n  paragraph\n    text \"\(literal)\"\n"
     }
 
-    @Test func testCase1() {
+    @Test func testGuillemetHostIsText() {
         #expect(surface("https://\u{AB}") == text("https://\u{AB}"))
     }
 
-    @Test func testCase2() {
+    @Test func testGuillemetHostBeforeParenthesisIsText() {
         #expect(surface("ftp://\u{AB})") == text("ftp://\u{AB})"))
     }
 
-    @Test func testCase3() {
+    @Test func testGuillemetHostBeforePeriodIsText() {
         #expect(surface("x http://\u{AB}.") == text("x http://\u{AB}."))
     }
 
-    @Test func testCase4() {
+    @Test func testUppercaseSchemeGuillemetHostIsText() {
         #expect(surface("HTTP://\u{AB}*") == text("HTTP://\u{AB}*"))
     }
 
-    @Test func testCase6() {
+    @Test func testGuillemetBeforeDottedHostIsText() {
         #expect(surface("http://\u{AB}a.b") == text("http://\u{AB}a.b"))
     }
 
-    @Test func testCase9() {
+    @Test func testInvertedExclamationHostIsText() {
         #expect(surface("http://\u{A1}x") == text("http://\u{A1}x"))
     }
 
-    @Test func testCase10() {
+    @Test func testEmDashHostIsText() {
         #expect(surface("http://\u{2014}x") == text("http://\u{2014}x"))
     }
 
-    @Test func testCase11() {
+    @Test func testLeftQuotationMarkHostIsText() {
         #expect(surface("http://\u{201C}x") == text("http://\u{201C}x"))
     }
 
-    // MARK: - Category probes
+    // MARK: - Unicode general categories
 
-    /// Punctuation (P[cdefios]) and Unicode whitespace (Zs) at the host start: never a link.
     @Test(arguments: [
         ("Pd hyphen", "\u{2010}"), ("Pd em dash", "\u{2014}"),
         ("Ps fullwidth paren", "\u{FF08}"), ("Pe fullwidth paren", "\u{FF09}"), ("Ps corner bracket", "\u{300C}"),
@@ -71,16 +71,13 @@ struct AutolinkHostLeadingPunctuationTests {
         #expect(surface("http://\(scalar)a.b") == text("http://\(scalar)a.b"), "\(category)")
     }
 
-    /// The rejection is spec-correct (punctuation is not a valid domain character), so the shipped flag-OFF
-    /// parser agrees.
     @Test(arguments: ["\u{2014}", "\u{00AB}", "\u{00A1}", "\u{00A0}"])
-    func testHostStartPunctuationIsNotALinkWithoutBugCompatibility(scalar: String) {
+    func testHostStartPunctuationIsNotALink(scalar: String) {
         #expect(surface("http://\(scalar)a.b") == text("http://\(scalar)a.b"))
     }
 
-    /// A letter is a valid domain character at a label's start or end, so a host holding one links; flag-off the
-    /// scheme autolink is the paragraph's only child.
-    @Test func testLetterInHostIsALinkWithoutBugCompatibility() {
+    /// A non-ASCII letter is alphanumeric, so it may start or end a domain segment.
+    @Test func testLetterInHostIsALink() {
         #expect(surface("http://\u{4E2D}a.b") == """
             document
               paragraph

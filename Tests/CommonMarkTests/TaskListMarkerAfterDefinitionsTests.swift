@@ -12,11 +12,11 @@ import Testing
 import CommonMark
 
 /// A paragraph's leading link reference definitions are not part of its content, so the task list item
-/// marker check applies to what follows them, once its initial whitespace is removed (spec "Paragraphs").
+/// marker check applies to what follows them, once its initial whitespace is removed (Paragraphs).
 @Suite("Task list item marker after a paragraph's definitions")
 struct TaskListMarkerAfterDefinitionsTests {
 
-    @Test("a marker after a line tabulation makes a task item")
+    @Test("a marker after a line tabulation makes a task list item")
     func markerAfterLineTabulation() {
         #expect(TreeDump.dump("- [a]: /u\n  \u{0B}[ ] b\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
             document @1:1-2:9
@@ -28,7 +28,7 @@ struct TaskListMarkerAfterDefinitionsTests {
             """)
     }
 
-    @Test("a marker after a form feed makes a task item before a table")
+    @Test("a marker after a form feed makes a task list item before a table")
     func markerAfterFormFeedBeforeTable() {
         #expect(TreeDump.dump("- [a]: /u\n  \u{0C}[x] b\n  h|i\n  -|-\n", options: [.tasklist, .tables, .sourcePosition], sourceRanges: true) == """
             document @1:1-4:6

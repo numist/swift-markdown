@@ -11,23 +11,15 @@
 import Testing
 @testable import CommonMark
 
-/// Deliverable (flag-OFF) source-position coverage for every BLOCK construct crossed with the
-/// Unicode encoding classes that stress byte-column bookkeeping. Source columns are 1-based UTF-8
-/// **byte** offsets, so a multi-byte scalar before or inside a construct's content must advance the
-/// reported column by its byte count (2 for `é`/`U+00E9`, 3 for `€`/`U+20AC`, 4 for `😀`/`U+1F600`,
-/// 3 for a combining sequence `e` + `U+0301`, 3 for `U+FFFD`) while a TAB counts as one byte (no
-/// expansion). Every asserted value is the flag-OFF surface (`dump --new-off`, the shipped parser
-/// with `[.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]`); each was confirmed against `dump --ref` (cmark-gfm) and, where the two
-/// disagree, the flag-OFF value is spec-correct by byte-offset reasoning and cmark's is a quirk
-/// (marked `// cmark differs`).
+/// Source positions of every block construct across Unicode encodings. Source columns are 1-based UTF-8 byte
+/// offsets, so a multi-byte scalar before or inside a construct's content advances the column by its byte count
+/// (2 for `é`/`U+00E9`, 3 for `€`/`U+20AC`, 4 for `😀`/`U+1F600`, 3 for a combining sequence `e` + `U+0301`, 3 for
+/// `U+FFFD`), and a tab counts as one byte.
 @Suite("Block source positions — Unicode encodings")
 struct BlockPositionEncodingTests {
 
     fileprivate typealias Pos = MarkdownNode.SourcePosition
 
-    /// The deliverable option set: source positions + smart punctuation + the GFM extensions the
-    /// `Markdown` layer always enables. This equals `dump --new-off` (options byte `0x00`), whose
-    /// `Markdown.ParseOptions(rawValue: 0)` maps to exactly these `CommonMark` options.
     private static let opts: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]
 
@@ -223,11 +215,11 @@ struct BlockPositionEncodingTests {
         }
     }
 
-    // MARK: - Blockquote
+    // MARK: - Block quote
 
-    @Test("blockquote — content column 3 after `> `, tracks multibyte, nesting, and matched continuation")
+    @Test("block quote — content column 3 after `> `, tracks multibyte, nesting, and matched continuation")
     func blockQuote() throws {
-        // "> hi": blockquote @1:1-1:5, paragraph/text at content column 3.
+        // "> hi": block quote @1:1-1:5, paragraph/text at content column 3.
         do {
             let out = parse("> hi")
             try #require(shape(out) == ["document", "blockQuote", "paragraph", "text"])
@@ -290,17 +282,12 @@ struct BlockPositionEncodingTests {
         }
     }
 
-    @Test("blockquote lazy continuation — deliverable reports the true source column (cmark re-indents)")
+    @Test("block quote lazy continuation line — text starts at its own byte column")
     func blockQuoteLazyContinuation() throws {
-        // "> a\nb": line 2 "b" is a LAZY continuation (no `>` prefix). Its only source byte is at
-        // line-2 column 1, so the deliverable stamps "b" @2:1-2:2 — the true byte position.
-        // cmark differs: reports "b" @2:3-2:4, re-indenting the continuation to the blockquote's
-        // content column (a phantom column past line 2's single byte) — quirk E (paragraph
-        // continuation-line re-indent).
         let out = parse("> a\nb")
         try #require(shape(out) == ["document", "blockQuote", "paragraph", "text", "softBreak", "text"])
         #expect(out[3].range == r(1, 3, 1, 4))   // "a"
-        #expect(out[5].range == r(2, 1, 2, 2))   // "b" at its true column 1
+        #expect(out[5].range == r(2, 1, 2, 2))   // "b"
         #expect(out[5].literal == "b")
     }
 
@@ -383,15 +370,12 @@ struct BlockPositionEncodingTests {
         }
     }
 
-    @Test("list lazy continuation — deliverable reports the true source column (cmark re-indents)")
+    @Test("list item lazy continuation line — text starts at its own byte column")
     func listLazyContinuation() throws {
-        // "- a\nb": line 2 "b" is a LAZY continuation (indented below the item content column). The
-        // deliverable stamps it at its true byte position @2:1-2:2. cmark differs: reports "b"
-        // @2:3-2:4, re-indenting to the list content column — quirk E.
         let out = parse("- a\nb")
         try #require(shape(out) == ["document", "list", "item", "paragraph", "text", "softBreak", "text"])
         #expect(out[4].range == r(1, 3, 1, 4))   // "a"
-        #expect(out[6].range == r(2, 1, 2, 2))   // "b" at its true column 1
+        #expect(out[6].range == r(2, 1, 2, 2))   // "b"
         #expect(out[6].literal == "b")
     }
 
@@ -442,7 +426,7 @@ struct BlockPositionEncodingTests {
             #expect(cb.fenceLength == 0)
             #expect(cb.fenceOffset == 0)
             #expect(out[1].range == r(1, 5, 1, 9))
-            #expect(out[1].literal == "code\n")   // code-block bodies carry a trailing newline
+            #expect(out[1].literal == "code\n")   // code block content ends in a line ending
             #expect(out[1].info == "")
         }
         // "    é code": multibyte body (é = 2 bytes) → line-1 end column 12 (11 bytes + 1).
@@ -504,7 +488,7 @@ struct BlockPositionEncodingTests {
 
     @Test("HTML block — span covers the raw lines, body tracks multibyte content")
     func htmlBlock() throws {
-        // "<div>\n</div>": HTML block @1:1-2:7, body includes both lines and a trailing newline.
+        // "<div>\n</div>": HTML block @1:1-2:7, body includes both lines and a trailing line ending.
         do {
             let out = parse("<div>\n</div>")
             try #require(shape(out) == ["document", "htmlBlock"])
@@ -512,8 +496,7 @@ struct BlockPositionEncodingTests {
             #expect(out[1].range == r(1, 1, 2, 7))
             #expect(out[1].literal == "<div>\n</div>\n")
         }
-        // Multibyte in the first line "<div>é": body carries the multibyte bytes; span unchanged
-        // (the block range is line-based, so the second-line end column 7 is stable).
+        // Multibyte in the first line "<div>é": the block's source range ends on line 2, at column 7.
         do {
             let out = parse("<div>\u{E9}\n</div>")
             try #require(shape(out) == ["document", "htmlBlock"])
@@ -534,8 +517,7 @@ struct BlockPositionEncodingTests {
         #expect(out[4].range == r(2, 1, 2, 2))
     }
 
-    /// A BOM alone is one empty line, as in cmark-gfm, so the document spans that line from just after the BOM:
-    /// an empty range at 1:1. cmark-gfm reports `1:1-1:4`, counting the BOM's three bytes.
+    /// A BOM alone is one empty line, so the document spans that line from just after the BOM: an empty range at 1:1.
     @Test("BOM-only input — the document is an empty range at 1:1")
     func byteOrderMarkOnly() throws {
         let out = parse("\u{FEFF}")

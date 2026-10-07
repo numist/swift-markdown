@@ -11,19 +11,8 @@
 import Testing
 @testable import CommonMark
 
-/// CommonMark §2.3: "For security reasons, a conforming parser must strip or replace the U+0000
-/// character" — cmark-gfm replaces every NUL (U+0000) in the input with U+FFFD (REPLACEMENT
-/// CHARACTER) at feed time, so every emitted node's literal content shows U+FFFD, never a raw NUL.
-/// The rewrite is zero-copy (it parses a borrowed source `Span`), so it reproduces this by
-/// materializing any NUL-bearing content into the additions arena with the 1-byte NUL replaced by
-/// the 3-byte U+FFFD — the same arena-materialization it already uses for tab expansion — while
-/// NUL-free content stays zero-copy. NUL is a non-structural byte (not whitespace, not punctuation),
-/// so it only ever changes content, never block/inline structure; the exception is that a raw NUL is
-/// an ASCII control character while U+FFFD is not, so contexts that reject control characters (e.g. an
-/// angle-bracket autolink body) must see U+FFFD to match — which requires the substitution to happen
-/// before inline scanning, not just at emission.
-///
-/// Other C0 control bytes (0x01, 0x08, …) are kept literally by cmark and are unaffected here.
+/// Every U+0000 in the input is replaced with U+FFFD (Insecure characters), in every kind of content.
+/// Other control characters are kept.
 @Suite("NUL replacement (U+0000 -> U+FFFD)")
 struct NULReplacementTests {
     private static let replacement = "\u{FFFD}"
@@ -148,11 +137,10 @@ struct NULReplacementTests {
         #expect(url == "\u{FFFD}")
     }
 
-    @Test("NUL in a ref-def destination stripped on the setext-underline path becomes U+FFFD")
+    /// The `===` line follows a paragraph holding only a link reference definition, which it cannot
+    /// underline (Setext headings).
+    @Test("NUL in a link reference definition destination followed by `===` becomes U+FFFD")
     func setextStrippedReferenceDefinition() {
-        // The whole first line is a ref-def; the `===` underline triggers `processLine`'s ref-def strip
-        // over the paragraph's still-*source-backed* content (bypassing `drainLeaf`), so the definition
-        // store is where the NUL must be replaced. cmark yields destination "/u<U+FFFD>".
         let url = MarkdownDocument.withParsedDocument("[a]: /u\u{0}\n===\n\n[a]") { doc -> String in
             var found: String? = nil
             func walk(_ n: borrowing MarkdownNode) {
@@ -213,14 +201,12 @@ struct NULReplacementTests {
         let text = firstText("> a\u{0}\n> b")
         #expect(text.contains(Self.replacement))
         #expect(!text.contains(Self.nul))
-        // "a" + U+FFFD, a soft break (no literal), then "b".
         #expect(text == "a\u{FFFD}b")
     }
 
     @Test("NUL inside an angle-bracket autolink body forms a link with a U+FFFD destination")
     func angleAutolinkBody() throws {
-        // A raw NUL is an ASCII control char, which the autolink URI scanner rejects; U+FFFD is not,
-        // so cmark forms the autolink. The substitution must therefore happen before inline scanning.
+        // A URI autolink (Autolinks) excludes ASCII control characters; U+FFFD is not one.
         try MarkdownDocument.withParsedDocument("<http://a\u{0}b>") { doc in
             var link: String? = nil
             doc.root.children.forEach { p in
@@ -290,8 +276,6 @@ struct NULReplacementTests {
 
     @Test("other C0 control bytes are left literal (only NUL is replaced)")
     func otherControlBytesUnchanged() {
-        // cmark keeps 0x01 / 0x08 / 0x1F literally; the rewrite already matches and must not start
-        // replacing them.
         for control in ["\u{1}", "\u{8}", "\u{1F}"] {
             let text = firstText("a\(control)b")
             #expect(text == "a\(control)b")

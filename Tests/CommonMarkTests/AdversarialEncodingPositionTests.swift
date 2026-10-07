@@ -11,18 +11,8 @@
 import Testing
 @testable import CommonMark
 
-// Adversarial Unicode-encoding source-position coverage for the DELIVERABLE (flag-OFF).
-//
-// Source columns are 1-based UTF-8 BYTE offsets into the original source, and a node's
-// `sourceRange.upperBound` is the offset just PAST the node's last byte (half-open). Every
-// asserted position was taken from the deliverable oracle
-//   dump --new-off <bytes + 0x00 options byte>
-// which parses with exactly this suite's option set (see `opts`).
-// Every case here also equals `dump --ref` (cmark-gfm): the byte accounting for multi-codepoint
-// graphemes, combining marks, and U+FFFD repair matches the reference on all of them, so there are
-// no `// cmark differs:` sites in this suite.
-//
-// `dfsRanges` (file-scope, defined in SourcePositionTests.swift) is reused for the DFS collection.
+// Source columns are 1-based UTF-8 byte offsets into the source, and a node's
+// `sourceRange.upperBound` is the offset just past the node's last byte.
 
 @Suite("Adversarial Unicode encoding source positions")
 struct AdversarialEncodingPositionTests {
@@ -30,15 +20,12 @@ struct AdversarialEncodingPositionTests {
     private typealias Pos = MarkdownNode.SourcePosition
     private typealias Entry = (kind: MarkdownNode.Kind, range: Range<Pos>?)
 
-    /// The deliverable option set. Identical to what `dump --new-off` applies for a `0x00` options
-    /// byte (`MarkupParser` always enables tables/strikethrough/tasklist/tableSpans + source
-    /// positions, and smart punctuation unless disabled), so these positions are the shipped, spec-correct behavior.
     private static let opts: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]
 
     // MARK: - Helpers
 
-    /// Parse `src` with the deliverable options and DFS-collect every node's kind and source range.
+    /// Parse `src` with `opts` and DFS-collect every node's kind and source range.
     private func collect(_ src: String) -> [Entry] {
         MarkdownDocument.withParsedDocument(src, options: Self.opts) { doc in
             var out: [Entry] = []
@@ -63,8 +50,7 @@ struct AdversarialEncodingPositionTests {
         ranges.filter { $0.kind == .text }.map { $0.range }
     }
 
-    /// The UTF-8 repair the harness (`splitInput`) and `dump` apply to raw bytes: invalid sequences
-    /// become U+FFFD. Parsing the result exercises the same repair -> position path as the fuzzer.
+    /// `raw` decoded as UTF-8, with each invalid subsequence replaced by U+FFFD.
     private func repaired(_ raw: [UInt8]) -> String {
         String(decoding: raw, as: UTF8.self)
     }
@@ -161,15 +147,15 @@ struct AdversarialEncodingPositionTests {
 
     // MARK: - B. Multibyte characters at line boundaries
     //
-    // A newline resets the column to 1 on the next line; the byte count of a trailing multibyte
+    // A line ending resets the column to 1 on the next line; the byte count of a trailing multibyte
     // character must not leak across the boundary. "€" = U+20AC = 3 bytes.
 
-    @Test("a multibyte char just before a newline does not shift the next line's column 1")
-    func multibyteBeforeNewlineResetsColumn() throws {
+    @Test("a multibyte char just before a line ending does not shift the next line's column 1")
+    func multibyteBeforeLineEndingResetsColumn() throws {
         // "a€" -> 'a'(1) '€'(2..4), 4 bytes, text 1:1..1:5. Next line "bb" resets to col 1.
         let ranges = collect("a\u{20AC}\nbb")
         let texts = textRanges(ranges)
-        try #require(texts.count == 2, "expected a text on each line, split by a soft break")
+        try #require(texts.count == 2, "expected a text on each line, split by a soft line break")
         #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 5))
         #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 3))
     }
@@ -306,11 +292,8 @@ struct AdversarialEncodingPositionTests {
 
     // MARK: - E. Invalid-UTF-8 repair
     //
-    // The harness (`splitInput`) and `dump` both decode with `String(decoding:as:UTF8.self)`, which
-    // repairs each invalid subsequence to U+FFFD (3 bytes). These tests parse the REPAIRED string —
-    // exactly what the parser sees — and pin the 3-byte accounting of U+FFFD. Each `#expect(repaired
-    // == …)` confirms the raw bytes normalize to the asserted form; `dump --new-off` on the raw bytes
-    // was verified to produce the identical surface to this normalized form (and both equal `--ref`).
+    // Decoding invalid UTF-8 replaces each invalid subsequence with U+FFFD, which occupies 3 bytes
+    // in the parsed string.
 
     @Test("lone continuation byte 0x80 in text becomes one 3-byte U+FFFD")
     func loneContinuationByteInText() throws {

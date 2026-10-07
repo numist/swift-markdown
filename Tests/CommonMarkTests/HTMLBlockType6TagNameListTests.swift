@@ -11,22 +11,20 @@
 import Testing
 import CommonMark
 
-/// The tag names that open an HTML block of type 6.
+/// The tag names of HTML block start condition 6 (HTML blocks) follow the CommonMark 0.31 list, which has `search` and
+/// not `source`.
 ///
-/// CommonMark 0.31 lists `search` and not `source`. cmark-gfm's `blocktagname` (swift-cmark `src/scanners.re`) keeps the
-/// earlier list, with `source` and without `search`.
-///
-/// A type-6 start needs only the tag name and a following whitespace, `>`, `/>` or line end, and it may interrupt a
-/// paragraph. A complete tag such as `<search>` alone on a line is still a type-7 start under either list, which can't
-/// interrupt a paragraph.
+/// Start condition 6 needs only the tag name followed by whitespace, `>`, `/>` or the end of the line, and it may
+/// interrupt a paragraph. A complete tag whose name isn't on the list, such as `<source>`, meets only start condition 7,
+/// which can't interrupt a paragraph.
 @Suite("HTML block type-6 tag name list")
 struct HTMLBlockType6TagNameListTests {
 
-    private static let specCompliant: MarkdownDocument.ParseOptions = [.sourcePosition]
+    private static let options: MarkdownDocument.ParseOptions = [.sourcePosition]
 
-    @Test("spec-compliant: `<source` at the line end is paragraph text")
-    func specSourceAtLineEnd() {
-        #expect(TreeDump.dump("<source\n", options: Self.specCompliant, sourceRanges: true) == """
+    @Test("`<source` at the line end is paragraph text")
+    func sourceAtLineEnd() {
+        #expect(TreeDump.dump("<source\n", options: Self.options, sourceRanges: true) == """
             document @1:1-1:8
               paragraph @1:1-1:8
                 text "<source" @1:1-1:8
@@ -34,18 +32,18 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
-    @Test("spec-compliant: `<search` at the line end opens an HTML block")
-    func specSearchAtLineEnd() {
-        #expect(TreeDump.dump("<search\n", options: Self.specCompliant, sourceRanges: true) == """
+    @Test("`<search` at the line end opens an HTML block")
+    func searchAtLineEnd() {
+        #expect(TreeDump.dump("<search\n", options: Self.options, sourceRanges: true) == """
             document @1:1-1:8
               html_block "<search\\n" @1:1-1:8
 
             """)
     }
 
-    @Test("spec-compliant: `<search>` interrupts a paragraph")
-    func specSearchInterruptsParagraph() {
-        #expect(TreeDump.dump("para\n<search>\n", options: Self.specCompliant, sourceRanges: true) == """
+    @Test("`<search>` interrupts a paragraph")
+    func searchInterruptsParagraph() {
+        #expect(TreeDump.dump("para\n<search>\n", options: Self.options, sourceRanges: true) == """
             document @1:1-2:9
               paragraph @1:1-1:5
                 text "para" @1:1-1:5
@@ -54,9 +52,9 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
-    @Test("spec-compliant: `<source>` doesn't interrupt a paragraph")
-    func specSourceContinuesParagraph() {
-        #expect(TreeDump.dump("para\n<source>\n", options: Self.specCompliant, sourceRanges: true) == """
+    @Test("`<source>` doesn't interrupt a paragraph")
+    func sourceContinuesParagraph() {
+        #expect(TreeDump.dump("para\n<source>\n", options: Self.options, sourceRanges: true) == """
             document @1:1-2:9
               paragraph @1:1-2:9
                 text "para" @1:1-1:5
@@ -66,11 +64,9 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
-    /// `source` is not on CommonMark 0.31's type-6 tag list, so `<SOURCE x` is paragraph text where cmark-gfm opens
-    /// an HTML block.
-    @Test("spec-compliant: an uppercase `<SOURCE` followed by an attribute is paragraph text")
-    func specUppercaseSourceWithAttribute() {
-        #expect(TreeDump.dump("<SOURCE x\n", options: Self.specCompliant, sourceRanges: true) == """
+    @Test("an uppercase `<SOURCE` followed by an attribute is paragraph text")
+    func uppercaseSourceWithAttribute() {
+        #expect(TreeDump.dump("<SOURCE x\n", options: Self.options, sourceRanges: true) == """
             document @1:1-1:10
               paragraph @1:1-1:10
                 text "<SOURCE x" @1:1-1:10
@@ -78,11 +74,9 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
-    /// `source` is not on CommonMark 0.31's type-6 tag list, so `</soURce` is paragraph text where cmark-gfm opens an
-    /// HTML block.
-    @Test("spec-compliant: a mixed-case closing `</soURce` is paragraph text")
-    func specMixedCaseClosingSource() {
-        #expect(TreeDump.dump("</soURce\n", options: Self.specCompliant, sourceRanges: true) == """
+    @Test("a mixed-case closing `</soURce` is paragraph text")
+    func mixedCaseClosingSource() {
+        #expect(TreeDump.dump("</soURce\n", options: Self.options, sourceRanges: true) == """
             document @1:1-1:9
               paragraph @1:1-1:9
                 text "</soURce" @1:1-1:9
@@ -90,11 +84,9 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
-    /// `source` is not on CommonMark 0.31's type-6 tag list, so `<source/>` is a type-7 start that can't interrupt a
-    /// paragraph and stays inline HTML in it, where cmark-gfm opens an HTML block.
-    @Test("spec-compliant: `<source/>` doesn't interrupt a paragraph")
-    func specSelfClosingSourceContinuesParagraph() {
-        #expect(TreeDump.dump("para\n<source/>\n", options: Self.specCompliant, sourceRanges: true) == """
+    @Test("`<source/>` doesn't interrupt a paragraph")
+    func selfClosingSourceContinuesParagraph() {
+        #expect(TreeDump.dump("para\n<source/>\n", options: Self.options, sourceRanges: true) == """
             document @1:1-2:10
               paragraph @1:1-2:10
                 text "para" @1:1-1:5
@@ -104,11 +96,9 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
-    /// `source` is not on CommonMark 0.31's type-6 tag list, so `<source` is a lazy continuation line of the block
-    /// quote's paragraph, where cmark-gfm ends the block quote with an HTML block.
-    @Test("spec-compliant: `<source` continues a block quote's paragraph lazily")
-    func specSourceContinuesLazily() {
-        #expect(TreeDump.dump("> a\n<source\n", options: Self.specCompliant, sourceRanges: true) == """
+    @Test("`<source` continues a block quote's paragraph lazily")
+    func sourceContinuesLazily() {
+        #expect(TreeDump.dump("> a\n<source\n", options: Self.options, sourceRanges: true) == """
             document @1:1-2:8
               block_quote @1:1-2:8
                 paragraph @1:3-2:8
@@ -119,9 +109,9 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
-    @Test("spec-compliant: a longer name starting with `source` is paragraph text")
-    func specLongerNameIsParagraph() {
-        #expect(TreeDump.dump("<sources\n", options: Self.specCompliant, sourceRanges: true) == """
+    @Test("a longer name starting with `source` is paragraph text")
+    func longerNameIsParagraph() {
+        #expect(TreeDump.dump("<sources\n", options: Self.options, sourceRanges: true) == """
             document @1:1-1:9
               paragraph @1:1-1:9
                 text "<sources" @1:1-1:9
@@ -129,11 +119,9 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
-    /// `source` is not on CommonMark 0.31's type-6 tag list, so `<Source` is paragraph text in the block quote where
-    /// cmark-gfm opens an HTML block.
-    @Test("spec-compliant: `<Source` is paragraph text inside a block quote")
-    func specSourceInBlockQuote() {
-        #expect(TreeDump.dump("> <Source\n", options: Self.specCompliant, sourceRanges: true) == """
+    @Test("`<Source` is paragraph text inside a block quote")
+    func sourceInBlockQuote() {
+        #expect(TreeDump.dump("> <Source\n", options: Self.options, sourceRanges: true) == """
             document @1:1-1:10
               block_quote @1:1-1:10
                 paragraph @1:3-1:10
@@ -142,11 +130,10 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
-    /// `source` is not on CommonMark 0.31's type-6 tag list, so `<source` is paragraph text in the list item that
-    /// `next` continues lazily, where cmark-gfm opens an HTML block and `next` starts a paragraph after the list.
-    @Test("spec-compliant: `<source` is paragraph text inside a list item")
-    func specSourceInListItem() {
-        #expect(TreeDump.dump("- <source\nnext\n", options: Self.specCompliant, sourceRanges: true) == """
+    /// `<source` is paragraph text, so `next` is a lazy continuation line of the list item's paragraph.
+    @Test("`<source` is paragraph text inside a list item")
+    func sourceInListItem() {
+        #expect(TreeDump.dump("- <source\nnext\n", options: Self.options, sourceRanges: true) == """
             document @1:1-2:5
               list bullet '-' tight @1:1-2:5
                 item @1:1-2:5

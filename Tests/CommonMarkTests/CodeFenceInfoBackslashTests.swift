@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// A fenced code block info string `\a&amp;`: a backslash before a non-punctuation character is a literal backslash
-/// (CommonMark §2.4), while the entity reference after it is decoded.
+/// In a fenced code block's info string, a backslash before a non-punctuation character is a literal backslash
+/// (Backslash escapes), while an entity reference is decoded (Entity and numeric character references).
 @Suite("Code fence info string with a literal backslash")
 struct CodeFenceInfoBackslashTests {
 

@@ -11,7 +11,7 @@
 import CommonMark
 import Testing
 
-/// Footnote labels follow the link label rules (spec "Links"): unescaped square brackets are not
+/// Footnote labels follow the link label rules (Links): unescaped square brackets are not
 /// allowed inside them, and a reference matches a definition when their labels are equal after
 /// normalization, which collapses whitespace, line endings included.
 @Suite("Footnote labels")

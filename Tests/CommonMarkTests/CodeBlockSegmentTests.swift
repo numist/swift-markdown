@@ -49,7 +49,9 @@ private func visitBlocks(_ node: MarkdownNode, into out: inout [BlockContent]) {
     }
 }
 
-/// Code and HTML block bodies are stored as zero-copy segment lists (source ranges joined by a shared interned `"\n"`), not materialized byte buffers. These tests assert two things for every shape: (1) the public `literal()` String is byte-identical to the joined body lines, and (2) `literalSegments()` concatenated byte-for-byte equals `literal()` - exercising the multi-segment read path that code/HTML blocks are the first production users of.
+/// Code and HTML block bodies are segment lists (source ranges joined by a shared `"\n"`) rather than copied byte
+/// buffers. For each shape, `literal()` is the block's content and `literalSegments()` concatenated byte for byte
+/// equals `literal()`.
 @Suite("Code/HTML block segment content")
 struct CodeBlockSegmentTests {
 
@@ -96,7 +98,6 @@ struct CodeBlockSegmentTests {
     @Test("fenced body preserves a trailing blank line")
     func fencedTrailingBlank() throws {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        // Fenced code keeps trailing blanks (unlike indented).
         let r = try firstBlock(\.isCodeBlock, in: "```\ncode\n\n```\n")
         #expect(r.literal == "code\n\n")
         #expect(r.segmentsJoined == r.literal)
@@ -124,7 +125,6 @@ struct CodeBlockSegmentTests {
     @Test("indented code strips trailing blank lines")
     func indentedStripsTrailingBlanks() throws {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        // The blank lines after the indented line must be stripped (CommonMark §4.4).
         let r = try firstBlock(\.isCodeBlock, in: "    code\n\n\nmore text\n")
         #expect(r.literal == "code\n")
         #expect(r.segmentsJoined == r.literal)
@@ -143,7 +143,7 @@ struct CodeBlockSegmentTests {
     @Test("tab-indented code body round-trips (forces non-source segment)")
     func tabIndentedCode() throws {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        // A tab in the indentation triggers per-line tab expansion, so the body line does not map to source and is copied into the arena as an `inSource: false` segment. The literal must still be correct and the segment join must still equal it.
+        // Expanding the indentation tab makes each content line differ from its source, so it is an arena segment.
         let r = try firstBlock(\.isCodeBlock, in: "\tcode line one\n\tcode line two\n")
         #expect(r.literal == "code line one\ncode line two\n")
         #expect(r.segmentsJoined == r.literal)
@@ -152,7 +152,7 @@ struct CodeBlockSegmentTests {
     @Test("content tab beyond the code indent is preserved literally")
     func tabPreservedBeyondCodeIndent() throws {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        // The first tab is the 4-column code indent; the second is content and must stay a literal tab, not expand to spaces. Positions are off (default), so this exercises the flag-independent content path.
+        // The first tab is the code block's four columns of indentation; the second is content (Tabs).
         let r = try firstBlock(\.isCodeBlock, in: "\t\tfoo\n")
         #expect(r.literal == "\tfoo\n")
         #expect(r.segmentsJoined == r.literal)
@@ -161,7 +161,7 @@ struct CodeBlockSegmentTests {
     @Test("bullet-like content and its trailing tab stay literal in indented code")
     func tabAfterBulletContent() throws {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        // `\t-\t` is indented code (the leading tab is 4 columns), so the dash is content, not a list marker, and the trailing tab must remain literal.
+        // The leading tab is four columns of indentation, so the line is indented code and `-` is content.
         let r = try firstBlock(\.isCodeBlock, in: "\t-\t\n")
         #expect(r.literal == "-\t\n")
         #expect(r.segmentsJoined == r.literal)
@@ -178,7 +178,8 @@ struct CodeBlockSegmentTests {
     @Test("a tab split by nested-container indentation becomes its remaining columns as spaces")
     func tabSplitByContainerIndent() throws {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        // In `>\t\tfoo` the block quote consumes `>` plus one column of the first tab, splitting it; the code body is that tab's remaining columns as spaces (cmark's partially_consumed_tab) followed by the literal remainder.
+        // The block quote marker takes `>` and one column of the first tab (Tabs). Of the six columns of indentation
+        // left, four make the line indented code and two are content spaces.
         let r = try firstBlock(\.isCodeBlock, in: ">\t\tfoo\n")
         #expect(r.literal == "  foo\n")
         #expect(r.segmentsJoined == r.literal)

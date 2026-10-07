@@ -11,16 +11,9 @@
 import Testing
 @testable import CommonMark
 
-/// Coverage for source-position stamping of inline runs that fall on the 2nd+ physical line of a
-/// **multi-line contiguous** segment.
-///
-/// A top-level paragraph whose first lines are source-adjacent (LF, no stripped prefix) collapses those
-/// lines into ONE `inSource` segment (`a\nb`) that spans multiple physical source lines with
-/// `sourceOffset == offset` (no re-indent). When a LATER line has leading whitespace, the paragraph turns
-/// non-contiguous (a segment list), so the earlier contiguous run is preserved as that single multi-line
-/// segment. An inline run on such a segment's interior line projects onto the run's own physical line
-/// (its byte projection is already exact, since the run is not re-indented). (Regression for the
-/// differential-fuzzer `midseg-*` pairs.)
+/// Source ranges of inlines on the second and later lines of a multi-line segment. Adjacent paragraph
+/// lines with no stripped indentation share one segment; a later indented line starts another. Each
+/// inline's source range lies on its own line.
 @Suite("Multi-line contiguous segment - interior-line inline positions")
 struct MultiLineSegmentRangeTests {
 
@@ -38,32 +31,27 @@ struct MultiLineSegmentRangeTests {
         return out
     }
 
-    /// The deliverable (flag-OFF, spec-correct default): every inline on an interior contiguous line
-    /// carries its true byte-projected position - notably line 2's `b` at `@2:1-2:2`.
-    @Test("flag-OFF: interior line b is stamped @2:1-2:2")
-    func specInteriorLineStamped() throws {
+    @Test("interior line b is stamped @2:1-2:2")
+    func interiorLineStamped() throws {
         let texts = ranges("a\nb\n c", options: Self.specOptions).filter { $0.kind == .text }.map(\.range)
         try #require(texts.count == 3)
         #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 2))   // "a"
         #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 2))   // "b" (interior line)
-        #expect(texts[2] == Pos(line: 3, column: 2)..<Pos(line: 3, column: 3))   // "c" (spec: true column)
+        #expect(texts[2] == Pos(line: 3, column: 2)..<Pos(line: 3, column: 3))   // "c"
     }
 
-    /// The final re-indented line keeps its true byte-projected
-    /// column (@4:2).
-    @Test("flag-OFF: four-line paragraph keeps the final re-indented line's true column")
-    func specFourLine() throws {
+    @Test("four-line paragraph keeps the final indented line's column")
+    func fourLineFinalIndentedLine() throws {
         let texts = ranges("a\nb\nc\n d", options: Self.specOptions).filter { $0.kind == .text }.map(\.range)
         try #require(texts.count == 4)
         #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 2))   // "a"
         #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 2))   // "b"
         #expect(texts[2] == Pos(line: 3, column: 1)..<Pos(line: 3, column: 2))   // "c"
-        #expect(texts[3] == Pos(line: 4, column: 2)..<Pos(line: 4, column: 3))   // "d" true column (spec)
+        #expect(texts[3] == Pos(line: 4, column: 2)..<Pos(line: 4, column: 3))   // "d"
     }
 
-    /// A single-line emphasis on an interior contiguous line is stamped on its own physical line.
-    @Test("flag-OFF: single-line emphasis on an interior contiguous line is stamped on its own line")
-    func specInteriorEmphasis() {
+    @Test("single-line emphasis on an interior contiguous line is stamped on its own line")
+    func interiorLineEmphasis() {
         let all = ranges("a\n*b*\n c", options: Self.specOptions)
         let emph = all.first { $0.kind == .emphasis }?.range
         let innerText = all.first { $0.kind == .text && ($0.range?.lowerBound == Pos(line: 2, column: 2)) }?.range
@@ -71,10 +59,8 @@ struct MultiLineSegmentRangeTests {
         #expect(innerText == Pos(line: 2, column: 2)..<Pos(line: 2, column: 3))  // "b"
     }
 
-    /// A genuine multi-line WRAPPER (`*a\nb*`) inside a contiguous segment keeps its opener on line 1 and
-    /// its closer on line 2 - the byte projection is exact, so it is NOT collapsed onto line 1.
-    @Test("flag-OFF: multi-line wrapper on a contiguous segment keeps its closer on line 2")
-    func specMultiLineWrapper() {
+    @Test("multi-line emphasis on a contiguous segment keeps its closer on line 2")
+    func multiLineEmphasis() {
         let all = ranges("*a\nb*\n c", options: Self.specOptions)
         let emph = all.first { $0.kind == .emphasis }?.range
         let bText = all.first { $0.kind == .text && ($0.range?.lowerBound == Pos(line: 2, column: 1)) }?.range

@@ -94,7 +94,7 @@ struct InlineOnlyTextConsolidationTests {
             """)
     }
 
-    @Test func preservedNewlineMergesWithAdjacentText() {
+    @Test func preservedLineEndingMergesWithAdjacentText() {
         #expect(TreeDump.dump("_\nb", options: Self.preserveWhitespace) == """
             document
               paragraph

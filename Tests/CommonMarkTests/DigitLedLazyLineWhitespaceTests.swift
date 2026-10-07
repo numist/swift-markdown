@@ -11,9 +11,10 @@
 import CommonMark
 import Testing
 
-/// A list item whose paragraph begins with a digit and a NUL or multi-byte character before `[x]`, continued by lazy
-/// lines: the item has no checkbox, and each continuation line's leading whitespace is stripped (spec "Paragraphs";
-/// GFM "Task list items").
+/// A list item whose paragraph begins with a digit has no checkbox, because a task list item marker must begin the
+/// item's first paragraph (Task list items (extension)); the `[x]` later on the line is paragraph text. Every following
+/// line of the paragraph has its leading whitespace stripped (Paragraphs), including inside a code span, link
+/// destination or link title that crosses the line ending.
 @Suite("Digit-led paragraph with lazy continuation lines")
 struct DigitLedLazyLineWhitespaceTests {
 
@@ -21,11 +22,7 @@ struct DigitLedLazyLineWhitespaceTests {
         .tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink,
     ]
 
-    /// Flag-off (spec-correct): a paragraph beginning `22` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox, and the lazy line's leading whitespace is stripped like any
-    /// paragraph line's (CommonMark paragraphs), leaving a one-space code span, where cmark's later-line
-    /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
-    @Test func multiByteLineLazySpaceCodeSpanFlagOff() {
+    @Test func multiByteLineLazySpaceCodeSpan() {
         #expect(TreeDump.dump("+\n  22é [x] `\n `", options: Self.options) == """
             document
               list bullet '+' tight
@@ -37,11 +34,7 @@ struct DigitLedLazyLineWhitespaceTests {
             """)
     }
 
-    /// Flag-off (spec-correct): a paragraph beginning `2` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox, and the lazy line's leading whitespace is stripped like any
-    /// paragraph line's (CommonMark paragraphs), leaving a one-space code span, where cmark's later-line
-    /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
-    @Test func tabLedLazyLineFlagOff() {
+    @Test func tabLedLazyLine() {
         #expect(TreeDump.dump("+\n  2\u{0} [x] `\n\t`", options: Self.options) == """
             document
               list bullet '+' tight
@@ -53,10 +46,9 @@ struct DigitLedLazyLineWhitespaceTests {
             """)
     }
 
-    /// Flag-off (spec-correct): the item has no checkbox (its first block is a block quote), and the lazy
-    /// line keeps its `2` prefix while the next line loses its leading whitespace (CommonMark paragraphs),
-    /// where cmark's later-line checkbox retry checks the item and drops the advanced bytes.
-    @Test func lazyBlockQuoteLineCodeSpanFlagOff() {
+    /// The item's first block is a block quote, so the item has no checkbox, and line 2 is a lazy continuation line
+    /// of the block quote's paragraph.
+    @Test func lazyBlockQuoteLineCodeSpan() {
         #expect(TreeDump.dump("- > a\n  2\u{0} [x] `\n `", options: Self.options) == """
             document
               list bullet '-' tight
@@ -71,11 +63,7 @@ struct DigitLedLazyLineWhitespaceTests {
             """)
     }
 
-    /// Flag-off (spec-correct): a paragraph beginning `2` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox, and the lazy line's leading whitespace is stripped like any
-    /// paragraph line's (CommonMark paragraphs), leaving a one-space code span, where cmark's later-line
-    /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
-    @Test func twoSpaceLazyLineCodeSpanFlagOff() {
+    @Test func twoSpaceLazyLineCodeSpan() {
         #expect(TreeDump.dump(" +\n   2\u{0} [x] `\n  `", options: Self.options) == """
             document
               list bullet '+' tight
@@ -87,11 +75,7 @@ struct DigitLedLazyLineWhitespaceTests {
             """)
     }
 
-    /// Flag-off (spec-correct): a paragraph beginning `2` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox, and the lazy line's leading whitespace is stripped like any
-    /// paragraph line's (CommonMark paragraphs) inside the image title, where cmark's later-line checkbox
-    /// retry checks the item and keeps the lazy line's leading whitespace.
-    @Test func lazyLineImageTitleFlagOff() {
+    @Test func lazyLineImageTitle() {
         #expect(TreeDump.dump("+\n  2\u{0} [x] ![a](b \"c\n d\")", options: Self.options) == """
             document
               list bullet '+' tight
@@ -104,10 +88,7 @@ struct DigitLedLazyLineWhitespaceTests {
             """)
     }
 
-    /// Flag-off (spec-correct): a paragraph beginning `2` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox, and the link destination follows the line ending, where cmark's
-    /// later-line checkbox retry checks the item and keeps the lazy line's leading whitespace.
-    @Test func lazyLineLinkDestinationFlagOff() {
+    @Test func lazyLineLinkDestination() {
         #expect(TreeDump.dump("+\n  2\u{0} [x] [a](\n b)", options: Self.options) == """
             document
               list bullet '+' tight
@@ -120,11 +101,7 @@ struct DigitLedLazyLineWhitespaceTests {
             """)
     }
 
-    /// Flag-off (spec-correct): a paragraph beginning `2` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox, and the lazy lines' leading whitespace is stripped like any
-    /// paragraph line's (CommonMark paragraphs), leaving the code span `a`, where cmark's later-line
-    /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
-    @Test func secondLazyLineCodeSpanFlagOff() {
+    @Test func secondLazyLineCodeSpan() {
         #expect(TreeDump.dump("+\n  2\u{0} [x] `\n a\n `", options: Self.options) == """
             document
               list bullet '+' tight
@@ -136,11 +113,7 @@ struct DigitLedLazyLineWhitespaceTests {
             """)
     }
 
-    /// Flag-off (spec-correct): a paragraph beginning `2` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox, and the continuation line's extra indent is stripped like any
-    /// paragraph line's (CommonMark paragraphs), leaving a one-space code span, where cmark's later-line
-    /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
-    @Test func matchedContinuationFlagOff() {
+    @Test func matchedContinuation() {
         #expect(TreeDump.dump("+\n  2\u{0} [x] `\n   `", options: Self.options) == """
             document
               list bullet '+' tight
@@ -152,11 +125,7 @@ struct DigitLedLazyLineWhitespaceTests {
             """)
     }
 
-    /// Flag-off (spec-correct): a paragraph beginning `2` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox, and the lazy line's leading whitespace is stripped like any
-    /// paragraph line's (CommonMark paragraphs), where cmark's later-line checkbox retry checks the item
-    /// and keeps the lazy line's leading whitespace.
-    @Test func lazyLineAfterSoftBreakFlagOff() {
+    @Test func lazyLineAfterSoftBreak() {
         #expect(TreeDump.dump("+\n  2\u{0} [x] a\n b", options: Self.options) == """
             document
               list bullet '+' tight
@@ -169,11 +138,7 @@ struct DigitLedLazyLineWhitespaceTests {
             """)
     }
 
-    /// Flag-off (spec-correct): a paragraph beginning `2` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox, and the lazy line's leading whitespace is stripped like any
-    /// paragraph line's (CommonMark paragraphs) after the hard line break, where cmark's later-line
-    /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
-    @Test func lazyLineAfterBackslashBreakFlagOff() {
+    @Test func lazyLineAfterBackslashBreak() {
         #expect(TreeDump.dump("+\n  2\u{0} [x] a\\\n b", options: Self.options) == """
             document
               list bullet '+' tight
@@ -186,11 +151,7 @@ struct DigitLedLazyLineWhitespaceTests {
             """)
     }
 
-    /// Flag-off (spec-correct): a paragraph beginning `2` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox, and the lazy line's leading whitespace is stripped like any
-    /// paragraph line's (CommonMark paragraphs), leaving a one-space code span, where cmark's later-line
-    /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
-    @Test func tabLazyLineCodeSpanFlagOff() {
+    @Test func tabLazyLineCodeSpan() {
         #expect(TreeDump.dump("100.\n     2\u{0} [x] `\n \t`", options: Self.options) == """
             document
               list ordered start=100 delim=period tight
@@ -202,11 +163,7 @@ struct DigitLedLazyLineWhitespaceTests {
             """)
     }
 
-    /// Flag-off (spec-correct): a paragraph beginning `2` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox, and the lazy line's leading whitespace is stripped like any
-    /// paragraph line's (CommonMark paragraphs), leaving a one-space code span, where cmark's later-line
-    /// checkbox retry checks the item and keeps the lazy line's leading whitespace.
-    @Test func splitTabLazyLineCodeSpanFlagOff() {
+    @Test func splitTabLazyLineCodeSpan() {
         #expect(TreeDump.dump("+ 100.\n       2\u{0} [x] `\n \t`", options: Self.options) == """
             document
               list bullet '+' tight

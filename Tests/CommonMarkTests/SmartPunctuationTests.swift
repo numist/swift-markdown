@@ -11,11 +11,11 @@
 import Testing
 @testable import CommonMark
 
-/// Tests for the `.smart` parse option, which rewrites text content during inline parsing: straight quotes become curly, `--`/`---` become en/em dashes, and `...` becomes an ellipsis.
+/// The `.smart` parse option replaces straight quotes with curly quotes, `--`/`---` with en/em dashes, and `...` with an ellipsis.
 @Suite("Parse option - smart punctuation")
 struct SmartPunctuationTests {
 
-    /// Concatenate every `.text` node's literal in document order. The smart rewrites all land in text nodes, so this reconstructs the visible string regardless of how it's split into nodes.
+    /// Concatenate every `.text` node's literal in document order, which is where smart punctuation appears.
     private func text(_ doc: borrowing MarkdownDocument) -> String {
         var out = ""
         func walk(_ node: borrowing MarkdownNode) {

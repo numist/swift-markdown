@@ -11,19 +11,9 @@
 import Testing
 @testable import CommonMark
 
-/// GFM table detection takes precedence over link-reference-definition extraction, matching cmark.
-///
-/// cmark opens a table while processing the delimiter row (`extensions/table.c`
-/// `try_opening_table_block`), which converts the still-open paragraph to a table BEFORE it is ever
-/// finalized. Reference-link definitions are resolved only at PARAGRAPH finalize
-/// (`src/blocks.c` `resolve_reference_link_definitions`, reached from `finalize`), so a paragraph that
-/// became a table is never probed for ref-defs. The rewrite detects tables at finalize too, so the
-/// two matchers meet in `runParagraphMatchers`; the table must be tried first.
-///
-/// The motivating divergence: `[\n|-\n]:/` looks like a multi-line ref-def (`[<newline>|-<newline>]`
-/// closes the label, then `: /` is the destination), but its second physical line `|-` is a delimiter
-/// row, so cmark forms a table and never extracts the ref-def. Ref-def-first ordering consumed the
-/// whole paragraph as an (output-free) definition and produced an EMPTY document.
+/// A delimiter row turns the open paragraph into a table before any link reference definition is
+/// extracted from it (Tables (extension), Link reference definitions), so text shaped like a link
+/// reference definition becomes table content.
 @Suite("GFM table vs link reference definition precedence")
 struct TableVsReferenceDefinitionTests {
 
@@ -111,10 +101,9 @@ struct TableVsReferenceDefinitionTests {
         }
     }
 
-    @Test("a delimiter-row second line forms a table even when the paragraph reads as a ref-def")
+    @Test("a delimiter-row second line forms a table even when the paragraph reads as a link reference definition")
     func delimiterRowBeatsReferenceDefinition() throws {
-        // `[\n|-\n]:/`: label `[<nl>|-<nl>]`, then `: /` — a valid (output-free) ref-def shape. But line 2
-        // `|-` is a delimiter row, so cmark forms a table; the ref-def is never extracted.
+        // Read as a whole, `[\n|-\n]:/` is a link reference definition with label `\n|-\n`.
         let doc = blocks("[\n|-\n]:/")
         let table = try #require(doc.first, "expected a block, got an empty document")
         try #require(table.kind == .table, "expected a table, got \(table.kind)")
@@ -124,10 +113,8 @@ struct TableVsReferenceDefinitionTests {
         #expect(doc.count == 1)
     }
 
-    @Test("the non-ref-def-shaped control still forms the same table")
-    func delimiterRowControlWithoutColon() throws {
-        // `[\n|-\n]a`: last line `]a` never looks like a ref-def destination (no `:` after `]`), so this
-        // matched cmark even under ref-def-first ordering. Pin it so the reorder does not regress it.
+    @Test("the same table forms when the paragraph does not read as a link reference definition")
+    func delimiterRowWithoutColon() throws {
         let doc = blocks("[\n|-\n]a")
         let table = try #require(doc.first, "expected a block, got an empty document")
         try #require(table.kind == .table, "expected a table, got \(table.kind)")
@@ -137,50 +124,33 @@ struct TableVsReferenceDefinitionTests {
         #expect(doc.count == 1)
     }
 
-    @Test("a complete first-line ref-def becomes the header cell when a delimiter row follows")
+    @Test("a complete first-line link reference definition becomes the header cell when a delimiter row follows")
     func firstLineReferenceDefinitionAbsorbedAsHeader() throws {
-        // `[foo]: /bar\n|-\n|x`: line 1 is a complete ref-def by itself, but line 2 `|-` is a delimiter
-        // row, so cmark makes `[foo]: /bar` the table's header cell and registers NO definition. The old
-        // ref-def-first ordering registered `foo` -> /bar and made `|-\n|x` a paragraph — the strongest
-        // discriminator that the table now wins.
         let doc = blocks("[foo]: /bar\n|-\n|x")
         let table = try #require(doc.first, "expected a block, got an empty document")
         try #require(table.kind == .table, "expected a table, got \(table.kind)")
         #expect(table.headerCells == ["[foo]: /bar"])
         #expect(table.bodyRows == [["x"]])
         #expect(doc.count == 1)
-        // The definition must NOT have been registered: a trailing `[foo]` reference stays literal.
-        #expect(firstLinkURL("[foo]: /bar\n|-\n|x\n\n[foo]") == nil, "the ref-def must not be registered")
+        // No definition exists, so a later `[foo]` stays literal.
+        #expect(firstLinkURL("[foo]: /bar\n|-\n|x\n\n[foo]") == nil, "the link reference definition must not be registered")
     }
 
-    @Test("a genuine multi-line ref-def without a delimiter row is still a ref-def")
-    func genuineMultiLineReferenceDefinitionNotRegressed() throws {
-        // `[a\nb]: /u` spans two lines but its second line `b]: /u` is NOT a delimiter row, so no table
-        // forms and the definition must still be extracted: the def paragraph is dropped and `[a b]`
-        // resolves to a link. Guards the reorder against breaking real multi-line ref-defs.
+    @Test("a multi-line link reference definition without a delimiter row defines a link")
+    func multiLineReferenceDefinition() throws {
         let doc = blocks("[a\nb]: /u\n\n[a b]")
-        // Exactly one surviving block (the `[a b]` reference paragraph); the ref-def paragraph is dropped.
-        try #require(doc.count == 1, "expected the ref-def to be consumed, leaving one block; got \(doc.count)")
+        try #require(doc.count == 1, "expected the link reference definition to be consumed, leaving one block; got \(doc.count)")
         #expect(doc[0].kind == .paragraph, "expected a paragraph, got \(doc[0].kind)")
         let url = try #require(firstLinkURL("[a\nb]: /u\n\n[a b]"), "expected `[a b]` to resolve to a link")
         #expect(url == "/u")
     }
 
-    // MARK: - Bare (pipe-less) delimiter row after a complete ref-def (regression: refines #134)
-    //
-    // #134 made table detection run before ref-def extraction unconditionally. That was too coarse: a BARE
-    // `-`/`=` delimiter row can never open a table in cmark. cmark's `open_new_blocks` tries the
-    // setext-heading-underline branch (`scan_setext_heading_line`, which matches a pipe-less run of `-` or
-    // `=`) BEFORE the GFM table extension (`try_opening_table_block`, the last-resort block opener). The
-    // setext branch resolves reference-link definitions on the open paragraph; when the whole paragraph is a
-    // complete ref-def, no header content remains, so no heading forms and the bare `-` becomes a fresh
-    // paragraph line — the table extension is never reached. A PIPE-containing delimiter row (`|-`) does NOT
-    // match the setext scanner, so the table extension runs and a table opens over the would-be ref-def.
+    // MARK: - Delimiter row after a complete link reference definition
 
-    /// The definition's paragraph is still open when the bare `-` is read, and an empty list item cannot interrupt a
-    /// paragraph (spec "List items"), so the `-` is paragraph text once the definition is removed.
-    @Test("a bare `-` after a complete single-line ref-def is paragraph text")
-    func bareDelimiterAfterCompleteReferenceDefinitionSpecCorrect() {
+    /// The definition's paragraph is open when the bare `-` is read, and an empty list item cannot interrupt a
+    /// paragraph (List items), so the `-` is paragraph text once the definition is removed.
+    @Test("a bare `-` after a complete single-line link reference definition is paragraph text")
+    func bareDelimiterAfterCompleteReferenceDefinition() {
         #expect(TreeDump.dump("[o]:o\n-", options: [.tables]) == """
             document
               paragraph
@@ -189,10 +159,10 @@ struct TableVsReferenceDefinitionTests {
             """)
     }
 
-    /// The definition's paragraph is still open when the bare `-` is read, and an empty list item cannot interrupt a
-    /// paragraph (spec "List items"), so the `-` is paragraph text once the definition is removed.
-    @Test("a bare `-` after a ref-def with a space before the destination is paragraph text")
-    func bareDelimiterAfterCompleteReferenceDefinitionWithSpaceSpecCorrect() {
+    /// The definition's paragraph is open when the bare `-` is read, and an empty list item cannot interrupt a
+    /// paragraph (List items), so the `-` is paragraph text once the definition is removed.
+    @Test("a bare `-` after a link reference definition with a space before the destination is paragraph text")
+    func bareDelimiterAfterCompleteReferenceDefinitionWithSpace() {
         #expect(TreeDump.dump("[o]: o\n-", options: [.tables]) == """
             document
               paragraph
@@ -201,8 +171,8 @@ struct TableVsReferenceDefinitionTests {
             """)
     }
 
-    @Test("without bug compatibility, a PIPE delimiter row after a complete ref-def still forms a table")
-    func pipeDelimiterAfterCompleteReferenceDefinitionStaysTableSpecCorrect() throws {
+    @Test("a pipe delimiter row after a complete link reference definition forms a table")
+    func pipeDelimiterAfterCompleteReferenceDefinitionFormsTable() throws {
         let doc = blocks("[o]:o\n|-")
         let table = try #require(doc.first, "expected a block, got an empty document")
         try #require(table.kind == .table, "expected a table, got \(table.kind)")

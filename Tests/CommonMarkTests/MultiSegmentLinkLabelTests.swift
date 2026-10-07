@@ -11,15 +11,9 @@
 import Testing
 @testable import CommonMark
 
-/// Coverage for close-bracket / reference scanning over **multi-segment** inline content.
-///
-/// A paragraph whose lines aren't source-contiguous (a block-quote body, a list-item body, or a
-/// lazy continuation) is parsed directly from a segment list, addressed by *virtual* offsets that
-/// don't index any single buffer. The link/reference scanners (`matchLinkLabel`,
-/// `matchLinkDestination`, `matchLinkTitle`) read a `Chunk` with raw single-buffer `readByte`, so
-/// feeding them virtual offsets used to index the wrong buffer out of bounds and trap. These tests
-/// pin the fix: the scans read real bytes in bounds (no crash) and produce the correct surface -
-/// including a shortcut reference that genuinely resolves inside multi-segment content.
+/// Link label, destination and title scanning (Links) over a paragraph whose lines are not contiguous
+/// in the source, such as a block quote or list item body or a lazy continuation line. The paragraph's
+/// content is a list of segments, and a label, destination or title may cross from one to the next.
 @Suite("Multi-segment link/reference scanning")
 struct MultiSegmentLinkLabelTests {
 
@@ -32,10 +26,8 @@ struct MultiSegmentLinkLabelTests {
         var attributeStrings: [String] = []
     }
 
-    /// The inline children of `paragraph`, flattened to the fields the assertions below check. Reads
-    /// each node's string content (`literal`/`url`/`attributes`), which forces the arena/source
-    /// materialization that a straddling multi-segment chunk would trap on - so a regression that
-    /// forms a node over an unrepresentable range fails loudly here rather than silently.
+    /// The inline children of `paragraph`, flattened to the fields the assertions below check. Reading
+    /// each node's string content checks that every node's content is readable.
     private static func paragraphInlines(_ paragraph: borrowing MarkdownNode) -> Inlines {
         var result = Inlines()
         paragraph.children.forEach { inline in
@@ -59,8 +51,7 @@ struct MultiSegmentLinkLabelTests {
         return result
     }
 
-    /// The inlines of the first `.paragraph` anywhere in the tree (descends through the block-quote /
-    /// list / item wrappers these inputs produce; those never nest deeper than three levels).
+    /// The inlines of the first `.paragraph` within three levels of the root.
     private static func firstParagraphInlines(_ doc: borrowing MarkdownDocument) -> Inlines {
         var result = Inlines()
         var found = false
@@ -79,7 +70,7 @@ struct MultiSegmentLinkLabelTests {
         return result
     }
 
-    @Test("block-quote lazy continuation with empty brackets is literal text (no crash)")
+    @Test("block-quote lazy continuation with empty brackets is literal text")
     func blockQuoteEmptyBrackets() {
         MarkdownDocument.withParsedDocument(">a\n[]b") { doc in
             let inlines = Self.firstParagraphInlines(doc)
@@ -89,7 +80,7 @@ struct MultiSegmentLinkLabelTests {
         }
     }
 
-    @Test("list-item lazy continuation with empty brackets is literal text (no crash)")
+    @Test("list-item lazy continuation with empty brackets is literal text")
     func listItemEmptyBrackets() {
         MarkdownDocument.withParsedDocument("- a\n[]b") { doc in
             let inlines = Self.firstParagraphInlines(doc)
@@ -99,7 +90,7 @@ struct MultiSegmentLinkLabelTests {
         }
     }
 
-    @Test("block-quote lazy continuation with full brackets and no definition is literal text (no crash)")
+    @Test("block-quote lazy continuation with full brackets and no definition is literal text")
     func blockQuoteFullBracketsNoDefinition() {
         MarkdownDocument.withParsedDocument(">a\n[x]b") { doc in
             let inlines = Self.firstParagraphInlines(doc)
@@ -109,10 +100,7 @@ struct MultiSegmentLinkLabelTests {
         }
     }
 
-    /// A shortcut reference inside multi-segment content that DOES resolve: the definition is at top
-    /// level, the use `[x]` sits on the block quote's lazy-continuation line (so the paragraph is
-    /// multi-segment) and its label lies within a single source segment. Proves the fix scans and
-    /// resolves references, not merely avoids the crash.
+    /// `[x]` sits on a lazy continuation line of the block quote.
     @Test("shortcut reference resolves inside multi-segment content")
     func shortcutReferenceResolvesMultiSegment() {
         MarkdownDocument.withParsedDocument("[x]: /u\n\n>a\n[x]b") { doc in
@@ -125,12 +113,7 @@ struct MultiSegmentLinkLabelTests {
         }
     }
 
-    /// The `^[…](attrs)` extended-attribute inline form scanned over multi-segment content. Its
-    /// `(attrs)` interior straddles the interned-newline segment joining the two source lines. cmark
-    /// reads its flattened paragraph buffer, so the interior newline is ordinary attribute content and
-    /// the form resolves to an attribute whose string carries it. The scanner materializes the
-    /// straddling interior into the arena (reading `attributes()` forces that materialization), so the
-    /// attribute is reconstructed - matching the reference - rather than deferred to literal text.
+    /// An inline attribute's `(…)` may span a line ending, which is part of the attribute string.
     @Test("cross-line attribute form reconstructs the attribute (block quote)")
     func crossLineAttributeBlockQuote() {
         MarkdownDocument.withParsedDocument("> ^[a](\n> b)", options: [.attributes]) { doc in
@@ -154,10 +137,7 @@ struct MultiSegmentLinkLabelTests {
         }
     }
 
-    /// A NON-blank full-reference label that straddles the line join: cmark's `link_label` scans a flat
-    /// buffer, so it crosses the soft break to the `]`, captures `la\nbel`, normalizes it to `la bel`,
-    /// and resolves the full reference `[t][la\nbel]` - consuming the trailing bracket pair. The
-    /// contiguous window can't image the straddling label, so this drives the cross-line label scan.
+    /// A link label may span a line ending; matching normalizes `la\nbel` to `la bel` (Links).
     @Test("cross-line full-reference label resolves and consumes the trailing bracket")
     func crossLineFullReferenceResolves() {
         MarkdownDocument.withParsedDocument("[la bel]: /u\n\n>[t][la\nbel]") { doc in
@@ -169,9 +149,6 @@ struct MultiSegmentLinkLabelTests {
         }
     }
 
-    /// The same cross-line full-reference shape with NO matching definition: cmark scans the label,
-    /// fails the lookup, and rewinds to a literal `]` - both bracket pairs stay literal text. Confirms
-    /// the cross-line scan doesn't spuriously consume the trailing label when the reference is unknown.
     @Test("cross-line full-reference label with no definition stays literal")
     func crossLineFullReferenceNoDefinition() {
         MarkdownDocument.withParsedDocument(">[t][la\nbel]") { doc in

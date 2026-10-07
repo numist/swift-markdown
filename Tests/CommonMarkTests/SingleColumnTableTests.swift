@@ -11,19 +11,9 @@
 import Testing
 @testable import CommonMark
 
-/// GFM single-column table detection. A single-column table is one whose delimiter row parses to
-/// exactly one column (e.g. `|-`, `-|`, `|-|`, or a pipe-less `:-`). cmark-gfm accepts these
-/// (`extensions/table.c`: a table forms when the delimiter row scans to >= 1 column and the header
-/// column count equals it — there is NO requirement that the header line contain a pipe), so the
-/// rewrite must too. This holds on all three detection paths: the zero-copy contiguous fast path, the
-/// materialized-chunk path, and the non-contiguous segment path (a top-level row with leading
-/// whitespace, or content nested in a block quote / list).
-///
-/// A pipe-less dash-only second line (`-`, `--`, `---`) is NOT a table: cmark's block-start chain
-/// (`open_new_blocks` in `blocks.c`) matches a setext-heading underline BEFORE it reaches the table
-/// extension, so such a paragraph becomes a heading and never reaches table detection. The rewrite
-/// mirrors this: setext/thematic-break resolution happens during block parsing, before the paragraph
-/// is offered to the table transform. These negative controls pin that boundary.
+/// Tables whose delimiter row has one column, such as `|-`, `-|`, `|-|` or `:-` (Tables (extension)).
+/// The header row needs no pipe when its cell count matches the delimiter row's. A pipe-less line of
+/// dashes is a setext heading underline (Setext headings) rather than a delimiter row.
 @Suite("Single-column GFM tables")
 struct SingleColumnTableTests {
 
@@ -139,9 +129,7 @@ struct SingleColumnTableTests {
 
     @Test("a pipe-less colon single-column delimiter row forms a left-aligned table")
     func pipelessColonLeft() throws {
-        // cmark forms a table here (`a\n:-`): the pipe-less DASH exclusion is setext precedence, not a
-        // pipe requirement, and `:-` is not a setext underline. This is the case the task's simplified
-        // "single column needs a pipe" model gets wrong.
+        // `:-` is not a setext heading underline, so it can be a delimiter row without a pipe.
         let block = firstBlock("a\n:-")
         try #require(block.kind == .table, "expected a single-column table, got \(block.kind)")
         #expect(block.headerCells == ["a"])
@@ -171,20 +159,16 @@ struct SingleColumnTableTests {
         #expect(block.bodyRows == [["b"], ["c"]])
     }
 
-    @Test("a top-level row with leading whitespace still forms a single-column table (segment path)")
+    @Test("a top-level row with leading whitespace forms a single-column table")
     func leadingWhitespaceDelimiterRow() throws {
-        // ` :-` arrives as a re-indented segment list, not a contiguous source range; the detection
-        // gate must scan the delimiter line, not the (pipe-less) header.
         let block = firstBlock("a\n :-")
         try #require(block.kind == .table, "expected a single-column table, got \(block.kind)")
         #expect(block.headerCells == ["a"])
         #expect(block.alignments == [.left])
     }
 
-    @Test("a single-column table nested in a block quote forms (segment path)")
+    @Test("a single-column table nested in a block quote forms")
     func nestedBlockQuoteSingleColumn() throws {
-        // Nested content is a materialized segment list; the same gate must admit its pipe-less header.
-        // (Nested-container source positions are a separately deferred class; this asserts structure.)
         let table = try #require(firstTable("> a\n> :-"), "expected a nested single-column table")
         #expect(table.headerCells == ["a"])
         #expect(table.alignments == [.left])
@@ -192,8 +176,6 @@ struct SingleColumnTableTests {
 
     @Test("a pipe-less dash-only second line stays a setext heading, not a table")
     func pipelessDashIsSetext() {
-        // `-`, `--`, `---` are setext underlines; setext resolution precedes table detection, so these
-        // never become tables. This must stay true after relaxing the header-pipe gate.
         #expect(firstBlock("a\n-").kind == .heading)
         #expect(firstBlock("a\n--").kind == .heading)
         #expect(firstBlock("a\n---").kind == .heading)
@@ -201,13 +183,12 @@ struct SingleColumnTableTests {
 
     @Test("a second line that is not a delimiter row stays a paragraph")
     func nonDelimiterStaysParagraph() {
-        // Guard against over-eager detection: an ordinary two-line paragraph must not become a table.
         #expect(firstBlock("a\nb").kind == .paragraph)
         #expect(firstBlock("a|b\nc|d").kind == .paragraph)
     }
 
-    @Test("a multi-column table is unaffected")
-    func multiColumnRegression() throws {
+    @Test("a multi-column table forms")
+    func multiColumn() throws {
         let block = firstBlock("a|b\n-|-")
         try #require(block.kind == .table, "expected a two-column table, got \(block.kind)")
         #expect(block.headerCells == ["a", "b"])
@@ -216,23 +197,18 @@ struct SingleColumnTableTests {
 
     @Test("a delimiter row indented 4+ columns is not a table")
     func indentedDelimiterStaysParagraph() {
-        // cmark's table extension opens a table header only when the delimiter-row line is NOT
-        // indented (`try_opening_table_block`'s `!indented` gate — the same 4-column indented-code
-        // threshold setext underlines honor). A tab advances to the next 4-column tab stop, so a
-        // leading tab is 4 columns; 4+ spaces are likewise 4+ columns. Such a delimiter row is an
-        // ordinary lazy paragraph continuation, not a table.
+        // Like a setext heading underline, a delimiter row may be indented at most 3 columns; a more
+        // indented one is paragraph continuation text. A leading tab is 4 columns (Tabs).
         #expect(firstBlock("o\n\t-").kind == .paragraph)       // tab = 4 columns
         #expect(firstBlock("o\n    -").kind == .paragraph)     // 4 spaces
         #expect(firstBlock("o\n    |-").kind == .paragraph)    // 4 spaces + pipe delimiter
         #expect(firstBlock("o\n\t---").kind == .paragraph)     // tab + `---`
         #expect(firstBlock("o\n\t|-").kind == .paragraph)      // tab + pipe delimiter
-        #expect(firstBlock("Foo\n    ---").kind == .paragraph) // the original fuzzer seed
+        #expect(firstBlock("Foo\n    ---").kind == .paragraph) // 4 spaces + `---`
     }
 
-    @Test("a delimiter row indented fewer than 4 columns still forms a table")
+    @Test("a delimiter row indented fewer than 4 columns forms a table")
     func underIndentedDelimiterFormsTable() {
-        // The gate is exactly the < 4-column threshold, so 1–3 columns of indent still forms a
-        // table (guards the fix against over-correcting into rejecting all indentation).
         #expect(firstBlock("a\n   |-").kind == .table)   // 3 spaces
         #expect(firstBlock("a\n  :-:").kind == .table)   // 2 spaces
     }

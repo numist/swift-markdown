@@ -15,8 +15,7 @@ import Testing
 struct DeepBlockQuoteFootnoteTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes]
 
-    /// Footnote post-processing must not recurse one native stack frame per level either: a
-    /// reference at the bottom of a deep block-quote chain keeps its definition, which moves to the
+    /// A footnote reference 2,000 block quotes deep resolves to its definition, which moves to the
     /// document end.
     @Test func deepBlockQuoteFootnoteReferenceDoesNotOverflow() {
         let depth = 2_000
