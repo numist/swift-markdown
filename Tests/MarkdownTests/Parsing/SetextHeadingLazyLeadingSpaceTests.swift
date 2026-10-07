@@ -11,12 +11,10 @@
 @testable import Markdown
 import XCTest
 
-/// Minimized differential-fuzzer artifact.
-/// Input is `[markdown …][option byte]`, split as the fuzzer does. Position-free compare surface.
-class SetextRefdefLazySpaceFuzzArtifactTests: XCTestCase {
-    /// Flag-off (shipped): a setext heading's content is stripped of leading whitespace, where cmark-gfm
-    /// keeps the lazy continuation line's leading space after resolving the reference definition.
-    func testFlagOff() {
+class SetextHeadingLazyLeadingSpaceTests: XCTestCase {
+    /// Leading whitespace is stripped from a setext heading's content (Setext headings), including content
+    /// from a lazy continuation line that follows a link reference definition.
+    func testLazyContinuationLeadingSpaceIsStripped() {
         let (markdown, options) = DocumentRegressionTests.splitInput([62, 91, 97, 93, 58, 117, 10, 32, 255, 10, 62, 61, 10])!
         XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Heading level: 1\n      └─ Text \"\u{fffd}\"", Document(parsing: markdown, options: options).debugDescription(options: []))
     }

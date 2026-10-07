@@ -40,7 +40,7 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    /// A heading is not a paragraph, so an item whose first block is a setext heading is no task item.
+    /// A heading is not a paragraph, so an item whose first block is a setext heading is not a task list item.
     @Test func setextHeadingFirstBlockIsNoTaskItem() {
         #expect(tree("- [x] v\n  -") == """
             Document @1:1-2:4
@@ -150,7 +150,7 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    /// A table is not a paragraph, so an item whose first block is a table is no task item.
+    /// A table is not a paragraph, so an item whose first block is a table is not a task list item.
     @Test func tableFirstBlockIsNoTaskItem() {
         #expect(tree("- [ ] a|b\n  -|-") == """
             Document @1:1-2:6

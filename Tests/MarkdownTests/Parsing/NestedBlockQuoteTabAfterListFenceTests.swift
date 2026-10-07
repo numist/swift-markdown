@@ -11,18 +11,15 @@
 @testable import Markdown
 import XCTest
 
-/// A tab between nested block-quote markers, on a line that closes a list item's open fence, is consumed
-/// in columns by the following `>` marker.
-///
-/// Ground truth is cmark-gfm. Each case's second line leaves the list item (closing its unterminated fence)
-/// and opens nested block quotes whose last `>` follows a tab; cmark opens that last `>` as a further block
-/// quote (or, after its leftover columns, an indented code block). Spec-correct (CommonMark §2.2 tab stops).
-/// Position-free compare surface.
+/// A line of nested block quote markers ends the preceding list item and its unclosed fenced code block.
+/// A tab after a block quote marker counts in columns (Tabs): one column is the marker's optional space, so
+/// a following `>` opens a further block quote and following text at four more columns is an indented
+/// code block.
 class NestedBlockQuoteTabAfterListFenceTests: XCTestCase {
-    private static let fuzzedBits = ParseOptions(rawValue: UInt(0x3e & 0b11011111))
+    private static let options = ParseOptions(rawValue: UInt(0x3e & 0b11011111))
 
     private func surface(_ markdown: String) -> String {
-        Document(parsing: markdown, options: Self.fuzzedBits).debugDescription(options: [])
+        Document(parsing: markdown, options: Self.options).debugDescription(options: [])
     }
 
     func testTabBeforeFourthMarker() {

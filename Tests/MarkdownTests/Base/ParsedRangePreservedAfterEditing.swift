@@ -48,7 +48,7 @@ class ParsedRangePreservedAfterEditingTests: XCTestCase {
         // Replace all `Text` elements with `Emphasis(Text)`.
         // All existing `Text` elements should keep their parsed range.
         // All `Emphasis` elements should have `nil` parsed range.
-        // Everything else should still have their parsed range.
+        // Everything else keeps its parsed range.
         let source = """
         - 1
           - 2

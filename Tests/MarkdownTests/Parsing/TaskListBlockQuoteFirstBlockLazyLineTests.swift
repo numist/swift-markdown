@@ -11,103 +11,63 @@
 @testable import Markdown
 import XCTest
 
-class TaskListRetryLazyContinuationTests: XCTestCase {
+/// A list item whose first block is a block quote is not a task list item (Task list items (extension)), so
+/// `[x]` on a later line of the item is not a checkbox.
+class TaskListBlockQuoteFirstBlockLazyLineTests: XCTestCase {
     private func surface(_ markdown: String) -> String {
         let options = ParseOptions(rawValue: UInt(0x0a & 0b11011111))
         return Document(parsing: markdown, options: options).debugDescription(options: [])
     }
 
-    /// Flag-off (spec-correct): the item's first block is a block quote, not a paragraph (GFM task list
-    /// items), so the item has no checkbox and the lazy line continues the quote's paragraph whole, where
-    /// cmark's later-line checkbox retry checks the item and drops the advanced bytes.
-    func testLazyBlockQuoteParagraphFlagOff() {
+    func testLazyBlockQuoteParagraph() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"a\"\n            ├─ SoftBreak\n            └─ Text \"2- [x] a\"", surface("- > a\n  2- [x] a"))
     }
 
-    /// Flag-off (spec-correct): the item's first block is a block quote, not a paragraph (GFM task list
-    /// items), so the item has no checkbox and the lazy line continues the quoted item's paragraph whole,
-    /// where cmark's later-line checkbox retry checks the item and drops the advanced bytes.
-    func testLazyListItemParagraphInBlockQuoteFlagOff() {
+    func testLazyListItemParagraphInBlockQuote() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ UnorderedList\n            └─ ListItem\n               └─ Paragraph\n                  ├─ Text \"a\"\n                  ├─ SoftBreak\n                  └─ Text \"2- [x] a\"", surface("- > - a\n  2- [x] a"))
     }
 
-    /// Flag-off (spec-correct): the item's first block is a block quote, not a paragraph (GFM task list
-    /// items), so the item has no checkbox and the line after the blank line is the item's second
-    /// paragraph, whole, where cmark's later-line checkbox retry checks the item and drops the advanced
-    /// bytes.
-    func testBlankLineEndsLazyContinuationFlagOff() {
+    func testBlankLineEndsLazyContinuation() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      ├─ BlockQuote\n      │  └─ Paragraph\n      │     └─ Text \"a\"\n      └─ Paragraph\n         └─ Text \"2- [x] a\"", surface("- > a\n\n  2- [x] a"))
     }
 
-    /// Flag-off (spec-correct): the item's first block is a block quote, not a paragraph (GFM task list
-    /// items), so the item has no checkbox and the lazy line continues the quote's paragraph whole, where
-    /// cmark's later-line checkbox retry checks the item and drops the advanced bytes.
-    func testTabIndentedLazyLineFlagOff() {
+    func testTabIndentedLazyLine() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"a\"\n            ├─ SoftBreak\n            └─ Text \"2- [x] b\"", surface("- > a\n\t2- [x] b"))
     }
 
-    /// Flag-off (spec-correct): the item's first block is a block quote, not a paragraph (GFM task list
-    /// items), so the item has no checkbox and the code span holds the whole lazy line after its stripped
-    /// indent, where cmark's later-line checkbox retry checks the item and drops the advanced bytes.
-    func testLazyLineInCodeSpanFlagOff() {
+    func testLazyLineInCodeSpan() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            └─ InlineCode `a 22  [x] b`", surface("- > `a\n  22  [x] b`"))
     }
 
-    /// Flag-off (spec-correct): the item's first block is a block quote, not a paragraph (GFM task list
-    /// items), so the item has no checkbox and the lazy line, its NUL an ordinary U+FFFD, continues the
-    /// quote's paragraph whole, where cmark's later-line checkbox retry checks the item and drops the
-    /// advanced bytes.
-    func testNULLazyLineFlagOff() {
+    func testNULLazyLine() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"a\"\n            ├─ SoftBreak\n            └─ Text \"2\u{FFFD} [x] b\"", surface("- > a\n  2\0 [x] b"))
     }
 
-    /// Flag-off (spec-correct): the item's first block is a block quote, not a paragraph (GFM task list
-    /// items), so the item has no checkbox and the lazy line, its NUL an ordinary U+FFFD, continues the
-    /// quote's paragraph whole, where cmark's later-line checkbox retry checks the item and drops the
-    /// advanced bytes.
-    func testNULLazyLineAfterMatchedContinuationFlagOff() {
+    func testNULLazyLineAfterMatchedContinuation() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"a\"\n            ├─ SoftBreak\n            ├─ Text \"b\"\n            ├─ SoftBreak\n            └─ Text \"2\u{FFFD} [x] c\"", surface("- > a\n  > b\n  2\0 [x] c"))
     }
 
-    /// Flag-off (spec-correct): the item's first block is a block quote, not a paragraph (GFM task list
-    /// items), so the item has no checkbox and the lazy line continues the quote's paragraph whole, where
-    /// cmark's later-line checkbox retry checks the item and drops the advanced bytes.
-    func testIndentedLazyLineFlagOff() {
+    func testIndentedLazyLine() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"a\"\n            ├─ SoftBreak\n            └─ Text \"22 [x] b\"", surface("- > a\n      22 [x] b"))
     }
 
-    func testScanFailureLeavesItemUnchecked() {
+    func testDigitPrefixedLazyLine() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"a\"\n            ├─ SoftBreak\n            └─ Text \"2 [x] b\"", surface("- > a\n  2 [x] b"))
     }
 
-    /// Flag-off (spec-correct): the item's first block is a block quote, not a paragraph (GFM task list
-    /// items), so the item has no checkbox and the lazy line continues the quote's paragraph whole, where
-    /// cmark's later-line checkbox retry checks the item and orphans the `é`'s continuation byte.
-    func testMultiByteLazyLineFlagOff() {
+    func testMultiByteLazyLine() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"a\"\n            ├─ SoftBreak\n            └─ Text \"22\u{E9} [x] b\"", surface("- > a\n  22\u{E9} [x] b"))
     }
 
-    /// Flag-off (spec-correct): the item's first block is a block quote, not a paragraph (GFM task list
-    /// items), so the item has no checkbox and the lazy line is an ordinary header row for the quote's
-    /// delimiter row, where cmark's later-line checkbox retry checks the item, leaving orphaned bytes that
-    /// stop its header scan.
-    func testNULLazyLineHeadsTableFlagOff() {
+    func testNULLazyLineHeadsTable() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         ├─ Paragraph\n         │  └─ Text \"a\"\n         └─ Table alignments: |-|-|\n            ├─ Head\n            │  ├─ Cell\n            │  │  └─ Text \"2\u{FFFD} [x]\"\n            │  └─ Cell\n            │     └─ Text \"b\"\n            └─ Body", surface("- > a\n  2\0 [x] |b\n  > -|-"))
     }
 
-    /// Flag-off (spec-correct): the item's first block is a block quote, not a paragraph (GFM task list
-    /// items), so the item has no checkbox and the lazy line is an ordinary header row for the quote's
-    /// delimiter row, where cmark's later-line checkbox retry checks the item, leaving an orphaned byte
-    /// that stops its header scan.
-    func testMultiByteLazyLineHeadsTableFlagOff() {
+    func testMultiByteLazyLineHeadsTable() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         ├─ Paragraph\n         │  └─ Text \"a\"\n         └─ Table alignments: |-|-|\n            ├─ Head\n            │  ├─ Cell\n            │  │  └─ Text \"22\u{E9} [x]\"\n            │  └─ Cell\n            │     └─ Text \"b\"\n            └─ Body", surface("- > a\n  22\u{E9} [x] |b\n  > -|-"))
     }
 
-    /// Flag-off (spec-correct): the item's first block is a block quote, not a paragraph (GFM task list
-    /// items), so the item has no checkbox and the quote's last line heads a table under its paragraph,
-    /// where cmark's later-line checkbox retry checks the item, leaving orphaned bytes that stop its header
-    /// scan.
-    func testNULLazyLineThenTableFlagOff() {
+    func testNULLazyLineThenTable() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         ├─ Paragraph\n         │  ├─ Text \"a\"\n         │  ├─ SoftBreak\n         │  └─ Text \"2\u{FFFD} [x] b\"\n         └─ Table alignments: |-|-|\n            ├─ Head\n            │  ├─ Cell\n            │  │  └─ Text \"c\"\n            │  └─ Cell\n            │     └─ Text \"d\"\n            └─ Body", surface("- > a\n  2\0 [x] b\n  > c|d\n  > -|-"))
     }
 }

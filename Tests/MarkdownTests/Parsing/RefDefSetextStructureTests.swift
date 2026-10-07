@@ -11,17 +11,12 @@
 @testable import Markdown
 import XCTest
 
-/// Block structure when a reference-definition-only paragraph is immediately followed by a
-/// setext-underline (`===`/`---`) line and then content.
-///
-/// The definitions leave no paragraph to underline, so no heading forms. The paragraph is still open
-/// while the underline line is examined: `===` cannot interrupt it and becomes its text once the
-/// definitions are removed, while `---` is a thematic break, which interrupts it. Each block starts at
-/// its first content byte.
+/// A paragraph made only of link reference definitions, followed by a setext heading underline and then
+/// content. Once the definitions are removed there is no content to underline, so no setext heading forms
+/// (Setext headings): `===` cannot interrupt a paragraph and is its text, while `---` is a thematic break,
+/// which can. Each block starts at its first content byte.
 class RefDefSetextStructureTests: XCTestCase {
-    /// `===` after a ref-def-only line is not a thematic break, so it is paragraph text starting on
-    /// line 2; the following content keeps its true positions.
-    func testEqualsUnderlineAfterRefDefOpensFreshParagraph() {
+    func testEqualsUnderlineAfterRefDefIsParagraphText() {
         let text = "[a]: /u\n===\nx"
 
         let expectedDump = """
@@ -36,9 +31,8 @@ class RefDefSetextStructureTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// The removed reference definition is still registered, so a later `[foo]` shortcut in the
-    /// paragraph resolves against it.
-    func testEqualsUnderlineAfterRefDefStillRegistersDefinition() {
+    /// The removed link reference definition is defined, so a later `[foo]` resolves against it.
+    func testRefDefBeforeEqualsUnderlineIsDefined() {
         let text = "[foo]: /url\n===\n[foo]"
 
         let expectedDump = """
@@ -54,8 +48,6 @@ class RefDefSetextStructureTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// `---` after a ref-def-only line becomes a thematic break, and the following content opens a
-    /// new paragraph on line 3.
     func testDashUnderlineAfterRefDefBecomesThematicBreak() {
         let text = "[a]: /u\n---\nx"
 
@@ -70,9 +62,9 @@ class RefDefSetextStructureTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// Control: real content before the underline promotes to a setext heading, which ends with its
-    /// underline line, and the trailing ref-def is removed from the next paragraph, which starts at `x`.
-    func testRealContentBeforeUnderlineIsSetextHeading() {
+    /// Content before the underline forms a setext heading, and the link reference definition after it is
+    /// removed from the next paragraph.
+    func testContentBeforeUnderlineIsSetextHeading() {
         let text = "z\n===\n[a]: /u\nx"
 
         let expectedDump = """

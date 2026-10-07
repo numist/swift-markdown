@@ -11,9 +11,9 @@
 @testable import Markdown
 import XCTest
 
-/// Flag-OFF keeps the scalar, which CommonMark §6.5
-/// treats as a valid code point. Position-free compare surface.
-class EntityNoncharacterQuirkTests: XCTestCase {
+/// Numeric character references to noncharacters decode to the noncharacter itself, since each is a valid
+/// code point (Entity and numeric character references).
+class NoncharacterEntityTests: XCTestCase {
     // Swift string literals reject noncharacter escapes such as `\u{FDD0}`, so these are built from scalars.
     private static let uFFFE = String(Unicode.Scalar(0xFFFE as UInt32)!)
     private static let uFFFF = String(Unicode.Scalar(0xFFFF as UInt32)!)
@@ -28,7 +28,7 @@ class EntityNoncharacterQuirkTests: XCTestCase {
         "Document\n└─ Paragraph\n   └─ Text \"\(literal)\""
     }
 
-    // An Image, because the surface prints a Link's destination but not its title.
+    // An Image, because the debug description prints a Link's destination but not its title.
     private static func image(source: String, title: String) -> String {
         "Document\n└─ Paragraph\n   └─ Image source: \"\(source)\" title: \"\(title)\"\n      └─ Text \"a\""
     }
@@ -37,9 +37,7 @@ class EntityNoncharacterQuirkTests: XCTestCase {
         "Document\n└─ Paragraph\n   └─ Link destination: \"\(url)\"\n      └─ Text \"\(url)\""
     }
 
-    // MARK: Agreeing controls — other scalars survive under both flags
-
-    func testOtherScalarsSurviveUnderBothFlags() {
+    func testOtherNoncharactersAndReplacementCharacterDecode() {
         XCTAssertEqual(Self.text(Self.uFDD0), surface("&#xFDD0;"))
         XCTAssertEqual(Self.text(Self.u1FFFE), surface("&#x1FFFE;"))
         XCTAssertEqual(Self.text("\u{10FFFF}"), surface("&#x10FFFF;"))
@@ -49,9 +47,7 @@ class EntityNoncharacterQuirkTests: XCTestCase {
         XCTAssertEqual(Self.autolink("op:" + Self.uFDD0 + Self.u1FFFE + "\u{10FFFF}\u{FFFD}"), surface("<op:&#xFDD0;&#x1FFFE;&#x10FFFF;&#xFFFD;>"))
     }
 
-    // MARK: Flag OFF — the deliverable keeps the noncharacter scalar
-
-    func testFlagOffKeepsNoncharacters() {
+    func testUFFFEAndUFFFFDecode() {
         XCTAssertEqual(Self.text(Self.uFFFE + Self.uFFFF), surface("&#xFFFE;&#65535;"))
         XCTAssertEqual(Self.text(Self.uFFFE), surface("&#xFFFE;"))
         XCTAssertEqual(Self.text(Self.uFFFF), surface("&#xFFFF;"))

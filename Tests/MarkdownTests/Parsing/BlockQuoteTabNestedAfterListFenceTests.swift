@@ -11,14 +11,8 @@
 @testable import Markdown
 import XCTest
 
-/// A `>` TAB `>` block quote following a list item that holds an unterminated fenced code block: the tab
-/// after the outer `>` marker leaves enough columns that the second `>` opens a NESTED block quote.
-///
-/// Ground truth is cmark-gfm. For `- ` fence, then `>` TAB `>`, cmark produces `BlockQuote` → `BlockQuote`
-/// (nested). `>` TAB `>` on its own already nests on both sides, and the two-tab indented-code sibling
-/// (#182) is fixed; only this one-tab nested-quote case in the open-list-fence context still produced
-/// `BlockQuote` → `Paragraph` `Text ">"`. The nested quote is spec-correct (partially-consumed-tab
-/// columns). Position-free compare surface.
+/// `>` TAB `>` after a list item holding an unclosed fenced code block opens a nested block quote: the block
+/// quote marker consumes one column of the tab (Tabs), and the second `>` begins the inner block quote.
 class BlockQuoteTabNestedAfterListFenceTests: XCTestCase {
     // "- " "```" LF ">" TAB ">"
     private static let bytes: [UInt8] = [0x2d, 0x20, 0x60, 0x60, 0x60, 0x0a, 0x3e, 0x09, 0x3e]

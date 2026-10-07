@@ -17,7 +17,7 @@ fileprivate extension RandomAccessCollection where Element == DirectiveArgument 
         guard let found = self.first(where: {
             $0.name == name
         }) else {
-            XCTFail("Expected argument named \(name) but it was not found", file: file, line: line)
+            XCTFail("Expected an argument named \(name)", file: file, line: line)
             return nil
         }
         return found
@@ -290,13 +290,6 @@ class BlockDirectiveArgumentParserTests: XCTestCase {
             XCTAssertEqual(SourceLocation(line: 1, column: 11, source: nil)..<SourceLocation(line: 1, column: 12, source: nil), x.valueRange)
         }
 
-        // NOTE: The `}` here lands on a continuation line of the paragraph whose first line is
-        // indented two columns. The C cmark-gfm library has an inline source-position bug for wrapped
-        // paragraphs: it offsets every continuation line's inline columns by the *first* line's
-        // indentation, so it reported `}` at column 3 (and an internally inconsistent tree, since the
-        // text node then sat past its own paragraph's end column). The pure-Swift CommonMark parser
-        // reports the true column (1), so the expected ranges below differ from the historical
-        // cmark-gfm output: `}` is `@3:1-3:2` (not `@3:3-3:4`) and the document ends at `3:2` (not `3:4`).
         let expectedDump = """
         Document @1:1-3:2
         ├─ BlockDirective @1:1-1:13 name: "Outer"
@@ -841,7 +834,7 @@ class BlockDirectiveArgumentParserTests: XCTestCase {
     }
     
     func testEmptyStringArgument() {
-        // make sure that block directives where an argument is an empty string still show the argument after parsing
+        // make sure that block directives where an argument is an empty string show the argument after parsing
         let source = """
         @Outer(name: "") {
           This is a test.

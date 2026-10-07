@@ -31,7 +31,7 @@ final class TreeDumperPerformanceTests: XCTestCase {
 
         XCTAssertEqual(dump.split(separator: "\n").count, 2 + 2 * lines - 1)
 
-        // Generous bound for a loaded machine and a debug build; copying every sibling once per dumped node took about 45 seconds here.
+        // Generous for a loaded machine and a debug build, and far below the 45 seconds that copying every sibling once per dumped node takes.
         XCTAssertLessThan(elapsed, .seconds(5))
     }
 
@@ -52,7 +52,7 @@ final class TreeDumperPerformanceTests: XCTestCase {
 
         XCTAssertEqual(dump.split(separator: "\n").count, 1 + 2 * paragraphs)
 
-        // Generous bound for a loaded machine and a debug build; copying every sibling once per dumped node and once per ancestor took about 20 seconds here.
+        // Generous for a loaded machine and a debug build, and far below the 20 seconds that copying every sibling once per dumped node and once per ancestor takes.
         XCTAssertLessThan(elapsed, .seconds(5))
     }
 }

@@ -11,16 +11,9 @@
 @testable import Markdown
 import XCTest
 
-/// A list marker that opens an *empty* first item cannot interrupt a paragraph (CommonMark 0.31 §5.2).
-///
-/// Emptiness is decided by the run of spaces / tabs after the marker: if only whitespace remains
-/// before the line ends, the item is empty and the marker folds back into the paragraph as text. The
-/// whole trailing-whitespace run counts, not just the first byte - `*  ` (two spaces) and `*\t` (a tab
-/// materialized to several spaces) are as empty as `* `. The no-interrupt rule applies only while a
-/// paragraph is open; a marker on its own line still opens an empty list.
+/// An empty list item cannot interrupt a paragraph (List items). A list marker followed only by
+/// whitespace opens an empty item, however much whitespace follows it.
 class EmptyListItemInterruptTests: XCTestCase {
-    /// Two trailing spaces after the marker leave the item empty, so it does not interrupt the open
-    /// paragraph: the `*` folds back in as text joined by a soft break.
     func testEmptyItemWithTrailingSpacesDoesNotInterruptParagraph() {
         let text = "a\n*  "
 
@@ -36,7 +29,6 @@ class EmptyListItemInterruptTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// A non-empty first item still interrupts the paragraph and opens a list.
     func testNonEmptyItemInterruptsParagraph() {
         let text = "a\n* b"
 
@@ -54,9 +46,9 @@ class EmptyListItemInterruptTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// The whole trailing whitespace run counts toward emptiness, not just the first few: six trailing
-    /// spaces (past the 5-column indent boundary) still leave the item empty, so it does not interrupt.
-    func testManyTrailingSpacesStillEmptyAndDoesNotInterruptParagraph() {
+    /// Six spaces after the marker, enough to start indented code, leave the item empty when no content
+    /// follows them.
+    func testManyTrailingSpacesLeaveItemEmptyAndDoNotInterruptParagraph() {
         let text = "a\n*      "
 
         let expectedDump = """
@@ -71,8 +63,8 @@ class EmptyListItemInterruptTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// Five or more spaces followed by real content is a non-empty item (an indented code block within
-    /// the item), so it still interrupts the paragraph and opens a list.
+    /// Five or more spaces before content start the item with an indented code block (List items), so
+    /// the item is not empty.
     func testFivePlusSpacesThenContentInterruptsAsCodeBlock() {
         let text = "a\n*      x"
 
@@ -90,8 +82,6 @@ class EmptyListItemInterruptTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// With no paragraph open, an empty marker with trailing whitespace still opens an empty list -
-    /// the no-interrupt rule is scoped to paragraph continuation only.
     func testStandaloneEmptyItemFormsList() {
         let text = "*  "
 

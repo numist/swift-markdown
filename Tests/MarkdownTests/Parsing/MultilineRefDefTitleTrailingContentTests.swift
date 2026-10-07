@@ -11,15 +11,9 @@
 @testable import Markdown
 import XCTest
 
-/// Block structure for a multiline link reference definition whose title is on a continuation line that
-/// also carries trailing content (`[f]:dest` newline `"title"![f]`), where the trailing `![f]` resolves
-/// against the definition.
-///
-/// Ground truth is cmark-gfm. cmark-gfm keeps the continuation-line title on the definition even though
-/// non-whitespace (`![f]`) follows it on that line, so the image resolves WITH the title. That violates the
-/// CommonMark rule that no further character may follow a title (spec example 209; and cmark's own
-/// single-line behavior drops the title when content trails it). The title is dropped, `"title"` becomes
-/// paragraph text, and the image has no title. Position-free compare surface.
+/// No further non-whitespace characters may follow a link reference definition's title on its line (Link
+/// reference definitions). In `[f]:&` / `"title"![f]`, the definition ends at its destination, the second
+/// line is paragraph text, and its `![f]` is an image without a title.
 class MultilineRefDefTitleTrailingContentTests: XCTestCase {
     private func surface(_ bytes: [UInt8]) -> String {
         let options = ParseOptions(rawValue: 0)
@@ -27,7 +21,7 @@ class MultilineRefDefTitleTrailingContentTests: XCTestCase {
             .debugDescription(options: [])
     }
 
-    /// The fuzzer artifact: a NUL-only title (materialized to U+FFFD) on the continuation line.
+    /// The NUL is replaced by U+FFFD (Insecure characters).
     /// `[` `f` `]` `:` `&` LF `"` NUL `"` `!` `[` `f` `]`
     func testNulTitleWithTrailingImage() {
         let bytes: [UInt8] = [0x5b, 0x66, 0x5d, 0x3a, 0x26, 0x0a, 0x22, 0x00, 0x22, 0x21, 0x5b, 0x66, 0x5d]
@@ -36,8 +30,6 @@ class MultilineRefDefTitleTrailingContentTests: XCTestCase {
             surface(bytes))
     }
 
-    /// The same shape with an ordinary ASCII title, isolating the multiline-trailing-content trigger from
-    /// the NUL→U+FFFD replacement.
     func testAsciiTitleWithTrailingImage() {
         let bytes: [UInt8] = [0x5b, 0x66, 0x5d, 0x3a, 0x26, 0x0a, 0x22, 0x78, 0x22, 0x21, 0x5b, 0x66, 0x5d]
         XCTAssertEqual(

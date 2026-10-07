@@ -11,15 +11,10 @@
 @testable import Markdown
 import XCTest
 
-/// A list marker after `>` TAB, on a line that closes a list item's open fence (so its tabs reach block
-/// parsing unexpanded).
-///
-/// Ground truth is cmark-gfm, whose item content column counts the marker's leading indent in COLUMNS
-/// (`marker_offset = parser->indent`, blocks.c `parse_list_marker`): the tab after `>` widens the
-/// marker's offset to two columns, so the item's content starts at column 6 and a later `- ` indented
-/// less than that opens a sibling item, not a sublist. The same lines without the fence line already
-/// match. Spec-correct (CommonMark §2.2 tab stops). Position-free
-/// compare surface.
+/// A list item in a block quote whose marker follows `>` TAB, on a line that ends a list item holding an
+/// unclosed fenced code block. The tab counts in columns (Tabs): one column is the block quote marker's
+/// optional space and the other two indent the list marker, so they count toward the item's content column
+/// (List items).
 class ListMarkerTabOffsetAfterListFenceTests: XCTestCase {
     private static let listFence = "Document\n├─ UnorderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n"
 

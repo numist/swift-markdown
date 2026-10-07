@@ -11,14 +11,11 @@
 import Markdown
 import Testing
 
-/// Deep block-quote nesting must build the full tree (cmark leaves block quotes uncapped) and must
-/// render without overflowing the call stack, on any thread — including the small-stack worker
-/// threads the test runner uses.
+/// Deeply nested block quotes build the full tree and render without overflowing the call stack on any
+/// thread, including the test runner's small-stack worker threads.
 struct DeepBlockQuoteNestingTests {
 
-    /// A single line of `>` markers opens one block quote per marker, and a following line keeps
-    /// them open. Before block-quote nesting was uncapped, the per-line open-container walk threw a
-    /// parsing-limit error once the chain crossed 256, and the whole document collapsed to empty.
+    /// A line of `>` markers opens one block quote per marker, and a following line keeps them open.
     @Test func multiLineDeepBlockQuotesBuildFullTree() {
         let markdown = String(repeating: ">", count: 300) + "\n>"
         let document = Document(parsing: markdown)

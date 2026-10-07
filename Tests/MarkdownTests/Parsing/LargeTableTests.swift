@@ -11,14 +11,12 @@
 @testable import Markdown
 import XCTest
 
-/// cmark's GFM table extension caps a table row at 65534 cells and stops adding body rows once a table has
-/// autocompleted too many empty cells.
-///
-/// CommonMark/GFM have neither limit, so flag-OFF keeps every row.
+/// Tables (extension) set no limit on the number of cells in a row or on the number of empty cells inserted
+/// into rows shorter than the header row.
 ///
 /// The inputs are large, so these assert structure through the `Markdown` API rather than a full
 /// `debugDescription`.
-class TableAntiDoSLimitTests: XCTestCase {
+class LargeTableTests: XCTestCase {
     private func parse(_ markdown: String) -> Document {
         Document(parsing: markdown, options: [])
     }
@@ -41,36 +39,34 @@ class TableAntiDoSLimitTests: XCTestCase {
         return String(text.string.prefix(count))
     }
 
-    // MARK: - Row cell limit (`row_from_string`, `UINT16_MAX`)
+    // MARK: - Cells per row
 
     private static func bodyRowTable(cells: Int) -> String {
         "a|b\n-|-\n|" + String(repeating: "c|", count: cells) + "\n"
     }
 
-    func testFlagOffBodyRowOf65534CellsStaysInTable() {
+    func testBodyRowOf65534CellsStaysInTable() {
         let document = parse(Self.bodyRowTable(cells: 65534))
         XCTAssertEqual(["Table"], blockKinds(document))
         XCTAssertEqual(1, table(document)?.body.childCount)
         XCTAssertEqual(2, table(document)?.body.child(at: 0)?.childCount)
     }
 
-    /// Flag-OFF has no row cell limit.
-    func testFlagOffBodyRowOf65535CellsStaysInTable() {
+    func testBodyRowOf65535CellsStaysInTable() {
         let document = parse(Self.bodyRowTable(cells: 65535))
         XCTAssertEqual(["Table"], blockKinds(document))
         XCTAssertEqual(1, table(document)?.body.childCount)
     }
 
-    /// Flag-OFF has no row cell limit, so the 65535-column header and delimiter open a table.
-    func testFlagOffHeaderAndDelimiterOf65535ColumnsAreATable() {
+    func testHeaderAndDelimiterOf65535ColumnsAreATable() {
         let markdown = "|" + String(repeating: "a|", count: 65535) + "\n|" + String(repeating: "-|", count: 65535) + "\n"
         let document = parse(markdown)
         XCTAssertEqual(["Table"], blockKinds(document))
         XCTAssertEqual(65535, table(document)?.head.childCount)
     }
 
-    /// Flag-OFF agrees: a delimiter row whose cell count differs from the header row's opens no table.
-    func testFlagOffDelimiterOf65535ColumnsUnderTwoColumnHeaderIsNotATable() {
+    /// A delimiter row whose cell count differs from the header row's opens no table.
+    func testDelimiterOf65535ColumnsUnderTwoColumnHeaderIsNotATable() {
         let markdown = "a|b\n|" + String(repeating: "-|", count: 65535) + "\n"
         XCTAssertEqual(["Paragraph"], blockKinds(parse(markdown)))
     }
@@ -79,58 +75,55 @@ class TableAntiDoSLimitTests: XCTestCase {
         String(repeating: "x|", count: cells) + "\nb\n:-\n"
     }
 
-    func testFlagOffParagraphLineOf65534CellsAboveHeaderAllowsTable() {
+    func testParagraphLineOf65534CellsAboveHeaderAllowsTable() {
         let document = parse(Self.tableUnderWideLine(cells: 65534))
         XCTAssertEqual(["Paragraph", "Table"], blockKinds(document))
         XCTAssertEqual("x|x|x|", paragraphPrefix(document, 6))
     }
 
-    /// Flag-OFF has no row cell limit, so the quoted paragraph's last line heads a table under it.
-    func testFlagOffQuotedParagraphLineOf65535CellsAboveHeaderAllowsTable() {
+    /// The block quote's paragraph keeps its wide line, and its last line heads a table.
+    func testQuotedParagraphLineOf65535CellsAboveHeaderAllowsTable() {
         let markdown = "> " + String(repeating: "x|", count: 65535) + "\n> b\n> :-\n"
         let document = parse(markdown)
         XCTAssertEqual(["BlockQuote"], blockKinds(document))
         XCTAssertEqual(["Paragraph", "Table"], document.child(at: 0)?.children.map { String(describing: type(of: $0)) })
     }
 
-    func testFlagOffParagraphLineOf65535CellsAboveHeaderAllowsTable() {
+    func testParagraphLineOf65535CellsAboveHeaderAllowsTable() {
         let document = parse(Self.tableUnderWideLine(cells: 65535))
         XCTAssertEqual(["Paragraph", "Table"], blockKinds(document))
         XCTAssertEqual("x|x|x|", paragraphPrefix(document, 6))
     }
 
-    // MARK: - Autocompleted-cell budget (`try_opening_table_row`, `MAX_AUTOCOMPLETED_CELLS`)
+    // MARK: - Empty cells inserted into short rows
 
-    // With 1025 columns, each one-cell body row autocompletes 1024 cells. After 512 such rows the table
-    // has autocompleted exactly 0x80000 cells, which the `>` test still admits, so the 513th row joins;
-    // after it the total is 0x80000 + 1024, so the 514th line is refused and becomes a paragraph.
-    private static let budgetColumns = 1025
-    private static let budgetRowsAdmitted = 513
+    // Each one-cell body row of a `wideColumns`-column table gets 1024 empty cells.
+    private static let wideColumns = 1025
+    private static let shortRowCount = 513
 
     private static func wideTable(_ bodyRows: [String]) -> String {
-        "|" + String(repeating: "a|", count: budgetColumns) + "\n|"
-            + String(repeating: "-|", count: budgetColumns) + "\n"
+        "|" + String(repeating: "a|", count: wideColumns) + "\n|"
+            + String(repeating: "-|", count: wideColumns) + "\n"
             + bodyRows.map { $0 + "\n" }.joined()
     }
 
-    func testFlagOffRowAtAutocompletedCellBudgetStaysInTable() {
-        let document = parse(Self.wideTable(Array(repeating: "x", count: Self.budgetRowsAdmitted)))
+    func testRowsMissing1024CellsEachStayInTable() {
+        let document = parse(Self.wideTable(Array(repeating: "x", count: Self.shortRowCount)))
         XCTAssertEqual(["Table"], blockKinds(document))
-        XCTAssertEqual(Self.budgetRowsAdmitted, table(document)?.body.childCount)
+        XCTAssertEqual(Self.shortRowCount, table(document)?.body.childCount)
     }
 
-    /// Flag-OFF has no autocompleted-cell budget, so the wide row and every one-cell row stay in the table.
-    func testFlagOffKeepsRowsAfterRowWiderThanTable() {
+    func testKeepsRowsAfterRowWiderThanTable() {
         let wideRow = String(repeating: "y|", count: 3000)
-        let rows = [wideRow] + Array(repeating: "x", count: Self.budgetRowsAdmitted + 1)
+        let rows = [wideRow] + Array(repeating: "x", count: Self.shortRowCount + 1)
         let document = parse(Self.wideTable(rows))
         XCTAssertEqual(["Table"], blockKinds(document))
-        XCTAssertEqual(Self.budgetRowsAdmitted + 2, table(document)?.body.childCount)
+        XCTAssertEqual(Self.shortRowCount + 2, table(document)?.body.childCount)
     }
 
-    /// Flag-OFF has no autocompleted-cell budget, so every quoted line, `:-` and `z` included, is a row of one table.
-    func testFlagOffQuotedRowsPastBudgetStayInTable() {
-        let markdown = Self.wideTable(Array(repeating: "x", count: Self.budgetRowsAdmitted + 1) + [":-", "z"])
+    /// Every quoted line, `:-` and `z` included, is a row of one table.
+    func testQuotedRowsMissingCellsStayInTable() {
+        let markdown = Self.wideTable(Array(repeating: "x", count: Self.shortRowCount + 1) + [":-", "z"])
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.isEmpty ? "" : "> " + $0 }
             .joined(separator: "\n")
@@ -138,35 +131,33 @@ class TableAntiDoSLimitTests: XCTestCase {
         XCTAssertEqual(["BlockQuote"], blockKinds(document))
         guard let quote = document.child(at: 0) else { return XCTFail("missing block quote") }
         XCTAssertEqual(["Table"], quote.children.map { String(describing: type(of: $0)) })
-        XCTAssertEqual(Self.budgetRowsAdmitted + 3, (quote.child(at: 0) as? Table)?.body.childCount)
+        XCTAssertEqual(Self.shortRowCount + 3, (quote.child(at: 0) as? Table)?.body.childCount)
     }
 
-    /// Flag-OFF has no autocompleted-cell budget, so `:-` and `z` are rows of the first table.
-    func testFlagOffRowsPastBudgetStayInFirstTable() {
-        let document = parse(Self.wideTable(Array(repeating: "x", count: Self.budgetRowsAdmitted + 1) + [":-", "z"]))
+    /// `:-` and `z` are rows of the table.
+    func testDelimiterShapedRowStaysInTable() {
+        let document = parse(Self.wideTable(Array(repeating: "x", count: Self.shortRowCount + 1) + [":-", "z"]))
         XCTAssertEqual(["Table"], blockKinds(document))
-        XCTAssertEqual(Self.budgetRowsAdmitted + 3, table(document)?.body.childCount)
+        XCTAssertEqual(Self.shortRowCount + 3, table(document)?.body.childCount)
     }
 
-    /// Flag-OFF has no autocompleted-cell budget, so a header split off a multi-line paragraph keeps every row.
-    func testFlagOffMultiLineHeaderTableKeepsRows() {
-        let rows = Array(repeating: "x", count: Self.budgetRowsAdmitted + 1)
+    /// A header row that ends a multi-line paragraph heads a table that keeps every row.
+    func testMultiLineHeaderTableKeepsRows() {
+        let rows = Array(repeating: "x", count: Self.shortRowCount + 1)
         let document = parse("p\n" + Self.wideTable(rows))
         XCTAssertEqual(["Paragraph", "Table"], blockKinds(document))
-        XCTAssertEqual(Self.budgetRowsAdmitted + 1, table(document)?.body.childCount)
+        XCTAssertEqual(Self.shortRowCount + 1, table(document)?.body.childCount)
     }
 
-    /// Flag-OFF has no autocompleted-cell budget, with CRLF line endings too.
-    func testFlagOffCRLFTableKeepsRows() {
-        let rows = Array(repeating: "x", count: Self.budgetRowsAdmitted + 1)
+    func testCRLFTableKeepsRows() {
+        let rows = Array(repeating: "x", count: Self.shortRowCount + 1)
         let markdown = Self.wideTable(rows).replacingOccurrences(of: "\n", with: "\r\n")
         let document = parse(markdown)
         XCTAssertEqual(["Table"], blockKinds(document))
-        XCTAssertEqual(Self.budgetRowsAdmitted + 1, table(document)?.body.childCount)
+        XCTAssertEqual(Self.shortRowCount + 1, table(document)?.body.childCount)
     }
 
-    /// Flag-OFF has no autocompleted-cell budget, so all 600 rows stay in the table.
-    func testFlagOffThousandColumnTableKeepsAllRows() {
+    func testThousandColumnTableKeepsAllRows() {
         let markdown = "|" + String(repeating: "a|", count: 1000) + "\n|" + String(repeating: "-|", count: 1000) + "\n"
             + String(repeating: "x\n", count: 600)
         let document = parse(markdown)
@@ -174,10 +165,9 @@ class TableAntiDoSLimitTests: XCTestCase {
         XCTAssertEqual(600, table(document)?.body.childCount)
     }
 
-    /// Flag-OFF has no autocompleted-cell budget.
-    func testFlagOffKeepsRowsPastAutocompletedCellBudget() {
-        let document = parse(Self.wideTable(Array(repeating: "x", count: Self.budgetRowsAdmitted + 1)))
+    func testOneMoreRowMissing1024CellsStaysInTable() {
+        let document = parse(Self.wideTable(Array(repeating: "x", count: Self.shortRowCount + 1)))
         XCTAssertEqual(["Table"], blockKinds(document))
-        XCTAssertEqual(Self.budgetRowsAdmitted + 1, table(document)?.body.childCount)
+        XCTAssertEqual(Self.shortRowCount + 1, table(document)?.body.childCount)
     }
 }

@@ -11,11 +11,11 @@
 @testable import Markdown
 import XCTest
 
-/// Block structure when a reference-definition-only paragraph is followed by a setext-underline line.
+/// A paragraph made only of link reference definitions, followed by a setext heading underline. Once the
+/// definitions are removed, the underline is the first line of a paragraph or the header row of a table
+/// (Tables (extension)).
 class RefDefSetextTableStructureTests: XCTestCase {
-    // MARK: Flag-off (shipped)
-
-    func testFlagOffLinesFormTable() {
+    func testUnderlineIsTableHeaderRow() {
         let text = "[r]:o\n=\n|-"
 
         let expectedDump = """
@@ -31,9 +31,7 @@ class RefDefSetextTableStructureTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// Flag-off (shipped): the dropped definition takes no part in the paragraph, which starts on the `=`
-    /// line, where cmark-gfm's paragraph keeps the definition's start line.
-    func testFlagOffParagraphStartsAfterDefinition() {
+    func testParagraphStartsAfterDefinition() {
         let text = "[r]:o\n=\nx"
 
         let expectedDump = """
@@ -48,9 +46,7 @@ class RefDefSetextTableStructureTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// Flag-off (shipped): the table spans only its header and delimiter rows, where cmark-gfm's table
-    /// starts on the preceding multi-line definition's first line.
-    func testFlagOffMaterializedDefinitionTableStartsAtHeader() {
+    func testTableAfterMultilineDefinitionStartsAtHeaderRow() {
         let text = "[f]:\n \"\n=\n|-"
 
         let expectedDump = """
@@ -66,7 +62,7 @@ class RefDefSetextTableStructureTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    func testFlagOffSegmentedLinesFormTable() {
+    func testUnderlineIsTableHeaderRowInBlockQuote() {
         let text = "> [r]:o\n> =\n> |-"
 
         let expectedDump = """
@@ -83,7 +79,7 @@ class RefDefSetextTableStructureTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    func testFlagOffParagraphBeforeTable() {
+    func testUnderlineIsParagraphBeforeTable() {
         let text = "[r]:o\n=\nfoo\n|-"
 
         let expectedDump = """

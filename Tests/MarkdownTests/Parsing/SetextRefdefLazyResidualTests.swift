@@ -11,11 +11,11 @@
 @testable import Markdown
 import XCTest
 
-/// A setext heading whose paragraph opens with a link reference definition followed by a lazy
-/// continuation line. Ground truth is cmark-gfm.
+/// A setext heading whose lines begin with a link reference definition and continue on an indented line.
+/// As with a paragraph, the heading's content has its initial whitespace removed (Paragraphs, Setext headings).
 class SetextRefdefLazyResidualTests: XCTestCase {
-    /// Options byte 0x0a (smart off, symbol links).
-    private func surface(_ markdown: String) -> String {
+    /// Parses `markdown` with `[.parseSymbolLinks, .parseMinimalDoxygen]`.
+    private func tree(_ markdown: String) -> String {
         var bytes = Array(markdown.utf8)
         bytes.append(0x0a)
         let (text, options) = DocumentRegressionTests.splitInput(bytes)!
@@ -26,69 +26,58 @@ class SetextRefdefLazyResidualTests: XCTestCase {
         "Document\n└─ BlockQuote\n   └─ Heading level: \(level)\n\(children)"
     }
 
-    /// Flag-off (shipped) strips a heading's leading whitespace, as the spec requires.
-    func testLazyTwoSpacesFlagOff() {
-        XCTAssertEqual(Self.quotedHeading("      └─ Text \"b\""), surface(">[a]:u\n  b\n>=\n"))
+    func testLazyTwoSpaces() {
+        XCTAssertEqual(Self.quotedHeading("      └─ Text \"b\""), tree(">[a]:u\n  b\n>=\n"))
     }
 
-    /// Flag-off (shipped): a setext heading's content is stripped of leading whitespace, where cmark-gfm
-    /// keeps the lazy line's leading tab.
-    func testLazyTabFlagOff() {
-        XCTAssertEqual(Self.quotedHeading("      └─ Text \"b\""), surface(">[a]:u\n\tb\n>=\n"))
+    func testLazyTab() {
+        XCTAssertEqual(Self.quotedHeading("      └─ Text \"b\""), tree(">[a]:u\n\tb\n>=\n"))
     }
 
-    /// Flag-off (shipped): a setext heading's content is stripped of leading whitespace, where cmark-gfm
-    /// keeps the first remainder line's leading space.
-    func testMultiLineRemainderFlagOff() {
+    func testMultiLineRemainder() {
         XCTAssertEqual(
             Self.quotedHeading("      ├─ Text \"b\"\n      ├─ SoftBreak\n      └─ Text \"c\""),
-            surface(">[a]:u\n b\n c\n>=\n"))
+            tree(">[a]:u\n b\n c\n>=\n"))
     }
 
-    /// Flag-off (shipped): a setext heading's content is stripped of leading whitespace, where cmark-gfm
-    /// keeps the lazy line's leading space under a `---` underline.
-    func testDashUnderlineFlagOff() {
-        XCTAssertEqual(Self.quotedHeading(level: 2, "      └─ Text \"b\""), surface(">[a]:u\n b\n>---\n"))
+    func testDashUnderline() {
+        XCTAssertEqual(Self.quotedHeading(level: 2, "      └─ Text \"b\""), tree(">[a]:u\n b\n>---\n"))
     }
 
-    /// Flag-off (shipped): a setext heading's content is stripped of leading whitespace, where cmark-gfm
-    /// keeps the lazy line's leading space in a list item.
-    func testListLazyResidualFlagOff() {
+    func testListItemLazyLine() {
         XCTAssertEqual(
             "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 1\n         └─ Text \"b\"",
-            surface("- [a]:u\n b\n  =\n"))
+            tree("- [a]:u\n b\n  =\n"))
     }
 
-    /// Flag-off (shipped): a setext heading's content is stripped of leading whitespace, where cmark-gfm
-    /// keeps the space left after the outer `>` prefix match.
-    func testNestedQuotePartialPrefixFlagOff() {
+    func testNestedQuotePartialPrefix() {
         XCTAssertEqual(
             "Document\n└─ BlockQuote\n   └─ BlockQuote\n      └─ Heading level: 1\n         └─ Text \"b\"",
-            surface(">>[a]:u\n>  b\n>>=\n"))
+            tree(">>[a]:u\n>  b\n>>=\n"))
     }
 
     /// `[ ] [a]:u` does not begin with a link reference definition, so it is heading text, and a heading is
     /// not the paragraph a task list item must begin with (spec "Task list items (extension)").
-    func testTaskCheckboxThenRefDefFlagOff() {
+    func testTaskCheckboxThenRefDef() {
         XCTAssertEqual(
             "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 1\n         ├─ Text \"[ ] [a]:u\"\n         ├─ SoftBreak\n         └─ Text \"b\"",
-            surface("- [ ] [a]:u\n b\n  =\n"))
+            tree("- [ ] [a]:u\n b\n  =\n"))
     }
 
-    func testNonLazyContinuationFlagOff() {
-        XCTAssertEqual(Self.quotedHeading("      └─ Text \"b\""), surface(">[a]:u\n>  b\n>=\n"))
+    func testNonLazyContinuation() {
+        XCTAssertEqual(Self.quotedHeading("      └─ Text \"b\""), tree(">[a]:u\n>  b\n>=\n"))
     }
 
-    func testNoRefDefFlagOff() {
+    func testNoRefDef() {
         XCTAssertEqual(
             Self.quotedHeading("      ├─ Text \"a\"\n      ├─ SoftBreak\n      └─ Text \"b\""),
-            surface(">a\n b\n>=\n"))
+            tree(">a\n b\n>=\n"))
     }
 
     /// A heading is not the paragraph a task list item must begin with (spec "Task list items (extension)").
-    func testTaskCheckboxGapFlagOff() {
+    func testTaskCheckboxGap() {
         XCTAssertEqual(
             "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 1\n         └─ Text \"[ ]  \tb\"",
-            surface("- [ ]  \tb\n  =\n"))
+            tree("- [ ]  \tb\n  =\n"))
     }
 }

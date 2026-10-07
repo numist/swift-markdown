@@ -11,34 +11,26 @@
 @testable import Markdown
 import XCTest
 
+/// A list item whose paragraph begins with a digit-led word before `[x]` or `[X]` has no checkbox: the
+/// paragraph does not begin with a task list item marker (Task list items (extension)).
 class TaskListDigitPrefixUppercaseCheckboxTests: XCTestCase {
     private func surface(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])
     }
 
-    /// Flag-off (spec-correct): a paragraph beginning `2-` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox and the line stays paragraph text whole, where cmark's
-    /// later-line checkbox retry checks the item.
-    func testUppercaseCheckboxThenContentFlagOff() {
+    func testDigitDashPrefix() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2- [X] a\"", surface("+\n  2- [X] a"))
     }
 
-    /// Flag-off (spec-correct): a paragraph beginning `12-` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox and the line stays paragraph text whole, where cmark's
-    /// later-line checkbox retry checks the item.
-    func testMultiDigitUppercaseCheckboxFlagOff() {
+    func testMultiDigitDashPrefix() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"12- [X]\"", surface("+\n  12- [X]\t"))
     }
 
-    /// Flag-off (spec-correct): a paragraph beginning `2é` has no task list item marker (GFM task list
-    /// items), so the item has no checkbox and the line stays paragraph text whole, where cmark's
-    /// later-line checkbox retry checks the item.
-    func testMultiByteScalarAfterDigitFlagOff() {
+    func testMultiByteScalarAfterDigit() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{E9} [x]\"", surface("+\n  2\u{E9} [x] "))
     }
 
-    /// Flag-off (spec-correct): no checkbox; the whole continuation line stays paragraph text.
-    func testFlagOffNoCheckbox() {
+    func testDigitDashPrefixWithDefaultOptions() {
         XCTAssertEqual(
             "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2- [X]\"",
             Document(parsing: "+\n  2- [X]\t").debugDescription(options: []))

@@ -11,15 +11,9 @@
 @testable import Markdown
 import XCTest
 
-/// Nested block-quote markers separated by raw tabs, on a line whose tabs reach block parsing unexpanded
-/// because the previous line left a fenced code block open.
-///
-/// Ground truth is cmark-gfm, whose `S_advance_offset(..., columns: true)` (blocks.c) consumes a tab in
-/// columns: the optional column after `>` fully consumes a tab that ends one column later (a tab starting
-/// at column 3 mod 4) and only partially consumes a wider one. Every tab stop, depth, and marker spacing
-/// must nest and strip indentation exactly as the same line would parse on its own. The expected trees
-/// follow CommonMark's tab-stop rules, which cmark implements here.
-/// Position-free compare surface.
+/// Nested block quote markers separated by tabs, on a line after an unclosed fenced code block. A tab counts
+/// to the next tab stop (Tabs), and the space a block quote marker may be followed by takes one column of
+/// it: all of a tab that starts at column 3 mod 4, part of a wider one (Block quotes).
 class BlockQuoteTabColumnMatrixTests: XCTestCase {
     private static let listFence = "Document\n├─ UnorderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n"
 
@@ -101,7 +95,7 @@ class BlockQuoteTabColumnMatrixTests: XCTestCase {
     func testContinuationMarkerAfterPartiallyConsumedTab() {
         assertSurface(quotes(2, .code("x"), head: "Document\n"), "> > ```\n>\t>x")
         assertSurface(quotes(2, .code("x"), head: "Document\n"), "> > ```\n>\t> x")
-        // Control: a paragraph line has its prefix tabs expanded before block parsing.
+        // Control: the same markers on a paragraph continuation line.
         assertSurface("Document\n└─ BlockQuote\n   └─ BlockQuote\n      └─ Paragraph\n         ├─ Text \"a\"\n         ├─ SoftBreak\n         └─ Text \"x\"", "> > a\n>\t> x")
     }
 

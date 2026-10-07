@@ -11,15 +11,10 @@
 @testable import Markdown
 import XCTest
 
-/// A GFM fenced code block whose OPENING fence is indented, followed by a body line whose leading
-/// whitespace contains a TAB that straddles the fence-indent boundary.
-///
-/// cmark strips the fence's indentation from each body line in COLUMNS, tab-stop-aware (blocks.c
-/// `parse_code_block_prefix` advances `fence_offset` columns). When a body-line tab straddles that
-/// boundary, cmark's `partially_consumed_tab` (blocks.c `add_line`) drops the tab byte and emits its
-/// leftover columns as spaces, then copies the rest of the line verbatim (so any *content* tab stays
-/// literal). A tab occupying columns [0,4) therefore contributes `4 - fence_offset` leading spaces to
-/// the content. The 0-indent fence consumes nothing, so a body tab stays a literal tab.
+/// When the opening code fence is indented N columns, up to N columns of indentation are removed from each
+/// content line (Fenced code blocks). A tab counts to the next tab stop (Tabs): when the removed columns end
+/// inside a tab, the tab's remaining columns become spaces, and the rest of the line, later tabs included,
+/// is kept as is.
 class FencedCodeTabExpansionTests: XCTestCase {
     /// Assert the parsed document is a single top-level fenced code block with the expected content
     /// bytes and dump. `contentDisplay` is the code line as `debugDescription` renders it: the raw
@@ -44,8 +39,6 @@ class FencedCodeTabExpansionTests: XCTestCase {
         guard let codeBlock = codeBlocks.first else { return }
         XCTAssertNil(codeBlock.language, file: file, line: line)
 
-        // The observable content bytes (this is what the fence-indent strip drops when it is not
-        // tab-stop-aware).
         XCTAssertEqual(codeBlock.code, expectedCode, file: file, line: line)
 
         let expectedDump = "Document \(docRange)\n└─ CodeBlock \(codeBlockRange) language: none\n\(contentDisplay)"
@@ -110,10 +103,8 @@ class FencedCodeTabExpansionTests: XCTestCase {
         )
     }
 
-    /// A fence nested in a block quote: the body tab is measured from the container column (2), not the
-    /// line start, so its width is 2 and the 1-column strip leaves a single space (NOT three). Exercises
-    /// the `startColumn`/`columnWidth` path that a top-level fence never reaches - a broken `columnWidth`
-    /// returning 0 would treat the tab as 4 columns wide and emit `   x`.
+    /// In a block quote, the tab starts at column 2, so it spans two columns and removing one leaves one
+    /// space.
     func testNestedBlockQuoteFenceStraddlingTab() {
         let input = ">  ```\n> \tx"
         XCTAssertTrue(input.utf8.contains(0x09), "fixture must contain a tab")
@@ -126,7 +117,6 @@ class FencedCodeTabExpansionTests: XCTestCase {
         guard let codeBlock = codeBlocks.first else { return }
         XCTAssertNil(codeBlock.language)
 
-        // Ground truth (cmark): the tab at column 2 has width 2; the 1-column strip leaves one space, then `x`.
         XCTAssertEqual(codeBlock.code, " x\n")
 
         let expectedDump =
@@ -137,7 +127,7 @@ class FencedCodeTabExpansionTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// Guard: a 0-indent fence consumes nothing, so a body tab stays a literal tab (must NOT expand).
+    /// An unindented fence removes no indentation, so the tab is kept.
     func testZeroIndentFenceKeepsLiteralTab() {
         check(
             input: "```\n\t",
@@ -148,12 +138,8 @@ class FencedCodeTabExpansionTests: XCTestCase {
         )
     }
 
-    /// After a block quote (with an unclosed empty fenced code block) closes, a line whose leading TAB
-    /// reaches four columns opens an INDENTED code block, not a second fence. cmark gates the fence
-    /// opener on `!indented` (`parser->indent < 4`, blocks.c `open_new_blocks`), an indent measured in
-    /// COLUMNS - so the tab (one byte, four columns) is indented code and the `~~~` is its content, not a
-    /// fence marker. The tab reaches the opener unexpanded because a fenced-code body line skips
-    /// `expandPrefixTabs`; a byte-distance gate would see one byte, admit the fence, and drop the `~~~`.
+    /// A line indented by a tab to four columns ends the block quote and its unclosed fenced code block and
+    /// opens an indented code block (Indented code blocks), so `~~~` is code content, not a code fence.
     func testTabIndentedCodeAfterBlockQuoteCloses() {
         let input = ">~~~\n\t~~~"
         XCTAssertTrue(input.utf8.contains(0x09), "fixture must contain a tab")
@@ -172,7 +158,6 @@ class FencedCodeTabExpansionTests: XCTestCase {
         XCTAssertEqual(nestedCodeBlocks.first?.code, "")
         XCTAssertNil(nestedCodeBlocks.first?.language)
 
-        // Ground truth (cmark): the tab-indented `~~~` is the indented code block's content, not a fence.
         guard let topLevelCode = topLevelCodeBlocks.first else { return }
         XCTAssertEqual(topLevelCode.code, "~~~\n")
         XCTAssertNil(topLevelCode.language)

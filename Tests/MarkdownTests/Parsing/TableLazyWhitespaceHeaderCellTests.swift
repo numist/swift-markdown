@@ -11,80 +11,60 @@
 @testable import Markdown
 import XCTest
 
-/// A GFM table header row that is a whitespace-only leading cell closed by a pipe (`<ws>|`), with table
-/// spans on. Ground truth is cmark-gfm.
+/// A table header row whose first cell is only whitespace before a pipe (`<ws>|`). A lazy continuation
+/// line loses its initial whitespace like any paragraph line (Paragraphs), so the header row is a lone `|`
+/// and no table forms (Tables (extension)).
 class TableLazyWhitespaceHeaderCellTests: XCTestCase {
-    /// Options byte 0x0a (smart off, symbol links; tables and table spans always on in the harness).
-    private func surface(_ markdown: String) -> String {
+    /// Parses `markdown` with `[.parseSymbolLinks, .parseMinimalDoxygen]`.
+    private func tree(_ markdown: String) -> String {
         var bytes = Array(markdown.utf8)
         bytes.append(0x0a)
         let (text, options) = DocumentRegressionTests.splitInput(bytes)!
         return Document(parsing: text, options: options).debugDescription(options: [])
     }
 
-    /// Flag-off (shipped) strips a lazy continuation line's leading whitespace like any paragraph line's
-    /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the space
-    /// and opens a table headed by a filler cell.
-    func testLazyOneSpaceFlagOff() {
-        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", surface(">x\n |\n>-|\n"))
+    func testLazyOneSpace() {
+        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", tree(">x\n |\n>-|\n"))
     }
 
-    /// Flag-off (shipped) strips a lazy continuation line's leading whitespace like any paragraph line's
-    /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the
-    /// spaces and opens a table headed by a whitespace cell.
-    func testLazyThreeSpacesFlagOff() {
-        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", surface(">x\n   |\n>-|\n"))
+    func testLazyThreeSpaces() {
+        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", tree(">x\n   |\n>-|\n"))
     }
 
-    /// Flag-off (shipped) strips a lazy continuation line's leading whitespace like any paragraph line's
-    /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the tab
-    /// and opens a table headed by a filler cell.
-    func testLazyTabFlagOff() {
-        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", surface(">x\n\t|\n>-|\n"))
+    func testLazyTab() {
+        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", tree(">x\n\t|\n>-|\n"))
     }
 
-    /// Flag-off (shipped) strips a lazy continuation line's leading whitespace like any paragraph line's
-    /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the space
-    /// and tab and opens a table headed by a whitespace cell.
-    func testLazySpaceTabFlagOff() {
-        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", surface(">x\n \t|\n>-|\n"))
+    func testLazySpaceTab() {
+        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", tree(">x\n \t|\n>-|\n"))
     }
 
-    /// Flag-off (shipped) strips a lazy continuation line's leading whitespace like any paragraph line's
-    /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the tab
-    /// and opens a table headed by a filler cell.
-    func testLazyTabAfterListIndentFlagOff() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"x\"\n            ├─ SoftBreak\n            ├─ Text \"|\"\n            ├─ SoftBreak\n            └─ Text \"-|\"", surface("- >x\n  \t|\n  >-|\n"))
+    func testLazyTabAfterListIndent() {
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"x\"\n            ├─ SoftBreak\n            ├─ Text \"|\"\n            ├─ SoftBreak\n            └─ Text \"-|\"", tree("- >x\n  \t|\n  >-|\n"))
     }
 
-    /// Flag-off (shipped) strips a lazy continuation line's leading whitespace like any paragraph line's
-    /// (CommonMark paragraphs), so the header is a lone `|` and no table forms, where cmark keeps the tab's
-    /// leftover columns and opens a table headed by a whitespace cell.
-    func testLazySplitTabAfterListIndentFlagOff() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"x\"\n            ├─ SoftBreak\n            ├─ Text \"|\"\n            ├─ SoftBreak\n            └─ Text \"-|\"", surface("- >x\n \t|\n  >-|\n"))
+    func testLazySplitTabAfterListIndent() {
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"x\"\n            ├─ SoftBreak\n            ├─ Text \"|\"\n            ├─ SoftBreak\n            └─ Text \"-|\"", tree("- >x\n \t|\n  >-|\n"))
     }
 
-    /// A matched block-quote continuation is advanced to its first non-space, so the header is a lone
-    /// `|` (zero columns) and no table forms.
+    /// A non-lazy line in a block quote also loses its initial whitespace.
     func testNonLazyContinuationFormsNoTable() {
-        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", surface(">x\n>  |\n>-|\n"))
+        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"", tree(">x\n>  |\n>-|\n"))
     }
 
-    /// A paragraph's first line is advanced to its first non-space, so the header is a lone `|`.
+    /// A paragraph's first line also loses its initial whitespace.
     func testTopLevelLeadingSpacesFormNoTable() {
-        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"|\"\n   ├─ SoftBreak\n   └─ Text \"-|\"", surface("  |\n-|\n"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   ├─ Text \"|\"\n   ├─ SoftBreak\n   └─ Text \"-|\"", tree("  |\n-|\n"))
     }
 
-    /// A pipe-preceded whitespace-only cell backs `start_offset` over the whitespace to the previous pipe,
-    /// so it is never zero-width: a plain `Cell`.
-    func testMiddleWhitespaceCellIsPlainCell() {
-        XCTAssertEqual("Document\n└─ Table alignments: |-|-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  ├─ Cell\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body", surface("a|  |b\n-|-|-\n"))
+    /// A whitespace-only cell between two pipes is an empty cell.
+    func testMiddleWhitespaceCellIsEmptyCell() {
+        XCTAssertEqual("Document\n└─ Table alignments: |-|-|-|\n   ├─ Head\n   │  ├─ Cell\n   │  │  └─ Text \"a\"\n   │  ├─ Cell\n   │  └─ Cell\n   │     └─ Text \"b\"\n   └─ Body", tree("a|  |b\n-|-|-\n"))
     }
 
-    /// Flag-off (shipped) drops the lazy residual, so the header is a lone `|` and no table forms.
-    func testLazyTwoSpacesFlagOff() {
+    func testLazyTwoSpaces() {
         XCTAssertEqual(
             "Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"",
-            surface(">x\n  |\n>-|\n"))
+            tree(">x\n  |\n>-|\n"))
     }
 }

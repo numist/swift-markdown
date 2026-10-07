@@ -651,7 +651,7 @@ class MarkupFormatterSimpleRoundTripTests: XCTestCase {
         checkRoundTrip(for: Document(Paragraph(Text("OK"))))
         checkRoundTrip(for: Document(Paragraph(Emphasis(Strong(Text("emphasized and strong"))))))
         checkRoundTrip(for: Document(Paragraph(InlineCode("foo"))))
-        // According to cmark, ***...*** is always Emphasis(Strong(...)).
+        // `***...***` always parses as Emphasis(Strong(...)) (Emphasis and strong emphasis, rule 14).
     }
 
     func testRoundTripBlockQuote() {
@@ -867,7 +867,7 @@ class MarkupFormatterSimpleRoundTripTests: XCTestCase {
  However, when splitting lines, it has to insert soft/hard breaks into
  ``Text`` elements.
 
- However, it still should never change the structure of
+ However, it should never change the structure of
  ``BlockMarkup`` elements with line splitting enabled.
 
  It should also never turn any inline element containing ``Text`` elements
@@ -1394,7 +1394,7 @@ class MarkupFormatterTableTests: XCTestCase {
         XCTAssertEqual(expected, formatted)
     }
 
-    /// Test that tables nested in other block elements still get printed
+    /// Test that tables nested in other block elements get printed
     /// correctly.
     func testNested() {
         do { // Inside blockquotes; unlikely but possible

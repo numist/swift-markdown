@@ -16,7 +16,7 @@ class InlineOnlyParseOptionTests: XCTestCase {
         Document(parsing: markdown, options: options).debugDescription(options: [])
     }
 
-    func testDefaultStillParsesBlocks() {
+    func testDefaultOptionsParseBlocks() {
         XCTAssertEqual("Document\n├─ Heading level: 1\n│  └─ Text \"heading\"\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"item\"", surface("# heading\n\n* item", options: []))
     }
 }

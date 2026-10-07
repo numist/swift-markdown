@@ -11,16 +11,9 @@
 @testable import Markdown
 import XCTest
 
-/// Source ranges for the two raw-scan inlines (code spans, inline HTML) whose token crosses a newline.
-///
-/// The old C path set `CMARK_OPT_SOURCEPOS` only when `disableSourcePosOpts` was unset, and with it
-/// off cmark flattened these two constructs' END onto their start line (`(startLine, startColumn +
-/// tokenByteLength)`), ignoring the interior break. This suite is the
-/// deliverable-side guardrail: it parses with `.disableSourcePosOpts`, proving the shipped parser tracks
-/// the precise end regardless of `.disableSourcePosOpts`.
-class FlatRawInlineEndTests: XCTestCase {
-    /// A two-line code span ends at its closing backtick's physical position (byte-projected @2:3),
-    /// not at cmark's sourcepos-off flat @1:6. `.disableSourcePosOpts` alone does not flatten it.
+/// A code span or raw HTML that contains a line ending has a source range that ends on the line of its
+/// closing delimiter. `.disableSourcePosOpts` does not affect source ranges.
+class CrossLineCodeSpanAndRawHTMLRangeTests: XCTestCase {
     func testMultilineCodeSpanEndsOnPhysicalLine() {
         let text = "`a\nb`"
 
@@ -34,8 +27,6 @@ class FlatRawInlineEndTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// A two-line inline HTML span keeps its precise half-open end (byte-projected @2:5, one past the
-    /// closing `>` on line 2), not cmark's sourcepos-off flat @1:10.
     func testMultilineInlineHTMLEndsOnPhysicalLine() {
         let text = "<foo\nbar>"
 
@@ -50,9 +41,7 @@ class FlatRawInlineEndTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// Control: the shipped default (no options) is likewise precise, so `.disableSourcePosOpts` is
-    /// shown to change nothing about the deliverable's raw-inline ends.
-    func testMultilineCodeSpanUnchangedByDefault() {
+    func testMultilineCodeSpanEndsOnPhysicalLineWithoutOptions() {
         let text = "`a\nb`"
 
         let expectedDump = """
@@ -65,9 +54,6 @@ class FlatRawInlineEndTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// The persistent-flat-cursor half of the quirk is likewise quarantined: the text FOLLOWING a
-    /// newline-crossing code span keeps its true physical position in the deliverable, even with
-    /// `.disableSourcePosOpts`. Here the shipped parser reports the physical @2:2.
     func testTextAfterMultilineCodeSpanKeepsPhysicalLine() {
         let text = "`\n`8"
 

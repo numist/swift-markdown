@@ -11,7 +11,7 @@
 import Markdown
 import Testing
 
-struct AlternateModeScanEdgeTests {
+struct PointyBracketDestinationEscapeTests {
     private func tree(_ markdown: String, _ options: ParseOptions) -> String {
         Document(parsing: markdown, options: options).debugDescription()
     }

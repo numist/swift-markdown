@@ -12,7 +12,7 @@
 import XCTest
 
 class CommonMarkConverterTests: XCTestCase {
-    /// Verify that a link that spans multiple lines does not crash cmark and also returns a valid range
+    /// Verify that a link that spans multiple lines does not crash the parser and also returns a valid range
     func testMulitlineLinks() {
         let text = """
         This is a link to an article on a different domain [link
@@ -82,7 +82,7 @@ class CommonMarkConverterTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// Verify that extremely deep nesting does not overflow the call stack during cmark-to-RawMarkup conversion.
+    /// Verify that extremely deep nesting does not overflow the call stack during conversion to RawMarkup.
     func testTrulyDeepNestingStackUnwind() {
         let depth = 15_000
         

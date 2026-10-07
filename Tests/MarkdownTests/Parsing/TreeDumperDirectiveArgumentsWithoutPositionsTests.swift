@@ -11,9 +11,8 @@
 @testable import Markdown
 import XCTest
 
-/// Covers the tree dumper's block-directive argument printing without source locations (the
-/// fuzzer's compare surface), which the position-printing `DocumentRegressions` pairs never reach.
-/// The expected surface is the cmark-gfm reference's output bytes for the same input.
+/// The tree dumper prints a block directive's argument text segments without source locations when
+/// `.printSourceLocations` is off.
 class TreeDumperDirectiveArgumentsWithoutPositionsTests: XCTestCase {
     func testDirectiveArgumentsPrintedWithoutPositions() {
         let (markdown, options) = DocumentRegressionTests.splitInput([64, 107, 40, 80, 10, 106, 9])!

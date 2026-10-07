@@ -11,11 +11,9 @@
 @testable import Markdown
 import XCTest
 
-/// Sibling probes for `AutolinkEntityDecodingTests`: the decoder's edge cases inside a `<scheme:…>`
-/// autolink, the spec-correct deliverable (flag-OFF), and the GFM extended autolink (which cmark does
-/// NOT decode). Expected trees derived from swift-cmark `src/houdini_html_u.c` (`houdini_unescape_ent`)
-/// and `extensions/autolink.c`.
-class AutolinkEntityDecodingEdgeTests: XCTestCase {
+/// Character references inside an autolink decode in its destination and text (Entity and numeric character
+/// references).
+class AutolinkEntityDecodingTests: XCTestCase {
     private func surface(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: [])
     }
@@ -56,8 +54,8 @@ class AutolinkEntityDecodingEdgeTests: XCTestCase {
         )
     }
 
-    func testEightDigitReferenceFollowsTheFlag() {
-        // CommonMark §6.2 caps decimal at 7.
+    func testEightDigitReferenceStaysLiteral() {
+        // A decimal numeric character reference has at most 7 digits.
         XCTAssertEqual(Self.autolink("http://a&#12345678;b"), surface("<http://a&#12345678;b>"))
     }
 
@@ -105,16 +103,16 @@ class AutolinkEntityDecodingEdgeTests: XCTestCase {
         )
     }
 
-    func testDeliverableDecodesToo() {
+    func testNamedAndDecimalReferencesDecode() {
         XCTAssertEqual(Self.autolink("http://a&b"), surface("<http://a&amp;b>"))
         XCTAssertEqual(Self.autolink("op:\u{fffd}"), surface("<op:&#0;>"))
         XCTAssertEqual(Self.autolink("http://aAb"), surface("<http://a&#65;b>"))
     }
 
     func testEmailFormCannotHoldAReference() {
+        // `;` is not allowed in an email address (Autolinks), so no autolink forms and the `&amp;` decodes as
+        // text.
         XCTAssertEqual(
-            // `;` is outside the email local-part class, so no autolink forms; the `&amp;` decodes as ordinary
-            // inline text and `cmark_parser_finish` (`blocks.c`) consolidates the adjacent text nodes.
             "Document\n└─ Paragraph\n   └─ Text \"<a&b@c.d>\"",
             surface("<a&amp;b@c.d>")
         )

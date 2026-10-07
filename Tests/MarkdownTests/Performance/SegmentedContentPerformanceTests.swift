@@ -29,7 +29,7 @@ final class SegmentedContentPerformanceTests: XCTestCase {
         XCTAssertEqual(paragraph.children.filter { $0 is SoftBreak }.count, repetitions + 1)
         XCTAssertTrue(paragraph.children.allSatisfy { $0 is SoftBreak || $0 is Text })
 
-        // Generous bound for a loaded machine and a debug build; the quadratic walk took about 45 seconds here.
+        // Generous for a loaded machine and a debug build, and far below the 45 seconds a quadratic walk takes.
         XCTAssertLessThan(elapsed, .seconds(5))
     }
 
@@ -53,7 +53,7 @@ final class SegmentedContentPerformanceTests: XCTestCase {
         XCTAssertEqual(heading.children.filter { $0 is SoftBreak }.count, lines)
         XCTAssertTrue(heading.children.allSatisfy { $0 is SoftBreak || $0 is Text })
 
-        // Generous bound for a loaded machine and a debug build; the quadratic walk took about 45 seconds here.
+        // Generous for a loaded machine and a debug build, and far below the 45 seconds a quadratic walk takes.
         XCTAssertLessThan(elapsed, .seconds(5))
     }
 }

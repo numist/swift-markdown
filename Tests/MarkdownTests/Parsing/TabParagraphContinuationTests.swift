@@ -11,17 +11,9 @@
 @testable import Markdown
 import XCTest
 
-/// A paragraph continuation line that begins with a tab.
-///
-/// A leading tab makes the parser materialize a tab-expanded per-line buffer for the line, so the
-/// continuation's surviving content is not read straight from the source span. The content past the
-/// expanded prefix is nonetheless byte-identical to source (`expandPrefixTabs` copies the tail
-/// verbatim), so it must resolve to the literal source bytes - a single soft break joins the lines
-/// and the text survives, exactly like a space-indented continuation. Columns are byte-projected
-/// (a tab counts as one byte) in the shipped, flag-off parser.
+/// A paragraph continuation line that begins with tabs loses them as initial whitespace (Paragraphs), and its
+/// text follows a single soft line break. Columns count a tab as one byte.
 class TabParagraphContinuationTests: XCTestCase {
-    /// A one-tab continuation: `bar` survives with a single soft break; its column is byte-projected
-    /// just past the one-byte tab (@2:2).
     func testSingleTabContinuation() {
         let text = "foo\n\tbar"
 
@@ -37,7 +29,6 @@ class TabParagraphContinuationTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// Two tab-led continuation lines: each contributes exactly one soft break and keeps its text.
     func testMultipleTabContinuationLines() {
         let text = "foo\n\tbar\n\tbaz"
 
@@ -55,8 +46,6 @@ class TabParagraphContinuationTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// Two leading tabs are both stripped as indentation; the text still survives with one soft break,
-    /// its column byte-projected past the two one-byte tabs (@2:3).
     func testTwoLeadingTabsContinuation() {
         let text = "foo\n\t\tbar"
 

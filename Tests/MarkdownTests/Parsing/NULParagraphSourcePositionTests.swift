@@ -11,11 +11,9 @@
 @testable import Markdown
 import XCTest
 
-/// Inline nodes of block content containing a NUL carry source positions.
-///
-/// A NUL is materialized as U+FFFD (3 bytes) in the arena; positions still project onto the original source
-/// bytes, so `a` NUL `b` on line 1 spans columns 1-3 exactly as `axb` would. Each expectation is therefore the
-/// output for the same input with every NUL replaced by a one-byte letter, with only that text differing.
+/// A NUL is replaced with U+FFFD (Insecure characters), and source positions count it as its one source byte.
+/// Each expected tree is the tree for the same input with every NUL replaced by a one-byte letter, apart from
+/// that text.
 class NULParagraphSourcePositionTests: XCTestCase {
     private func positions(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)
@@ -65,11 +63,11 @@ class NULParagraphSourcePositionTests: XCTestCase {
         XCTAssertEqual("Document @1:1-2:6\n└─ BlockQuote @1:1-2:6\n   └─ Paragraph @1:3-2:6\n      ├─ Text @1:3-1:4 \"p\"\n      ├─ SoftBreak\n      └─ Text @2:3-2:6 \"q\u{fffd}r\"", positions("> p\n> q\u{0}r"))
     }
 
-    func testTabMaterializedListItemPrefix() {
+    func testListItemWithTabAfterMarker() {
         XCTAssertEqual("Document @1:1-1:6\n└─ UnorderedList @1:1-1:6\n   └─ ListItem @1:1-1:6\n      └─ Paragraph @1:3-1:6\n         └─ Text @1:3-1:6 \"a\u{fffd}b\"", positions("-\ta\u{0}b"))
     }
 
-    func testTabMaterializedBlockQuotePrefix() {
+    func testBlockQuoteWithTabAfterMarker() {
         XCTAssertEqual("Document @1:1-1:6\n└─ BlockQuote @1:1-1:6\n   └─ Paragraph @1:3-1:6\n      └─ Text @1:3-1:6 \"a\u{fffd}b\"", positions(">\ta\u{0}b"))
     }
 
@@ -93,7 +91,7 @@ class NULParagraphSourcePositionTests: XCTestCase {
         XCTAssertEqual("Document @1:1-3:4\n├─ Paragraph @1:1-1:6\n│  └─ Text @1:1-1:5 \"x|\u{fffd}y\"\n└─ Table @2:1-3:4 alignments: |-|\n   ├─ Head @2:1-2:6\n   │  └─ Cell @2:2-2:5\n   │     └─ Text @2:3-2:4 \"a\"\n   └─ Body", positions("x\\|\u{0}y\n| a |\n|-|"))
     }
 
-    /// A stripped `\|` backslash shifts only the rest of its own line: later lines keep their true columns.
+    /// The backslash of a `\|` affects source columns only on its own line.
     func testTablePrecedingParagraphEscapeShiftEndsAtLineBreak() {
         XCTAssertEqual("Document @1:1-4:4\n├─ Paragraph @1:1-2:3\n│  ├─ Text @1:1-1:4 \"x|y\"\n│  ├─ SoftBreak\n│  └─ Text @2:1-2:3 \"zz\"\n└─ Table @3:1-4:4 alignments: |-|\n   ├─ Head @3:1-3:6\n   │  └─ Cell @3:2-3:5\n   │     └─ Text @3:3-3:4 \"a\"\n   └─ Body", positions("x\\|y\nzz\n| a |\n|-|"))
     }

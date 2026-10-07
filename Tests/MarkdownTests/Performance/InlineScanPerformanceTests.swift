@@ -29,7 +29,7 @@ final class InlineScanPerformanceTests: XCTestCase {
         XCTAssertEqual(paragraph.children.filter { $0 is SoftBreak }.count, repetitions + 1)
         XCTAssertFalse(paragraph.children.contains { $0 is Link })
 
-        // Generous bound for a loaded machine and a debug build; the cubic scan took about a minute here.
+        // Generous for a loaded machine and a debug build, and far below the minute a cubic scan takes.
         XCTAssertLessThan(elapsed, .seconds(5))
     }
 
@@ -70,7 +70,7 @@ final class InlineScanPerformanceTests: XCTestCase {
         XCTAssertFalse(paragraph.children.contains { $0 is InlineHTML }, file: file, line: line)
         XCTAssertEqual(paragraph.plainText.filter { $0 == "<" }.count, repetitions, file: file, line: line)
 
-        // Generous bound for a loaded machine and a debug build; rescanning to the paragraph end for every opener took 20-45 seconds here.
+        // Generous for a loaded machine and a debug build, and far below the 20-45 seconds that rescanning to the paragraph's end for every opener takes.
         XCTAssertLessThan(elapsed, .seconds(5), file: file, line: line)
     }
 }

@@ -11,14 +11,9 @@
 @testable import Markdown
 import XCTest
 
-/// Source ranges for a link/image/attribute whose `(...)` destination/title crosses a newline.
-///
-/// The shipped (flag-off, spec-correct) parser stamps such a node's end at the *byte-projected*
-/// position of just past its closing `)` - i.e. on the `)`'s own physical line. This suite is the flag-off
-/// guardrail proving the default parser is spec-correct: the node ends on the `)`'s physical line.
+/// A link or image whose destination or title is on a later line has a source range that ends just past
+/// its closing `)` on that line.
 class MultilineLinkEndColumnTests: XCTestCase {
-    /// A multi-line link's destination on the next line ends just past the `)` on that physical
-    /// line (byte-projected @2:4), not at cmark's flat @1:9.
     func testMultilineLinkDestinationEndsOnPhysicalLine() {
         let text = "[a](\n/u)"
 
@@ -33,9 +28,6 @@ class MultilineLinkEndColumnTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// A multi-line link whose title is on the next line ends just past the `)` on that physical
-    /// line (byte-projected @2:13 - the `)` is at column 12, so the half-open end is column 13,
-    /// consistent with the paragraph's true-width end @2:13), not at cmark's flat @1:26.
     func testMultilineLinkTitleEndsOnPhysicalLine() {
         let text = "[link](   /uri\n  \"title\"  )"
 
@@ -50,8 +42,6 @@ class MultilineLinkEndColumnTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// A multi-line image whose title is on the next line ends just past the `)` on that physical
-    /// line (byte-projected @2:5), not at cmark's flat @1:13.
     func testMultilineImageEndsOnPhysicalLine() {
         let text = "![x](/u\n\"t\")"
 
@@ -66,8 +56,7 @@ class MultilineLinkEndColumnTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// Control: a single-line link never crosses a newline in `(...)`, so it is byte-projected.
-    func testSingleLineLinkUnchanged() {
+    func testSingleLineLinkEndsPastClosingParenthesis() {
         let text = "[a](/b)"
 
         let expectedDump = """
@@ -81,9 +70,7 @@ class MultilineLinkEndColumnTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// Control: a newline in the link *text* precedes the `]`, so `(...)` has no interior newline
-    /// and the node is byte-projected (the `testMulitlineLinks` shape).
-    func testNewlineInTextLinkUnchanged() {
+    func testLinkWithLineEndingInTextEndsOnClosingLine() {
         let text = "[a\nb](/u)"
 
         let expectedDump = """

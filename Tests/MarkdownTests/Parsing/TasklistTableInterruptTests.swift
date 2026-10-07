@@ -11,10 +11,9 @@
 @testable import Markdown
 import XCTest
 
-/// A task item whose first paragraph is split by a table keeps its checkbox.
+/// A task list item whose first paragraph is followed by a table keeps its checkbox.
 class TasklistTableInterruptTests: XCTestCase {
-    /// The split-off paragraph's range and inlines start after the checkbox, on both the contiguous path
-    /// (`- [x] a` / `  b|`) and the re-indented segment path (CRLF-joined lines).
+    /// The paragraph before the table starts after the checkbox, also when its lines end in CRLF.
     func testSplitOffParagraphPositions() {
         func paragraphLines(_ markdown: String) -> [String] {
             let dump = Document(parsing: markdown, options: []).debugDescription(options: [.printSourceLocations])

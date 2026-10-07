@@ -11,27 +11,15 @@
 import Markdown
 import Testing
 
-/// Coverage for the `^[…](attrs)` extended-attribute inline form scanned over multi-segment content,
-/// exercised through the exact comparison surface the differential fuzzer uses
-/// (`Document.debugDescription(options: .printSourceLocations)`).
-///
-/// A block-quote / list body whose `(attrs)` spans lines is parsed as multi-segment content: the
-/// interior straddles the interned-newline segment joining the two source lines. cmark reads its
-/// flattened paragraph buffer, so the interior newline is ordinary attribute content and the form
-/// resolves to an `InlineAttributes` node whose attribute string carries that newline
-/// (`manual_scan_attribute_attributes`, swift-cmark `src/inlines.c`). The scanner materializes the
-/// straddling interior into the arena (the code-span / tab-expansion pattern) to reproduce it - the
-/// attribute forms, matching the reference, without indexing the wrong buffer or running past a segment.
-@Suite("Multi-segment attribute surface")
-struct MultiSegmentAttributeSurfaceTests {
-
-    private static func surface(_ markdown: String) -> String {
+/// An inline attribute's `(attributes)` may contain a line ending. In a block quote or list item, the
+/// attributes keep the line ending and omit the next line's container prefix.
+@Suite("Inline attributes across a line ending")
+struct CrossLineInlineAttributeTests {
+    private static func tree(_ markdown: String) -> String {
         Document(parsing: markdown)
             .debugDescription(options: .printSourceLocations)
     }
 
-    /// Cross-line forms: the attribute spans the line join and
-    /// keeps the interior newline, as cmark-gfm's does.
     @Test(arguments: [
         ("> ^[a](\n> b)", """
             Document @1:1-2:5
@@ -67,12 +55,12 @@ struct MultiSegmentAttributeSurfaceTests {
                      └─ Text @1:4-1:5 "a"
             """),
     ])
-    func crossLineAttributeFormsFlagOff(_ markdown: String, _ expected: String) {
-        #expect(Self.surface(markdown) == expected)
+    func crossLineAttributesKeepLineEnding(_ markdown: String, _ expected: String) {
+        #expect(Self.tree(markdown) == expected)
     }
 
     /// An inline attribute's `(attributes)` form completes it, so a following `[label]` is not part of it and
-    /// stays text, also when the label straddles a block-quote line join.
+    /// stays text, also when the label spans a line ending in a block quote.
     @Test func trailingBracketAfterAttributeIsText() {
         #expect(Document(parsing: "^[](x)[y]").debugDescription() == """
             Document
