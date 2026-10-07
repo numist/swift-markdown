@@ -20,13 +20,13 @@ import Testing
 /// as a body byte and closes on the following delimiter, where the eager scan consumes the delimiter
 /// and never finds a close.
 ///
-/// Reproduces a differential-fuzzer finding. Input `[]((` + newline + `'\')`:
-/// - the destination scan stops at the `(` before the newline (a newline is terminating whitespace in
-///   a bare destination), giving destination `(`;
+/// Input `[](a` + newline + `'\')`:
+/// - the destination scan stops at the newline (a newline is terminating whitespace in a bare
+///   destination), giving destination `a`;
 /// - the spacechars between destination and title skip the newline;
 /// - the title `'\'` closes on the *second* quote (the `\` is body, not an escape), interior `\`.
 ///
-/// So cmark forms an inline link with empty text, destination `(`, and title `\`. The eager scan
+/// So cmark forms an inline link with empty text, destination `a`, and title `\`. The eager scan
 /// never matched the title, so the whole `[]((` stayed literal text split by a soft break.
 @Suite("Link title backslash longest match")
 struct LinkTitleBackslashLongestMatchTests {
@@ -72,7 +72,7 @@ struct LinkTitleBackslashLongestMatchTests {
 
     @Test("empty-text link whose title backslash precedes the closing quote")
     func findingBackslashBeforeCloseQuote() throws {
-        let source = "[]((\n'\\')"
+        let source = "[](a\n'\\')"
         let (top, inlines) = structure(source)
         #expect(top == [.paragraph])
         // Fixture sanity: the whole construct collapses to a single inline link (not the buggy
@@ -81,7 +81,7 @@ struct LinkTitleBackslashLongestMatchTests {
 
         let link = firstLink(source)
         try #require(link.found)  // fixture sanity: a link must exist
-        #expect(link.url == "(")
+        #expect(link.url == "a")
         #expect(link.title == "\\")
         #expect(!link.hasText)
     }
@@ -106,15 +106,11 @@ struct LinkTitleBackslashLongestMatchTests {
         #expect(!link.hasText)
     }
 
-    @Test("open paren destination stopped by a space")
+    /// A bare destination includes parentheses only when they are escaped or balanced (spec "Links").
+    @Test("unbalanced open paren destination stopped by a space is no link")
     func openParenDestinationStoppedBySpace() throws {
-        // `[](( )`: the destination scan stops at the space (`(`), the spacechars skip it, and the `)`
-        // closes the link — destination `(`, no title.
         let link = firstLink("[](( )")
-        try #require(link.found)
-        #expect(link.url == "(")
-        #expect(link.title == "")
-        #expect(!link.hasText)
+        #expect(!link.found)
     }
 
     @Test("empty destination across a newline")

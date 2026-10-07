@@ -160,6 +160,13 @@ extension BlockParser {
         var afterEnd: Int
     }
 
+    /// Whether a `\` inside a `<…>` link destination escapes `next`, the byte after it. A backslash escapes
+    /// only ASCII punctuation (spec "Backslash escapes"), so a `\` before a line ending leaves the line ending
+    /// in the destination, which a `<…>` destination may not contain (spec "Links").
+    private func escapesNext(_ next: UInt8?) -> Bool {
+        storage.options.contains(.cmarkBugCompatibility) || (next?.isASCIIPunct ?? false)
+    }
+
     /// Parse a link destination - either `<...>` (no internal `<`, `>`, or unescaped newline) or a bare URL (no whitespace, balanced parens up to depth 32, ASCII `\X` escapes).
     internal func matchLinkDestination(_ chunk: Chunk) -> LinkDestinationMatch? {
         let start = chunk.offset
@@ -175,7 +182,7 @@ extension BlockParser {
                 if c == UInt8(ascii: ">") {
                     return LinkDestinationMatch(chunk: chunk.extracting(1..<(i - start)), afterEnd: i + 1)
                 }
-                if c == UInt8(ascii: "\\") {
+                if c == UInt8(ascii: "\\"), escapesNext(i + 1 < end ? readByte(at: i + 1, in: chunk) : nil) {
                     i += 2
                     continue
                 }
@@ -233,6 +240,10 @@ extension BlockParser {
             }
             i += 1
         }
+        // A bare destination includes parentheses only when they are escaped or balanced (spec "Links").
+        if nbParen != 0 && !bugCompat {
+            return nil
+        }
         // Empty bare URL is allowed for inline links - `[a]()` should match with an empty destination.
         return LinkDestinationMatch(chunk: chunk.extracting(0..<(i - start)), afterEnd: i)
     }
@@ -259,7 +270,7 @@ extension BlockParser {
                 // why: cmark's `manual_scan_link_url` (`src/inlines.c`) skips the byte after any `\`,
                 // a line ending included, so `<a\` LF `b>` is a destination. CommonMark §6.3 forbids line
                 // endings inside `<…>`; this replicates cmark, as `matchLinkDestination(_:)` does.
-                if c == UInt8(ascii: "\\") {
+                if c == UInt8(ascii: "\\"), escapesNext(i + 1 < end ? content[i + 1] : nil) {
                     i += 2
                     continue
                 }
