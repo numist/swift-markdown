@@ -9,23 +9,23 @@
 */
 
 import Foundation
-@_spi(CmarkBugCompatibility) @_spi(InlineOnly) import Markdown
+@_spi(InlineOnly) import Markdown
 import Testing
 
 /// Regression coverage for divergences found by the swift-markdown-difftest differential fuzzer.
 ///
 /// Each case is a pair of files in `FuzzRegressions/`:
 ///   - `<name>.input`    — the raw fuzzer artifact bytes (`[markdown …][final byte = options]`).
-///   - `<name>.expected` — the rewrite's comparison surface WITH source positions, minted with
-///                         `dump --new-pos <artifact>`. Its structure + literal content are validated
-///                         against the cmark-gfm reference (`dump --ref`, which is position-free) at mint
-///                         time; the positions are the rewrite's own byte projection (gated separately by
-///                         the `*PositionEncoding` suites, not the fuzzer). This is the oracle; the
-///                         rewrite must reproduce it.
+///   - `<name>.expected` — the shipped parser's surface WITH source positions
+///                         (`debugDescription(options: .printSourceLocations)`). Its structure + literal
+///                         content match the cmark-gfm reference, except where cmark-gfm departs from the
+///                         CommonMark/GFM spec; there it holds the spec-correct output. The positions are
+///                         the rewrite's own byte projection (gated separately by the `*PositionEncoding`
+///                         suites). This is the oracle; the parser must reproduce it.
 ///
-/// `@Test(arguments:)` runs one case per pair, so a failure names the exact fixture. The split +
-/// surface logic mirrors `DiffSupport` (the fuzzer and `dump` build from it); MarkdownTests can't
-/// import that package, so the two-line equivalent is inlined here.
+/// `@Test(arguments:)` runs one case per pair, so a failure names the exact fixture. The input split
+/// mirrors `DiffSupport.splitInput` (the fuzzer and `dump` build from it); MarkdownTests can't import
+/// that package, so the equivalent is inlined here.
 struct FuzzRegressionTests {
 
     static let corpusDir: URL = {
@@ -51,8 +51,7 @@ struct FuzzRegressionTests {
     /// Split a raw artifact exactly as `DiffSupport.splitInput`: the last byte selects parse options
     /// (as `DiffSupport.fuzzedOptionsRawValue`: bits 0-4 plus bit 6 = `gfmAutolink` and bit 7 =
     /// `footnotes`; bit 5 selects inline-only mode, within which bit 4 selects `preserveWhitespace`
-    /// instead of `inlineOnly`; `cmarkBugCompatibility` is inserted by `surface()`, not fuzzed), the
-    /// rest is the UTF-8 document (invalid sequences → U+FFFD).
+    /// instead of `inlineOnly`), the rest is the UTF-8 document (invalid sequences → U+FFFD).
     static func splitInput(_ bytes: [UInt8]) -> (markdown: String, options: ParseOptions)? {
         guard let optionBits = bytes.last else { return nil }
         let markdown = String(decoding: bytes.dropLast(), as: UTF8.self)
@@ -68,10 +67,8 @@ struct FuzzRegressionTests {
         return (markdown, options)
     }
 
-    /// The rewrite's comparison surface, matching `DiffSupport.newSurface`.
+    /// The shipped parser's surface for `markdown`, with source positions.
     static func surface(_ markdown: String, options: ParseOptions) -> String {
-        var options = options
-        options.insert(.cmarkBugCompatibility)          // fixed setting; not a fuzzed bit
         return Document(parsing: markdown, options: options).debugDescription(options: .printSourceLocations)
     }
 
