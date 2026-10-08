@@ -2469,7 +2469,9 @@ extension BlockParser {
         // `atSign` is the `@` under trial. A second `@` met during the domain scan abandons the current
         // candidate and restarts from that `@`, the run between the two becoming the new local part.
         // The scheme state below carries across the restart; `localStart` and the domain cursor are
-        // recomputed from `atSign`.
+        // recomputed from `atSign`. The new local part follows `@` (or `/` after `xmpp:`), which may not
+        // precede an extended autolink, so a restart never matches; it settles the `@`s it walks over and
+        // sets `resumeAt` past them.
         var atSign = at
         var schemeFolded = false
         var isXmpp = false

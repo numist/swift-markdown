@@ -87,16 +87,16 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.compactMap(\.url) == [])
     }
 
-    // MARK: - The restarted address needs a period in its own domain
+    // MARK: - The restarted address follows `@`
 
-    @Test("`o@.e@b`: `.e@b` has a domain without a period, so the run is text")
+    @Test("`o@.e@b`: `.e@b` follows `@`, so the run is text")
     func restartNeedsOwnPeriod() {
         let ns = nodes(in: "o@.e@b")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "o@.e@b"])
     }
 
-    @Test("`a@b.c@d`: `b.c@d` has a domain without a period, so the run is text")
+    @Test("`a@b.c@d`: `b.c@d` follows `@`, so the run is text")
     func restartWithValidPrefixNeedsOwnPeriod() {
         let ns = nodes(in: "a@b.c@d")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])

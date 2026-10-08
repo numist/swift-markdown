@@ -26,7 +26,7 @@ private func dfsAutolinkNodes(
 /// rejected, the next address's local part starts no earlier than the character that ended the candidate's
 /// domain: `+`, or a `.` not followed by an alphanumeric, ends a domain, while `-`, `_`, alphanumerics and a
 /// `.` followed by an alphanumeric continue it. Such a local part follows `@` or a character of the rejected
-/// domain, and neither may precede an extended autolink, so the address is text.
+/// domain, and only `_` among those may precede an extended autolink.
 @Suite("Extended email autolink local part after a rejected candidate")
 struct AutolinkEmailLocalRewindBoundaryTests {
 
@@ -77,6 +77,14 @@ struct AutolinkEmailLocalRewindBoundaryTests {
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "a@b+c@d.d"])
         #expect(ns.compactMap(\.url) == [])
+    }
+
+    @Test("`a@b_+c@d.e`: the `+` bounds the second local part to `+c`, which follows `_`, so it links")
+    func plusBoundsLocalPartAfterUnderscore() {
+        let ns = nodes(in: "a@b_+c@d.e")
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@b_", nil, "+c@d.e"])
+        #expect(ns.compactMap(\.url) == ["mailto:+c@d.e"])
     }
 
     // MARK: - `.`, `-`, `_` and alphanumerics continue a domain
@@ -137,6 +145,14 @@ struct AutolinkEmailLocalRewindBoundaryTests {
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.map(\.text) == [nil, nil, "a@b.+@c.c"])
         #expect(ns.compactMap(\.url) == [])
+    }
+
+    @Test("`a@b_.+@c.c`: the local part `.+` follows `_`, so it links")
+    func dotThenPlusBoundaryAfterUnderscore() {
+        let ns = nodes(in: "a@b_.+@c.c")
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@b_", nil, ".+@c.c"])
+        #expect(ns.compactMap(\.url) == ["mailto:.+@c.c"])
     }
 
     @Test("`a@b..c@d.d` is text: the local part `..c` follows `b`")
