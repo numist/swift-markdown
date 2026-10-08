@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// When a delimiter run is longer than the run it pairs with, the unused delimiters remain text
 /// (Emphasis and strong emphasis). The emphasis or strong emphasis source range covers only the

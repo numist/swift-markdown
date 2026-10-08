@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Tables whose delimiter row has one column, such as `|-`, `-|`, `|-|` or `:-` (Tables (extension)).
 /// The header row needs no pipe when its cell count matches the delimiter row's. A pipe-less line of

@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Appends the literal of every text node in `node`'s subtree to `out`, depth-first.
 private func concatText(_ node: borrowing MarkdownNode, into out: inout String) {

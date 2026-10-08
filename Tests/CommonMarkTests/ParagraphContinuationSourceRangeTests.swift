@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A paragraph continuation line's text starts at the line's first non-whitespace byte, wherever
 /// that falls relative to the paragraph's first line. Paragraphs strip the line's leading

@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 // DFS-render each node as an indented `kind[:detail]` line, so a whole tree can be asserted at once.
 internal func describeTree(_ node: borrowing MarkdownNode, depth: Int, into out: inout [String]) {

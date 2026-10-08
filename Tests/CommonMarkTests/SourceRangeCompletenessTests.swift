@@ -14,7 +14,7 @@ import FoundationEssentials
 #else
 import Foundation
 #endif
-@testable import CommonMark
+import CommonMark
 
 /// Collects each node's kind, source range and whether it is a leaf, in depth-first order.
 internal func dfsCompleteness(

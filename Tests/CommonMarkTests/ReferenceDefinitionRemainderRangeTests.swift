@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Source ranges of the content that follows link reference definitions at the start of a paragraph.
 /// The remaining text keeps its own lines, and the paragraph or setext heading starts at its first byte.

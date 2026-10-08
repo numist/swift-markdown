@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Under Tables (extension), spaces between pipes and cell content are trimmed. Directly after a pipe, the parser
 /// also skips tabs, line tabulations (U+000B) and form feeds (U+000C), which are whitespace characters, so a trailing

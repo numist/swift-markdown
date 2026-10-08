@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A container's continuation consumes part of a tab, a deeper container fails to continue, and the
 /// line starts a new block in the surviving container. The tab's unconsumed columns count toward that

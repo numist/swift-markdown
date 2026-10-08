@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A delimiter row cell may be padded with any whitespace character other than a line ending (Characters
 /// and lines), including form feed (U+000C) and line tabulation (U+000B) (Tables (extension)).

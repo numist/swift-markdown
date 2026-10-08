@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// When a table interrupts a paragraph, the lines before the header row form an ordinary paragraph (Paragraphs).
 /// Only a cell's content unescapes `\|` (Tables (extension)), so a code span in those lines keeps its backslash

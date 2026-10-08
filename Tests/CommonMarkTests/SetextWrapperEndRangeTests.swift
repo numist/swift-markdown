@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Source ranges of emphasis, strong emphasis and links that span a soft line break inside a
 /// multi-line setext heading with an indented first line. Each ends just past its closing delimiter on

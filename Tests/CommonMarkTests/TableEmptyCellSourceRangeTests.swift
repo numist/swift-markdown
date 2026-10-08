@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Source ranges of table cells (Tables (extension)) cover the untrimmed text between the pipes. A cell
 /// with content ends at its closing pipe; an empty or whitespace-only cell also covers its closing pipe;

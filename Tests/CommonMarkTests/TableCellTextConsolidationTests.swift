@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Adjacent text in a table cell, including bracket literals, decoded entity references and smart
 /// punctuation, forms a single `.text` node. Its literal is the concatenation of the runs, and its source

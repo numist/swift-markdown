@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Under Tables (extension), a `|` directly after a backslash is part of the cell's content rather than a cell
 /// delimiter, however many backslashes precede it. The backslash directly before the `|` is removed, and inline
