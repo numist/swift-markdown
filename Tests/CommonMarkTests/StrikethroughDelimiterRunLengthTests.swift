@@ -103,17 +103,15 @@ struct StrikethroughDelimiterRunLengthTests {
 
     @Test("one- and two-tilde runs pair with a run of the same length; three-tilde runs stay literal")
     func shortRuns() {
-        for options in [Self.options] {
-            #expect(strikeText("~x~", options: options) == "x")
-            #expect(strikeCount("~x~", options: options) == 1)
-            #expect(strikeText("~~x~~", options: options) == "x")
-            #expect(strikeCount("~~x~~", options: options) == 1)
-            #expect(strikeText("~~~x~~~", options: options) == nil)
-            #expect(strikeText("**~)~", options: options) == ")")
-            #expect(strikeCount("**~)~", options: options) == 1)
-            #expect(strikeText("**~~)~~", options: options) == ")")
-            #expect(strikeCount("**~~)~~", options: options) == 1)
-        }
+        #expect(strikeText("~x~", options: Self.options) == "x")
+        #expect(strikeCount("~x~", options: Self.options) == 1)
+        #expect(strikeText("~~x~~", options: Self.options) == "x")
+        #expect(strikeCount("~~x~~", options: Self.options) == 1)
+        #expect(strikeText("~~~x~~~", options: Self.options) == nil)
+        #expect(strikeText("**~)~", options: Self.options) == ")")
+        #expect(strikeCount("**~)~", options: Self.options) == 1)
+        #expect(strikeText("**~~)~~", options: Self.options) == ")")
+        #expect(strikeCount("**~~)~~", options: Self.options) == 1)
     }
 
     /// With `.strikethroughDoubleTilde`, only a two-tilde run delimits strikethrough.

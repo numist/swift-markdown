@@ -33,30 +33,21 @@ struct LinkLabelLengthCapTests {
     /// A label of `n` `a` bytes (no escapes, so scanned length == `n`).
     private func label(_ n: Int) -> String { String(repeating: "a", count: n) }
 
-    /// Parse options paired with the longest label that resolves under them.
-    private static let cases: [(options: MarkdownDocument.ParseOptions, cap: Int)] = [
-        (options: [], cap: 999),
-    ]
-
     // MARK: - Link reference definitions
 
     /// A link reference definition produces no block, so over the cap the line is a paragraph.
     @Test("reference definition registers at the cap but not one past it")
     func referenceDefinitionLabelCap() {
-        for (options, cap) in Self.cases {
-            MarkdownDocument.withParsedDocument("[\(label(cap))]: /u", options: options) { doc in
-                let kinds = dfs(doc).map(\.kind)
-                #expect(!kinds.contains(.paragraph),
-                        "options=\(options.rawValue): a \(cap)-char definition must be consumed")
-            }
+        MarkdownDocument.withParsedDocument("[\(label(999))]: /u", options: []) { doc in
+            let kinds = dfs(doc).map(\.kind)
+            #expect(!kinds.contains(.paragraph), "a 999-char definition must be consumed")
+        }
 
-            MarkdownDocument.withParsedDocument("[\(label(cap + 1))]: /u", options: options) { doc in
-                let nodes = dfs(doc)
-                #expect(nodes.map(\.kind).contains(.paragraph),
-                        "options=\(options.rawValue): a \(cap + 1)-char definition must fall through to text")
-                #expect(nodes.contains { $0.literal?.hasPrefix("[") == true },
-                        "the over-cap definition line must survive as literal text")
-            }
+        MarkdownDocument.withParsedDocument("[\(label(1000))]: /u", options: []) { doc in
+            let nodes = dfs(doc)
+            #expect(nodes.map(\.kind).contains(.paragraph), "a 1000-char definition must fall through to text")
+            #expect(nodes.contains { $0.literal?.hasPrefix("[") == true },
+                    "the over-cap definition line must survive as literal text")
         }
     }
 
@@ -64,16 +55,12 @@ struct LinkLabelLengthCapTests {
 
     @Test("shortcut reference resolves at the cap but not one past it")
     func shortcutReferenceLabelCap() {
-        for (options, cap) in Self.cases {
-            MarkdownDocument.withParsedDocument("[\(label(cap))]: /u\n\n[\(label(cap))]", options: options) { doc in
-                #expect(linkURLs(doc) == ["/u"],
-                        "options=\(options.rawValue): a \(cap)-char reference must resolve")
-            }
+        MarkdownDocument.withParsedDocument("[\(label(999))]: /u\n\n[\(label(999))]", options: []) { doc in
+            #expect(linkURLs(doc) == ["/u"], "a 999-char reference must resolve")
+        }
 
-            MarkdownDocument.withParsedDocument("[\(label(cap + 1))]: /u\n\n[\(label(cap + 1))]", options: options) { doc in
-                #expect(linkURLs(doc).isEmpty,
-                        "options=\(options.rawValue): a \(cap + 1)-char reference must stay literal")
-            }
+        MarkdownDocument.withParsedDocument("[\(label(1000))]: /u\n\n[\(label(1000))]", options: []) { doc in
+            #expect(linkURLs(doc).isEmpty, "a 1000-char reference must stay literal")
         }
     }
 
