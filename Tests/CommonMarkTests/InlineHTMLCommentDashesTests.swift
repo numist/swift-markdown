@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// An HTML comment (Raw HTML) is `<!--`, text not containing `-->`, and `-->`, so `<!----->` is a comment whose text
 /// is `-`.

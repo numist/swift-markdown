@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Appends each node's kind and literal to `out` in document order.
 private func dfsContent(

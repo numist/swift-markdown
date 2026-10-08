@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Appends each node's kind, literal and attribute string to `out` in document order.
 private func dfsAttributeNodes(

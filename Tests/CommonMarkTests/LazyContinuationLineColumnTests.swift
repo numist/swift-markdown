@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A lazy continuation line's text has the source range of its own bytes, which start at column 1 rather than at the
 /// container's content column.

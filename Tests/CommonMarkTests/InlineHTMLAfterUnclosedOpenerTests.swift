@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// The number of raw HTML nodes in the tree.
 private func inlineHTMLCount(_ node: borrowing MarkdownNode) -> Int {

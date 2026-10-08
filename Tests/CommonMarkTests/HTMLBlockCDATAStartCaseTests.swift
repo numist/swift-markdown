@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// HTML block start condition 5 (HTML blocks) is the string `<![CDATA[`, matched case-sensitively. `<![cdata[` and
 /// `<![CDAtA[` meet no start condition, since condition 4 needs an uppercase ASCII letter after `<!`, so they are

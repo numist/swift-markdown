@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Source ranges of raw HTML that spans a line ending, such as `<foo\nbar>`. The end is half-open, one column past the
 /// closing `>`, as for every other node.

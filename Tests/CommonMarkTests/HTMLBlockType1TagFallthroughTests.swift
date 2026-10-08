@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Start condition 1 (HTML blocks) needs whitespace, `>` or the end of the line after the tag name, so a self-closing
 /// `<script/>` doesn't meet it. Start condition 7 excludes the tag names of start condition 1, so `<script/>` starts no

@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// The literals of every raw HTML node in the tree, in document order.
 private func inlineHTMLLiterals(_ node: borrowing MarkdownNode) -> [String] {

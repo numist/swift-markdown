@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// The literal content of the first raw HTML node in document order, or nil if the tree has none.
 private func firstInlineHTML(_ node: borrowing MarkdownNode) -> String? {

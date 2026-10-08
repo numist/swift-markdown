@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Source positions of inline constructs across Unicode encodings. A `SourcePosition.column` is a 1-based UTF-8 byte
 /// offset within its line, so a multi-byte scalar advances the column by its byte count (é = 2, € = 3, 😀 = 4,

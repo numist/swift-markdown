@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A CDATA section (Raw HTML) runs to the first `]]>`, so content ending in `]` before the closer, as in
 /// `<![CDATA[x]]]>`, is part of the section.
