@@ -1465,8 +1465,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         // PHASE 2b: Blank line.
         if isBlank {
-            // Capture the deepest open block BEFORE we close any leaves - a blank line closes an open paragraph/heading, but the blank is attributed to that leaf for tight/loose detection.
-            let blankLeaf = current
             let nowOpen = storage[current].kind
             if nowOpen.canAccumulateText {
                 pending = finalize(node: current, pending: pending)
@@ -1477,21 +1475,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     pending = finalize(node: current, pending: pending)
                 }
             }
-            // Mark the leaf as having had a blank line. Then clear on all ancestors so the blank doesn't bubble up.
-            storage.nodes[blankLeaf].lastLineBlank = true
-            // When the container survived this blank line and has a closed child block, the LAST CHILD also receives the flag so that `endsWithBlankLine` recursion picks it up later. Without this, a fenced/closed block followed by a blank between siblings of the same item wouldn't mark the list loose.
-            if let lastChild = storage[blankLeaf].lastChild {
+            // For list tightness (Lists), the blank line belongs to the deepest container that matched it, and it follows that container's last block, if any. Neither its ancestors, a block quote, whose lines all begin with `>`, nor a footnote definition end with it.
+            let container = deepestMatched
+            if let lastChild = storage[container].lastChild {
                 storage.nodes[lastChild].lastLineBlank = true
             }
-            var up = storage[blankLeaf].parent
+            storage.nodes[container].lastLineBlank = switch storage[container].kind {
+            case .blockQuote, .footnoteDefinition: false
+            default: true
+            }
+            var up = storage[container].parent
             while let up_ = up {
                 storage.nodes[up_].lastLineBlank = false
                 up = storage[up_].parent
             }
             return pending
         }
-        // Non-blank line - clear `lastLineBlank` on every ancestor of the current container so a stale blank flag doesn't outlive the continuing block. The blank's leaf flag (set above) is preserved because `current` after a non-blank can't be the blank leaf.
-        var clearUp: DocumentStorage.Index? = current
+        // Non-blank line - the containers that matched it, and their ancestors, no longer end with a blank line. A container that failed to match keeps its flag: this line closes it, or continues its paragraph lazily.
+        var clearUp: DocumentStorage.Index? = deepestMatched
         while let clearUp_ = clearUp {
             storage.nodes[clearUp_].lastLineBlank = false
             clearUp = storage[clearUp_].parent
