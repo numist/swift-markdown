@@ -46,6 +46,42 @@ struct ExtendedAutolinkPrecedingCharacterTests {
             """)
     }
 
+    @Test(arguments: [("\u{0B}", "\\u{B}"), ("\u{0C}", "\\u{C}")])
+    func testURLAfterLineTabulationOrFormFeedIsLink(_ whitespace: String, _ escaped: String) {
+        #expect(surface("x" + whitespace + "http://a.b") == """
+            document
+              paragraph
+                text "x\(escaped)"
+                link "http://a.b" ""
+                  text "http://a.b"
+
+            """)
+    }
+
+    @Test(arguments: [("\u{0B}", "\\u{B}"), ("\u{0C}", "\\u{C}")])
+    func testWWWAfterLineTabulationOrFormFeedIsLink(_ whitespace: String, _ escaped: String) {
+        #expect(surface("x" + whitespace + "www.a.b") == """
+            document
+              paragraph
+                text "x\(escaped)"
+                link "http://www.a.b" ""
+                  text "www.a.b"
+
+            """)
+    }
+
+    @Test(arguments: [("\u{0B}", "\\u{B}"), ("\u{0C}", "\\u{C}")])
+    func testEmailAfterLineTabulationOrFormFeedIsLink(_ whitespace: String, _ escaped: String) {
+        #expect(surface("x" + whitespace + "foo@b.cd") == """
+            document
+              paragraph
+                text "x\(escaped)"
+                link "mailto:foo@b.cd" ""
+                  text "foo@b.cd"
+
+            """)
+    }
+
     // MARK: - Extended email autolinks
 
     @Test func testEmailAfterLessThanSignIsText() {

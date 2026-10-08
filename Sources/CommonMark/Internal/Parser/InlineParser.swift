@@ -2737,9 +2737,11 @@ extension BlockParser {
     /// Characters that may directly precede an extended autolink (Autolinks (extension)): whitespace, `*`, `_`,
     /// `~` and `(`. Anything else, `<` included, disqualifies it.
     private func isValidGFMPreceding(_ b: UInt8) -> Bool {
+        if b.isASCIISpace {
+            return true
+        }
         switch b {
-        case UInt8(ascii: " "), UInt8(ascii: "\t"), UInt8(ascii: "\n"), UInt8(ascii: "\r"),
-             UInt8(ascii: "*"), UInt8(ascii: "_"), UInt8(ascii: "~"), UInt8(ascii: "("):
+        case UInt8(ascii: "*"), UInt8(ascii: "_"), UInt8(ascii: "~"), UInt8(ascii: "("):
             return true
         default:
             return false
