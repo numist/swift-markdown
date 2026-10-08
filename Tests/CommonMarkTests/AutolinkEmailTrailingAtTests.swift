@@ -25,9 +25,8 @@ private func dfsAutolinkNodes(
 /// An extended email autolink candidate whose domain runs into a second `@`.
 ///
 /// The first candidate is abandoned and the match restarts from the second `@`, with the run between the
-/// two `@`s as the new local part. The restarted address is an extended email autolink only when its own
-/// domain is valid (spec "Autolinks (extension)"): one or more segments separated by periods, with at least
-/// one period.
+/// two `@`s as the new local part. That local part follows `@`, which may not precede an extended autolink
+/// (spec "Autolinks (extension)"), so the restarted address is text whatever its domain.
 @Suite("Extended email autolink candidate with a second `@`")
 struct AutolinkEmailTrailingAtTests {
 
@@ -104,12 +103,12 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.map(\.text) == [nil, nil, "a@b.c@d"])
     }
 
-    @Test("`a@b@c.d`: `b@c.d` links, with `a@` as text before it")
-    func restartLinksOnOwnDomain() {
+    @Test("`a@b@c.d`: `b@c.d` follows `@`, so the run is text")
+    func restartAfterAtSignIsText() {
         let ns = nodes(in: "a@b@c.d")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@", nil, "b@c.d"])
-        #expect(ns.compactMap(\.url) == ["mailto:b@c.d"])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@b@c.d"])
+        #expect(ns.compactMap(\.url) == [])
     }
 
     @Test("`o@.e@ x@y.z`: the valid email after a rejected `@` run links")
@@ -139,12 +138,12 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
-    @Test("`@o@e.e`: the leading `@` has an empty local part; `o@e.e` links")
-    func leadingAtLinks() {
+    @Test("`@o@e.e`: the leading `@` has an empty local part, and `o@e.e` follows `@`, so the run is text")
+    func leadingAtIsText() {
         let ns = nodes(in: "@o@e.e")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "@", nil, "o@e.e"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
+        #expect(ns.map(\.text) == [nil, nil, "@o@e.e"])
+        #expect(ns.compactMap(\.url) == [])
     }
 
     @Test("`o@e.ex`: the email links")

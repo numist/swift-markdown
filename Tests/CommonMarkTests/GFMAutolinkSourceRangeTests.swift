@@ -61,12 +61,12 @@ struct GFMAutolinkSourceRangeTests {
     /// The U+FFFD that replaces a NUL (Insecure characters) spans the NUL, and the address spans its own bytes.
     @Test("an email autolink after a NUL spans the address")
     func emailAfterNUL() {
-        #expect(tree("\u{0}a@b.co") == """
-            document @1:1-1:8
-              paragraph @1:1-1:8
-                text "\u{FFFD}" @1:1-1:2
-                link "mailto:a@b.co" "" @1:2-1:8
-                  text "a@b.co" @1:2-1:8
+        #expect(tree("\u{0} a@b.co") == """
+            document @1:1-1:9
+              paragraph @1:1-1:9
+                text "\u{FFFD} " @1:1-1:3
+                link "mailto:a@b.co" "" @1:3-1:9
+                  text "a@b.co" @1:3-1:9
 
             """)
     }
@@ -74,29 +74,30 @@ struct GFMAutolinkSourceRangeTests {
     /// The curly quote that replaces `'` spans the `'`.
     @Test("the text before an email autolink spans a smart quote")
     func smartQuoteBeforeEmail() {
-        #expect(tree("'a@b.co", options: Self.opts.union(.smart)) == """
-            document @1:1-1:8
-              paragraph @1:1-1:8
-                text "\u{2019}" @1:1-1:2
-                link "mailto:a@b.co" "" @1:2-1:8
-                  text "a@b.co" @1:2-1:8
+        #expect(tree("' a@b.co", options: Self.opts.union(.smart)) == """
+            document @1:1-1:9
+              paragraph @1:1-1:9
+                text "\u{2019} " @1:1-1:3
+                link "mailto:a@b.co" "" @1:3-1:9
+                  text "a@b.co" @1:3-1:9
 
             """)
     }
 
     /// The first address's last character comes from the character reference `&#111;`, so that address ends just
-    /// past the reference's `;`. The text before it is the NUL, and the text between the two addresses is the space.
+    /// past the reference's `;`. The text before it is the NUL and a space, and the text between the two addresses is
+    /// the space.
     @Test("an email autolink ending in a character reference ends past the reference")
     func emailEndingInCharacterReferenceBeforeAnotherEmail() {
-        #expect(tree("\u{0}a@b.c&#111; x@y.zz") == """
-            document @1:1-1:20
-              paragraph @1:1-1:20
-                text "\u{FFFD}" @1:1-1:2
-                link "mailto:a@b.co" "" @1:2-1:13
-                  text "a@b.co" @1:2-1:13
-                text " " @1:13-1:14
-                link "mailto:x@y.zz" "" @1:14-1:20
-                  text "x@y.zz" @1:14-1:20
+        #expect(tree("\u{0} a@b.c&#111; x@y.zz") == """
+            document @1:1-1:21
+              paragraph @1:1-1:21
+                text "\u{FFFD} " @1:1-1:3
+                link "mailto:a@b.co" "" @1:3-1:14
+                  text "a@b.co" @1:3-1:14
+                text " " @1:14-1:15
+                link "mailto:x@y.zz" "" @1:15-1:21
+                  text "x@y.zz" @1:15-1:21
 
             """)
     }
@@ -136,16 +137,16 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// A backslash before a line ending is a hard line break (Hard line breaks), and `[^b@b.B` matches no footnote
+    /// A backslash before a line ending is a hard line break (Hard line breaks), and `[^*b@b.B` matches no footnote
     /// definition, so the bracket is text spanning its own bytes on either side of the email autolink.
     @Test("an email in an undefined footnote-shaped bracket across a hard line break spans the address")
     func emailInUndefinedFootnoteBracket() {
-        #expect(tree("![^b@b.B\\\n]", options: Self.opts.union(.footnotes)) == """
+        #expect(tree("![^*b@b.B\\\n]", options: Self.opts.union(.footnotes)) == """
             document @1:1-2:2
               paragraph @1:1-2:2
-                text "![^" @1:1-1:4
-                link "mailto:b@b.B" "" @1:4-1:9
-                  text "b@b.B" @1:4-1:9
+                text "![^*" @1:1-1:5
+                link "mailto:b@b.B" "" @1:5-1:10
+                  text "b@b.B" @1:5-1:10
                 linebreak @-
                 text "]" @2:1-2:2
 

@@ -2361,14 +2361,8 @@ extension BlockParser {
         guard let schemeStart = matchSchemeBackward(colon: colon, content: content) else {
             return nil
         }
-        if schemeStart > chunkStart {
-            // The scheme is the maximal run of ASCII letters before `://`, so a letter before `http`
-            // makes the scheme something else (`xhttp://a.b` is text). Any other preceding byte, unlike
-            // the `www.` form's `isValidGFMPreceding` set, is allowed.
-            let pre = content[schemeStart - 1]
-            if pre.isASCIILetter {
-                return nil
-            }
+        if schemeStart > chunkStart, !isValidGFMPreceding(content[schemeStart - 1]) {
+            return nil
         }
         let urlEnd = scanGFMURLBody(start: colon + 3, end: end, content: content)
         let trimmedEnd = trimTrailingPunctuation(urlStart: schemeStart, urlEnd: urlEnd, content: content)
@@ -2464,13 +2458,14 @@ extension BlockParser {
     ///
     /// `localBound` is the earliest offset the backward local-part scan may reach - the content start for a
     /// fresh scan, or the end of the previous email when scanning a text node with several `@`s.
+    /// `mayStartAtContentStart` tells whether what precedes the content lets an email start at its first byte.
     ///
     /// On a non-match the function returns nil and sets `resumeAt` to the offset just past everything it
     /// scanned (`> at` always). Every `@` in `[at, resumeAt)` - the trial `@` plus any `@`s the restart
     /// walked over - provably cannot start an email (a restart that reaches those `@`s fresh
     /// carries no more periods than this scan did, so it fails identically), so the caller skips straight to
     /// `resumeAt`. This keeps the whole pass O(content length) even on `@`-dense input.
-    private func matchGFMEmailAutolink(at: Int, localBound: Int, end: Int, content: borrowing ContentSpan, resumeAt: inout Int) -> GFMAutolinkMatch? {
+    private func matchGFMEmailAutolink(at: Int, localBound: Int, end: Int, content: borrowing ContentSpan, mayStartAtContentStart: Bool, resumeAt: inout Int) -> GFMAutolinkMatch? {
         // `atSign` is the `@` under trial. A second `@` met during the domain scan abandons the current
         // candidate and restarts from that `@`, the run between the two becoming the new local part.
         // The scheme state below carries across the restart; `localStart` and the domain cursor are
@@ -2512,8 +2507,6 @@ extension BlockParser {
                 resumeAt = atSign + 1
                 return nil
             }
-            // Unlike the `www.` form, an email has no preceding-character restriction: whatever precedes
-            // the local part stays text, so `<o@a.b` is `<` followed by a link.
             // The domain is one or more segments of alphanumerics, `-` and `_` separated by periods, with
             // at least one period, ending in neither `-` nor `_` (Autolinks (extension)). A period no
             // segment follows ends the address before it.
@@ -2537,6 +2530,12 @@ extension BlockParser {
             }
             resumeAt = max(i, atSign + 1)
             guard periods > 0, content[i - 1] != UInt8(ascii: "-"), content[i - 1] != UInt8(ascii: "_") else {
+                return nil
+            }
+            let mayStart = localStart > content.startOffset
+                ? isValidGFMPreceding(content[localStart - 1])
+                : mayStartAtContentStart
+            guard mayStart else {
                 return nil
             }
             return GFMAutolinkMatch(urlStart: localStart, urlEnd: i, form: .email, emailSchemeFolded: schemeFolded)
@@ -2735,9 +2734,8 @@ extension BlockParser {
         }
     }
 
-    /// Characters that may directly precede a `www.` extended autolink: whitespace, `*`, `_`, `~` and `(`.
-    /// Anything else, `<` included, disqualifies it. The `://` form only rejects a preceding ASCII letter
-    /// (see `matchGFMSchemeAutolink`), and the email form has no restriction (see `matchGFMEmailAutolink`).
+    /// Characters that may directly precede an extended autolink (Autolinks (extension)): whitespace, `*`, `_`,
+    /// `~` and `(`. Anything else, `<` included, disqualifies it.
     private func isValidGFMPreceding(_ b: UInt8) -> Bool {
         switch b {
         case UInt8(ascii: " "), UInt8(ascii: "\t"), UInt8(ascii: "\n"), UInt8(ascii: "\r"),
@@ -2943,6 +2941,7 @@ extension BlockParser {
         // `current` is the text node we are filling as the running `before`/`between` run; `segStart` is
         // where its text begins (in logical content offsets). `cursor` is the scan position and also the
         // floor for the next backward local-part scan (so a later `@` can't reach into a prior email).
+        let mayStartAtContentStart = extendedAutolinkMayStartAtTextStart(node, parent: parent)
         var current = node
         var segStart = 0
         var cursor = 0
@@ -2957,7 +2956,8 @@ extension BlockParser {
                 continue
             }
             guard let auto = matchGFMEmailAutolink(
-                at: i, localBound: cursor, end: total, content: content, resumeAt: &resumeAt
+                at: i, localBound: cursor, end: total, content: content,
+                mayStartAtContentStart: mayStartAtContentStart, resumeAt: &resumeAt
             ) else {
                 // `matchGFMEmailAutolink` guarantees `resumeAt > i`, so this always advances (and skips any
                 // `@`s the restart already settled - see its doc). O(content length) overall.
@@ -3024,6 +3024,29 @@ extension BlockParser {
         // produced (`didSplit`), never a pre-existing `@`-free node.
         if didSplit, case .literal(let last) = storage[current].data, last.totalLength == 0 {
             storage.unlinkChild(current)
+        }
+    }
+
+    /// Whether an extended autolink may start at the first byte of the text node `node` (Autolinks (extension)): at
+    /// the start of a line or of the leaf's inline content, or after an emphasis, strong emphasis or strikethrough
+    /// delimiter. Adjacent text nodes are merged beforehand, so `node` follows a node of another kind or the
+    /// opening of its parent.
+    private func extendedAutolinkMayStartAtTextStart(_ node: DocumentStorage.Index, parent: DocumentStorage.Index) -> Bool {
+        if let previous = storage[node].previous {
+            switch storage[previous].kind {
+            case .softBreak, .lineBreak, .emphasis, .strong, .strikethrough:
+                return true
+            case .text:
+                preconditionFailure("adjacent text nodes are merged before the email autolink pass")
+            default:
+                return false
+            }
+        }
+        switch storage[parent].kind {
+        case .image, .attribute:
+            return false
+        default:
+            return true
         }
     }
 
