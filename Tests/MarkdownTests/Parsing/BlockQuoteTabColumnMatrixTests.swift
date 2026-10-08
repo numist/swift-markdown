@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@testable import Markdown
+import Markdown
 import XCTest
 
 /// Nested block quote markers separated by tabs, on a line after an unclosed fenced code block. A tab counts

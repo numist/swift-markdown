@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@testable import Markdown
+import Markdown
 import XCTest
 
 /// A backslash before `&` in a fenced code block's info string escapes it (Backslash escapes), so the

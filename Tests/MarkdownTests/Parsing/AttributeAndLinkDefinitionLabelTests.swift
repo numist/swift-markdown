@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@testable import Markdown
+import Markdown
 import XCTest
 
 /// Link reference definitions and inline attribute definitions have separate labels, so a definition of one

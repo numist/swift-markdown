@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@testable import Markdown
+import Markdown
 import XCTest
 
 /// `>` TAB `>` after a list item holding an unclosed fenced code block opens a nested block quote: the block

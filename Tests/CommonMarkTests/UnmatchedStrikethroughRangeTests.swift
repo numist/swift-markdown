@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A `~` or `~~` run that closes no strikethrough is literal text (Strikethrough (extension)), and its
 /// source range covers its bytes like any other text.

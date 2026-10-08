@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A text run that follows an inline spanning a line ending, in a block quote paragraph with lazy
 /// continuation lines, has a source range on its own line.

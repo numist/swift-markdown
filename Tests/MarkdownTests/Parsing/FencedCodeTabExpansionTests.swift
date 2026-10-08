@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@testable import Markdown
+import Markdown
 import XCTest
 
 /// When the opening code fence is indented N columns, up to N columns of indentation are removed from each

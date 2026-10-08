@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@testable import Markdown
+import Markdown
 import XCTest
 
 /// A CDATA section begins with the string `<![CDATA[` (Raw HTML), so a keyword in any other case is text.
