@@ -66,7 +66,7 @@ extension MarkdownDocument {
 
         /// Enables GFM task list items.
         ///
-        /// A list item whose first paragraph begins with `[ ]`, `[x]`, or `[X]` followed by a space becomes an unchecked or checked task list item. Without this option, the brackets stay as ordinary text in the item's first paragraph.
+        /// A list item whose first paragraph begins with a task list item marker (`[ ]`, `[x]`, or `[X]`, as defined under Task list items (extension)) becomes an unchecked or checked task list item. Without this option, the brackets stay as ordinary text in the item's first paragraph.
         public static let tasklist = MarkdownDocument.ParseOptions(rawValue: 1 << 23)
 
         /// Enables GFM extended autolinks.

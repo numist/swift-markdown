@@ -30,12 +30,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// typical documents.
     static let initialOpenContainerCapacity = 256
 
-    /// The number of containers a single line may open before a list marker stops opening a list.
+    /// The block-start depth on one line at which a list marker stops opening a list.
     ///
-    /// Once this many containers have been opened on one line, a bullet or ordered list marker opens no
-    /// list and its text becomes paragraph content. The cap bounds the cost of deeply nested lists.
-    /// It counts only the containers opened on the current line, so nesting spread across lines is
-    /// unaffected, and block quotes are uncapped.
+    /// Each block start matched on a line, such as a block quote marker or a list marker, is one level of
+    /// depth, counting from 1. A bullet or ordered list marker at depth `maxListNesting` or deeper opens
+    /// no list and its text becomes paragraph content, so 99 block quote markers followed by `- ` give no
+    /// list. The cap bounds the cost of deeply nested lists. It counts only the current line, so nesting
+    /// spread across lines is unaffected, and block quotes are uncapped.
     static let maxListNesting = 100
 
     /// The deepest currently-open block.
@@ -2092,7 +2093,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var pending = pending
         var cursor = startCursor
         var column = startColumn
-        // Containers opened on this line so far, which caps list opening at `maxListNesting`.
+        // The depth of the block start being matched on this line; `maxListNesting` caps list opening by it.
         var depth = 0
         while true {
             depth += 1

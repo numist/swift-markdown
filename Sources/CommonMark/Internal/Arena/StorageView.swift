@@ -99,7 +99,7 @@ internal struct StorageView: ~Escapable, Copyable {
         }
         return String(unsafeUninitializedCapacity: Int(ref.totalLength)) { buffer in
             // SAFETY: `buffer` is the string's uninitialized storage, valid for this closure only. `OutputSpan(buffer:initializedCount: 0)` claims none of it as initialized, every append is capacity-checked (`ref.totalLength` is the sum of the segment lengths), `output.finalize(for: buffer)` checks that `buffer` is the buffer `output` covers before reporting its initialized count, and the initializer repairs any invalid UTF-8 in that prefix.
-            //         No String initializer fills its UTF-8 storage through an `OutputSpan`; the safe route builds the bytes in an owned array and copies them with `String(decoding:as:)`, which measured about 0.4% more corpus and 3% more spec.txt instructions to parse and read every node's content.
+            //         No String initializer fills its UTF-8 storage through an `OutputSpan`; the safe route builds the bytes in an owned array and copies them with `String(decoding:as:)`, which measured about 3% more instructions to parse spec.txt and read every node's content.
             var output = unsafe OutputSpan(buffer: buffer, initializedCount: 0)
             for i in 0..<Int(ref.count) {
                 let span = bytes(of: segments[Int(ref.first) + i].chunk)

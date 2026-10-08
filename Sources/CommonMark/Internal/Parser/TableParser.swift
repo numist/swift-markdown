@@ -567,7 +567,7 @@ extension BlockParser {
         return alignments
     }
 
-    /// Split `line` into cells on unescaped `|`. Strips a single trailing `|` if present (with optional surrounding whitespace), and a single leading `|` only when the row's first byte is that pipe (no whitespace before it). `hadClosingPipe` reports whether a trailing `|` is stripped, so the caller can tell a rightmost cell capped by a pipe from one that runs to the line end.
+    /// Split `line` into cells on unescaped `|`. Strips a single trailing `|` if present, along with any whitespace after it, and a single leading `|` only when the row's first byte is that pipe (no whitespace before it). `hadClosingPipe` reports whether a trailing `|` is stripped, so the caller can tell a rightmost cell capped by a pipe from one that runs to the line end.
     private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool, hadLeadingPipe: Bool) {
         var s = line.lowerBound
         var e = line.upperBound
@@ -583,7 +583,7 @@ extension BlockParser {
             hadLeadingPipe = true
         }
         var hadClosingPipe = false
-        // A closing pipe may be followed by spaces, tabs, VTs or FFs. Spaces and tabs were trimmed above;
+        // A closing pipe may be followed by spaces, tabs, VTs or FFs. Spaces and tabs are trimmed above;
         // look past any trailing VT/FF for an unescaped pipe. Without one, the trailing VT/FF is the last
         // cell's content.
         var pipeEnd = e

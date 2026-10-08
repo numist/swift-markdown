@@ -422,9 +422,8 @@ extension BlockParser {
                 // `://` and `www.` extended autolinks are detected in this pass. Extended email autolinks
                 // are detected by `gfmEmailAutolinkPass` after emphasis resolution, so a `_` or `*` beside
                 // an email resolves as emphasis (or not) before the email's boundaries are decided.
-                // Links may not contain other links (Links), so no extended autolink forms while a `[` or
-                // `![` opener is on the bracket stack: `[http://t` is text. An `^[` opener does not
-                // suppress one.
+                // The parser forms no `://` or `www.` extended autolink while a `[` or `![` opener is on
+                // the bracket stack, so `[a http://t.t` is text. An `^[` opener does not suppress one.
                 let insideLinkOrImageBracket = lastBracket.map { brackets[$0].insideLinkOrImage } ?? false
                 if storage.options.contains(.gfmAutolink),
                    !insideLinkOrImageBracket,
@@ -1229,8 +1228,8 @@ extension BlockParser {
         // A delimiter that forms no emphasis stays literal text, and this range keeps its columns when it consolidates with adjacent text.
         stampInline(textIdx, start, runEnd, content: content)
         if canOpen || canClose {
-            // Strikethrough (extension) wraps text in two tildes, so a `~` run is a delimiter only at
-            // length 2, or length 1 without `.strikethroughDoubleTilde`. Other `~` runs stay literal text.
+            // Strikethrough (extension) wraps text in two tildes. The parser also accepts a single tilde
+            // unless `.strikethroughDoubleTilde` is set; a `~` run of any other length stays literal text.
             let pushDelim: Bool
             if isStrikethrough {
                 let doubleTilde = storage.options.contains(.strikethroughDoubleTilde)
@@ -1292,8 +1291,8 @@ extension BlockParser {
                     && delimiters[o].character == closerChar {
                     let cl = delimiters[c]
                     let op = delimiters[o]
-                    // The multiple-of-3 test of rules 9 and 10 (Emphasis and strong emphasis) applies to
-                    // every delimiter, `~` included. A `~` opener is accepted whatever its length:
+                    // The parser applies the multiple-of-3 test of rules 9 and 10 (Emphasis and strong
+                    // emphasis) to `~` as well as `*` and `_`. A `~` opener is accepted whatever its length:
                     // `insertEmph` discards a mismatched pair, so a closer never reaches past the nearest
                     // `~` opener to a farther one of equal length.
                     if !(cl.canOpen || op.canClose)
