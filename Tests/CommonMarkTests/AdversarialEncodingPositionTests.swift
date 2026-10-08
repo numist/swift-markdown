@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 // Source columns are 1-based UTF-8 byte offsets into the source, and a node's
 // `sourceRange.upperBound` is the offset just past the node's last byte.

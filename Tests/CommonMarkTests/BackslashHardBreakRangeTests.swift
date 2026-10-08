@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Source ranges of inline nodes after a hard line break made by a backslash at the end of a line. Each node after
 /// the break lies on its own line, at its own source column.

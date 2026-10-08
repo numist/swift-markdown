@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Source ranges of text on a paragraph continuation line indented to its list item's content column.
 @Suite("Text source range on an indented continuation line")

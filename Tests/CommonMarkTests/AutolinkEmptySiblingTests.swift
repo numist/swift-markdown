@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 // Depth-first: each node's kind, text literal, and (for links) destination URL.
 private func dfsAutolinkNodes(

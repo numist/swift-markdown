@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 // DFS-collect each node's kind, text literal, and (for links) destination URL.
 private func dfsAutolinkNodes(
