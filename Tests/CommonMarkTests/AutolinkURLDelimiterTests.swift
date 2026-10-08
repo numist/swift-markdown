@@ -97,7 +97,7 @@ struct AutolinkURLDelimiterTests {
 
     // MARK: - Entity-like `;` tails
 
-    @Test("a trailing `&` + letters + `;` is removed whole")
+    @Test("a trailing `&` + alphanumerics + `;` is removed whole")
     func semicolonEntityStripped() throws {
         // `&zq;` is not an entity reference, so the trailing text is literal.
         let ns = nodes(in: "http://a.x/&zq;", options: Self.options)
@@ -107,14 +107,13 @@ struct AutolinkURLDelimiterTests {
         #expect(ns.compactMap(\.url) == ["http://a.x/"])
     }
 
-    @Test("with a digit between `&` and `;`, only the `;` is removed")
-    func semicolonEntityWithDigitOnlyTrimsSemicolon() throws {
-        // A digit between `&` and `;` leaves only the `;` to remove.
+    @Test("with a digit between `&` and `;`, the tail is removed whole")
+    func semicolonEntityWithDigitStripped() throws {
         let ns = nodes(in: "http://a.l/&am2;", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l/&am2", ";"])
-        #expect(ns.compactMap(\.url) == ["http://a.l/&am2"])
+        #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l/", "&am2;"])
+        #expect(ns.compactMap(\.url) == ["http://a.l/"])
     }
 
     // MARK: - Multi-trailing sequences

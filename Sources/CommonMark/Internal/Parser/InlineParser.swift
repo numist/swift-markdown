@@ -2633,7 +2633,7 @@ extension BlockParser {
     ///   (`…/Pikachu_(Electric)`) are kept while a stray closing paren is dropped. The `(`/`)` totals are
     ///   counted once over the whole run; `closing` is decremented as each unbalanced `)` is removed;
     /// - a trailing `;` peels a whole `&…;` entity tail when one precedes it (`&`, then one or more ASCII
-    ///   letters, not digits, then `;`), otherwise it peels just the `;`.
+    ///   alphanumerics, then `;`), otherwise it peels just the `;`.
     ///
     /// These `)`, punctuation, and `;` cases are interleaved in one loop, so a mixed tail like `');` peels
     /// right-to-left. A `<` never appears in the run: `scanGFMURLBody` stops at it.
@@ -2662,11 +2662,11 @@ extension BlockParser {
                  UInt8(ascii: "'"), UInt8(ascii: "\""):
                 i -= 1
             case UInt8(ascii: ";"):
-                // Scan ASCII letters back from the char before the `;`; an entity tail is `&` + those
-                // letters + `;`. Requiring at least one letter (`entityStart < i - 2`) makes `&;` and a
-                // bare `;` peel only the `;`.
+                // Scan ASCII alphanumerics back from the char before the `;`; an entity tail is `&` +
+                // those alphanumerics + `;`. Requiring at least one (`entityStart < i - 2`) makes `&;` and
+                // a bare `;` peel only the `;`.
                 var entityStart = i - 2
-                while entityStart > urlStart, content[entityStart].isASCIILetter {
+                while entityStart > urlStart, content[entityStart].isASCIILetter || content[entityStart].isASCIIDigit {
                     entityStart -= 1
                 }
                 if entityStart < i - 2, content[entityStart] == UInt8(ascii: "&") {
