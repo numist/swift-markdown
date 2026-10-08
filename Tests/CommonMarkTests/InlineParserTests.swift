@@ -11,20 +11,6 @@
 import Testing
 @testable import CommonMark
 
-/// Walk all inline children of the first paragraph (or heading) in the document, returning a compact `(kind, literal)` list.
-internal func paragraphInlines(_ doc: borrowing MarkdownDocument) -> [(kind: MarkdownNode.Kind, literal: String?)] {
-    var out: [(MarkdownNode.Kind, String?)] = []
-    let root = doc.root
-    root.children.forEach { block in
-        if block.kind.canAccumulateText {
-            block.children.forEach { inline in
-                out.append((inline.kind, inline.literal()))
-            }
-        }
-    }
-    return out.map { ($0.0, $0.1) }
-}
-
 @Suite("Inline parser - code spans")
 struct CodeSpanTests {
 

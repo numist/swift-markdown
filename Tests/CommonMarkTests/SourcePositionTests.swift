@@ -11,17 +11,6 @@
 import Testing
 @testable import CommonMark
 
-/// Collects each node's kind and source range, depth-first.
-internal func dfsRanges(
-    _ node: borrowing MarkdownNode,
-    into out: inout [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?)]
-) {
-    out.append((node.kind, node.sourceRange))
-    node.children.forEach { child in
-        dfsRanges(child, into: &out)
-    }
-}
-
 @Suite("Source positions - blocks")
 struct SourcePositionTests {
 
