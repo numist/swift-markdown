@@ -2975,8 +2975,17 @@ extension BlockParser {
 
             // The link node and its single text child (the visible email address).
             // A folded `mailto:`/`xmpp:` scheme means the destination is the visible run, so reuse its ref
-            // for the URL. A plain email gets `mailto:` synthesized into the arena.
-            let urlRef = auto.emailSchemeFolded ? emailRef : materializeMailtoURL(for: emailRef)
+            // for the URL when it is one span; a run assembled around a backslash escape is several, and a URL
+            // is read as one span, so it is joined in the arena. A plain email gets `mailto:` synthesized into
+            // the arena.
+            let urlRef: ContentRef
+            if !auto.emailSchemeFolded {
+                urlRef = materializeURL(prefix: "mailto:", for: emailRef)
+            } else if emailRef.count > 1 {
+                urlRef = materializeURL(prefix: "", for: emailRef)
+            } else {
+                urlRef = emailRef
+            }
             let linkIdx = storage.appendNode(NodeRecord(
                 kind: .link, parent: parent, data: .link(url: urlRef, title: .empty)))
             let childIdx = storage.appendNode(NodeRecord(
@@ -3087,13 +3096,13 @@ extension BlockParser {
         return ContentRef(first: newFirst, count: count, totalLength: total)
     }
 
-    /// Materialize `"mailto:"` + the content bytes of `emailRef` into the string arena and intern them.
+    /// Materialize `prefix` + the content bytes of `emailRef` into the string arena as one chunk and intern it.
     ///
     /// The email bytes are copied into an independent local buffer first (they may live in the arena, and
     /// reading the arena while appending to it would alias the growing buffer), then flushed to the arena.
-    private mutating func materializeMailtoURL(for emailRef: ContentRef) -> ContentRef {
+    private mutating func materializeURL(prefix: String, for emailRef: ContentRef) -> ContentRef {
         var buf = UniqueArray<UInt8>()
-        for b in "mailto:".utf8 {
+        for b in prefix.utf8 {
             buf.append(b)
         }
         materialize(emailRef, into: &buf)
