@@ -3288,7 +3288,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         let nameRange = nameStart..<nameEnd
 
-        // Type 1: pre/script/style/textarea (open tag only - closing tag goes to type 6 since `</pre>` etc. don't fit type 1's start condition either way).
+        // Type 1: pre/script/style/textarea, open tag only. A closing tag such as `</pre>` doesn't meet start condition 1, but may start a type 7 block.
         if !isClosing {
             for tag in Self.htmlBlockType1Tags {
                 if bytesEqualASCIICaseInsensitive(span: source, range: nameRange, target: tag) {

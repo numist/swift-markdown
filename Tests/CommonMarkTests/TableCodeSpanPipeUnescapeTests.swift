@@ -14,7 +14,7 @@ import Testing
 /// When a table interrupts a paragraph, the lines before the header row form an ordinary paragraph (Paragraphs).
 /// Only a cell's content unescapes `\|` (Tables (extension)), so a code span in those lines keeps its backslash
 /// escapes literal (Code spans).
-@Suite("Table preceding-paragraph code-span pipe unescaping")
+@Suite("Escaped pipe in a code span of a table's preceding paragraph")
 struct TableCodeSpanPipeUnescapeTests {
 
     /// The literal content of the first `.codeInline` node anywhere in the document (depth-first, pre-order),

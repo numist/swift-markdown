@@ -15,7 +15,7 @@ import Testing
 /// after `*`, `_`, `~` or `(` (Autolinks (extension)).
 @Suite("Character before an extended autolink")
 struct ExtendedAutolinkPrecedingCharacterTests {
-    private static let options: MarkdownDocument.ParseOptions = [.strikethrough, .attributes, .gfmAutolink]
+    private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .attributes, .gfmAutolink]
 
     private func surface(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: Self.options)
@@ -182,6 +182,51 @@ struct ExtendedAutolinkPrecedingCharacterTests {
                   text "x"
                 link "mailto:foo@b.cd" ""
                   text "foo@b.cd"
+
+            """)
+    }
+
+    @Test func testEmailAfterStrongEmphasisIsLink() {
+        #expect(surface("**x**foo@b.cd") == """
+            document
+              paragraph
+                strong
+                  text "x"
+                link "mailto:foo@b.cd" ""
+                  text "foo@b.cd"
+
+            """)
+    }
+
+    @Test func testEmailOpeningStrongEmphasisIsLink() {
+        #expect(surface("**foo@b.cd**") == """
+            document
+              paragraph
+                strong
+                  link "mailto:foo@b.cd" ""
+                    text "foo@b.cd"
+
+            """)
+    }
+
+    @Test func testEmailAfterRawHTMLIsText() {
+        #expect(surface("<b>foo@b.cd") == """
+            document
+              paragraph
+                html_inline "<b>"
+                text "foo@b.cd"
+
+            """)
+    }
+
+    @Test func testEmailOpeningTableCellIsLink() {
+        #expect(surface("|foo@b.cd|\n|-|") == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    link "mailto:foo@b.cd" ""
+                      text "foo@b.cd"
 
             """)
     }
