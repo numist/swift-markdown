@@ -76,6 +76,42 @@ struct ListItemDefinitionsFirstBlockTests {
                         text "b"
 
                 """),
+            ("- a\n  - [r]: /u\n\n\n    b\n", """
+                document
+                  list bullet '-' tight
+                    item
+                      paragraph
+                        text "a"
+                      list bullet '-' loose
+                        item
+                          paragraph
+                            text "b"
+
+                """),
+            ("-\n  [r]: /u\n\n\n  b\n", """
+                document
+                  list bullet '-' loose
+                    item
+                      paragraph
+                        text "b"
+
+                """),
+            ("- [r]: /u\n \n \n  b\n", """
+                document
+                  list bullet '-' loose
+                    item
+                      paragraph
+                        text "b"
+
+                """),
+            ("- [r]: /u\n\t\n\n\tb\n", """
+                document
+                  list bullet '-' loose
+                    item
+                      paragraph
+                        text "b"
+
+                """),
         ]
     )
     func blockAfterTwoBlankLines(_ markdown: String, _ expected: String) {

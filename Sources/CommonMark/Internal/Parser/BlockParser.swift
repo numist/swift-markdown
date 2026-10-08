@@ -187,7 +187,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// follows that paragraph in the item. An entry is dropped when the item gains another block.
     ///
     /// A definition is a block for list looseness (Lists), so the removed paragraph is still separated from the
-    /// item's next block by a blank line after it, and still ends the item for `endsWithBlankLine`.
+    /// item's next block by a blank line after it, and still ends the item for `endsWithBlankLine`. It also keeps the
+    /// item from counting as empty, so a blank line after it does not close the item (List items).
     var itemsEndingInRemovedDefinitions: [DocumentStorage.Index: Bool] = [:]
 
     /// List items that directly contain a removed paragraph of only definitions and another block with a blank
@@ -1757,8 +1758,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // the indent falls short of the content column. Advance `cursor` to first-non-space (the
                     // line end for a blank line) so any deeper open item measures its indent from here rather
                     // than the line start. An empty item closes on such a line, since a list item can begin
-                    // with at most one blank line (List items). A removed paragraph of only definitions is
-                    // content, since a definition is a block of the item.
+                    // with at most one blank line (List items). An item whose blocks are only definitions is
+                    // not empty, since a definition is a block of the item.
                     cursor = firstNonSpace
                     prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
                     deepestMatched = node
