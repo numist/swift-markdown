@@ -42,7 +42,7 @@ struct AutolinkEmailEmphasisTests {
 
     // MARK: - A `_` outside emphasis joins the local part
 
-    @Test("`_@b.c`: the flanking `_` is the local part, not before-text")
+    @Test("`_@b.c`: the flanking `_` is the local part, not text before the link")
     func leadingUnderscore() {
         let ns = nodes(in: "_@b.c", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
@@ -58,7 +58,7 @@ struct AutolinkEmailEmphasisTests {
         #expect(ns.compactMap(\.url) == ["mailto:a_@b.c"])
     }
 
-    @Test("`x _@b.c`: the space bounds the local part; `x ` is before-text")
+    @Test("`x _@b.c`: the space bounds the local part; `x ` is text before the link")
     func spaceThenUnderscore() {
         let ns = nodes(in: "x _@b.c", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
@@ -99,7 +99,7 @@ struct AutolinkEmailEmphasisTests {
 }
 
 /// A lowercase `mailto:` or `xmpp:` directly before an extended email autolink, and not preceded by an
-/// alphanumeric, is part of the autolink: it becomes the destination's scheme in place of `mailto:` and is part of
+/// alphanumeric or other local-part character, is part of the autolink: it becomes the destination's scheme in place of `mailto:` and is part of
 /// the link text. With such a scheme the local part may be empty, and after `xmpp:` the domain may hold `/`.
 @Suite("Extended email autolinks with a scheme")
 struct AutolinkProtocolPrefixTests {
@@ -152,7 +152,7 @@ struct AutolinkProtocolPrefixTests {
         #expect(ns.compactMap(\.url) == ["mailto:@a.b"])
     }
 
-    @Test("`x mailto:a@b.c`: the scheme is part of the link; `x ` is before-text")
+    @Test("`x mailto:a@b.c`: the scheme is part of the link; `x ` is text before the link")
     func schemeAfterText() {
         let ns = nodes(in: "x mailto:a@b.c", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])

@@ -580,8 +580,7 @@ struct BlockPositionEncodingTests {
     }
 }
 
-// File-scope + `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (a `MarkdownNode`
-// is `~Escapable`, so it can't be captured by an instance-method closure).
+// File scope because a `MarkdownNode` is `~Escapable`, so an instance-method closure can't capture it.
 private func collect(
     _ node: borrowing MarkdownNode,
     into out: inout [BlockPositionEncodingTests.Collected]

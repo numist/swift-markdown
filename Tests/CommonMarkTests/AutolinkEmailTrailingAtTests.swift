@@ -104,7 +104,7 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.map(\.text) == [nil, nil, "a@b.c@d"])
     }
 
-    @Test("`a@b@c.d`: `b@c.d` links, with before-text `a@`")
+    @Test("`a@b@c.d`: `b@c.d` links, with `a@` as text before it")
     func restartLinksOnOwnDomain() {
         let ns = nodes(in: "a@b@c.d")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])

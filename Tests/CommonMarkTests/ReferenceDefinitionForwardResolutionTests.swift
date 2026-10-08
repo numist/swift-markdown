@@ -12,7 +12,6 @@ import Testing
 @testable import CommonMark
 
 // DFS-render each node as an indented `kind[:detail]` line, so a whole tree can be asserted at once.
-// File-scope so the walk can borrow each noncopyable `MarkdownNode`.
 internal func describeTree(_ node: borrowing MarkdownNode, depth: Int, into out: inout [String]) {
     let label: String
     switch node.kind {

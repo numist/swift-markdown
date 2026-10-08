@@ -11,7 +11,6 @@
 import Testing
 @testable import CommonMark
 
-// File-scope + `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (see `dfsRanges`).
 
 /// The checked state of every `.item` node, in document (DFS) order. `.some(false)` = unchecked task
 /// item, `.some(true)` = checked, `nil` = an ordinary (non-task) list item.

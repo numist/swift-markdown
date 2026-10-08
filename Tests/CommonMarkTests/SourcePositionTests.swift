@@ -11,7 +11,7 @@
 import Testing
 @testable import CommonMark
 
-// DFS-collect each node's kind and source range. File-scope so the walk can borrow each noncopyable `MarkdownNode`.
+/// Collects each node's kind and source range, depth-first.
 internal func dfsRanges(
     _ node: borrowing MarkdownNode,
     into out: inout [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?)]

@@ -17,7 +17,6 @@ import Foundation
 @testable import CommonMark
 
 /// Collects each node's kind, source range and whether it is a leaf, in depth-first order.
-// File scope with a `borrowing` parameter because `MarkdownNode` is noncopyable.
 internal func dfsCompleteness(
     _ node: borrowing MarkdownNode,
     into out: inout [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)]

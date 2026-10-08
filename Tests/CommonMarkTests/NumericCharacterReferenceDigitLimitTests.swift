@@ -11,7 +11,6 @@
 import Testing
 @testable import CommonMark
 
-// File-scope so the walk can borrow each noncopyable `MarkdownNode`.
 private func collectText(_ node: borrowing MarkdownNode, into out: inout String, count: inout Int) {
     if case .text = node.kind, case .text(let literal) = node.stringContent {
         out += literal

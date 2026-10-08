@@ -12,7 +12,6 @@ import Testing
 @testable import CommonMark
 
 /// Appends the literal of every text node in `node`'s subtree to `out`, depth-first.
-// File scope with a `borrowing` parameter because `MarkdownNode` is noncopyable.
 private func concatText(_ node: borrowing MarkdownNode, into out: inout String) {
     if case .text = node.kind, case .text(let s) = node.stringContent {
         out += s
@@ -48,8 +47,8 @@ private func strikethroughCount(_ node: borrowing MarkdownNode) -> Int {
     return n
 }
 
-/// Under Strikethrough (extension), a run of one or two tildes delimits strikethrough and closes only an opener of
-/// the same length. A run of three or more tildes is literal text, whatever its length.
+/// With `.strikethrough`, a run of one or two tildes delimits strikethrough and closes only an opener of the same
+/// length. A run of three or more tildes is literal text, whatever its length.
 @Suite("Strikethrough delimiter run length")
 struct StrikethroughDelimiterRunLengthTests {
 
