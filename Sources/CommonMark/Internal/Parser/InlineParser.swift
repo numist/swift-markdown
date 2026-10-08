@@ -2352,7 +2352,7 @@ extension BlockParser {
     /// `:`-triggered: looks back for `http`/`https`/`ftp`, then forward for `//` and a URL body.
     private func matchGFMSchemeAutolink(colon: Int, end: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         let chunkStart = content.startOffset
-        if colon + 2 >= end {
+        if colon + 3 >= end {
             return nil
         }
         if content[colon + 1] != UInt8(ascii: "/") || content[colon + 2] != UInt8(ascii: "/") {
@@ -2361,18 +2361,16 @@ extension BlockParser {
         guard let schemeStart = matchSchemeBackward(colon: colon, content: content) else {
             return nil
         }
-        if schemeStart > chunkStart, !isValidGFMPreceding(content[schemeStart - 1]) {
+        // The scheme is the whole run of ASCII letters before `://`, so a letter before `http` makes the scheme
+        // something else (`xhttp://a.b` is text). Any other character may precede it.
+        if schemeStart > chunkStart, content[schemeStart - 1].isASCIILetter {
+            return nil
+        }
+        guard schemeURLDomainAccepted(afterSlashes: colon + 3, end: end, content: content) else {
             return nil
         }
         let urlEnd = scanGFMURLBody(start: colon + 3, end: end, content: content)
         let trimmedEnd = trimTrailingPunctuation(urlStart: schemeStart, urlEnd: urlEnd, content: content)
-        if trimmedEnd <= colon + 3 {
-            return nil
-        }
-        let domainAccepted = validDomainEnd(start: colon + 3, end: trimmedEnd, content: content) != nil
-        if !domainAccepted {
-            return nil
-        }
         return GFMAutolinkMatch(
             urlStart: schemeStart,
             urlEnd: trimmedEnd,
@@ -2404,7 +2402,7 @@ extension BlockParser {
         let chunkStart = content.startOffset
         if start > chunkStart {
             let pre = content[start - 1]
-            if !isValidGFMPreceding(pre) {
+            if !isValidWWWPreceding(pre) {
                 return nil
             }
         }
@@ -2414,16 +2412,14 @@ extension BlockParser {
         if !bytesEqual(at: start, target: "www.", content: content) {
             return nil
         }
+        guard domainAccepted(base: start, end: end, requirePeriod: true, content: content) else {
+            return nil
+        }
         let urlEnd = scanGFMURLBody(start: start + 4, end: end, content: content)
         let trimmedEnd = trimTrailingPunctuation(
             urlStart: start, urlEnd: urlEnd,
             content: content
         )
-        // The trailing punctuation removed above is not part of the autolink, so neither is it part of
-        // its domain.
-        guard validDomainEnd(start: start + 4, end: trimmedEnd, content: content) != nil else {
-            return nil
-        }
         return GFMAutolinkMatch(urlStart: start, urlEnd: trimmedEnd, form: .www)
     }
 
@@ -2457,24 +2453,22 @@ extension BlockParser {
     /// domain, restarting from a second `@` met mid-domain (see the loop).
     ///
     /// `localBound` is the earliest offset the backward local-part scan may reach - the content start for a
-    /// fresh scan, or the end of the previous email when scanning a text node with several `@`s.
-    /// `mayStartAtContentStart` tells whether what precedes the content lets an email start at its first byte.
+    /// fresh scan, or the end of the previous email or failed candidate when scanning a text node with several
+    /// `@`s.
     ///
     /// On a non-match the function returns nil and sets `resumeAt` to the offset just past everything it
-    /// scanned (`> at` always). Every `@` in `[at, resumeAt)` - the trial `@` plus any `@`s the restart
-    /// walked over - provably cannot start an email (a restart that reaches those `@`s fresh
-    /// carries no more periods than this scan did, so it fails identically), so the caller skips straight to
-    /// `resumeAt`. This keeps the whole pass O(content length) even on `@`-dense input.
-    private func matchGFMEmailAutolink(at: Int, localBound: Int, end: Int, content: borrowing ContentSpan, mayStartAtContentStart: Bool, resumeAt: inout Int) -> GFMAutolinkMatch? {
+    /// scanned (`> at` always), which is also the floor of the next local part. Every `@` in `[at, resumeAt)` -
+    /// the trial `@` plus any `@`s the restart walked over - is settled by this scan, so the caller skips
+    /// straight to `resumeAt`. This keeps the whole pass O(content length) even on `@`-dense input.
+    private func matchGFMEmailAutolink(at: Int, localBound: Int, end: Int, content: borrowing ContentSpan, resumeAt: inout Int) -> GFMAutolinkMatch? {
         // `atSign` is the `@` under trial. A second `@` met during the domain scan abandons the current
-        // candidate and restarts from that `@`, the run between the two becoming the new local part.
-        // The scheme state below carries across the restart; `localStart` and the domain cursor are
-        // recomputed from `atSign`. The new local part follows `@` (or `/` after `xmpp:`), which may not
-        // precede an extended autolink, so a restart never matches; it settles the `@`s it walks over and
-        // sets `resumeAt` past them.
+        // candidate and restarts from that `@`, the run between the two becoming the new local part. The
+        // scheme state and the period count below carry across the restart; `localStart` and the domain cursor
+        // are recomputed from `atSign`.
         var atSign = at
         var schemeFolded = false
         var isXmpp = false
+        var hasPeriodBeforeAlphanumeric = false
         while true {
             // The local part stops at the first character an extended email autolink's local part can't
             // hold (`isGFMEmailLocalChar`). A `:` completing a lowercase `mailto:` or `xmpp:` scheme at a
@@ -2509,46 +2503,35 @@ extension BlockParser {
                 resumeAt = atSign + 1
                 return nil
             }
-            // The domain is one or more segments of alphanumerics, `-` and `_` separated by periods, with
-            // at least one period, ending in neither `-` nor `_` (Autolinks (extension)). A period no
-            // segment follows ends the address before it.
+            // The domain is a run of ASCII alphanumerics, `-`, `_`, and periods each followed by an
+            // alphanumeric, with `/` too after an `xmpp:` scheme. A period no alphanumeric follows ends it.
             var i = atSign + 1
-            var periods = 0
-            while true {
-                let segmentStart = i
-                while i < end, isEmailDomainByte(content[i], isXmpp: isXmpp) {
+            var sawSecondAt = false
+            while i < end {
+                let b = content[i]
+                if b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-") || b == UInt8(ascii: "_") {
                     i += 1
-                }
-                guard i > segmentStart, i + 1 < end, content[i] == UInt8(ascii: "."),
-                      isEmailDomainByte(content[i + 1], isXmpp: isXmpp) else {
+                } else if b == UInt8(ascii: "."), i + 1 < end, content[i + 1].isASCIILetter || content[i + 1].isASCIIDigit {
+                    hasPeriodBeforeAlphanumeric = true
+                    i += 1
+                } else if b == UInt8(ascii: "/"), isXmpp {
+                    i += 1
+                } else {
+                    sawSecondAt = b == UInt8(ascii: "@")
                     break
                 }
-                periods += 1
-                i += 1
             }
-            if i < end, content[i] == UInt8(ascii: "@") {
+            if sawSecondAt {
                 atSign = i
                 continue
             }
-            resumeAt = max(i, atSign + 1)
-            guard periods > 0, content[i - 1] != UInt8(ascii: "-"), content[i - 1] != UInt8(ascii: "_") else {
-                return nil
-            }
-            let mayStart = localStart > content.startOffset
-                ? isValidGFMPreceding(content[localStart - 1])
-                : mayStartAtContentStart
-            guard mayStart else {
+            resumeAt = i
+            // The domain holds a period and ends in a letter.
+            guard i > atSign + 1, hasPeriodBeforeAlphanumeric, content[i - 1].isASCIILetter else {
                 return nil
             }
             return GFMAutolinkMatch(urlStart: localStart, urlEnd: i, form: .email, emailSchemeFolded: schemeFolded)
         }
-    }
-
-    /// Whether `b` may appear in an extended email autolink's domain segment: an ASCII alphanumeric, `-`
-    /// or `_`, or `/` after a folded `xmpp:` scheme.
-    private func isEmailDomainByte(_ b: UInt8, isXmpp: Bool) -> Bool {
-        b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-") || b == UInt8(ascii: "_")
-            || (isXmpp && b == UInt8(ascii: "/"))
     }
 
     /// Emit a `.link` node + a single `.text` child for an extended autolink match. `www.` and email forms get a synthetic scheme prefix (`http://` or `mailto:`) materialized into the string arena.
@@ -2634,7 +2617,7 @@ extension BlockParser {
     ///   (`…/Pikachu_(Electric)`) are kept while a stray closing paren is dropped. The `(`/`)` totals are
     ///   counted once over the whole run; `closing` is decremented as each unbalanced `)` is removed;
     /// - a trailing `;` peels a whole `&…;` entity tail when one precedes it (`&`, then one or more ASCII
-    ///   alphanumerics, then `;`), otherwise it peels just the `;`.
+    ///   letters, then `;`), otherwise it peels just the `;`.
     ///
     /// These `)`, punctuation, and `;` cases are interleaved in one loop, so a mixed tail like `');` peels
     /// right-to-left. A `<` never appears in the run: `scanGFMURLBody` stops at it.
@@ -2663,11 +2646,11 @@ extension BlockParser {
                  UInt8(ascii: "'"), UInt8(ascii: "\""):
                 i -= 1
             case UInt8(ascii: ";"):
-                // Scan ASCII alphanumerics back from the char before the `;`; an entity tail is `&` +
-                // those alphanumerics + `;`. Requiring at least one (`entityStart < i - 2`) makes `&;` and
-                // a bare `;` peel only the `;`.
+                // Scan ASCII letters back from the char before the `;`; an entity tail is `&` + those
+                // letters + `;`. Requiring at least one letter (`entityStart < i - 2`) makes `&;` and a
+                // bare `;` peel only the `;`.
                 var entityStart = i - 2
-                while entityStart > urlStart, content[entityStart].isASCIILetter || content[entityStart].isASCIIDigit {
+                while entityStart > urlStart, content[entityStart].isASCIILetter {
                     entityStart -= 1
                 }
                 if entityStart < i - 2, content[entityStart] == UInt8(ascii: "&") {
@@ -2682,64 +2665,71 @@ extension BlockParser {
         return i
     }
 
-    /// The end of the valid domain starting at `start` (Autolinks (extension): segments of
-    /// alphanumeric characters, underscores and hyphens separated by periods, with at least one period
-    /// and no underscore in the last two segments), or `nil` when none starts there. A period that no
-    /// segment follows ends the domain before it.
-    private func validDomainEnd(start: Int, end: Int, content: borrowing ContentSpan) -> Int? {
-        var i = start
+    /// Whether the domain of an extended www or url autolink beginning at `base` is accepted.
+    ///
+    /// The scan starts at the domain's second character (a url autolink's first is checked by
+    /// `schemeURLDomainAccepted`, a www autolink's is `w`) and runs over host characters, `-`, `_` and `.` until
+    /// the first other character or the last character of the inline content, which it never examines. A
+    /// backslash makes it examine the character after it in its place. It ignores where the URL body later
+    /// ends. An underscore in either of the last two period-separated segments it covers rejects the domain
+    /// while the scan has passed ten periods or fewer. `requirePeriod` also demands one such period.
+    private func domainAccepted(base: Int, end: Int, requirePeriod: Bool, content: borrowing ContentSpan) -> Bool {
+        let size = end - base
         var periods = 0
-        var underscoreInPreviousSegment = false
-        var underscoreInSegment = false
-        while true {
-            let segmentStart = i
-            underscoreInPreviousSegment = underscoreInSegment
-            underscoreInSegment = false
-            while i < end, let width = domainCharacterWidth(at: i, content: content) {
-                if content[i] == UInt8(ascii: "_") {
-                    underscoreInSegment = true
-                }
-                i += width
+        var underscoresInPreviousSegment = 0
+        var underscoresInLastSegment = 0
+        var i = 1
+        while i < size - 1 {
+            if content[base + i] == UInt8(ascii: "\\"), i < size - 2 {
+                i += 1
             }
-            if i == segmentStart {
-                return nil
-            }
-            guard i + 1 < end, content[i] == UInt8(ascii: "."),
-                  domainCharacterWidth(at: i + 1, content: content) != nil else {
+            let b = content[base + i]
+            if b == UInt8(ascii: "_") {
+                underscoresInLastSegment += 1
+            } else if b == UInt8(ascii: ".") {
+                underscoresInPreviousSegment = underscoresInLastSegment
+                underscoresInLastSegment = 0
+                periods += 1
+            } else if !isHostByte(b) && b != UInt8(ascii: "-") {
                 break
             }
-            periods += 1
             i += 1
         }
-        if periods == 0 || underscoreInSegment || underscoreInPreviousSegment {
-            return nil
+        if (underscoresInPreviousSegment > 0 || underscoresInLastSegment > 0) && periods <= 10 {
+            return false
         }
-        return i
+        return !requirePeriod || periods > 0
     }
 
-    /// The byte width of the domain-segment character at `i` - an alphanumeric character (a Unicode letter or
-    /// number), `_` or `-` - or `nil` when another character is there.
-    private func domainCharacterWidth(at i: Int, content: borrowing ContentSpan) -> Int? {
-        let b = content[i]
-        if b < 0x80 {
-            return b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "_") || b == UInt8(ascii: "-") ? 1 : nil
+    /// Whether the domain of an extended url autolink, beginning at `afterSlashes` just past `://`, is accepted:
+    /// its first character is a host character, a character that is neither whitespace nor punctuation, and
+    /// `domainAccepted` accepts the rest.
+    private func schemeURLDomainAccepted(afterSlashes: Int, end: Int, content: borrowing ContentSpan) -> Bool {
+        let first = content[afterSlashes]
+        if first < 0x80 {
+            if !isHostByte(first) {
+                return false
+            }
+        } else {
+            let scalar = Self.decodeUTF8Scalar(at: afterSlashes, content: content)
+            if Self.isUnicodeWhitespace(scalar) || Self.isUnicodePunctuation(scalar) {
+                return false
+            }
         }
-        let decoded = Unicode.Scalar(UInt32(Self.decodeUTF8Scalar(at: i, content: content)))
-        precondition(decoded != nil, "inline content is valid UTF-8, so a decoded scalar is a Unicode scalar value")
-        let scalar = decoded!
-        switch scalar.properties.generalCategory {
-        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
-             .decimalNumber, .letterNumber, .otherNumber:
-            return scalar.utf8.count
-        default:
-            return nil
-        }
+        return domainAccepted(base: afterSlashes, end: end, requirePeriod: false, content: content)
     }
 
-    /// Characters that may directly precede an extended autolink (Autolinks (extension)): whitespace, `*`, `_`,
-    /// `~` and `(`. Anything else, `<` included, disqualifies it.
-    private func isValidGFMPreceding(_ b: UInt8) -> Bool {
-        if b.isASCIISpace {
+    /// Whether byte `b` continues a domain scan as a host character: an ASCII character that is neither
+    /// punctuation nor whitespace, or line tabulation, which ends no extended autolink. A multi-byte character
+    /// ends the scan.
+    private func isHostByte(_ b: UInt8) -> Bool {
+        b < 0x80 && !b.isASCIIPunct && (b == 0x0B || !b.isASCIISpace)
+    }
+
+    /// Characters that may directly precede an extended www autolink: space, tab, line feed, carriage return, `*`,
+    /// `_`, `~` and `(`.
+    private func isValidWWWPreceding(_ b: UInt8) -> Bool {
+        if b.isSpaceTabOrNewline {
             return true
         }
         switch b {
@@ -2945,7 +2935,6 @@ extension BlockParser {
         // `current` is the text node we are filling as the running `before`/`between` run; `segStart` is
         // where its text begins (in logical content offsets). `cursor` is the scan position and also the
         // floor for the next backward local-part scan (so a later `@` can't reach into a prior email).
-        let mayStartAtContentStart = extendedAutolinkMayStartAtTextStart(node, parent: parent)
         var current = node
         var segStart = 0
         var cursor = 0
@@ -2960,8 +2949,7 @@ extension BlockParser {
                 continue
             }
             guard let auto = matchGFMEmailAutolink(
-                at: i, localBound: cursor, end: total, content: content,
-                mayStartAtContentStart: mayStartAtContentStart, resumeAt: &resumeAt
+                at: i, localBound: cursor, end: total, content: content, resumeAt: &resumeAt
             ) else {
                 // `matchGFMEmailAutolink` guarantees `resumeAt > i`, so this always advances (and skips any
                 // `@`s the restart already settled - see its doc). O(content length) overall.
@@ -3028,29 +3016,6 @@ extension BlockParser {
         // produced (`didSplit`), never a pre-existing `@`-free node.
         if didSplit, case .literal(let last) = storage[current].data, last.totalLength == 0 {
             storage.unlinkChild(current)
-        }
-    }
-
-    /// Whether an extended autolink may start at the first byte of the text node `node` (Autolinks (extension)): at
-    /// the start of a line or of the leaf's inline content, or after an emphasis, strong emphasis or strikethrough
-    /// delimiter. Adjacent text nodes are merged beforehand, so `node` follows a node of another kind or the
-    /// opening of its parent.
-    private func extendedAutolinkMayStartAtTextStart(_ node: DocumentStorage.Index, parent: DocumentStorage.Index) -> Bool {
-        if let previous = storage[node].previous {
-            switch storage[previous].kind {
-            case .softBreak, .lineBreak, .emphasis, .strong, .strikethrough:
-                return true
-            case .text:
-                preconditionFailure("adjacent text nodes are merged before the email autolink pass")
-            default:
-                return false
-            }
-        }
-        switch storage[parent].kind {
-        case .image, .attribute:
-            return false
-        default:
-            return true
         }
     }
 

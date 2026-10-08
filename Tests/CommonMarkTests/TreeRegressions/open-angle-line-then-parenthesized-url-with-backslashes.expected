@@ -4,4 +4,6 @@ document @1:1-3:24
     softbreak @-
     text "<" @2:1-2:2
     softbreak @-
-    text "(http://ex\\A\\1\\6\\��" @3:1-3:24
+    text "(" @3:1-3:2
+    link "http://ex\\A\\1\\6\\��" "" @3:2-3:24
+      text "http://ex\\A\\1\\6\\��" @3:2-3:24

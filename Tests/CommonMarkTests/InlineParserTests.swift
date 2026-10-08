@@ -1712,13 +1712,12 @@ struct GFMAutolinkTests {
         }
     }
 
-    /// A valid domain holds at least one period (spec "Autolinks (extension)").
-    @Test("scheme URL host needs a period")
-    func schemeHostNeedsPeriod() {
+    @Test("scheme URL host needs no period")
+    func schemeHostNeedsNoPeriod() {
         let source = "look at http://localhost"
         MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
         let info = Self.firstLink(doc)
-        #expect(info.url == nil)
+        #expect(info.url == "http://localhost")
         }
     }
 

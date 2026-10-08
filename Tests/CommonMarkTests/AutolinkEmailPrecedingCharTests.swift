@@ -22,8 +22,8 @@ private func dfsAutolinkNodes(
     }
 }
 
-/// An extended email autolink (Autolinks (extension)) is recognized only at the start of a line, after whitespace,
-/// or after `*`, `_`, `~` or `(`.
+/// An extended email autolink's local part is the run of local-part characters before the `@`, so the autolink may
+/// follow any other character.
 @Suite("Extended email autolink preceding character")
 struct AutolinkEmailPrecedingCharTests {
 
@@ -40,13 +40,13 @@ struct AutolinkEmailPrecedingCharTests {
         }
     }
 
-    @Test("email is text after a leading `<`")
+    @Test("email autolinks after a leading `<`")
     func emailAfterAngle() {
         // Without a `>`, the `<` is literal text.
         let ns = nodes(in: "<o@e.e", options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "<o@e.e"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "<", nil, "o@e.e"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
     @Test("standalone email autolinks")

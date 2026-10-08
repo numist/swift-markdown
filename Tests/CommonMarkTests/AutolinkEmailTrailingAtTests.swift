@@ -25,8 +25,8 @@ private func dfsAutolinkNodes(
 /// An extended email autolink candidate whose domain runs into a second `@`.
 ///
 /// The first candidate is abandoned and the match restarts from the second `@`, with the run between the
-/// two `@`s as the new local part. That local part follows `@`, which may not precede an extended autolink
-/// (spec "Autolinks (extension)"), so the restarted address is text whatever its domain.
+/// two `@`s as the new local part. The periods the first candidate's domain held count toward the restarted
+/// address's domain.
 @Suite("Extended email autolink candidate with a second `@`")
 struct AutolinkEmailTrailingAtTests {
 
@@ -87,28 +87,28 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.compactMap(\.url) == [])
     }
 
-    // MARK: - The restarted address follows `@`
+    // MARK: - The restarted address
 
-    @Test("`o@.e@b`: `.e@b` follows `@`, so the run is text")
+    @Test("`o@.e@b`: the restarted `.e@b` keeps the period of `.e` and links")
     func restartNeedsOwnPeriod() {
         let ns = nodes(in: "o@.e@b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "o@.e@b"])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "o@", nil, ".e@b"])
     }
 
-    @Test("`a@b.c@d`: `b.c@d` follows `@`, so the run is text")
+    @Test("`a@b.c@d`: the restarted `b.c@d` keeps the period of `b.c` and links")
     func restartWithValidPrefixNeedsOwnPeriod() {
         let ns = nodes(in: "a@b.c@d")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b.c@d"])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@", nil, "b.c@d"])
     }
 
-    @Test("`a@b@c.d`: `b@c.d` follows `@`, so the run is text")
+    @Test("`a@b@c.d`: the restarted `b@c.d` links")
     func restartAfterAtSignIsText() {
         let ns = nodes(in: "a@b@c.d")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b@c.d"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@", nil, "b@c.d"])
+        #expect(ns.compactMap(\.url) == ["mailto:b@c.d"])
     }
 
     @Test("`o@.e@ x@y.z`: the valid email after a rejected `@` run links")
@@ -138,12 +138,12 @@ struct AutolinkEmailTrailingAtTests {
         #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
-    @Test("`@o@e.e`: the leading `@` has an empty local part, and `o@e.e` follows `@`, so the run is text")
+    @Test("`@o@e.e`: the leading `@` has an empty local part, and `o@e.e` links")
     func leadingAtIsText() {
         let ns = nodes(in: "@o@e.e")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "@o@e.e"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "@", nil, "o@e.e"])
+        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
     }
 
     @Test("`o@e.ex`: the email links")

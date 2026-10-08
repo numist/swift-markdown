@@ -588,26 +588,29 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// An undefined footnote reference is text, and `f@.f` is no extended email autolink because its domain starts
-    /// with a period (spec "Autolinks (extension)").
-    @Test("an email-shaped run with an empty first domain segment after a footnote-shaped bracket holding `^[` is text")
-    func emailWithEmptyDomainSegmentAfterCaretBracketIsText() {
+    /// An undefined footnote reference is text, and an extended email autolink's domain may start with a period.
+    @Test("an email with an empty first domain segment after a footnote-shaped bracket holding `^[` autolinks")
+    func emailWithEmptyDomainSegmentAfterCaretBracketAutolinks() {
         #expect(tree("[^[]]f@.f", Self.footnotesAutolink) == """
             document @1:1-1:10
               paragraph @1:1-1:10
-                text "[^[]]f@.f" @1:1-1:10
+                text "[^[]]" @1:1-1:6
+                link "mailto:f@.f" "" @1:6-1:10
+                  text "f@.f" @1:6-1:10
 
             """)
     }
 
-    /// `f@.f` is no extended email autolink because its domain starts with a period (spec "Autolinks (extension)"),
-    /// and the undefined footnote reference after it is text.
-    @Test("an email-shaped run with an empty first domain segment before a footnote-shaped bracket holding `^[` is text")
-    func emailWithEmptyDomainSegmentBeforeCaretBracketIsText() {
+    /// An extended email autolink's domain may start with a period, and the undefined footnote reference after it is
+    /// text.
+    @Test("an email with an empty first domain segment before a footnote-shaped bracket holding `^[` autolinks")
+    func emailWithEmptyDomainSegmentBeforeCaretBracketAutolinks() {
         #expect(tree("f@.f[^[]]y", Self.footnotesAutolink) == """
             document @1:1-1:11
               paragraph @1:1-1:11
-                text "f@.f[^[]]y" @1:1-1:11
+                link "mailto:f@.f" "" @1:1-1:5
+                  text "f@.f" @1:1-1:5
+                text "[^[]]y" @1:5-1:11
 
             """)
     }

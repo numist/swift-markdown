@@ -171,28 +171,28 @@ struct AutolinkProtocolPrefixTests {
 
     // MARK: - Schemes that are not part of the autolink
 
-    @Test("`MAILTO:x@a.b` is text: uppercase is not recognized (case-sensitive), and `:` may not precede an autolink")
+    @Test("`MAILTO:x@a.b`: uppercase is not a scheme, so `:` ends the local part")
     func uppercaseNotFolded() {
         let ns = nodes(in: "MAILTO:x@a.b", options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "MAILTO:x@a.b"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "MAILTO:", nil, "x@a.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:x@a.b"])
     }
 
-    @Test("`foo:x@a.b` is text: another scheme is not recognized, and `:` may not precede an autolink")
+    @Test("`foo:x@a.b`: another scheme is not recognized, so `:` ends the local part")
     func unknownSchemeNotFolded() {
         let ns = nodes(in: "foo:x@a.b", options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "foo:x@a.b"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "foo:", nil, "x@a.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:x@a.b"])
     }
 
-    @Test("`amailto:x@a.b` is text: a scheme preceded by an alphanumeric is not at a boundary")
+    @Test("`amailto:x@a.b`: a scheme preceded by an alphanumeric is not at a boundary, so `:` ends the local part")
     func schemeNotAtBoundaryNotFolded() {
         let ns = nodes(in: "amailto:x@a.b", options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "amailto:x@a.b"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "amailto:", nil, "x@a.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:x@a.b"])
     }
 
     @Test("`a@b.c`: an email with no scheme links with a `mailto:` destination")

@@ -22,8 +22,9 @@ private func dfsAutolinkNodes(
     }
 }
 
-/// An extended www autolink needs a valid domain after `www.` (Autolinks (extension)), so a `www.` without one is
-/// text.
+/// An extended www autolink's domain holds a period among the characters the domain scan examines, which stops
+/// short of the final character of the inline content; the trailing punctuation trim may then cut the link back
+/// to `www`.
 @Suite("Extended www autolink without a domain")
 struct AutolinkWWWBareTests {
 
@@ -40,12 +41,12 @@ struct AutolinkWWWBareTests {
         }
     }
 
-    @Test("`www.` followed by a space is text")
-    func domainlessWWWNotLinked() {
+    @Test("`www.` followed by a space links `www`")
+    func domainlessWWWLinksWWW() {
         let ns = nodes(in: "www. x", options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "www. x"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
+        #expect(ns.map(\.text) == [nil, nil, nil, "www", ". x"])
+        #expect(ns.compactMap(\.url) == ["http://www"])
     }
 
     @Test("`www.` at the end of the input is text")

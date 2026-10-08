@@ -38,12 +38,12 @@ struct FootnoteBracketEmailAutolinkTests {
         }
     }
 
-    @Test("`[^[]]f@f.f` is literal text: an extended autolink may not follow `]`")
+    @Test("`[^[]]f@f.f` keeps the bracket literal and autolinks the email after `]`")
     func bracketThenEmail() {
         let ns = nodes(in: "[^[]]f@f.f", options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "[^[]]f@f.f"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "[^[]]", nil, "f@f.f"])
+        #expect(ns.compactMap(\.url) == ["mailto:f@f.f"])
     }
 
     @Test("`[^[]]*f@f.f` keeps the bracket literal and autolinks the email")

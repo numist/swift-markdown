@@ -22,8 +22,9 @@ private func dfsAutolinkNodes(
     }
 }
 
-/// An extended url or www autolink (Autolinks (extension)) is recognized only at the start of a line, after
-/// whitespace, or after `*`, `_`, `~` or `(`.
+/// An extended url autolink's scheme is the whole run of ASCII letters before `://`, so the autolink may follow any
+/// character but a letter. An extended www autolink comes only at the start of a line, after whitespace, or after
+/// `*`, `_`, `~` or `(`.
 @Suite("Extended autolink preceding character")
 struct AutolinkSchemePrecedingCharTests {
 
@@ -49,48 +50,40 @@ struct AutolinkSchemePrecedingCharTests {
         #expect(ns.compactMap(\.url) == ["http://e.e"])
     }
 
-    /// Assert that `src` parses to a single `.text` node with literal `literal` and no link.
-    private func expectText(_ src: String, literal: String) {
-        let ns = nodes(in: src, options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, literal])
-        #expect(ns.compactMap(\.url) == [])
-    }
-
-    @Test("scheme is text after `!`")
+    @Test("scheme autolinks after `!`")
     func afterBang() {
-        expectText("!http://e.e", literal: "!http://e.e")
+        expectPrefixThenLink("!http://e.e", prefix: "!")
     }
 
-    @Test("scheme is text after `.`")
+    @Test("scheme autolinks after `.`")
     func afterDot() {
-        expectText(".http://e.e", literal: ".http://e.e")
+        expectPrefixThenLink(".http://e.e", prefix: ".")
     }
 
-    @Test("scheme is text after a digit")
+    @Test("scheme autolinks after a digit")
     func afterDigit() {
-        expectText("9http://e.e", literal: "9http://e.e")
+        expectPrefixThenLink("9http://e.e", prefix: "9")
     }
 
-    @Test("scheme is text after `-`")
+    @Test("scheme autolinks after `-`")
     func afterHyphen() {
-        expectText("-http://e.e", literal: "-http://e.e")
+        expectPrefixThenLink("-http://e.e", prefix: "-")
     }
 
-    @Test("scheme is text after `/`")
+    @Test("scheme autolinks after `/`")
     func afterSlash() {
-        expectText("/http://e.e", literal: "/http://e.e")
+        expectPrefixThenLink("/http://e.e", prefix: "/")
     }
 
-    @Test("scheme is text after a non-ASCII letter")
+    @Test("scheme autolinks after a non-ASCII letter")
     func afterNonASCIILetter() {
-        expectText("éhttp://e.e", literal: "éhttp://e.e")
+        expectPrefixThenLink("éhttp://e.e", prefix: "é")
     }
 
-    @Test("scheme is text after a NUL (replaced with U+FFFD)")
+    @Test("scheme autolinks after a NUL (replaced with U+FFFD)")
     func afterNUL() {
         // A NUL is replaced with U+FFFD (Insecure characters).
-        expectText("\u{0}http://e.e", literal: "\u{FFFD}http://e.e")
+        expectPrefixThenLink("\u{0}http://e.e", prefix: "\u{FFFD}")
     }
 
     @Test("scheme autolinks after `*`, `_` or `~`", arguments: ["*", "_", "~"])

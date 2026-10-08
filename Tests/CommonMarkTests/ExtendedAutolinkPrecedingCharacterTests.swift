@@ -11,8 +11,10 @@
 import CommonMark
 import Testing
 
-/// Every extended autolink, whether www, url or email, comes only at the beginning of a line, after whitespace, or
-/// after `*`, `_`, `~` or `(` (Autolinks (extension)).
+/// An extended www autolink comes at the start of the inline content, or after a space, tab, line ending, `*`, `_`,
+/// `~` or `(`. An extended url autolink's scheme is the whole run of ASCII letters before `://`, so the autolink may
+/// follow any character but a letter. An extended email autolink's local part is the run of local-part characters
+/// before the `@`, so the autolink may follow any other character.
 @Suite("Character before an extended autolink")
 struct ExtendedAutolinkPrecedingCharacterTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .attributes, .gfmAutolink]
@@ -27,12 +29,57 @@ struct ExtendedAutolinkPrecedingCharacterTests {
 
     // MARK: - Extended url autolinks
 
-    @Test func testURLAfterExclamationMarkIsText() {
-        #expect(surface("!http://a.b") == text("!http://a.b"))
+    @Test func testURLAfterQuotationMarkIsLink() {
+        #expect(surface("\"https://a.b\" in quotes;") == """
+            document
+              paragraph
+                text "\\""
+                link "https://a.b" ""
+                  text "https://a.b"
+                text "\\" in quotes;"
+
+            """)
     }
 
-    @Test func testURLAfterDigitIsText() {
-        #expect(surface("1ftp://a.b") == text("1ftp://a.b"))
+    @Test func testURLAfterExclamationMarkIsLink() {
+        #expect(surface("!http://a.b") == """
+            document
+              paragraph
+                text "!"
+                link "http://a.b" ""
+                  text "http://a.b"
+
+            """)
+    }
+
+    @Test func testURLAfterDigitIsLink() {
+        #expect(surface("1ftp://a.b") == """
+            document
+              paragraph
+                text "1"
+                link "ftp://a.b" ""
+                  text "ftp://a.b"
+
+            """)
+    }
+
+    @Test func testURLAfterNonASCIILetterIsLink() {
+        #expect(surface("\u{E9}http://a.b") == """
+            document
+              paragraph
+                text "\u{E9}"
+                link "http://a.b" ""
+                  text "http://a.b"
+
+            """)
+    }
+
+    @Test func testURLAfterASCIILetterIsText() {
+        #expect(surface("xHTTP://a.b") == text("xHTTP://a.b"))
+    }
+
+    @Test func testURLInLinkTextBracketIsText() {
+        #expect(surface("[http://a.b];") == text("[http://a.b];"))
     }
 
     @Test func testURLAfterParenthesisIsLink() {
@@ -58,17 +105,30 @@ struct ExtendedAutolinkPrecedingCharacterTests {
             """)
     }
 
+    // MARK: - Extended www autolinks
+
     @Test(arguments: [("\u{0B}", "\\u{B}"), ("\u{0C}", "\\u{C}")])
-    func testWWWAfterLineTabulationOrFormFeedIsLink(_ whitespace: String, _ escaped: String) {
-        #expect(surface("x" + whitespace + "www.a.b") == """
+    func testWWWAfterLineTabulationOrFormFeedIsText(_ whitespace: String, _ escaped: String) {
+        #expect(surface("x" + whitespace + "www.a.b") == text("x\(escaped)www.a.b"))
+    }
+
+    @Test func testWWWAfterTabIsLink() {
+        #expect(surface("x\twww.a.b") == """
             document
               paragraph
-                text "x\(escaped)"
+                text "x\\t"
                 link "http://www.a.b" ""
                   text "www.a.b"
 
             """)
     }
+
+    @Test(arguments: [(".", "."), ("\"", "\\\""), ("\u{E9}", "\u{E9}")])
+    func testWWWAfterOtherCharacterIsText(_ preceding: String, _ escaped: String) {
+        #expect(surface(preceding + "www.a.b") == text(escaped + "www.a.b"))
+    }
+
+    // MARK: - Extended email autolinks
 
     @Test(arguments: [("\u{0B}", "\\u{B}"), ("\u{0C}", "\\u{C}")])
     func testEmailAfterLineTabulationOrFormFeedIsLink(_ whitespace: String, _ escaped: String) {
@@ -82,22 +142,64 @@ struct ExtendedAutolinkPrecedingCharacterTests {
             """)
     }
 
-    // MARK: - Extended email autolinks
+    @Test func testEmailAfterLessThanSignIsLink() {
+        #expect(surface("<o@e.e;") == """
+            document
+              paragraph
+                text "<"
+                link "mailto:o@e.e" ""
+                  text "o@e.e"
+                text ";"
 
-    @Test func testEmailAfterLessThanSignIsText() {
-        #expect(surface("<o@e.e") == text("<o@e.e"))
+            """)
     }
 
-    @Test func testEmailAfterExclamationMarkIsText() {
-        #expect(surface("!foo@b.cd") == text("!foo@b.cd"))
+    @Test func testEmailAfterExclamationMarkIsLink() {
+        #expect(surface("!foo@b.cd;") == """
+            document
+              paragraph
+                text "!"
+                link "mailto:foo@b.cd" ""
+                  text "foo@b.cd"
+                text ";"
+
+            """)
     }
 
-    @Test func testEmailAfterAtSignIsText() {
-        #expect(surface("a@b@c.de") == text("a@b@c.de"))
+    @Test func testEmailAfterAtSignIsLink() {
+        #expect(surface("a@b@c.de") == """
+            document
+              paragraph
+                text "a@"
+                link "mailto:b@c.de" ""
+                  text "b@c.de"
+
+            """)
     }
 
-    @Test func testEmailAfterLetterAndSchemeIsText() {
-        #expect(surface("amailto:foo@b.cd") == text("amailto:foo@b.cd"))
+    /// `MAILTO:` is not the lowercase `mailto:` scheme, so the `:` ends the local part.
+    @Test func testEmailAfterUppercaseSchemeIsLink() {
+        #expect(surface("MAILTO:x@a.b.") == """
+            document
+              paragraph
+                text "MAILTO:"
+                link "mailto:x@a.b" ""
+                  text "x@a.b"
+                text "."
+
+            """)
+    }
+
+    /// A `mailto:` scheme right after a letter is not a scheme, so the `:` ends the local part.
+    @Test func testEmailAfterLetterAndSchemeIsLink() {
+        #expect(surface("amailto:foo@b.cd") == """
+            document
+              paragraph
+                text "amailto:"
+                link "mailto:foo@b.cd" ""
+                  text "foo@b.cd"
+
+            """)
     }
 
     @Test func testEmailWithSchemeAfterSpaceIsLink() {
@@ -111,43 +213,59 @@ struct ExtendedAutolinkPrecedingCharacterTests {
             """)
     }
 
-    @Test func testEmailAfterCodeSpanIsText() {
+    @Test func testEmailAfterCodeSpanIsLink() {
         #expect(surface("`x`foo@b.cd") == """
             document
               paragraph
                 code "x"
-                text "foo@b.cd"
+                link "mailto:foo@b.cd" ""
+                  text "foo@b.cd"
 
             """)
     }
 
-    @Test func testEmailAfterLinkIsText() {
+    @Test func testEmailAfterLinkIsLink() {
         #expect(surface("[x](u)foo@b.cd") == """
             document
               paragraph
                 link "u" ""
                   text "x"
-                text "foo@b.cd"
+                link "mailto:foo@b.cd" ""
+                  text "foo@b.cd"
 
             """)
     }
 
-    @Test func testEmailOpeningImageDescriptionIsText() {
+    @Test func testEmailInUnresolvedBracketsIsLink() {
+        #expect(surface("[foo@b.cd]") == """
+            document
+              paragraph
+                text "["
+                link "mailto:foo@b.cd" ""
+                  text "foo@b.cd"
+                text "]"
+
+            """)
+    }
+
+    @Test func testEmailOpeningImageDescriptionIsLink() {
         #expect(surface("![foo@b.cd](u)") == """
             document
               paragraph
                 image "u" ""
-                  text "foo@b.cd"
+                  link "mailto:foo@b.cd" ""
+                    text "foo@b.cd"
 
             """)
     }
 
-    @Test func testEmailOpeningAttributeTextIsText() {
+    @Test func testEmailOpeningAttributeTextIsLink() {
         #expect(surface("^[foo@b.cd](k: 1)") == """
             document
               paragraph
                 attribute "k: 1"
-                  text "foo@b.cd"
+                  link "mailto:foo@b.cd" ""
+                    text "foo@b.cd"
 
             """)
     }
@@ -209,12 +327,13 @@ struct ExtendedAutolinkPrecedingCharacterTests {
             """)
     }
 
-    @Test func testEmailAfterRawHTMLIsText() {
+    @Test func testEmailAfterRawHTMLIsLink() {
         #expect(surface("<b>foo@b.cd") == """
             document
               paragraph
                 html_inline "<b>"
-                text "foo@b.cd"
+                link "mailto:foo@b.cd" ""
+                  text "foo@b.cd"
 
             """)
     }

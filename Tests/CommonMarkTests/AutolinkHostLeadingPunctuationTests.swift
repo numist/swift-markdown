@@ -11,8 +11,8 @@
 import CommonMark
 import Testing
 
-/// A valid domain holds only alphanumerics, `_` and `-` (Autolinks (extension)), so a host that begins with a
-/// non-ASCII punctuation or space character is not an extended autolink.
+/// An extended url autolink's domain begins with a character that is neither whitespace nor punctuation, so a host
+/// that begins with a non-ASCII punctuation or space character is not an extended autolink.
 @Suite("Extended autolink host beginning with punctuation")
 struct AutolinkHostLeadingPunctuationTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink]
@@ -76,7 +76,6 @@ struct AutolinkHostLeadingPunctuationTests {
         #expect(surface("http://\(scalar)a.b") == text("http://\(scalar)a.b"))
     }
 
-    /// A non-ASCII letter is alphanumeric, so it may start or end a domain segment.
     @Test func testLetterInHostIsALink() {
         #expect(surface("http://\u{4E2D}a.b") == """
             document

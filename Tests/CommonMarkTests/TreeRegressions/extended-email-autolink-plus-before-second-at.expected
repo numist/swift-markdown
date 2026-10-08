@@ -1,0 +1,5 @@
+document @1:1-1:8
+  paragraph @1:1-1:8
+    text "l@o" @1:1-1:4
+    link "mailto:+@.b" "" @1:4-1:8
+      text "+@.b" @1:4-1:8

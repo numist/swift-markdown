@@ -107,13 +107,13 @@ struct AutolinkURLDelimiterTests {
         #expect(ns.compactMap(\.url) == ["http://a.x/"])
     }
 
-    @Test("with a digit between `&` and `;`, the tail is removed whole")
+    @Test("with a digit between `&` and `;`, only the `;` is removed")
     func semicolonEntityWithDigitStripped() throws {
         let ns = nodes(in: "http://a.l/&am2;", options: Self.options)
         try #require(ns.map(\.kind).contains(.link))
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l/", "&am2;"])
-        #expect(ns.compactMap(\.url) == ["http://a.l/"])
+        #expect(ns.map(\.text) == [nil, nil, nil, "http://a.l/&am2", ";"])
+        #expect(ns.compactMap(\.url) == ["http://a.l/&am2"])
     }
 
     // MARK: - Multi-trailing sequences

@@ -22,11 +22,10 @@ private func dfsAutolinkNodes(
     }
 }
 
-/// Extended email autolinks (Autolinks (extension)) are recognized left to right. When a candidate address is
-/// rejected, the next address's local part starts no earlier than the character that ended the candidate's
-/// domain: `+`, or a `.` not followed by an alphanumeric, ends a domain, while `-`, `_`, alphanumerics and a
-/// `.` followed by an alphanumeric continue it. Such a local part follows `@` or a character of the rejected
-/// domain, and only `_` among those may precede an extended autolink.
+/// Extended email autolinks are recognized left to right. When a candidate address is rejected, the next address's
+/// local part starts no earlier than the character that ended the candidate's domain: `+`, or a `.` not followed by
+/// an alphanumeric, ends a domain, while `-`, `_`, alphanumerics and a `.` followed by an alphanumeric continue it.
+/// A second `@` in a domain restarts the address just past the first `@`.
 @Suite("Extended email autolink local part after a rejected candidate")
 struct AutolinkEmailLocalRewindBoundaryTests {
 
@@ -54,32 +53,32 @@ struct AutolinkEmailLocalRewindBoundaryTests {
 
     // MARK: - `+` ends a domain
 
-    @Test("`l@o+@b.b` is text: the `+` bounds the second local part, which follows `o`")
+    @Test("`l@o+@b.b`: the `+` bounds the second local part")
     func plusBoundsLocalPart() {
         // `l@o` is rejected (its domain has no period), and its domain ends at `+`.
         let ns = nodes(in: "l@o+@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@o+@b.b"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "l@o", nil, "+@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:+@b.b"])
     }
 
-    @Test("`l@oo+@b.b` is text: the `+` bounds the second local part, which follows `o`")
+    @Test("`l@oo+@b.b`: the `+` bounds the second local part")
     func plusBoundsLocalPartTwoChars() {
         let ns = nodes(in: "l@oo+@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@oo+@b.b"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "l@oo", nil, "+@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:+@b.b"])
     }
 
-    @Test("`a@b+c@d.d` is text: the `+` bounds the second local part to `+c`, which follows `b`")
+    @Test("`a@b+c@d.d`: the `+` bounds the second local part to `+c`")
     func plusBoundsLocalPartWithTrailingAlnum() {
         let ns = nodes(in: "a@b+c@d.d")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b+c@d.d"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@b", nil, "+c@d.d"])
+        #expect(ns.compactMap(\.url) == ["mailto:+c@d.d"])
     }
 
-    @Test("`a@b_+c@d.e`: the `+` bounds the second local part to `+c`, which follows `_`, so it links")
+    @Test("`a@b_+c@d.e`: the `+` bounds the second local part to `+c`")
     func plusBoundsLocalPartAfterUnderscore() {
         let ns = nodes(in: "a@b_+c@d.e")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
@@ -89,65 +88,65 @@ struct AutolinkEmailLocalRewindBoundaryTests {
 
     // MARK: - `.`, `-`, `_` and alphanumerics continue a domain
 
-    @Test("`l@o.p@b.b` is text: the local part `o.p` follows `@`")
+    @Test("`l@o.p@b.b`: the second `@` restarts the address at `o.p`")
     func dotContinuesDomain() {
         let ns = nodes(in: "l@o.p@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@o.p@b.b"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o.p@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:o.p@b.b"])
     }
 
-    @Test("`l@o-p@b.b` is text: the local part `o-p` follows `@`")
+    @Test("`l@o-p@b.b`: the second `@` restarts the address at `o-p`")
     func hyphenContinuesDomain() {
         let ns = nodes(in: "l@o-p@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@o-p@b.b"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o-p@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:o-p@b.b"])
     }
 
-    @Test("`l@o_p@b.b` is text: the local part `o_p` follows `@`")
+    @Test("`l@o_p@b.b`: the second `@` restarts the address at `o_p`")
     func underscoreContinuesDomain() {
         let ns = nodes(in: "l@o_p@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@o_p@b.b"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o_p@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:o_p@b.b"])
     }
 
-    @Test("`l@abc@b.b` is text: the local part `abc` follows `@`")
+    @Test("`l@abc@b.b`: the second `@` restarts the address at `abc`")
     func alnumContinuesDomain() {
         let ns = nodes(in: "l@abc@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@abc@b.b"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "abc@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:abc@b.b"])
     }
 
-    @Test("`l@+@b.b` is text: the local part `+` follows `@`")
+    @Test("`l@+@b.b`: the local part after the rejected `l@` is `+`")
     func plusAtStart() {
         let ns = nodes(in: "l@+@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@+@b.b"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "+@b.b"])
+        #expect(ns.compactMap(\.url) == ["mailto:+@b.b"])
     }
 
-    @Test("`xy@ab@c.c` is text: the local part `ab` follows `@`")
+    @Test("`xy@ab@c.c`: the second `@` restarts the address at `ab`")
     func alnumFirstLocalPart() {
         let ns = nodes(in: "xy@ab@c.c")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "xy@ab@c.c"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "xy@", nil, "ab@c.c"])
+        #expect(ns.compactMap(\.url) == ["mailto:ab@c.c"])
     }
 
     // MARK: - A `.` not followed by an alphanumeric ends a domain
 
-    @Test("`a@b.+@c.c` is text: the local part `.+` follows `b`")
+    @Test("`a@b.+@c.c`: the local part after the rejected `a@b` is `.+`")
     func dotThenPlusBoundary() {
         let ns = nodes(in: "a@b.+@c.c")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b.+@c.c"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@b", nil, ".+@c.c"])
+        #expect(ns.compactMap(\.url) == ["mailto:.+@c.c"])
     }
 
-    @Test("`a@b_.+@c.c`: the local part `.+` follows `_`, so it links")
+    @Test("`a@b_.+@c.c`: the local part after the rejected `a@b_` is `.+`")
     func dotThenPlusBoundaryAfterUnderscore() {
         let ns = nodes(in: "a@b_.+@c.c")
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
@@ -155,11 +154,11 @@ struct AutolinkEmailLocalRewindBoundaryTests {
         #expect(ns.compactMap(\.url) == ["mailto:.+@c.c"])
     }
 
-    @Test("`a@b..c@d.d` is text: the local part `..c` follows `b`")
+    @Test("`a@b..c@d.d`: the local part after the rejected `a@b` is `..c`")
     func doubledDotBoundary() {
         let ns = nodes(in: "a@b..c@d.d")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b..c@d.d"])
-        #expect(ns.compactMap(\.url) == [])
+        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
+        #expect(ns.map(\.text) == [nil, nil, "a@b", nil, "..c@d.d"])
+        #expect(ns.compactMap(\.url) == ["mailto:..c@d.d"])
     }
 }
