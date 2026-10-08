@@ -8,11 +8,9 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@testable import CommonMark
+import CommonMark
 
-// Test-target `String` and `Segments` accessors for a node's content.
-//
-// The `String` accessors use `stringContent`, which is available on every deployment target. `literalSegments()` vends the borrowed `Segments` (`UTF8Span`) form, which requires OS 26.
+// Test-target `String` accessors for a node's content, read through `stringContent`, which is available on every deployment target.
 extension MarkdownNode {
 
     borrowing func literal() -> String? {
@@ -21,18 +19,6 @@ extension MarkdownNode {
         case .codeBlock(_, let body): return body
         case .htmlBlock(let body): return body
         default: return nil
-        }
-    }
-
-    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
-    @_lifetime(borrow self)
-    borrowing func literalSegments() -> Segments {
-        // `content`'s payload is `~Copyable` and can only be borrowed in place, so the `Segments` are derived from the record data the same way `content` derives them.
-        switch _view.record(at: _index).data {
-        case .literal(let ref): return Segments(view: _view, ref: ref)
-        case .codeBlock(_, let body): return Segments(view: _view, ref: body)
-        case .htmlBlock(_, let body): return Segments(view: _view, ref: body)
-        default: return Segments(view: _view, ref: .empty)
         }
     }
 

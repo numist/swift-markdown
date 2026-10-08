@@ -11,6 +11,22 @@
 import Testing
 @testable import CommonMark
 
+extension MarkdownNode {
+
+    /// The borrowed `Segments` of a node's literal, code-block body or HTML-block body, or empty segments for any other kind.
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
+    @_lifetime(borrow self)
+    borrowing func literalSegments() -> Segments {
+        // `content`'s payload is `~Copyable` and can only be borrowed in place, so the `Segments` are derived from the record data the same way `content` derives them.
+        switch _view.record(at: _index).data {
+        case .literal(let ref): return Segments(view: _view, ref: ref)
+        case .codeBlock(_, let body): return Segments(view: _view, ref: body)
+        case .htmlBlock(_, let body): return Segments(view: _view, ref: body)
+        default: return Segments(view: _view, ref: .empty)
+        }
+    }
+}
+
 @Suite("Segment Sequence Tests")
 struct SegmentsTests {
 
