@@ -1938,9 +1938,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 )
                 pending = addLine(span: source, range: bodyStart..<lineRange.upperBound, to: current, pending: pending)
             }
+            // Blank lines that end the block are not part of it, so for list tightness the block ends with a blank line until a further code line follows.
+            storage.nodes[current].lastLineBlank = true
             return LeafContinuation(stillOpen: true, pending: pending)
         }
         if indent >= 4 {
+            storage.nodes[current].lastLineBlank = false
             let bodyStart = advanceColumns(
                 source: source,
                 from: cursor,
