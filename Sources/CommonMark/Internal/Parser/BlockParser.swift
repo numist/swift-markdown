@@ -951,46 +951,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return map
     }
 
-    /// Replace each `\|` with `|` in the paragraph text that precedes a table it opens.
-    ///
-    /// An escaped pipe in a table is a literal pipe, including inside other inline spans such as code
-    /// spans (Tables (extension)), so the substitution runs on the raw bytes before inline parsing. The
-    /// paragraph lines split off ahead of the table get the same substitution; `TableParser.unescapePipes`
-    /// applies it to rows and cells.
-    ///
-    /// Returns `chunk` unchanged - so escape-free content stays a zero-copy slice - when it has no `\|`.
-    /// Otherwise materializes a copy into the additions arena with each `\|` collapsed to `|` (the
-    /// arena-materialization pattern: only the affected content is copied, the single backslash dropped) and
-    /// returns a `Chunk` addressing that copy.
-    private mutating func unescapingPipes(_ chunk: Chunk) -> Chunk {
-        let end = chunk.offset + chunk.length
-        var hasEscape = false
-        var i = chunk.offset
-        while i + 1 < end {
-            if readByte(at: i, in: chunk) == UInt8(ascii: "\\")
-                && readByte(at: i + 1, in: chunk) == UInt8(ascii: "|") {
-                hasEscape = true
-                break
-            }
-            i += 1
-        }
-        guard hasEscape else { return chunk }
-        let offset = storage.strings.count
-        var j = chunk.offset
-        while j < end {
-            let b = readByte(at: j, in: chunk)
-            if b == UInt8(ascii: "\\"), j + 1 < end, readByte(at: j + 1, in: chunk) == UInt8(ascii: "|") {
-                storage.strings.append(UInt8(ascii: "|"))
-                j += 2
-                continue
-            }
-            storage.strings.append(b)
-            j += 1
-        }
-        return Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
-    }
-
-    /// The content-relative arena→source run map of `unescapingPipes(raw)`, given `map`, `raw`'s own.
+    /// The content-relative arena→source run map of `raw` after `TableParser.unescapePipes`, given `map`, `raw`'s own.
     ///
     /// Each stripped backslash's image is dropped, and every other byte keeps its own image. A U+FFFD's three
     /// bytes image one NUL byte.
@@ -1002,7 +963,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         for run in map {
             for local in 0..<Int(run.length) {
                 defer { i += 1 }
-                // The same `\|` match as `unescapingPipes`: a backslash immediately followed by a pipe.
+                // The same `\|` match as `unescapePipes`: a backslash immediately followed by a pipe.
                 if readByte(at: i, in: raw) == UInt8(ascii: "\\"), i + 1 < end, readByte(at: i + 1, in: raw) == UInt8(ascii: "|") {
                     continue
                 }
@@ -1241,27 +1202,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Queue a table-preceding paragraph's `content` for inline parsing after replacing NUL with U+FFFD and
-    /// unescaping pipes (`\|`→`|`, even inside a code span), and register the arena→source run map its
-    /// inlines stamp positions through.
+    /// Queue a table-preceding paragraph's `content` for inline parsing after replacing NUL with U+FFFD, and
+    /// register the arena→source run map its inlines stamp positions through.
     ///
-    /// `map` is `content`'s content-relative run map (empty for source-backed content). The unescaped text
-    /// is positioned as for a table cell (see `unescapedPipesMap`).
+    /// `map` is `content`'s content-relative run map (empty for source-backed content).
     private mutating func enqueueTablePrecedingContent(_ content: Chunk, map: [ArenaRun], of node: DocumentStorage.Index) {
         if content.isEmpty {
             return
         }
         var map = map
         let nulReplaced = replacingNUL(content, map: &map)
-        let unescaped = unescapingPipes(nulReplaced)
-        if positionsEnabled, !unescaped.inSource {
+        if positionsEnabled, !nulReplaced.inSource {
             let image = sourceImage(of: nulReplaced, map: map)
-            let unescapedImage = image.isEmpty || unescaped == nulReplaced ? image : unescapedPipesMap(image, of: nulReplaced)
-            if !unescapedImage.isEmpty {
-                arenaSourceMaps[node] = unescapedImage
+            if !image.isEmpty {
+                arenaSourceMaps[node] = image
             }
         }
-        pendingInlines.append((node, storage.intern(unescaped)))
+        pendingInlines.append((node, storage.intern(nulReplaced)))
     }
 
     /// Insert the paragraph formed from the lines before a table's header row as `node`'s preceding

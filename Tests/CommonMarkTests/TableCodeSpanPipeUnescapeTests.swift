@@ -11,9 +11,9 @@
 import Testing
 @testable import CommonMark
 
-/// When a table interrupts a paragraph, `\|` in the paragraph lines before the header row unescapes to `|`
-/// before inline parsing, as it does in cells (Tables (extension)). A code span in those lines therefore
-/// contains `|`, although code spans otherwise keep backslash escapes literal (Code spans).
+/// When a table interrupts a paragraph, the lines before the header row form an ordinary paragraph (Paragraphs).
+/// Only a cell's content unescapes `\|` (Tables (extension)), so a code span in those lines keeps its backslash
+/// escapes literal (Code spans).
 @Suite("Table preceding-paragraph code-span pipe unescaping")
 struct TableCodeSpanPipeUnescapeTests {
 
@@ -29,36 +29,36 @@ struct TableCodeSpanPipeUnescapeTests {
         }
     }
 
-    @Test("code span in a table's preceding paragraph unescapes its pipe (backtick header)")
-    func precedingParagraphCodeSpanUnescapesPipe() throws {
+    @Test("code span in a table's preceding paragraph keeps its escaped pipe (backtick header)")
+    func precedingParagraphCodeSpanKeepsEscapedPipe() throws {
         let (codeSpan, hasTable) = firstCodeSpanAndTable("`\\|`\n`\n|-", options: [.tables])
         try #require(hasTable, "fixture: expected a table to form")
         try #require(codeSpan != nil, "fixture: expected a code span in the preceding paragraph")
-        #expect(codeSpan == "|")
+        #expect(codeSpan == "\\|")
     }
 
-    @Test("code span in a table's preceding paragraph unescapes its pipe (backslash header)")
-    func precedingParagraphCodeSpanUnescapesPipeBackslashHeader() throws {
+    @Test("code span in a table's preceding paragraph keeps its escaped pipe (backslash header)")
+    func precedingParagraphCodeSpanKeepsEscapedPipeBackslashHeader() throws {
         let (codeSpan, hasTable) = firstCodeSpanAndTable("`\\|`\n\\\n-|", options: [.tables])
         try #require(hasTable, "fixture: expected a table to form")
         try #require(codeSpan != nil, "fixture: expected a code span in the preceding paragraph")
-        #expect(codeSpan == "|")
+        #expect(codeSpan == "\\|")
     }
 
-    @Test("code span in a block-quote table's preceding paragraph unescapes its pipe")
-    func precedingParagraphCodeSpanUnescapesPipeInBlockQuote() throws {
+    @Test("code span in a block-quote table's preceding paragraph keeps its escaped pipe")
+    func precedingParagraphCodeSpanKeepsEscapedPipeInBlockQuote() throws {
         let (codeSpan, hasTable) = firstCodeSpanAndTable("> `\\|`\n> `\n> |-", options: [.tables])
         try #require(hasTable, "fixture: expected a table to form inside the block quote")
         try #require(codeSpan != nil, "fixture: expected a code span in the preceding paragraph")
-        #expect(codeSpan == "|")
+        #expect(codeSpan == "\\|")
     }
 
-    @Test("code span in a tab-continuation table's preceding paragraph unescapes its pipe")
-    func precedingParagraphCodeSpanUnescapesPipeWithTabContinuation() throws {
+    @Test("code span in a tab-continuation table's preceding paragraph keeps its escaped pipe")
+    func precedingParagraphCodeSpanKeepsEscapedPipeWithTabContinuation() throws {
         let (codeSpan, hasTable) = firstCodeSpanAndTable("`\\|`\n\tx\n|-", options: [.tables])
         try #require(hasTable, "fixture: expected a table to form")
         try #require(codeSpan != nil, "fixture: expected a code span in the preceding paragraph")
-        #expect(codeSpan == "|")
+        #expect(codeSpan == "\\|")
     }
 
     @Test("code span with no table keeps its escaped pipe")
