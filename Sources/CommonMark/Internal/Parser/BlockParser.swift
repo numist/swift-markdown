@@ -2666,7 +2666,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 storage[node].data = .codeBlock(info: info, literal: literalRef)
             }
         case .htmlBlock:
-            // Body lines accumulate as zero-copy source segments (same as code blocks). Normalize: ensure a single trailing `\n`.
+            // Body lines accumulate as zero-copy source segments (same as code blocks). Normalize: end the last line with `\n`.
             let drained = drainSegments(node, pending: pending)
             var segs = drained.segments
             pending = drained.pending
@@ -2697,18 +2697,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return pending
     }
 
-    /// Normalize an HTML block's accumulated body segments: ensure a single trailing `\n`.
+    /// Normalize an HTML block's accumulated body segments: end every line, a final blank one included, with `\n`.
+    ///
+    /// The list holds the opening line followed by a separator and content for each later line, where an empty line contributes only its separator.
     private func normalizeHTMLBlockSegments(_ segs: inout UniqueArray<Segment>) {
         let nl = storage.newlineSegment
         precondition(segs.count > 0 && segs[0] != nl, "an HTML block's body starts with its opening line, which is never empty")
-        if segs[segs.count - 1] != nl {
-            segs.append(nl)
-        }
+        segs.append(nl)
     }
 
     /// Normalize a code block's accumulated body segments (Indented code blocks, Fenced code blocks) without copying the line bodies.
     ///
-    /// Drops the leading separator our accumulator inserts before the first fenced line, strips trailing blank lines for indented code, and ensures the body ends with exactly one `\n` (an empty fenced body stays empty).
+    /// Drops the leading separator our accumulator inserts before the first fenced line, strips trailing blank lines for indented code, and ends the body's last line with `\n` (a fenced block with no body lines stays empty).
     ///
     /// The list alternates body-line content segments with the shared `newlineSegment`. Content segments never contain a `\n` (lines are split on line endings), so `\n` occurs only at separator positions - the list is isomorphic to "lines separated by `\n`".
     private func normalizeCodeBlockSegments(_ segs: inout UniqueArray<Segment>, isFenced: Bool) {
@@ -2744,6 +2744,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // An indented code block opens on a line with content, so only a fenced body can be empty.
             precondition(isFenced, "an indented code block's first line holds content, so its body is never empty")
             segs = UniqueArray()
+            // A body of one blank line is that line's line ending.
+            if strippedLeading { segs.append(nl) }
             return
         }
 
