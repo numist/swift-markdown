@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@testable import Markdown
+import Markdown
 import XCTest
 
 /// A paragraph continuation line that begins with tabs loses them as initial whitespace (Paragraphs), and its

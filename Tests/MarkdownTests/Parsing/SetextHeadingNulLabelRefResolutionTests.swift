@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@testable import Markdown
+import Markdown
 import XCTest
 
 /// A NUL in a link label is replaced by U+FFFD (Insecure characters), so a link reference definition and a
