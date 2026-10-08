@@ -1827,7 +1827,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// `interruptsParagraph` is `true` when the open paragraph's own container matched this line's continuation prefix, so the line interrupts that paragraph, and `false` when only a shallower container matched, so a list marker starts a sibling item in an existing list.
     private func lineStartsNewBlock(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indent: Int, currentKind: MarkdownNode.Kind, interruptsParagraph: Bool, lineStart: Int) -> Bool {
-        if matchThematicBreak(source: source, range: range, firstNonSpace: firstNonSpace) {
+        if matchThematicBreak(source: source, range: range, firstNonSpace: firstNonSpace) != nil {
             return true
         }
         if matchATXHeading(source: source, range: range, firstNonSpace: firstNonSpace) != nil {
@@ -2110,7 +2110,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
             // Thematic break (must be before ATX so `---` etc. wins over content matchers, and before list-marker so `- - -` etc. wins over nested lists).
             // A line indented four or more columns is indented code, not a break. A raw prefix tab reaches here unexpanded only on a fenced code body line; see the fenced-code branch below.
-            if indent < 4, matchThematicBreak(source: source, range: cursor..<lineRange.upperBound, firstNonSpace: firstNonSpace) {
+            if indent < 4, let breakEnd = matchThematicBreak(source: source, range: cursor..<lineRange.upperBound, firstNonSpace: firstNonSpace) {
                 // A list contains only list items, so an enclosing list closes first.
                 if storage[current].kind.isList {
                     pending = finalize(node: current, pending: pending)
@@ -2120,10 +2120,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     parent: current,
                     start: sourceOffset(firstNonSpace)
                 )
-                // The thematic break stays open as `current` so the per-line close path finalizes it and
-                // stamps its end, as for any other block.
                 current = breakIdx
-                return pending
+                return finalize(node: breakIdx, pending: pending, lineContentEnd: breakEnd)
             }
 
             // Footnote definition (after thematic break, before list marker). Opens a block container
@@ -2189,7 +2187,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 if !heading.contentRange.isEmpty {
                     pending = addLine(span: source, range: heading.contentRange, to: headingIdx, pending: pending)
                 }
-                return finalize(node: headingIdx, pending: pending, atxHeadingEnd: heading.end)
+                return finalize(node: headingIdx, pending: pending, lineContentEnd: heading.end)
             }
 
             // Fenced code block. A line indented four or more columns is indented code, not a fence, even
@@ -2650,7 +2648,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Close `node`, materialize its accumulated content, and back the parser's `current` pointer up to `node`'s parent.
-    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, atEOF: Bool = false, atxHeadingEnd: Int? = nil) -> PendingLeaf? {
+    ///
+    /// `lineContentEnd` is the line offset just past the content of a block that is only ever one line, an ATX heading or a thematic break, closed on that line.
+    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, atEOF: Bool = false, lineContentEnd: Int? = nil) -> PendingLeaf? {
         var pending = pending
         let kind = storage[node].kind
 
@@ -2661,12 +2661,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let isFenced: Bool
             if case .codeBlock(let info) = kind { isFenced = info.isFenced } else { isFenced = false }
             let end: Int
-            if let atxHeadingEnd {
-                // An ATX heading ends at its trimmed content extent, not the raw line. Map the line-offset through `sourceOffset` exactly like the heading start, so tab-expanded lines resolve correctly.
-                let mappedEnd = sourceOffset(atxHeadingEnd)
+            if let lineContentEnd {
+                // An ATX heading or a thematic break ends at its trimmed content extent, not the raw line. Map the line-offset through `sourceOffset` exactly like the block's start, so tab-expanded lines resolve correctly.
+                let mappedEnd = sourceOffset(lineContentEnd)
                 precondition(mappedEnd != nil, "with positions tracked, every line offset maps to source")
                 end = mappedEnd!
-                // A block whose end is later attributed to this line - notably the document, whose end is stamped from the final line - ends at the heading's content end, not the raw line end, so shrink the tracked current-line end to match.
+                // A block whose end is later attributed to this line - notably the document, whose end is stamped from the final line - ends at the block's content end, not the raw line end, so shrink the tracked current-line end to match.
                 currentLineSourceRange = currentLineSourceRange.lowerBound..<end
             } else {
                 end = (atEOF || startedThisLine || kind == .document || isFenced)
@@ -2703,7 +2703,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             switch consume drained.content {
             case .chunk(let raw):
                 // An ATX heading's content range already excludes its surrounding spaces and tabs, and holds no line ending.
-                let trimmed = atxHeadingEnd == nil ? raw.trimmingWhitespace(using: self) : raw
+                let trimmed = lineContentEnd == nil ? raw.trimmingWhitespace(using: self) : raw
                 if !trimmed.isEmpty {
                     if positionsEnabled, !map.isEmpty {
                         arenaSourceMaps[node] = sliceRuns(map, from: trimmed.offset - raw.offset, length: trimmed.length)
@@ -3827,28 +3827,30 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return level
     }
 
-    /// Try to match a thematic break starting at `firstNonSpace` within `range` (Thematic breaks).
-    private func matchThematicBreak(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> Bool {
+    /// Try to match a thematic break starting at `firstNonSpace` within `range` (Thematic breaks), returning the offset just past its last marker character.
+    private func matchThematicBreak(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> Int? {
         if firstNonSpace - range.lowerBound > 3 {
-            return false
+            return nil
         }
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         let marker = source[firstNonSpace]
         if marker != UInt8(ascii: "-") && marker != UInt8(ascii: "_") && marker != UInt8(ascii: "*") {
-            return false
+            return nil
         }
         var count = 0
+        var end = firstNonSpace
         var i = firstNonSpace
         while i < range.upperBound {
             let b = source[i]
             if b == marker {
                 count += 1
+                end = i + 1
             } else if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t") {
-                return false
+                return nil
             }
             i += 1
         }
-        return count >= 3
+        return count >= 3 ? end : nil
     }
 
     /// Try to match an ATX heading (ATX headings).

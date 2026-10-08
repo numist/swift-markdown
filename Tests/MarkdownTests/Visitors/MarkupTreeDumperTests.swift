@@ -80,7 +80,7 @@ final class MarkupTreeDumperTests: XCTestCase {
         │  ├─ Link @29:12-29:30 #59 destination: "topic://autolink"
         │  │  └─ Text @29:13-29:29 #60 "topic://autolink"
         │  └─ Text @29:30-29:31 #61 "."
-        ├─ ThematicBreak @31:1-32:1 #62
+        ├─ ThematicBreak @31:1-31:4 #62
         ├─ HTMLBlock @33:1-35:5 #63
         │  <a href="foo.png">
         │  An HTML Block.
