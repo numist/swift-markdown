@@ -1470,13 +1470,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     pending = finalize(node: current, pending: pending)
                 }
             }
-            // For list tightness (Lists), the blank line belongs to the deepest container that matched it, and it follows that container's last block, if any. Neither its ancestors, a block quote, whose lines all begin with `>`, nor a footnote definition end with it.
+            // For list tightness (Lists), the blank line belongs to the deepest container that matched it, and it follows that container's last block, if any. Neither its ancestors nor a block quote, whose lines all begin with `>`, end with it.
             let container = deepestMatched
             if let lastChild = storage[container].lastChild {
                 storage.nodes[lastChild].lastLineBlank = true
             }
             storage.nodes[container].lastLineBlank = switch storage[container].kind {
-            case .blockQuote, .footnoteDefinition: false
+            case .blockQuote: false
             default: true
             }
             var up = storage[container].parent

@@ -44,7 +44,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
     @Test func testUnderindentedLineAfterWhitespaceLineClosesDefinition() {
         #expect(surface("- [^a]: x\n \n  y") == """
             document
-              list bullet '-' tight
+              list bullet '-' loose
                 item
                   paragraph
                     text "y"
