@@ -80,7 +80,7 @@ class BacktickTests: XCTestCase {
     }
 
     func testDoubleBacktickSymbolLinkStillWorks() {
-        // Regression guard: ``symbol`` with parseSymbolLinks should be a SymbolLink.
+        // Regression guard: ``symbol`` with parseSymbolLinks should still be a SymbolLink.
         let source = "See ``foo()`` for details"
         let document = Document(parsing: source, options: .parseSymbolLinks)
         let expectedDump = """

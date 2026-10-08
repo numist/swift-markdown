@@ -97,7 +97,8 @@ class LargeTableTests: XCTestCase {
 
     // MARK: - Empty cells inserted into short rows
 
-    // Each one-cell body row of a `wideColumns`-column table gets 1024 empty cells.
+    // Each one-cell body row of a `wideColumns`-column table gets 1024 empty cells, so `shortRowCount`
+    // such rows insert over half a million empty cells.
     private static let wideColumns = 1025
     private static let shortRowCount = 513
 

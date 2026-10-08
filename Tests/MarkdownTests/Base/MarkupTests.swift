@@ -93,7 +93,7 @@ final class MarkupTests: XCTestCase {
         XCTAssertTrue(document.isIdentical(to: leaf.root))
     }
 
-    /// Test that a detached node keeps its range mapping.
+    /// Test that a detached node still maintains range mapping.
     func testDetachedFromParent() {
         let document = Document(parsing: "***OK***")
         XCTAssertTrue(document.detachedFromParent.isIdentical(to: document))

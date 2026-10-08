@@ -132,7 +132,7 @@ class RepeatedReferenceLinkTests: XCTestCase {
         XCTAssertEqual(70, count("Link destination:", in: result))
     }
 
-    /// The inline form of each inline attribute resolves, and so does the `[bar]` after it.
+    /// Each `^[t](a)` forms inline attributes, and every `[bar]` is a link.
     func testAttributeLookupAfterInlineForm() {
         let markdown = Self.definition("bar", destinationBytes: 2001) + Self.uses("^[t](a)[bar]", 10) + " " + Self.uses("[bar]", 60)
         let result = surface(markdown)

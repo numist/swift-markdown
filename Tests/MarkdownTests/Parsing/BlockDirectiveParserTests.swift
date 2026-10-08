@@ -834,7 +834,7 @@ class BlockDirectiveArgumentParserTests: XCTestCase {
     }
     
     func testEmptyStringArgument() {
-        // make sure that block directives where an argument is an empty string show the argument after parsing
+        // make sure that block directives where an argument is an empty string still show the argument after parsing
         let source = """
         @Outer(name: "") {
           This is a test.

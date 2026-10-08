@@ -867,7 +867,7 @@ class MarkupFormatterSimpleRoundTripTests: XCTestCase {
  However, when splitting lines, it has to insert soft/hard breaks into
  ``Text`` elements.
 
- However, it should never change the structure of
+ However, it still should never change the structure of
  ``BlockMarkup`` elements with line splitting enabled.
 
  It should also never turn any inline element containing ``Text`` elements
@@ -1394,7 +1394,7 @@ class MarkupFormatterTableTests: XCTestCase {
         XCTAssertEqual(expected, formatted)
     }
 
-    /// Test that tables nested in other block elements get printed
+    /// Test that tables nested in other block elements still get printed
     /// correctly.
     func testNested() {
         do { // Inside blockquotes; unlikely but possible
