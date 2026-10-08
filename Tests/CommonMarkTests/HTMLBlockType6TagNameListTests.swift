@@ -11,12 +11,9 @@
 import Testing
 import CommonMark
 
-/// The tag names of HTML block start condition 6 (HTML blocks) follow the CommonMark 0.31 list, which has `search` and
-/// not `source`.
-///
-/// Start condition 6 needs only the tag name followed by whitespace, `>`, `/>` or the end of the line, and it may
-/// interrupt a paragraph. A complete tag whose name isn't on the list, such as `<source>`, meets only start condition 7,
-/// which can't interrupt a paragraph.
+/// Start condition 6 (HTML blocks) needs only one of its listed tag names followed by whitespace, `>`, `/>` or the end
+/// of the line, and it may interrupt a paragraph. `source` and `search` are not on the list, so a complete tag with
+/// either name, such as `<source>`, meets only start condition 7, which can't interrupt a paragraph.
 @Suite("HTML block type-6 tag name list")
 struct HTMLBlockType6TagNameListTests {
 
@@ -32,22 +29,33 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
-    @Test("`<search` at the line end opens an HTML block")
+    @Test("`<search` at the line end is paragraph text")
     func searchAtLineEnd() {
         #expect(TreeDump.dump("<search\n", options: Self.options, sourceRanges: true) == """
             document @1:1-1:8
-              html_block "<search\\n" @1:1-1:8
+              paragraph @1:1-1:8
+                text "<search" @1:1-1:8
 
             """)
     }
 
-    @Test("`<search>` interrupts a paragraph")
-    func searchInterruptsParagraph() {
+    @Test("`<search>` doesn't interrupt a paragraph")
+    func searchContinuesParagraph() {
         #expect(TreeDump.dump("para\n<search>\n", options: Self.options, sourceRanges: true) == """
             document @1:1-2:9
-              paragraph @1:1-1:5
+              paragraph @1:1-2:9
                 text "para" @1:1-1:5
-              html_block "<search>\\n" @2:1-2:9
+                softbreak @-
+                html_inline "<search>" @2:1-2:9
+
+            """)
+    }
+
+    @Test("`<search>` on its own line opens a type 7 HTML block")
+    func searchOpensType7Block() {
+        #expect(TreeDump.dump("<search>\n", options: Self.options, sourceRanges: true) == """
+            document @1:1-1:9
+              html_block "<search>\\n" @1:1-1:9
 
             """)
     }

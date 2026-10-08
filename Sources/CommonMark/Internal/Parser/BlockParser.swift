@@ -3189,13 +3189,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header",
         "hr", "html", "iframe", "legend", "li", "link", "main", "menu",
         "menuitem", "nav", "noframes", "ol", "optgroup", "option", "p", "param",
-        "search", "section", "summary", "table", "tbody", "td", "tfoot", "th",
+        "section", "summary", "table", "tbody", "td", "tfoot", "th",
         "thead", "title", "tr", "track", "ul",
     ].map { Array($0.utf8) }
 
     /// Tag names that trigger an HTML block of type 1 (their *closing* tag also ends the block), as UTF-8 bytes.
     private static let htmlBlockType1Tags: [[UInt8]] = [
-        "pre", "script", "style", "textarea",
+        "pre", "script", "style",
     ].map { Array($0.utf8) }
 
     /// The end conditions of HTML blocks of types 2 (`-->`), 3 (`?>`) and 5 (`]]>`), as UTF-8 bytes.
@@ -3288,7 +3288,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         let nameRange = nameStart..<nameEnd
 
-        // Type 1: pre/script/style/textarea, open tag only. A closing tag such as `</pre>` doesn't meet start condition 1, but may start a type 7 block.
+        // Type 1: pre/script/style, open tag only. A closing tag such as `</pre>` doesn't meet start condition 1, but may start a type 7 block.
         if !isClosing {
             for tag in Self.htmlBlockType1Tags {
                 if bytesEqualASCIICaseInsensitive(span: source, range: nameRange, target: tag) {
@@ -3442,7 +3442,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private func htmlBlockLineMatchesEndCondition(type: UInt8, source: Span<UInt8>, range: Range<Int>) -> Bool {
         switch type {
         case 1:
-            // `</pre>`, `</script>`, `</style>`, or `</textarea>` (case-insensitive).
+            // `</pre>`, `</script>`, or `</style>` (case-insensitive).
             for tag in Self.htmlBlockType1Tags {
                 if findClosingTag(span: source, range: range, name: tag) {
                     return true

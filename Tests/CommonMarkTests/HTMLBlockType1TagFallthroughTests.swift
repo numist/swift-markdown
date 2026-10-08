@@ -11,9 +11,10 @@
 import Testing
 import CommonMark
 
-/// Start condition 1 (HTML blocks) needs whitespace, `>` or the end of the line after the tag name, so a self-closing
-/// `<script/>` doesn't meet it. Start condition 7 excludes the tag names of start condition 1, so `<script/>` starts no
-/// HTML block.
+/// Start condition 1 (HTML blocks) takes `script`, `pre` and `style`, followed by whitespace, `>` or the end of the
+/// line, so a self-closing `<script/>` doesn't meet it. Start condition 7 excludes those tag names from its open tags,
+/// so `<script/>` starts no HTML block. `textarea` is not a start condition 1 tag name, so `<textarea>` and
+/// `<textarea/>` meet start condition 7.
 @Suite("Self-closing type-1 tag names as HTML block starts")
 struct HTMLBlockType1TagFallthroughTests {
 
@@ -53,8 +54,8 @@ struct HTMLBlockType1TagFallthroughTests {
         #expect(first.text == "<script/>")
     }
 
-    @Test("`<pre/>`, `<style/>`, `<textarea/>` are paragraphs", arguments: [
-        "<pre/>", "<style/>", "<textarea/>",
+    @Test("`<pre/>`, `<style/>` are paragraphs", arguments: [
+        "<pre/>", "<style/>",
     ])
     func otherType1TagsSelfClosing(_ src: String) throws {
         let blocks = blocks(src)
@@ -66,8 +67,8 @@ struct HTMLBlockType1TagFallthroughTests {
 
     // MARK: Start condition 1
 
-    @Test("bare `<script>`/`<pre>`/`<style>`/`<textarea>` open HTML blocks (type 1)", arguments: [
-        "<script>", "<pre>", "<style>", "<textarea>",
+    @Test("bare `<script>`/`<pre>`/`<style>` open HTML blocks (type 1)", arguments: [
+        "<script>", "<pre>", "<style>",
     ])
     func bareType1Tags(_ src: String) throws {
         let blocks = blocks(src)
@@ -95,7 +96,40 @@ struct HTMLBlockType1TagFallthroughTests {
         #expect(first.text == "<scripting>")
     }
 
+    @Test("`<textarea>` and `<textarea/>` open HTML blocks (type 7)", arguments: [
+        "<textarea>", "<textarea/>",
+    ])
+    func textareaOpensType7Block(_ src: String) throws {
+        let blocks = blocks(src)
+        let first = try #require(blocks.first, "fixture vacuous: no block parsed for \(src.debugDescription)")
+        #expect(blocks.count == 1)
+        #expect(first.kind == .htmlBlock)
+        #expect(first.text == src)
+    }
+
+    @Test("a `<textarea>` HTML block ends at a blank line (type 7)")
+    func textareaBlockEndsAtBlankLine() {
+        let blocks = blocks("<textarea>\n\nx</textarea>")
+        #expect(blocks.map(\.kind) == [.htmlBlock, .paragraph])
+        #expect(blocks.map(\.text) == ["<textarea>", "x</textarea>"])
+    }
+
+    @Test("a `</textarea>` doesn't end a type 1 HTML block")
+    func textareaClosingTagDoesNotEndType1Block() {
+        let blocks = blocks("<pre>\n</textarea>\nx")
+        #expect(blocks.map(\.kind) == [.htmlBlock])
+        #expect(blocks.map(\.text) == ["<pre>\n</textarea>\nx"])
+    }
+
     // MARK: Interrupting a paragraph
+
+    @Test("`<textarea>` doesn't interrupt a paragraph")
+    func textareaDoesNotInterruptParagraph() {
+        let blocks = blocks("foo\n<textarea>")
+        #expect(blocks.map(\.kind) == [.paragraph])
+        #expect(blocks.map(\.text) == ["foo<textarea>"])
+    }
+
 
     @Test("`<script/>` doesn't interrupt a paragraph")
     func selfClosingDoesNotInterruptParagraph() throws {
