@@ -41,7 +41,11 @@ internal struct LineReader: ~Escapable, ~Copyable {
         let count = bytes.count
         
         if count == 0 {
-            return nil
+            // A byte order mark with nothing after it still begins a line.
+            guard lineNumber == 0, start > 0 else { return nil }
+            lineNumber = 1
+            lineRange = start..<start
+            return bytes
         }
 
         lineNumber += 1
