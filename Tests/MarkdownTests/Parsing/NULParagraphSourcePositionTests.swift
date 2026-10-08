@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@testable import Markdown
+import Markdown
 import XCTest
 
 /// A NUL is replaced with U+FFFD (Insecure characters), and source positions count it as its one source byte.

@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@testable import Markdown
+import Markdown
 import XCTest
 
 /// Where whitespace defines block structure, a tab behaves as if replaced by spaces with a tab stop of
