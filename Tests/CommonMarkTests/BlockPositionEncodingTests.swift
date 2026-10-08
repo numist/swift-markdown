@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Source positions of every block construct across Unicode encodings. Source columns are 1-based UTF-8 byte
 /// offsets, so a multi-byte scalar before or inside a construct's content advances the column by its byte count

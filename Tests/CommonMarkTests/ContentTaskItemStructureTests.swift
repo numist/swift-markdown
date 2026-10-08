@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 
 /// The checked state of every `.item` node, in document (DFS) order. `.some(false)` = unchecked task

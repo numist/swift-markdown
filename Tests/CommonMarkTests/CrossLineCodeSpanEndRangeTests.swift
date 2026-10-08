@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A code span that crosses a line ending ends just past its closing backtick string, on the line that
 /// holds it.

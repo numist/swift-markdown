@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A non-ASCII character in the Unicode `P` categories, such as U+055E, U+00A1 or U+2014, is a punctuation
 /// character (Characters and lines) when deciding whether a delimiter run is left- or right-flanking (Emphasis and

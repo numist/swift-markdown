@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A closing code fence may be indented up to three spaces (Fenced code blocks). A leading tab advances to
 /// column 4 (Tabs), so a tab-indented fence line is code content, not a closing fence.

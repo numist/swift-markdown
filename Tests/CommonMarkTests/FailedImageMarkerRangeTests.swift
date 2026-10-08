@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// The literal of the first text node in depth-first order, or nil if there is none.
 @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)

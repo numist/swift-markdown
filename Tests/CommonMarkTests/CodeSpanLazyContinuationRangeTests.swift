@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A code span spanning lines whose opening backtick string is on a lazy continuation line starts at that
 /// backtick's own column.

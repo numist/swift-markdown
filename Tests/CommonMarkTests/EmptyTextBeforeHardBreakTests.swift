@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// The two or more spaces before a hard line break belong to the break (Hard line breaks), so they
 /// produce no text node and are not part of a preceding text node's source range.

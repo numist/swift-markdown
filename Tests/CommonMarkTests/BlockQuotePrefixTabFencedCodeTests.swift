@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A block quote marker is `>` plus an optional following space (Block quotes). When a tab follows the `>`, the
 /// marker takes one of the tab's columns and the rest are indentation (Tabs), so on a fenced code block's

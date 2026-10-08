@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A list item that begins with a blank line cannot interrupt a paragraph (List items), so a list marker with
 /// nothing after it, on a line that would otherwise be paragraph continuation text, stays paragraph text. Where the

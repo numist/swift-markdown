@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Appends every node's kind, literal text and link destination to `out`, in depth-first order.
 private func dfsKindsTextAndURL(

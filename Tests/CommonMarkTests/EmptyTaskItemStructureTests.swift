@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// The checked state and direct-child count of the first list item in depth-first order, or nil if
 /// there is none.
