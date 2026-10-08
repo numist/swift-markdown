@@ -1752,12 +1752,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // leaf continuation can split that tab (Tabs).
                     prefixColumns += padding
                     deepestMatched = node
-                } else if isBlank, storage[node].firstChild != nil {
+                } else if isBlank, storage[node].firstChild != nil || itemsEndingInRemovedDefinitions[node] != nil {
                     // A blank line inside an item that already has content keeps the item open even though
                     // the indent falls short of the content column. Advance `cursor` to first-non-space (the
                     // line end for a blank line) so any deeper open item measures its indent from here rather
                     // than the line start. An empty item closes on such a line, since a list item can begin
-                    // with at most one blank line (List items).
+                    // with at most one blank line (List items). A removed paragraph of only definitions is
+                    // content, since a definition is a block of the item.
                     cursor = firstNonSpace
                     prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
                     deepestMatched = node
