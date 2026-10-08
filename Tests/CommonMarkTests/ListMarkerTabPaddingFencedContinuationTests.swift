@@ -24,9 +24,13 @@ struct ListMarkerTabPaddingFencedContinuationTests {
     func doubleTabSiblingIndentedCode() {
         MarkdownDocument.withParsedDocument("- ```\n-\t\t-") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [
-                .document, .bulletList(), .item(checked: nil), .fencedCode(),
-                .item(checked: nil), .indentedCode,
+            #expect(kinds.map(TreeDump.describe) == [
+                "document",
+                "list bullet '-' tight",
+                "item",
+                "code_block fenced fence='`' length=3 offset=0",
+                "item",
+                "code_block indented fence=none length=0 offset=0",
             ])
             #expect(codeBlocks(doc).map(\.literal) == ["", "  -\n"])
         }
@@ -36,9 +40,13 @@ struct ListMarkerTabPaddingFencedContinuationTests {
     func doubleTabSiblingIndentedCodeContent() {
         MarkdownDocument.withParsedDocument("- ```\n-\t\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [
-                .document, .bulletList(), .item(checked: nil), .fencedCode(),
-                .item(checked: nil), .indentedCode,
+            #expect(kinds.map(TreeDump.describe) == [
+                "document",
+                "list bullet '-' tight",
+                "item",
+                "code_block fenced fence='`' length=3 offset=0",
+                "item",
+                "code_block indented fence=none length=0 offset=0",
             ])
             #expect(codeBlocks(doc).map(\.literal) == ["", "  x\n"])
         }
@@ -50,9 +58,13 @@ struct ListMarkerTabPaddingFencedContinuationTests {
     func tabThenSpacesSiblingIndentedCode() {
         MarkdownDocument.withParsedDocument("*\t~~~\n*\t  -") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [
-                .document, .bulletList(.asterisk), .item(checked: nil), .fencedCode(.tilde),
-                .item(checked: nil), .indentedCode,
+            #expect(kinds.map(TreeDump.describe) == [
+                "document",
+                "list bullet '*' tight",
+                "item",
+                "code_block fenced fence='~' length=3 offset=0",
+                "item",
+                "code_block indented fence=none length=0 offset=0",
             ])
             #expect(codeBlocks(doc).map(\.literal) == ["", "-\n"])
         }
@@ -64,9 +76,14 @@ struct ListMarkerTabPaddingFencedContinuationTests {
     func singleTabSiblingParagraph() {
         MarkdownDocument.withParsedDocument("- ```\n-\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [
-                .document, .bulletList(), .item(checked: nil), .fencedCode(),
-                .item(checked: nil), .paragraph, .text,
+            #expect(kinds.map(TreeDump.describe) == [
+                "document",
+                "list bullet '-' tight",
+                "item",
+                "code_block fenced fence='`' length=3 offset=0",
+                "item",
+                "paragraph",
+                "text",
             ])
             #expect(codeBlocks(doc).map(\.literal) == [""])
             #expect(dfs(doc).last?.literal == "x")
@@ -79,9 +96,13 @@ struct ListMarkerTabPaddingFencedContinuationTests {
     func orderedMarkerDoubleTabSiblingIndentedCode() {
         MarkdownDocument.withParsedDocument("1. ```\n1.\t\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [
-                .document, .orderedList(), .item(checked: nil), .fencedCode(),
-                .item(checked: nil), .indentedCode,
+            #expect(kinds.map(TreeDump.describe) == [
+                "document",
+                "list ordered start=1 delim=period tight",
+                "item",
+                "code_block fenced fence='`' length=3 offset=0",
+                "item",
+                "code_block indented fence=none length=0 offset=0",
             ])
             #expect(codeBlocks(doc).map(\.literal) == ["", " x\n"])
         }

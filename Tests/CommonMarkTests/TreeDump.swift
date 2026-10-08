@@ -45,9 +45,13 @@ internal enum TreeDump {
         node.children.forEach { dump($0, depth: depth + 1, sourceRanges: sourceRanges, into: &out) }
     }
 
-    private static func line(_ node: borrowing MarkdownNode) -> String {
-        let content = node.stringContent
-        switch node.kind {
+    /// The snake_case name of `kind` followed by every value that applies to it, so a test can compare a node's kind
+    /// with a literal: a bullet list's marker or an ordered list's start and delimiter, a list's tightness, the
+    /// checkbox state of a task list item, whether a code block is fenced with its fence character, length and offset,
+    /// the heading level, the alignment and span of a table cell, the backtick count of a code span, and the number of
+    /// a footnote reference.
+    internal static func describe(_ kind: MarkdownNode.Kind) -> String {
+        switch kind {
         case .document: return "document"
         case .blockQuote: return "block_quote"
         case .list(let info):
@@ -67,36 +71,62 @@ internal enum TreeDump {
         case .item(let checked):
             guard let checked else { return "item" }
             return "tasklist " + (checked ? "checked" : "unchecked")
-        case .codeBlock:
-            guard case .codeBlock(let info, let body) = content else { return "code_block <no content>" }
-            return "code_block \(quoted(info)) \(quoted(body))"
-        case .htmlBlock: return "html_block " + quotedText(content)
+        case .codeBlock(let info):
+            let fence = switch info.fenceCharacter {
+            case .backtick: "'`'"
+            case .tilde: "'~'"
+            case nil: "none"
+            }
+            let style = info.isFenced ? "fenced" : "indented"
+            return "code_block \(style) fence=\(fence) length=\(info.fenceLength) offset=\(info.fenceOffset)"
+        case .htmlBlock: return "html_block"
         case .customBlock: return "custom_block"
         case .paragraph: return "paragraph"
         case .heading(let level): return "heading \(level)"
         case .thematicBreak: return "thematic_break"
-        case .footnoteDefinition:
-            guard case .footnote(let label) = content else { return "footnote_definition <no content>" }
-            return "footnote_definition " + quoted(label)
+        case .footnoteDefinition: return "footnote_definition"
         case .table: return "table"
         case .tableRow(let isHeader): return isHeader ? "table_header" : "table_row"
         case .tableCell(let alignment, let columns, let rows):
             return "table_cell align=\(alignment) colspan=\(columns) rowspan=\(rows)"
-        case .text: return "text " + quotedText(content)
+        case .text: return "text"
         case .softBreak: return "softbreak"
         case .lineBreak: return "linebreak"
-        case .codeInline: return "code " + quotedText(content)
-        case .htmlInline: return "html_inline " + quotedText(content)
+        case .codeInline(let backtickCount): return "code backticks=\(backtickCount)"
+        case .htmlInline: return "html_inline"
         case .customInline: return "custom_inline"
         case .emphasis: return "emph"
         case .strong: return "strong"
+        case .link: return "link"
+        case .image: return "image"
+        case .footnoteReference(let index): return "footnote_reference \(index)"
+        case .strikethrough: return "strikethrough"
+        case .attribute: return "attribute"
+        }
+    }
+
+    private static func line(_ node: borrowing MarkdownNode) -> String {
+        let content = node.stringContent
+        switch node.kind {
+        case .codeBlock:
+            guard case .codeBlock(let info, let body) = content else { return "code_block <no content>" }
+            return "code_block \(quoted(info)) \(quoted(body))"
+        case .htmlBlock: return "html_block " + quotedText(content)
+        case .footnoteDefinition:
+            guard case .footnote(let label) = content else { return "footnote_definition <no content>" }
+            return "footnote_definition " + quoted(label)
+        case .text: return "text " + quotedText(content)
+        case .codeInline: return "code " + quotedText(content)
+        case .htmlInline: return "html_inline " + quotedText(content)
         case .link: return "link " + quotedLink(content)
         case .image: return "image " + quotedLink(content)
         case .footnoteReference(let index): return "footnote_reference \(quoted(String(index)))"
-        case .strikethrough: return "strikethrough"
         case .attribute:
             guard case .attribute(let raw) = content else { return "attribute <no content>" }
             return "attribute " + quoted(raw)
+        case .document, .blockQuote, .list, .item, .customBlock, .paragraph, .heading, .thematicBreak, .table,
+             .tableRow, .tableCell, .softBreak, .lineBreak, .customInline, .emphasis, .strong, .strikethrough:
+            return describe(node.kind)
         }
     }
 

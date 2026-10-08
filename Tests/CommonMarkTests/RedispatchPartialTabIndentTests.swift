@@ -23,7 +23,7 @@ struct RedispatchPartialTabIndentTests {
     func blockQuoteStraddleTwoSpaces() {
         MarkdownDocument.withParsedDocument(">>```\n>\t  x") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode(), .indentedCode])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "block_quote", "code_block fenced fence='`' length=3 offset=0", "code_block indented fence=none length=0 offset=0"])
             #expect(codeBlocks(doc).map(\.literal) == ["", "x\n"])
         }
     }
@@ -32,7 +32,7 @@ struct RedispatchPartialTabIndentTests {
     func blockQuoteStraddleThreeSpaces() {
         MarkdownDocument.withParsedDocument(">>```\n>\t   x") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode(), .indentedCode])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "block_quote", "code_block fenced fence='`' length=3 offset=0", "code_block indented fence=none length=0 offset=0"])
             #expect(codeBlocks(doc).map(\.literal) == ["", " x\n"])
         }
     }
@@ -43,7 +43,7 @@ struct RedispatchPartialTabIndentTests {
     func blockQuoteStraddleSplitTab() {
         MarkdownDocument.withParsedDocument(">>```\n>\t\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode(), .indentedCode])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "block_quote", "code_block fenced fence='`' length=3 offset=0", "code_block indented fence=none length=0 offset=0"])
             #expect(codeBlocks(doc).map(\.literal) == ["", "  x\n"])
         }
     }
@@ -53,7 +53,7 @@ struct RedispatchPartialTabIndentTests {
     func listItemStraddleBareTab() {
         MarkdownDocument.withParsedDocument("- >```\n\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .bulletList(), .item(checked: nil), .blockQuote, .fencedCode(), .paragraph, .text])
+            #expect(kinds.map(TreeDump.describe) == ["document", "list bullet '-' tight", "item", "block_quote", "code_block fenced fence='`' length=3 offset=0", "paragraph", "text"])
             #expect(codeBlocks(doc).map(\.literal) == [""])
             #expect(dfs(doc).last?.literal == "x")
         }
@@ -63,7 +63,7 @@ struct RedispatchPartialTabIndentTests {
     func listItemStraddleSpaceTab() {
         MarkdownDocument.withParsedDocument("- >```\n \tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .bulletList(), .item(checked: nil), .blockQuote, .fencedCode(), .paragraph, .text])
+            #expect(kinds.map(TreeDump.describe) == ["document", "list bullet '-' tight", "item", "block_quote", "code_block fenced fence='`' length=3 offset=0", "paragraph", "text"])
             #expect(codeBlocks(doc).map(\.literal) == [""])
             #expect(dfs(doc).last?.literal == "x")
         }
@@ -74,7 +74,7 @@ struct RedispatchPartialTabIndentTests {
     func listItemStraddleTwoSpacesTab() {
         MarkdownDocument.withParsedDocument("- >```\n  \tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .bulletList(), .item(checked: nil), .blockQuote, .fencedCode(), .paragraph, .text])
+            #expect(kinds.map(TreeDump.describe) == ["document", "list bullet '-' tight", "item", "block_quote", "code_block fenced fence='`' length=3 offset=0", "paragraph", "text"])
             #expect(codeBlocks(doc).map(\.literal) == [""])
             #expect(dfs(doc).last?.literal == "x")
         }
@@ -84,7 +84,7 @@ struct RedispatchPartialTabIndentTests {
     func blockQuoteStraddleBoundaryBareTab() {
         MarkdownDocument.withParsedDocument(">>```\n>\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode(), .paragraph, .text])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "block_quote", "code_block fenced fence='`' length=3 offset=0", "paragraph", "text"])
             #expect(codeBlocks(doc).map(\.literal) == [""])
             #expect(dfs(doc).last?.literal == "x")
         }
@@ -94,7 +94,7 @@ struct RedispatchPartialTabIndentTests {
     func blockQuoteStraddleBoundaryTabSpace() {
         MarkdownDocument.withParsedDocument(">>```\n>\t x") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode(), .paragraph, .text])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "block_quote", "code_block fenced fence='`' length=3 offset=0", "paragraph", "text"])
             #expect(codeBlocks(doc).map(\.literal) == [""])
             #expect(dfs(doc).last?.literal == "x")
         }
@@ -104,7 +104,7 @@ struct RedispatchPartialTabIndentTests {
     func listItemBoundaryUnindented() {
         MarkdownDocument.withParsedDocument("- >```\nx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .bulletList(), .item(checked: nil), .blockQuote, .fencedCode(), .paragraph, .text])
+            #expect(kinds.map(TreeDump.describe) == ["document", "list bullet '-' tight", "item", "block_quote", "code_block fenced fence='`' length=3 offset=0", "paragraph", "text"])
             #expect(codeBlocks(doc).map(\.literal) == [""])
             #expect(dfs(doc).last?.literal == "x")
         }

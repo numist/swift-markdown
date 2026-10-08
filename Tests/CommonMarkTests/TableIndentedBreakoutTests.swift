@@ -37,7 +37,7 @@ struct TableIndentedBreakoutTests {
     @Test("a tab-indented line after the delimiter row opens indented code")
     func tabIndentBreakout() {
         MarkdownDocument.withParsedDocument("a|b\n-|-\n\tx", options: [.tables]) { doc in
-            #expect(topKinds(doc) == [.table, .indentedCode])
+            #expect(topKinds(doc).map(TreeDump.describe) == ["table", "code_block indented fence=none length=0 offset=0"])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
             #expect(counts.body == 0)
@@ -48,7 +48,7 @@ struct TableIndentedBreakoutTests {
     @Test("a four-space-indented line after the delimiter row opens indented code")
     func fourSpaceIndentBreakout() {
         MarkdownDocument.withParsedDocument("a|b\n-|-\n    x", options: [.tables]) { doc in
-            #expect(topKinds(doc) == [.table, .indentedCode])
+            #expect(topKinds(doc).map(TreeDump.describe) == ["table", "code_block indented fence=none length=0 offset=0"])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
             #expect(counts.body == 0)
@@ -59,7 +59,7 @@ struct TableIndentedBreakoutTests {
     @Test("a five-space-indented line keeps one leftover space in the code content")
     func fiveSpaceIndentBreakout() {
         MarkdownDocument.withParsedDocument("a|b\n-|-\n     x", options: [.tables]) { doc in
-            #expect(topKinds(doc) == [.table, .indentedCode])
+            #expect(topKinds(doc).map(TreeDump.describe) == ["table", "code_block indented fence=none length=0 offset=0"])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
             #expect(counts.body == 0)
@@ -70,7 +70,7 @@ struct TableIndentedBreakoutTests {
     @Test("pipes in an indented-code line are literal content, not cells")
     func tabIndentPipesAreLiteral() {
         MarkdownDocument.withParsedDocument("a|b\n-|-\n\tx|y", options: [.tables]) { doc in
-            #expect(topKinds(doc) == [.table, .indentedCode])
+            #expect(topKinds(doc).map(TreeDump.describe) == ["table", "code_block indented fence=none length=0 offset=0"])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
             #expect(counts.body == 0)
@@ -81,7 +81,7 @@ struct TableIndentedBreakoutTests {
     @Test("the table keeps its earlier body rows when an indented line closes it")
     func indentBreakoutPreservesEarlierBodyRows() {
         MarkdownDocument.withParsedDocument("a|b\n-|-\nc|d\n\tx", options: [.tables]) { doc in
-            #expect(topKinds(doc) == [.table, .indentedCode])
+            #expect(topKinds(doc).map(TreeDump.describe) == ["table", "code_block indented fence=none length=0 offset=0"])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
             #expect(counts.body == 1)
@@ -98,7 +98,7 @@ struct TableIndentedBreakoutTests {
             doc.root.children.forEach { block in
                 block.children.forEach { quoteChildren.append($0.kind) }
             }
-            #expect(quoteChildren == [.table, .indentedCode])
+            #expect(quoteChildren.map(TreeDump.describe) == ["table", "code_block indented fence=none length=0 offset=0"])
             let counts = tableRowCounts(doc)
             #expect(counts.header == 1)
             #expect(counts.body == 0)

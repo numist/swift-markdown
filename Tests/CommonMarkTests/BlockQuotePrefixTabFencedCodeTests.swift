@@ -22,7 +22,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     func tabAfterMarkerLeavesTwoSpaces() {
         MarkdownDocument.withParsedDocument(">```\n>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .fencedCode()])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "code_block fenced fence='`' length=3 offset=0"])
             #expect(codeBlocks(doc).map(\.literal) == ["  \n"])
         }
     }
@@ -31,7 +31,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     func tabAfterMarkerThenContent() {
         MarkdownDocument.withParsedDocument(">```\n>\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .fencedCode()])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "code_block fenced fence='`' length=3 offset=0"])
             #expect(codeBlocks(doc).map(\.literal) == ["  x\n"])
         }
     }
@@ -40,7 +40,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     func openingFenceSpaceBodyTab() {
         MarkdownDocument.withParsedDocument("> ```\n>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .fencedCode()])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "code_block fenced fence='`' length=3 offset=0"])
             #expect(codeBlocks(doc).map(\.literal) == ["  \n"])
         }
     }
@@ -50,7 +50,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     func tabAfterNestedMarkers() {
         MarkdownDocument.withParsedDocument(">>```\n>>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode()])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "block_quote", "code_block fenced fence='`' length=3 offset=0"])
             #expect(codeBlocks(doc).map(\.literal) == [" \n"])
         }
     }
@@ -59,7 +59,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     func spaceThenTabIsLiteral() {
         MarkdownDocument.withParsedDocument("> ```\n> \t") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .fencedCode()])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "code_block fenced fence='`' length=3 offset=0"])
             #expect(codeBlocks(doc).map(\.literal) == ["\t\n"])
         }
     }
@@ -70,7 +70,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     func indentedFenceBodyTab() {
         MarkdownDocument.withParsedDocument(" ```\n\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .fencedCode(offset: 1)])
+            #expect(kinds.map(TreeDump.describe) == ["document", "code_block fenced fence='`' length=3 offset=1"])
             #expect(codeBlocks(doc).map(\.literal) == ["   x\n"])
         }
     }
@@ -79,7 +79,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     func listItemFenceBodyTab() {
         MarkdownDocument.withParsedDocument("- ```\n  \tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .bulletList(), .item(checked: nil), .fencedCode()])
+            #expect(kinds.map(TreeDump.describe) == ["document", "list bullet '-' tight", "item", "code_block fenced fence='`' length=3 offset=0"])
             #expect(codeBlocks(doc).map(\.literal) == ["\tx\n"])
         }
     }
@@ -109,7 +109,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     func nestedInnerMarkerAbsentReDispatchesParagraph() {
         MarkdownDocument.withParsedDocument(">>```\n>\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode(), .paragraph, .text])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "block_quote", "code_block fenced fence='`' length=3 offset=0", "paragraph", "text"])
             #expect(codeBlocks(doc).map(\.literal) == [""])
             #expect(dfs(doc).last?.literal == "x")
         }
@@ -119,7 +119,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     func nestedInnerMarkerAbsentBlankTail() {
         MarkdownDocument.withParsedDocument(">>```\n>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .blockQuote, .fencedCode()])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "block_quote", "code_block fenced fence='`' length=3 offset=0"])
             #expect(codeBlocks(doc).map(\.literal) == [""])
         }
     }
@@ -130,7 +130,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     func openingLineTabFenceOffsetLeavesOneSpace() {
         MarkdownDocument.withParsedDocument(">\t```\n>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .fencedCode(offset: 1)])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "code_block fenced fence='`' length=3 offset=1"])
             #expect(codeBlocks(doc).map(\.literal) == [" \n"])
         }
     }
@@ -139,7 +139,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     func openingLineTabFenceOffsetThenContent() {
         MarkdownDocument.withParsedDocument(">\t```\n>\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .blockQuote, .fencedCode(offset: 1)])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "code_block fenced fence='`' length=3 offset=1"])
             #expect(codeBlocks(doc).map(\.literal) == [" x\n"])
         }
     }

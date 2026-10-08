@@ -22,7 +22,7 @@ struct OrderedMarkerTabExpansionTests {
     func periodMarkerTabIsCodeBlock() {
         MarkdownDocument.withParsedDocument("1.\t   z") { doc in
             let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds == [.document, .orderedList(), .item(checked: nil), .indentedCode])
+            #expect(kinds.map(TreeDump.describe) == ["document", "list ordered start=1 delim=period tight", "item", "code_block indented fence=none length=0 offset=0"])
             #expect(codeBlocks(doc).map(\.literal) == ["z\n"])
         }
     }
@@ -31,7 +31,7 @@ struct OrderedMarkerTabExpansionTests {
     func parenMarkerTabIsCodeBlock() {
         MarkdownDocument.withParsedDocument("1)\t   z") { doc in
             let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds == [.document, .orderedList(.paren), .item(checked: nil), .indentedCode])
+            #expect(kinds.map(TreeDump.describe) == ["document", "list ordered start=1 delim=paren tight", "item", "code_block indented fence=none length=0 offset=0"])
             #expect(codeBlocks(doc).map(\.literal) == ["z\n"])
         }
     }
@@ -40,7 +40,7 @@ struct OrderedMarkerTabExpansionTests {
     func periodMarkerLiteralSpacesIsCodeBlock() {
         MarkdownDocument.withParsedDocument("1.     z") { doc in
             let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds == [.document, .orderedList(), .item(checked: nil), .indentedCode])
+            #expect(kinds.map(TreeDump.describe) == ["document", "list ordered start=1 delim=period tight", "item", "code_block indented fence=none length=0 offset=0"])
             #expect(codeBlocks(doc).map(\.literal) == ["z\n"])
         }
     }
@@ -49,7 +49,7 @@ struct OrderedMarkerTabExpansionTests {
     func periodMarkerTabOnlyIsParagraph() {
         MarkdownDocument.withParsedDocument("1.\tz") { doc in
             let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds == [.document, .orderedList(), .item(checked: nil), .paragraph, .text])
+            #expect(kinds.map(TreeDump.describe) == ["document", "list ordered start=1 delim=period tight", "item", "paragraph", "text"])
         }
     }
 
@@ -58,7 +58,7 @@ struct OrderedMarkerTabExpansionTests {
     func wideMarkerTabStaysParagraph() {
         MarkdownDocument.withParsedDocument("12.\t  z") { doc in
             let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds == [.document, .orderedList(start: 12), .item(checked: nil), .paragraph, .text])
+            #expect(kinds.map(TreeDump.describe) == ["document", "list ordered start=12 delim=period tight", "item", "paragraph", "text"])
         }
     }
 
@@ -66,7 +66,7 @@ struct OrderedMarkerTabExpansionTests {
     func bulletMarkerTabIsCodeBlock() {
         MarkdownDocument.withParsedDocument("-\t   z") { doc in
             let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds == [.document, .bulletList(), .item(checked: nil), .indentedCode])
+            #expect(kinds.map(TreeDump.describe) == ["document", "list bullet '-' tight", "item", "code_block indented fence=none length=0 offset=0"])
         }
     }
 
@@ -74,10 +74,14 @@ struct OrderedMarkerTabExpansionTests {
     func orderedMarkerTabThenNestedBullet() {
         MarkdownDocument.withParsedDocument("1.\t- x") { doc in
             let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds == [
-                .document,
-                .orderedList(), .item(checked: nil),
-                .bulletList(), .item(checked: nil), .paragraph, .text,
+            #expect(kinds.map(TreeDump.describe) == [
+                "document",
+                "list ordered start=1 delim=period tight",
+                "item",
+                "list bullet '-' tight",
+                "item",
+                "paragraph",
+                "text",
             ])
         }
     }
@@ -90,11 +94,11 @@ struct OrderedMarkerTabExpansionTests {
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)
             let kinds = ranges.map { $0.kind }
-            #expect(kinds == [.document, .orderedList(), .item(checked: nil), .indentedCode])
+            #expect(kinds.map(TreeDump.describe) == ["document", "list ordered start=1 delim=period tight", "item", "code_block indented fence=none length=0 offset=0"])
             let list = ranges.first { if case .list = $0.kind { return true } else { return false } }?.range
             #expect(list?.lowerBound == Pos(line: 1, column: 1))
             #expect(list?.upperBound == Pos(line: 1, column: 8))
-            let code = ranges.first { $0.kind == .indentedCode }?.range
+            let code = ranges.first { if case .codeBlock = $0.kind { return true } else { return false } }?.range
             #expect(code?.lowerBound == Pos(line: 1, column: 7))
             #expect(code?.upperBound == Pos(line: 1, column: 8))
         }

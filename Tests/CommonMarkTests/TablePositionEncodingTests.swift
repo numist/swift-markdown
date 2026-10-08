@@ -304,7 +304,7 @@ struct TablePositionEncodingTests {
     func indentedCodeLeadingTab() throws {
         // Line 1 `\tcodeé`: \t@byte0 (col1, the indent), c@byte1 (col2) … é@bytes5-6 (cols6-7).
         let nodes = nodes("\tcode\u{E9}")
-        let code = nodes.first { $0.kind == .indentedCode }
+        let code = nodes.first { if case .codeBlock = $0.kind { return true } else { return false } }
         // The literal's trailing line ending is not in the source, so the range ends after `é`.
         try #require(code?.literal == "code\u{E9}\n", "fixture: code body `codeé`")
         #expect(code?.range == r(1, 2, 1, 8))               // body starts at col2, ends past é (col8)
@@ -315,7 +315,7 @@ struct TablePositionEncodingTests {
         // Line 1 `\tco\tdeé`: \t@byte0 (indent), c@byte1, o@byte2, \t@byte3 (interior, kept),
         // d@byte4, e@byte5, é@bytes6-7 (cols7-8).
         let nodes = nodes("\tco\tde\u{E9}")
-        let code = nodes.first { $0.kind == .indentedCode }
+        let code = nodes.first { if case .codeBlock = $0.kind { return true } else { return false } }
         try #require(code?.literal == "co\tde\u{E9}\n", "fixture: code body keeps the interior tab")
         #expect(code?.range == r(1, 2, 1, 9))               // body starts at col2, ends past é (col9)
     }
@@ -324,7 +324,7 @@ struct TablePositionEncodingTests {
     func indentedCodeExcessTab() throws {
         // Line 1 `\t\tcodeé`: \t@byte0 (indent), \t@byte1 (residual, kept in body), c@byte2 … é@bytes6-7.
         let nodes = nodes("\t\tcode\u{E9}")
-        let code = nodes.first { $0.kind == .indentedCode }
+        let code = nodes.first { if case .codeBlock = $0.kind { return true } else { return false } }
         try #require(code?.literal == "\tcode\u{E9}\n", "fixture: body keeps the second (residual) tab")
         #expect(code?.range == r(1, 2, 1, 9))               // body starts at col2 (after the first tab)
     }
@@ -334,7 +334,7 @@ struct TablePositionEncodingTests {
         // Line 1 `  \tcodeé`: space@byte0 (col1), space@byte1 (col2), \t@byte2 (col3, completes the
         // 4-col indent), c@byte3 (col4) … é@bytes7-8 (cols8-9).
         let nodes = nodes("  \tcode\u{E9}")
-        let code = nodes.first { $0.kind == .indentedCode }
+        let code = nodes.first { if case .codeBlock = $0.kind { return true } else { return false } }
         try #require(code?.literal == "code\u{E9}\n", "fixture: code body `codeé`, no residual whitespace")
         #expect(code?.range == r(1, 4, 1, 10))              // body starts at col4, ends past é (col10)
     }

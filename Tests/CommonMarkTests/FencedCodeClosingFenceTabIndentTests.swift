@@ -21,7 +21,7 @@ struct FencedCodeClosingFenceTabIndentTests {
     func tabLedLineIsContent() throws {
         try MarkdownDocument.withParsedDocument("```\n\t```") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .fencedCode()])
+            #expect(kinds.map(TreeDump.describe) == ["document", "code_block fenced fence='`' length=3 offset=0"])
             try #require(codeBlocks(doc).count == 1)
             #expect(codeBlocks(doc).map(\.literal) == ["\t```\n"])
         }
@@ -31,7 +31,7 @@ struct FencedCodeClosingFenceTabIndentTests {
     func tabLedLineAfterContent() throws {
         try MarkdownDocument.withParsedDocument("```\nx\n\t```") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .fencedCode()])
+            #expect(kinds.map(TreeDump.describe) == ["document", "code_block fenced fence='`' length=3 offset=0"])
             try #require(codeBlocks(doc).count == 1)
             #expect(codeBlocks(doc).map(\.literal) == ["x\n\t```\n"])
         }
@@ -41,7 +41,7 @@ struct FencedCodeClosingFenceTabIndentTests {
     func unindentedLineCloses() throws {
         try MarkdownDocument.withParsedDocument("```\n```") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .fencedCode()])
+            #expect(kinds.map(TreeDump.describe) == ["document", "code_block fenced fence='`' length=3 offset=0"])
             try #require(codeBlocks(doc).count == 1)
             #expect(codeBlocks(doc).map(\.literal) == [""])
         }
@@ -51,7 +51,7 @@ struct FencedCodeClosingFenceTabIndentTests {
     func threeSpaceIndentCloses() throws {
         try MarkdownDocument.withParsedDocument("```\n   ```") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .fencedCode()])
+            #expect(kinds.map(TreeDump.describe) == ["document", "code_block fenced fence='`' length=3 offset=0"])
             try #require(codeBlocks(doc).count == 1)
             #expect(codeBlocks(doc).map(\.literal) == [""])
         }
@@ -61,7 +61,7 @@ struct FencedCodeClosingFenceTabIndentTests {
     func fourSpaceIndentIsContent() throws {
         try MarkdownDocument.withParsedDocument("```\n    ```") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds == [.document, .fencedCode()])
+            #expect(kinds.map(TreeDump.describe) == ["document", "code_block fenced fence='`' length=3 offset=0"])
             try #require(codeBlocks(doc).count == 1)
             #expect(codeBlocks(doc).map(\.literal) == ["    ```\n"])
         }
