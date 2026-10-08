@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@testable import Markdown
+import Markdown
 import XCTest
 
 /// A list item whose paragraph begins with a digit-led word before `[x]` or `[X]` has no checkbox: the

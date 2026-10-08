@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-@testable import Markdown
+import Markdown
 import XCTest
 
 /// In `- [ ] |` / `  -|` / `z`, the item's first block is a one-column table, so the item is not a task list
