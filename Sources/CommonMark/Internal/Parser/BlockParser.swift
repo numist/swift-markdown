@@ -3369,10 +3369,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     if follow.isASCIISpace || follow == UInt8(ascii: ">") {
                         return 1
                     }
-                    // A disqualifying follow character (e.g. `/` in `<script/>`) means this is not a
-                    // type-1 start, but the line may start a type 7 block: a complete open tag
-                    // followed only by the line end.
-                    break
+                    // Start condition 7 excludes these tag names, so `<script/>` starts no HTML block.
+                    return nil
                 }
             }
         }

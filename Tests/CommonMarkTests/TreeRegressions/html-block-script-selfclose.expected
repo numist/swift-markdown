@@ -1,2 +1,3 @@
 document @1:1-1:10
-  html_block "<script/>\n" @1:1-1:10
+  paragraph @1:1-1:10
+    html_inline "<script/>" @1:1-1:10

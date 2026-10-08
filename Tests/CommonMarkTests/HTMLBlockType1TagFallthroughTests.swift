@@ -12,8 +12,8 @@ import Testing
 @testable import CommonMark
 
 /// Start condition 1 (HTML blocks) needs whitespace, `>` or the end of the line after the tag name, so a self-closing
-/// `<script/>` doesn't meet it. The parser opens an HTML block for it as a complete open tag followed only by the end of
-/// the line (start condition 7), which can't interrupt a paragraph.
+/// `<script/>` doesn't meet it. Start condition 7 excludes the tag names of start condition 1, so `<script/>` starts no
+/// HTML block.
 @Suite("Self-closing type-1 tag names as HTML block starts")
 struct HTMLBlockType1TagFallthroughTests {
 
@@ -44,23 +44,23 @@ struct HTMLBlockType1TagFallthroughTests {
         }
     }
 
-    @Test("`<script/>` opens an HTML block")
+    @Test("`<script/>` is a paragraph")
     func scriptSelfClosing() throws {
         let blocks = blocks("<script/>")
         let first = try #require(blocks.first, "fixture vacuous: no block parsed")
         #expect(blocks.count == 1)
-        #expect(first.kind == .htmlBlock)
+        #expect(first.kind == .paragraph)
         #expect(first.text == "<script/>")
     }
 
-    @Test("`<pre/>`, `<style/>`, `<textarea/>` open HTML blocks", arguments: [
+    @Test("`<pre/>`, `<style/>`, `<textarea/>` are paragraphs", arguments: [
         "<pre/>", "<style/>", "<textarea/>",
     ])
     func otherType1TagsSelfClosing(_ src: String) throws {
         let blocks = blocks(src)
         let first = try #require(blocks.first, "fixture vacuous: no block parsed for \(src.debugDescription)")
         #expect(blocks.count == 1)
-        #expect(first.kind == .htmlBlock)
+        #expect(first.kind == .paragraph)
         #expect(first.text == src)
     }
 
