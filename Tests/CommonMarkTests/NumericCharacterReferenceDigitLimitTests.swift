@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 private func collectText(_ node: borrowing MarkdownNode, into out: inout String, count: inout Int) {
     if case .text = node.kind, case .text(let literal) = node.stringContent {

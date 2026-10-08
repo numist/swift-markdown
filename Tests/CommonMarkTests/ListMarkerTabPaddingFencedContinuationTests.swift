@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A list marker followed by tabs, on the line after a fenced code block in a list item. Under the
 /// rule for an item starting with indented code (List items), indentation after the marker is counted

@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A paragraph that could be a table or begin with a link reference definition, footnote definition or
 /// checkbox has its content materialized into the arena. When it turns out to be a plain paragraph, each

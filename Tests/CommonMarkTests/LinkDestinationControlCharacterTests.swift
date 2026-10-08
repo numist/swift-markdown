@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// The destination URL of the first `.link` node in depth-first order, or nil if there is none.
 private func firstLinkURL(_ node: borrowing MarkdownNode) -> String? {

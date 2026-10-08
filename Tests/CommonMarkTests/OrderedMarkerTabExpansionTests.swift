@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Indentation after an ordered list marker is counted in columns with tab stops of 4 (Tabs), as after a
 /// bullet list marker. When it reaches five columns, the item starts with an indented code block (List
@@ -94,7 +94,7 @@ struct OrderedMarkerTabExpansionTests {
             let list = ranges.first { if case .list = $0.kind { return true } else { return false } }?.range
             #expect(list?.lowerBound == Pos(line: 1, column: 1))
             #expect(list?.upperBound == Pos(line: 1, column: 8))
-            let code = ranges.first { $0.kind.isCodeBlock }?.range
+            let code = ranges.first { $0.kind == .indentedCode }?.range
             #expect(code?.lowerBound == Pos(line: 1, column: 7))
             #expect(code?.upperBound == Pos(line: 1, column: 8))
         }

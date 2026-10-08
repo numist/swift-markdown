@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A list marker opens a list only while it is below the nesting cap of `BlockParser.maxListNesting`
 /// (100) containers on its line; at the cap the marker is paragraph text. Depth counts every container

@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A backslash before a line ending in a link destination is a literal backslash (Backslash escapes), and a link
 /// destination cannot contain a line ending (Links), so the destination ends with that backslash. An even run of

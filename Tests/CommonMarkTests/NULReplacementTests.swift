@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Every U+0000 in the input is replaced with U+FFFD (Insecure characters), in every kind of content.
 /// Other control characters are kept.

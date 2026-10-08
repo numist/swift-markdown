@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Every `.link` node's destination URL, in document order.
 private func linkURLs(_ doc: borrowing MarkdownDocument) -> [String] {

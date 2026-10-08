@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Source ranges of inlines on the second and later lines of a multi-line segment. Adjacent paragraph
 /// lines with no stripped indentation share one segment; a later indented line starts another. Each

@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// An ordered list can interrupt a paragraph only when its start number is 1 (List items); otherwise the
 /// marker is paragraph continuation text. The rule applies at every nesting level.

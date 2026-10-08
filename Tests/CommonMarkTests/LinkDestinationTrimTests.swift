@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// The parser strips spaces, tabs and line endings from both ends of a link destination, in an inline link and in a
 /// link reference definition, and keeps whitespace inside it. A link title keeps all its whitespace.

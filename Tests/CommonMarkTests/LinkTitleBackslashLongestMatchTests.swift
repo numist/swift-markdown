@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A link title (Links) is the longest delimited match available: a `\` before the closing quote
 /// escapes it only when a later quote can close the title; otherwise the `\` is a literal backslash

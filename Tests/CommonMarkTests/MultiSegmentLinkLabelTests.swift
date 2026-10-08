@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Link label, destination and title scanning (Links) over a paragraph whose lines are not contiguous
 /// in the source, such as a block quote or list item body or a lazy continuation line. The paragraph's
