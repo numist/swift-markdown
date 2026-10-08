@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A task list item marker must be followed by at least one whitespace character (Task list items
 /// (extension)); all of that whitespace is removed from the item's content.

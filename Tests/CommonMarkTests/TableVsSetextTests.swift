@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Once a header row and delimiter row form a table, the paragraph is gone, so a following `-` or `=` line
 /// is not a setext heading underline (Setext headings): `-` starts a list and `=` is a body row.

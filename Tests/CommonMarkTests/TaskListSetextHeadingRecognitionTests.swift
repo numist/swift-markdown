@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A task list item's first block must be a paragraph (Task list items (extension)), so an item whose
 /// first block is a setext heading has no checkbox and the heading keeps `[ ]` as text.

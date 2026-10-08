@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A delimiter row turns the open paragraph into a table before any link reference definition is
 /// extracted from it (Tables (extension), Link reference definitions), so text shaped like a link

@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A paragraph continuation line in a task list item has a source range that starts at the line's first
 /// content byte, whatever the width of the checkbox on the opening line.

@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// An indented dump of a parsed document's node kinds and text, so assertions cover the whole nested
 /// tree.

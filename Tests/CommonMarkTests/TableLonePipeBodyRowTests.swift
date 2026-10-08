@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A line holding only a leading pipe (Tables (extension)), optionally with whitespace, has no cells. It
 /// is not a body row, so it closes the table and starts a paragraph.

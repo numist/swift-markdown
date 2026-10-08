@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// When a delimiter row follows a paragraph of several lines, the paragraph's last line is the header
 /// row and the earlier lines remain a paragraph (Tables (extension)).

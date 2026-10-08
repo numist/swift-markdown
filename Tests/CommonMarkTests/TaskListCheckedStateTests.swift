@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 // Depth-first: the checked state of the first list item, or nil if there is none. File-scope because a
 // recursive walk over `borrowing MarkdownNode` can't capture the borrow in a closure.

@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 // Depth-first: the checked state of the first list item — `.some(nil)` = an ordinary bullet item,
 // `.some(.some(x))` = a task list item (unchecked/checked), outer `nil` = no item at all.

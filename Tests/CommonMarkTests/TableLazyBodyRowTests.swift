@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Laziness applies only to paragraph continuation text (Block quotes, List items). Once a table opens in a
 /// container, a following line without the container's prefix is not a lazy continuation line: it closes

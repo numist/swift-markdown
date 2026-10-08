@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A table is broken at the beginning of another block-level structure (Tables (extension)). Unlike a
 /// paragraph, a table can be interrupted by an indented code block, so a line indented four or more

@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// A delimiter row on a lazy continuation line (Block quotes, List items) is paragraph text, just as a
 /// lazy `--` is not a setext heading underline, so no table forms.
