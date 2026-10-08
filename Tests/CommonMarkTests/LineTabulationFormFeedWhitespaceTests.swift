@@ -62,6 +62,33 @@ struct LineTabulationFormFeedWhitespaceTests {
             """)
     }
 
+    /// A footnote definition's label holds no whitespace, so, as with a space, `[^\u{B}]: x` is a link reference
+    /// definition whose label is `^` and a line tabulation.
+    @Test(arguments: [("\u{0B}", "\\u{B}"), ("\u{0C}", "\\u{C}")])
+    func footnoteDefinitionLabelWithWhitespaceIsLinkReferenceDefinition(_ whitespace: String, _ escaped: String) {
+        #expect(TreeDump.dump("[^\(whitespace)]: x\n\n[^\(whitespace)]", options: [.footnotes]) == """
+            document
+              paragraph
+                link "x" ""
+                  text "^\(escaped)"
+
+            """)
+        #expect(TreeDump.dump("[^\\\(whitespace)]: x\n\n[^\\\(whitespace)]", options: [.footnotes]) == """
+            document
+              paragraph
+                link "x" ""
+                  text "^\\\\\(escaped)"
+
+            """)
+        #expect(TreeDump.dump("[^a\(whitespace)b]: x\n\n[^a b]", options: [.footnotes]) == """
+            document
+              paragraph
+                link "x" ""
+                  text "^a b"
+
+            """)
+    }
+
     @Test(arguments: ["\u{0B}", "\u{0C}"])
     func infoStringIsTrimmedOfWhitespace(_ whitespace: String) {
         #expect(surface("```\(whitespace)js\(whitespace) \n```") == """

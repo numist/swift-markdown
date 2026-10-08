@@ -23,8 +23,8 @@ private func dfsAutolinkNodes(
 }
 
 /// An extended url autolink's scheme is the whole run of ASCII letters before `://`, so the autolink may follow any
-/// character but a letter. An extended www autolink comes only at the start of a line, after whitespace, or after
-/// `*`, `_`, `~` or `(`.
+/// character but a letter. An extended www autolink comes only at the start of a line, after a space, tab or line
+/// ending, or after `*`, `_`, `~` or `(`.
 @Suite("Extended autolink preceding character")
 struct AutolinkSchemePrecedingCharTests {
 

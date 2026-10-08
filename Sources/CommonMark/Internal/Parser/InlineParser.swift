@@ -2324,7 +2324,7 @@ extension BlockParser {
 
     /// Result of an extended autolink match. Carries the visible text range (used for the link's child `.text` node) plus the form so the emit step knows whether to synthesize a scheme prefix.
     ///
-    /// `emailSchemeFolded` is set only for the email form when `[urlStart, urlEnd)` begins with a folded
+    /// `emailSchemeFolded` is set only for the email form when `[urlStart, urlEnd)` holds a folded
     /// `mailto:`/`xmpp:` scheme. The destination is then the folded run itself, with no synthetic
     /// `mailto:` prefix, so `xmpp:` keeps its own scheme.
     private struct GFMAutolinkMatch {
@@ -2719,9 +2719,8 @@ extension BlockParser {
         return domainAccepted(base: afterSlashes, end: end, requirePeriod: false, content: content)
     }
 
-    /// Whether byte `b` continues a domain scan as a host character: an ASCII character that is neither
-    /// punctuation nor whitespace, or line tabulation, which ends no extended autolink. A multi-byte character
-    /// ends the scan.
+    /// Whether byte `b` continues a domain scan as a host character: an ASCII character other than
+    /// punctuation, space, tab, line feed, form feed or carriage return. A multi-byte character ends the scan.
     private func isHostByte(_ b: UInt8) -> Bool {
         b < 0x80 && !b.isASCIIPunct && (b == 0x0B || !b.isASCIISpace)
     }

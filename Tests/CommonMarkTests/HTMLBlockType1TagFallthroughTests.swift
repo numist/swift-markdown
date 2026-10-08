@@ -130,7 +130,6 @@ struct HTMLBlockType1TagFallthroughTests {
         #expect(blocks.map(\.text) == ["foo<textarea>"])
     }
 
-
     @Test("`<script/>` doesn't interrupt a paragraph")
     func selfClosingDoesNotInterruptParagraph() throws {
         let blocks = blocks("foo\n<script/>")

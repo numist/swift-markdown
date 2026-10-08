@@ -3918,8 +3918,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Match a footnote definition opener `[^label]:` at `firstNonSpace` on the current line.
     ///
-    /// The label is `[^` followed by one or more bytes other than an unescaped `[` or `]`, space, tab,
-    /// CR, or LF, then `]:` and optional trailing spaces/tabs.
+    /// The label is `[^` followed by one or more bytes other than an unescaped `[` or `]` or whitespace,
+    /// then `]:` and optional trailing spaces/tabs.
     /// Returns the label (raw source bytes between `^` and `]`) and the within-line offset just past
     /// the consumed marker (`]:` plus trailing whitespace), where the definition's content begins,
     /// or `nil` if this line is not a footnote-definition opener.
@@ -3941,14 +3941,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if b == UInt8(ascii: "[") {
                 return nil
             }
-            if b == UInt8(ascii: "\\"), i + 1 < end, !source[i + 1].isSpaceTabOrNewline {
+            if b == UInt8(ascii: "\\"), i + 1 < end, !source[i + 1].isASCIISpace {
                 i += 2
                 continue
             }
             // A NUL is allowed: it stands for U+FFFD (Insecure characters), which it becomes wherever
             // the label is materialized.
-            if b == UInt8(ascii: " ") || b == UInt8(ascii: "\t")
-                || b == UInt8(ascii: "\r") || b == UInt8(ascii: "\n") {
+            if b.isASCIISpace {
                 return nil
             }
             i += 1
