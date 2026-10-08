@@ -879,26 +879,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return false
     }
 
-    /// `true` if any segment's bytes contain a `\|` (backslash immediately followed by a pipe).
-    ///
-    /// A `\|` never straddles two content segments: a paragraph's lines are joined by the interned line
-    /// ending segment, so a backslash ending one line and a pipe starting the next are not adjacent. A
-    /// per-segment scan is therefore exact.
-    private func segmentsContainEscapedPipe(_ segs: borrowing UniqueArray<Segment>) -> Bool {
-        for i in 0..<segs.count {
-            let seg = segs[i]
-            let len = Int(seg.length)
-            var j = 0
-            while j + 1 < len {
-                if segmentByte(seg, j) == UInt8(ascii: "\\") && segmentByte(seg, j + 1) == UInt8(ascii: "|") {
-                    return true
-                }
-                j += 1
-            }
-        }
-        return false
-    }
-
     /// Replace every NUL (`U+0000`) in `chunk` with U+FFFD (the three bytes `EF BF BD`), per Insecure
     /// characters, under every parse option.
     ///
@@ -1338,11 +1318,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             storage.setSourceStart(precedingNode, span.start)
             storage.setSourceEnd(precedingNode, span.end)
         }
-        // A NUL (replaced by U+FFFD) or a `\|` (unescaped to `|`) in the split-off preceding lines forces
-        // a flatten into one normalized arena chunk with both substitutions applied: this content bypasses
-        // `drainLeaf`, so it is normalized here at its own intern (see `ContentSpan` for why a segment list
-        // can't carry the replacement).
-        let substitutes = segmentsContainNUL(preceding) || segmentsContainEscapedPipe(preceding)
+        // A NUL (replaced by U+FFFD) in the split-off preceding lines forces a flatten into one normalized
+        // arena chunk with the replacement applied: this content bypasses `drainLeaf`, so it is normalized
+        // here at its own intern (see `ContentSpan` for why a segment list can't carry the replacement).
+        let substitutes = segmentsContainNUL(preceding)
         let trimsControlWhitespace = segmentsEndInControlWhitespace(preceding)
         let mayHoldMatcher = segmentsCouldMatchMatcher(preceding)
         if substitutes || trimsControlWhitespace || mayHoldMatcher {

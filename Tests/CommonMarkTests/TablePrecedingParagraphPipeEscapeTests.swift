@@ -49,6 +49,22 @@ struct TablePrecedingParagraphPipeEscapeTests {
             """ + table(line: 2))
     }
 
+    @Test func testEscapedPipeInBlockQuoteKeepsColumns() {
+        #expect(surface("> a\\|b\n> c\n> | x |\n> |-|") == """
+            document @1:1-4:6
+              block_quote @1:1-4:6
+                paragraph @1:3-2:4
+                  text "a|b" @1:3-1:7
+                  softbreak @-
+                  text "c" @2:3-2:4
+                table @3:3-4:6
+                  table_header @3:3-3:8
+                    table_cell align=none colspan=1 rowspan=1 @3:4-3:7
+                      text "x" @3:5-3:6
+
+            """)
+    }
+
     @Test func testEscapedPipeIsPipe() {
         #expect(surface("x\\|y\n| a |\n|-|") == """
             document @1:1-3:4
