@@ -1486,7 +1486,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             return pending
         }
-        // Non-blank line - the containers that matched it, and their ancestors, no longer end with a blank line. A container that failed to match keeps its flag: this line closes it, or continues its paragraph lazily.
+        // Non-blank line - the containers that matched it, and their ancestors, no longer end with a blank line. A container that failed to match keeps its flag, since this line closes it.
         var clearUp: DocumentStorage.Index? = deepestMatched
         while let clearUp_ = clearUp {
             storage.nodes[clearUp_].lastLineBlank = false
