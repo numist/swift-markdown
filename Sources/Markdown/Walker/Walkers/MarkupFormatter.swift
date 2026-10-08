@@ -368,7 +368,7 @@ public struct MarkupFormatter: MarkupWalker {
         /// content is printed.
         var queuedNewlines = 0
 
-        /// The number of consecutive empty lines at the end of the result.
+        /// The number of consecutive line endings at the end of the result.
         var newlineStreak = 0
 
         /// The length of the last line.

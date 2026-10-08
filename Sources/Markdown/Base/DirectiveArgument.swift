@@ -55,7 +55,7 @@ public struct DirectiveArgumentText: Equatable, Sendable {
         /// The index from which parsing should start.
         public var parseIndex: String.Index
 
-        /// The range from which a segment is extracted from a line
+        /// The range within its line that the segment is taken from
         /// of source, or `nil` if it is provided by other means.
         public var range: SourceRange?
 
@@ -68,7 +68,7 @@ public struct DirectiveArgumentText: Equatable, Sendable {
         /// - Parameters:
         ///   - untrimmedText: the segment's untrimmed text from which arguments can be parsed.
         ///   - parseIndex: The index from which parsing should start.
-        ///   - range: The range from which a segment is extracted from a line
+        ///   - range: The range within its line that the segment is taken from
         ///     of source, or `nil` if the argument text is provided by other means.
         init(untrimmedText: String, parseIndex: String.Index? = nil, range: SourceRange? = nil) {
             self.untrimmedText = untrimmedText

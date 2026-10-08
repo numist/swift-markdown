@@ -23,8 +23,8 @@ struct MarkupParser {
         if !options.contains(.disableSmartOpts) {
             cmOptions.insert(.smart)
         }
-        // Every parsed `Markup` carries a source range. `.disableSourcePosOpts` governs only the
-        // rendered `data-sourcepos` attribute, which a `Document` never contains.
+        // Parsing always records source ranges. `.disableSourcePosOpts` governs only the rendered
+        // `data-sourcepos` attribute, which a `Document` never contains.
         cmOptions.insert(.sourcePosition)
 
         let raw = MarkdownDocument.withParsedDocument(string, options: cmOptions) { document in
