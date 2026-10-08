@@ -1385,8 +1385,8 @@ struct HTMLBlockTests {
         }
     }
 
-    // After a type 7 open tag, the rest of the line may hold spaces, tabs and form feeds, but not a line
-    // tabulation.
+    // After a type 7 open tag, the rest of the line may hold any whitespace, line tabulation and form feed
+    // included.
     @Test("type 7: form feed trailing the tag starts an HTML block")
     func type7TrailingFormFeed() {
         MarkdownDocument.withParsedDocument("<a>\u{0C}") { doc in
@@ -1395,11 +1395,11 @@ struct HTMLBlockTests {
         }
     }
 
-    @Test("type 7: vertical tab trailing the tag does not start an HTML block")
-    func type7TrailingVerticalTabIsParagraph() {
+    @Test("type 7: vertical tab trailing the tag starts an HTML block")
+    func type7TrailingVerticalTab() {
         MarkdownDocument.withParsedDocument("<a>\u{0B}") { doc in
             let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds.contains(.paragraph) && !kinds.contains(.htmlBlock))
+            #expect(kinds == [.document, .htmlBlock])
         }
     }
 

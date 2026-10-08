@@ -3508,18 +3508,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     private func isOnlyWhitespaceToEnd(span: Span<UInt8>, from start: Int, end: Int) -> Bool {
-        var i = start
-        while i < end {
-            let b = span[i]
-            // Only space, tab, form feed and line-ending bytes may follow a type-7 tag. A line tabulation separates tag parts but may not follow the tag, so `<a>\u{0B}` stays a paragraph while `<a>\u{0C}` is an HTML block.
-            if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t")
-                && b != UInt8(ascii: "\n") && b != UInt8(ascii: "\r")
-                && b != 0x0C {
-                return false
-            }
-            i += 1
-        }
-        return true
+        skipSpacechars(span: span, from: start, to: end) == end
     }
 
     /// Check whether a line satisfies the end condition for an HTML block of the given type. The check looks for the closing pattern *anywhere* on the line (HTML blocks).
