@@ -170,8 +170,8 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// The cell spans its source bytes `b\|x`. Its text `b|x` drops the backslash, so the text's source range starts
-    /// with the cell's and is one byte shorter.
+    /// The cell spans its source bytes `b\|x`. Its text `b|x` drops the backslash, but the text's source range still
+    /// runs from `b` to `x`, so it matches the cell's.
     @Test("a table in a block quote with an escaped pipe in a cell")
     func escapedPipe() {
         #expect(tree("> b\\|x|c\n> -|-") == """
@@ -180,7 +180,7 @@ struct ContainerTableSourceRangeTests {
                 table @1:3-2:6
                   table_header @1:3-1:9
                     table_cell align=none colspan=1 rowspan=1 @1:3-1:7
-                      text "b|x" @1:3-1:6
+                      text "b|x" @1:3-1:7
                     table_cell align=none colspan=1 rowspan=1 @1:8-1:9
                       text "c" @1:8-1:9
 

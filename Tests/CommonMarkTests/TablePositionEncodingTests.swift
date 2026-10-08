@@ -240,8 +240,8 @@ struct TablePositionEncodingTests {
 
     // MARK: - \|-escaped cells, multibyte around the escaped pipe
 
-    /// The Text run's source range starts at the cell's start and is as long as its unescaped literal, so
-    /// it ends one byte before the cell does.
+    /// The Text run's source range covers the cell's content bytes, escaping backslash included, so it ends where
+    /// the cell does.
     @Test("escaped pipe: \\|-escaped header cell counts the bytes around the pipe")
     func escapedPipeHeaderCellMultibyte() throws {
         // Header line 1 `é\|€|c`: é@bytes0-1 (cols1-2), \@byte2 (col3), |@byte3 (col4),
@@ -252,7 +252,7 @@ struct TablePositionEncodingTests {
         try #require(head.cells.count == 2 && head.cells[0].text == "\u{E9}|\u{20AC}" && head.cells[1].text == "c",
                      "fixture: escaped-pipe cell literal `é|€`")
         #expect(head.cells[0].range == r(1, 1, 1, 8))       // cell ends at the separator pipe (col8)
-        #expect(head.cells[0].textRange == r(1, 1, 1, 7))
+        #expect(head.cells[0].textRange == r(1, 1, 1, 8))
         #expect(head.cells[1].range == r(1, 9, 1, 10))      // `c`
         #expect(head.cells[1].textRange == r(1, 9, 1, 10))
         #expect(head.range == r(1, 1, 1, 10))
@@ -268,7 +268,7 @@ struct TablePositionEncodingTests {
         try #require(head.cells.count == 2 && head.cells[0].text == "x|\u{1F600}" && head.cells[1].text == "y",
                      "fixture: escaped-pipe cell literal `x|😀`")
         #expect(head.cells[0].range == r(1, 1, 1, 8))       // cell ends at the separator pipe
-        #expect(head.cells[0].textRange == r(1, 1, 1, 7))   // as long as the unescaped literal
+        #expect(head.cells[0].textRange == r(1, 1, 1, 8))
         #expect(head.cells[1].range == r(1, 9, 1, 10))      // `y`
     }
 
@@ -281,7 +281,7 @@ struct TablePositionEncodingTests {
         try #require(body.cells.count == 2 && body.cells[0].text == "\u{E9}|\u{20AC}" && body.cells[1].text == "c",
                      "fixture: escaped-pipe body cell literal `é|€`")
         #expect(body.cells[0].range == r(3, 1, 3, 8))       // cell ends at the separator pipe
-        #expect(body.cells[0].textRange == r(3, 1, 3, 7))   // as long as the unescaped literal
+        #expect(body.cells[0].textRange == r(3, 1, 3, 8))
         #expect(body.cells[1].range == r(3, 9, 3, 10))      // `c`
         #expect(body.cells[1].textRange == r(3, 9, 3, 10))
         #expect(body.range == r(3, 1, 3, 10))

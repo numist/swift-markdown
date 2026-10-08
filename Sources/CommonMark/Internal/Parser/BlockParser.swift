@@ -992,14 +992,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// The content-relative arena→source run map of `unescapingPipes(raw)`, given `map`, `raw`'s own.
     ///
-    /// Pipe-unescaped text is positioned by its offset in the unescaped content, so every byte after a
-    /// stripped backslash images one source byte earlier than its raw byte does: the backslash's image is
-    /// dropped and each later image on its line shifts left by one per backslash stripped before it there.
-    /// The shift ends at the line ending. A U+FFFD's three bytes image one (shifted) NUL byte.
+    /// Each stripped backslash's image is dropped, and every other byte keeps its own image. A U+FFFD's three
+    /// bytes image one NUL byte.
     func unescapedPipesMap(_ map: [ArenaRun], of raw: Chunk) -> [ArenaRun] {
         assert(map.reduce(0) { $0 + Int($1.length) } == raw.length, "a run map must tile its chunk")
         var unescapedMap: [ArenaRun] = []
-        var stripped = 0
         var i = raw.offset
         let end = raw.offset + raw.length
         for run in map {
@@ -1007,14 +1004,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 defer { i += 1 }
                 // The same `\|` match as `unescapingPipes`: a backslash immediately followed by a pipe.
                 if readByte(at: i, in: raw) == UInt8(ascii: "\\"), i + 1 < end, readByte(at: i + 1, in: raw) == UInt8(ascii: "|") {
-                    stripped += 1
                     continue
                 }
-                let sourceOffset = run.sourceOffset < 0 ? -1 : Int(run.sourceOffset) + local - stripped
+                let sourceOffset = run.sourceOffset < 0 ? -1 : Int(run.sourceOffset) + local
                 Self.appendContentByte(imaging: sourceOffset, to: &unescapedMap)
-                if readByte(at: i, in: raw) == UInt8(ascii: "\n") {
-                    stripped = 0
-                }
             }
         }
         return unescapedMap

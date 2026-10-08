@@ -324,8 +324,8 @@ extension BlockParser {
                     } else {
                         // The cell's run map is the table's map over the cell: one constant-shift run for a
                         // contiguous table, the row's runs for a `.flattened` one, split at each U+FFFD so its
-                        // three bytes image the one NUL. An escaped cell's inlines are positioned by their offset
-                        // in the unescaped content (`unescapedPipesMap`). With positions off there is no
+                        // three bytes image the one NUL. An escaped cell's map drops the image of each stripped
+                        // backslash (`unescapedPipesMap`). With positions off there is no
                         // projection, so no map is registered.
                         if let projection {
                             let cellMap = projection.runs(from: cellRange.lowerBound, length: cellRange.count, in: self)

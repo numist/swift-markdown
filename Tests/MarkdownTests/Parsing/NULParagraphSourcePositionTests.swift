@@ -44,7 +44,7 @@ class NULParagraphSourcePositionTests: XCTestCase {
     }
 
     func testTableCellWithEscapedPipe() {
-        XCTAssertEqual("Document @1:1-2:6\n└─ Table @1:1-2:6 alignments: |-|-|\n   ├─ Head @1:1-1:9\n   │  ├─ Cell @1:2-1:6\n   │  │  └─ Text @1:2-1:5 \"\u{fffd}|a\"\n   │  └─ Cell @1:7-1:8\n   │     └─ Text @1:7-1:8 \"b\"\n   └─ Body", positions("|\u{0}\\|a|b|\n|-|-|"))
+        XCTAssertEqual("Document @1:1-2:6\n└─ Table @1:1-2:6 alignments: |-|-|\n   ├─ Head @1:1-1:9\n   │  ├─ Cell @1:2-1:6\n   │  │  └─ Text @1:2-1:6 \"\u{fffd}|a\"\n   │  └─ Cell @1:7-1:8\n   │     └─ Text @1:7-1:8 \"b\"\n   └─ Body", positions("|\u{0}\\|a|b|\n|-|-|"))
     }
 
     func testTablePrecedingParagraph() {
@@ -84,19 +84,19 @@ class NULParagraphSourcePositionTests: XCTestCase {
     }
 
     func testTableCellWithNULAfterEscapedPipe() {
-        XCTAssertEqual("Document @1:1-2:4\n└─ Table @1:1-2:4 alignments: |-|\n   ├─ Head @1:1-1:10\n   │  └─ Cell @1:2-1:9\n   │     └─ Text @1:3-1:7 \"f|\u{fffd}\u{fffd}\"\n   └─ Body", positions("| f\\|\u{0}\u{0} |\n|-|"))
+        XCTAssertEqual("Document @1:1-2:4\n└─ Table @1:1-2:4 alignments: |-|\n   ├─ Head @1:1-1:10\n   │  └─ Cell @1:2-1:9\n   │     └─ Text @1:3-1:8 \"f|\u{fffd}\u{fffd}\"\n   └─ Body", positions("| f\\|\u{0}\u{0} |\n|-|"))
     }
 
     func testTablePrecedingParagraphWithNULAfterEscapedPipe() {
-        XCTAssertEqual("Document @1:1-3:4\n├─ Paragraph @1:1-1:6\n│  └─ Text @1:1-1:5 \"x|\u{fffd}y\"\n└─ Table @2:1-3:4 alignments: |-|\n   ├─ Head @2:1-2:6\n   │  └─ Cell @2:2-2:5\n   │     └─ Text @2:3-2:4 \"a\"\n   └─ Body", positions("x\\|\u{0}y\n| a |\n|-|"))
+        XCTAssertEqual("Document @1:1-3:4\n├─ Paragraph @1:1-1:6\n│  └─ Text @1:1-1:6 \"x|\u{fffd}y\"\n└─ Table @2:1-3:4 alignments: |-|\n   ├─ Head @2:1-2:6\n   │  └─ Cell @2:2-2:5\n   │     └─ Text @2:3-2:4 \"a\"\n   └─ Body", positions("x\\|\u{0}y\n| a |\n|-|"))
     }
 
-    /// The backslash of a `\|` affects source columns only on its own line.
-    func testTablePrecedingParagraphEscapeShiftEndsAtLineBreak() {
-        XCTAssertEqual("Document @1:1-4:4\n├─ Paragraph @1:1-2:3\n│  ├─ Text @1:1-1:4 \"x|y\"\n│  ├─ SoftBreak\n│  └─ Text @2:1-2:3 \"zz\"\n└─ Table @3:1-4:4 alignments: |-|\n   ├─ Head @3:1-3:6\n   │  └─ Cell @3:2-3:5\n   │     └─ Text @3:3-3:4 \"a\"\n   └─ Body", positions("x\\|y\nzz\n| a |\n|-|"))
+    /// A `\|` leaves the source columns of the text after it unchanged, on its own line and the next.
+    func testTablePrecedingParagraphEscapeKeepsColumns() {
+        XCTAssertEqual("Document @1:1-4:4\n├─ Paragraph @1:1-2:3\n│  ├─ Text @1:1-1:5 \"x|y\"\n│  ├─ SoftBreak\n│  └─ Text @2:1-2:3 \"zz\"\n└─ Table @3:1-4:4 alignments: |-|\n   ├─ Head @3:1-3:6\n   │  └─ Cell @3:2-3:5\n   │     └─ Text @3:3-3:4 \"a\"\n   └─ Body", positions("x\\|y\nzz\n| a |\n|-|"))
     }
 
     func testNestedTablePrecedingParagraphWithNULAfterEscapedPipe() {
-        XCTAssertEqual("Document @1:1-4:6\n└─ BlockQuote @1:1-4:6\n   ├─ Paragraph @1:3-2:5\n   │  ├─ Text @1:3-1:6 \"x|\u{fffd}\"\n   │  ├─ SoftBreak\n   │  └─ Text @2:3-2:5 \"y\u{fffd}\"\n   └─ Table @3:3-4:6 alignments: |-|\n      ├─ Head @3:3-3:8\n      │  └─ Cell @3:4-3:7\n      │     └─ Text @3:5-3:6 \"a\"\n      └─ Body", positions("> x\\|\u{0}\n> y\u{0}\n> | a |\n> |-|"))
+        XCTAssertEqual("Document @1:1-4:6\n└─ BlockQuote @1:1-4:6\n   ├─ Paragraph @1:3-2:5\n   │  ├─ Text @1:3-1:7 \"x|\u{fffd}\"\n   │  ├─ SoftBreak\n   │  └─ Text @2:3-2:5 \"y\u{fffd}\"\n   └─ Table @3:3-4:6 alignments: |-|\n      ├─ Head @3:3-3:8\n      │  └─ Cell @3:4-3:7\n      │     └─ Text @3:5-3:6 \"a\"\n      └─ Body", positions("> x\\|\u{0}\n> y\u{0}\n> | a |\n> |-|"))
     }
 }
