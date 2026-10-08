@@ -690,7 +690,7 @@ extension BlockParser {
             var shortcutRange: Range<Int>?
             let labelIsBlank: Bool
             if let lc = labelChunk {
-                labelIsBlank = lc.trimming(using: self).isEmpty
+                labelIsBlank = lc.trimmingWhitespace(using: self).isEmpty
             } else if let lr = labelRange {
                 labelIsBlank = normalizeLabel(virtualRange: lr, in: content).isEmpty
             } else {

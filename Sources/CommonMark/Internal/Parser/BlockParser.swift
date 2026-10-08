@@ -3602,13 +3602,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         var infoStart = i
-        while infoStart < range.upperBound
-            && (source[infoStart] == UInt8(ascii: " ") || source[infoStart] == UInt8(ascii: "\t")) {
+        while infoStart < range.upperBound && source[infoStart].isASCIISpace {
             infoStart += 1
         }
         var infoEnd = range.upperBound
-        while infoEnd > infoStart
-            && (source[infoEnd - 1] == UInt8(ascii: " ") || source[infoEnd - 1] == UInt8(ascii: "\t")) {
+        while infoEnd > infoStart && source[infoEnd - 1].isASCIISpace {
             infoEnd -= 1
         }
         if marker == .backtick {

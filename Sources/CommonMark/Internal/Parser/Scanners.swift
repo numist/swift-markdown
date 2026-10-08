@@ -431,7 +431,7 @@ extension BlockParser {
 
     // MARK: - Label normalization
 
-    /// Normalizes a link label for matching (spec "Links"): trims outer whitespace, collapses interior whitespace runs to a single space, then case-folds with `String.lowercased()`, so `[ΑΓΩ]` and `[αγω]` resolve to the same key.
+    /// Normalizes a link label for matching (spec "Links"): trims outer whitespace, line tabulation and form feed included, collapses interior whitespace runs to a single space, then case-folds with `String.lowercased()`, so `[ΑΓΩ]` and `[αγω]` resolve to the same key.
     internal func normalizeLabel(chunk: Chunk) -> String {
         let span = if chunk.inSource {
             sourceBytes.extracting(chunk.range)
@@ -472,8 +472,8 @@ extension BlockParser {
             for i in 0..<span.count {
                 let b = span[i]
                 switch b {
-                case UInt8(ascii: " "), UInt8(ascii: "\t"),
-                     UInt8(ascii: "\n"), UInt8(ascii: "\r"):
+                case UInt8(ascii: " "), UInt8(ascii: "\t"), UInt8(ascii: "\n"),
+                     UInt8(ascii: "\r"), 0x0B, 0x0C:
                     if !output.isEmpty {
                         pendingSpace = true
                     }
