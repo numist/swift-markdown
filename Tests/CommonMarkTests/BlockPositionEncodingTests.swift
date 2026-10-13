@@ -291,6 +291,20 @@ struct BlockPositionEncodingTests {
         #expect(out[5].literal == "b")
     }
 
+    /// A quote opened after a tab starts at its `>`, whatever the tab expands to.
+    @Test("nested block quotes after tabs start at their markers")
+    func nestedBlockQuotesAfterTabs() {
+        #expect(TreeDump.dump(">\t>\t> a", options: .sourcePosition, sourceRanges: true) == """
+            document @1:1-1:8
+              block_quote @1:1-1:8
+                block_quote @1:3-1:8
+                  block_quote @1:5-1:8
+                    paragraph @1:7-1:8
+                      text "a" @1:7-1:8
+
+            """)
+    }
+
     // MARK: - Unordered list
 
     @Test("unordered list — marker styles and content column 3, tracking multibyte and tab")

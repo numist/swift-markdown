@@ -192,6 +192,21 @@ struct TablePrecedingParagraphNoncontiguousTests {
         """)
     }
 
+    @Test("nested block quote: lines with a colon inside the dashes are no delimiter row")
+    func nestedInteriorColonStaysParagraph() {
+        #expect(TreeDump.dump("> a\n> -:-\n> -:-\n", options: .tables) == """
+            document
+              block_quote
+                paragraph
+                  text "a"
+                  softbreak
+                  text "-:-"
+                  softbreak
+                  text "-:-"
+
+            """)
+    }
+
     // MARK: - Top-level paragraph
 
     @Test("contiguous: multiple preceding lines split off as one paragraph")
