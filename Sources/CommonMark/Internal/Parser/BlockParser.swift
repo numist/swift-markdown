@@ -1674,6 +1674,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var cursor = lineRange.lowerBound
         var deepestMatched = documentIndex
         var prefixColumns = 0
+        var lineColumns = LineColumns(lineStart: lineRange.lowerBound)
 
         // Build top-down chain via parent walk + reverse. `chain` is a caller-owned reused buffer (reset here per line) so we don't allocate/zero a fresh array each line.
         chain.removeSubrange(0..<chain.count)
@@ -1713,7 +1714,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // to spaces (`expandPrefixTabs`).
                     (cursor, prefixColumns) = blockQuotePrefixEnd(
                         source: source,
-                        lineStart: lineRange.lowerBound,
+                        lineColumns: &lineColumns,
                         markerEnd: firstNonSpace + 1,
                         advanced: advanced
                     )
@@ -1767,7 +1768,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // with at most one blank line (List items). An item whose blocks are only definitions is
                     // not empty, since a definition is a block of the item.
                     cursor = firstNonSpace
-                    prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+                    prefixColumns = lineColumns.column(at: cursor, in: source)
                     deepestMatched = node
                 } else {
                     return (deepestMatched, cursor, prefixColumns, false)
@@ -1793,7 +1794,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     deepestMatched = node
                 } else if isBlank {
                     cursor = firstNonSpace
-                    prefixColumns = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+                    prefixColumns = lineColumns.column(at: cursor, in: source)
                     deepestMatched = node
                 } else {
                     return (deepestMatched, cursor, prefixColumns, false)
@@ -2045,6 +2046,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var pending = pending
         var cursor = startCursor
         var column = startColumn
+        var lineColumns = LineColumns(lineStart: lineRange.lowerBound)
         // The depth of the block start being matched on this line; `maxListNesting` caps list opening by it.
         var depth = 0
         while true {
@@ -2054,7 +2056,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if isBlank {
                 return pending
             }
-            let indent = columnWidth(source: source, from: lineRange.lowerBound, to: firstNonSpace) - column
+            let indent = lineColumns.column(at: firstNonSpace, in: source) - column
 
             // Block quote opens a container; loop to keep dispatching the rest.
             // `baseColumn: column` - `cursor` can sit mid-tab here (a prior iteration's marker on this
@@ -2085,7 +2087,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // continuing an open fenced code block).
                 (cursor, column) = blockQuotePrefixEnd(
                     source: source,
-                    lineStart: lineRange.lowerBound,
+                    lineColumns: &lineColumns,
                     markerEnd: firstNonSpace + 1,
                     advanced: advanced
                 )
@@ -2127,7 +2129,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let fnIdx = openFootnoteDefinition(label: fn.label, firstNonSpace: firstNonSpace)
                 current = fnIdx
                 cursor = fn.consumedTo
-                column = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+                column = lineColumns.column(at: cursor, in: source)
                 continue
             }
 
@@ -3619,12 +3621,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// the tab byte while the column moves one past `>`. Callers rely on a cursor left on a tab
     /// having a column strictly inside that tab: measuring from a column already at the tab's stop would
     /// recount the whole tab as four fresh columns.
-    private func blockQuotePrefixEnd(source: Span<UInt8>, lineStart: Int, markerEnd: Int, advanced: Int) -> (cursor: Int, column: Int) {
-        let markerEndColumn = columnWidth(source: source, from: lineStart, to: markerEnd)
+    private func blockQuotePrefixEnd(source: Span<UInt8>, lineColumns: inout LineColumns, markerEnd: Int, advanced: Int) -> (cursor: Int, column: Int) {
+        let markerEndColumn = lineColumns.column(at: markerEnd, in: source)
         if advanced == markerEnd + 1, source[markerEnd] == UInt8(ascii: "\t"), 4 - (markerEndColumn & 3) > 1 {
             return (markerEnd, markerEndColumn + 1)
         }
-        return (advanced, columnWidth(source: source, from: lineStart, to: advanced))
+        return (advanced, lineColumns.column(at: advanced, in: source))
     }
 
     /// Try to match an opening code fence line (Fenced code blocks).
@@ -3753,6 +3755,36 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             column += source[i] == UInt8(ascii: "\t") ? 4 - (column & 3) : 1
         }
         return column
+    }
+
+    /// `columnWidth` from one line's start, answered by advancing from the previous answer unless the offset moved
+    /// back, so a line's nondecreasing queries cost time in proportion to the line in total.
+    ///
+    /// The prefix walk and block dispatch place every container marker on a line by its absolute column, and
+    /// measuring each from the line start would cost a line of `n` nested markers `n` measurements of up to `n`
+    /// bytes.
+    private struct LineColumns {
+        private let lineStart: Int
+        private var offset: Int
+        private var column = 0
+
+        init(lineStart: Int) {
+            self.lineStart = lineStart
+            offset = lineStart
+        }
+
+        /// The absolute column reached after the line's bytes before `target`.
+        mutating func column(at target: Int, in source: Span<UInt8>) -> Int {
+            if target < offset {
+                offset = lineStart
+                column = 0
+            }
+            while offset < target {
+                column += source[offset] == UInt8(ascii: "\t") ? 4 - (column & 3) : 1
+                offset += 1
+            }
+            return column
+        }
     }
 
     /// Try to match a setext heading underline at `firstNonSpace` within `range` (Setext headings).
