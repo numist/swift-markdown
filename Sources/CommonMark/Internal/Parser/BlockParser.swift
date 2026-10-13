@@ -186,17 +186,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// non-indented, non-lazy continuation line.
     var paragraphTablePending: [DocumentStorage.Index: Bool] = [:]
 
-    /// List items whose last block is a removed paragraph of only definitions, mapped to whether a blank line
-    /// follows that paragraph in the item. An entry is dropped when the item gains another block.
+    /// List items whose last block is a removed paragraph that held only definitions or a task list item marker,
+    /// mapped to whether a blank line follows that paragraph in the item. An entry is dropped when the item gains
+    /// another block.
     ///
-    /// A definition is a block for list looseness (Lists), so the removed paragraph is still separated from the
-    /// item's next block by a blank line after it, and still ends the item for `endsWithBlankLine`. It also keeps the
-    /// item from counting as empty, so a blank line after it does not close the item (List items).
-    var itemsEndingInRemovedDefinitions: [DocumentStorage.Index: Bool] = [:]
+    /// The removed paragraph is still a block for list looseness (Lists), so it is still separated from the item's
+    /// next block by a blank line after it, and still ends the item for `endsWithBlankLine`. It also keeps the item
+    /// from counting as empty, so a blank line after it does not close the item (List items).
+    var itemsEndingInRemovedParagraph: [DocumentStorage.Index: Bool] = [:]
 
-    /// List items that directly contain a removed paragraph of only definitions and another block with a blank
-    /// line between them, which makes their list loose (Lists). Consulted by `detectLooseList`.
-    var itemsWithBlankLineAroundRemovedDefinitions: Set<DocumentStorage.Index> = []
+    /// List items that directly contain a removed paragraph that held only definitions or a task list item marker,
+    /// and another block with a blank line between them, which makes their list loose (Lists). Consulted by `detectLooseList`.
+    var itemsWithBlankLineAroundRemovedParagraph: Set<DocumentStorage.Index> = []
 
     /// Per-kind stretches of scan starts from which a first-closer raw-HTML scan is known to fail in the current `parseInline` pass (`HTMLCloserMisses`). Reset per pass.
     var htmlCloserMisses = HTMLCloserMisses()
@@ -622,8 +623,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Append a node as a child of the given parent. Returns the new node's index.
     private mutating func addChild(kind: MarkdownNode.Kind, parent: DocumentStorage.Index, data: NodeData? = nil, start: Int? = nil) -> DocumentStorage.Index {
         let idx = storage.appendNode(NodeRecord(kind: kind, parent: parent, data: data))
-        if itemsEndingInRemovedDefinitions.removeValue(forKey: parent) == true {
-            itemsWithBlankLineAroundRemovedDefinitions.insert(parent)
+        if itemsEndingInRemovedParagraph.removeValue(forKey: parent) == true {
+            itemsWithBlankLineAroundRemovedParagraph.insert(parent)
         }
         storage.appendChild(idx, to: parent)
         storage.setSourceStart(idx, start)
@@ -1507,8 +1508,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             // For list tightness (Lists), the blank line belongs to the deepest container that matched it, and it follows that container's last block, if any. Neither its ancestors nor a block quote, whose lines all begin with `>`, end with it.
             let container = deepestMatched
-            if itemsEndingInRemovedDefinitions[container] != nil {
-                itemsEndingInRemovedDefinitions[container] = true
+            if itemsEndingInRemovedParagraph[container] != nil {
+                itemsEndingInRemovedParagraph[container] = true
             } else if let lastChild = storage[container].lastChild {
                 storage.nodes[lastChild].lastLineBlank = true
             }
@@ -1575,7 +1576,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     return pending
                 }
                 // Empty after link reference definition extraction - drop the paragraph and let the underline line dispatch as a fresh block. Refresh `stillOpenKind` so PHASE 2d doesn't try to continue the detached paragraph.
-                removeDefinitionsParagraph(para)
+                removeEmptiedParagraph(para)
                 guard let parent = storage[para].parent else {
                     fatalError("Invalid internal state - missing parent")
                 }
@@ -1774,13 +1775,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // leaf continuation can split that tab (Tabs).
                     prefixColumns += padding
                     deepestMatched = node
-                } else if isBlank, storage[node].firstChild != nil || itemsEndingInRemovedDefinitions[node] != nil {
+                } else if isBlank, storage[node].firstChild != nil || itemsEndingInRemovedParagraph[node] != nil {
                     // A blank line inside an item that already has content keeps the item open even though
                     // the indent falls short of the content column. Advance `cursor` to first-non-space (the
                     // line end for a blank line) so any deeper open item measures its indent from here rather
                     // than the line start. An empty item closes on such a line, since a list item can begin
-                    // with at most one blank line (List items). An item whose blocks are only definitions is
-                    // not empty, since a definition is a block of the item.
+                    // with at most one blank line (List items). An item whose first paragraph held only
+                    // definitions or a task list item marker is not empty, since that paragraph is a block of
+                    // the item.
                     cursor = firstNonSpace
                     prefixColumns = lineColumns.column(at: cursor, in: source)
                     deepestMatched = node
@@ -2572,17 +2574,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         preconditionFailure("leaf content lies within its run map")
     }
 
-    /// Remove `paragraph`, the last block of its container, which holds only definitions.
+    /// Remove `paragraph`, the last block of its container, which holds only definitions or a task list item marker.
     ///
-    /// When the container is a list item, the paragraph still counts for list looseness, since a definition is a
-    /// block (Lists): a blank line before it separates it from the item's preceding block, and one after it from the
+    /// When the container is a list item, the paragraph still counts for list looseness, since it is a block of the
+    /// item (Lists): a blank line before it separates it from the item's preceding block, and one after it from the
     /// item's next block.
-    private mutating func removeDefinitionsParagraph(_ paragraph: DocumentStorage.Index) {
+    private mutating func removeEmptiedParagraph(_ paragraph: DocumentStorage.Index) {
         if let item = storage[paragraph].parent, case .item = storage[item].kind {
             if let preceding = storage[paragraph].previous, endsWithBlankLine(preceding) {
-                itemsWithBlankLineAroundRemovedDefinitions.insert(item)
+                itemsWithBlankLineAroundRemovedParagraph.insert(item)
             }
-            itemsEndingInRemovedDefinitions[item] = false
+            itemsEndingInRemovedParagraph[item] = false
         }
         storage.unlinkChild(paragraph)
     }
@@ -2625,13 +2627,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         let afterDefinitions = parseDefinitions(in: trimmed).trimmingWhitespace(using: self)
         if afterDefinitions.isEmpty {
-            removeDefinitionsParagraph(node)
+            removeEmptiedParagraph(node)
             return
         }
         let contentChunk = taskItemContent(of: node, content: afterDefinitions, trailingSeparator: byte(after: trimmed, in: raw))
         if contentChunk.isEmpty {
-            // The paragraph is only a task list item marker - drop the empty paragraph node.
-            storage.unlinkChild(node)
+            removeEmptiedParagraph(node)
             return
         }
         if positionsEnabled, let start = sourceStart(of: contentChunk, in: raw, map: map) {
@@ -3920,13 +3921,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// At list finalize, decide whether the list is loose.
     ///
-    /// A list is loose (Lists) if any item directly contains two block-level children separated by a blank line - i.e., the item has more than one block child AND a blank line is observed inside it, counting a removed paragraph of only definitions as a block (`itemsWithBlankLineAroundRemovedDefinitions`). (The other criterion - a blank line between sibling items - is case (a) below.)
+    /// A list is loose (Lists) if any item directly contains two block-level children separated by a blank line - i.e., the item has more than one block child AND a blank line is observed inside it, counting a removed paragraph of only definitions or a task list item marker as a block (`itemsWithBlankLineAroundRemovedParagraph`). (The other criterion - a blank line between sibling items - is case (a) below.)
     private mutating func detectLooseList(_ list: DocumentStorage.Index) {
         var loose = false
         var item = storage[list].firstChild
         outer: while let item_ = item {
             let nextItem = storage[item_].next
-            if itemsWithBlankLineAroundRemovedDefinitions.contains(item_) {
+            if itemsWithBlankLineAroundRemovedParagraph.contains(item_) {
                 loose = true
                 break outer
             }
@@ -3956,7 +3957,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Walks down the rightmost spine of lists/items to a leaf, returning whether that leaf has the `lastLineBlank` flag. An item whose last block is a removed paragraph of only definitions ends with a blank line when one follows that paragraph.
+    /// Walks down the rightmost spine of lists/items to a leaf, returning whether that leaf has the `lastLineBlank` flag. An item whose last block is a removed paragraph of only definitions or a task list item marker ends with a blank line when one follows that paragraph.
     private func endsWithBlankLine(_ node: DocumentStorage.Index) -> Bool {
         var cur = node
         while true {
@@ -3965,8 +3966,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             case .list, .item: true
             default: false
             }
-            if let blankLineAfterDefinitions = itemsEndingInRemovedDefinitions[cur] {
-                return blankLineAfterDefinitions
+            if let blankLineAfterRemovedParagraph = itemsEndingInRemovedParagraph[cur] {
+                return blankLineAfterRemovedParagraph
             }
             if isListOrItem, let lastChild = storage[cur].lastChild {
                 cur = lastChild
