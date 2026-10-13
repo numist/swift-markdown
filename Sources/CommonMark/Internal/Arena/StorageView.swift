@@ -128,6 +128,9 @@ internal struct StorageView: ~Escapable, Copyable {
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @_lifetime(borrow self)
     internal func utf8Span(of ref: ContentRef) -> UTF8Span {
+        // The single-span content cases (link URL and title, code info, attribute, footnote label) must be stored as one
+        // segment; a longer ref would be cut to its first segment here while `stringContent` joins them all.
+        assert(ref.count <= 1, "single-span content stored as \(ref.count) segments")
         if ref.count == 0 {
             return utf8Span(of: Chunk(offset: 0, length: 0, inSource: false))
         }
