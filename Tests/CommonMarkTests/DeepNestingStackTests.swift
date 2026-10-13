@@ -65,6 +65,17 @@ struct DeepNestingStackTests {
         #expect(blocks == 2)
     }
 
+    /// Each definition opens inside the one before it; the outermost is referenced, and moves to the document's end.
+    @Test("deeply nested footnote definitions parse without exhausting a 512 KB stack", arguments: [
+        MarkdownDocument.ParseOptions.footnotes,
+        [.footnotes, .sourcePosition],
+    ])
+    func footnoteDefinitionNesting(_ options: MarkdownDocument.ParseOptions) {
+        let source = "x[^a]\n\n" + String(repeating: "[^a]: ", count: Self.depth) + "y\n"
+        let blocks = Self.topLevelBlocksOnSmallStack(source, options: options)
+        #expect(blocks == 2)
+    }
+
     private static func topLevelBlocksOnSmallStack(_ source: String, options: MarkdownDocument.ParseOptions) -> Int {
         onThread(stackSize: 512 * 1024) {
             MarkdownDocument.withParsedDocument(source, options: options) { document in
