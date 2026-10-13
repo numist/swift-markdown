@@ -37,6 +37,36 @@ internal struct HTMLCloserMisses {
     var processingInstruction: Range<Int> = 0..<0
 }
 
+/// The backtick runs that closing-backtick scans in one `parseInline` pass have passed, which can prove that no closer
+/// of a given length follows an opener without scanning again.
+///
+/// A scan starts just past an opening run, so it splits the content into the same maximal runs as any other scan
+/// from a run's end. Once a scan has run from `scannedToEndFrom` to the content end without a closer, every run at or
+/// past that offset is recorded, so an opener ending at or past it has a closer only if a run of its length starts at
+/// or past its end.
+internal struct BacktickRunsSeen {
+    /// The earliest offset from which a scan has run to the content end without finding a closer, if any has.
+    var scannedToEndFrom: Int?
+    /// The latest start offset of a run of each length that any scan has passed, by length.
+    var latestStart: [Int: Int] = [:]
+
+    /// Whether no run of `length` backticks starts at or past `openEnd`, the end of an opening run of that length.
+    func rulesOutCloser(length: Int, after openEnd: Int) -> Bool {
+        guard let scannedToEndFrom, scannedToEndFrom <= openEnd else {
+            return false
+        }
+        return latestStart[length, default: -1] < openEnd
+    }
+
+    mutating func recordRun(length: Int, start: Int) {
+        latestStart[length] = max(latestStart[length, default: -1], start)
+    }
+
+    mutating func recordScanToEnd(from openEnd: Int) {
+        scannedToEndFrom = min(scannedToEndFrom ?? openEnd, openEnd)
+    }
+}
+
 /// Inline-level Markdown parsing functions.
 extension BlockParser {
 
@@ -70,6 +100,7 @@ extension BlockParser {
         let smartEnabled = storage.options.contains(.smart)
 
         htmlCloserMisses = HTMLCloserMisses()
+        backtickRunsSeen = BacktickRunsSeen()
         characterReferenceSources.removeAll(keepingCapacity: true)
 
         while cursor < endOffset {
@@ -1603,6 +1634,11 @@ extension BlockParser {
     private mutating func matchCodeSpan(start: Int, end: Int, content: borrowing ContentSpan) -> CodeSpanMatch? {
         let openEnd = scanBacktickRun(start: start, end: end, content: content)
         let runLength = openEnd - start
+        // Scanning the rest of the paragraph afresh for every unmatched opener makes a paragraph of distinct-length
+        // runs quadratic.
+        if backtickRunsSeen.rulesOutCloser(length: runLength, after: openEnd) {
+            return nil
+        }
 
         // Find a matching same-length backtick run after `openEnd`.
         var i = openEnd
@@ -1611,6 +1647,7 @@ extension BlockParser {
             if b == UInt8(ascii: "`") {
                 let closeEnd = scanBacktickRun(start: i, end: end, content: content)
                 let closeLength = closeEnd - i
+                backtickRunsSeen.recordRun(length: closeLength, start: i)
                 if closeLength == runLength {
                     // Return the raw content `[openEnd, i)`; the caller converts line endings to spaces before
                     // the one-space strip, which compares the converted bytes. A span crossing a line ending in
@@ -1625,6 +1662,7 @@ extension BlockParser {
             }
             i += 1
         }
+        backtickRunsSeen.recordScanToEnd(from: openEnd)
         return nil
     }
 
