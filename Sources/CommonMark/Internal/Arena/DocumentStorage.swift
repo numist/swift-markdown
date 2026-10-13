@@ -200,11 +200,9 @@ internal struct DocumentStorage: ~Copyable {
         if parent == root {
             return false
         }
-        guard let grandparent = nodes[parent].parent else {
-            preconditionFailure("only the document node has no parent, and a walk never climbs above its root")
-        }
+        precondition(nodes[parent].parent != nil, "only the document node has no parent, and a walk never climbs above its root")
         child = nodes[parent].next
-        parent = grandparent
+        parent = nodes[parent].parent!
         return true
     }
 

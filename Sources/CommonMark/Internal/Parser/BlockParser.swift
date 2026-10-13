@@ -3771,28 +3771,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return column
     }
 
-    /// `columnWidth` from one line's start, answered by advancing from the previous answer unless the offset moved
-    /// back, so a line's nondecreasing queries cost time in proportion to the line in total.
+    /// `columnWidth` from one line's start, answered by advancing from the previous answer, so a line's queries cost
+    /// time in proportion to the line in total. Queries never move back: the prefix walk and block dispatch each ask
+    /// only at or past the cursor, which never falls behind an offset already asked about.
     ///
     /// The prefix walk and block dispatch place every container marker on a line by its absolute column, and
     /// measuring each from the line start would cost a line of `n` nested markers `n` measurements of up to `n`
     /// bytes.
     private struct LineColumns {
-        private let lineStart: Int
         private var offset: Int
         private var column = 0
 
         init(lineStart: Int) {
-            self.lineStart = lineStart
             offset = lineStart
         }
 
         /// The absolute column reached after the line's bytes before `target`.
         mutating func column(at target: Int, in source: Span<UInt8>) -> Int {
-            if target < offset {
-                offset = lineStart
-                column = 0
-            }
+            precondition(target >= offset, "a line's column queries never move back")
             while offset < target {
                 column += source[offset] == UInt8(ascii: "\t") ? 4 - (column & 3) : 1
                 offset += 1
