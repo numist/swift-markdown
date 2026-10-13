@@ -15,7 +15,6 @@ import Synchronization
 /// running it on an OS release without `Synchronization.Mutex`.
 internal func onThread<R: Sendable>(
     stackSize: Int,
-    qualityOfService: QualityOfService = .default,
     _ body: @escaping @Sendable () -> R
 ) -> R? {
     guard #available(macOS 15, iOS 18, tvOS 18, watchOS 11, visionOS 2, *) else {
@@ -29,7 +28,6 @@ internal func onThread<R: Sendable>(
         done.signal()
     }
     thread.stackSize = stackSize
-    thread.qualityOfService = qualityOfService
     thread.start()
     done.wait()
     return result.withLock { $0 }

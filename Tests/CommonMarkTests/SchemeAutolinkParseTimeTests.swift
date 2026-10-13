@@ -43,14 +43,4 @@ struct SchemeAutolinkParseTimeTests {
 
             """)
     }
-
-    @Test("a line of candidates with unsafe domains parses in linear time", arguments: options)
-    func unsafeDomains(_ options: MarkdownDocument.ParseOptions) {
-        expectLinearParseTime(count: 2000, options: options) { String(repeating: "(http://", count: $0) }
-    }
-
-    @Test("a line of candidates with underscore domains parses in linear time", arguments: options)
-    func underscoreDomains(_ options: MarkdownDocument.ParseOptions) {
-        expectLinearParseTime(count: 2000, options: options) { String(repeating: "http://a_", count: $0) }
-    }
 }

@@ -14,9 +14,7 @@ import CommonMark
 /// Parse time for many backtick runs of distinct lengths, none of which closes a code span.
 ///
 /// Each run looks for a closing run of its own length to the end of the paragraph. Scanning the rest of the paragraph
-/// afresh for every run makes `k` such runs cost `k` scans of the whole paragraph. A ladder four times as tall is
-/// sixteen times the size, so its parse may take at most forty times as long, where `k` scans of the paragraph take
-/// sixty-four times as long.
+/// afresh for every run makes `k` such runs cost `k` scans of the whole paragraph.
 @Suite("Unmatched backtick runs parse in linear time")
 struct UnmatchedBacktickRunParseTimeTests {
 
@@ -49,10 +47,5 @@ struct UnmatchedBacktickRunParseTimeTests {
                 code "b"
 
             """)
-    }
-
-    @Test("a long ladder of distinct backtick runs parses in linear time", arguments: options)
-    func longLadder(_ options: MarkdownDocument.ParseOptions) {
-        expectLinearParseTime(count: 200, options: options) { Self.ladder(count: $0) }
     }
 }

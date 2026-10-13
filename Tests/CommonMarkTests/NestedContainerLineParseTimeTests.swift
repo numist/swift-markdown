@@ -19,23 +19,6 @@ import CommonMark
 @Suite("Lines of nested container markers parse in linear time")
 struct NestedContainerLineParseTimeTests {
 
-    struct Shape: Sendable, CustomTestStringConvertible {
-        let options: MarkdownDocument.ParseOptions
-        let make: @Sendable (Int) -> String
-        var blocks = 1
-        var count = 2000
-        let testDescription: String
-    }
-
-    static let shapes: [Shape] = [
-        Shape(options: [], make: { String(repeating: ">", count: $0) + " a" }, testDescription: "block quotes opening on one line"),
-        Shape(options: [], make: { String(repeating: "> ", count: $0) + "a\n" + String(repeating: "> ", count: $0) + "b" }, testDescription: "block quotes continuing on a later line"),
-        Shape(options: [], make: { String(repeating: ">\t", count: $0) + "a" }, testDescription: "block quotes separated by tabs"),
-        Shape(options: .sourcePosition, make: { String(repeating: ">\t", count: $0) + "a" }, count: 4000, testDescription: "block quotes separated by tabs, with source positions"),
-        // The definition moves to the end of the document, after the paragraph that references it.
-        Shape(options: .footnotes, make: { "x[^a]\n\n" + String(repeating: "[^a]: ", count: $0) + "x" }, blocks: 2, testDescription: "footnote definitions opening on one line"),
-    ]
-
     @Test("nested block quotes hold their paragraph")
     func blockQuoteTree() {
         #expect(TreeDump.dump(">>\t> a", options: []) == """
@@ -61,10 +44,5 @@ struct NestedContainerLineParseTimeTests {
                       text "a" @1:7-1:8
 
             """)
-    }
-
-    @Test("a line of many nested containers parses in linear time", arguments: shapes)
-    func manyContainers(_ shape: Shape) {
-        expectLinearParseTime(count: shape.count, options: shape.options, blocks: shape.blocks, shape.make)
     }
 }

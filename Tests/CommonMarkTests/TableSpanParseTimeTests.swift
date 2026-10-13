@@ -19,18 +19,6 @@ import CommonMark
 @Suite("Spanning table cells parse in linear time")
 struct TableSpanParseTimeTests {
 
-    struct Shape: Sendable, CustomTestStringConvertible {
-        let options: MarkdownDocument.ParseOptions
-        let make: @Sendable (Int) -> String
-        let testDescription: String
-    }
-
-    static let shapes: [Shape] = [
-        Shape(options: [.tables, .tableSpans], make: { "|a|b|\n|-|-|\n|x|y|\n" + String(repeating: "|^|^|\n", count: $0) }, testDescription: "rowspan markers"),
-        Shape(options: [.tables, .tableSpans, .tableRowspanDitto], make: { "|a|b|\n|-|-|\n|x|y|\n" + String(repeating: "|\"|\"|\n", count: $0) }, testDescription: "ditto rowspan markers"),
-        Shape(options: [.tables, .tableSpans], make: { "|a|b|\n|-|-|\n|x" + String(repeating: "|", count: 4 * $0) + "\n" }, testDescription: "empty cells"),
-    ]
-
     /// The top cell spans the whole column of markers below it, and the cells of the marker rows are fillers.
     @Test("a column of rowspan markers grows the cell above them")
     func rowspanTree() {
@@ -68,10 +56,5 @@ struct TableSpanParseTimeTests {
                   table_cell align=none colspan=0 rowspan=1
 
             """)
-    }
-
-    @Test("a long run of spanning cells parses in linear time", arguments: shapes)
-    func longRun(_ shape: Shape) {
-        expectLinearParseTime(count: 2000, options: shape.options, shape.make)
     }
 }

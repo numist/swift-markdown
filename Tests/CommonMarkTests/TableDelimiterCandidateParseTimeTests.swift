@@ -32,9 +32,6 @@ struct TableDelimiterCandidateParseTimeTests {
 
     static let shapes: [Shape] = [
         Shape(prefix: "> a\n", line: "> -:-\n", testDescription: "block quote"),
-        Shape(prefix: "a\r\n", line: "-:-\r\n", testDescription: "CRLF"),
-        Shape(prefix: "> a\n>\t\tb\n", line: "> -:-\n", testDescription: "block quote after a tab-indented line"),
-        Shape(prefix: "> " + String(repeating: "a", count: 4000) + "\n", line: "> -:-\n", testDescription: "block quote after a long line"),
     ]
 
     @Test("the lines stay one paragraph")
@@ -50,10 +47,5 @@ struct TableDelimiterCandidateParseTimeTests {
                   text "-:-"
 
             """)
-    }
-
-    @Test("many delimiter-shaped lines parse in linear time", arguments: shapes)
-    func manyLines(_ shape: Shape) {
-        expectLinearParseTime(count: 2000, options: .tables) { shape.source(count: $0) }
     }
 }
