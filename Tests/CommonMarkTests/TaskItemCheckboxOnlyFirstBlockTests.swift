@@ -177,6 +177,40 @@ struct TaskItemCheckboxOnlyFirstBlockTests {
     }
 
     @Test(
+        "a sublist after the checkbox belongs to the item",
+        arguments: [
+            ("- [ ] \n\n  - b\n", "loose"),
+            ("- [ ] \n  - b\n", "tight"),
+        ]
+    )
+    func sublistAfterCheckbox(_ markdown: String, _ looseness: String) {
+        #expect(TreeDump.dump(markdown, options: Self.options) == """
+            document
+              list bullet '-' \(looseness)
+                tasklist unchecked
+                  list bullet '-' tight
+                    item
+                      paragraph
+                        text "b"
+
+            """, "\(markdown.debugDescription)")
+    }
+
+    @Test("without task lists, the bracket text is the item's first paragraph")
+    func withoutTaskLists() {
+        #expect(TreeDump.dump("- [ ] \n\n\n  b\n", options: []) == """
+            document
+              list bullet '-' loose
+                item
+                  paragraph
+                    text "[ ]"
+                  paragraph
+                    text "b"
+
+            """)
+    }
+
+    @Test(
         "a following item after blank lines loosens the list",
         arguments: ["- [ ] \n\n- b\n", "- [ ] \n\n\n- b\n"]
     )
