@@ -201,6 +201,21 @@ struct ExtendedAutolinkDomainScanTests {
         #expect(surface("www.a.b.c.d.e.f.g.h.i.l_m") == text("www.a.b.c.d.e.f.g.h.i.l_m"))
     }
 
+    /// The final candidate's domain is `a`, since trailing punctuation leaves the link.
+    @Test("a url candidate after a rejected one in the same word links",
+          arguments: [.gfmAutolink, [.gfmAutolink, .inlineOnly]] as [MarkdownDocument.ParseOptions])
+    func candidateAfterRejectedCandidateIsLink(_ options: MarkdownDocument.ParseOptions) {
+        #expect(TreeDump.dump("http://a_http://a_", options: options) == """
+            document
+              paragraph
+                text "http://a_"
+                link "http://a" ""
+                  text "http://a"
+                text "_"
+
+            """)
+    }
+
     @Test func underscoreAfterMoreThanTenPeriodsIsLink() {
         #expect(surface("www.a.b.c.d.e.f.g.h.i.j.l_m") == """
             document
