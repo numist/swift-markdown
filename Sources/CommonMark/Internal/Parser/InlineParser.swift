@@ -2868,7 +2868,7 @@ extension BlockParser {
 
     /// Merge `source` into the preceding text node `dest`, giving `dest` its own start and `source`'s end, and unlink `source`.
     ///
-    /// When the two runs are pool-contiguous (the common case for adjacent text) this just widens `dest`'s `ContentRef` - no new segments. Otherwise (e.g. a smart-punctuation glyph re-interned at the pool's end sits between them) it appends copies of both runs' segments as a fresh combined run.
+    /// When the two runs are pool-contiguous (the common case for adjacent text) this just widens `dest`'s `ContentRef` - no new segments. Otherwise (e.g. a smart-punctuation glyph re-interned at the pool's end sits between them) it appends copies of both runs' segments as a fresh combined run. A destination that already ends the pool grows by copies of the source's segments alone, so merging a run of `n` siblings appends `O(n)` segments in total.
     private mutating func mergeTextNode(_ source: DocumentStorage.Index, into dest: DocumentStorage.Index) {
         guard case .literal(let destRef) = storage[dest].data,
               case .literal(let srcRef) = storage[source].data else {
@@ -2876,6 +2876,20 @@ extension BlockParser {
         }
         if destRef.first + destRef.count == srcRef.first {
             // Pool-contiguous: widen the destination's `ContentRef` in place (no new segments, no intern).
+            storage[dest].data = .literal(ContentRef(
+                first: destRef.first,
+                count: destRef.count + srcRef.count,
+                totalLength: destRef.totalLength + srcRef.totalLength
+            ))
+        } else if Int(destRef.first + destRef.count) == storage.segments.count {
+            // The destination ends the pool, typically as a run an earlier merge relocated there: append copies of
+            // only the source's segments behind it. Re-copying the destination for every out-of-order sibling makes
+            // a long run cost quadratic segments and time. Each segment is read into a local before appending, so
+            // the read access ends before the mutating append.
+            for i in 0..<Int(srcRef.count) {
+                let seg = storage.segments[Int(srcRef.first) + i]
+                storage.segments.append(seg)
+            }
             storage[dest].data = .literal(ContentRef(
                 first: destRef.first,
                 count: destRef.count + srcRef.count,
