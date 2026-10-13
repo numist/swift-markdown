@@ -127,9 +127,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Used by `addLine` to decide whether the bytes can be addressed lazily by source-range, deferring materialization until the paragraph spans multiple lines or otherwise transforms the content.
     var currentLineMapsToSource: Bool = false
 
-    /// For a tab-expanded (materialized) line, the buffer offset where `expandPrefixTabs`'s verbatim tail begins, and the corresponding original-line byte offset. Since the tail is copied byte-for-byte, every content offset in it maps back to source by the constant delta `currentLineSourceRange.lowerBound + materializedRestStart - materializedTailBufferStart`; offsets inside the expanded prefix are recovered by a column walk on the original line. Only meaningful while `!currentLineMapsToSource` (see `sourceOffset` for the positions path, and `materializedSourceOffset` / `materializedSourceStart` for the positions-independent content paths).
+    /// For a tab-expanded (materialized) line, the buffer offset where `expandPrefixTabs`'s verbatim tail begins, and the corresponding original-line byte offset. Since the tail is copied byte-for-byte, every content offset in it maps back to source by the constant delta `currentLineSourceRange.lowerBound + materializedRestStart - materializedTailBufferStart`; offsets inside the expanded prefix are recovered from `materializedPrefixColumns`. Only meaningful while `!currentLineMapsToSource` (see `sourceOffset` for the positions path, and `materializedSourceOffset` / `materializedSourceStart` for the positions-independent content paths).
     var materializedTailBufferStart: Int = 0
     var materializedRestStart: Int = 0
+
+    /// For a tab-expanded (materialized) line, the buffer offset at which the expansion of each byte of the original line's prefix (`[0, materializedRestStart)`) begins, ascending, followed by the prefix's expanded width. Filled once per materialized line, so mapping a prefix offset back to the source is a binary search rather than a walk of the prefix: a line opening many containers maps one offset per container. Only meaningful while `!currentLineMapsToSource`.
+    var materializedPrefixColumns = UniqueArray<Int>()
 
     /// `true` when `.sourcePosition` tracking is on.
     ///
@@ -262,6 +265,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     currentLineMapsToSource = false
                     materializedTailBufferStart = materialized.tailBufferStart
                     materializedRestStart = materialized.restStart
+                    recordMaterializedPrefixColumns()
                     let span = materialized.buffer.span
                     pending = processLine(source: span, lineRange: 0..<span.count, chain: &chain, pending: pending)
                 } else {
@@ -628,7 +632,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// The global original-source byte offset for a within-current-line offset.
     ///
-    /// When the line maps to source the passed offset is a global source offset (the line is processed as a slice of `sourceBytes`). For a tab-expanded (materialized) line, the offset is a transient-buffer offset: `expandPrefixTabs` only expands the leading whitespace/marker prefix and copies the rest of the line verbatim, so a tail offset maps back by a constant delta and a prefix offset is recovered by re-walking the original line's prefix (see `originalPrefixSourceOffset`). Returns `nil` for a materialized line when positions are off, since its callers only stamp positions; content that must be read back from source uses `materializedSourceOffset`, which doesn't depend on `.sourcePosition`.
+    /// When the line maps to source the passed offset is a global source offset (the line is processed as a slice of `sourceBytes`). For a tab-expanded (materialized) line, the offset is a transient-buffer offset: `expandPrefixTabs` only expands the leading whitespace/marker prefix and copies the rest of the line verbatim, so a tail offset maps back by a constant delta and a prefix offset is recovered from the prefix's column table (see `originalPrefixSourceOffset`). Returns `nil` for a materialized line when positions are off, since its callers only stamp positions; content that must be read back from source uses `materializedSourceOffset`, which doesn't depend on `.sourcePosition`.
     private func sourceOffset(_ lineOffset: Int) -> Int? {
         if currentLineMapsToSource {
             return lineOffset
@@ -646,28 +650,46 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // Verbatim tail: a single constant delta covers every content offset.
             return currentLineSourceRange.lowerBound + materializedRestStart + (bufferOffset - materializedTailBufferStart)
         }
-        // Inside the expanded prefix (e.g. an indented-code `bodyStart` landing mid-prefix, or a container marker): re-walk the original prefix to find the byte covering this buffer offset.
+        // Inside the expanded prefix (e.g. an indented-code `bodyStart` landing mid-prefix, or a container marker): find the byte covering this buffer offset.
         return originalPrefixSourceOffset(bufferOffset: bufferOffset)
     }
 
     /// Map a buffer offset lying inside a materialized line's expanded prefix back to an original-source byte offset.
     ///
-    /// Re-walks the original line's prefix (`[lineStart, lineStart + materializedRestStart)`) with the same tab-expansion rule `expandPrefixTabs` used, tracking each byte's span in the expanded buffer, and returns the source offset of the byte whose expansion covers `bufferOffset`. A tab covers its whole `4 - (col & 3)` run, so a buffer offset landing mid-tab resolves to that tab's byte. O(prefix).
+    /// Returns the source offset of the prefix byte whose expansion covers `bufferOffset` (`materializedPrefixByte`). A tab covers its whole `4 - (col & 3)` run, so a buffer offset landing mid-tab resolves to that tab's byte.
     private func originalPrefixSourceOffset(bufferOffset: Int) -> Int {
+        materializedPrefixByte(covering: bufferOffset).sourceOffset
+    }
+
+    /// Fill `materializedPrefixColumns` for the current materialized line, with the tab-expansion rule `expandPrefixTabs` uses.
+    private mutating func recordMaterializedPrefixColumns() {
+        materializedPrefixColumns.removeSubrange(0..<materializedPrefixColumns.count)
         let lineStart = currentLineSourceRange.lowerBound
-        let prefixEnd = lineStart + materializedRestStart
         var col = 0
-        var i = lineStart
-        while i < prefixEnd {
-            let width = sourceBytes[i] == UInt8(ascii: "\t") ? 4 - (col & 3) : 1
-            if bufferOffset < col + width {
-                break
-            }
-            col += width
-            i += 1
+        for i in lineStart..<(lineStart + materializedRestStart) {
+            materializedPrefixColumns.append(col)
+            col += sourceBytes[i] == UInt8(ascii: "\t") ? 4 - (col & 3) : 1
         }
-        precondition(i < prefixEnd, "a buffer offset inside the expanded prefix is covered by the prefix walk")
-        return i
+        materializedPrefixColumns.append(col)
+    }
+
+    /// The byte of the current materialized line's prefix whose expansion covers buffer offset `bufferOffset`: its source offset, and the buffer offsets its expansion starts at and ends before.
+    private func materializedPrefixByte(covering bufferOffset: Int) -> (sourceOffset: Int, column: Int, end: Int) {
+        let columns = materializedPrefixColumns.span
+        let prefixLength = columns.count - 1
+        precondition(bufferOffset >= 0 && bufferOffset < columns[prefixLength], "a buffer offset inside the expanded prefix is covered by the prefix")
+        // The last prefix byte whose expansion starts at or before `bufferOffset`.
+        var lo = 0
+        var hi = prefixLength
+        while hi - lo > 1 {
+            let mid = (lo + hi) / 2
+            if columns[mid] <= bufferOffset {
+                lo = mid
+            } else {
+                hi = mid
+            }
+        }
+        return (currentLineSourceRange.lowerBound + lo, columns[lo], columns[lo + 1])
     }
 
     /// Consume `pending` and return `node`'s accumulated content, or `nil` if `node` has none (either nothing is pending, or a *different* node's leaf is - which the single-open-leaf invariant forbids).
@@ -846,32 +868,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Map a materialized-buffer offset back to the original source for a code/HTML body line: the source byte where the literal content begins, plus the count of synthetic spaces that must precede it.
     ///
-    /// A non-zero space count arises only when `bufferStart` lands inside an expanded tab - the consumed indentation split that tab, so its remaining columns become spaces and the split tab byte itself is dropped (the source start advances past it). Re-walks the original prefix like `originalPrefixSourceOffset`; reads `sourceBytes` directly so it is independent of `positionsEnabled`.
+    /// A non-zero space count arises only when `bufferStart` lands inside an expanded tab - the consumed indentation split that tab, so its remaining columns become spaces and the split tab byte itself is dropped (the source start advances past it). Finds the prefix byte like `originalPrefixSourceOffset`, independent of `positionsEnabled`.
     private func materializedSourceStart(bufferStart: Int) -> (sourceStart: Int, splitTabSpaces: Int) {
         let lineStart = currentLineSourceRange.lowerBound
         if bufferStart >= materializedTailBufferStart {
             // In the verbatim tail: copied byte-for-byte, so it maps by a constant delta with no split tab.
             return (lineStart + materializedRestStart + (bufferStart - materializedTailBufferStart), 0)
         }
-        // In the expanded prefix: re-walk the original prefix, tracking each byte's buffer-column span.
-        let prefixEnd = lineStart + materializedRestStart
-        var col = 0
-        var width = 0
-        var i = lineStart
-        while i < prefixEnd {
-            width = sourceBytes[i] == UInt8(ascii: "\t") ? 4 - (col & 3) : 1
-            if bufferStart < col + width {
-                break
-            }
-            col += width
-            i += 1
-        }
-        precondition(i < prefixEnd, "a buffer offset inside the expanded prefix is covered by the prefix walk")
-        if bufferStart == col {
-            return (i, 0)
+        // In the expanded prefix: find the prefix byte whose expansion covers it.
+        let byte = materializedPrefixByte(covering: bufferStart)
+        if bufferStart == byte.column {
+            return (byte.sourceOffset, 0)
         }
         // A tab split by the consumed indentation: emit its remaining columns as spaces, resume after it.
-        return (i + 1, (col + width) - bufferStart)
+        return (byte.sourceOffset + 1, byte.end - bufferStart)
     }
 
     // MARK: - NUL -> U+FFFD replacement (Insecure characters)
@@ -2966,7 +2976,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     j += 1
                 }
                 if j < count, bytes[j] == UInt8(ascii: ".") || bytes[j] == UInt8(ascii: ")") {
-                    // An ordered-list marker: emit the digits and delimiter as-is. Each is one column, so advance `col` by the marker's byte width and resume the prefix scan just past the delimiter - keeping the tab-expansion column in lockstep with the position re-walks (`originalPrefixSourceOffset`, `materializedSourceStart`), which re-derive it byte-by-byte with the same one-column-per-marker-byte rule.
+                    // An ordered-list marker: emit the digits and delimiter as-is. Each is one column, so advance `col` by the marker's byte width and resume the prefix scan just past the delimiter - keeping the tab-expansion column in lockstep with `recordMaterializedPrefixColumns`, which re-derives it byte-by-byte with the same one-column-per-marker-byte rule.
                     output.append(b)
                     for m in i..<(j + 1) {
                         output.append(bytes[m])
