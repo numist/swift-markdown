@@ -11,14 +11,15 @@
 import Foundation
 import Synchronization
 
-/// Runs `body` on a new thread with a stack of `stackSize` bytes and waits for its result.
+/// Runs `body` on a new thread with a stack of `stackSize` bytes and waits for its result, or returns `nil` without
+/// running it on an OS release without `Synchronization.Mutex`.
 internal func onThread<R: Sendable>(
     stackSize: Int,
     qualityOfService: QualityOfService = .default,
     _ body: @escaping @Sendable () -> R
-) -> R {
+) -> R? {
     guard #available(macOS 15, iOS 18, tvOS 18, watchOS 11, visionOS 2, *) else {
-        preconditionFailure("thread tests need Synchronization.Mutex")
+        return nil
     }
     let result = Mutex<R?>(nil)
     let done = DispatchSemaphore(value: 0)
@@ -31,5 +32,5 @@ internal func onThread<R: Sendable>(
     thread.qualityOfService = qualityOfService
     thread.start()
     done.wait()
-    return result.withLock { $0! }
+    return result.withLock { $0 }
 }

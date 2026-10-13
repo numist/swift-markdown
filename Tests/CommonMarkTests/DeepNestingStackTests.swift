@@ -50,7 +50,7 @@ struct DeepNestingStackTests {
     ])
     func inlineNesting(_ shape: String, options: MarkdownDocument.ParseOptions) {
         let source = Self.inlineSource(shape)
-        let blocks = Self.topLevelBlocksOnSmallStack(source, options: options)
+        guard let blocks = Self.topLevelBlocksOnSmallStack(source, options: options) else { return }
         #expect(blocks == 1, "\(shape)")
     }
 
@@ -61,7 +61,7 @@ struct DeepNestingStackTests {
     ])
     func blockQuoteNesting(_ options: MarkdownDocument.ParseOptions) {
         let source = String(repeating: ">", count: Self.depth) + " x[^a]\n\n[^a]: y\n"
-        let blocks = Self.topLevelBlocksOnSmallStack(source, options: options)
+        guard let blocks = Self.topLevelBlocksOnSmallStack(source, options: options) else { return }
         #expect(blocks == 2)
     }
 
@@ -72,11 +72,12 @@ struct DeepNestingStackTests {
     ])
     func footnoteDefinitionNesting(_ options: MarkdownDocument.ParseOptions) {
         let source = "x[^a]\n\n" + String(repeating: "[^a]: ", count: Self.depth) + "y\n"
-        let blocks = Self.topLevelBlocksOnSmallStack(source, options: options)
+        guard let blocks = Self.topLevelBlocksOnSmallStack(source, options: options) else { return }
         #expect(blocks == 2)
     }
 
-    private static func topLevelBlocksOnSmallStack(_ source: String, options: MarkdownDocument.ParseOptions) -> Int {
+    /// The number of top-level blocks, or `nil` where no small-stack thread can run the parse.
+    private static func topLevelBlocksOnSmallStack(_ source: String, options: MarkdownDocument.ParseOptions) -> Int? {
         onThread(stackSize: 512 * 1024) {
             MarkdownDocument.withParsedDocument(source, options: options) { document in
                 var count = 0

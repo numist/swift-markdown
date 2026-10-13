@@ -17,9 +17,9 @@ import Foundation
 import Testing
 import CommonMark
 
-/// Expects the parse time of `make(count)` to grow in proportion to its size: parsing a source four times as large
-/// may take at most ten times as long, where a parse quadratic in the input takes sixteen times as long. Each parse
-/// must hold `blocks` top-level blocks.
+/// Expects the parse time of `make(count)` to grow in proportion to its size: parsing `make(4 * count)` may take at
+/// most two and a half times as long per byte, so a source four times as large may take at most ten times as long,
+/// where a parse quadratic in the input takes sixteen times as long. Each parse must hold `blocks` top-level blocks.
 ///
 /// The test compares two sizes rather than bounding one parse, so it holds on a machine of any speed. It measures the
 /// processor time of the parsing thread, which other work on the machine doesn't stretch, and keeps the fastest of
@@ -35,7 +35,7 @@ internal func expectLinearParseTime(
 ) {
     let small = make(count)
     let large = make(4 * count)
-    let (smallBlocks, smallSeconds, largeBlocks, largeSeconds) = onThread(stackSize: 8 * 1024 * 1024, qualityOfService: .userInteractive) {
+    let measured = onThread(stackSize: 8 * 1024 * 1024, qualityOfService: .userInteractive) {
         var smallBlocks = 0
         var largeBlocks = 0
         var smallSeconds = Double.infinity
@@ -49,6 +49,9 @@ internal func expectLinearParseTime(
             largeSeconds = min(largeSeconds, largeParse.seconds)
         }
         return (smallBlocks, smallSeconds, largeBlocks, largeSeconds)
+    }
+    guard let (smallBlocks, smallSeconds, largeBlocks, largeSeconds) = measured else {
+        return
     }
     #expect(smallBlocks == blocks, sourceLocation: sourceLocation)
     #expect(largeBlocks == blocks, sourceLocation: sourceLocation)
