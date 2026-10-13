@@ -2989,6 +2989,7 @@ extension BlockParser {
         var current = node
         var segStart = 0
         var cursor = 0
+        var carve = ContentRefCarvePosition()
         var didSplit = false
         var i = 0
         var resumeAt = 0
@@ -3014,9 +3015,9 @@ extension BlockParser {
                 continue
             }
             // `current` becomes the text run before this email.
-            let beforeRef = subContentRef(of: ref, from: segStart, to: auto.urlStart)
+            let beforeRef = subContentRef(of: ref, from: segStart, to: auto.urlStart, resumingAt: &carve)
             storage[current].data = .literal(beforeRef)
-            let emailRef = subContentRef(of: ref, from: auto.urlStart, to: auto.urlEnd)
+            let emailRef = subContentRef(of: ref, from: auto.urlStart, to: auto.urlEnd, resumingAt: &carve)
             let email = positionsEnabled ? sourceSpan(of: emailRef, image: image) : nil
             if let email {
                 let currentStart = Int(storage.sourceRanges[current].start)
@@ -3051,11 +3052,12 @@ extension BlockParser {
                 }
             }
 
-            // A fresh text node spanning the remaining tail; it becomes the running run and is trimmed to
-            // the next `between` segment on a further match, or kept as the final `after` run.
-            let tailRef = subContentRef(of: ref, from: auto.urlEnd, to: total)
+            // A fresh text node for the remaining tail; it becomes the running run, given the next `between` run
+            // on a further match or the final `after` run once the scan ends. Its content is carved only then:
+            // carving the whole remaining tail at every address would re-copy the rest of a long run's segments
+            // per address.
             let tailIdx = storage.appendNode(NodeRecord(
-                kind: .text, parent: parent, data: .literal(tailRef)))
+                kind: .text, parent: parent, data: .literal(.empty)))
             storage.insertChildAfter(tailIdx, after: linkIdx)
             if let email {
                 storage.setSourceStart(tailIdx, email.end)
@@ -3072,10 +3074,14 @@ extension BlockParser {
             i = auto.urlEnd
             didSplit = true
         }
-        // Drop the final tail run if the split left it empty. Only ever a residual this pass
-        // produced (`didSplit`), never a pre-existing `@`-free node.
-        if didSplit, case .literal(let last) = storage[current].data, last.totalLength == 0 {
-            storage.unlinkChild(current)
+        if didSplit {
+            let afterRef = subContentRef(of: ref, from: segStart, to: total, resumingAt: &carve)
+            storage[current].data = .literal(afterRef)
+            // Drop the final tail run if the split left it empty. Only ever a residual this pass produced, never a
+            // pre-existing `@`-free node.
+            if afterRef.totalLength == 0 {
+                storage.unlinkChild(current)
+            }
         }
     }
 
@@ -3108,26 +3114,42 @@ extension BlockParser {
         }
     }
 
+    /// Where the next of a left-to-right series of `subContentRef` carves of one ref starts scanning: the index (within
+    /// the ref) of a segment that begins at or before the carve's start, and that segment's logical start offset.
+    private struct ContentRefCarvePosition {
+        var segment = 0
+        var start = 0
+    }
+
     /// Carve the logical sub-range `[lo, hi)` of `ref`'s content into a fresh `ContentRef`.
     ///
     /// Zero-copy: the carved segments point into the same source / arena bytes (with `offset` shifted for
     /// a partial leading segment); only new `Segment` entries are appended.
-    private mutating func subContentRef(of ref: ContentRef, from lo: Int, to hi: Int) -> ContentRef {
+    ///
+    /// The scan starts at `position` and stops at `hi`, leaving `position` at the last segment that begins before
+    /// `hi`. Carves whose ranges never start before an earlier carve's end then visit each segment of `ref` a bounded
+    /// number of times in total, rather than once per carve.
+    private mutating func subContentRef(of ref: ContentRef, from lo: Int, to hi: Int, resumingAt position: inout ContentRefCarvePosition) -> ContentRef {
         if hi <= lo {
             return .empty
         }
+        precondition(position.start <= lo, "a carve starts at or after the segment it resumes from")
         let refFirst = Int(ref.first)
         let refCount = Int(ref.count)
         let newFirst = Int32(storage.segments.count)
         var count: Int32 = 0
         var total: Int32 = 0
-        var v = 0
-        for s in 0..<refCount {
+        var v = position.start
+        for s in position.segment..<refCount {
             // Read the source segment into a local before appending, so the read ends before the append (no
             // aliasing of the growing pool). Original segments keep their indices; appends only grow the end.
             let seg = storage.segments[refFirst + s]
             let segLen = Int(seg.length)
             let segStart = v
+            if segStart >= hi {
+                break
+            }
+            position = ContentRefCarvePosition(segment: s, start: segStart)
             v += segLen
             let pieceLo = max(lo, segStart)
             let pieceHi = min(hi, v)
