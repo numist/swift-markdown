@@ -17,8 +17,8 @@ get_property(SWIFT_MARKDOWN_EXPORTS GLOBAL PROPERTY SWIFT_MARKDOWN_EXPORTS)
 # Only emit a build-tree export when SwiftMarkdown is the top-level project.
 # When SwiftMarkdown is pulled in as a subproject (e.g. via FetchContent), the
 # consumer references its targets directly, and the exported interface would
-# otherwise drag in transitive targets (such as libcmark-gfm-extensions) that
-# are not part of this build tree's export set.
+# otherwise drag in transitive targets that are not part of this build tree's
+# export set.
 if(PROJECT_NAME STREQUAL CMAKE_PROJECT_NAME)
   export(TARGETS ${SWIFT_MARKDOWN_EXPORTS}
     NAMESPACE SwiftMarkdown::
