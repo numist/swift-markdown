@@ -193,6 +193,21 @@ internal struct DocumentStorage: ~Copyable {
         nodes[parentIndex].lastChild = childIndex
     }
 
+    /// Step a pre-order walk of `root`'s subtree out of `parent` once all its children are visited: `child` becomes `parent`'s next sibling and `parent` that sibling's parent. Returns `false`, changing nothing, when `parent` is `root`, so the walk is complete.
+    ///
+    /// Lets a tree pass follow `firstChild` / `next` / `parent` links instead of recursing, so nesting of any depth runs in constant stack.
+    internal func ascend(from parent: inout Index, resumingAt child: inout Index?, within root: Index) -> Bool {
+        if parent == root {
+            return false
+        }
+        guard let grandparent = nodes[parent].parent else {
+            preconditionFailure("only the document node has no parent, and a walk never climbs above its root")
+        }
+        child = nodes[parent].next
+        parent = grandparent
+        return true
+    }
+
     /// Detach `childIndex` from its current parent's child list.
     ///
     /// The node itself remains in `nodes` (so other indices stay stable) but is orphaned - DFS traversals will not visit it. Used when ref-def parsing consumes an entire paragraph's content.

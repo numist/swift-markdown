@@ -2848,19 +2848,30 @@ extension BlockParser {
         storage.setSourceEnd(node, content.sourceOffset(ofVirtual: end - 1) + 1)
     }
 
-    /// Merge runs of adjacent `.text` children into single nodes, recursing into containers.
+    /// Merge runs of adjacent `.text` children into single nodes, throughout `root`'s inline subtree.
     ///
     /// Smart-punctuation and entity substitutions emit their replacement as a separate text node (e.g. `"Markdown"` + `"’"` + `"s "`), which this merges into one text run. The merged node's content is the concatenation of the runs' segments and its source range runs from the first run's start to the last run's end.
-    mutating func consolidateTextNodes(_ parent: DocumentStorage.Index) {
-        var child = storage[parent].firstChild
-        while let current = child {
+    ///
+    /// Walks the subtree without recursing (`DocumentStorage.ascend`), so inline nesting of any depth runs in constant stack.
+    mutating func consolidateTextNodes(_ root: DocumentStorage.Index) {
+        var parent = root
+        var child = storage[root].firstChild
+        while true {
+            guard let current = child else {
+                guard storage.ascend(from: &parent, resumingAt: &child, within: root) else {
+                    return
+                }
+                continue
+            }
             if storage[current].kind == .text {
                 // Absorb all immediately-following text siblings into `current`.
                 while let next = storage[current].next, storage[next].kind == .text {
                     mergeTextNode(next, into: current)
                 }
             } else {
-                consolidateTextNodes(current)
+                parent = current
+                child = storage[current].firstChild
+                continue
             }
             child = storage[current].next
         }
@@ -2934,13 +2945,21 @@ extension BlockParser {
     /// resolved as emphasis, or left as literal text in the local part, before the email's boundaries are
     /// decided.
     ///
-    /// Every non-link container (emphasis, strong, image, …) is recursed into.
+    /// Every non-link container (emphasis, strong, image, …) is descended into, without recursing
+    /// (`DocumentStorage.ascend`), so inline nesting of any depth runs in constant stack.
     ///
     /// A link may not contain another link, so the pass never autolinks inside a link and skips its subtree.
     /// `image` maps the leaf's arena content back to source, when its content is a single arena chunk with a source image.
-    mutating func gfmEmailAutolinkPass(_ parent: DocumentStorage.Index, image: ContentImage?) {
-        var child = storage[parent].firstChild
-        while let current = child {
+    mutating func gfmEmailAutolinkPass(_ root: DocumentStorage.Index, image: ContentImage?) {
+        var parent = root
+        var child = storage[root].firstChild
+        while true {
+            guard let current = child else {
+                guard storage.ascend(from: &parent, resumingAt: &child, within: root) else {
+                    return
+                }
+                continue
+            }
             // Capture the next sibling BEFORE splitting: `splitEmailsInTextNode` inserts the link/after
             // nodes between `current` and this sibling (and may unlink `current`), and resuming here skips
             // over everything it produced.
@@ -2951,7 +2970,9 @@ extension BlockParser {
             case .link:
                 break
             default:
-                gfmEmailAutolinkPass(current, image: image)
+                parent = current
+                child = storage[current].firstChild
+                continue
             }
             child = next
         }
