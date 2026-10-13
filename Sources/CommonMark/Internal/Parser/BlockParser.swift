@@ -1117,7 +1117,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .materialized(let text):
             // Searched from the end: a paragraph asks once per delimiter-shaped line, and a search from the start
             // would rescan a long first line every time.
-            for k in (0..<text.count).reversed() where text[k] == UInt8(ascii: "\n") {
+            var k = text.count - 1
+            while k >= 0 && text[k] != UInt8(ascii: "\n") {
+                k -= 1
+            }
+            if k >= 0 {
                 return .multiOther
             }
             // A single-line materialized paragraph is a table-header re-seed (`splitMaterializedHeader`), which
