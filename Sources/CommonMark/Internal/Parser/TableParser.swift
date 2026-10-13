@@ -58,10 +58,10 @@ extension BlockParser {
         )
         let spansEnabled = storage.options.contains(.tableSpans)
         let dittoEnabled = storage.options.contains(.tableRowspanDitto)
-        // Every row built so far (its cell node indices and how many of them were parsed rather than padded in), so a rowspan marker can find the cell above it. Only tracked when `.tableSpans` is on - otherwise it stays empty (no allocation) and the span machinery is skipped entirely.
-        var previousRows: [SpanRow] = []
+        // Per column, the cell a rowspan marker in the next row grows: the nearest cell above that isn't itself a rowspan filler. It is kept rather than found by walking up the rows, so a long column of markers doesn't walk past every filler above each one. Only tracked when `.tableSpans` is on - otherwise it stays empty (no allocation) and the span machinery is skipped entirely.
+        var rowspanOwners: [DocumentStorage.Index?] = spansEnabled ? Array(repeating: nil, count: columnCount) : []
         // Header row.
-        let headerRow = appendRow(
+        appendRow(
             parent: node,
             line: header,
             alignments: alignments,
@@ -69,16 +69,13 @@ extension BlockParser {
             isLastLine: false,
             spansEnabled: spansEnabled,
             dittoEnabled: dittoEnabled,
-            previousRows: previousRows,
+            rowspanOwners: &rowspanOwners,
             mode: mode,
             projection: projection
         )
-        if spansEnabled {
-            previousRows.append(headerRow)
-        }
         // Body rows. Each subsequent line becomes one `.tableRow`.
         for k in 2..<lines.count {
-            let row = appendRow(
+            appendRow(
                 parent: node,
                 line: lines[k],
                 alignments: alignments,
@@ -86,13 +83,10 @@ extension BlockParser {
                 isLastLine: k == lines.count - 1,
                 spansEnabled: spansEnabled,
                 dittoEnabled: dittoEnabled,
-                previousRows: previousRows,
+                rowspanOwners: &rowspanOwners,
                 mode: mode,
                 projection: projection
             )
-            if spansEnabled {
-                previousRows.append(row)
-            }
         }
     }
 
@@ -171,8 +165,7 @@ extension BlockParser {
 
     /// Build a `.tableRow` node + its cells under `parent`. Missing trailing cells are emitted as empty; extras beyond `columnCount` are dropped.
     ///
-    /// When `spansEnabled`, each cell carries `.tableCell` span data: an empty `||` cell becomes a colspan filler (colspan 0) and grows the nearest preceding real cell's colspan (a leading filler has none, so it just carries colspan 0); a cell whose content is the lone rowspan marker (`^`, or `"` when `dittoEnabled`) becomes a rowspan filler (rowspan 0) and grows the matching cell in the nearest non-filler row above, with its marker text suppressed. Returns the row's cells (for the next row's rowspan resolution).
-    @discardableResult
+    /// When `spansEnabled`, each cell carries `.tableCell` span data: an empty `||` cell becomes a colspan filler (colspan 0) and grows the nearest preceding real cell's colspan (a leading filler has none, so it just carries colspan 0); a cell whose content is the lone rowspan marker (`^`, or `"` when `dittoEnabled`) becomes a rowspan filler (rowspan 0) and grows its column's cell in the nearest non-filler row above (`rowspanOwners`), with its marker text suppressed. Each of the row's cells that isn't a rowspan filler becomes its column's owner for the rows below.
     private mutating func appendRow(
         parent: DocumentStorage.Index,
         line: Range<Int>,
@@ -181,10 +174,10 @@ extension BlockParser {
         isLastLine: Bool,
         spansEnabled: Bool,
         dittoEnabled: Bool,
-        previousRows: [SpanRow],
+        rowspanOwners: inout [DocumentStorage.Index?],
         mode: TableSourceMode,
         projection: TableProjection?
-    ) -> SpanRow {
+    ) {
         let rowIdx = storage.appendNode(NodeRecord(
             kind: .tableRow(isHeader: isHeader),
             parent: parent,
@@ -214,7 +207,6 @@ extension BlockParser {
         var colspans: [Int] = []
         var rowspans: [Int] = []
         var skipContent: [Bool] = []
-        var cellIndices: [DocumentStorage.Index] = []
         if spansEnabled {
             // Colspan accumulates over every parsed cell, not only the first `columnCount`: an empty cell
             // beyond `columnCount` grows the nearest preceding real cell's colspan, uncapped. The emit loop
@@ -224,21 +216,20 @@ extension BlockParser {
             colspans = [Int](repeating: 1, count: max(columnCount, cells.count))
             rowspans = [Int](repeating: 1, count: columnCount)
             skipContent = [Bool](repeating: false, count: columnCount)
-            cellIndices.reserveCapacity(columnCount)
             let markerByte = dittoEnabled ? UInt8(ascii: "\"") : UInt8(ascii: "^")
+            // The nearest cell to the left that isn't a colspan filler. It is kept rather than searched for, so a long
+            // run of fillers doesn't walk back over all of them for each one.
+            var lastRealCell: Int? = nil
             for col in 0..<cells.count {
                 let raw = cells[col]
                 // Colspan filler: a zero-width cell (literally `||`), in any column, the first included. The nearest preceding real cell (if any) absorbs the span; a leading filler has none, so it just carries colspan 0.
                 if raw.isEmpty {
                     colspans[col] = 0
-                    var j = col - 1
-                    while j >= 0 {
-                        if colspans[j] > 0 {
-                            colspans[j] += 1
-                            break
-                        }
-                        j -= 1
+                    if let lastRealCell {
+                        colspans[lastRealCell] += 1
                     }
+                } else {
+                    lastRealCell = col
                 }
                 // Rowspan marker: the cell's trimmed content is exactly the marker byte. A cell beyond
                 // `columnCount` is dropped, so only emitted cells track a marker. The test reads the cell's
@@ -250,23 +241,10 @@ extension BlockParser {
                     }
                 }
             }
-            // Resolve rowspan markers against the cell directly above (body rows only - the header has no row above). Scan upward past filler rows to the cell that owns the span and grow it.
+            // Resolve rowspan markers against the cell that owns the span above them, past any filler rows (body rows only - the header has no row above), and grow it.
             if !isHeader {
                 for col in 0..<columnCount where rowspans[col] == 0 {
-                    var r = previousRows.count - 1
-                    var spanning: DocumentStorage.Index? = nil
-                    while r >= 0 {
-                        let prev = previousRows[r]
-                        precondition(col < prev.cells.count, "every row of a table holds one cell per column")
-                        let candidate = prev.cells[col]
-                        if cellRowspan(candidate) == 0 {
-                            r -= 1
-                            continue
-                        }
-                        spanning = candidate
-                        break
-                    }
-                    if let spanning {
+                    if let spanning = rowspanOwners[col] {
                         setCellRowspan(spanning, cellRowspan(spanning) + 1)
                         skipContent[col] = true
                     }
@@ -286,8 +264,8 @@ extension BlockParser {
                 data: nil
             ))
             storage.appendChild(cellIdx, to: rowIdx)
-            if spansEnabled {
-                cellIndices.append(cellIdx)
+            if spansEnabled && rowspans[col] != 0 {
+                rowspanOwners[col] = cellIdx
             }
             // A cell's source range is its untrimmed between-pipes span: a cell with content ends just past its last non-pipe byte, which is `cr.upperBound`. A cell whose content trims to empty, a zero-width `||` cell included, also covers its closing pipe, so its end is one byte further. Such a cell always has a closing pipe (`splitCells` drops a trailing empty cell, which the row then pads), so `+1` never overshoots the row.
             if let proj, col < cells.count {
@@ -338,7 +316,6 @@ extension BlockParser {
                 }
             }
         }
-        return SpanRow(cells: cellIndices)
     }
 
     // MARK: - Source projection
@@ -442,11 +419,6 @@ extension BlockParser {
     /// Stamp a node's half-open end from an arena offset, through the row projection.
     private mutating func stampEnd(_ node: DocumentStorage.Index, arena: Int, _ proj: RowProjection) {
         storage.setSourceEnd(node, proj.end(arena: arena))
-    }
-
-    /// A built row's cell node indices, kept so the rows below it can resolve their rowspan markers.
-    private struct SpanRow {
-        let cells: [DocumentStorage.Index]
     }
 
     /// Current rowspan of a `.tableCell` node.
