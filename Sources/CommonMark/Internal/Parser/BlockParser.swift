@@ -1105,7 +1105,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             precondition(!joinPending, "a deferred line join is always consumed by the next line")
             return lastNewline(in: r).map { .multiContiguous(range: r, lastNewline: $0) } ?? .single
         case .materialized(let text):
-            for k in 0..<text.count where text[k] == UInt8(ascii: "\n") {
+            // Searched from the end: a paragraph asks once per delimiter-shaped line, and a search from the start
+            // would rescan a long first line every time.
+            for k in (0..<text.count).reversed() where text[k] == UInt8(ascii: "\n") {
                 return .multiOther
             }
             // A single-line materialized paragraph is a table-header re-seed (`splitMaterializedHeader`), which
@@ -1245,11 +1247,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         switch pending.content {
         case .segments(let segs):
             // Content segments (one line each) alternate with the shared `newlineSegment`; the
-            // header is every segment after the last line-join.
+            // header is every segment after the last line-join. It is found from the end: a paragraph asks once
+            // per delimiter-shaped line, and walking every line for each makes a long paragraph quadratic.
             let nl = storage.newlineSegment
-            var lastNewlineIndex = -1
-            for i in 0..<segs.count where segs[i] == nl {
-                lastNewlineIndex = i
+            var lastNewlineIndex = segs.count - 1
+            while lastNewlineIndex >= 0 && segs[lastNewlineIndex] != nl {
+                lastNewlineIndex -= 1
             }
             precondition(lastNewlineIndex >= 0, "a paragraph's segment list holds a line join")
             for i in (lastNewlineIndex + 1)..<segs.count {
@@ -1259,10 +1262,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
             }
         case .materialized(let text):
-            // The header is the bytes after the last embedded line ending.
-            var lastNewline = -1
-            for k in 0..<text.count where text[k] == UInt8(ascii: "\n") {
-                lastNewline = k
+            // The header is the bytes after the last embedded line ending, found from the end like a segment list's.
+            var lastNewline = text.count - 1
+            while lastNewline >= 0 && text[lastNewline] != UInt8(ascii: "\n") {
+                lastNewline -= 1
             }
             precondition(lastNewline >= 0, "a multi-line materialized paragraph holds a line join")
             for k in (lastNewline + 1)..<text.count {
