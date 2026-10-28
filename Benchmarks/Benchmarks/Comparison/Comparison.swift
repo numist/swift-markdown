@@ -181,7 +181,7 @@ let benchmarks: @Sendable () -> Void = {
 
     Benchmark("Parse small markdown sample (cmark-swift)") { benchmark in
         for _ in benchmark.scaledIterations {
-            MarkdownDocument.withParsedDocument(sample) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(sample, options: .attributes) { document in blackHole(document.root.kind) }
         }
     }
 
@@ -200,7 +200,7 @@ let benchmarks: @Sendable () -> Void = {
     
     Benchmark("Parse 1 KB files (cmark-swift)") { benchmark in
         for file in files1KB {
-            MarkdownDocument.withParsedDocument(file.content) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(file.content, options: .attributes) { document in blackHole(document.root.kind) }
         }
     }
     
@@ -216,7 +216,7 @@ let benchmarks: @Sendable () -> Void = {
     
     Benchmark("Parse 100 KB files (cmark-swift)") { benchmark in
         for file in files100KB {
-            MarkdownDocument.withParsedDocument(file.content) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(file.content, options: .attributes) { document in blackHole(document.root.kind) }
         }
     }
     
@@ -232,7 +232,7 @@ let benchmarks: @Sendable () -> Void = {
     
     Benchmark("Parse 1 MB files (cmark-swift)") { benchmark in
         for file in files1MB {
-            MarkdownDocument.withParsedDocument(file.content) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(file.content, options: .attributes) { document in blackHole(document.root.kind) }
         }
     }
     
@@ -251,7 +251,7 @@ let benchmarks: @Sendable () -> Void = {
     Benchmark("Parse inline strings (cmark-swift, inline-only)") { benchmark in
         for _ in benchmark.scaledIterations {
             for file in inlineFiles {
-                MarkdownDocument.withParsedDocument(file.content, options: .inlineOnly) { document in blackHole(document.root.kind) }
+                MarkdownDocument.withParsedDocument(file.content, options: [.inlineOnly, .attributes]) { document in blackHole(document.root.kind) }
             }
         }
     }
