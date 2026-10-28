@@ -47,17 +47,9 @@ extension BlockParser {
         let alignments = delimiterAlignments!
         precondition(splitCells(line: lines[0]).cells.count == alignments.count, "a table-pending paragraph's header has the delimiter row's column count")
         let columnCount = alignments.count
-        // Materialize alignments into the per-document table-alignment array.
-        let alignmentsOffset = storage.tableAlignments.count
-        for a in alignments {
-            storage.tableAlignments.append(a)
-        }
         // Mutate the paragraph node in place.
         storage[node].kind = .table
-        storage[node].data = .table(
-            columnCount: columnCount,
-            alignmentsOffset: alignmentsOffset
-        )
+        storage[node].data = .table(columnCount: columnCount, alignmentsOffset: 0)
         // Per column, the cell a rowspan marker in the next row grows: the nearest cell above that isn't itself a rowspan filler. It is kept rather than found by walking up the rows, so a long column of markers doesn't walk past every filler above each one. Only tracked when `.tableSpans` is on - otherwise it stays empty (no allocation) and the span machinery is skipped entirely.
         var rowspanOwners: [DocumentStorage.Index?] = storage.options.contains(.tableSpans) ? Array(repeating: nil, count: columnCount) : []
         // The header row, then one `.tableRow` per body line; the delimiter line (index 1) is not a row.

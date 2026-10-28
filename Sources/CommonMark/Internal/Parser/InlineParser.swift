@@ -715,8 +715,7 @@ extension BlockParser {
 
     /// Splice a `.footnoteReference` node in place of the opener's bracket text node and any inner-content text nodes.
     ///
-    /// Only called with the `definition` the reference's label resolved to (`footnoteDefinition`). The reference's index (and the
-    /// definition's `referenceCount`) is assigned later, by the footnote post-processing pass over the
+    /// Only called with the `definition` the reference's label resolved to (`footnoteDefinition`). The reference's index is assigned later, by the footnote post-processing pass over the
     /// finalized tree, because an enclosing bracket can discard this reference; until then it
     /// carries a placeholder index of 0. The emitted reference carries the *definition's* raw label, so
     /// `[^Foo]` resolving to `[^foo]` displays `foo`.
@@ -726,7 +725,7 @@ extension BlockParser {
     ///
     /// The reference's source range is `span`, the virtual range of `content` it replaces: from its opener to just past its `]`.
     private mutating func emitFootnoteReference(openerInl: DocumentStorage.Index, definition defIdx: DocumentStorage.Index, span: Range<Int>, content: borrowing ContentSpan) {
-        guard case .footnoteDefinition(let defLabel, _) = storage[defIdx].data else {
+        guard case .footnoteDefinition(let defLabel) = storage[defIdx].data else {
             preconditionFailure("footnoteMap holds only footnote definitions")
         }
         let parentIdx = storage[openerInl].parent

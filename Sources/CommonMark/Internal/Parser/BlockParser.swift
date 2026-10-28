@@ -402,7 +402,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func numberLiveFootnoteReferences() -> [DocumentStorage.Index] {
         var referencedDefs: [DocumentStorage.Index] = []
         var indices: [DocumentStorage.Index: Int] = [:]
-        var referenceCounts: [DocumentStorage.Index: Int] = [:]
         var pending: [DocumentStorage.Index] = []
         if let first = storage[documentIndex].firstChild {
             pending.append(first)
@@ -419,18 +418,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     indices[defIdx] = index
                 }
                 storage[node].kind = .footnoteReference(index: index)
-                referenceCounts[defIdx, default: 0] += 1
             }
             if let next = storage[node].next {
                 pending.append(next)
             }
             if let child = storage[node].firstChild {
                 pending.append(child)
-            }
-        }
-        for (defIdx, count) in referenceCounts {
-            if case .footnoteDefinition(let label, _) = storage[defIdx].data {
-                storage[defIdx].data = .footnoteDefinition(label: label, referenceCount: count)
             }
         }
         return referencedDefs
@@ -2755,7 +2748,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // A label's winning definition is the first to close, so a definition nested in a
             // same-label definition (`[^b]:[^b]:A`) wins over its encloser: a container closes only
             // after all its children have.
-            if case .footnoteDefinition(let labelRef, _) = storage[node].data {
+            if case .footnoteDefinition(let labelRef) = storage[node].data {
                 let key = normalizeLabel(chunk: storage.chunk(of: labelRef))
                 if !key.isEmpty && storage.footnoteMap[key] == nil {
                     storage.footnoteMap[key] = node
@@ -4102,7 +4095,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let fnIdx = addChild(
             kind: .footnoteDefinition,
             parent: current,
-            data: .footnoteDefinition(label: labelRef, referenceCount: 0),
+            data: .footnoteDefinition(label: labelRef),
             start: sourceOffset(firstNonSpace)
         )
         storage.footnoteDefinitionOrder.append(fnIdx)

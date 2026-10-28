@@ -28,10 +28,10 @@ internal enum NodeData {
     /// Footnote reference - the original label (used for resolution and rendering). The assigned 1-based index lives on the node's `kind`.
     case footnoteReference(label: ContentRef)
 
-    /// Footnote definition - original label, count of references that resolved to this definition.
-    case footnoteDefinition(label: ContentRef, referenceCount: Int)
+    /// Footnote definition - original label.
+    case footnoteDefinition(label: ContentRef)
 
-    /// Table - column count and per-column alignment table.
+    /// Table - column count. `alignmentsOffset` is always 0: per-column alignments live on each cell's `kind`.
     case table(columnCount: Int, alignmentsOffset: Int)
 
     /// List item - `padding` is the column at which the item's content starts, relative to the line position where the parent list/item walk began - used by the per-line container walk to strip leading indentation on continuation lines. A task list item's checked state lives on the node's `kind`.

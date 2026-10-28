@@ -53,7 +53,7 @@ extension MarkdownNode {
                 return .attribute(_view.utf8Span(of: ref))
             case .footnoteReference(let label):
                 return .footnote(label: _view.utf8Span(of: label))
-            case .footnoteDefinition(let label, _):
+            case .footnoteDefinition(let label):
                 return .footnote(label: _view.utf8Span(of: label))
             default:
                 return .none
@@ -102,7 +102,7 @@ extension MarkdownNode {
                 return .attribute(_view.string(of: ref))
             case .footnoteReference(let label):
                 return .footnote(label: _view.string(of: label))
-            case .footnoteDefinition(let label, _):
+            case .footnoteDefinition(let label):
                 return .footnote(label: _view.string(of: label))
             default:
                 return .none

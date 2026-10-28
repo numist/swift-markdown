@@ -17,7 +17,6 @@ internal struct StorageView: ~Escapable, Copyable {
     internal let nodes: Span<NodeRecord>
     internal let strings: Span<UInt8>
     internal let segments: Span<Segment>
-    internal let tableAlignments: Span<MarkdownNode.TableAlignment>
     internal let lineStarts: Span<Int>
     internal let sourceRanges: Span<DocumentStorage.SourceByteRange>
     internal let source: Span<UInt8>
@@ -28,7 +27,6 @@ internal struct StorageView: ~Escapable, Copyable {
         self.nodes = storage.nodes.span
         self.strings = storage.strings.span
         self.segments = storage.segments.span
-        self.tableAlignments = storage.tableAlignments.span
         self.lineStarts = storage.lineStarts.span
         self.sourceRanges = storage.sourceRanges.span
         self.source = source

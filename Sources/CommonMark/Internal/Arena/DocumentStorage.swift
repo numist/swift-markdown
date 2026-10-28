@@ -31,11 +31,6 @@ internal struct DocumentStorage: ~Copyable {
     /// Append-only pool of content segments. A node's content (`NodeData`) is a `ContentRef` slice `[first, first + count)` of this pool. Single-segment refs (the common case) append exactly one entry here.
     internal var segments: UniqueArray<Segment> = UniqueArray(minimumCapacity: 16)
 
-    /// Per-table-node alignment storage.
-    ///
-    /// `NodeData.table` stores an offset into this array plus a column count.
-    internal var tableAlignments: UniqueArray<MarkdownNode.TableAlignment> = UniqueArray()
-
     /// Link reference definitions discovered while finalizing paragraphs.
     ///
     /// Keys are labels normalized by `normalizeLabel` (spec "Links"). The first definition of a label wins.
