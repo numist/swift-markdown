@@ -1217,77 +1217,32 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         currentLineIsLazyContinuation = !allMatched
 
+        // PHASE 2a: Code-block / HTML-block continuation.
         let openKind = storage[current].kind
-
-        // PHASE 2a: Code-block / HTML-block continuation - only when the prefix walk reached the leaf. If the walk failed before that, the block must close.
-        if openKind.isCodeBlock && allMatched {
-            let result = handleCodeBlockContinuation(
-                source: source,
-                lineRange: lineRange,
-                cursor: cursor,
-                prefixColumns: prefixColumns,
-                pending: pending
-            )
-            let stillOpen = result.stillOpen
-            pending = result.pending
-            if stillOpen {
+        if openKind.isCodeBlock || openKind == .htmlBlock {
+            let leaf = continueOrCloseLeafBlock(source: source, lineRange: lineRange, cursor: cursor, prefixColumns: prefixColumns, allMatched: allMatched, pending: pending)
+            let leafStillOpen = leaf.stillOpen
+            pending = leaf.pending
+            if leafStillOpen {
                 return pending
             }
-            // Fenced or indented code block ended on this line; fall through to dispatch the line content as a fresh block.
-        } else if openKind.isCodeBlock && !allMatched {
-            // Walk failed before reaching the code block - close it and any stale containers, then dispatch the line normally.
-            pending = finalize(node: current, pending: pending)
-        } else if openKind == .htmlBlock && allMatched {
-            let result = handleHTMLBlockContinuation(
-                source: source,
-                lineRange: lineRange,
-                cursor: cursor,
-                pending: pending
-            )
-            let stillOpen = result.stillOpen
-            pending = result.pending
-            if stillOpen {
-                return pending
-            }
-            // This line closed the HTML block.
-        } else if openKind == .htmlBlock && !allMatched {
-            pending = finalize(node: current, pending: pending)
         }
 
         let scan = leadingScan(source: source, range: cursor..<lineRange.upperBound)
-        let firstNonSpace = scan.firstNonSpace
-        let isBlank = scan.isBlank
-        let indent = scan.indentColumns
+        var line = LineContext(
+            lineRange: lineRange,
+            deepestMatched: deepestMatched,
+            cursor: cursor,
+            allMatched: allMatched,
+            firstNonSpace: scan.firstNonSpace,
+            firstNonSpaceByte: scan.firstNonSpaceByte,
+            indent: scan.indentColumns,
+            openKind: storage[current].kind
+        )
 
         // PHASE 2b: Blank line.
-        if isBlank {
-            let nowOpen = storage[current].kind
-            if nowOpen.canAccumulateText {
-                pending = finalize(node: current, pending: pending)
-            }
-            // Close any container in the chain that failed to continue.
-            if !allMatched {
-                while current != deepestMatched {
-                    pending = finalize(node: current, pending: pending)
-                }
-            }
-            // For list tightness (Lists), the blank line belongs to the deepest container that matched it, and it follows that container's last block, if any. Neither its ancestors nor a block quote, whose lines all begin with `>`, end with it.
-            let container = deepestMatched
-            if itemsEndingInRemovedParagraph[container] != nil {
-                itemsEndingInRemovedParagraph[container] = true
-            } else if let lastChild = storage[container].lastChild {
-                storage.nodes[lastChild].lastLineBlank = true
-            }
-            storage.nodes[container].lastLineBlank = switch storage[container].kind {
-            case .blockQuote: false
-            default: true
-            }
-            var up = storage[container].parent
-            while let up_ = up {
-                storage.nodes[up_].lastLineBlank = false
-                up = storage[up_].parent
-            }
-            return pending
+        if scan.isBlank {
+            return handleBlankLine(deepestMatched: deepestMatched, allMatched: allMatched, pending: pending)
         }
         // Non-blank line - the containers that matched it, and their ancestors, no longer end with a blank line. A container that failed to match keeps its flag, since this line closes it.
         var clearUp: DocumentStorage.Index? = deepestMatched
@@ -1296,138 +1251,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             clearUp = storage[clearUp_].parent
         }
 
-        var stillOpenKind = storage[current].kind
-
-        // PHASE 2c: Setext heading underline transforms an open paragraph that's a direct descendant of the deepest matched container. Special case: when we're inside a list item AND the line is a dashes-style underline that ALSO matches a thematic break, the thematic break wins (it closes the list rather than turning the item's paragraph into a heading). See spec examples 64, 69, 27, 30.
-        //
-        // A table-pending paragraph (its first two lines form a header and delimiter row) is a table from its
-        // delimiter row on, so a `-` or `=` line can't underline it as a setext heading (`r\n|-\n-` → table +
-        // list; `r\n|-\n=` → table with a `=` body row). The line falls through to PHASE 2d.
-        if stillOpenKind == .paragraph && allMatched && !(paragraphTablePending[current] ?? false),
-           let level = matchSetextUnderline(source: source, range: cursor..<lineRange.upperBound, firstNonSpace: firstNonSpace) {
-            // Strip any leading reference-link definitions from the paragraph's accumulated content first. If they consume the entire paragraph, the setext heading never forms - the underline line falls through to dispatch as plain text (per spec examples 184 / 185).
-            let para = current
-            let materialized = materializePendingContent(para, pending: pending)
-            let raw = materialized.chunk
-            // Content-relative arena→source run map for the flattened segments (empty unless the paragraph body is non-contiguous `.segments`, i.e. inside a block quote or list). Captured before `pending` is moved out.
-            let flatMap = materialized.map
-            pending = materialized.pending
-            let trimmedHead = raw.trimmingWhitespace(using: self)
-            let stripped = parseDefinitions(in: trimmedHead)
-            if self.isBlank(chunk: stripped) {
-                // A paragraph of only definitions forms no heading (spec "Setext headings": the
-                // underline must follow lines that are a paragraph once definitions are removed), but it
-                // is open while this line is examined. A line that cannot interrupt a paragraph -
-                // a lone `-`, which would be an empty list item (spec "List items"), or a run of `=` or
-                // `-` that is no thematic break - continues it, and becomes the paragraph's text when the
-                // definitions are removed at finalize. A thematic break interrupts it.
-                let continuesParagraph = !lineStartsNewBlock(
-                    source: source,
-                    range: cursor..<lineRange.upperBound,
-                    firstNonSpace: firstNonSpace,
-                    indent: indent,
-                    currentKind: .paragraph,
-                    interruptsParagraph: true,
-                    lineStart: lineRange.lowerBound
-                )
-                if continuesParagraph {
-                    // These leading definitions are registered already; restoring them below lets the
-                    // paragraph's finalize, or the split of a table that forms first, remove them again.
-                    pending = raw.inSource
-                        ? PendingLeaf(node: para, content: .lazy(range: raw.range))
-                        : reseedSegments(raw, map: flatMap, for: para)
-                    pending = appendNewline(to: para, pending: pending)
-                    pending = addLine(span: source, range: firstNonSpace..<lineRange.upperBound, to: para, pending: pending)
-                    return pending
-                }
-                // Empty after link reference definition extraction - drop the paragraph and let the underline line dispatch as a fresh block. Refresh `stillOpenKind` so PHASE 2d doesn't try to continue the detached paragraph.
-                removeEmptiedParagraph(para)
-                guard let parent = storage[para].parent else {
-                    fatalError("Invalid internal state - missing parent")
-                }
-                current = parent
-                stillOpenKind = storage[current].kind
-            } else {
-                // Re-seed pending content with the stripped bytes so the heading's inline-parse pass sees only what's left after link reference definitions are extracted. Keep source-backed content zero-copy as a `.lazy` source range (its offset/length are source offsets when `inSource`), so the heading's inlines are source-mapped and get positions exactly as paragraph / ATX-heading content does; arena-backed content (non-contiguous lines) is re-seeded as source segments, also without a copy.
-                if stripped.inSource {
-                    pending = PendingLeaf(node: para, content: .lazy(range: stripped.range))
-                } else {
-                    // Arena-backed (non-contiguous) content: re-seed as the segments the narrowed run map images, so the heading's text/emphasis keep their source positions.
-                    pending = reseedSegments(stripped, map: sliceRuns(flatMap, from: stripped.offset - raw.offset, length: stripped.length), for: para)
-                }
-                let headingContent = stripped.trimmingWhitespace(using: self)
-                if positionsEnabled, !headingContent.isEmpty,
-                   let start = sourceStart(of: headingContent, in: raw, map: flatMap) {
-                    storage.setSourceStart(para, start)
-                }
-                storage[para].kind = .heading(level: Int(level))
-                // The heading stays open as `current` with its content pending so the per-line close path
-                // finalizes it and stamps its end, as for any other block. No line can continue a heading,
-                // so its content ends at the underline.
-                return pending
-            }
+        // PHASE 2c: Setext heading underline.
+        if underlineParagraph(source: source, line: &line, pending: &pending) {
+            return pending
         }
 
-        // PHASE 2d: When a paragraph is open, decide whether this line starts a new block (which closes the paragraph) or is absorbed as lazy/matched continuation. This is the ONLY case where the interrupt decision matters, so the matcher ladder is run only here - every other line goes straight to dispatch, which does its own (single) classification.
-        //
-        // A table-pending paragraph (its first two lines form a table's header and delimiter rows) is a
-        // table from its delimiter row on, so a line that can't be a table row closes the table and its
-        // enclosing container. Three kinds of line can't be a row:
-        //   - a lazy continuation line, since laziness continues only a paragraph;
-        //   - a line holding only a `|`, optionally padded with whitespace, which has no cells (finalize
-        //     would otherwise autocomplete it into a one-empty-cell body row);
-        //   - a line indented four or more columns, which starts an indented code block: an indented code
-        //     block cannot interrupt a paragraph (Indented code blocks), but a table is not a paragraph.
-        // These skip the absorb path and fall through to PHASE 3, which closes the paragraph (finalizing it
-        // into the table) and the container, then dispatches this line anew.
-        let tablePending = paragraphTablePending[current] ?? false
-        let breaksOutOfPendingTable = tablePending
-            && (currentLineIsLazyContinuation
-                || indent >= 4
-                || Self.isLonePipeRow(span: source, range: firstNonSpace..<lineRange.upperBound))
-        if stillOpenKind == .paragraph && !breaksOutOfPendingTable {
-            // The matcher ladder can only return true if the first content byte is one that some block construct starts with; for ordinary prose continuation lines it isn't, so we skip the whole ladder. `mightStartBlock` is a superset of every matcher's trigger byte, so a `false` here is exactly what `lineStartsNewBlock` would have returned.
-            // `interruptsParagraph` is true iff the open paragraph's own container matched this line, i.e. `deepestMatched` is the paragraph's parent. When a shallower container matched, a list marker starts a sibling item at the list level rather than interrupting this paragraph.
-            // A table-pending paragraph is a table, so the restrictions on interrupting a paragraph (List items, Lists) don't apply: an empty bullet item or an ordered marker with start ≠ 1 closes the table and opens a list (`r\n|-\n-` → table + list). A line that starts no block (e.g. `=`) stays a table body row.
-            let interruptsParagraph = !(paragraphTablePending[current] ?? false)
-                && storage[current].parent == deepestMatched
-            let canInterrupt = Self.mightStartBlock(scan.firstNonSpaceByte)
-                && lineStartsNewBlock(
-                    source: source,
-                    range: cursor..<lineRange.upperBound,
-                    firstNonSpace: firstNonSpace,
-                    indent: indent,
-                    currentKind: stillOpenKind,
-                    interruptsParagraph: interruptsParagraph,
-                    lineStart: lineRange.lowerBound
-                )
-            if !canInterrupt {
-                // Continue paragraph (matched or lazy). Don't close stale containers - the paragraph absorbs without breaking the chain.
-                if storage.options.contains(.tables) {
-                    // The first continuation line is the paragraph's second line, its table delimiter-row
-                    // candidate. Finalize-time table detection can't see its stripped indentation or its
-                    // laziness, so record both (`leadingScan` measured the indent against the container
-                    // prefix) for `runParagraphMatchers`.
-                    if paragraphSecondLineIndent[current] == nil {
-                        paragraphSecondLineIndent[current] = indent
-                        paragraphSecondLineLazy[current] = currentLineIsLazyContinuation
-                    }
-                    // Detect whether this line opens a table with the paragraph's last accumulated line as the
-                    // header row. The first delimiter-shaped, non-indented, non-lazy continuation line that
-                    // settles the question sets `paragraphTablePending` so it isn't re-evaluated; a candidate
-                    // that isn't a delimiter row leaves the flag unset so a later line can open a table.
-                    // When earlier lines precede the header, the split happens here. `couldBeDelimiterRow`
-                    // keeps ordinary prose paragraphs from materializing.
-                    if paragraphTablePending[current] == nil,
-                       indent < 4, !currentLineIsLazyContinuation,
-                       Self.couldBeDelimiterRow(span: source, range: firstNonSpace..<lineRange.upperBound) {
-                        pending = detectPendingTable(current, delimSpan: source, delimRange: firstNonSpace..<lineRange.upperBound, delimIndent: indent, pending: pending)
-                    }
-                }
-                pending = appendNewline(to: current, pending: pending)
-                pending = addLine(span: source, range: firstNonSpace..<lineRange.upperBound, to: current, pending: pending)
-                return pending
-            }
+        // PHASE 2d: Paragraph continuation.
+        if absorbParagraphLine(source: source, line: line, pending: &pending) {
+            return pending
         }
 
         // PHASE 3: Close stale containers down to deepestMatched.
@@ -1443,6 +1274,238 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             startColumn: prefixColumns,
             pending: pending
         )
+    }
+
+    /// What `processLine` knows about a line once its container prefixes are stripped and its leading whitespace scanned.
+    private struct LineContext {
+        var lineRange: Range<Int>
+        /// The deepest open container whose continuation matched the line.
+        var deepestMatched: DocumentStorage.Index
+        /// The byte offset into the line after the stripped container prefixes.
+        var cursor: Int
+        /// Whether every open container matched the line.
+        var allMatched: Bool
+        var firstNonSpace: Int
+        var firstNonSpaceByte: UInt8
+        /// The indentation, in columns, measured from the container prefix.
+        var indent: Int
+        /// The kind of the open block, `current`.
+        var openKind: MarkdownNode.Kind
+    }
+
+    /// An open code block or HTML block takes the line as its content when the prefix walk reached it, unless the line ends the block; then `stillOpen` is `false` and the line dispatches as a fresh block. When the walk failed before the block, the block closes.
+    private mutating func continueOrCloseLeafBlock(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, prefixColumns: Int, allMatched: Bool, pending: consuming PendingLeaf?) -> LeafContinuation {
+        var pending = pending
+        let openKind = storage[current].kind
+        if openKind.isCodeBlock && allMatched {
+            return handleCodeBlockContinuation(
+                source: source,
+                lineRange: lineRange,
+                cursor: cursor,
+                prefixColumns: prefixColumns,
+                pending: pending
+            )
+        } else if openKind == .htmlBlock && allMatched {
+            return handleHTMLBlockContinuation(
+                source: source,
+                lineRange: lineRange,
+                cursor: cursor,
+                pending: pending
+            )
+        } else if openKind.isCodeBlock || openKind == .htmlBlock {
+            pending = finalize(node: current, pending: pending)
+        }
+        return LeafContinuation(stillOpen: false, pending: pending)
+    }
+
+    /// A blank line closes the open leaf and any container that failed to continue, and records the line for list tightness (Lists).
+    private mutating func handleBlankLine(deepestMatched: DocumentStorage.Index, allMatched: Bool, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        var pending = pending
+        let nowOpen = storage[current].kind
+        if nowOpen.canAccumulateText {
+            pending = finalize(node: current, pending: pending)
+        }
+        // Close any container in the chain that failed to continue.
+        if !allMatched {
+            while current != deepestMatched {
+                pending = finalize(node: current, pending: pending)
+            }
+        }
+        // For list tightness (Lists), the blank line belongs to the deepest container that matched it, and it follows that container's last block, if any. Neither its ancestors nor a block quote, whose lines all begin with `>`, end with it.
+        let container = deepestMatched
+        if itemsEndingInRemovedParagraph[container] != nil {
+            itemsEndingInRemovedParagraph[container] = true
+        } else if let lastChild = storage[container].lastChild {
+            storage.nodes[lastChild].lastLineBlank = true
+        }
+        storage.nodes[container].lastLineBlank = switch storage[container].kind {
+        case .blockQuote: false
+        default: true
+        }
+        var up = storage[container].parent
+        while let up_ = up {
+            storage.nodes[up_].lastLineBlank = false
+            up = storage[up_].parent
+        }
+        return pending
+    }
+
+    /// Setext heading underline transforms an open paragraph that's a direct descendant of the deepest matched container. Special case: when we're inside a list item AND the line is a dashes-style underline that ALSO matches a thematic break, the thematic break wins (it closes the list rather than turning the item's paragraph into a heading). See spec examples 64, 69, 27, 30.
+    ///
+    /// A table-pending paragraph (its first two lines form a header and delimiter row) is a table from its
+    /// delimiter row on, so a `-` or `=` line can't underline it as a setext heading (`r\n|-\n-` → table +
+    /// list; `r\n|-\n=` → table with a `=` body row). The line falls through to the paragraph continuation.
+    ///
+    /// The line is done when the underline forms a heading, or when it continues a paragraph that holds only definitions.
+    private mutating func underlineParagraph(source: Span<UInt8>, line: inout LineContext, pending: inout PendingLeaf?) -> Bool {
+        let lineRange = line.lineRange
+        guard line.openKind == .paragraph && line.allMatched && !(paragraphTablePending[current] ?? false),
+              let level = matchSetextUnderline(source: source, range: line.cursor..<lineRange.upperBound, firstNonSpace: line.firstNonSpace) else {
+            return false
+        }
+        // Strip any leading reference-link definitions from the paragraph's accumulated content first. If they consume the entire paragraph, the setext heading never forms - the underline line falls through to dispatch as plain text (per spec examples 184 / 185).
+        let para = current
+        let materialized = materializePendingContent(para, pending: consume pending)
+        let raw = materialized.chunk
+        // Content-relative arena→source run map for the flattened segments (empty unless the paragraph body is non-contiguous `.segments`, i.e. inside a block quote or list). Captured before `pending` is moved out.
+        let flatMap = materialized.map
+        pending = materialized.pending
+        let trimmedHead = raw.trimmingWhitespace(using: self)
+        let stripped = parseDefinitions(in: trimmedHead)
+        if !self.isBlank(chunk: stripped) {
+            pending = makeHeading(para, level: level, raw: raw, stripped: stripped, flatMap: flatMap)
+            return true
+        }
+        // A paragraph of only definitions forms no heading (spec "Setext headings": the
+        // underline must follow lines that are a paragraph once definitions are removed), but it
+        // is open while this line is examined. A line that cannot interrupt a paragraph -
+        // a lone `-`, which would be an empty list item (spec "List items"), or a run of `=` or
+        // `-` that is no thematic break - continues it, and becomes the paragraph's text when the
+        // definitions are removed at finalize. A thematic break interrupts it.
+        let continuesParagraph = !lineStartsNewBlock(
+            source: source,
+            range: line.cursor..<lineRange.upperBound,
+            firstNonSpace: line.firstNonSpace,
+            indent: line.indent,
+            currentKind: .paragraph,
+            interruptsParagraph: true,
+            lineStart: lineRange.lowerBound
+        )
+        if continuesParagraph {
+            // These leading definitions are registered already; restoring them below lets the
+            // paragraph's finalize, or the split of a table that forms first, remove them again.
+            pending = raw.inSource
+                ? PendingLeaf(node: para, content: .lazy(range: raw.range))
+                : reseedSegments(raw, map: flatMap, for: para)
+            pending = appendNewline(to: para, pending: consume pending)
+            pending = addLine(span: source, range: line.firstNonSpace..<lineRange.upperBound, to: para, pending: consume pending)
+            return true
+        }
+        // Empty after link reference definition extraction - drop the paragraph and let the underline line dispatch as a fresh block.
+        removeEmptiedParagraph(para)
+        guard let parent = storage[para].parent else {
+            fatalError("Invalid internal state - missing parent")
+        }
+        current = parent
+        line.openKind = storage[current].kind
+        return false
+    }
+
+    /// Turn the open paragraph `para` into a heading of `level` whose content is `stripped`, `raw` less its leading definitions, and return the leaf holding that content. `flatMap` is `raw`'s arena→source run map.
+    private mutating func makeHeading(_ para: DocumentStorage.Index, level: UInt8, raw: Chunk, stripped: Chunk, flatMap: [ArenaRun]) -> PendingLeaf {
+        // Re-seed pending content with the stripped bytes so the heading's inline-parse pass sees only what's left after link reference definitions are extracted. Keep source-backed content zero-copy as a `.lazy` source range (its offset/length are source offsets when `inSource`), so the heading's inlines are source-mapped and get positions exactly as paragraph / ATX-heading content does; arena-backed content (non-contiguous lines) is re-seeded as source segments, also without a copy.
+        let pending: PendingLeaf
+        if stripped.inSource {
+            pending = PendingLeaf(node: para, content: .lazy(range: stripped.range))
+        } else {
+            // Arena-backed (non-contiguous) content: re-seed as the segments the narrowed run map images, so the heading's text/emphasis keep their source positions.
+            pending = reseedSegments(stripped, map: sliceRuns(flatMap, from: stripped.offset - raw.offset, length: stripped.length), for: para)
+        }
+        let headingContent = stripped.trimmingWhitespace(using: self)
+        if positionsEnabled, !headingContent.isEmpty,
+           let start = sourceStart(of: headingContent, in: raw, map: flatMap) {
+            storage.setSourceStart(para, start)
+        }
+        storage[para].kind = .heading(level: Int(level))
+        // The heading stays open as `current` with its content pending so the per-line close path
+        // finalizes it and stamps its end, as for any other block. No line can continue a heading,
+        // so its content ends at the underline.
+        return pending
+    }
+
+    /// When a paragraph is open, decide whether this line starts a new block (which closes the paragraph) or is absorbed as lazy/matched continuation. This is the ONLY case where the interrupt decision matters, so the matcher ladder is run only here - every other line goes straight to dispatch, which does its own (single) classification.
+    ///
+    /// A table-pending paragraph (its first two lines form a table's header and delimiter rows) is a
+    /// table from its delimiter row on, so a line that can't be a table row closes the table and its
+    /// enclosing container. Three kinds of line can't be a row:
+    ///   - a lazy continuation line, since laziness continues only a paragraph;
+    ///   - a line holding only a `|`, optionally padded with whitespace, which has no cells (finalize
+    ///     would otherwise autocomplete it into a one-empty-cell body row);
+    ///   - a line indented four or more columns, which starts an indented code block: an indented code
+    ///     block cannot interrupt a paragraph (Indented code blocks), but a table is not a paragraph.
+    /// These skip the absorb path, so the line is not done: the caller closes the paragraph (finalizing it into the table) and the container, then dispatches this line anew.
+    private mutating func absorbParagraphLine(source: Span<UInt8>, line: LineContext, pending: inout PendingLeaf?) -> Bool {
+        let lineRange = line.lineRange
+        let tablePending = paragraphTablePending[current] ?? false
+        let breaksOutOfPendingTable = tablePending
+            && (currentLineIsLazyContinuation
+                || line.indent >= 4
+                || Self.isLonePipeRow(span: source, range: line.firstNonSpace..<lineRange.upperBound))
+        if line.openKind != .paragraph || breaksOutOfPendingTable {
+            return false
+        }
+        // The matcher ladder can only return true if the first content byte is one that some block construct starts with; for ordinary prose continuation lines it isn't, so we skip the whole ladder. `mightStartBlock` is a superset of every matcher's trigger byte, so a `false` here is exactly what `lineStartsNewBlock` would have returned.
+        // `interruptsParagraph` is true iff the open paragraph's own container matched this line, i.e. `deepestMatched` is the paragraph's parent. When a shallower container matched, a list marker starts a sibling item at the list level rather than interrupting this paragraph.
+        // A table-pending paragraph is a table, so the restrictions on interrupting a paragraph (List items, Lists) don't apply: an empty bullet item or an ordered marker with start ≠ 1 closes the table and opens a list (`r\n|-\n-` → table + list). A line that starts no block (e.g. `=`) stays a table body row.
+        let interruptsParagraph = !(paragraphTablePending[current] ?? false)
+            && storage[current].parent == line.deepestMatched
+        let canInterrupt = Self.mightStartBlock(line.firstNonSpaceByte)
+            && lineStartsNewBlock(
+                source: source,
+                range: line.cursor..<lineRange.upperBound,
+                firstNonSpace: line.firstNonSpace,
+                indent: line.indent,
+                currentKind: line.openKind,
+                interruptsParagraph: interruptsParagraph,
+                lineStart: lineRange.lowerBound
+            )
+        if canInterrupt {
+            return false
+        }
+        // Continue paragraph (matched or lazy). Don't close stale containers - the paragraph absorbs without breaking the chain.
+        if storage.options.contains(.tables) {
+            recordTableDelimiterCandidate(source: source, line: line, pending: &pending)
+        }
+        pending = appendNewline(to: current, pending: consume pending)
+        pending = addLine(span: source, range: line.firstNonSpace..<lineRange.upperBound, to: current, pending: consume pending)
+        return true
+    }
+
+    /// Note that a continuation line of the open paragraph may open a table with the paragraph's last accumulated line as the header row.
+    ///
+    /// Inlined because this runs on every continuation line of a paragraph: as a call, its cost shows as extra retired instructions on prose-heavy input.
+    @inline(__always)
+    private mutating func recordTableDelimiterCandidate(source: Span<UInt8>, line: LineContext, pending: inout PendingLeaf?) {
+        let delimRange = line.firstNonSpace..<line.lineRange.upperBound
+        // The first continuation line is the paragraph's second line, its table delimiter-row
+        // candidate. Finalize-time table detection can't see its stripped indentation or its
+        // laziness, so record both (`leadingScan` measured the indent against the container
+        // prefix) for `runParagraphMatchers`.
+        if paragraphSecondLineIndent[current] == nil {
+            paragraphSecondLineIndent[current] = line.indent
+            paragraphSecondLineLazy[current] = currentLineIsLazyContinuation
+        }
+        // Detect whether this line opens a table with the paragraph's last accumulated line as the
+        // header row. The first delimiter-shaped, non-indented, non-lazy continuation line that
+        // settles the question sets `paragraphTablePending` so it isn't re-evaluated; a candidate
+        // that isn't a delimiter row leaves the flag unset so a later line can open a table.
+        // When earlier lines precede the header, the split happens here. `couldBeDelimiterRow`
+        // keeps ordinary prose paragraphs from materializing.
+        if paragraphTablePending[current] == nil,
+           line.indent < 4, !currentLineIsLazyContinuation,
+           Self.couldBeDelimiterRow(span: source, range: delimRange) {
+            pending = detectPendingTable(current, delimSpan: source, delimRange: delimRange, delimIndent: line.indent, pending: consume pending)
+        }
     }
 
     /// Walk the open-container chain top-down, stripping each container's continuation prefix.
@@ -1863,9 +1926,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 baseColumn: column
             ) {
                 // A list contains only list items, so an enclosing list closes first - e.g. a `>` line after list items ends the list and starts a top-level block quote.
-                if storage[current].kind.isList {
-                    pending = finalize(node: current, pending: pending)
-                }
+                pending = closingOpenList(pending)
                 let quoteIdx = addChild(
                     kind: .blockQuote,
                     parent: current,
@@ -1892,16 +1953,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // A line indented four or more columns is indented code, not a break. A raw prefix tab reaches here unexpanded only on a fenced code body line; see the fenced-code branch below.
             if indent < 4, let breakEnd = matchThematicBreak(source: source, range: cursor..<lineRange.upperBound, firstNonSpace: firstNonSpace) {
                 // A list contains only list items, so an enclosing list closes first.
-                if storage[current].kind.isList {
-                    pending = finalize(node: current, pending: pending)
-                }
-                let breakIdx = addChild(
-                    kind: .thematicBreak,
-                    parent: current,
-                    start: sourceOffset(firstNonSpace)
-                )
-                current = breakIdx
-                return finalize(node: breakIdx, pending: pending, lineContentEnd: breakEnd)
+                pending = closingOpenList(pending)
+                return openThematicBreak(firstNonSpace: firstNonSpace, end: breakEnd, pending: pending)
             }
 
             // Footnote definition (after thematic break, before list marker). Opens a block container
@@ -1915,9 +1968,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                    firstNonSpace: firstNonSpace
                ) {
                 // A list contains only list items, so an enclosing list closes first.
-                if storage[current].kind.isList {
-                    pending = finalize(node: current, pending: pending)
-                }
+                pending = closingOpenList(pending)
                 let fnIdx = openFootnoteDefinition(label: fn.label, firstNonSpace: firstNonSpace)
                 current = fnIdx
                 cursor = fn.consumedTo
@@ -1948,9 +1999,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
 
             // From this point on the line isn't a list item, and a list contains only list items, so any open list at `current` closes before the new block attaches.
-            if storage[current].kind.isList {
-                pending = finalize(node: current, pending: pending)
-            }
+            pending = closingOpenList(pending)
 
             // ATX heading. A line indented four or more columns is indented code, not a heading; see the fenced-code branch below for how a raw prefix tab reaches an opener unexpanded.
             if indent < 4, let heading = matchATXHeading(
@@ -1958,16 +2007,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace
             ) {
-                let headingIdx = addChild(
-                    kind: .heading(level: Int(heading.level)),
-                    parent: current,
-                    start: sourceOffset(firstNonSpace)
-                )
-                current = headingIdx
-                if !heading.contentRange.isEmpty {
-                    pending = addLine(span: source, range: heading.contentRange, to: headingIdx, pending: pending)
-                }
-                return finalize(node: headingIdx, pending: pending, lineContentEnd: heading.end)
+                return openATXHeading(heading, source: source, firstNonSpace: firstNonSpace, pending: pending)
             }
 
             // Fenced code block. A line indented four or more columns is indented code, not a fence, even
@@ -1982,38 +2022,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace
             ) {
-                // Decode backslash escapes and HTML entities in the info string so consumers see the canonical language tag (e.g. `foo\+bar` → `foo+bar`, `f&ouml;&ouml;` → `föö`).
-                // The info string lives in `expandPrefixTabs`'s verbatim tail (the fence char isn't a prefix byte), so on a tab-materialized line the matcher measured its bounds against the transient buffer. Map them back to source (the tail copies byte-for-byte, so the constant delta preserves the length) before interning, giving the same `inSource: true` chunk a source-mapped line produces; the mapping reads only unconditionally-tracked line state, so it is correct even when `.sourcePosition` is off. A source-mapped line already carries real source offsets.
-                let infoChunk: Chunk
-                if currentLineMapsToSource {
-                    infoChunk = fence.infoChunk
-                } else {
-                    let start = materializedSourceStart(bufferStart: fence.infoChunk.offset).sourceStart
-                    let end = materializedSourceStart(bufferStart: fence.infoChunk.range.upperBound).sourceStart
-                    infoChunk = Chunk(offset: start, length: end - start, inSource: true)
-                }
-                let cleanInfo = unescapeURLChunk(infoChunk)
-                let infoRef = storage.intern(replacingNUL(cleanInfo))
-                // The fence offset counts source bytes, so a tab straddling the container prefix and the
-                // fence counts once even though it spans several columns. On a materialized line the prefix
-                // tabs are expanded to spaces, so the buffer distance over-counts that tab; map both
-                // endpoints back to source so a fence opened after a partially consumed tab (`>\t```) strips
-                // only one column from its continuation lines, not the tab's full width.
-                let fenceOffset = currentLineMapsToSource
-                    ? fence.fenceOffset
-                    : materializedSourceOffset(firstNonSpace) - materializedSourceOffset(cursor)
-                let codeIdx = addChild(
-                    kind: .codeBlock(MarkdownNode.CodeBlockInfo(
-                        isFenced: true,
-                        fenceCharacter: fence.character,
-                        fenceLength: fence.length,
-                        fenceOffset: fenceOffset
-                    )),
-                    parent: current,
-                    data: .codeBlock(info: infoRef, literal: .empty),
-                    start: sourceOffset(firstNonSpace)
-                )
-                current = codeIdx
+                openFencedCode(fence, cursor: cursor, firstNonSpace: firstNonSpace)
                 return pending
             }
 
@@ -2026,91 +2035,177 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 firstNonSpace: firstNonSpace,
                 allowType7: allowType7
             ) {
-                let htmlIdx = addChild(
-                    kind: .htmlBlock,
-                    parent: current,
-                    data: .htmlBlock(type: htmlType, literal: .empty),
-                    start: sourceOffset(firstNonSpace)
-                )
-                current = htmlIdx
-                // `cursor` can sit mid-tab here (an ancestor container - block quote or list item -
-                // partially consumed it with its own optional-column/padding advance; see the
-                // block-quote-open and list-marker branches above). Split that tab the same way the
-                // indented-code-block opener below does (Tabs): leftover columns become synthetic leading
-                // spaces, then the rest of the line copies verbatim. `maxColumns` is 0 in the ordinary
-                // (non-straddling) case, so `stripFenceIndent` is a no-op and the zero-copy `addLine` path
-                // is taken.
-                let priorColumn = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
-                let (bodyStart, leadingSpaces) = stripFenceIndent(
-                    source: source,
-                    range: cursor..<lineRange.upperBound,
-                    maxColumns: column - priorColumn,
-                    startColumn: priorColumn
-                )
-                if leadingSpaces == 0 {
-                    pending = addLine(span: source, range: bodyStart..<lineRange.upperBound, to: htmlIdx, pending: pending)
-                } else {
-                    pending = appendSplitTabCodeContent(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineRange.upperBound, to: htmlIdx, pending: pending)
-                }
-                // Check whether this same line also satisfies the end condition.
-                if htmlBlockLineMatchesEndCondition(
-                    type: htmlType,
-                    source: source,
-                    range: firstNonSpace..<lineRange.upperBound
-                ) {
-                    pending = finalize(node: htmlIdx, pending: pending)
-                }
-                return pending
+                return openHTMLBlock(htmlType, source: source, lineRange: lineRange, cursor: cursor, column: column, firstNonSpace: firstNonSpace, pending: pending)
             }
 
             // Indented code block (only when current container can't continue a paragraph).
             if indent >= 4 && storage[current].kind != .paragraph {
-                // The block's source range starts after the four-column code indent, where its content
-                // begins; indentation beyond four columns is content (Indented code blocks). Strip the
-                // four columns tab-stop-aware from the current `column`: when a straddling tab crosses
-                // the boundary its consumed columns are dropped and its leftover columns surface as
-                // leading spaces (Tabs), the rest of the line copied verbatim so any content tab stays
-                // literal.
-                // A leftover only ever arises on a source-mapped line (materialized lines pre-expand
-                // their prefix tabs to spaces), where `source` is the shared source buffer and `bodyStart`
-                // a real source offset, so the arena split-tab append is well-formed.
-                let (bodyStart, leadingSpaces) = stripFenceIndent(
-                    source: source,
-                    range: cursor..<lineRange.upperBound,
-                    maxColumns: 4,
-                    startColumn: column
-                )
-                let codeIdx = addChild(
-                    kind: .codeBlock(MarkdownNode.CodeBlockInfo(
-                        isFenced: false,
-                        fenceCharacter: nil,
-                        fenceLength: 0,
-                        fenceOffset: 0
-                    )),
-                    parent: current,
-                    data: .codeBlock(info: .empty, literal: .empty),
-                    start: sourceOffset(bodyStart)
-                )
-                current = codeIdx
-                if leadingSpaces == 0 {
-                    return addLine(span: source, range: bodyStart..<lineRange.upperBound, to: codeIdx, pending: pending)
-                }
-                return appendSplitTabCodeContent(
-                    spaces: leadingSpaces,
-                    sourceStart: bodyStart,
-                    lineEnd: lineRange.upperBound,
-                    to: codeIdx,
-                    pending: pending
-                )
+                return openIndentedCode(source: source, lineRange: lineRange, cursor: cursor, column: column, pending: pending)
             }
 
             // Paragraph fallback. By this point the list-close-if-needed step above has already ensured `current` isn't a list.
-            let textRange = firstNonSpace..<lineRange.upperBound
-            precondition(storage[current].kind != .paragraph, "dispatch starts below the deepest matched container and opens only containers before a leaf, so `current` is never a paragraph here")
-            let paragraphIdx = addChild(kind: .paragraph, parent: current, start: sourceOffset(firstNonSpace))
-            current = paragraphIdx
-            return addLine(span: source, range: textRange, to: paragraphIdx, pending: pending)
+            return openParagraph(source: source, lineRange: lineRange, firstNonSpace: firstNonSpace, pending: pending)
         }
+    }
+
+    /// Close the open list at `current`, if any: a list contains only list items, so any other block opening at `current` ends the list first.
+    private mutating func closingOpenList(_ pending: consuming PendingLeaf?) -> PendingLeaf? {
+        if storage[current].kind.isList {
+            return finalize(node: current, pending: pending)
+        }
+        return pending
+    }
+
+    /// Open a thematic break at `current` whose line content ends at `end`, and close it.
+    private mutating func openThematicBreak(firstNonSpace: Int, end: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        let breakIdx = addChild(
+            kind: .thematicBreak,
+            parent: current,
+            start: sourceOffset(firstNonSpace)
+        )
+        current = breakIdx
+        return finalize(node: breakIdx, pending: pending, lineContentEnd: end)
+    }
+
+    /// Open an ATX heading at `current`, add its content line, and close it.
+    private mutating func openATXHeading(_ heading: ATXMatch, source: Span<UInt8>, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        var pending = pending
+        let headingIdx = addChild(
+            kind: .heading(level: Int(heading.level)),
+            parent: current,
+            start: sourceOffset(firstNonSpace)
+        )
+        current = headingIdx
+        if !heading.contentRange.isEmpty {
+            pending = addLine(span: source, range: heading.contentRange, to: headingIdx, pending: pending)
+        }
+        return finalize(node: headingIdx, pending: pending, lineContentEnd: heading.end)
+    }
+
+    /// Open a fenced code block at `current` for the opening fence `fence`. The block stays open as `current`.
+    private mutating func openFencedCode(_ fence: FenceMatch, cursor: Int, firstNonSpace: Int) {
+        // Decode backslash escapes and HTML entities in the info string so consumers see the canonical language tag (e.g. `foo\+bar` → `foo+bar`, `f&ouml;&ouml;` → `föö`).
+        // The info string lives in `expandPrefixTabs`'s verbatim tail (the fence char isn't a prefix byte), so on a tab-materialized line the matcher measured its bounds against the transient buffer. Map them back to source (the tail copies byte-for-byte, so the constant delta preserves the length) before interning, giving the same `inSource: true` chunk a source-mapped line produces; the mapping reads only unconditionally-tracked line state, so it is correct even when `.sourcePosition` is off. A source-mapped line already carries real source offsets.
+        let infoChunk: Chunk
+        if currentLineMapsToSource {
+            infoChunk = fence.infoChunk
+        } else {
+            let start = materializedSourceStart(bufferStart: fence.infoChunk.offset).sourceStart
+            let end = materializedSourceStart(bufferStart: fence.infoChunk.range.upperBound).sourceStart
+            infoChunk = Chunk(offset: start, length: end - start, inSource: true)
+        }
+        let cleanInfo = unescapeURLChunk(infoChunk)
+        let infoRef = storage.intern(replacingNUL(cleanInfo))
+        // The fence offset counts source bytes, so a tab straddling the container prefix and the
+        // fence counts once even though it spans several columns. On a materialized line the prefix
+        // tabs are expanded to spaces, so the buffer distance over-counts that tab; map both
+        // endpoints back to source so a fence opened after a partially consumed tab (`>\t```) strips
+        // only one column from its continuation lines, not the tab's full width.
+        let fenceOffset = currentLineMapsToSource
+            ? fence.fenceOffset
+            : materializedSourceOffset(firstNonSpace) - materializedSourceOffset(cursor)
+        let codeIdx = addChild(
+            kind: .codeBlock(MarkdownNode.CodeBlockInfo(
+                isFenced: true,
+                fenceCharacter: fence.character,
+                fenceLength: fence.length,
+                fenceOffset: fenceOffset
+            )),
+            parent: current,
+            data: .codeBlock(info: infoRef, literal: .empty),
+            start: sourceOffset(firstNonSpace)
+        )
+        current = codeIdx
+    }
+
+    /// Open an HTML block of start-condition `htmlType` at `current`, add the line's content to it, and close it if the same line satisfies its end condition.
+    private mutating func openHTMLBlock(_ htmlType: UInt8, source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, column: Int, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        var pending = pending
+        let htmlIdx = addChild(
+            kind: .htmlBlock,
+            parent: current,
+            data: .htmlBlock(type: htmlType, literal: .empty),
+            start: sourceOffset(firstNonSpace)
+        )
+        current = htmlIdx
+        // `cursor` can sit mid-tab here (an ancestor container - block quote or list item -
+        // partially consumed it with its own optional-column/padding advance; see the
+        // `dispatchNewBlocks`'s block quote and list marker branches). Split that tab the same way the
+        // indented-code-block opener below does (Tabs): leftover columns become synthetic leading
+        // spaces, then the rest of the line copies verbatim. `maxColumns` is 0 in the ordinary
+        // (non-straddling) case, so `stripFenceIndent` is a no-op and the zero-copy `addLine` path
+        // is taken.
+        let priorColumn = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+        let (bodyStart, leadingSpaces) = stripFenceIndent(
+            source: source,
+            range: cursor..<lineRange.upperBound,
+            maxColumns: column - priorColumn,
+            startColumn: priorColumn
+        )
+        if leadingSpaces == 0 {
+            pending = addLine(span: source, range: bodyStart..<lineRange.upperBound, to: htmlIdx, pending: pending)
+        } else {
+            pending = appendSplitTabCodeContent(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineRange.upperBound, to: htmlIdx, pending: pending)
+        }
+        // Check whether this same line also satisfies the end condition.
+        if htmlBlockLineMatchesEndCondition(
+            type: htmlType,
+            source: source,
+            range: firstNonSpace..<lineRange.upperBound
+        ) {
+            pending = finalize(node: htmlIdx, pending: pending)
+        }
+        return pending
+    }
+
+    /// Open an indented code block at `current` and add the line's content to it.
+    private mutating func openIndentedCode(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, column: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        // The block's source range starts after the four-column code indent, where its content
+        // begins; indentation beyond four columns is content (Indented code blocks). Strip the
+        // four columns tab-stop-aware from the current `column`: when a straddling tab crosses
+        // the boundary its consumed columns are dropped and its leftover columns surface as
+        // leading spaces (Tabs), the rest of the line copied verbatim so any content tab stays
+        // literal.
+        // A leftover only ever arises on a source-mapped line (materialized lines pre-expand
+        // their prefix tabs to spaces), where `source` is the shared source buffer and `bodyStart`
+        // a real source offset, so the arena split-tab append is well-formed.
+        let (bodyStart, leadingSpaces) = stripFenceIndent(
+            source: source,
+            range: cursor..<lineRange.upperBound,
+            maxColumns: 4,
+            startColumn: column
+        )
+        let codeIdx = addChild(
+            kind: .codeBlock(MarkdownNode.CodeBlockInfo(
+                isFenced: false,
+                fenceCharacter: nil,
+                fenceLength: 0,
+                fenceOffset: 0
+            )),
+            parent: current,
+            data: .codeBlock(info: .empty, literal: .empty),
+            start: sourceOffset(bodyStart)
+        )
+        current = codeIdx
+        if leadingSpaces == 0 {
+            return addLine(span: source, range: bodyStart..<lineRange.upperBound, to: codeIdx, pending: pending)
+        }
+        return appendSplitTabCodeContent(
+            spaces: leadingSpaces,
+            sourceStart: bodyStart,
+            lineEnd: lineRange.upperBound,
+            to: codeIdx,
+            pending: pending
+        )
+    }
+
+    /// Open a paragraph at `current` and add the line's content to it.
+    private mutating func openParagraph(source: Span<UInt8>, lineRange: Range<Int>, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        let textRange = firstNonSpace..<lineRange.upperBound
+        precondition(storage[current].kind != .paragraph, "dispatch starts below the deepest matched container and opens only containers before a leaf, so `current` is never a paragraph here")
+        let paragraphIdx = addChild(kind: .paragraph, parent: current, start: sourceOffset(firstNonSpace))
+        current = paragraphIdx
+        return addLine(span: source, range: textRange, to: paragraphIdx, pending: pending)
     }
 
     // MARK: - Finalize
