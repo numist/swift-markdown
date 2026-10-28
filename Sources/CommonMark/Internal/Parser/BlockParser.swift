@@ -173,6 +173,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// each pair is the decoded bytes' arena range and the reference's source range, `&` through `;`. Reset per pass.
     var characterReferenceSources: [(arena: Range<Int>, source: Range<Int>)] = []
 
+    /// The delimiter stack of the current `parseInline` pass: a doubly-linked list embedded in an array (see `DelimiterRecord`), whose top is `lastDelim`. Scratch space reused across passes; reset at the start of each pass.
+    var delimiters = UniqueArray<DelimiterRecord>()
+    var lastDelim: Int? = nil
+
+    /// The bracket stack of the current `parseInline` pass (see `BracketRecord`), whose top is `lastBracket`. Scratch space reused across passes; reset at the start of each pass.
+    var brackets = UniqueArray<BracketRecord>()
+    var lastBracket: Int? = nil
+
     // MARK: - Init
     
     @_lifetime(copy source)
@@ -254,9 +262,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Inline-parsing pass: with all blocks closed (and `storage`'s `referenceMap` / `attributeReferenceMap` / `footnoteMap` fully populated), run inline parsing for every paragraph and heading queued during finalize. Forward references like `[foo]\n\n[foo]: url` resolve correctly because the def is in the map by the time the ref's paragraph is parsed.
         let pending = pendingInlines
         
-        var delimiters = UniqueArray<DelimiterRecord>()
-        var brackets = UniqueArray<BracketRecord>()
-        
         // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content) and `segEndScratch` its running virtual end offsets; `runScratch` holds a stable copy of a flattened block's arena→source run map and `runEndScratch` its running end offsets. All owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
         var scratch = UniqueArray<UInt8>()
         var segScratch = UniqueArray<Segment>()
@@ -272,9 +277,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // Source-backed: zero-copy slice of the source span.
                     parseInline(
                         content: ContentSpan(span: sourceBytes.extracting(chunk.range), base: chunk.offset, inSource: true),
-                        into: node,
-                        delimiters: &delimiters,
-                        brackets: &brackets
+                        into: node
                     )
                 } else {
                     // Arena-backed: copy the content region out of `storage.strings` so the read view is independent of the appends `parseInline` makes to that same array.
@@ -293,9 +296,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     }
                     parseInline(
                         content: ContentSpan(span: scratch.span, base: chunk.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span),
-                        into: node,
-                        delimiters: &delimiters,
-                        brackets: &brackets
+                        into: node
                     )
                 }
             } else {
@@ -311,9 +312,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
                 parseInline(
                     content: ContentSpan(source: sourceBytes, segments: segScratch.span, segmentEnds: segEndScratch.span, virtualLength: Int(ref.totalLength)),
-                    into: node,
-                    delimiters: &delimiters,
-                    brackets: &brackets
+                    into: node
                 )
             }
 
@@ -449,8 +448,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         storage.setSourceEnd(documentIndex, contentEnd)
         storage.setSourceEnd(paragraph, contentEnd)
 
-        var delimiters = UniqueArray<DelimiterRecord>()
-        var brackets = UniqueArray<BracketRecord>()
         // A NUL forces the arena-copy path below (per Insecure characters, NUL becomes U+FFFD); scanned here so a
         // NUL-free, LF-only document stays zero-copy.
         var hasNUL = false
@@ -467,9 +464,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             parseInline(
                 content: content,
                 into: paragraph,
-                preserveWhitespace: true,
-                delimiters: &delimiters,
-                brackets: &brackets
+                preserveWhitespace: true
             )
         } else {
             // Normalize `\r\n` and lone `\r` to `\n` and each NUL to U+FFFD into the string arena, then read from an independent scratch copy (the inline parser appends to `storage.strings` as it runs).
@@ -522,9 +517,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             parseInline(
                 content: content,
                 into: paragraph,
-                preserveWhitespace: true,
-                delimiters: &delimiters,
-                brackets: &brackets
+                preserveWhitespace: true
             )
             if positionsEnabled {
                 image = ContentImage(base: arenaStart, runs: runs)

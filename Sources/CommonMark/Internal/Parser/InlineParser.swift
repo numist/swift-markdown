@@ -72,22 +72,20 @@ extension BlockParser {
     mutating func parseInline(
         content: borrowing ContentSpan,
         into parent: DocumentStorage.Index,
-        preserveWhitespace: Bool = false,
-        delimiters: inout UniqueArray<DelimiterRecord>,
-        brackets: inout UniqueArray<BracketRecord>
+        preserveWhitespace: Bool = false
     ) {
         if content.isEmpty {
             return
         }
-        // The delimiter and bracket stacks are caller-owned scratch buffers, reused across every paragraph in the document. Reset them to empty rather than allocating per call.
+        // The delimiter and bracket stacks are parser-owned scratch buffers, reused across every paragraph in the document. Reset the stacks and their tops rather than allocating per call.
         delimiters.removeSubrange(0..<delimiters.count)
         brackets.removeSubrange(0..<brackets.count)
         
         var cursor = content.startOffset
         let endOffset = content.endOffset
         var pendingTextStart = cursor
-        var lastDelim: Int? = nil
-        var lastBracket: Int? = nil
+        lastDelim = nil
+        lastBracket = nil
 
         // Hoisted once for the plain-text skip in the `default` case below.
         let strikethroughEnabled = storage.options.contains(.strikethrough)
@@ -218,7 +216,7 @@ extension BlockParser {
                     )
                     // Links may not contain other links (Links), and an autolink binds more tightly
                     // than link text brackets, so the link openers before it cannot form links.
-                    markLinkOpenersInactive(brackets: &brackets, lastBracket: lastBracket)
+                    markLinkOpenersInactive()
                     cursor = auto.afterClose
                     pendingTextStart = cursor
                     continue
@@ -252,8 +250,6 @@ extension BlockParser {
                     end: endOffset,
                     content: content,
                     parent: parent,
-                    delimiters: &delimiters,
-                    lastDelim: &lastDelim,
                     pendingTextStart: &pendingTextStart
                 )
 
@@ -265,8 +261,6 @@ extension BlockParser {
                         end: endOffset,
                         content: content,
                         parent: parent,
-                        delimiters: &delimiters,
-                        lastDelim: &lastDelim,
                         pendingTextStart: &pendingTextStart
                     )
                 } else {
@@ -280,9 +274,6 @@ extension BlockParser {
                     at: cursor,
                     to: parent,
                     pendingTextStart: &pendingTextStart,
-                    lastDelim: lastDelim,
-                    brackets: &brackets,
-                    lastBracket: &lastBracket,
                     content: content
                 )
 
@@ -298,9 +289,6 @@ extension BlockParser {
                         at: cursor,
                         to: parent,
                         pendingTextStart: &pendingTextStart,
-                        lastDelim: lastDelim,
-                        brackets: &brackets,
-                        lastBracket: &lastBracket,
                         content: content
                     )
                 } else {
@@ -318,9 +306,6 @@ extension BlockParser {
                         at: cursor,
                         to: parent,
                         pendingTextStart: &pendingTextStart,
-                        lastDelim: lastDelim,
-                        brackets: &brackets,
-                        lastBracket: &lastBracket,
                         content: content
                     )
                 } else {
@@ -338,11 +323,7 @@ extension BlockParser {
                     cursor: cursor,
                     end: endOffset,
                     content: content,
-                    parent: parent,
-                    delimiters: &delimiters,
-                    lastDelim: &lastDelim,
-                    brackets: &brackets,
-                    lastBracket: &lastBracket
+                    parent: parent
                 )
                 pendingTextStart = cursor
 
@@ -408,8 +389,6 @@ extension BlockParser {
                         end: endOffset,
                         content: content,
                         parent: parent,
-                        delimiters: &delimiters,
-                        lastDelim: &lastDelim,
                         pendingTextStart: &pendingTextStart
                     )
                 } else {
@@ -469,9 +448,7 @@ extension BlockParser {
         )
         processEmphasis(
             stackBottom: -1,
-            content: content,
-            delimiters: &delimiters,
-            lastDelim: &lastDelim
+            content: content
         )
     }
 
@@ -512,7 +489,7 @@ extension BlockParser {
     }
 
     /// Marks every open link opener as unable to form a link, because a link or autolink formed after it.
-    private func markLinkOpenersInactive(brackets: inout UniqueArray<BracketRecord>, lastBracket: Int?) {
+    private mutating func markLinkOpenersInactive() {
         var idx = lastBracket
         while let i = idx {
             if brackets[i].kind == .link {
@@ -525,13 +502,13 @@ extension BlockParser {
     /// Push a `kind` opener whose literal text is the `length` bytes at `cursor` (`[`, `![` or `^[`), returning the offset past it.
     ///
     /// An opener that never resolves survives as literal text with its own source range, so it keeps its columns when it consolidates with neighbors; a resolved one is unlinked first.
-    private mutating func openBracket(_ kind: BracketKind, length: Int, at cursor: Int, to parent: DocumentStorage.Index, pendingTextStart: inout Int, lastDelim: Int?, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?, content: borrowing ContentSpan) -> Int {
+    private mutating func openBracket(_ kind: BracketKind, length: Int, at cursor: Int, to parent: DocumentStorage.Index, pendingTextStart: inout Int, content: borrowing ContentSpan) -> Int {
         let textIdx = emitLiteral(.text, content.chunk(offset: cursor, length: length), start: cursor, end: cursor + length, to: parent, pendingTextStart: &pendingTextStart, content: content)
-        pushBracket(kind: kind, inlText: textIdx, virtualStart: cursor, delimPosition: lastDelim ?? -1, brackets: &brackets, lastBracket: &lastBracket)
+        pushBracket(kind: kind, inlText: textIdx, virtualStart: cursor, delimPosition: lastDelim ?? -1)
         return cursor + length
     }
 
-    private func pushBracket(kind: BracketKind, inlText: DocumentStorage.Index, virtualStart: Int, delimPosition: Int, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?) {
+    private mutating func pushBracket(kind: BracketKind, inlText: DocumentStorage.Index, virtualStart: Int, delimPosition: Int) {
         if let lastBracket {
             brackets[lastBracket].bracketAfter = true
         }
@@ -550,14 +527,14 @@ extension BlockParser {
         lastBracket = newIdx
     }
 
-    private func popBracket(brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?) {
+    private mutating func popBracket() {
         if let last = lastBracket {
             lastBracket = brackets[last].previous
         }
     }
     
     /// Process a `]`. A link or image form after it - an inline `(destination "title")` or a reference to a definition - or an attribute form turns the innermost open bracket into that node; a `[^label]` naming a footnote definition becomes a footnote reference; otherwise the `]` is literal text. Returns the offset to resume scanning from.
-    private mutating func handleCloseBracket(cursor: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?) -> Int {
+    private mutating func handleCloseBracket(cursor: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index) -> Int {
         let afterBracket = cursor + 1
         guard let openerIdx = lastBracket else {
             emitBracketLiteral(at: cursor, content: content, parent: parent)
@@ -569,7 +546,7 @@ extension BlockParser {
         let openerStart = brackets[openerIdx].virtualStart
         // A link opener cannot form a link inside another link, or after a link formed at its level.
         if openerKind == .link, brackets[openerIdx].linkFormedAfter {
-            popBracket(brackets: &brackets, lastBracket: &lastBracket)
+            popBracket()
             emitBracketLiteral(at: cursor, content: content, parent: parent)
             return afterBracket
         }
@@ -577,10 +554,10 @@ extension BlockParser {
             ? matchAttributeForm(cursor: cursor, end: end, content: content)
             : matchLinkForm(shortcutLabelStart: brackets[openerIdx].bracketAfter ? nil : openerStart + (openerKind == .image ? 2 : 1), cursor: cursor, end: end, content: content)
         if let formed {
-            wrapBracketContent(openerKind.nodeKind, formed.data, openerInl: openerInl, delimPosition: openerDelimPos, start: openerStart, end: formed.end, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
-            popBracket(brackets: &brackets, lastBracket: &lastBracket)
+            wrapBracketContent(openerKind.nodeKind, formed.data, openerInl: openerInl, delimPosition: openerDelimPos, start: openerStart, end: formed.end, content: content)
+            popBracket()
             if openerKind == .link {
-                markLinkOpenersInactive(brackets: &brackets, lastBracket: lastBracket)
+                markLinkOpenersInactive()
             }
             return formed.end
         }
@@ -592,12 +569,12 @@ extension BlockParser {
            let defIdx = footnoteDefinition(referencedFrom: footnoteBracketStart, closeBracket: cursor, in: content) {
             // Resolve emphasis inside the bracket first (clearing its delimiters from the stack) so
             // removing the inner nodes below doesn't leave stale delimiters for `processEmphasis`.
-            processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
+            processEmphasis(stackBottom: openerDelimPos, content: content)
             emitFootnoteReference(openerInl: openerInl, definition: defIdx, span: footnoteBracketStart..<afterBracket, content: content)
-            popBracket(brackets: &brackets, lastBracket: &lastBracket)
+            popBracket()
             return afterBracket
         }
-        popBracket(brackets: &brackets, lastBracket: &lastBracket)
+        popBracket()
         emitBracketLiteral(at: cursor, content: content, parent: parent)
         return afterBracket
     }
@@ -684,7 +661,7 @@ extension BlockParser {
 
     /// Wrap the nodes after the opener's text in a new `kind` node spanning the virtual range `start..<end`, remove the opener's text, and resolve emphasis inside the new node with the opener's delimiter position as the floor.
     @inline(__always)
-    private mutating func wrapBracketContent(_ kind: MarkdownNode.Kind, _ data: NodeData, openerInl: DocumentStorage.Index, delimPosition: Int, start: Int, end: Int, content: borrowing ContentSpan, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) {
+    private mutating func wrapBracketContent(_ kind: MarkdownNode.Kind, _ data: NodeData, openerInl: DocumentStorage.Index, delimPosition: Int, start: Int, end: Int, content: borrowing ContentSpan) {
         let wrapper = storage.appendNode(NodeRecord(kind: kind, parent: storage[openerInl].parent, data: data))
         stampInline(wrapper, start, end, content: content)
         storage.insertChildBefore(wrapper, before: openerInl)
@@ -695,7 +672,7 @@ extension BlockParser {
             storage.appendChild(current, to: wrapper)
         }
         storage.unlinkChild(openerInl)
-        processEmphasis(stackBottom: delimPosition, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
+        processEmphasis(stackBottom: delimPosition, content: content)
     }
 
     // MARK: - Footnote references
@@ -997,7 +974,7 @@ extension BlockParser {
     /// Scan a maximal delimiter run of `char` starting at `start`, decide whether it can open and close (Emphasis and strong emphasis), emit a `.text` node for the run, and (if it can open or close) push a delimiter record onto the stack. Returns the offset just past the run.
     ///
     /// The start of the content counts as a line ending before the run.
-    private mutating func handleDelimRun(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, pendingTextStart: inout Int) -> Int {
+    private mutating func handleDelimRun(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         var runEnd = start
         while runEnd < end, content[runEnd] == char {
             runEnd += 1
@@ -1066,7 +1043,7 @@ extension BlockParser {
     /// Resolve emphasis pairs. Walks forward from the first delimiter above `stackBottom` (use `-1` to process the entire stack). For each closer, looks back for the most recent compatible opener and pairs them via `insertEmph`.
     ///
     /// `openersBottom` is the per-(length%3, char) search-floor optimization: once we fail to find an opener for a closer of a given (length%3, char), no later closer of the same shape needs to look behind that point.
-    private mutating func processEmphasis(stackBottom: Int, content: borrowing ContentSpan, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) {
+    private mutating func processEmphasis(stackBottom: Int, content: borrowing ContentSpan) {
         // openersBottom[length % 3, char-index]: 0=`*`, 1=`_`, 2=`~`, 3=`'`, 4=`"`.
         var openersBottom = OpenersBottom(fill: stackBottom)
         // Find the earliest (smallest-index) delimiter strictly above stackBottom.
@@ -1116,17 +1093,15 @@ extension BlockParser {
                         of: delimiters[opener].inlText,
                         single ? Self.leftSingleQuote : Self.leftDoubleQuote
                     )
-                    removeDelim(opener, delimiters: &delimiters, lastDelim: &lastDelim)
-                    removeDelim(oldCloser, delimiters: &delimiters, lastDelim: &lastDelim)
+                    removeDelim(opener)
+                    removeDelim(oldCloser)
                 }
                 closer = next
             } else if openerFound, let opener {
                 closer = insertEmph(
                     opener: opener,
                     closer: c,
-                    content: content,
-                    delimiters: &delimiters,
-                    lastDelim: &lastDelim
+                    content: content
                 )
             } else {
                 closer = delimiters[c].next
@@ -1134,13 +1109,13 @@ extension BlockParser {
             if !openerFound {
                 openersBottom[delimiters[oldCloser].length % 3, charIdx] = oldCloser
                 if !delimiters[oldCloser].canOpen {
-                    removeDelim(oldCloser, delimiters: &delimiters, lastDelim: &lastDelim)
+                    removeDelim(oldCloser)
                 }
             }
         }
         // Free remaining delimiters above stackBottom.
         while let last = lastDelim, last > stackBottom {
-            removeDelim(last, delimiters: &delimiters, lastDelim: &lastDelim)
+            removeDelim(last)
         }
     }
 
@@ -1155,7 +1130,7 @@ extension BlockParser {
     }
 
     /// Pair `opener` with `closer`, build an `.emphasis` (1-char match) or `.strong` (2-char match) node, reparent the inner siblings into it, trim the matched chars off the opener's and closer's text nodes, remove freed delimiters from the stack, and return the next closer to process (which is `closer.next` if we consumed the closer's text fully, otherwise `closer` itself for another round).
-    private mutating func insertEmph(opener: Int, closer: Int, content: borrowing ContentSpan, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) -> Int? {
+    private mutating func insertEmph(opener: Int, closer: Int, content: borrowing ContentSpan) -> Int? {
         let openerInl = delimiters[opener].inlText
         let closerInl = delimiters[closer].inlText
         let openerChar = delimiters[opener].character
@@ -1172,10 +1147,10 @@ extension BlockParser {
                 var d: Int? = closer
                 while let dd = d, dd != opener {
                     let prev = delimiters[dd].previous
-                    removeDelim(dd, delimiters: &delimiters, lastDelim: &lastDelim)
+                    removeDelim(dd)
                     d = prev
                 }
-                removeDelim(opener, delimiters: &delimiters, lastDelim: &lastDelim)
+                removeDelim(opener)
                 return next
             }
             // Equal run lengths: consume the entire run from each side.
@@ -1201,7 +1176,7 @@ extension BlockParser {
         var d = delimiters[closer].previous
         while let dd = d, dd != opener {
             let prev = delimiters[dd].previous
-            removeDelim(dd, delimiters: &delimiters, lastDelim: &lastDelim)
+            removeDelim(dd)
             d = prev
         }
         // Build the wrapping node and reparent siblings.
@@ -1222,18 +1197,18 @@ extension BlockParser {
         var resultCloser: Int? = closer
         if openerNumChars == 0 {
             storage.unlinkChild(openerInl)
-            removeDelim(opener, delimiters: &delimiters, lastDelim: &lastDelim)
+            removeDelim(opener)
         }
         if closerNumChars == 0 {
             storage.unlinkChild(closerInl)
             let next = delimiters[closer].next
-            removeDelim(closer, delimiters: &delimiters, lastDelim: &lastDelim)
+            removeDelim(closer)
             resultCloser = next
         }
         return resultCloser
     }
 
-    private func removeDelim(_ idx: Int, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) {
+    private mutating func removeDelim(_ idx: Int) {
         let prev = delimiters[idx].previous
         let next = delimiters[idx].next
         if let prev {
@@ -1326,7 +1301,7 @@ extension BlockParser {
     /// Handle a `'` or `"` under `.smart`. Emits a text node carrying the initial curly form and, if the quote can open or close, pushes a delimiter so `processEmphasis` can resolve the open/close pairing.
     ///
     /// Returns the offset just past the quote.
-    private mutating func handleQuoteDelim(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, pendingTextStart: inout Int) -> Int {
+    private mutating func handleQuoteDelim(char: UInt8, start: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         // Quotes are limited to a single delimiter character (unlike `*`/`_`/`~` runs).
         let runEnd = start + 1
         let flanking = classifyFlanking(char: char, start: start, runEnd: runEnd, end: end, content: content)
