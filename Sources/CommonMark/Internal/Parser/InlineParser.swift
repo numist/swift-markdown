@@ -88,7 +88,6 @@ extension BlockParser {
         var pendingTextStart = cursor
         var lastDelim: Int? = nil
         var lastBracket: Int? = nil
-        var noLinkOpeners = false
 
         // Hoisted once for the plain-text skip in the `default` case below.
         let strikethroughEnabled = storage.options.contains(.strikethrough)
@@ -111,26 +110,17 @@ extension BlockParser {
                     end: endOffset,
                     content: content
                 ) {
-                    flushPendingText(
-                        start: pendingTextStart,
-                        end: cursor,
-                        content: content,
-                        into: parent
-                    )
                     // Per Code spans, line endings become spaces before one leading and trailing space is stripped.
-                    let normalized = normalizeCodeSpanContent(span.content)
-                    let normalizedRef = storage.intern(normalized)
-                    let codeIdx = storage.appendNode(
-                        NodeRecord(
-                            kind: .codeInline(backtickCount: span.backtickCount),
-                            parent: parent,
-                            data: .literal(normalizedRef)
-                        )
+                    emitLiteral(
+                        .codeInline(backtickCount: span.backtickCount),
+                        normalizeCodeSpanContent(span.content),
+                        start: cursor,
+                        end: span.afterClose,
+                        to: parent,
+                        pendingTextStart: &pendingTextStart,
+                        content: content
                     )
-                    storage.appendChild(codeIdx, to: parent)
-                    stampInline(codeIdx, cursor, span.afterClose, content: content)
                     cursor = span.afterClose
-                    pendingTextStart = cursor
                     continue
                 }
                 // No matching close - skip past the run; the backticks become part of the pending text region.
@@ -148,7 +138,7 @@ extension BlockParser {
                         cursor += 1
                         continue
                     }
-                    info = LineBreakInfo(isHard: true, textEnd: cursor - 1, isBackslash: true)
+                    info = LineBreakInfo(isHard: true, textEnd: cursor - 1)
                 } else {
                     info = classifyLineBreak(
                         at: cursor,
@@ -184,31 +174,27 @@ extension BlockParser {
                     EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: storage.strings.span)
                 }
                 if let entity {
-                    flushPendingText(
-                        start: pendingTextStart,
-                        end: cursor,
-                        content: content,
-                        into: parent
-                    )
                     let decoded = Self.appendUTF8Bytes(
                         bytes: entity.bytes,
                         count: entity.count,
                         into: &storage.strings
                     )
-                    let decodedRef = storage.intern(decoded)
-                    let textIdx = storage.appendNode(
-                        NodeRecord(kind: .text, parent: parent, data: .literal(decodedRef))
-                    )
-                    storage.appendChild(textIdx, to: parent)
                     // Convert the scanner-returned buffer offset back to a virtual content offset via the window base (identity for single-segment content).
                     let afterSemi = cursor + (entity.afterSemi - window.offset)
-                    stampInline(textIdx, cursor, afterSemi, content: content)
+                    let textIdx = emitLiteral(
+                        .text,
+                        decoded,
+                        start: cursor,
+                        end: afterSemi,
+                        to: parent,
+                        pendingTextStart: &pendingTextStart,
+                        content: content
+                    )
                     if positionsEnabled {
                         let source = storage.sourceRanges[textIdx]
                         characterReferenceSources.append((decoded.range, Int(source.start)..<Int(source.end)))
                     }
                     cursor = afterSemi
-                    pendingTextStart = cursor
                     continue
                 }
                 cursor += 1
@@ -242,35 +228,19 @@ extension BlockParser {
                     end: endOffset,
                     content: content
                 ) {
-                    flushPendingText(
-                        start: pendingTextStart,
-                        end: cursor,
-                        content: content,
-                        into: parent
-                    )
                     // The literal is the tag's raw bytes, zero-copy when they lie in one segment. A tag
                     // spanning a line ending in a non-contiguous paragraph has its bytes in separate
                     // segments, so the joined literal is materialized into the arena.
-                    let chunkRef: ContentRef
-                    if let contiguous = content.contiguousChunk(fromVirtual: cursor, limit: htmlEnd),
-                       contiguous.length == htmlEnd - cursor {
-                        chunkRef = storage.intern(contiguous)
-                    } else {
-                        let outOffset = storage.strings.count
-                        for i in cursor..<htmlEnd {
-                            storage.strings.append(content[i])
-                        }
-                        chunkRef = storage.intern(
-                            Chunk(offset: outOffset, length: storage.strings.count - outOffset, inSource: false)
-                        )
-                    }
-                    let nodeIdx = storage.appendNode(
-                        NodeRecord(kind: .htmlInline, parent: parent, data: .literal(chunkRef))
+                    emitLiteral(
+                        .htmlInline,
+                        materializedChunk(start: cursor, end: htmlEnd, content: content),
+                        start: cursor,
+                        end: htmlEnd,
+                        to: parent,
+                        pendingTextStart: &pendingTextStart,
+                        content: content
                     )
-                    storage.appendChild(nodeIdx, to: parent)
-                    stampInline(nodeIdx, cursor, htmlEnd, content: content)
                     cursor = htmlEnd
-                    pendingTextStart = cursor
                     continue
                 }
                 cursor += 1
@@ -304,63 +274,35 @@ extension BlockParser {
                 }
                 
             case UInt8(ascii: "["):
-                flushPendingText(
-                    start: pendingTextStart,
-                    end: cursor,
-                    content: content,
-                    into: parent
-                )
-                let textChunk = content.chunk(offset: cursor, length: 1)
-                let textRef = storage.intern(textChunk)
-                let textIdx = storage.appendNode(
-                    NodeRecord(kind: .text, parent: parent, data: .literal(textRef))
-                )
-                storage.appendChild(textIdx, to: parent)
-                // An opener whose link never resolves survives as literal `[` text; stamp it so it keeps its column when it consolidates with neighbors (a matched link unlinks this node first).
-                stampInline(textIdx, cursor, cursor + 1, content: content)
-                pushBracket(
-                    kind: .link,
-                    inlText: textIdx,
-                    virtualStart: cursor,
-                    delimPosition: lastDelim ?? -1,
+                cursor = openBracket(
+                    .link,
+                    length: 1,
+                    at: cursor,
+                    to: parent,
+                    pendingTextStart: &pendingTextStart,
+                    lastDelim: lastDelim,
                     brackets: &brackets,
                     lastBracket: &lastBracket,
-                    noLinkOpeners: &noLinkOpeners
+                    content: content
                 )
-                cursor += 1
-                pendingTextStart = cursor
-                
+
             case UInt8(ascii: "!"):
                 // `![^` opens no image: the `!` is literal text and the `[` opens a bracket, so `![^a]`
                 // is `!` followed by a footnote reference, link or literal text.
                 if cursor + 1 < endOffset,
                    content[cursor + 1] == UInt8(ascii: "["),
                    !(cursor + 2 < endOffset && content[cursor + 2] == UInt8(ascii: "^")) {
-                    flushPendingText(
-                        start: pendingTextStart,
-                        end: cursor,
-                        content: content,
-                        into: parent
-                    )
-                    let textChunk = content.chunk(offset: cursor, length: 2)
-                    let textRef = storage.intern(textChunk)
-                    let textIdx = storage.appendNode(
-                        NodeRecord(kind: .text, parent: parent, data: .literal(textRef))
-                    )
-                    storage.appendChild(textIdx, to: parent)
-                    // An opener whose image never resolves survives as literal `![` text; stamp its full 2-byte span so it keeps its start column when it consolidates with neighbors (a matched image unlinks this node first).
-                    stampInline(textIdx, cursor, cursor + 2, content: content)
-                    pushBracket(
-                        kind: .image,
-                        inlText: textIdx,
-                        virtualStart: cursor,
-                        delimPosition: lastDelim ?? -1,
+                    cursor = openBracket(
+                        .image,
+                        length: 2,
+                        at: cursor,
+                        to: parent,
+                        pendingTextStart: &pendingTextStart,
+                        lastDelim: lastDelim,
                         brackets: &brackets,
                         lastBracket: &lastBracket,
-                        noLinkOpeners: &noLinkOpeners
+                        content: content
                     )
-                    cursor += 2
-                    pendingTextStart = cursor
                 } else {
                     cursor += 1
                 }
@@ -370,31 +312,17 @@ extension BlockParser {
                 if storage.options.contains(.attributes),
                    cursor + 1 < endOffset,
                    content[cursor + 1] == UInt8(ascii: "[") {
-                    flushPendingText(
-                        start: pendingTextStart,
-                        end: cursor,
-                        content: content,
-                        into: parent
-                    )
-                    let textChunk = content.chunk(offset: cursor, length: 2)
-                    let textRef = storage.intern(textChunk)
-                    let textIdx = storage.appendNode(
-                        NodeRecord(kind: .text, parent: parent, data: .literal(textRef))
-                    )
-                    storage.appendChild(textIdx, to: parent)
-                    // An opener whose attribute never resolves survives as literal `^[` text; stamp it so it keeps its columns when it consolidates with neighbors.
-                    stampInline(textIdx, cursor, cursor + 2, content: content)
-                    pushBracket(
-                        kind: .attribute,
-                        inlText: textIdx,
-                        virtualStart: cursor,
-                        delimPosition: lastDelim ?? -1,
+                    cursor = openBracket(
+                        .attribute,
+                        length: 2,
+                        at: cursor,
+                        to: parent,
+                        pendingTextStart: &pendingTextStart,
+                        lastDelim: lastDelim,
                         brackets: &brackets,
                         lastBracket: &lastBracket,
-                        noLinkOpeners: &noLinkOpeners
+                        content: content
                     )
-                    cursor += 2
-                    pendingTextStart = cursor
                 } else {
                     cursor += 1
                 }
@@ -414,8 +342,7 @@ extension BlockParser {
                     delimiters: &delimiters,
                     lastDelim: &lastDelim,
                     brackets: &brackets,
-                    lastBracket: &lastBracket,
-                    noLinkOpeners: &noLinkOpeners
+                    lastBracket: &lastBracket
                 )
                 pendingTextStart = cursor
 
@@ -424,25 +351,17 @@ extension BlockParser {
                 if cursor + 1 < endOffset {
                     let next = content[cursor + 1]
                     if next.isASCIIPunct {
-                        flushPendingText(
-                            start: pendingTextStart,
-                            end: cursor,
-                            content: content,
-                            into: parent
+                        // The node's content is the single unescaped char (`cursor + 1`), but its source span is the 2-byte `\<punct>` escape starting at `cursor`, so the run keeps the backslash's column.
+                        emitLiteral(
+                            .text,
+                            content.chunk(offset: cursor + 1, length: 1),
+                            start: cursor,
+                            end: cursor + 2,
+                            to: parent,
+                            pendingTextStart: &pendingTextStart,
+                            content: content
                         )
-                        let punctChunk = content.chunk(
-                            offset: cursor + 1,
-                            length: 1
-                        )
-                        let punctRef = storage.intern(punctChunk)
-                        let textIdx = storage.appendNode(
-                            NodeRecord(kind: .text, parent: parent, data: .literal(punctRef))
-                        )
-                        storage.appendChild(textIdx, to: parent)
-                        // why: the node's content is the single unescaped char (`cursor + 1`), but its source span is the 2-byte `\<punct>` escape starting at `cursor` - stamp the 2-byte source range so the run keeps the backslash's column.
-                        stampInline(textIdx, cursor, cursor + 2, content: content)
                         cursor += 2
-                        pendingTextStart = cursor
                         continue
                     }
                 }
@@ -517,21 +436,17 @@ extension BlockParser {
                    cursor + 2 < endOffset,
                    content[cursor + 1] == UInt8(ascii: "."),
                    content[cursor + 2] == UInt8(ascii: ".") {
-                    flushPendingText(
-                        start: pendingTextStart,
-                        end: cursor,
-                        content: content,
-                        into: parent
+                    // The ellipsis glyph is arena-backed and its byte length differs from the `...` it replaces; its source span is the three dots, so it keeps their columns.
+                    emitLiteral(
+                        .text,
+                        smartConstantChunk(Self.ellipsis),
+                        start: cursor,
+                        end: cursor + 3,
+                        to: parent,
+                        pendingTextStart: &pendingTextStart,
+                        content: content
                     )
-                    let ellipsisRef = internSmartLiteral(Self.ellipsis)
-                    let textIdx = storage.appendNode(
-                        NodeRecord(kind: .text, parent: parent, data: .literal(ellipsisRef))
-                    )
-                    storage.appendChild(textIdx, to: parent)
-                    // The ellipsis glyph is arena-backed and its byte length differs from the `...` it replaces; stamp the three dots' source span so it keeps their columns.
-                    stampInline(textIdx, cursor, cursor + 3, content: content)
                     cursor += 3
-                    pendingTextStart = cursor
                 } else {
                     cursor += 1
                 }
@@ -562,7 +477,7 @@ extension BlockParser {
 
     // MARK: - Links / images (bracket stack)
 
-    /// Bracket-stack opener kind. `.link` and `.attribute` reset `noLinkOpeners` when pushed; `.image` does not.
+    /// Bracket-stack opener kind.
     internal enum BracketKind {
         case link
         case image
@@ -577,8 +492,8 @@ extension BlockParser {
         var virtualStart: Int
         /// Delimiter-stack index at time of push. Passed to `processEmphasis` as `stackBottom` after a successful link match so emphasis inside the link text gets resolved without leaking out.
         var delimPosition: Int
-        /// `true` once any later bracket has been pushed on top of this one; an outer bracket that contains nested ones cannot take the shortcut reference form.
-        var bracketAfter: Bool
+        /// `true` once any later bracket has been pushed on top of this one. Such a bracket's text holds an unescaped bracket, which no link label does, so it skips the shortcut-reference label lookup.
+        var bracketAfter: Bool = false
         /// `true` when this bracket, or any bracket enclosing it, is a `.link` or `.image` opener. `://` and `www.` extended autolinks don't form while such a bracket is open; an `.attribute`-only chain does not suppress them.
         var insideLinkOrImage: Bool
         /// `true` once a link or autolink formed after this opener, which then cannot form a link: links may not
@@ -598,7 +513,16 @@ extension BlockParser {
         }
     }
 
-    private func pushBracket(kind: BracketKind, inlText: DocumentStorage.Index, virtualStart: Int, delimPosition: Int, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?, noLinkOpeners: inout Bool) {
+    /// Push a `kind` opener whose literal text is the `length` bytes at `cursor` (`[`, `![` or `^[`), returning the offset past it.
+    ///
+    /// An opener that never resolves survives as literal text with its own source range, so it keeps its columns when it consolidates with neighbors; a resolved one is unlinked first.
+    private mutating func openBracket(_ kind: BracketKind, length: Int, at cursor: Int, to parent: DocumentStorage.Index, pendingTextStart: inout Int, lastDelim: Int?, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?, content: borrowing ContentSpan) -> Int {
+        let textIdx = emitLiteral(.text, content.chunk(offset: cursor, length: length), start: cursor, end: cursor + length, to: parent, pendingTextStart: &pendingTextStart, content: content)
+        pushBracket(kind: kind, inlText: textIdx, virtualStart: cursor, delimPosition: lastDelim ?? -1, brackets: &brackets, lastBracket: &lastBracket)
+        return cursor + length
+    }
+
+    private func pushBracket(kind: BracketKind, inlText: DocumentStorage.Index, virtualStart: Int, delimPosition: Int, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?) {
         if let lastBracket {
             brackets[lastBracket].bracketAfter = true
         }
@@ -611,14 +535,10 @@ extension BlockParser {
             inlText: inlText,
             virtualStart: virtualStart,
             delimPosition: delimPosition,
-            bracketAfter: false,
             insideLinkOrImage: insideLinkOrImage,
             previous: prev
         ))
         lastBracket = newIdx
-        if kind != .image {
-            noLinkOpeners = false
-        }
     }
 
     private func popBracket(brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?) {
@@ -628,7 +548,7 @@ extension BlockParser {
     }
     
     /// Process a `]` while the parent's child list contains any text/inline nodes that were emitted after the matching `[`. Returns the new cursor position.
-    private mutating func handleCloseBracket(cursor: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?, noLinkOpeners: inout Bool) -> Int {
+    private mutating func handleCloseBracket(cursor: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?) -> Int {
         let initialPos = cursor + 1
         var pos = initialPos
         // No bracket open: emit `]` literal and return.
@@ -639,7 +559,6 @@ extension BlockParser {
         let openerKind = brackets[openerIdx].kind
         let openerInl = brackets[openerIdx].inlText
         let openerDelimPos = brackets[openerIdx].delimPosition
-        let openerBracketAfter = brackets[openerIdx].bracketAfter
         if openerKind == .attribute {
             return handleCloseBracketAttribute(
                 cursor: cursor,
@@ -655,9 +574,10 @@ extension BlockParser {
                 lastBracket: &lastBracket
             )
         }
+        let openerBracketAfter = brackets[openerIdx].bracketAfter
         let isImage = openerKind == .image
         // Inactive link opener: just pop and emit `]`.
-        if !isImage && (noLinkOpeners || brackets[openerIdx].linkFormedAfter) {
+        if !isImage && brackets[openerIdx].linkFormedAfter {
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             emitBracketLiteral(at: cursor, content: content, parent: parent)
             return pos
@@ -781,7 +701,6 @@ extension BlockParser {
             )
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             if !isImage {
-                noLinkOpeners = true
                 markLinkOpenersInactive(brackets: &brackets, lastBracket: lastBracket)
             }
             return pos
@@ -790,11 +709,7 @@ extension BlockParser {
         // reference. Any other bracket stays literal text through the no-match handling below; the
         // footnote map is complete before inline parsing.
         let footnoteBracketStart = brackets[openerIdx].virtualStart + (isImage ? 1 : 0)
-        // When an inner `^[…](…)` or `^[…][ref]` formed an attribute, the node after the opener is that
-        // attribute rather than text, and the bracket stays literal (`[^[]()]` is `[`, an attribute and `]`).
-        let footnoteAfterOpenerIsText = storage[openerInl].next.map { storage[$0].kind == .text } ?? false
         if storage.options.contains(.footnotes),
-           footnoteAfterOpenerIsText,
            let defIdx = footnoteDefinition(referencedFrom: footnoteBracketStart, closeBracket: cursor, in: content) {
             // Resolve emphasis inside the bracket first (clearing its delimiters from the stack) so
             // removing the inner nodes below doesn't leave stale delimiters for `processEmphasis`.
@@ -811,13 +726,7 @@ extension BlockParser {
 
     /// Append a one-byte `]` text node at `cursor`. Used by the failure paths of `handleCloseBracket`.
     private mutating func emitBracketLiteral(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index) {
-        let chunk = content.chunk(offset: cursor, length: 1)
-        let chunkRef = storage.intern(chunk)
-        let idx = storage.appendNode(
-            NodeRecord(kind: .text, parent: parent, data: .literal(chunkRef))
-        )
-        storage.appendChild(idx, to: parent)
-        stampInline(idx, cursor, cursor + 1, content: content)
+        appendInline(.text, .literal(storage.intern(content.chunk(offset: cursor, length: 1))), to: parent, start: cursor, end: cursor + 1, content: content)
     }
 
     /// Construct the `.link` / `.image` node, splice it in front of the opener's `[` text node, reparent every following sibling into it, and remove the opener's `[` text from the tree. Then resolve emphasis inside the link with the bracket's `delimPosition` as the floor.
@@ -1244,19 +1153,8 @@ extension BlockParser {
         if !canOpen && !canClose && !isStrikethrough {
             return runEnd
         }
-        // Flush pending text up to the run start, then emit the run as text.
-        flushPendingText(
-            start: pendingTextStart,
-            end: start,
-            content: content,
-            into: parent
-        )
-        let runChunk = content.chunk(offset: start, length: count)
-        let runRef = storage.intern(runChunk)
-        let textIdx = storage.appendNode(NodeRecord(kind: .text, parent: parent, data: .literal(runRef)))
-        storage.appendChild(textIdx, to: parent)
         // A delimiter that forms no emphasis stays literal text, and this range keeps its columns when it consolidates with adjacent text.
-        stampInline(textIdx, start, runEnd, content: content)
+        let textIdx = emitLiteral(.text, content.chunk(offset: start, length: count), start: start, end: runEnd, to: parent, pendingTextStart: &pendingTextStart, content: content)
         if canOpen || canClose {
             // Strikethrough (extension) wraps text in two tildes. The parser also accepts a single tilde
             // unless `.strikethroughDoubleTilde` is set; a `~` run of any other length stays literal text.
@@ -1287,7 +1185,6 @@ extension BlockParser {
                 lastDelim = newIdx
             }
         }
-        pendingTextStart = runEnd
         return runEnd
     }
 
@@ -1500,17 +1397,16 @@ extension BlockParser {
         }
     }
 
-    /// Append a constant UTF-8 byte sequence into the string arena and intern it as a literal content ref.
-    private mutating func internSmartLiteral(_ s: String) -> ContentRef {
+    /// Append a constant UTF-8 byte sequence into the string arena, returning the chunk it occupies.
+    private mutating func smartConstantChunk(_ s: String) -> Chunk {
         let offset = storage.strings.count
         appendSmartConstant(s)
-        let chunk = Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
-        return storage.intern(chunk)
+        return Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
     }
 
     /// Replace a text node's literal with a constant smart-punctuation glyph.
     private mutating func setSmartLiteral(of nodeIdx: DocumentStorage.Index, _ s: String) {
-        let ref = internSmartLiteral(s)
+        let ref = storage.intern(smartConstantChunk(s))
         storage[nodeIdx].data = .literal(ref)
     }
 
@@ -1539,12 +1435,6 @@ extension BlockParser {
             enCount = 2
             emCount = (numHyphens - 4) / 3
         }
-        flushPendingText(
-            start: pendingTextStart,
-            end: start,
-            content: content,
-            into: parent
-        )
         let offset = storage.strings.count
         for _ in 0..<emCount {
             appendSmartConstant(Self.emDash)
@@ -1553,14 +1443,8 @@ extension BlockParser {
             appendSmartConstant(Self.enDash)
         }
         let chunk = Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
-        let ref = storage.intern(chunk)
-        let textIdx = storage.appendNode(
-            NodeRecord(kind: .text, parent: parent, data: .literal(ref))
-        )
-        storage.appendChild(textIdx, to: parent)
-        // why: the node's content is arena-backed en/em-dash glyphs whose byte length differs from the source hyphen run; stamp the source span of the `-` run (`start..<runEnd`) so the dashes keep their source columns.
-        stampInline(textIdx, start, runEnd, content: content)
-        pendingTextStart = runEnd
+        // The node's content is arena-backed en/em-dash glyphs whose byte length differs from the source hyphen run; its source span is the `-` run, so the dashes keep their source columns.
+        emitLiteral(.text, chunk, start: start, end: runEnd, to: parent, pendingTextStart: &pendingTextStart, content: content)
         return runEnd
     }
 
@@ -1584,19 +1468,8 @@ extension BlockParser {
         } else {
             literal = canClose ? Self.rightDoubleQuote : Self.leftDoubleQuote
         }
-        flushPendingText(
-            start: pendingTextStart,
-            end: start,
-            content: content,
-            into: parent
-        )
-        let ref = internSmartLiteral(literal)
-        let textIdx = storage.appendNode(
-            NodeRecord(kind: .text, parent: parent, data: .literal(ref))
-        )
-        storage.appendChild(textIdx, to: parent)
-        // why: the node's content is the arena-backed curly glyph (3 UTF-8 bytes), but its source span is the single straight-quote byte at `start`; stamp that 1-byte source range so the quote keeps its column.
-        stampInline(textIdx, start, runEnd, content: content)
+        // The node's content is the arena-backed curly glyph (3 UTF-8 bytes), but its source span is the single straight-quote byte at `start`, so the quote keeps its column.
+        let textIdx = emitLiteral(.text, smartConstantChunk(literal), start: start, end: runEnd, to: parent, pendingTextStart: &pendingTextStart, content: content)
         if canOpen || canClose {
             let prev = lastDelim
             let newIdx = delimiters.count
@@ -1617,7 +1490,6 @@ extension BlockParser {
             }
             lastDelim = newIdx
         }
-        pendingTextStart = runEnd
         return runEnd
     }
 
@@ -1763,7 +1635,6 @@ extension BlockParser {
     private struct LineBreakInfo {
         var isHard: Bool
         var textEnd: Int  // exclusive end of the pending-text region (excludes the marker bytes)
-        var isBackslash: Bool = false  // hard break driven by a trailing `\` (vs 2+ trailing spaces)
     }
 
     /// Decide whether the line ending at `newlineOffset` is a soft or hard line break (Hard line breaks):
@@ -1776,7 +1647,7 @@ extension BlockParser {
         if newlineOffset > pendingTextStart {
             let prev = content[newlineOffset - 1]
             if prev == UInt8(ascii: "\\") {
-                return LineBreakInfo(isHard: true, textEnd: newlineOffset - 1, isBackslash: true)
+                return LineBreakInfo(isHard: true, textEnd: newlineOffset - 1)
             }
         }
         // Spaces and tabs before a line ending are not part of the text, whatever the break kind; a
@@ -1913,7 +1784,6 @@ extension BlockParser {
         if !validateEmailDomain(range: labelStart..<i, content: content) {
             return nil
         }
-        _ = labelStart
         return AutolinkMatch(
             interior: bodyStart..<i,
             afterClose: i + 1,
@@ -2009,21 +1879,9 @@ extension BlockParser {
         }
         let urlRef = storage.intern(urlChunk)
         let textRef = storage.intern(textChunk)
-        let linkIdx = storage.appendNode(
-            NodeRecord(
-                kind: .link,
-                parent: parent,
-                data: .link(url: urlRef, title: .empty)
-            )
-        )
-        storage.appendChild(linkIdx, to: parent)
         // The link spans the whole `<…>`; the text child spans just the interior visible bytes.
-        stampInline(linkIdx, auto.interior.lowerBound - 1, auto.afterClose, content: content)
-        let textIdx = storage.appendNode(
-            NodeRecord(kind: .text, parent: linkIdx, data: .literal(textRef))
-        )
-        storage.appendChild(textIdx, to: linkIdx)
-        stampInline(textIdx, auto.interior.lowerBound, auto.interior.upperBound, content: content)
+        let linkIdx = appendInline(.link, .link(url: urlRef, title: .empty), to: parent, start: auto.interior.lowerBound - 1, end: auto.afterClose, content: content)
+        appendInline(.text, .literal(textRef), to: linkIdx, start: auto.interior.lowerBound, end: auto.interior.upperBound, content: content)
     }
 
     // MARK: - Raw inline HTML
@@ -2605,18 +2463,8 @@ extension BlockParser {
         )
         let urlRef = storage.intern(urlChunk)
         let textRef = storage.intern(textChunk)
-        let linkIdx = storage.appendNode(NodeRecord(
-            kind: .link,
-            parent: parent,
-            data: .link(url: urlRef, title: .empty)
-        ))
-        storage.appendChild(linkIdx, to: parent)
-        let textIdx = storage.appendNode(NodeRecord(
-            kind: .text, parent: linkIdx, data: .literal(textRef)
-        ))
-        storage.appendChild(textIdx, to: linkIdx)
-        stampInline(linkIdx, auto.urlStart, auto.urlEnd, content: content)
-        stampInline(textIdx, auto.urlStart, auto.urlEnd, content: content)
+        let linkIdx = appendInline(.link, .link(url: urlRef, title: .empty), to: parent, start: auto.urlStart, end: auto.urlEnd, content: content)
+        appendInline(.text, .literal(textRef), to: linkIdx, start: auto.urlStart, end: auto.urlEnd, content: content)
     }
 
     /// Append `prefix` + the content bytes of `start..<end` into `storage.strings`, returning a chunk pointing at the appended region.
@@ -2822,12 +2670,24 @@ extension BlockParser {
             return
         }
         precondition(content.contiguousChunk(fromVirtual: start, limit: end)?.length == end - start, "a text run lies within one segment")
-        let chunkRef = storage.intern(content.chunk(offset: start, length: end - start))
-        let textIdx = storage.appendNode(
-            NodeRecord(kind: .text, parent: parent, data: .literal(chunkRef))
-        )
-        storage.appendChild(textIdx, to: parent)
-        stampInline(textIdx, start, end, content: content)
+        appendInline(.text, .literal(storage.intern(content.chunk(offset: start, length: end - start))), to: parent, start: start, end: end, content: content)
+    }
+
+    /// Append an inline node to `parent`, stamped with the source range of the virtual range `start..<end`.
+    @discardableResult
+    private mutating func appendInline(_ kind: MarkdownNode.Kind, _ data: NodeData?, to parent: DocumentStorage.Index, start: Int, end: Int, content: borrowing ContentSpan) -> DocumentStorage.Index {
+        let idx = storage.appendNode(NodeRecord(kind: kind, parent: parent, data: data))
+        storage.appendChild(idx, to: parent)
+        stampInline(idx, start, end, content: content)
+        return idx
+    }
+
+    /// Flush the pending text before `start`, then append an inline node of `kind` whose literal is `chunk` for the virtual range `start..<end`. The pending text resumes at `end`.
+    @discardableResult
+    private mutating func emitLiteral(_ kind: MarkdownNode.Kind, _ chunk: Chunk, start: Int, end: Int, to parent: DocumentStorage.Index, pendingTextStart: inout Int, content: borrowing ContentSpan) -> DocumentStorage.Index {
+        flushPendingText(start: pendingTextStart, end: start, content: content, into: parent)
+        pendingTextStart = end
+        return appendInline(kind, .literal(storage.intern(chunk)), to: parent, start: start, end: end, content: content)
     }
 
     /// Build a `Chunk` for the virtual range `[start, end)`, materializing into the arena ONLY when the
@@ -2888,6 +2748,14 @@ extension BlockParser {
         }
     }
 
+    /// Append copies of `ref`'s segments to the pool end. Each is read into a local first, so the read ends before the mutating append.
+    private mutating func appendSegments(of ref: ContentRef) {
+        for i in 0..<Int(ref.count) {
+            let seg = storage.segments[Int(ref.first) + i]
+            storage.segments.append(seg)
+        }
+    }
+
     /// Merge `source` into the preceding text node `dest`, giving `dest` its own start and `source`'s end, and unlink `source`.
     ///
     /// When the two runs are pool-contiguous (the common case for adjacent text) this just widens `dest`'s `ContentRef` - no new segments. Otherwise (e.g. a smart-punctuation glyph re-interned at the pool's end sits between them) it appends copies of both runs' segments as a fresh combined run. A destination that already ends the pool grows by copies of the source's segments alone, so merging a run of `n` siblings appends `O(n)` segments in total.
@@ -2896,44 +2764,23 @@ extension BlockParser {
               case .literal(let srcRef) = storage[source].data else {
             preconditionFailure("a text node holds a literal")
         }
-        if destRef.first + destRef.count == srcRef.first {
-            // Pool-contiguous: widen the destination's `ContentRef` in place (no new segments, no intern).
-            storage[dest].data = .literal(ContentRef(
-                first: destRef.first,
-                count: destRef.count + srcRef.count,
-                totalLength: destRef.totalLength + srcRef.totalLength
-            ))
-        } else if Int(destRef.first + destRef.count) == storage.segments.count {
-            // The destination ends the pool, typically as a run an earlier merge relocated there: append copies of
-            // only the source's segments behind it. Re-copying the destination for every out-of-order sibling makes
-            // a long run cost quadratic segments and time. Each segment is read into a local before appending, so
-            // the read access ends before the mutating append.
-            for i in 0..<Int(srcRef.count) {
-                let seg = storage.segments[Int(srcRef.first) + i]
-                storage.segments.append(seg)
+        // Pool-contiguous runs widen in place with no new segments. A destination that already ends the pool grows by
+        // copies of the source's segments alone: re-copying the destination for every out-of-order sibling makes a long
+        // run cost quadratic segments and time. Anything else is copied whole to the pool end as a fresh run.
+        let isContiguous = destRef.first + destRef.count == srcRef.first
+        let endsPool = Int(destRef.first + destRef.count) == storage.segments.count
+        let first = isContiguous || endsPool ? destRef.first : Int32(storage.segments.count)
+        if !isContiguous {
+            if !endsPool {
+                appendSegments(of: destRef)
             }
-            storage[dest].data = .literal(ContentRef(
-                first: destRef.first,
-                count: destRef.count + srcRef.count,
-                totalLength: destRef.totalLength + srcRef.totalLength
-            ))
-        } else {
-            // Non-contiguous: append copies of both runs' segments to the pool end as a new combined run. Each segment is read into a local before appending, so the read access ends before the mutating append - no aliasing of the growing `segments` pool.
-            let newFirst = Int32(storage.segments.count)
-            for i in 0..<Int(destRef.count) {
-                let seg = storage.segments[Int(destRef.first) + i]
-                storage.segments.append(seg)
-            }
-            for i in 0..<Int(srcRef.count) {
-                let seg = storage.segments[Int(srcRef.first) + i]
-                storage.segments.append(seg)
-            }
-            storage[dest].data = .literal(ContentRef(
-                first: newFirst,
-                count: destRef.count + srcRef.count,
-                totalLength: destRef.totalLength + srcRef.totalLength
-            ))
+            appendSegments(of: srcRef)
         }
+        storage[dest].data = .literal(ContentRef(
+            first: first,
+            count: destRef.count + srcRef.count,
+            totalLength: destRef.totalLength + srcRef.totalLength
+        ))
         if positionsEnabled {
             let a = storage.sourceRanges[dest]
             let b = storage.sourceRanges[source]
