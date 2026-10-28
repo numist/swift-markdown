@@ -12,13 +12,24 @@ internal import BasicContainers
 
 /// Reused buffers for the inline pass, owned by its caller so their borrow is independent of the `storage` mutations `parseInline` performs.
 ///
-/// `bytes` holds an arena-content copy while it is parsed. `segments` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content) and `segmentEnds` its running virtual end offsets. `runs` holds a stable copy of a flattened block's arena→source run map and `runEnds` its running end offsets.
+/// `bytes` holds an arena-content copy while it is parsed. `pieces` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content), or of a flattened block's arena→source run map, and `pieceEnds` their running end offsets.
 private struct InlineScratch: ~Copyable {
     var bytes = UniqueArray<UInt8>()
-    var segments = UniqueArray<Segment>()
-    var segmentEnds = UniqueArray<Int>()
-    var runs = UniqueArray<ArenaRun>()
-    var runEnds = UniqueArray<Int>()
+    var pieces = UniqueArray<Segment>()
+    var pieceEnds = UniqueArray<Int>()
+
+    /// Empty `pieces` and `pieceEnds`, keeping their capacity.
+    mutating func removeAllPieces() {
+        pieces.removeSubrange(0..<pieces.count)
+        pieceEnds.removeSubrange(0..<pieceEnds.count)
+    }
+
+    /// Append `piece` to `pieces` and its end offset to `pieceEnds`.
+    mutating func append(piece: Segment) {
+        let start = pieceEnds.count == 0 ? 0 : pieceEnds[pieceEnds.count - 1]
+        pieces.append(piece)
+        pieceEnds.append(start + Int(piece.length))
+    }
 }
 
 /// Block-level Markdown parser.
@@ -291,17 +302,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 parseInline(chunk: storage.segments[Int(ref.first)].chunk, scratch: &scratch, into: node)
             } else {
                 // Multi-segment content (multi-line non-contiguous paragraph/heading): copy the segment list into stable storage and parse it directly from the source - no flattening into the arena.
-                scratch.segments.removeSubrange(0..<scratch.segments.count)
-                scratch.segmentEnds.removeSubrange(0..<scratch.segmentEnds.count)
-                var virtualEnd = 0
+                scratch.removeAllPieces()
                 for i in 0..<Int(ref.count) {
-                    let seg = storage.segments[Int(ref.first) + i]
-                    scratch.segments.append(seg)
-                    virtualEnd += Int(seg.length)
-                    scratch.segmentEnds.append(virtualEnd)
+                    scratch.append(piece: storage.segments[Int(ref.first) + i])
                 }
                 parseInline(
-                    content: ContentSpan(source: sourceBytes, segments: scratch.segments.span, segmentEnds: scratch.segmentEnds.span, virtualLength: Int(ref.totalLength)),
+                    content: ContentSpan(source: sourceBytes, segments: scratch.pieces.span, segmentEnds: scratch.pieceEnds.span, virtualLength: Int(ref.totalLength)),
                     into: node
                 )
             }
@@ -401,18 +407,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         scratch.bytes.removeSubrange(0..<scratch.bytes.count)
         scratch.bytes.append(copying: storage.strings.span.extracting(chunk.range))
-        scratch.runs.removeSubrange(0..<scratch.runs.count)
-        scratch.runEnds.removeSubrange(0..<scratch.runEnds.count)
-        if let map = arenaSourceMaps[node] {
-            var runEnd = 0
-            for run in map {
-                scratch.runs.append(run)
-                runEnd += Int(run.length)
-                scratch.runEnds.append(runEnd)
-            }
+        scratch.removeAllPieces()
+        for run in arenaSourceMaps[node] ?? [] {
+            scratch.append(piece: Segment(offset: run.sourceOffset, length: run.length, inSource: run.sourceOffset >= 0))
         }
         parseInline(
-            content: ContentSpan(span: scratch.bytes.span, base: chunk.offset, inSource: false, arenaRuns: scratch.runs.span, arenaRunEnds: scratch.runEnds.span),
+            content: ContentSpan(span: scratch.bytes.span, base: chunk.offset, runs: scratch.pieces.span, runEnds: scratch.pieceEnds.span),
             into: node,
             preserveWhitespace: preserveWhitespace
         )
