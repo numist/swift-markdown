@@ -1759,7 +1759,7 @@ extension BlockParser {
         case UInt8(ascii: "!"):
             return matchHTMLBangForm(start: start, content: content)
         case UInt8(ascii: "?"):
-            return matchHTMLProcessingInstruction(start: start, content: content)
+            return Self.matchHTMLOpenerToCloser("<?", "?>", start: start, content: content, misses: &htmlCloserMisses.processingInstruction)
         case UInt8(ascii: "/"):
             return matchHTMLCloseTag(start: start, content: content)
         default:
@@ -1842,7 +1842,7 @@ extension BlockParser {
             return matchHTMLComment(start: start, content: content)
         }
         if next == UInt8(ascii: "[") {
-            return matchHTMLCDATA(start: start, content: content)
+            return Self.matchHTMLOpenerToCloser("<![CDATA[", "]]>", start: start, content: content, misses: &htmlCloserMisses.cdata)
         }
         return matchHTMLDeclaration(start: start, content: content)
     }
@@ -1867,24 +1867,6 @@ extension BlockParser {
             return bodyStart + 2
         }
         return Self.scanRawHTMLCloser("-->", from: bodyStart, content: content, misses: &htmlCloserMisses.comment)
-    }
-
-    /// Match `<![CDATA[…]]>`. Per the CDATA section definition (Raw HTML) the content is any run not
-    /// containing `]]>`, closed by the first `]]>`.
-    private mutating func matchHTMLCDATA(start: Int, content: borrowing ContentSpan) -> Int? {
-        let end = content.endOffset
-        // Need `<![CDATA[`, with `CDATA` matched case-sensitively.
-        let prefixLen = 9
-        if start + prefixLen > end {
-            return nil
-        }
-        let prefix = "<![CDATA["
-        for (k, prefixByte) in prefix.utf8.enumerated() {
-            if content[start + k] != prefixByte {
-                return nil
-            }
-        }
-        return Self.scanRawHTMLCloser("]]>", from: start + prefixLen, content: content, misses: &htmlCloserMisses.cdata)
     }
 
     /// Match `<!NAME …>` where NAME is `[A-Z]+`, followed by at least one spacechar, any non-`>` non-NUL chars, then `>`.
@@ -1913,12 +1895,19 @@ extension BlockParser {
         return Self.scanRawHTMLCloser(">", from: afterSpaces, content: content, misses: &htmlCloserMisses.declaration)
     }
 
-    /// Match `<?…?>`. Body may be empty; scans for the first `?>` terminator rejecting NUL bytes.
-    ///
-    /// Per the processing instruction definition (Raw HTML) the body is any string of characters not
-    /// including `?>`, so this stops at the first `?>`.
-    private mutating func matchHTMLProcessingInstruction(start: Int, content: borrowing ContentSpan) -> Int? {
-        return Self.scanRawHTMLCloser("?>", from: start + 2, content: content, misses: &htmlCloserMisses.processingInstruction)
+    /// Match a raw HTML form that is a fixed `opener` followed by the first `closer`, scanned through `misses`: a CDATA section `<![CDATA[…]]>`, whose content is any run not containing `]]>`, or a processing instruction `<?…?>`, whose body may be empty and is any string not including `?>` (Raw HTML). `opener` is matched case-sensitively.
+    private static func matchHTMLOpenerToCloser(_ opener: String, _ closer: String, start: Int, content: borrowing ContentSpan, misses: inout Range<Int>) -> Int? {
+        let end = content.endOffset
+        let openerLength = opener.utf8.count
+        if start + openerLength > end {
+            return nil
+        }
+        for (k, openerByte) in opener.utf8.enumerated() {
+            if content[start + k] != openerByte {
+                return nil
+            }
+        }
+        return scanRawHTMLCloser(closer, from: start + openerLength, content: content, misses: &misses)
     }
 
     /// Scan for the first `closer` starting at or after `start`. Returns the offset just past it, or `nil` if the end of the content comes first.
