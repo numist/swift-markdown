@@ -1614,27 +1614,29 @@ extension BlockParser {
         }
         // The local-part loop stopped on the `@`.
         i += 1
-        // Domain: 1+ labels separated by `.`. Each label: letter/digit, optional letters/digits/hyphens, ending with letter/digit. Up to 63 chars per label.
-        let domainStart = i
-        let labelStart = i
-        while i < end {
-            let b = content[i]
-            if b == UInt8(ascii: ">") {
-                break
+        // Domain: 1+ labels separated by `.`. Each label is 1 to 63 letters, digits and hyphens, and neither starts nor ends with a hyphen.
+        var labelStart = i
+        while true {
+            if i >= end {
+                return nil
             }
-            // Stop at the first byte no domain can contain: scanning on to a distant `>` or the block's
-            // end would make each unclosed `<local@` cost O(block length).
-            if !(b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-") || b == UInt8(ascii: ".")) {
+            let b = content[i]
+            if b == UInt8(ascii: ">") || b == UInt8(ascii: ".") {
+                let labelLength = i - labelStart
+                if labelLength == 0 || labelLength > 63
+                    || content[labelStart] == UInt8(ascii: "-") || content[i - 1] == UInt8(ascii: "-") {
+                    return nil
+                }
+                if b == UInt8(ascii: ">") {
+                    break
+                }
+                labelStart = i + 1
+            } else if !(b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-")) {
+                // Stop at the first byte no domain can contain: scanning on to a distant `>` or the block's
+                // end would make each unclosed `<local@` cost O(block length).
                 return nil
             }
             i += 1
-        }
-        if i == domainStart || i >= end {
-            return nil
-        }
-        // Validate domain structure.
-        if !validateEmailDomain(range: labelStart..<i, content: content) {
-            return nil
         }
         return AutolinkMatch(
             interior: bodyStart..<i,
@@ -1671,39 +1673,6 @@ extension BlockParser {
         default:
             return false
         }
-    }
-
-    private func validateEmailDomain(range: Range<Int>, content: borrowing ContentSpan) -> Bool {
-        precondition(!range.isEmpty, "an email autolink's domain holds at least one byte")
-        var i = range.lowerBound
-        var labelStart = i
-        var labelLen = 0
-        while i <= range.upperBound {
-            let atEnd = i == range.upperBound
-            let b: UInt8 = atEnd ? UInt8(ascii: ".") : content[i]
-            if b == UInt8(ascii: ".") {
-                // End of label.
-                if labelLen == 0 || labelLen > 63 {
-                    return false
-                }
-                // Label can't start or end with hyphen.
-                let firstByte = content[labelStart]
-                let lastByte = content[i - 1]
-                if firstByte == UInt8(ascii: "-") || lastByte == UInt8(ascii: "-") {
-                    return false
-                }
-                if atEnd {
-                    return true
-                }
-                labelStart = i + 1
-                labelLen = 0
-            } else {
-                assert(b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-"), "the domain scan admits only letters, digits, `-` and `.`")
-                labelLen += 1
-            }
-            i += 1
-        }
-        return true
     }
 
     /// Emit a `.link` node + a single `.text` child for an autolink match.
