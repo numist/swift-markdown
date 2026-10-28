@@ -103,142 +103,17 @@ extension BlockParser {
             let byte = content[cursor]
             switch byte {
             case UInt8(ascii: "`"):
-                if let span = matchCodeSpan(
-                    start: cursor,
-                    content: content
-                ) {
-                    // Per Code spans, line endings become spaces before one leading and trailing space is stripped.
-                    emitLiteral(
-                        .codeInline(backtickCount: span.backtickCount),
-                        normalizeCodeSpanContent(span.content),
-                        start: cursor,
-                        end: span.afterClose,
-                        to: parent,
-                        pendingTextStart: &pendingTextStart,
-                        content: content
-                    )
-                    cursor = span.afterClose
-                    continue
-                }
-                // No matching close - skip past the run; the backticks become part of the pending text region.
-                cursor = scanBacktickRun(
-                    start: cursor,
-                    content: content
-                )
+                cursor = handleBackticks(at: cursor, content: content, parent: parent, pendingTextStart: &pendingTextStart)
 
             case UInt8(ascii: "\n"):
-                let info: LineBreakInfo
-                if preserveWhitespace {
-                    // Preserving whitespace, a line ending is literal text rather than a soft line break or a trailing-space hard line break. A backslash before it forms a hard line break (Hard line breaks).
-                    guard cursor > pendingTextStart, content[cursor - 1] == UInt8(ascii: "\\") else {
-                        cursor += 1
-                        continue
-                    }
-                    info = LineBreakInfo(isHard: true, textEnd: cursor - 1)
-                } else {
-                    info = classifyLineBreak(
-                        at: cursor,
-                        pendingTextStart: pendingTextStart,
-                        content: content
-                    )
-                }
-                flushPendingText(
-                    start: pendingTextStart,
-                    end: info.textEnd,
-                    content: content,
-                    into: parent
-                )
-                let kind: MarkdownNode.Kind = info.isHard ? .lineBreak : .softBreak
-                let breakIdx = storage.appendNode(NodeRecord(kind: kind, parent: parent))
-                storage.appendChild(breakIdx, to: parent)
-                cursor += 1
-                pendingTextStart = cursor
+                cursor = handleLineEnding(at: cursor, preserveWhitespace: preserveWhitespace, content: content, parent: parent, pendingTextStart: &pendingTextStart)
 
             case UInt8(ascii: "&"):
-                // Entity matching reads a flat buffer by raw offset, so scan through a contiguous
-                // window (see `contiguousChunk`): identity for single-segment content, the single
-                // source segment's slice for multi-segment content (whose virtual offsets index no
-                // single buffer). The line ending at a segment join terminates any entity name or
-                // number, so a window from `&` to the segment end is sufficient.
-                let contiguous = content.contiguousChunk(fromVirtual: cursor, limit: endOffset)
-                precondition(contiguous != nil, "an `&` lies in a source segment: the only synthetic segment is the line join")
-                let window = contiguous!
-                // Match in an expression of its own so the borrowed `source` span (lifetime-dependent) stays scoped to the call and can't escape into the body.
-                let entity: EntityParser.EntityMatch? = if window.inSource {
-                    EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: sourceBytes)
-                } else {
-                    EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: storage.strings.span)
-                }
-                if let entity {
-                    let decoded = Self.appendUTF8Bytes(
-                        bytes: entity.bytes,
-                        count: entity.count,
-                        into: &storage.strings
-                    )
-                    // Convert the scanner-returned buffer offset back to a virtual content offset via the window base (identity for single-segment content).
-                    let afterSemi = cursor + (entity.afterSemi - window.offset)
-                    let textIdx = emitLiteral(
-                        .text,
-                        decoded,
-                        start: cursor,
-                        end: afterSemi,
-                        to: parent,
-                        pendingTextStart: &pendingTextStart,
-                        content: content
-                    )
-                    if positionsEnabled {
-                        let source = storage.sourceRanges[textIdx]
-                        characterReferenceSources.append((decoded.range, Int(source.start)..<Int(source.end)))
-                    }
-                    cursor = afterSemi
-                    continue
-                }
-                cursor += 1
-                
+                cursor = handleCharacterReference(at: cursor, content: content, parent: parent, pendingTextStart: &pendingTextStart)
+
             case UInt8(ascii: "<"):
-                if let auto = matchAutolink(
-                    start: cursor,
-                    content: content
-                ) {
-                    flushPendingText(
-                        start: pendingTextStart,
-                        end: cursor,
-                        content: content,
-                        into: parent
-                    )
-                    emitAutolink(
-                        auto: auto,
-                        into: parent,
-                        content: content
-                    )
-                    // Links may not contain other links (Links), and an autolink binds more tightly
-                    // than link text brackets, so the link openers before it cannot form links.
-                    markLinkOpenersInactive()
-                    cursor = auto.afterClose
-                    pendingTextStart = cursor
-                    continue
-                }
-                if let htmlEnd = matchInlineHTML(
-                    start: cursor,
-                    content: content
-                ) {
-                    // The literal is the tag's raw bytes, zero-copy when they lie in one segment. A tag
-                    // spanning a line ending in a non-contiguous paragraph has its bytes in separate
-                    // segments, so the joined literal is materialized into the arena.
-                    emitLiteral(
-                        .htmlInline,
-                        materializedChunk(start: cursor, end: htmlEnd, content: content),
-                        start: cursor,
-                        end: htmlEnd,
-                        to: parent,
-                        pendingTextStart: &pendingTextStart,
-                        content: content
-                    )
-                    cursor = htmlEnd
-                    continue
-                }
-                cursor += 1
-                
+                cursor = handleAngleBracket(at: cursor, content: content, parent: parent, pendingTextStart: &pendingTextStart)
+
             case UInt8(ascii: "*"), UInt8(ascii: "_"):
                 cursor = handleDelimRun(
                     char: byte,
@@ -272,40 +147,11 @@ extension BlockParser {
                 )
 
             case UInt8(ascii: "!"):
-                // `![^` opens no image: the `!` is literal text and the `[` opens a bracket, so `![^a]`
-                // is `!` followed by a footnote reference, link or literal text.
-                if cursor + 1 < endOffset,
-                   content[cursor + 1] == UInt8(ascii: "["),
-                   !(cursor + 2 < endOffset && content[cursor + 2] == UInt8(ascii: "^")) {
-                    cursor = openBracket(
-                        .image,
-                        length: 2,
-                        at: cursor,
-                        to: parent,
-                        pendingTextStart: &pendingTextStart,
-                        content: content
-                    )
-                } else {
-                    cursor += 1
-                }
-                
+                cursor = handleExclamationMark(at: cursor, content: content, parent: parent, pendingTextStart: &pendingTextStart)
+
             case UInt8(ascii: "^"):
-                // Without `.attributes`, `^` is ordinary text and a following `[` opens a link bracket.
-                if storage.options.contains(.attributes),
-                   cursor + 1 < endOffset,
-                   content[cursor + 1] == UInt8(ascii: "[") {
-                    cursor = openBracket(
-                        .attribute,
-                        length: 2,
-                        at: cursor,
-                        to: parent,
-                        pendingTextStart: &pendingTextStart,
-                        content: content
-                    )
-                } else {
-                    cursor += 1
-                }
-                
+                cursor = handleCaret(at: cursor, content: content, parent: parent, pendingTextStart: &pendingTextStart)
+
             case UInt8(ascii: "]"):
                 flushPendingText(
                     start: pendingTextStart,
@@ -321,57 +167,11 @@ extension BlockParser {
                 pendingTextStart = cursor
 
             case UInt8(ascii: "\\"):
-                // Backslash escape: `\<ASCII punct>` emits the punct as a single-byte text node. The line ending case handles `\<line ending>`. Anything else leaves the backslash as literal text.
-                if cursor + 1 < endOffset {
-                    let next = content[cursor + 1]
-                    if next.isASCIIPunct {
-                        // The node's content is the single unescaped char (`cursor + 1`), but its source span is the 2-byte `\<punct>` escape starting at `cursor`, so the run keeps the backslash's column.
-                        emitLiteral(
-                            .text,
-                            content.chunk(offset: cursor + 1, length: 1),
-                            start: cursor,
-                            end: cursor + 2,
-                            to: parent,
-                            pendingTextStart: &pendingTextStart,
-                            content: content
-                        )
-                        cursor += 2
-                        continue
-                    }
-                }
-                cursor += 1
-                
+                cursor = handleBackslash(at: cursor, content: content, parent: parent, pendingTextStart: &pendingTextStart)
+
             case UInt8(ascii: ":"), UInt8(ascii: "w"), UInt8(ascii: "W"):
-                // `://` and `www.` extended autolinks are detected in this pass. Extended email autolinks
-                // are detected by `gfmEmailAutolinkPass` after emphasis resolution, so a `_` or `*` beside
-                // an email resolves as emphasis (or not) before the email's boundaries are decided.
-                // The parser forms no `://` or `www.` extended autolink while a `[` or `![` opener is on
-                // the bracket stack, so `[a http://t.t` is text. An `^[` opener does not suppress one.
-                let insideLinkOrImageBracket = lastBracket.map { brackets[$0].insideLinkOrImage } ?? false
-                if storage.options.contains(.gfmAutolink),
-                   !insideLinkOrImageBracket,
-                   let auto = matchGFMAutolink(
-                    trigger: byte,
-                    cursor: cursor,
-                    content: content
-                   ) {
-                    flushPendingText(
-                        start: pendingTextStart,
-                        end: auto.urlStart,
-                        content: content,
-                        into: parent
-                    )
-                    emitGFMAutolink(
-                        auto: auto,
-                        content: content,
-                        into: parent
-                    )
-                    cursor = auto.urlEnd
-                    pendingTextStart = cursor
-                    continue
-                }
-                cursor += 1
-                
+                cursor = handleGFMAutolinkTrigger(byte, at: cursor, content: content, parent: parent, pendingTextStart: &pendingTextStart)
+
             case UInt8(ascii: "'"), UInt8(ascii: "\""):
                 // Smart quotes: push a quote delimiter (resolved to curly open/close in `processEmphasis`). Without `.smart`, the byte is ordinary text.
                 if smartEnabled {
@@ -401,21 +201,8 @@ extension BlockParser {
 
             case UInt8(ascii: "."):
                 // Smart ellipsis: exactly `...` becomes a single ellipsis. Other runs of dots stay in the pending-text region.
-                if smartEnabled,
-                   cursor + 2 < endOffset,
-                   content[cursor + 1] == UInt8(ascii: "."),
-                   content[cursor + 2] == UInt8(ascii: ".") {
-                    // The ellipsis glyph is arena-backed and its byte length differs from the `...` it replaces; its source span is the three dots, so it keeps their columns.
-                    emitLiteral(
-                        .text,
-                        smartConstantChunk(Self.ellipsis),
-                        start: cursor,
-                        end: cursor + 3,
-                        to: parent,
-                        pendingTextStart: &pendingTextStart,
-                        content: content
-                    )
-                    cursor += 3
+                if smartEnabled {
+                    cursor = handleEllipsis(at: cursor, content: content, parent: parent, pendingTextStart: &pendingTextStart)
                 } else {
                     cursor += 1
                 }
@@ -440,6 +227,258 @@ extension BlockParser {
             stackBottom: -1,
             content: content
         )
+    }
+
+    // Each `handle` step below consumes the construct that starts with the byte at `cursor`, emits what it forms, and returns the offset where scanning resumes: past the construct when one formed, otherwise past the single byte, which stays in the pending text.
+
+    /// A code span (Code spans): line endings become spaces before one leading and trailing space is stripped. An unmatched backtick run is skipped whole and stays pending text.
+    private mutating func handleBackticks(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
+        if let span = matchCodeSpan(
+            start: cursor,
+            content: content
+        ) {
+            emitLiteral(
+                .codeInline(backtickCount: span.backtickCount),
+                normalizeCodeSpanContent(span.content),
+                start: cursor,
+                end: span.afterClose,
+                to: parent,
+                pendingTextStart: &pendingTextStart,
+                content: content
+            )
+            return span.afterClose
+        }
+        // No matching close - skip past the run; the backticks become part of the pending text region.
+        return scanBacktickRun(
+            start: cursor,
+            content: content
+        )
+    }
+
+    /// A soft or hard line break (Soft line breaks, Hard line breaks).
+    private mutating func handleLineEnding(at cursor: Int, preserveWhitespace: Bool, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
+        let info: LineBreakInfo
+        if preserveWhitespace {
+            // Preserving whitespace, a line ending is literal text rather than a soft line break or a trailing-space hard line break. A backslash before it forms a hard line break (Hard line breaks).
+            guard cursor > pendingTextStart, content[cursor - 1] == UInt8(ascii: "\\") else {
+                return cursor + 1
+            }
+            info = LineBreakInfo(isHard: true, textEnd: cursor - 1)
+        } else {
+            info = classifyLineBreak(
+                at: cursor,
+                pendingTextStart: pendingTextStart,
+                content: content
+            )
+        }
+        flushPendingText(
+            start: pendingTextStart,
+            end: info.textEnd,
+            content: content,
+            into: parent
+        )
+        let kind: MarkdownNode.Kind = info.isHard ? .lineBreak : .softBreak
+        let breakIdx = storage.appendNode(NodeRecord(kind: kind, parent: parent))
+        storage.appendChild(breakIdx, to: parent)
+        pendingTextStart = cursor + 1
+        return cursor + 1
+    }
+
+    /// An entity or numeric character reference (Entity and numeric character references).
+    private mutating func handleCharacterReference(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
+        // Entity matching reads a flat buffer by raw offset, so scan through a contiguous
+        // window (see `contiguousChunk`): identity for single-segment content, the single
+        // source segment's slice for multi-segment content (whose virtual offsets index no
+        // single buffer). The line ending at a segment join terminates any entity name or
+        // number, so a window from `&` to the segment end is sufficient.
+        let contiguous = content.contiguousChunk(fromVirtual: cursor, limit: content.endOffset)
+        precondition(contiguous != nil, "an `&` lies in a source segment: the only synthetic segment is the line join")
+        let window = contiguous!
+        // Match in an expression of its own so the borrowed `source` span (lifetime-dependent) stays scoped to the call and can't escape into the body.
+        let entity: EntityParser.EntityMatch? = if window.inSource {
+            EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: sourceBytes)
+        } else {
+            EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: storage.strings.span)
+        }
+        guard let entity else {
+            return cursor + 1
+        }
+        let decoded = Self.appendUTF8Bytes(
+            bytes: entity.bytes,
+            count: entity.count,
+            into: &storage.strings
+        )
+        // Convert the scanner-returned buffer offset back to a virtual content offset via the window base (identity for single-segment content).
+        let afterSemi = cursor + (entity.afterSemi - window.offset)
+        let textIdx = emitLiteral(
+            .text,
+            decoded,
+            start: cursor,
+            end: afterSemi,
+            to: parent,
+            pendingTextStart: &pendingTextStart,
+            content: content
+        )
+        if positionsEnabled {
+            let source = storage.sourceRanges[textIdx]
+            characterReferenceSources.append((decoded.range, Int(source.start)..<Int(source.end)))
+        }
+        return afterSemi
+    }
+
+    /// An autolink (Autolinks) or raw inline HTML (Raw HTML).
+    private mutating func handleAngleBracket(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
+        if let auto = matchAutolink(
+            start: cursor,
+            content: content
+        ) {
+            flushPendingText(
+                start: pendingTextStart,
+                end: cursor,
+                content: content,
+                into: parent
+            )
+            emitAutolink(
+                auto: auto,
+                into: parent,
+                content: content
+            )
+            // Links may not contain other links (Links), and an autolink binds more tightly
+            // than link text brackets, so the link openers before it cannot form links.
+            markLinkOpenersInactive()
+            pendingTextStart = auto.afterClose
+            return auto.afterClose
+        }
+        if let htmlEnd = matchInlineHTML(
+            start: cursor,
+            content: content
+        ) {
+            // The literal is the tag's raw bytes, zero-copy when they lie in one segment. A tag
+            // spanning a line ending in a non-contiguous paragraph has its bytes in separate
+            // segments, so the joined literal is materialized into the arena.
+            emitLiteral(
+                .htmlInline,
+                materializedChunk(start: cursor, end: htmlEnd, content: content),
+                start: cursor,
+                end: htmlEnd,
+                to: parent,
+                pendingTextStart: &pendingTextStart,
+                content: content
+            )
+            return htmlEnd
+        }
+        return cursor + 1
+    }
+
+    /// An image opener `![`.
+    private mutating func handleExclamationMark(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
+        // `![^` opens no image: the `!` is literal text and the `[` opens a bracket, so `![^a]`
+        // is `!` followed by a footnote reference, link or literal text.
+        let endOffset = content.endOffset
+        if cursor + 1 < endOffset,
+           content[cursor + 1] == UInt8(ascii: "["),
+           !(cursor + 2 < endOffset && content[cursor + 2] == UInt8(ascii: "^")) {
+            return openBracket(
+                .image,
+                length: 2,
+                at: cursor,
+                to: parent,
+                pendingTextStart: &pendingTextStart,
+                content: content
+            )
+        }
+        return cursor + 1
+    }
+
+    /// An inline attribute opener `^[`.
+    private mutating func handleCaret(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
+        // Without `.attributes`, `^` is ordinary text and a following `[` opens a link bracket.
+        if storage.options.contains(.attributes),
+           cursor + 1 < content.endOffset,
+           content[cursor + 1] == UInt8(ascii: "[") {
+            return openBracket(
+                .attribute,
+                length: 2,
+                at: cursor,
+                to: parent,
+                pendingTextStart: &pendingTextStart,
+                content: content
+            )
+        }
+        return cursor + 1
+    }
+
+    /// A backslash escape (Backslash escapes): `\<ASCII punct>` emits the punct as a single-byte text node. The line ending case handles `\<line ending>`. Anything else leaves the backslash as literal text.
+    private mutating func handleBackslash(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
+        if cursor + 1 < content.endOffset {
+            let next = content[cursor + 1]
+            if next.isASCIIPunct {
+                // The node's content is the single unescaped char (`cursor + 1`), but its source span is the 2-byte `\<punct>` escape starting at `cursor`, so the run keeps the backslash's column.
+                emitLiteral(
+                    .text,
+                    content.chunk(offset: cursor + 1, length: 1),
+                    start: cursor,
+                    end: cursor + 2,
+                    to: parent,
+                    pendingTextStart: &pendingTextStart,
+                    content: content
+                )
+                return cursor + 2
+            }
+        }
+        return cursor + 1
+    }
+
+    /// A `://` or `www.` extended autolink, triggered by `byte` (`:`, `w` or `W`).
+    private mutating func handleGFMAutolinkTrigger(_ byte: UInt8, at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
+        // `://` and `www.` extended autolinks are detected in this pass. Extended email autolinks
+        // are detected by `gfmEmailAutolinkPass` after emphasis resolution, so a `_` or `*` beside
+        // an email resolves as emphasis (or not) before the email's boundaries are decided.
+        // The parser forms no `://` or `www.` extended autolink while a `[` or `![` opener is on
+        // the bracket stack, so `[a http://t.t` is text. An `^[` opener does not suppress one.
+        let insideLinkOrImageBracket = lastBracket.map { brackets[$0].insideLinkOrImage } ?? false
+        if storage.options.contains(.gfmAutolink),
+           !insideLinkOrImageBracket,
+           let auto = matchGFMAutolink(
+            trigger: byte,
+            cursor: cursor,
+            content: content
+           ) {
+            flushPendingText(
+                start: pendingTextStart,
+                end: auto.urlStart,
+                content: content,
+                into: parent
+            )
+            emitGFMAutolink(
+                auto: auto,
+                content: content,
+                into: parent
+            )
+            pendingTextStart = auto.urlEnd
+            return auto.urlEnd
+        }
+        return cursor + 1
+    }
+
+    /// A smart ellipsis: exactly `...`.
+    private mutating func handleEllipsis(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
+        guard cursor + 2 < content.endOffset,
+              content[cursor + 1] == UInt8(ascii: "."),
+              content[cursor + 2] == UInt8(ascii: ".") else {
+            return cursor + 1
+        }
+        // The ellipsis glyph is arena-backed and its byte length differs from the `...` it replaces; its source span is the three dots, so it keeps their columns.
+        emitLiteral(
+            .text,
+            smartConstantChunk(Self.ellipsis),
+            start: cursor,
+            end: cursor + 3,
+            to: parent,
+            pendingTextStart: &pendingTextStart,
+            content: content
+        )
+        return cursor + 3
     }
 
     // MARK: - Links / images (bracket stack)
