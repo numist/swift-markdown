@@ -1,0 +1,59 @@
+/*
+ This source file is part of the Swift.org open source project
+
+ Copyright (c) 2026 Apple Inc. and the Swift project authors
+ Licensed under Apache License v2.0 with Runtime Library Exception
+
+ See https://swift.org/LICENSE.txt for license information
+ See https://swift.org/CONTRIBUTORS.txt for Swift project authors
+*/
+
+import CommonMark
+import Testing
+
+/// A plain paragraph that continues across container prefixes (`> `, list indentation) is stored as one source
+/// segment per line, with no copy of its text.
+@Suite("Multi-line container paragraphs keep source content")
+struct ContainerParagraphSourceContentTests {
+
+    @Test(arguments: [
+        ("> a\n> b\n> c\n", """
+            "a" source
+            "b" source
+            "c" source
+
+            """),
+        ("- a\n  b\n  c\n", """
+            "a" source
+            "b" source
+            "c" source
+
+            """),
+        ("> a b\n> c d\n> e f\n\n- x y\n  z w\n", """
+            "a b" source
+            "c d" source
+            "e f" source
+            "x y" source
+            "z w" source
+
+            """),
+    ])
+    func linesStayInSource(_ source: String, _ text: String) {
+        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
+        #expect(SourceBackedText.describe(source, options: []) == text)
+        #expect(SourceBackedText.describe(source, options: [.tables, .tasklist, .footnotes, .attributes]) == text)
+    }
+
+    @Test(arguments: [
+        ("> a\n> b\n> c\n", 8, 1),
+        ("- a\n  b\n  c\n", 8, 1),
+        ("> a b\n> c d\n> e f\n\n- x y\n  z w\n", 13, 1),
+        ("> a\n> b\n> c\n> d\n", 11, 1),
+        ("> a\n> |-\n", 5, 1),
+    ])
+    func noMaterializedCopy(_ source: String, _ segments: Int, _ stringSize: Int) {
+        let (count, size) = MarkdownDocument.withParsedDocument(source, options: []) { ($0._segmentCount, $0._materializedStringSize) }
+        #expect(count == segments)
+        #expect(size == stringSize)
+    }
+}
