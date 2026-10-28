@@ -1690,6 +1690,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var deepestMatched = documentIndex
         var prefixColumns = 0
         var lineColumns = LineColumns(lineStart: lineRange.lowerBound)
+        // The first non-whitespace byte at or after `cursor`, valid while `cursor` has not passed it. Containers that
+        // consume only whitespace leave it unchanged, so a chain of nested items scans the line's indent once.
+        var firstNonSpaceAhead = -1
 
         // Build top-down chain via parent walk + reverse. `chain` is a caller-owned reused buffer (reset here per line) so we don't allocate/zero a fresh array each line.
         chain.removeSubrange(0..<chain.count)
@@ -1709,7 +1712,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             case .document:
                 deepestMatched = node
             case .blockQuote:
-                let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
+                if cursor > firstNonSpaceAhead {
+                    firstNonSpaceAhead = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
+                }
+                let firstNonSpace = firstNonSpaceAhead
                 // `baseColumn: prefixColumns` - an outer quote's marker on this line can leave `cursor`
                 // mid-tab (see `blockQuotePrefixEnd`), so this marker's indent is measured from the
                 // column already reached, as in `dispatchNewBlocks`.
@@ -1750,14 +1756,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // non-empty item keep it open. Because `cursor` advances as each ancestor item consumes its
                 // own padding, a nested item is measured against its own content column, not an
                 // ancestor's.
-                let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
+                if cursor > firstNonSpaceAhead {
+                    firstNonSpaceAhead = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
+                }
+                let firstNonSpace = firstNonSpaceAhead
                 let isBlank = firstNonSpace == lineRange.upperBound
                 let padding = itemPadding(of: node)
                 // Compare in columns, not bytes, so a leading tab counts as up to 4 columns of indent.
                 // Measured from `prefixColumns`, the column the outer prefixes reached: `cursor` can sit
                 // after a marker at any column, or mid-tab after a partially consumed tab, and a tab's
                 // width depends on the column it starts at (Tabs).
-                let availCols = indentColumns(source: source, from: cursor, to: firstNonSpace, baseColumn: prefixColumns)
+                // Each whitespace byte spans at least one column, so `padding` bytes are enough to decide.
+                let availCols = indentColumns(source: source, from: cursor, to: min(firstNonSpace, cursor + padding), baseColumn: prefixColumns)
                 if availCols >= padding {
                     // The indent reaches the item's content column: consume exactly `padding` columns and
                     // match. This precedes the empty-item check, so a whitespace-only line whose expanded
@@ -1794,10 +1804,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // consumed prefix stays in the definition with 4 columns stripped, and a blank line keeps
                 // the definition open. Any other line fails the prefix, so the definition's open paragraph
                 // may continue lazily (the walk stops here with `allMatched: false`).
-                let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
+                if cursor > firstNonSpaceAhead {
+                    firstNonSpaceAhead = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
+                }
+                let firstNonSpace = firstNonSpaceAhead
                 let isBlank = firstNonSpace == lineRange.upperBound
                 // Measured from `prefixColumns`, like the item branch above: `cursor` can sit mid-tab.
-                let availCols = indentColumns(source: source, from: cursor, to: firstNonSpace, baseColumn: prefixColumns)
+                let availCols = indentColumns(source: source, from: cursor, to: min(firstNonSpace, cursor + 4), baseColumn: prefixColumns)
                 if availCols >= 4 {
                     cursor = advanceColumns(
                         source: source,
