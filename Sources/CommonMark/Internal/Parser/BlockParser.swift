@@ -54,53 +54,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var content: PendingContent
     }
 
-    /// A single source-range slice (`.lazy`, addressable directly into `BlockParser.source` with no copy), a materialized byte buffer (`.materialized`: arena content re-seeded when an underline line is examined, plus the lines appended to it), or a segment list (`.segments`).
+    /// A single source-range slice (`.lazy`, addressable directly into `BlockParser.source` with no copy) or a segment list (`.segments`).
     ///
     /// Single-line paragraphs/headings parsed from the original source stay `.lazy` until `materializePendingContent` emits them as a `Chunk(inSource: true)`.
     ///
     /// A `.lazy` span with `joinPending` set holds a deferred separator: a continuation `\n` is requested after the span but not committed, so that if the *next* line turns out to be contiguous in source (single-LF terminated, no stripped prefix) the whole multi-line run can stay a single zero-copy source range - the embedded `\n` comes from the source itself rather than a synthesized copy. Only `appendNewline` sets it, and the next `addLine` always clears it, so content that is drained or inspected between lines never has it set.
     enum PendingContent : ~Copyable {
         case lazy(range: Range<Int>, joinPending: Bool = false)
-        case materialized(MaterializedText)
         /// An ordered segment list.
         ///
         /// Each line is a zero-copy source `Segment` (or, for a code/HTML block body line that splits a tab, an arena copy) and each line join is the shared `newlineSegment`. Used for code/HTML block bodies, and for paragraph lines that are not contiguous in the source. Drained at finalize into a multi-segment `ContentRef` with no source bytes copied.
         case segments(UniqueArray<Segment>)
-    }
-
-    /// A paragraph or heading's content copied into a byte buffer, with the content-relative arena→source run map (`ArenaRun`s tiling `bytes` from its first byte) that images each byte: a copied source byte its own offset, a synthetic byte the source byte it stands for, and a line join a gap.
-    ///
-    /// The map is kept whether or not positions are tracked: it costs one run per contiguous source stretch, and the content it re-seeds must arrive with a map that tiles it (`addChunk`).
-    struct MaterializedText : ~Copyable {
-        private(set) var bytes = UniqueArray<UInt8>()
-        private(set) var map: [ArenaRun] = []
-
-        init() {}
-
-        /// The bytes `bytes` imaged by the content-relative run map `map`, which tiles them.
-        init(bytes: consuming UniqueArray<UInt8>, map: [ArenaRun]) {
-            precondition(map.reduce(0) { $0 + Int($1.length) } == bytes.count, "a run map tiles its content")
-            self.bytes = bytes
-            self.map = map
-        }
-
-        var count: Int { bytes.count }
-
-        subscript(_ index: Int) -> UInt8 { bytes[index] }
-
-        /// Append `byte`, imaging source byte `sourceOffset` (see `ArenaRun`), or a synthetic gap when `sourceOffset < 0`.
-        mutating func append(_ byte: UInt8, imaging sourceOffset: Int) {
-            bytes.append(byte)
-            BlockParser.appendContentByte(imaging: sourceOffset, to: &map)
-        }
-
-        /// Append the source bytes `source[range]`, each imaging itself.
-        mutating func append(_ range: Range<Int>, of source: Span<UInt8>) {
-            bytes.reserveCapacity(bytes.count + range.count)
-            for i in range {
-                append(source[i], imaging: i)
-            }
-        }
     }
 
     /// Result of `materializePendingContent`: the materialized `Chunk` plus the drained leaf. `map` carries a content-relative arena→source run map when the content is flattened from a source-mapped segment list (empty otherwise).
@@ -153,7 +117,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Arena→source run maps for flattened inline content that has a source pre-image, keyed by the content's node.
     ///
-    /// Registered at finalize for paragraph, heading, table-cell and table-preceding-paragraph content that reaches inline parsing as one arena `Chunk` (flattened from segments, materialized, NUL-replaced or pipe-unescaped), which loses the per-line source mapping the content had. The content-relative run map lets the inline pass stamp the node's inlines with real source positions. Consulted in the inline pass when building an arena single-segment `ContentSpan`.
+    /// Registered at finalize for paragraph, heading, table-cell and table-preceding-paragraph content that reaches inline parsing as one arena `Chunk` (flattened from segments, NUL-replaced or pipe-unescaped), which loses the per-line source mapping the content had. The content-relative run map lets the inline pass stamp the node's inlines with real source positions. Consulted in the inline pass when building an arena single-segment `ContentSpan`.
     var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
 
     /// The indent, in columns, of each paragraph's second line, keyed by the paragraph node and recorded
@@ -701,44 +665,28 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         fatalError("pending content for node \(leaf.node) must drain before node \(node) accumulates content")
     }
 
-    /// Consume `content` and materialize it into a `MaterializedText` ready for further appends.
+    /// Re-seed `node`'s content as the segment list imaged by `map`, the content-relative run map of the arena `chunk` (a flattened paragraph or a window of one), and return the leaf.
     ///
-    /// A `.materialized` entry's buffer is *moved* out (no copy). `nil` yields an empty buffer.
-    private func unwrap(_ content: consuming PendingContent?) -> MaterializedText {
-        switch consume content {
-        case .none:
-            return MaterializedText()
-        case .lazy?:
-            preconditionFailure("source-backed content is extended in place, never copied into a buffer")
-        case .materialized(let existing)?:
-            return existing
-        case .segments?:
-            // Segment lists are only produced for code/HTML blocks, which never re-seed via this path.
-            fatalError("unwrap called on segment-list content")
-        }
-    }
-
-    /// Append the bytes of the arena `chunk`, imaged by its content-relative run map `map`, to `pending` for `node`, returning the updated leaf.
-    ///
-    /// Used when re-seeding a node's content after a transformation step (e.g. setext heading content trimmed of leading link reference definitions).
-    private mutating func addChunk(_ chunk: Chunk, map: [ArenaRun], to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
-        precondition(!chunk.inSource, "source-backed content re-seeds as a `.lazy` range, not through addChunk")
+    /// Each source run becomes a zero-copy source segment and each gap a line-join segment, so later lines append like any other segment-list paragraph. Used when a setext heading's content is trimmed of leading link reference definitions, or a paragraph left holding only definitions continues.
+    private mutating func reseedSegments(_ chunk: Chunk, map: [ArenaRun], for node: DocumentStorage.Index) -> PendingLeaf {
+        precondition(!chunk.inSource, "source-backed content re-seeds as a `.lazy` range, not as segments")
         precondition(map.reduce(0) { $0 + Int($1.length) } == chunk.length, "a run map tiles its content")
-        var text = unwrap(take(pending, ifNode: node))
-        var i = chunk.offset
+        var segments = UniqueArray<Segment>()
         for run in map {
-            for j in 0..<Int(run.length) {
-                let sourceOffset = run.sourceOffset < 0 ? -1 : Int(run.sourceOffset) + j
-                text.append(storage.strings[i], imaging: sourceOffset)
-                i += 1
+            if run.sourceOffset < 0 {
+                for _ in 0..<run.length {
+                    segments.append(storage.newlineSegment)
+                }
+            } else {
+                segments.append(Segment(offset: run.sourceOffset, length: run.length, inSource: true))
             }
         }
-        return PendingLeaf(node: node, content: .materialized(text))
+        return PendingLeaf(node: node, content: .segments(segments))
     }
 
     /// Append the bytes from `span[range]` to `pending` for `node`, returning the updated leaf.
     private mutating func addLine(span: Span<UInt8>, range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
-        // Code/HTML block bodies accumulate as a zero-copy segment list rather than a materialized byte buffer (they're never inline-parsed). See `addLineSegment`.
+        // Code/HTML block bodies accumulate as a zero-copy segment list (they're never inline-parsed). See `addLineSegment`.
         let nodeKind = storage[node].kind
         if nodeKind.isCodeBlock || nodeKind == .htmlBlock {
             return addLineSegment(span: span, range: range, to: node, pending: pending)
@@ -768,23 +716,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return addLineSegment(span: span, range: range, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
             case .segments(let segs):
                 return addLineSegment(span: span, range: range, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
-            case let other:
-                var text = unwrap(other)
-                // A tab-expanded current line (`!currentLineMapsToSource`) has `span` pointing at the per-line expanded buffer, not source - appending `span[range]` directly would bake the expanded-tab spaces into the arena as if they were literal content. Map back to the literal source range instead, as in the `.none` case above: per Tabs, tabs stay literal in content.
-                if !currentLineMapsToSource {
-                    text.append(materializedSourceOffset(range.lowerBound)..<materializedSourceOffset(range.upperBound), of: sourceBytes)
-                } else {
-                    // A source-mapped line's `span` is the source itself.
-                    text.append(range.lowerBound..<range.upperBound, of: span)
-                }
-                return PendingLeaf(node: node, content: .materialized(text))
+            case .lazy(_, joinPending: false):
+                preconditionFailure("a continuation line follows a deferred line join")
             }
         }
     }
 
     /// Append a single `\n` to `pending` for `node`, returning the updated leaf.
     ///
-    /// Rejoins lines during paragraph continuation, since `LineReader` returns ranges without their line endings. When the current content is a `.lazy` source span, the separator is *deferred* by setting its `joinPending` so the next `addLine` can keep the run zero-copy if it's source-contiguous; otherwise the `\n` is committed into a materialized buffer immediately.
+    /// Rejoins lines during paragraph continuation, since `LineReader` returns ranges without their line endings. When the current content is a `.lazy` source span, the separator is *deferred* by setting its `joinPending` so the next `addLine` can keep the run zero-copy if it's source-contiguous; otherwise the content continues as a segment list joined by the shared `\n` segment.
     private mutating func appendNewline(to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         let nodeKind = storage[node].kind
         if nodeKind.isCodeBlock || nodeKind == .htmlBlock {
@@ -794,12 +734,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .lazy(let range, joinPending: false)?:
             return PendingLeaf(node: node, content: .lazy(range: range, joinPending: true))
         case .segments(let segs)?:
-            // A multi-line paragraph already accumulating as segments: the line join is the shared interned `\n` segment (zero-copy), not a byte appended to a materialized buffer.
+            // A multi-line paragraph already accumulating as segments: the line join is the shared interned `\n` segment (zero-copy).
             return appendSegment(storage.newlineSegment, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
-        case let existing:
-            var text = unwrap(existing)
-            text.append(UInt8(ascii: "\n"), imaging: -1)
-            return PendingLeaf(node: node, content: .materialized(text))
+        case .lazy?:
+            preconditionFailure("a deferred line join is requested once per line")
+        case nil:
+            preconditionFailure("a line join follows the leaf's first line")
         }
     }
 
@@ -1019,7 +959,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Materialize the pending content of the open paragraph `node` and return a `Chunk` pointing at it, along with the leaf with `node`'s content cleared.
     ///
-    /// A `.lazy` entry resolves to a `Chunk(inSource: true)` addressing the original source - no copy (this covers source-contiguous multi-line paragraphs). A `.materialized` entry is appended to `storage.strings` and a `Chunk(inSource: false)` is returned.
+    /// A `.lazy` entry resolves to a `Chunk(inSource: true)` addressing the original source - no copy (this covers source-contiguous multi-line paragraphs).
     private mutating func materializePendingContent(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> LeafMaterialization {
         precondition(pending != nil, "an open paragraph always holds its accumulated content")
         let leaf = pending!
@@ -1028,10 +968,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .lazy(let range, let joinPending):
             precondition(!joinPending, "a deferred line join is always consumed by the next line")
             return LeafMaterialization(chunk: Chunk(offset: range.lowerBound, length: range.count, inSource: true), pending: nil)
-        case .materialized(let content):
-            let offset = storage.strings.count
-            storage.strings.append(copying: content.bytes.span)
-            return LeafMaterialization(chunk: Chunk(offset: offset, length: content.count, inSource: false), pending: nil, map: content.map)
         case .segments(let segs):
             // Flatten a segment list to one arena chunk (used when a `Chunk` is required - e.g. a setext heading's paragraph re-seed, or matcher-eligible content). The common multi-line paragraph path keeps segments zero-copy via the finalize segment branch. Capture the arena→source run map so the re-seed can carry per-line source columns onto the heading's inlines.
             var map: [ArenaRun] = []
@@ -1056,8 +992,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .lazy(let r, let joinPending):
             precondition(!joinPending, "a deferred line join is always consumed by the next line")
             for i in r { storage.strings.append(sourceBytes[i]) }
-        case .materialized:
-            preconditionFailure("a single-line materialized paragraph has already resolved its table fate")
         case .segments:
             preconditionFailure("a single-line table header is a source range")
         }
@@ -1088,8 +1022,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         /// `\n` before the header line.
         case multiContiguous(range: Range<Int>, lastNewline: Int)
         /// Multiple lines in a non-contiguous representation: a zero-copy segment list (a nested
-        /// block-quote / list continuation, or a CRLF join) or a materialized buffer. The header and the
-        /// preceding lines are reconstructed from that representation by `splitNoncontiguousPendingTable`.
+        /// block-quote / list continuation, or a CRLF join). The header and the preceding lines are
+        /// reconstructed from that representation by `splitNoncontiguousPendingTable`.
         case multiOther
     }
 
@@ -1108,19 +1042,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .lazy(let r, let joinPending):
             precondition(!joinPending, "a deferred line join is always consumed by the next line")
             return lastNewline(in: r).map { .multiContiguous(range: r, lastNewline: $0) } ?? .single
-        case .materialized(let text):
-            // Searched from the end: a paragraph asks once per delimiter-shaped line, and a search from the start
-            // would rescan a long first line every time.
-            var k = text.count - 1
-            while k >= 0 && text[k] != UInt8(ascii: "\n") {
-                k -= 1
-            }
-            if k >= 0 {
-                return .multiOther
-            }
-            // A single-line materialized paragraph is a table-header re-seed (`splitMaterializedHeader`), which
-            // sets `paragraphTablePending`, so table detection never runs on one.
-            preconditionFailure("a single-line materialized paragraph has already resolved its table fate")
         case .segments:
             return .multiOther
         }
@@ -1135,8 +1056,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// inserted before `node`, and `node`'s pending content is re-seeded to the header line alone so the
     /// finalize-time two-line detection builds the table. This handles both multi-line representations: a
     /// source-contiguous range (`.multiContiguous`) and the non-contiguous forms (`.multiOther` - a
-    /// zero-copy segment list from a nested block-quote / list continuation or a CRLF join, or a
-    /// materialized buffer). The single-line case (the header is the paragraph) is delegated to
+    /// zero-copy segment list from a nested block-quote / list continuation or a CRLF join). The single-line case (the header is the paragraph) is delegated to
     /// `recordTablePending`.
     ///
     /// After a multi-line split the delimiter row becomes the re-seeded paragraph's second line, so its
@@ -1150,8 +1070,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             recordTablePending(node, delimSpan: delimSpan, delimRange: delimRange, pending: pending!)
             return pending
         case .multiOther:
-            // The header is the last accumulated line, held in a non-contiguous representation
-            // (segment list or materialized buffer). Classify header + delimiter through a borrow (like
+            // The header is the last accumulated line, held in a segment list. Classify header + delimiter through a borrow (like
             // `recordTablePending`); only split when a table actually opens.
             switch classifyMultiLineHeader(delimSpan: delimSpan, delimRange: delimRange, pending: pending!) {
             case .notDelimiterRow:
@@ -1246,8 +1165,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Classify whether the open paragraph's last accumulated line (the header) plus the just-arrived
     /// delimiter-candidate line open a table, for a non-contiguous paragraph representation (a zero-copy
-    /// segment list, or a materialized buffer with embedded line endings). Reconstructs the header line from the
-    /// stored representation into a scratch region of the arena, appends `\n` + the delimiter, runs
+    /// segment list). Reconstructs the header line from the segments into a scratch region of the arena, appends `\n` + the delimiter, runs
     /// `classifyTableOpen`, then truncates the scratch back off - reading `pending` through a borrow so the
     /// paragraph's accumulated content is untouched (mirrors `recordTablePending`).
     private mutating func classifyMultiLineHeader(delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf) -> TableOpenClassification {
@@ -1269,16 +1187,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     storage.strings.append(segmentByte(seg, j))
                 }
             }
-        case .materialized(let text):
-            // The header is the bytes after the last embedded line ending, found from the end like a segment list's.
-            var lastNewline = text.count - 1
-            while lastNewline >= 0 && text[lastNewline] != UInt8(ascii: "\n") {
-                lastNewline -= 1
-            }
-            precondition(lastNewline >= 0, "a multi-line materialized paragraph holds a line join")
-            for k in (lastNewline + 1)..<text.count {
-                storage.strings.append(text[k])
-            }
         case .lazy:
             preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
         }
@@ -1296,7 +1204,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// paragraph inserted before `node`, and `node` is re-seeded to the header line alone with
     /// `paragraphTablePending` set, so the finalize-time two-line detection builds the table from the header
     /// + the delimiter line the caller is about to append. The mirror of `detectPendingTable`'s
-    /// `.multiContiguous` split for the segment-list / materialized representations. Called only after
+    /// `.multiContiguous` split for the segment-list representation. Called only after
     /// `classifyMultiLineHeader` returns `.opens`.
     private mutating func splitNoncontiguousPendingTable(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         precondition(pending != nil, "an open paragraph always holds its accumulated content")
@@ -1304,8 +1212,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         switch consume leaf.content {
         case .segments(let segs):
             return splitSegmentHeader(node, segments: segs)
-        case .materialized(let text):
-            return splitMaterializedHeader(node, text: text)
         case .lazy:
             preconditionFailure("a single source range is never a non-contiguous multi-line paragraph")
         }
@@ -1382,44 +1288,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let last = segs[segs.count - 1]
         precondition(first.inSource && last.inSource, "a paragraph's lines start and end on a source byte")
         return (Int(first.offset), Int(last.offset) + Int(last.length))
-    }
-
-    /// Split a materialized paragraph (a byte buffer with embedded line endings) into a preceding paragraph
-    /// plus a header-only re-seed, each carrying its part of the buffer's run map. A paragraph is materialized
-    /// when its definitions are restored while an underline line is examined (`processLine` PHASE 2c) and
-    /// its lines were not contiguous in the source.
-    private mutating func splitMaterializedHeader(_ node: DocumentStorage.Index, text: consuming MaterializedText) -> PendingLeaf? {
-        var lastNewline = -1
-        for k in 0..<text.count where text[k] == UInt8(ascii: "\n") {
-            lastNewline = k
-        }
-        precondition(lastNewline >= 0, "a multi-line materialized paragraph holds a line join")
-        let precedingStart = storage.strings.count
-        for k in 0..<lastNewline {
-            storage.strings.append(text[k])
-        }
-        let precedingLines = Chunk(offset: precedingStart, length: lastNewline, inSource: false)
-        // The split-off lines are a paragraph that bypasses finalize, so its raw content is formed here.
-        if let precedingChunk = tableSplitParagraphContent(precedingLines.trimmingWhitespace(using: self), in: precedingLines, node: node) {
-            let precedingNode = insertTablePrecedingParagraph(before: node)
-            let precedingMap = sliceRuns(text.map, from: precedingChunk.offset - precedingStart, length: precedingChunk.length)
-            if positionsEnabled {
-                let span = sourceSpan(of: precedingChunk.isEmpty ? sliceRuns(text.map, from: 0, length: lastNewline) : precedingMap)
-                storage.setSourceStart(precedingNode, span.start)
-                storage.setSourceEnd(precedingNode, span.end)
-            }
-            enqueueTablePrecedingContent(precedingChunk, map: precedingMap, of: precedingNode)
-        }
-        var header = UniqueArray<UInt8>()
-        for k in (lastNewline + 1)..<text.count {
-            header.append(text[k])
-        }
-        let headerMap = sliceRuns(text.map, from: lastNewline + 1, length: text.count - lastNewline - 1)
-        if positionsEnabled {
-            storage.setSourceStart(node, sourceSpan(of: headerMap).start)
-        }
-        paragraphTablePending[node] = true
-        return PendingLeaf(node: node, content: .materialized(MaterializedText(bytes: header, map: headerMap)))
     }
 
     /// The source extent imaged by the run map of trimmed paragraph content: from its first run's byte to just past
@@ -1563,7 +1431,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // paragraph's finalize, or the split of a table that forms first, remove them again.
                     pending = raw.inSource
                         ? PendingLeaf(node: para, content: .lazy(range: raw.range))
-                        : addChunk(raw, map: flatMap, to: para, pending: pending)
+                        : reseedSegments(raw, map: flatMap, for: para)
                     pending = appendNewline(to: para, pending: pending)
                     pending = addLine(span: source, range: firstNonSpace..<lineRange.upperBound, to: para, pending: pending)
                     return pending
@@ -1576,12 +1444,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 current = parent
                 stillOpenKind = storage[current].kind
             } else {
-                // Re-seed pending content with the stripped bytes so the heading's inline-parse pass sees only what's left after link reference definitions are extracted. Keep source-backed content zero-copy as a `.lazy` source range (its offset/length are source offsets when `inSource`), so the heading's inlines are source-mapped and get positions exactly as paragraph / ATX-heading content does; only arena-backed content (non-contiguous or normalized lines) is copied.
+                // Re-seed pending content with the stripped bytes so the heading's inline-parse pass sees only what's left after link reference definitions are extracted. Keep source-backed content zero-copy as a `.lazy` source range (its offset/length are source offsets when `inSource`), so the heading's inlines are source-mapped and get positions exactly as paragraph / ATX-heading content does; arena-backed content (non-contiguous lines) is re-seeded as source segments, also without a copy.
                 if stripped.inSource {
                     pending = PendingLeaf(node: para, content: .lazy(range: stripped.range))
                 } else {
-                    // Arena-backed (non-contiguous) content: `addChunk` re-copies the stripped bytes into a fresh buffer. The flattened content's run map is content-relative, so narrow it to the re-seeded bytes and carry it with them, so the heading's text/emphasis keep their source positions.
-                    pending = addChunk(stripped, map: sliceRuns(flatMap, from: stripped.offset - raw.offset, length: stripped.length), to: para, pending: pending)
+                    // Arena-backed (non-contiguous) content: re-seed as the segments the narrowed run map images, so the heading's text/emphasis keep their source positions.
+                    pending = reseedSegments(stripped, map: sliceRuns(flatMap, from: stripped.offset - raw.offset, length: stripped.length), for: para)
                 }
                 let headingContent = stripped.trimmingWhitespace(using: self)
                 if positionsEnabled, !headingContent.isEmpty,
@@ -2345,7 +2213,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     // MARK: Segment-content finalize (segment model)
 
-    /// Drained leaf content: either one contiguous `Chunk` (`.lazy`/`.materialized`) or a multi-line segment list (`.segments`, kept zero-copy).
+    /// Drained leaf content: either one contiguous `Chunk` (`.lazy`) or a multi-line segment list (`.segments`, kept zero-copy).
     ///
     /// Lets paragraph/heading finalize decide whether to keep segments or run the chunk-based matchers without consuming `pending` twice.
     private enum DrainedLeaf: ~Copyable {
@@ -2361,8 +2229,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Drain `node`'s pending content, tagging it as a flat chunk or a segment list (mirrors `materializePendingContent` for the chunk cases; returns `.segments` zero-copy instead of flattening).
-    ///
-    /// A `.materialized` content's run map is carried through NUL replacement so its inlines keep source positions.
     private mutating func drainLeaf(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> LeafDrainResult {
         switch consume pending {
         case .none:
@@ -2386,12 +2252,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 precondition(!joinPending, "a deferred line join is always consumed by the next line")
                 var map: [ArenaRun] = []
                 let replaced = replacingNUL(Chunk(offset: range.lowerBound, length: range.count, inSource: true), map: &map)
-                return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
-            case .materialized(let content):
-                let offset = storage.strings.count
-                storage.strings.append(copying: content.bytes.span)
-                var map = content.map
-                let replaced = replacingNUL(Chunk(offset: offset, length: content.count, inSource: false), map: &map)
                 return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
             }
         }
@@ -2706,19 +2566,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .heading:
             let drained = drainLeaf(node, pending: pending)
             pending = drained.pending
-            let map = drained.map
+            var map = drained.map
+            let raw: Chunk
             switch consume drained.content {
-            case .chunk(let raw):
-                // An ATX heading's content range already excludes its surrounding spaces and tabs, and holds no line ending.
-                let trimmed = lineContentEnd == nil ? raw.trimmingWhitespace(using: self) : raw
-                if !trimmed.isEmpty {
-                    if positionsEnabled, !map.isEmpty {
-                        arenaSourceMaps[node] = sliceRuns(map, from: trimmed.offset - raw.offset, length: trimmed.length)
-                    }
-                    pendingInlines.append((node, storage.intern(trimmed)))
+            case .chunk(let chunk):
+                raw = chunk
+            case .segments(let segs):
+                // A re-seeded setext heading's content is a segment list.
+                raw = flattenSegments(segs, map: &map)
+            }
+            // An ATX heading's content range already excludes its surrounding spaces and tabs, and holds no line ending.
+            let trimmed = lineContentEnd == nil ? raw.trimmingWhitespace(using: self) : raw
+            if !trimmed.isEmpty {
+                if positionsEnabled, !map.isEmpty {
+                    arenaSourceMaps[node] = sliceRuns(map, from: trimmed.offset - raw.offset, length: trimmed.length)
                 }
-            case .segments:
-                preconditionFailure("heading content is never a segment list: a setext heading re-seeds as a range or an arena chunk")
+                pendingInlines.append((node, storage.intern(trimmed)))
             }
         case .codeBlock(let info):
             // Body lines were accumulated as zero-copy source segments; normalize the segment list (drop the leading separator, strip trailing blank lines for indented code, ensure one trailing `\n`) without copying the bodies into the arena.
