@@ -188,7 +188,7 @@ internal struct ContentSpan: ~Escapable {
 
     /// A contiguous buffer `Chunk` for forward byte scanning from virtual `offset`, bounded to one readable region and to `limit`.
     ///
-    /// The `Scanners` (`matchLinkLabel`, `matchLinkDestination`, `matchLinkTitle`) read a `Chunk` with raw `readByte(at:in:)`, which indexes a single buffer (`sourceBytes` or the arena) by the chunk's own offsets. That is only valid when the virtual offset space coincides with a single buffer's offset space:
+    /// A reader of a `Chunk` (`EntityParser.matchEntity`, `normalizeLabel(chunk:)`) indexes a single buffer (`sourceBytes` or the arena) by the chunk's own offsets. That is only valid when the virtual offset space coincides with a single buffer's offset space:
     ///
     /// - **Single-segment** content is one buffer region whose global offsets index that buffer directly, so this returns `[offset, limit)` in that buffer unchanged (`readByte` reads stay in bounds, identical to addressing the offsets directly).
     /// - **Multi-segment** content is addressed by *virtual* offsets that don't index any single buffer, so this returns the slice of the one **source** segment containing `offset`, bounded at that segment's end (and at `limit`). Scans therefore stay within a single contiguous source region and never index the wrong buffer or run past its end. A form that would continue past the segment boundary (onto the next line) simply isn't seen, which the caller treats as "no match".

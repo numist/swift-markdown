@@ -619,7 +619,8 @@ extension BlockParser {
         var blankLabelInOneSegment = false
         if let label = matchLabelKey(from: pos, end: end, content: content) {
             key = label.key
-            blankLabelInOneSegment = key.isEmpty && label.inOneSegment && label.afterEnd > pos + 2
+            blankLabelInOneSegment = key.isEmpty && label.afterEnd > pos + 2
+                && content.contiguousChunk(fromVirtual: pos, limit: label.afterEnd)?.length == label.afterEnd - pos
             // A whitespace-only `[ ]` is neither a link label nor `[]` (Links: a link label holds a
             // non-whitespace character), so a shortcut reference before it leaves it as text.
             if !key.isEmpty || label.afterEnd == pos + 2 {
@@ -631,11 +632,8 @@ extension BlockParser {
         if key.isEmpty, let textStart = shortcutLabelStart {
             // A link label has at most 999 characters inside its brackets (Links), so a longer shortcut stays literal.
             if cursor > textStart, linkLabelFitsLengthCap(virtualRange: textStart..<cursor, in: content) {
-                if let chunk = content.contiguousChunk(fromVirtual: textStart, limit: cursor),
-                   chunk.length == cursor - textStart {
-                    key = normalizeLabel(chunk: chunk)
-                } else if !blankLabelInOneSegment {
-                    // A whitespace-only `[ ]` read from one segment ends the lookup here when the shortcut label spans segments.
+                // A whitespace-only `[ ]` read from one segment ends the lookup here when the shortcut label spans segments.
+                if !blankLabelInOneSegment || content.contiguousChunk(fromVirtual: textStart, limit: cursor)?.length == cursor - textStart {
                     key = normalizeLabel(virtualRange: textStart..<cursor, in: content)
                 }
             }
@@ -648,7 +646,7 @@ extension BlockParser {
 
     /// Match an inline link's `destination "title")` following its `(`, returning the cleaned destination and title and the offset just past the `)`.
     ///
-    /// The destination and title are scanned over virtual offsets: either may span a line ending in multi-segment content (`<a\` LF `b>`, `'\'` LF `'`), which a one-segment contiguous window would cut short. The destination is trimmed, then unescaped and entity-decoded; the title is unescaped and entity-decoded without trimming. Inside arena content (a non-contiguous setext heading, a table cell with `\|`) either can be arena-backed, and either may span a line ending, so both are materialized (zero-copy within one segment).
+    /// The destination and title are scanned over virtual offsets: either may span a line ending in multi-segment content (`<a\` LF `b>`, `'\'` LF `'`). The destination is trimmed, then unescaped and entity-decoded; the title is unescaped and entity-decoded without trimming. Inside arena content (a non-contiguous setext heading, a table cell with `\|`) either can be arena-backed, and either may span a line ending, so both are materialized (zero-copy within one segment).
     @inline(__always)
     private mutating func matchInlineLinkTail(afterParen: Int, end: Int, content: borrowing ContentSpan) -> (url: Chunk, title: Chunk, end: Int)? {
         let destStart = skipSpaceChars(start: afterParen, end: end, content: content)
@@ -674,20 +672,15 @@ extension BlockParser {
         )
     }
 
-    /// The normalized key of the `[label]` at `pos` (empty for a blank label), the offset just past its `]` and whether the label lies within one segment, or `nil` when no label starts at `pos`. The label may span a line ending.
+    /// The normalized key of the `[label]` at `pos` (empty for a blank label) and the offset just past its `]`, or `nil` when no label starts at `pos`. The label may span a line ending.
     ///
     /// `mutating` so that calling its non-mutating callees does not copy `self`, which costs more than the call.
-    private mutating func matchLabelKey(from pos: Int, end: Int, content: borrowing ContentSpan) -> (key: String, afterEnd: Int, inOneSegment: Bool)? {
-        // A label within one segment is scanned and normalized from its chunk; one that spans a line ending is scanned over virtual offsets.
-        if let window = content.contiguousChunk(fromVirtual: pos, limit: end),
-           let label = matchLinkLabel(window) {
-            // A collapsed `[]` has no label to normalize.
-            return (label.interior.isEmpty ? "" : normalizeLabel(chunk: label.interior), pos + (label.afterEnd - window.offset), true)
-        }
+    private mutating func matchLabelKey(from pos: Int, end: Int, content: borrowing ContentSpan) -> (key: String, afterEnd: Int)? {
         guard let label = matchLinkLabel(from: pos, end: end, in: content) else {
             return nil
         }
-        return (label.interior.isEmpty ? "" : normalizeLabel(virtualRange: label.interior, in: content), label.afterEnd, false)
+        // A collapsed `[]` has no label to normalize.
+        return (label.interior.isEmpty ? "" : normalizeLabel(virtualRange: label.interior, in: content), label.afterEnd)
     }
 
     /// Append a one-byte `]` text node at `cursor`. Used by the failure paths of `handleCloseBracket`.

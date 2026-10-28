@@ -26,10 +26,25 @@ extension BlockParser {
 
     /// Parse a `[label]` link label (spec "Links"). Returns the interior chunk (excluding brackets) and the offset just past the closing `]`. Allows ASCII `\X` escapes inside the label. Capped per `maxLinkLabelLength`.
     internal func matchLinkLabel(_ chunk: Chunk) -> LinkLabelMatch? {
-        let start = chunk.offset
-        let end = chunk.range.upperBound
-        precondition(start < end, "a link label scan starts on a content byte")
-        if readByte(at: start, in: chunk) != UInt8(ascii: "[") {
+        precondition(!chunk.isEmpty, "a link label scan starts on a content byte")
+        let match = scanLinkLabel(from: chunk.offset, end: chunk.range.upperBound) { readByte(at: $0, in: chunk) }
+        return match.map { LinkLabelMatch(interior: subchunk(of: chunk, $0.interior), afterEnd: $0.afterEnd) }
+    }
+
+    /// The part of `chunk` at `range`, expressed in the offsets `chunk` is.
+    private func subchunk(of chunk: Chunk, _ range: Range<Int>) -> Chunk {
+        Chunk(offset: range.lowerBound, length: range.count, inSource: chunk.inSource)
+    }
+
+    /// Scan a link label, reading bytes through `byte`: the scan behind both `matchLinkLabel(_:)` over a `Chunk` and
+    /// `matchLinkLabel(from:end:in:)` over inline content, which may be multi-segment. A full reference's link label may span a line ending (`[text][la\nbel]`). Scans from
+    /// `start` to the closing `]`; returns the interior's virtual range (excluding the brackets) and the
+    /// offset just past `]`, or nil when `start` is not `[`, on an interior `[` or at the content end. Allows
+    /// ASCII `\X` escapes, capped per `maxLinkLabelLength`. The interior may span segments, so callers
+    /// resolve it with `normalizeLabel(virtualRange:in:)`, not a `Chunk`.
+    @inline(__always)
+    private func scanLinkLabel(from start: Int, end: Int, byte: (Int) -> UInt8) -> (interior: Range<Int>, afterEnd: Int)? {
+        if start >= end || byte(start) != UInt8(ascii: "[") {
             return nil
         }
         let maxLabelLength = Self.maxLinkLabelLength
@@ -37,21 +52,18 @@ extension BlockParser {
         var i = interiorStart
         var length = 0
         while i < end {
-            let b = readByte(at: i, in: chunk)
+            let b = byte(i)
             if b == UInt8(ascii: "[") {
                 return nil
             }
             if b == UInt8(ascii: "]") {
-                return LinkLabelMatch(
-                    interior: chunk.extracting(1..<(i - start)),
-                    afterEnd: i + 1
-                )
+                return (interiorStart..<i, i + 1)
             }
             if b == UInt8(ascii: "\\") {
                 i += 1
                 length += 1
                 if i < end {
-                    length += labelLengthWeight(readByte(at: i, in: chunk))
+                    length += labelLengthWeight(byte(i))
                     i += 1
                 }
             } else {
@@ -65,45 +77,9 @@ extension BlockParser {
         return nil
     }
 
-    /// Variant of `matchLinkLabel(_:)` over the virtual offsets of multi-segment inline content, where a
-    /// full reference's link label may span a line ending (`[text][la\nbel]`) that `contiguousChunk` can't
-    /// image within one source segment. Scans from `start` (which must be `[`) to the closing `]`; returns
-    /// the interior's virtual range (excluding the brackets) and the offset just past `]`, or nil on an
-    /// interior `[` or at the content end. Allows ASCII `\X` escapes, capped per `maxLinkLabelLength`. The
-    /// interior may span segments, so callers resolve it with `normalizeLabel(virtualRange:in:)`, not a
-    /// `Chunk`.
+    /// `matchLinkLabel(_:)` over virtual offsets of inline content.
     internal func matchLinkLabel(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
-        if start >= end || content[start] != UInt8(ascii: "[") {
-            return nil
-        }
-        let maxLabelLength = Self.maxLinkLabelLength
-        let interiorStart = start + 1
-        var i = interiorStart
-        var length = 0
-        while i < end {
-            let b = content[i]
-            if b == UInt8(ascii: "[") {
-                return nil
-            }
-            if b == UInt8(ascii: "]") {
-                return (interiorStart..<i, i + 1)
-            }
-            if b == UInt8(ascii: "\\") {
-                i += 1
-                length += 1
-                if i < end {
-                    length += labelLengthWeight(content[i])
-                    i += 1
-                }
-            } else {
-                length += labelLengthWeight(b)
-                i += 1
-            }
-            if length > maxLabelLength {
-                return nil
-            }
-        }
-        return nil
+        scanLinkLabel(from: start, end: end) { content[$0] }
     }
 
     /// Whether a label that is looked up without being scanned by `matchLinkLabel` - the text at
@@ -151,20 +127,28 @@ extension BlockParser {
 
     /// Parse a link destination - either `<...>` (no internal `<`, `>`, or line ending) or a bare URL (no ASCII space or control character, balanced parens up to depth 32, ASCII `\X` escapes).
     internal func matchLinkDestination(_ chunk: Chunk) -> LinkDestinationMatch? {
-        let start = chunk.offset
-        let end = chunk.range.upperBound
+        let match = scanLinkDestination(from: chunk.offset, end: chunk.range.upperBound) { readByte(at: $0, in: chunk) }
+        return match.map { LinkDestinationMatch(chunk: subchunk(of: chunk, $0.destination), afterEnd: $0.afterEnd) }
+    }
+
+    /// Scan a link destination, reading bytes through `byte`: the scan behind both `matchLinkDestination(_:)` over a `Chunk` and
+    /// `matchLinkDestination(from:end:in:)` over inline content, which may be multi-segment. Scans from `start` to `end`; returns the destination's virtual range (excluding any
+    /// `<` `>`) and the offset just past it. A bare destination ends at the first space or line ending, which
+    /// a segment join is. Callers materialize the range with `materializedChunk`, not a contiguous `Chunk`.
+    @inline(__always)
+    private func scanLinkDestination(from start: Int, end: Int, byte: (Int) -> UInt8) -> (destination: Range<Int>, afterEnd: Int)? {
         if start >= end {
             return nil
         }
-        let first = readByte(at: start, in: chunk)
+        let first = byte(start)
         if first == UInt8(ascii: "<") {
             var i = start + 1
             while i < end {
-                let c = readByte(at: i, in: chunk)
+                let c = byte(i)
                 if c == UInt8(ascii: ">") {
-                    return LinkDestinationMatch(chunk: chunk.extracting(1..<(i - start)), afterEnd: i + 1)
+                    return ((start + 1)..<i, i + 1)
                 }
-                if c == UInt8(ascii: "\\"), escapesNext(i + 1 < end ? readByte(at: i + 1, in: chunk) : nil) {
+                if c == UInt8(ascii: "\\"), escapesNext(i + 1 < end ? byte(i + 1) : nil) {
                     i += 2
                     continue
                 }
@@ -186,11 +170,11 @@ extension BlockParser {
         var i = start
         var nbParen = 0
         while i < end {
-            let c = readByte(at: i, in: chunk)
+            let c = byte(i)
             // A backslash escapes only an ASCII-punctuation byte, so a `\` before a line ending (or any
             // non-punctuation byte) is a literal destination character - a destination never spans a
             // line ending.
-            if c == UInt8(ascii: "\\") && i + 1 < end && readByte(at: i + 1, in: chunk).isASCIIPunct {
+            if c == UInt8(ascii: "\\") && i + 1 < end && byte(i + 1).isASCIIPunct {
                 i += 2
                 continue
             }
@@ -220,42 +204,12 @@ extension BlockParser {
             return nil
         }
         // Empty bare URL is allowed for inline links - `[a]()` should match with an empty destination.
-        return LinkDestinationMatch(chunk: chunk.extracting(0..<(i - start)), afterEnd: i)
+        return (start..<i, i)
     }
 
-    /// Variant of `matchLinkDestination(_:)` over the virtual offsets of inline content, which may be
-    /// multi-segment. Scans from `start` to `end`; returns the destination's virtual range (excluding any
-    /// `<` `>`) and the offset just past it. A bare destination ends at the first space or line ending,
-    /// so it is scanned through the contiguous window by `matchLinkDestination(_:)`. Callers materialize
-    /// the range with `materializedChunk`, not a contiguous `Chunk`.
+    /// `matchLinkDestination(_:)` over virtual offsets of inline content.
     internal func matchLinkDestination(from start: Int, end: Int, in content: borrowing ContentSpan) -> (destination: Range<Int>, afterEnd: Int)? {
-        if start >= end {
-            return nil
-        }
-        if content[start] == UInt8(ascii: "<") {
-            var i = start + 1
-            while i < end {
-                let c = content[i]
-                if c == UInt8(ascii: ">") {
-                    return ((start + 1)..<i, i + 1)
-                }
-                if c == UInt8(ascii: "\\"), escapesNext(i + 1 < end ? content[i + 1] : nil) {
-                    i += 2
-                    continue
-                }
-                if c == UInt8(ascii: "\n") || c == UInt8(ascii: "<") {
-                    return nil
-                }
-                i += 1
-            }
-            return nil
-        }
-        guard let window = content.contiguousChunk(fromVirtual: start, limit: end),
-              let dest = matchLinkDestination(window) else {
-            return nil
-        }
-        let afterEnd = start + (dest.afterEnd - window.offset)
-        return (start..<afterEnd, afterEnd)
+        scanLinkDestination(from: start, end: end) { content[$0] }
     }
 
     // MARK: - Link title
@@ -267,12 +221,22 @@ extension BlockParser {
 
     /// Match `"…"`, `'…'`, or `(…)` with ASCII `\X` escapes. Parens form disallows unescaped `(` inside.
     internal func matchLinkTitle(_ chunk: Chunk) -> LinkTitleMatch? {
-        let start = chunk.offset
-        let end = chunk.range.upperBound
+        let match = scanLinkTitle(from: chunk.offset, end: chunk.range.upperBound) { readByte(at: $0, in: chunk) }
+        return match.map { LinkTitleMatch(chunk: subchunk(of: chunk, $0.interior), afterEnd: $0.afterEnd) }
+    }
+
+    /// Scan a link title, reading bytes through `byte`: the scan behind both `matchLinkTitle(_:)` over a `Chunk` and
+    /// `matchLinkTitle(from:end:in:)` over inline content, which may be multi-segment. A title may span a line ending (`[](f (\n))`) and its furthest closing delimiter may
+    /// lie past one that ends the first line (`'\'` LF `'` closes on the second line). Scans from `start` (the
+    /// opening delimiter) to `end`; returns the interior's virtual range (excluding the delimiters) and the
+    /// offset just past the closer, or nil when the opener is not a delimiter or no closer is reached. The
+    /// interior may span segments, so callers materialize it with `materializedChunk`, not a contiguous `Chunk`.
+    @inline(__always)
+    private func scanLinkTitle(from start: Int, end: Int, byte: (Int) -> UInt8) -> (interior: Range<Int>, afterEnd: Int)? {
         if start >= end {
             return nil
         }
-        let opener = readByte(at: start, in: chunk)
+        let opener = byte(start)
         let closer: UInt8
         switch opener {
         case UInt8(ascii: "\""):
@@ -299,63 +263,7 @@ extension BlockParser {
         var closeAfterEnd: Int? = nil
         var i = start + 1
         while i < end, inBody || afterBackslash {
-            let c = readByte(at: i, in: chunk)
-            var nextInBody = false
-            var nextAfterBackslash = false
-            if inBody {
-                if c == closer {
-                    closeAfterEnd = i + 1
-                }
-                if c != opener && c != closer {
-                    nextInBody = true
-                }
-                if c == UInt8(ascii: "\\") {
-                    nextAfterBackslash = true
-                }
-            }
-            if afterBackslash && c.isASCIIPunct {
-                nextInBody = true
-            }
-            inBody = nextInBody
-            afterBackslash = nextAfterBackslash
-            i += 1
-        }
-        guard let closeAfterEnd else {
-            return nil
-        }
-        return LinkTitleMatch(chunk: chunk.extracting(1..<(closeAfterEnd - 1 - start)), afterEnd: closeAfterEnd)
-    }
-
-    /// Variant of `matchLinkTitle(_:)` over the virtual offsets of inline content, which may be
-    /// multi-segment: a title may span a line ending (`[](f (\n))`) that `contiguousChunk` can't image
-    /// within one source segment, and its furthest closing delimiter may lie past one that ends the first
-    /// line (`'\'` LF `'` closes on the second line). Scans from `start` (the opening delimiter) to `end`
-    /// with the same two-state scan as `matchLinkTitle(_:)`; returns the interior's virtual range
-    /// (excluding the delimiters) and the offset just past the closer, or nil when the opener is not a
-    /// delimiter or no closer is reached. The interior may span segments, so callers materialize it with
-    /// `materializedChunk`, not a contiguous `Chunk`.
-    internal func matchLinkTitle(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
-        if start >= end {
-            return nil
-        }
-        let opener = content[start]
-        let closer: UInt8
-        switch opener {
-        case UInt8(ascii: "\""):
-            closer = UInt8(ascii: "\"")
-        case UInt8(ascii: "'"):
-            closer = UInt8(ascii: "'")
-        case UInt8(ascii: "("):
-            closer = UInt8(ascii: ")")
-        default:
-            return nil
-        }
-        var inBody = true
-        var afterBackslash = false
-        var closeAfterEnd: Int? = nil
-        var i = start + 1
-        while i < end, inBody || afterBackslash {
-            let c = content[i]
+            let c = byte(i)
             var nextInBody = false
             var nextAfterBackslash = false
             if inBody {
@@ -380,6 +288,11 @@ extension BlockParser {
             return nil
         }
         return ((start + 1)..<(closeAfterEnd - 1), closeAfterEnd)
+    }
+
+    /// `matchLinkTitle(_:)` over virtual offsets of inline content.
+    internal func matchLinkTitle(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
+        scanLinkTitle(from: start, end: end) { content[$0] }
     }
 
     // MARK: - Whitespace
@@ -442,11 +355,14 @@ extension BlockParser {
         return Self.normalizeLabel(span)
     }
 
-    /// Label normalization for a label at virtual `range` of multi-segment `content` that spans a line
-    /// ending (`[foo\nbar]` used as a reference), which `contiguousChunk` can't image within one source
-    /// segment. Reading through `content` resolves each line join to `\n`, which collapses like any other
-    /// interior whitespace. A contiguous label goes through `normalizeLabel(chunk:)`.
+    /// Label normalization for a label at virtual `range` of `content`. A label within one segment is read
+    /// from its chunk; one that spans a line ending (`[foo\nbar]` used as a reference) is read through
+    /// `content`, which resolves each line join to `\n`, collapsing like any other interior whitespace.
     internal func normalizeLabel(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> String {
+        if let chunk = content.contiguousChunk(fromVirtual: range.lowerBound, limit: range.upperBound),
+           chunk.length == range.count {
+            return normalizeLabel(chunk: chunk)
+        }
         var bytes = UniqueArray<UInt8>()
         bytes.reserveCapacity(range.count)
         for i in range {
