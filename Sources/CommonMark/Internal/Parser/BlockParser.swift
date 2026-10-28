@@ -2227,7 +2227,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     let end = materializedSourceStart(bufferStart: fence.infoChunk.range.upperBound).sourceStart
                     infoChunk = Chunk(offset: start, length: end - start, inSource: true)
                 }
-                let cleanInfo = EntityParser.unescapeInfoStringChunk(infoChunk, source: sourceBytes, into: &storage)
+                let cleanInfo = unescapeURLChunk(infoChunk)
                 let infoRef = storage.intern(replacingNUL(cleanInfo))
                 // The fence offset counts source bytes, so a tab straddling the container prefix and the
                 // fence counts once even though it spans several columns. On a materialized line the prefix
