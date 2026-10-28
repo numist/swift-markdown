@@ -71,6 +71,21 @@ internal struct ContentImage {
         guard k >= 0, let total = runEnds.last, k < total else {
             return nil
         }
+        let i = firstRun(endingAfter: k)
+        precondition(runs[i].sourceOffset >= 0, "a resolved byte is not a line join")
+        return Int(runs[i].sourceOffset) + (k - runStart(i))
+    }
+
+    /// The runs imaging the arena bytes `[offset, offset + length)`, rebased so the first begins at offset 0 (`parser.sliceRuns` over just the runs the window overlaps, so slicing many windows of a large image stays linear in its size).
+    internal func runs(from offset: Int, length: Int, in parser: borrowing BlockParser) -> [ArenaRun] {
+        let k = offset - base
+        let first = firstRun(endingAfter: k)
+        let last = max(first, firstRun(endingAfter: k + length - 1) + 1)
+        return parser.sliceRuns(Array(runs[first..<min(last, runs.count)]), from: k - runStart(first), length: length)
+    }
+
+    /// The index of the first run ending past content-relative offset `k`, or `runs.count` when none does.
+    private func firstRun(endingAfter k: Int) -> Int {
         var lo = 0
         var hi = runEnds.count
         while lo < hi {
@@ -81,10 +96,12 @@ internal struct ContentImage {
                 lo = mid + 1
             }
         }
-        let run = runs[lo]
-        let local = k - (lo == 0 ? 0 : runEnds[lo - 1])
-        precondition(run.sourceOffset >= 0, "a resolved byte is not a line join")
-        return Int(run.sourceOffset) + local
+        return lo
+    }
+
+    /// The content-relative offset of run `i`'s first byte.
+    private func runStart(_ i: Int) -> Int {
+        i == 0 ? 0 : runEnds[i - 1]
     }
 }
 
