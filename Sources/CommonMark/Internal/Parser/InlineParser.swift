@@ -482,6 +482,15 @@ extension BlockParser {
         case link
         case image
         case attribute
+
+        /// The kind of the node the bracket becomes when it resolves.
+        var nodeKind: MarkdownNode.Kind {
+            switch self {
+            case .link: .link
+            case .image: .image
+            case .attribute: .attribute
+            }
+        }
     }
 
     /// Bracket-stack entry recording an open `[` (LINK), `![` (IMAGE), or `^[` (ATTRIBUTE, the inline-attribute syntax). Like the delimiter stack, it's a linked list embedded in an array; `previous` is an index into `brackets` (or `nil`).
@@ -547,181 +556,138 @@ extension BlockParser {
         }
     }
     
-    /// Process a `]` while the parent's child list contains any text/inline nodes that were emitted after the matching `[`. Returns the new cursor position.
+    /// Process a `]`. A link or image form after it - an inline `(destination "title")` or a reference to a definition - or an attribute form turns the innermost open bracket into that node; a `[^label]` naming a footnote definition becomes a footnote reference; otherwise the `]` is literal text. Returns the offset to resume scanning from.
     private mutating func handleCloseBracket(cursor: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?) -> Int {
-        let initialPos = cursor + 1
-        var pos = initialPos
-        // No bracket open: emit `]` literal and return.
+        let afterBracket = cursor + 1
         guard let openerIdx = lastBracket else {
             emitBracketLiteral(at: cursor, content: content, parent: parent)
-            return pos
+            return afterBracket
         }
         let openerKind = brackets[openerIdx].kind
         let openerInl = brackets[openerIdx].inlText
         let openerDelimPos = brackets[openerIdx].delimPosition
-        if openerKind == .attribute {
-            return handleCloseBracketAttribute(
-                cursor: cursor,
-                end: end,
-                content: content,
-                parent: parent,
-                openerInl: openerInl,
-                openerVirtualStart: brackets[openerIdx].virtualStart,
-                openerDelimPos: openerDelimPos,
-                delimiters: &delimiters,
-                lastDelim: &lastDelim,
-                brackets: &brackets,
-                lastBracket: &lastBracket
-            )
-        }
-        let openerBracketAfter = brackets[openerIdx].bracketAfter
-        let isImage = openerKind == .image
-        // Inactive link opener: just pop and emit `]`.
-        if !isImage && brackets[openerIdx].linkFormedAfter {
+        let openerStart = brackets[openerIdx].virtualStart
+        // A link opener cannot form a link inside another link, or after a link formed at its level.
+        if openerKind == .link, brackets[openerIdx].linkFormedAfter {
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
             emitBracketLiteral(at: cursor, content: content, parent: parent)
-            return pos
+            return afterBracket
         }
-        // Virtual arithmetic below uses `brackets[openerIdx].virtualStart` (correct for multi-segment content), not the opener text node's stored source offset.
-        var url: Chunk = .empty
-        var title: Chunk = .empty
-        var matched = false
-        // Try inline link: `(url "title")`.
-        if pos < end,
-           content[pos] == UInt8(ascii: "(") {
-            let afterParen = pos + 1
-            let afterSpaces1 = skipSpaceChars(start: afterParen, end: end, content: content)
-            // Scan the destination and title over virtual offsets: either may span a line ending in
-            // multi-segment content (`<a\` LF `b>`, `'\'` LF `'`), which a one-segment contiguous window
-            // would cut short.
-            if let dest = matchLinkDestination(from: afterSpaces1, end: end, in: content) {
-                let afterDest = dest.afterEnd
-                let afterSpaces2 = skipSpaceChars(start: afterDest, end: end, content: content)
-                var titleEnd = afterDest
-                var titleInterior: Range<Int> = afterDest..<afterDest
-                if afterSpaces2 > afterDest,
-                   let t = matchLinkTitle(from: afterSpaces2, end: end, in: content) {
-                    titleInterior = t.interior
-                    titleEnd = t.afterEnd
-                }
-                let afterTitleSpaces = skipSpaceChars(start: titleEnd, end: end, content: content)
-                if afterTitleSpaces < end,
-                   content[afterTitleSpaces] == UInt8(ascii: ")") {
-                    pos = afterTitleSpaces + 1
-                    // The destination is trimmed, then unescaped and entity-decoded; the title is unescaped and entity-decoded without trimming. Inside arena content (a non-contiguous setext heading, a table cell with `\|`) either can be arena-backed, and either may span a line ending, so both are materialized (zero-copy within one segment).
-                    url = cleanURLChunk(materializedChunk(start: dest.destination.lowerBound, end: dest.destination.upperBound, content: content))
-                    title = unescapeURLChunk(materializedChunk(start: titleInterior.lowerBound, end: titleInterior.upperBound, content: content))
-                    matched = true
-                }
-            }
-            if !matched {
-                pos = initialPos
-            }
-        }
-        // Try reference link forms: full `[label]`, collapsed `[]`, or shortcut.
-        if !matched {
-            var labelChunk: Chunk?
-            var labelRange: Range<Int>?
-            var afterRefForm = pos
-            // Scan the reference label through a contiguous window (see `contiguousChunk`); `lab.interior` is already a real buffer chunk and `lab.afterEnd` a buffer offset converted back to virtual via the window base.
-            if let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
-               let lab = matchLinkLabel(labelWindow) {
-                labelChunk = lab.interior
-                afterRefForm = pos + (lab.afterEnd - labelWindow.offset)
-            } else if let lab = matchLinkLabel(from: pos, end: end, in: content) {
-                // The full-reference label spans a line ending (`[text][la\nbel]`), which the contiguous
-                // window can't image; carry the interior's virtual range and normalize it across the
-                // join for lookup.
-                labelRange = lab.interior
-                afterRefForm = lab.afterEnd
-            }
-            // A collapsed `[]`, a whitespace-only `[   ]` or no label falls back to the shortcut form,
-            // whose label is the bracket text, when no bracket is nested under this opener.
-            var shortcutRange: Range<Int>?
-            let labelIsBlank: Bool
-            if let lc = labelChunk {
-                labelIsBlank = lc.trimmingWhitespace(using: self).isEmpty
-            } else if let lr = labelRange {
-                labelIsBlank = normalizeLabel(virtualRange: lr, in: content).isEmpty
-            } else {
-                labelIsBlank = true
-            }
-            // A whitespace-only `[ ]` is neither a link label nor `[]` (Links: a link label holds a
-            // non-whitespace character), so a shortcut reference before it leaves it as text.
-            let labelIsWhitespace = labelIsBlank && (labelChunk.map { $0.length > 0 } ?? (labelRange.map { !$0.isEmpty } ?? false))
-            if labelIsWhitespace {
-                afterRefForm = pos
-            }
-            if labelIsBlank && !openerBracketAfter {
-                // The shortcut label runs from just past the opener to the `]` at `cursor`. Within one segment it resolves from a contiguous chunk; a label spanning a line ending (`[foo\nbar]`) carries its virtual range and normalizes across the join.
-                let openerContentStart = brackets[openerIdx].virtualStart + (isImage ? 2 : 1)
-                let shortcutLen = cursor - openerContentStart
-                // A link label has at most 999 characters inside its brackets (Links), so a longer shortcut stays literal.
-                if shortcutLen > 0,
-                   linkLabelFitsLengthCap(virtualRange: openerContentStart..<cursor, in: content) {
-                    if let sc = content.contiguousChunk(fromVirtual: openerContentStart, limit: cursor),
-                       sc.length == shortcutLen {
-                        labelChunk = sc
-                    } else {
-                        shortcutRange = openerContentStart..<cursor
-                    }
-                }
-            }
-            let key: String?
-            if let lc = labelChunk, lc.length > 0 {
-                key = normalizeLabel(chunk: lc)
-            } else if let sr = shortcutRange {
-                key = normalizeLabel(virtualRange: sr, in: content)
-            } else if let lr = labelRange, !lr.isEmpty {
-                key = normalizeLabel(virtualRange: lr, in: content)
-            } else {
-                key = nil
-            }
-            if let key, !key.isEmpty,
-               let ref = storage.referenceMap[key] {
-                url = ref.destination
-                title = ref.title
-                pos = afterRefForm
-                matched = true
-            }
-        }
-        if matched {
-            buildLinkOrImage(
-                isImage: isImage,
-                openerInl: openerInl,
-                openerDelimPos: openerDelimPos,
-                url: url,
-                title: title,
-                linkStart: brackets[openerIdx].virtualStart,
-                linkEnd: pos,
-                closeBracket: cursor,
-                content: content,
-                delimiters: &delimiters,
-                lastDelim: &lastDelim
-            )
+        let formed = openerKind == .attribute
+            ? matchAttributeForm(cursor: cursor, end: end, content: content)
+            : matchLinkForm(shortcutLabelStart: brackets[openerIdx].bracketAfter ? nil : openerStart + (openerKind == .image ? 2 : 1), cursor: cursor, end: end, content: content)
+        if let formed {
+            wrapBracketContent(openerKind.nodeKind, formed.data, openerInl: openerInl, delimPosition: openerDelimPos, start: openerStart, end: formed.end, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
-            if !isImage {
+            if openerKind == .link {
                 markLinkOpenersInactive(brackets: &brackets, lastBracket: lastBracket)
             }
-            return pos
+            return formed.end
         }
         // With no link form matched, a `[^label]` whose label names a footnote definition is a footnote
-        // reference. Any other bracket stays literal text through the no-match handling below; the
-        // footnote map is complete before inline parsing.
-        let footnoteBracketStart = brackets[openerIdx].virtualStart + (isImage ? 1 : 0)
-        if storage.options.contains(.footnotes),
+        // reference. Any other bracket stays literal text; the footnote map is complete before inline parsing.
+        let footnoteBracketStart = openerStart + (openerKind == .image ? 1 : 0)
+        if openerKind != .attribute,
+           storage.options.contains(.footnotes),
            let defIdx = footnoteDefinition(referencedFrom: footnoteBracketStart, closeBracket: cursor, in: content) {
             // Resolve emphasis inside the bracket first (clearing its delimiters from the stack) so
             // removing the inner nodes below doesn't leave stale delimiters for `processEmphasis`.
             processEmphasis(stackBottom: openerDelimPos, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
-            emitFootnoteReference(openerInl: openerInl, definition: defIdx, span: footnoteBracketStart..<(cursor + 1), content: content)
+            emitFootnoteReference(openerInl: openerInl, definition: defIdx, span: footnoteBracketStart..<afterBracket, content: content)
             popBracket(brackets: &brackets, lastBracket: &lastBracket)
-            return initialPos
+            return afterBracket
         }
-        // No match: pop bracket, emit `]` text, rewind to just past `]`.
         popBracket(brackets: &brackets, lastBracket: &lastBracket)
         emitBracketLiteral(at: cursor, content: content, parent: parent)
-        return initialPos
+        return afterBracket
+    }
+
+    /// The link or image data for the form after the `]` at `cursor`, and the offset just past that form.
+    ///
+    /// `shortcutLabelStart` is where the shortcut form's label begins, just past the opener (it runs to `cursor` and may span a line ending, `[foo\nbar]`); `nil` when a bracket is nested under the opener, which excludes the shortcut form.
+    ///
+    /// The inline form `(destination "title")` is tried first, then the reference forms: full `[label]`, collapsed `[]` and shortcut.
+    @inline(__always)
+    private mutating func matchLinkForm(shortcutLabelStart: Int?, cursor: Int, end: Int, content: borrowing ContentSpan) -> (data: NodeData, end: Int)? {
+        let pos = cursor + 1
+        if pos < end, content[pos] == UInt8(ascii: "("),
+           let inline = matchInlineLinkTail(afterParen: pos + 1, end: end, content: content) {
+            return (.link(url: storage.intern(inline.url), title: storage.intern(inline.title)), inline.end)
+        }
+        var key = ""
+        var afterReference = pos
+        var blankLabelInOneSegment = false
+        if let label = matchLabelKey(from: pos, end: end, content: content) {
+            key = label.key
+            blankLabelInOneSegment = key.isEmpty && label.inOneSegment && label.afterEnd > pos + 2
+            // A whitespace-only `[ ]` is neither a link label nor `[]` (Links: a link label holds a
+            // non-whitespace character), so a shortcut reference before it leaves it as text.
+            if !key.isEmpty || label.afterEnd == pos + 2 {
+                afterReference = label.afterEnd
+            }
+        }
+        // A collapsed `[]`, a whitespace-only `[   ]` or no label falls back to the shortcut form, whose
+        // label is the bracket text, when no bracket is nested under this opener.
+        if key.isEmpty, let textStart = shortcutLabelStart {
+            // A link label has at most 999 characters inside its brackets (Links), so a longer shortcut stays literal.
+            if cursor > textStart, linkLabelFitsLengthCap(virtualRange: textStart..<cursor, in: content) {
+                if let chunk = content.contiguousChunk(fromVirtual: textStart, limit: cursor),
+                   chunk.length == cursor - textStart {
+                    key = normalizeLabel(chunk: chunk)
+                } else if !blankLabelInOneSegment {
+                    // A whitespace-only `[ ]` read from one segment ends the lookup here when the shortcut label spans segments.
+                    key = normalizeLabel(virtualRange: textStart..<cursor, in: content)
+                }
+            }
+        }
+        guard !key.isEmpty, let definition = storage.referenceMap[key] else {
+            return nil
+        }
+        return (.link(url: storage.intern(definition.destination), title: storage.intern(definition.title)), afterReference)
+    }
+
+    /// Match an inline link's `destination "title")` following its `(`, returning the cleaned destination and title and the offset just past the `)`.
+    ///
+    /// The destination and title are scanned over virtual offsets: either may span a line ending in multi-segment content (`<a\` LF `b>`, `'\'` LF `'`), which a one-segment contiguous window would cut short. The destination is trimmed, then unescaped and entity-decoded; the title is unescaped and entity-decoded without trimming. Inside arena content (a non-contiguous setext heading, a table cell with `\|`) either can be arena-backed, and either may span a line ending, so both are materialized (zero-copy within one segment).
+    @inline(__always)
+    private mutating func matchInlineLinkTail(afterParen: Int, end: Int, content: borrowing ContentSpan) -> (url: Chunk, title: Chunk, end: Int)? {
+        let destStart = skipSpaceChars(start: afterParen, end: end, content: content)
+        guard let dest = matchLinkDestination(from: destStart, end: end, in: content) else {
+            return nil
+        }
+        let titleStart = skipSpaceChars(start: dest.afterEnd, end: end, content: content)
+        var titleEnd = dest.afterEnd
+        var titleInterior = dest.afterEnd..<dest.afterEnd
+        if titleStart > dest.afterEnd,
+           let title = matchLinkTitle(from: titleStart, end: end, in: content) {
+            titleInterior = title.interior
+            titleEnd = title.afterEnd
+        }
+        let close = skipSpaceChars(start: titleEnd, end: end, content: content)
+        guard close < end, content[close] == UInt8(ascii: ")") else {
+            return nil
+        }
+        return (
+            cleanURLChunk(materializedChunk(start: dest.destination.lowerBound, end: dest.destination.upperBound, content: content)),
+            unescapeURLChunk(materializedChunk(start: titleInterior.lowerBound, end: titleInterior.upperBound, content: content)),
+            close + 1
+        )
+    }
+
+    /// The normalized key of the `[label]` at `pos` (empty for a blank label), the offset just past its `]` and whether the label lies within one segment, or `nil` when no label starts at `pos`. The label may span a line ending.
+    ///
+    /// `mutating` so that calling its non-mutating callees does not copy `self`, which costs more than the call.
+    private mutating func matchLabelKey(from pos: Int, end: Int, content: borrowing ContentSpan) -> (key: String, afterEnd: Int, inOneSegment: Bool)? {
+        // A label within one segment is scanned and normalized from its chunk; one that spans a line ending is scanned over virtual offsets.
+        if let window = content.contiguousChunk(fromVirtual: pos, limit: end),
+           let label = matchLinkLabel(window) {
+            // A collapsed `[]` has no label to normalize.
+            return (label.interior.isEmpty ? "" : normalizeLabel(chunk: label.interior), pos + (label.afterEnd - window.offset), true)
+        }
+        guard let label = matchLinkLabel(from: pos, end: end, in: content) else {
+            return nil
+        }
+        return (label.interior.isEmpty ? "" : normalizeLabel(virtualRange: label.interior, in: content), label.afterEnd, false)
     }
 
     /// Append a one-byte `]` text node at `cursor`. Used by the failure paths of `handleCloseBracket`.
@@ -729,34 +695,20 @@ extension BlockParser {
         appendInline(.text, .literal(storage.intern(content.chunk(offset: cursor, length: 1))), to: parent, start: cursor, end: cursor + 1, content: content)
     }
 
-    /// Construct the `.link` / `.image` node, splice it in front of the opener's `[` text node, reparent every following sibling into it, and remove the opener's `[` text from the tree. Then resolve emphasis inside the link with the bracket's `delimPosition` as the floor.
-    private mutating func buildLinkOrImage(isImage: Bool, openerInl: DocumentStorage.Index, openerDelimPos: Int, url: Chunk, title: Chunk, linkStart: Int, linkEnd: Int, closeBracket: Int, content: borrowing ContentSpan, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) {
-        let parentIdx = storage[openerInl].parent
-        let kind: MarkdownNode.Kind = isImage ? .image : .link
-        let urlRef = storage.intern(url)
-        let titleRef = storage.intern(title)
-        let linkIdx = storage.appendNode(NodeRecord(
-            kind: kind,
-            parent: parentIdx,
-            data: .link(url: urlRef, title: titleRef)
-        ))
-        // The link/image spans from its opening `[`/`![` (virtual `linkStart`) to just past the closing `)` or reference label (virtual `linkEnd`).
-        stampInline(linkIdx, linkStart, linkEnd, content: content)
-        storage.insertChildBefore(linkIdx, before: openerInl)
-        var sib = storage[openerInl].next
-        while let sib_ = sib {
-            let nextSib = storage[sib_].next
-            storage.unlinkChild(sib_)
-            storage.appendChild(sib_, to: linkIdx)
-            sib = nextSib
+    /// Wrap the nodes after the opener's text in a new `kind` node spanning the virtual range `start..<end`, remove the opener's text, and resolve emphasis inside the new node with the opener's delimiter position as the floor.
+    @inline(__always)
+    private mutating func wrapBracketContent(_ kind: MarkdownNode.Kind, _ data: NodeData, openerInl: DocumentStorage.Index, delimPosition: Int, start: Int, end: Int, content: borrowing ContentSpan, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?) {
+        let wrapper = storage.appendNode(NodeRecord(kind: kind, parent: storage[openerInl].parent, data: data))
+        stampInline(wrapper, start, end, content: content)
+        storage.insertChildBefore(wrapper, before: openerInl)
+        var sibling = storage[openerInl].next
+        while let current = sibling {
+            sibling = storage[current].next
+            storage.unlinkChild(current)
+            storage.appendChild(current, to: wrapper)
         }
         storage.unlinkChild(openerInl)
-        processEmphasis(
-            stackBottom: openerDelimPos,
-            content: content,
-            delimiters: &delimiters,
-            lastDelim: &lastDelim
-        )
+        processEmphasis(stackBottom: delimPosition, content: content, delimiters: &delimiters, lastDelim: &lastDelim)
     }
 
     // MARK: - Footnote references
@@ -810,88 +762,25 @@ extension BlockParser {
 
     // MARK: - Extended attributes (`^[..]`)
 
-    /// Resolve a `]` that closes an `^[…]` attribute opener. Tries the inline form `(attrs)` first, then the reference form `[label]` whose label resolves in `storage.attributeReferenceMap`.
+    /// The attribute data for the form after the `]` at `cursor` that closes an `^[…]` opener, and the offset just past that form.
     ///
-    /// On match emits a `.attribute` node and reparents the inner siblings into it.
-    private mutating func handleCloseBracketAttribute(cursor: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, openerInl: DocumentStorage.Index, openerVirtualStart: Int, openerDelimPos: Int, delimiters: inout UniqueArray<DelimiterRecord>, lastDelim: inout Int?, brackets: inout UniqueArray<BracketRecord>, lastBracket: inout Int?) -> Int {
-        var pos = cursor + 1
-        var attrs: Chunk = .empty
-        var matched = false
-        // Try inline `(attrs)` form. The attribute scanner allows whitespace and balanced parens - this is *not* a link-URL scan.
-        if pos < end,
-           content[pos] == UInt8(ascii: "(") {
-            let startAttrs = pos + 1
-            if let scanned = matchAttributeAttributes(start: startAttrs, end: end, content: content) {
-                let endAttrs = scanned.afterEnd
-                if endAttrs < end,
-                   content[endAttrs] == UInt8(ascii: ")") {
-                    attrs = scanned.chunk
-                    pos = endAttrs + 1
-                    matched = true
-                }
-            }
+    /// The inline form `(attrs)` is tried first, then the reference form `[label]` whose label resolves in `storage.attributeReferenceMap`.
+    private mutating func matchAttributeForm(cursor: Int, end: Int, content: borrowing ContentSpan) -> (data: NodeData, end: Int)? {
+        let pos = cursor + 1
+        // The attribute scanner allows whitespace and balanced parens - this is *not* a link-URL scan.
+        if pos < end, content[pos] == UInt8(ascii: "("),
+           let scanned = matchAttributeAttributes(start: pos + 1, end: end, content: content),
+           scanned.afterEnd < end,
+           content[scanned.afterEnd] == UInt8(ascii: ")") {
+            return (.attribute(storage.intern(scanned.chunk)), scanned.afterEnd + 1)
         }
-        // Otherwise try the reference form `[label]`, whose label must name an entry in
-        // `attributeReferenceMap`.
-        var labelKey: String?
-        // The inline form completes the construct; what follows it is not part of it.
-        if !matched, let labelWindow = content.contiguousChunk(fromVirtual: pos, limit: end),
-           let lab = matchLinkLabel(labelWindow) {
-            // Contiguous window (see `contiguousChunk`): `lab.interior` is a real buffer chunk and
-            // `lab.afterEnd` a buffer offset converted back to virtual via the window base.
-            pos = pos + (lab.afterEnd - labelWindow.offset)
-            if lab.interior.length > 0 {
-                labelKey = normalizeLabel(chunk: lab.interior)
-            }
-        } else if !matched, let lab = matchLinkLabel(from: pos, end: end, in: content) {
-            // The label spans a line ending (`^[x][la\nbel]`), past the end of the contiguous window;
-            // normalize the interior across the join for lookup.
-            pos = lab.afterEnd
-            if !lab.interior.isEmpty {
-                labelKey = normalizeLabel(virtualRange: lab.interior, in: content)
-            }
+        // A label naming no attribute definition is not part of the construct, so it is parsed again as text.
+        guard let label = matchLabelKey(from: pos, end: end, content: content),
+              !label.key.isEmpty,
+              let attributes = storage.attributeReferenceMap[label.key] else {
+            return nil
         }
-        if let key = labelKey, !key.isEmpty,
-           let storedAttrs = storage.attributeReferenceMap[key] {
-            attrs = storedAttrs
-            matched = true
-        }
-        if !matched {
-            // Fail: pop bracket, emit `]` as text and resume just past it. The `^[` text node stays as
-            // text. A label naming no attribute definition is not part of the construct, so it is parsed
-            // again as text.
-            pos = cursor + 1
-            popBracket(brackets: &brackets, lastBracket: &lastBracket)
-            emitBracketLiteral(at: pos - 1, content: content, parent: parent)
-            return pos
-        }
-        // Match: build attribute node, reparent siblings, drop opener `^[`.
-        let parentIdx = storage[openerInl].parent
-        let attrsRef = storage.intern(attrs)
-        let attrIdx = storage.appendNode(NodeRecord(
-            kind: .attribute,
-            parent: parentIdx,
-            data: .attribute(attrsRef)
-        ))
-        // The `^[…](…)` attribute spans from its opening `^[` (virtual `openerVirtualStart`) to just past the closing form (virtual `pos`).
-        stampInline(attrIdx, openerVirtualStart, pos, content: content)
-        storage.insertChildBefore(attrIdx, before: openerInl)
-        var sib = storage[openerInl].next
-        while let sib_ = sib {
-            let nextSib = storage[sib_].next
-            storage.unlinkChild(sib_)
-            storage.appendChild(sib_, to: attrIdx)
-            sib = nextSib
-        }
-        storage.unlinkChild(openerInl)
-        processEmphasis(
-            stackBottom: openerDelimPos,
-            content: content,
-            delimiters: &delimiters,
-            lastDelim: &lastDelim
-        )
-        popBracket(brackets: &brackets, lastBracket: &lastBracket)
-        return pos
+        return (.attribute(storage.intern(attributes)), label.afterEnd)
     }
 
     private struct AttributeAttributesMatch {
