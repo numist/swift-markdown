@@ -616,11 +616,8 @@ extension BlockParser {
         }
         var key = ""
         var afterReference = pos
-        var blankLabelInOneSegment = false
         if let label = matchLabelKey(from: pos, end: end, content: content) {
             key = label.key
-            blankLabelInOneSegment = key.isEmpty && label.afterEnd > pos + 2
-                && content.contiguousChunk(fromVirtual: pos, limit: label.afterEnd)?.length == label.afterEnd - pos
             // A whitespace-only `[ ]` is neither a link label nor `[]` (Links: a link label holds a
             // non-whitespace character), so a shortcut reference before it leaves it as text.
             if !key.isEmpty || label.afterEnd == pos + 2 {
@@ -632,10 +629,7 @@ extension BlockParser {
         if key.isEmpty, let textStart = shortcutLabelStart {
             // A link label has at most 999 characters inside its brackets (Links), so a longer shortcut stays literal.
             if cursor > textStart, linkLabelFitsLengthCap(virtualRange: textStart..<cursor, in: content) {
-                // A whitespace-only `[ ]` read from one segment ends the lookup here when the shortcut label spans segments.
-                if !blankLabelInOneSegment || content.contiguousChunk(fromVirtual: textStart, limit: cursor)?.length == cursor - textStart {
-                    key = normalizeLabel(virtualRange: textStart..<cursor, in: content)
-                }
+                key = normalizeLabel(virtualRange: textStart..<cursor, in: content)
             }
         }
         guard !key.isEmpty, let definition = storage.referenceMap[key] else {
