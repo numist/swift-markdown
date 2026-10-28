@@ -10,6 +10,17 @@
 
 internal import BasicContainers
 
+/// Reused buffers for the inline pass, owned by its caller so their borrow is independent of the `storage` mutations `parseInline` performs.
+///
+/// `bytes` holds an arena-content copy while it is parsed. `segments` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content) and `segmentEnds` its running virtual end offsets. `runs` holds a stable copy of a flattened block's arena→source run map and `runEnds` its running end offsets.
+private struct InlineScratch: ~Copyable {
+    var bytes = UniqueArray<UInt8>()
+    var segments = UniqueArray<Segment>()
+    var segmentEnds = UniqueArray<Int>()
+    var runs = UniqueArray<ArenaRun>()
+    var runEnds = UniqueArray<Int>()
+}
+
 /// Block-level Markdown parser.
 internal struct BlockParser : ~Copyable, ~Escapable {
     /// The storage we are parsing from.
@@ -272,56 +283,25 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Inline-parsing pass: with all blocks closed (and `storage`'s `referenceMap` / `attributeReferenceMap` / `footnoteMap` fully populated), run inline parsing for every paragraph and heading queued during finalize. Forward references like `[foo]\n\n[foo]: url` resolve correctly because the def is in the map by the time the ref's paragraph is parsed.
         let pending = pendingInlines
         
-        // Reused scratch buffers: `scratch` holds an arena-content copy while it is parsed; `segScratch` holds a stable copy of a multi-segment content's segment list (the live `storage.segments` pool grows as `parseInline` interns node content) and `segEndScratch` its running virtual end offsets; `runScratch` holds a stable copy of a flattened block's arena→source run map and `runEndScratch` its running end offsets. All owned here so their borrow is independent of the `storage` mutations `parseInline` performs.
-        var scratch = UniqueArray<UInt8>()
-        var segScratch = UniqueArray<Segment>()
-        var segEndScratch = UniqueArray<Int>()
-        var runScratch = UniqueArray<ArenaRun>()
-        var runEndScratch = UniqueArray<Int>()
-        
+        var scratch = InlineScratch()
+
         for (node, ref) in pending {
             precondition(ref.totalLength > 0, "only non-empty content is queued for inline parsing")
             if ref.count == 1 {
-                let chunk = storage.segments[Int(ref.first)].chunk
-                if chunk.inSource {
-                    // Source-backed: zero-copy slice of the source span.
-                    parseInline(
-                        content: ContentSpan(span: sourceBytes.extracting(chunk.range), base: chunk.offset, inSource: true),
-                        into: node
-                    )
-                } else {
-                    // Arena-backed: copy the content region out of `storage.strings` so the read view is independent of the appends `parseInline` makes to that same array.
-                    scratch.removeSubrange(0..<scratch.count)
-                    scratch.append(copying: storage.strings.span.extracting(chunk.range))
-                    // Arena content with a source image carries an arena→source run map so its inlines get source positions; arena content without one (positions off) parses unmapped.
-                    runScratch.removeSubrange(0..<runScratch.count)
-                    runEndScratch.removeSubrange(0..<runEndScratch.count)
-                    if let map = arenaSourceMaps[node] {
-                        var runEnd = 0
-                        for run in map {
-                            runScratch.append(run)
-                            runEnd += Int(run.length)
-                            runEndScratch.append(runEnd)
-                        }
-                    }
-                    parseInline(
-                        content: ContentSpan(span: scratch.span, base: chunk.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span),
-                        into: node
-                    )
-                }
+                parseInline(chunk: storage.segments[Int(ref.first)].chunk, scratch: &scratch, into: node)
             } else {
                 // Multi-segment content (multi-line non-contiguous paragraph/heading): copy the segment list into stable storage and parse it directly from the source - no flattening into the arena.
-                segScratch.removeSubrange(0..<segScratch.count)
-                segEndScratch.removeSubrange(0..<segEndScratch.count)
+                scratch.segments.removeSubrange(0..<scratch.segments.count)
+                scratch.segmentEnds.removeSubrange(0..<scratch.segmentEnds.count)
                 var virtualEnd = 0
                 for i in 0..<Int(ref.count) {
                     let seg = storage.segments[Int(ref.first) + i]
-                    segScratch.append(seg)
+                    scratch.segments.append(seg)
                     virtualEnd += Int(seg.length)
-                    segEndScratch.append(virtualEnd)
+                    scratch.segmentEnds.append(virtualEnd)
                 }
                 parseInline(
-                    content: ContentSpan(source: sourceBytes, segments: segScratch.span, segmentEnds: segEndScratch.span, virtualLength: Int(ref.totalLength)),
+                    content: ContentSpan(source: sourceBytes, segments: scratch.segments.span, segmentEnds: scratch.segmentEnds.span, virtualLength: Int(ref.totalLength)),
                     into: node
                 )
             }
@@ -402,6 +382,42 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return referencedDefs
     }
 
+    /// Parse the inline content of `node` held in `chunk`.
+    ///
+    /// Source-backed content is parsed in place. Arena-backed content is copied out of `storage.strings` first, so the read view is independent of the appends `parseInline` makes to that same array. Arena content with a source image carries the arena→source run map registered in `arenaSourceMaps`, so its inlines get source positions; arena content without one (positions off) parses unmapped.
+    private mutating func parseInline(
+        chunk: Chunk,
+        scratch: inout InlineScratch,
+        into node: DocumentStorage.Index,
+        preserveWhitespace: Bool = false
+    ) {
+        if chunk.inSource {
+            parseInline(
+                content: ContentSpan(span: sourceBytes.extracting(chunk.range), base: chunk.offset, inSource: true),
+                into: node,
+                preserveWhitespace: preserveWhitespace
+            )
+            return
+        }
+        scratch.bytes.removeSubrange(0..<scratch.bytes.count)
+        scratch.bytes.append(copying: storage.strings.span.extracting(chunk.range))
+        scratch.runs.removeSubrange(0..<scratch.runs.count)
+        scratch.runEnds.removeSubrange(0..<scratch.runEnds.count)
+        if let map = arenaSourceMaps[node] {
+            var runEnd = 0
+            for run in map {
+                scratch.runs.append(run)
+                runEnd += Int(run.length)
+                scratch.runEnds.append(runEnd)
+            }
+        }
+        parseInline(
+            content: ContentSpan(span: scratch.bytes.span, base: chunk.offset, inSource: false, arenaRuns: scratch.runs.span, arenaRunEnds: scratch.runEnds.span),
+            into: node,
+            preserveWhitespace: preserveWhitespace
+        )
+    }
+
     /// Inline-only parse path for `.inlineOnly` / `.preserveWhitespace`.
     ///
     /// Bypasses block structure completely: any non-empty input (even a BOM-only one) becomes a single `.paragraph`, and empty input yields no paragraph. The paragraph's content is the source with a leading UTF-8 BOM skipped and line endings normalized to `\n`, but with every other byte preserved verbatim - leading indentation, interior space runs, trailing spaces, and all line endings (including a trailing one). Markers like `#`, `* `, `> `, fences and 4-space indents stay literal text; only *inline* syntax (emphasis, code spans, links, autolinks, …) is parsed, and line endings remain literal text rather than becoming soft or hard line breaks.
@@ -467,15 +483,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         // The arena copy's source image, for the email autolink pass.
         var image: ContentImage? = nil
+        var scratch = InlineScratch()
         if !hasCR && !hasNUL {
             // Zero-copy: the paragraph content is a source slice; emitted text references the source in place.
             let rest = parseDefinitions(in: Chunk(offset: start, length: count - start, inSource: true))
-            let content = ContentSpan(span: sourceBytes.extracting(rest.range), base: rest.offset, inSource: true)
-            parseInline(
-                content: content,
-                into: paragraph,
-                preserveWhitespace: true
-            )
+            parseInline(chunk: rest, scratch: &scratch, into: paragraph, preserveWhitespace: true)
         } else {
             // Normalize `\r\n` and lone `\r` to `\n` and each NUL to U+FFFD into the string arena, then read from an independent scratch copy (the inline parser appends to `storage.strings` as it runs).
             // With positions on, also record the arena→source run map (inline stamping resolves a node's first byte for its start and its last byte, plus one, for its end). Every byte copied as-is, or a lone `\r` → `\n`, images its own source byte. A CRLF's `\n` images its LF, so a node ending at the line break covers the whole CRLF and projects to the next line's start, as it does for LF input (a node ending at the final line ending is pulled back to the end of the last line by `endInlinesWithinLastLine`); the cost is that a node *starting* at that `\n` starts one byte late, after the CR. Each of a U+FFFD's three bytes images its one NUL byte, so a node starting or ending at it covers exactly that byte.
@@ -511,21 +523,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             let arenaEnd = storage.strings.count
             let rest = parseDefinitions(in: Chunk(offset: arenaStart, length: arenaEnd - arenaStart, inSource: false))
-            var scratch = UniqueArray<UInt8>()
-            scratch.append(copying: storage.strings.span.extracting(rest.range))
-            var runScratch = UniqueArray<ArenaRun>()
-            var runEndScratch = UniqueArray<Int>()
             if positionsEnabled {
-                var runEnd = 0
-                for run in sliceRuns(runs, from: rest.offset - arenaStart, length: rest.length) {
-                    runScratch.append(run)
-                    runEnd += Int(run.length)
-                    runEndScratch.append(runEnd)
-                }
+                arenaSourceMaps[paragraph] = sliceRuns(runs, from: rest.offset - arenaStart, length: rest.length)
             }
-            let content = ContentSpan(span: scratch.span, base: rest.offset, inSource: false, arenaRuns: runScratch.span, arenaRunEnds: runEndScratch.span)
             parseInline(
-                content: content,
+                chunk: rest,
+                scratch: &scratch,
                 into: paragraph,
                 preserveWhitespace: true
             )
