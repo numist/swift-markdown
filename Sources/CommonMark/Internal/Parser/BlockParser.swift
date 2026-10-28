@@ -1577,19 +1577,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             case .list:
                 // Lists themselves don't have a per-line continuation rule; their items do. The list as a container "matches" trivially as long as we get to one of its items.
                 deepestMatched = node
-            case .item:
+            case .item, .footnoteDefinition:
                 // Item continuation (List items): the line's indent, measured from the parent container's
                 // consumed prefix (`cursor`), is tested against the item's content column first, for an
                 // empty item and a non-empty one alike. Only if that fails does a blank line inside a
                 // non-empty item keep it open. Because `cursor` advances as each ancestor item consumes its
                 // own padding, a nested item is measured against its own content column, not an
-                // ancestor's.
+                // ancestor's. A footnote definition continues the same way with a content column four
+                // columns past the parent's prefix, and a blank line always keeps it open. Any other line
+                // fails the prefix, so the container's open paragraph may continue lazily (the walk stops
+                // here with `allMatched: false`).
                 if cursor > firstNonSpaceAhead {
                     firstNonSpaceAhead = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
                 }
                 let firstNonSpace = firstNonSpaceAhead
                 let isBlank = firstNonSpace == lineRange.upperBound
-                let padding = itemPadding(of: node)
+                let isItem = if case .item = kind { true } else { false }
+                let padding = isItem ? itemPadding(of: node) : 4
                 // Compare in columns, not bytes, so a leading tab counts as up to 4 columns of indent.
                 // Measured from `prefixColumns`, the column the outer prefixes reached: `cursor` can sit
                 // after a marker at any column, or mid-tab after a partially consumed tab, and a tab's
@@ -1608,12 +1612,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                         columns: padding,
                         baseColumn: prefixColumns
                     )
-                    // The item intends to consume `padding` columns even when a straddling tab kept
+                    // The container intends to consume `padding` columns even when a straddling tab kept
                     // `advanceColumns` from advancing `cursor` past it: record the intended column so the
                     // leaf continuation can split that tab (Tabs).
                     prefixColumns += padding
                     deepestMatched = node
-                } else if isBlank, storage[node].firstChild != nil || itemsEndingInRemovedParagraph[node] != nil {
+                } else if isBlank, !isItem || storage[node].firstChild != nil || itemsEndingInRemovedParagraph[node] != nil {
                     // A blank line inside an item that already has content keeps the item open even though
                     // the indent falls short of the content column. Advance `cursor` to first-non-space (the
                     // line end for a blank line) so any deeper open item measures its indent from here rather
@@ -1621,35 +1625,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // with at most one blank line (List items). An item whose first paragraph held only
                     // definitions or a task list item marker is not empty, since that paragraph is a block of
                     // the item.
-                    cursor = firstNonSpace
-                    prefixColumns = lineColumns.column(at: cursor, in: source)
-                    deepestMatched = node
-                } else {
-                    return (deepestMatched, cursor, prefixColumns, false)
-                }
-            case .footnoteDefinition:
-                // Footnote definition continuation: a line indented four or more columns past the parent's
-                // consumed prefix stays in the definition with 4 columns stripped, and a blank line keeps
-                // the definition open. Any other line fails the prefix, so the definition's open paragraph
-                // may continue lazily (the walk stops here with `allMatched: false`).
-                if cursor > firstNonSpaceAhead {
-                    firstNonSpaceAhead = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
-                }
-                let firstNonSpace = firstNonSpaceAhead
-                let isBlank = firstNonSpace == lineRange.upperBound
-                // Measured from `prefixColumns`, like the item branch above: `cursor` can sit mid-tab.
-                let availCols = indentColumns(source: source, from: cursor, to: min(firstNonSpace, cursor + 4), baseColumn: prefixColumns)
-                if availCols >= 4 {
-                    cursor = advanceColumns(
-                        source: source,
-                        from: cursor,
-                        to: lineRange.upperBound,
-                        columns: 4,
-                        baseColumn: prefixColumns
-                    )
-                    prefixColumns += 4
-                    deepestMatched = node
-                } else if isBlank {
                     cursor = firstNonSpace
                     prefixColumns = lineColumns.column(at: cursor, in: source)
                     deepestMatched = node
