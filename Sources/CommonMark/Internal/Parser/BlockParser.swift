@@ -1825,9 +1825,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // Tight/loose detection runs at list-finalize time via `detectLooseList` + the `endsWithBlankLine` recursion, which catches the "blank between sibling items" case at finalize.
         } else {
             // Either there's no open list, or the marker style differs from the open list. In the latter case, finalize the open list so the new list opens as a sibling - `- foo\n+ bar` becomes two top-level lists, not a nested one (Lists).
-            if storage[current].kind.isList {
-                pending = finalize(node: current, pending: pending)
-            }
+            pending = closingOpenList(pending)
             // Open a new list.
             parentList = addChild(
                 kind: .list(MarkdownNode.ListInfo(
