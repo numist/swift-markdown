@@ -159,13 +159,21 @@ extension BlockParser {
             data: nil
         ))
         storage.appendChild(rowIdx, to: parent)
+        // The source offset imaged by arena byte `arena`, or `nil` when positions are off. Every byte a row or cell boundary lands on lies inside the content, so with positions on it resolves.
+        func sourceStart(arena: Int) -> Int? {
+            guard let image else { return nil }
+            guard let offset = image.sourceOffset(ofArenaByte: arena) else {
+                preconditionFailure("a table offset lies inside its content")
+            }
+            return offset
+        }
         // The half-open source end of the content ending at arena offset `arena`: just past the source byte its last byte images, so a range ending in a U+FFFD ends just past its NUL. `nil` when positions are off.
         func sourceEnd(arena: Int) -> Int? {
-            image?.sourceOffset(ofArenaByte: arena - 1).map { $0 + 1 }
+            sourceStart(arena: arena - 1).map { $0 + 1 }
         }
         // A row's source range covers its whole source line, trailing whitespace included. Interior rows reach their line ending via `splitLines`, but the paragraph content has its trailing whitespace trimmed (`runParagraphMatchers`), so the last row's untrimmed end comes from the table node's own end (the paragraph's extent, stamped before this runs). The same end closes the rightmost cell of a row with no closing pipe.
         let rowEnd = isLastLine && image != nil ? Int(storage.sourceRanges[parent].end) : sourceEnd(arena: line.upperBound)
-        storage.setSourceStart(rowIdx, image?.sourceOffset(ofArenaByte: line.lowerBound))
+        storage.setSourceStart(rowIdx, sourceStart(arena: line.lowerBound))
         storage.setSourceEnd(rowIdx, rowEnd)
         let (cells, hadClosingPipe, hadLeadingPipe) = splitCells(line: line)
         let columnCount = alignments.count
@@ -205,8 +213,11 @@ extension BlockParser {
                 // Rowspan marker: the cell's trimmed content is exactly the marker byte. A cell beyond
                 // `columnCount` is dropped, so only emitted cells track a marker. The test reads the cell's
                 // content, so a pipe-preceded cell's leading line tabulation or form feed is padding here.
-                if col < columnCount && content(col).count == 1 && storage.strings[content(col).lowerBound] == markerByte {
-                    rowspans[col] = 0
+                if col < columnCount {
+                    let trimmed = content(col)
+                    if trimmed.count == 1 && storage.strings[trimmed.lowerBound] == markerByte {
+                        rowspans[col] = 0
+                    }
                 }
             }
             // Resolve rowspan markers against the cell that owns the span above them, past any filler rows (body rows only - the header has no row above), and grow it.
@@ -238,7 +249,7 @@ extension BlockParser {
             // A cell's source range is its untrimmed between-pipes span: a cell with content ends just past its last non-pipe byte, which is `cr.upperBound`. A cell whose content trims to empty, a zero-width `||` cell included, also covers its closing pipe, so its end is one byte further. Such a cell always has a closing pipe (`splitCells` drops a trailing empty cell, which the row then pads), so `+1` never overshoots the row.
             let cr = cells[col]
             let cellRange = content(col)
-            storage.setSourceStart(cellIdx, image?.sourceOffset(ofArenaByte: cr.lowerBound))
+            storage.setSourceStart(cellIdx, sourceStart(arena: cr.lowerBound))
             if col == cells.count - 1 && !hadClosingPipe {
                 // Rightmost cell on a row with no closing pipe: with no pipe to stop at, the cell covers its trailing whitespace through the row's untrimmed end, the same extent the row spans, rather than the trimmed-content end in `cr.upperBound`.
                 storage.setSourceEnd(cellIdx, rowEnd)
