@@ -2,7 +2,7 @@
 
 Swift `Markdown` is a Swift package for parsing, building, editing, and analyzing Markdown documents.
 
-The parser is a Swift implementation of the [GitHub Flavored Markdown spec](https://github.github.com/gfm/) (version 0.29-gfm), including tables, strikethrough, and task lists. As the needs of the community change, the effective dialect implemented by this library may change.
+The parser is a Swift implementation of the [GitHub Flavored Markdown spec](https://github.github.com/gfm/) (version 0.29-gfm). As the needs of the community change, the effective dialect implemented by this library may change.
 
 The markup tree provided by this package is comprised of immutable/persistent, thread-safe, copy-on-write value types that only copy substructure that has changed. Other examples of the main strategy behind this library can be seen in [SwiftSyntax](https://github.com/swiftlang/swift-syntax).
 
