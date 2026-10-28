@@ -773,6 +773,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return appendSplitTabCodeContent(spaces: splitTabSpaces, sourceStart: sourceStart, lineEnd: lineEnd, to: node, pending: pending)
     }
 
+    /// Append the rest of a code/HTML block body line from `bodyStart` to `lineEnd`, after `stripFenceIndent` removed the indentation: a zero-copy `addLine` when no tab was split, otherwise `leadingSpaces` synthetic spaces plus the literal tail.
+    private mutating func appendCodeBodyLine(source: Span<UInt8>, bodyStart: Int, leadingSpaces: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        if leadingSpaces == 0 {
+            return addLine(span: source, range: bodyStart..<lineEnd, to: node, pending: pending)
+        }
+        return appendSplitTabCodeContent(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineEnd, to: node, pending: pending)
+    }
+
     /// Append `spaces` synthetic leading spaces followed by the verbatim source bytes `[sourceStart, lineEnd)`
     /// as a single arena-backed (`inSource: false`) content segment.
     ///
@@ -1764,17 +1772,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 maxColumns: prefixColumns + info.fenceOffset - startColumn,
                 startColumn: startColumn
             )
-            if leadingSpaces == 0 {
-                pending = addLine(span: source, range: bodyStart..<lineRange.upperBound, to: current, pending: pending)
-            } else {
-                pending = appendSplitTabCodeContent(
-                    spaces: leadingSpaces,
-                    sourceStart: bodyStart,
-                    lineEnd: lineRange.upperBound,
-                    to: current,
-                    pending: pending
-                )
-            }
+            pending = appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
             return LeafContinuation(stillOpen: true, pending: pending)
         }
         // Indented.
@@ -2115,11 +2113,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             maxColumns: column - priorColumn,
             startColumn: priorColumn
         )
-        if leadingSpaces == 0 {
-            pending = addLine(span: source, range: bodyStart..<lineRange.upperBound, to: htmlIdx, pending: pending)
-        } else {
-            pending = appendSplitTabCodeContent(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineRange.upperBound, to: htmlIdx, pending: pending)
-        }
+        pending = appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: htmlIdx, pending: pending)
         // Check whether this same line also satisfies the end condition.
         if htmlBlockLineMatchesEndCondition(
             type: htmlType,
@@ -2160,16 +2154,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             start: sourceOffset(bodyStart)
         )
         current = codeIdx
-        if leadingSpaces == 0 {
-            return addLine(span: source, range: bodyStart..<lineRange.upperBound, to: codeIdx, pending: pending)
-        }
-        return appendSplitTabCodeContent(
-            spaces: leadingSpaces,
-            sourceStart: bodyStart,
-            lineEnd: lineRange.upperBound,
-            to: codeIdx,
-            pending: pending
-        )
+        return appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: codeIdx, pending: pending)
     }
 
     /// Open a paragraph at `current` and add the line's content to it.
