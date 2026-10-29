@@ -17,8 +17,9 @@ import CommonMark
 /// (extension)), and both lines continue the paragraph. A later line pair that is a valid header row and delimiter row
 /// still opens a table, taking the line before the delimiter row as its header row, and the lines before it stay a
 /// paragraph. A later pair whose cell counts also differ, a later line that is not a delimiter row, and a delimiter row
-/// that is a lazy continuation line or is indented four or more columns open no table. Each case is tried at the top
-/// level, in a block quote and in a list item.
+/// that is a lazy continuation line or is indented four or more columns open no table, and a setext heading underline
+/// still makes the whole paragraph a heading. The cases are tried at the top level, in a block quote, in a list item,
+/// with CRLF line endings and after a tab that follows a block quote marker, wherever the construct can occur there.
 @Suite("A table after a header row and delimiter row that differ in cell count")
 struct TableAfterHeaderCellCountMismatchTests {
 
@@ -107,6 +108,51 @@ struct TableAfterHeaderCellCountMismatchTests {
             """
         ),
         Case(
+            "CRLF, two mismatched pairs before a valid pair",
+            "a|b|c\r\n-|-\r\np|q\r\n-|-|-\r\nd|e\r\n-|-\r\n",
+            """
+            document @1:1-6:4
+              paragraph @1:1-4:6
+                text "a|b|c" @1:1-1:6
+                softbreak @-
+                text "-|-" @2:1-2:4
+                softbreak @-
+                text "p|q" @3:1-3:4
+                softbreak @-
+                text "-|-|-" @4:1-4:6
+              table @5:1-6:4
+                table_header @5:1-5:4
+                  table_cell align=none colspan=1 rowspan=1 @5:1-5:2
+                    text "d" @5:1-5:2
+                  table_cell align=none colspan=1 rowspan=1 @5:3-5:4
+                    text "e" @5:3-5:4
+
+            """
+        ),
+        Case(
+            "tab after the block quote marker, two mismatched pairs before a valid pair",
+            ">\ta|b|c\n>\t-|-\n>\tp|q\n>\t-|-|-\n>\td|e\n>\t-|-\n",
+            """
+            document @1:1-6:6
+              block_quote @1:1-6:6
+                paragraph @1:3-4:8
+                  text "a|b|c" @1:3-1:8
+                  softbreak @-
+                  text "-|-" @2:3-2:6
+                  softbreak @-
+                  text "p|q" @3:3-3:6
+                  softbreak @-
+                  text "-|-|-" @4:3-4:8
+                table @5:3-6:6
+                  table_header @5:3-5:6
+                    table_cell align=none colspan=1 rowspan=1 @5:3-5:4
+                      text "d" @5:3-5:4
+                    table_cell align=none colspan=1 rowspan=1 @5:5-5:6
+                      text "e" @5:5-5:6
+
+            """
+        ),
+        Case(
             "top level, the mismatched delimiter row is the header row of a valid pair",
             "a|b\n-|-|-\n-|-|-\n",
             """
@@ -160,6 +206,43 @@ struct TableAfterHeaderCellCountMismatchTests {
                         text "-" @2:5-2:6
                       table_cell align=none colspan=1 rowspan=1 @2:7-2:8
                         text "-" @2:7-2:8
+
+            """
+        ),
+        Case(
+            "CRLF, the mismatched delimiter row is the header row of a valid pair",
+            "a|b\r\n-|-|-\r\n-|-|-\r\n",
+            """
+            document @1:1-3:6
+              paragraph @1:1-1:4
+                text "a|b" @1:1-1:4
+              table @2:1-3:6
+                table_header @2:1-2:6
+                  table_cell align=none colspan=1 rowspan=1 @2:1-2:2
+                    text "-" @2:1-2:2
+                  table_cell align=none colspan=1 rowspan=1 @2:3-2:4
+                    text "-" @2:3-2:4
+                  table_cell align=none colspan=1 rowspan=1 @2:5-2:6
+                    text "-" @2:5-2:6
+
+            """
+        ),
+        Case(
+            "tab after the block quote marker, the mismatched delimiter row is the header row of a valid pair",
+            ">\ta|b\n>\t-|-|-\n>\t-|-|-\n",
+            """
+            document @1:1-3:8
+              block_quote @1:1-3:8
+                paragraph @1:3-1:6
+                  text "a|b" @1:3-1:6
+                table @2:3-3:8
+                  table_header @2:3-2:8
+                    table_cell align=none colspan=1 rowspan=1 @2:3-2:4
+                      text "-" @2:3-2:4
+                    table_cell align=none colspan=1 rowspan=1 @2:5-2:6
+                      text "-" @2:5-2:6
+                    table_cell align=none colspan=1 rowspan=1 @2:7-2:8
+                      text "-" @2:7-2:8
 
             """
         ),
@@ -456,6 +539,20 @@ struct TableAfterHeaderCellCountMismatchTests {
                     text "d|e" @3:3-3:6
                     softbreak @-
                     text "-|-" @4:1-4:4
+
+            """
+        ),
+        Case(
+            "top level, a setext heading underline after a mismatched pair",
+            "x\na|b|c\n-|-\n===\n",
+            """
+            document @1:1-4:4
+              heading 1 @1:1-4:4
+                text "x" @1:1-1:2
+                softbreak @-
+                text "a|b|c" @2:1-2:6
+                softbreak @-
+                text "-|-" @3:1-3:4
 
             """
         ),

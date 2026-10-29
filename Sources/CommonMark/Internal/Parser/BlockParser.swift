@@ -154,8 +154,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         /// only a paragraph, so a later line that fails an open container's prefix closes the table and that
         /// container instead of becoming a body row. Tables are detected when the paragraph closes, so
         /// `processLine` consults this flag to break the first such line, and everything after it, out of
-        /// the table and its container. Only `true` when the delimiter row is a non-indented, non-lazy
-        /// continuation line.
+        /// the table and its container. Only `true` when the delimiter row is a continuation line indented
+        /// fewer than four columns that is not lazy.
         var tablePending = false
     }
 
@@ -911,9 +911,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Decide whether the just-arrived delimiter-candidate line `delimSpan[delimRange]` opens a table with
     /// the open paragraph's last accumulated line as the header row, and set the open paragraph's
-    /// `tablePending` when it does. A table has a single header row (Tables (extension)), so the header is always the line
-    /// immediately before the delimiter row. A candidate that isn't a delimiter row, or whose cell count differs from the
-    /// header row's, opens no table and continues the paragraph, so a later line can still open one.
+    /// `tablePending` when it does. A table has a single header row (Tables (extension)), so the
+    /// header is always the line immediately before the delimiter row. A candidate that isn't a
+    /// delimiter row, or whose cell count differs from the header row's, opens no table and continues
+    /// the paragraph, so a later line can still open one.
     ///
     /// When earlier paragraph lines precede that header, they are split off here into a fresh paragraph
     /// inserted before `node`, and `node`'s pending content is re-seeded to the header line alone so the
@@ -1230,7 +1231,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return pending
     }
 
-    /// Whether the open paragraph's first two lines form a table's header and delimiter rows.
+    /// Whether a line of the open paragraph and the line after it form a table's header and delimiter rows.
     private var openParagraphIsTablePending: Bool {
         assert(openParagraphTableState == nil || openParagraphTableState!.node == current, "the recorded table state belongs to the open leaf")
         return openParagraphTableState?.tablePending == true
@@ -1238,7 +1239,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Setext heading underline transforms an open paragraph that's a direct descendant of the deepest matched container. Special case: when we're inside a list item AND the line is a dashes-style underline that ALSO matches a thematic break, the thematic break wins (it closes the list rather than turning the item's paragraph into a heading). See spec examples 64, 69, 27, 30.
     ///
-    /// A table-pending paragraph (its first two lines form a header and delimiter row) is a table from its
+    /// A table-pending paragraph (a line of it and the next form a header and delimiter row) is a table from its
     /// delimiter row on, so a `-` or `=` line can't underline it as a setext heading (`r\n|-\n-` → table +
     /// list; `r\n|-\n=` → table with a `=` body row). The line falls through to the paragraph continuation.
     ///
@@ -1324,7 +1325,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// When a paragraph is open, decide whether this line starts a new block (which closes the paragraph) or is absorbed as lazy/matched continuation. This is the ONLY case where the interrupt decision matters, so the matcher ladder is run only here - every other line goes straight to dispatch, which does its own (single) classification.
     ///
-    /// A table-pending paragraph (its first two lines form a table's header and delimiter rows) is a
+    /// A table-pending paragraph (a line of it and the next form a table's header and delimiter rows) is a
     /// table from its delimiter row on, so a line that can't be a table row closes the table and its
     /// enclosing container. Three kinds of line can't be a row:
     ///   - a lazy continuation line, since laziness continues only a paragraph;
@@ -1386,8 +1387,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         assert(openParagraphTableState!.node == current, "the recorded state belongs to the open paragraph")
         // Detect whether this line opens a table with the paragraph's last accumulated line as the
-        // header row. The first delimiter-shaped, non-indented, non-lazy continuation line that
-        // opens one sets `tablePending`, so no later line is evaluated.
+        // header row. The first delimiter-shaped continuation line, indented fewer than four columns
+        // and not lazy, that opens one sets `tablePending`, so no later line is evaluated.
         // When earlier lines precede the header, the split happens here. `couldBeDelimiterRow`
         // keeps ordinary prose paragraphs from materializing.
         if !openParagraphTableState!.tablePending,
