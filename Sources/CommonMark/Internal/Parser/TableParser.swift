@@ -83,15 +83,15 @@ extension BlockParser {
         return splitCells(line: lines[0]).cells.count == alignments.count
     }
 
-    /// Whether `span[range]` consists solely of GFM delimiter-row bytes — `-`, `:`, `|`, and delimiter-marker
+    /// Whether `sourceBytes[range]` consists solely of GFM delimiter-row bytes — `-`, `:`, `|`, and delimiter-marker
     /// whitespace (space, tab, VT, FF) — and contains at least one `-`. A cheap necessary condition for a
     /// table delimiter row (`parseDelimRow` applies the exact rule on the materialized cells); lets the
     /// block parser's table-pending pre-check skip materializing a paragraph's two lines when the second
     /// line obviously isn't a delimiter row (ordinary prose, which starts with a letter).
-    internal static func couldBeDelimiterRow(span: Span<UInt8>, range: Range<Int>) -> Bool {
+    internal func couldBeDelimiterRow(range: Range<Int>) -> Bool {
         var sawDash = false
         for i in range {
-            switch span[i] {
+            switch sourceBytes[i] {
             case UInt8(ascii: "-"):
                 sawDash = true
             case UInt8(ascii: ":"), UInt8(ascii: "|"), UInt8(ascii: " "), UInt8(ascii: "\t"), 0x0B, 0x0C:
@@ -103,7 +103,7 @@ extension BlockParser {
         return sawDash
     }
 
-    /// Whether `span[range]` is a lone-pipe row — a single unescaped `|` with only spaces, tabs, line
+    /// Whether `sourceBytes[range]` is a lone-pipe row — a single unescaped `|` with only spaces, tabs, line
     /// tabulations or form feeds after it — which has zero cells. Such a line is not a table row, so it
     /// closes an open table rather than becoming a body row with one empty cell. The source-span
     /// counterpart of `splitCells`' zero-cell case.
@@ -111,16 +111,16 @@ extension BlockParser {
     /// Every caller passes a `firstNonSpace..<end` body-row range, so this never sees leading whitespace.
     /// It does not classify a header row, where leading whitespace before `|` forms one empty cell (see
     /// `splitCells`).
-    internal static func isLonePipeRow(span: Span<UInt8>, range: Range<Int>) -> Bool {
+    internal func isLonePipeRow(range: Range<Int>) -> Bool {
         var s = range.lowerBound
         var e = range.upperBound
-        precondition(s == e || !span[s].isSpaceOrTab, "a body-row candidate starts at the line's first non-space byte")
-        while e > s && span[e - 1].isSpaceOrTab { e -= 1 }
+        precondition(s == e || !sourceBytes[s].isSpaceOrTab, "a body-row candidate starts at the line's first non-space byte")
+        while e > s && sourceBytes[e - 1].isSpaceOrTab { e -= 1 }
         // Must lead with a pipe, ...
-        guard s < e && span[s] == UInt8(ascii: "|") else { return false }
+        guard s < e && sourceBytes[s] == UInt8(ascii: "|") else { return false }
         s += 1
         // ... with nothing but padding after it: a second pipe or any content forms at least one cell.
-        for i in s..<e where !span[i].isExtensionScannerSpace {
+        for i in s..<e where !sourceBytes[i].isExtensionScannerSpace {
             return false
         }
         return true

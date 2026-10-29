@@ -256,7 +256,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     lastLineSourceEnd = currentLineSourceRange.upperBound
                 }
                 currentLineSourceRange = lineRangeInOriginalSource
-                pending = processLine(source: sourceBytes, lineRange: lineRangeInOriginalSource, pending: pending)
+                pending = processLine(lineRange: lineRangeInOriginalSource, pending: pending)
             }
 
             // EOF: finalize all open blocks back up to the document root. By the end every leaf is drained and `pending` is `nil`.
@@ -609,12 +609,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return PendingLeaf(node: node, content: .segments(segments))
     }
 
-    /// Append the bytes from `span[range]` to `pending` for `node`, returning the updated leaf.
-    private mutating func addLine(span: Span<UInt8>, range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    /// Append the bytes from `sourceBytes[range]` to `pending` for `node`, returning the updated leaf.
+    private mutating func addLine(range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         // Code/HTML block bodies accumulate as a zero-copy segment list (they're never inline-parsed). See `addLineSegment`.
         let nodeKind = storage[node].kind
         if nodeKind.isCodeBlock || nodeKind == .htmlBlock {
-            return addLineSegment(span: span, range: range, to: node, pending: pending)
+            return addLineSegment(range: range, to: node, pending: pending)
         }
         switch take(pending, ifNode: node) {
         case .none:
@@ -633,9 +633,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 var segs = UniqueArray<Segment>()
                 segs.append(Segment(offset: Int32(prev.lowerBound), length: Int32(prev.count), inSource: true))
                 segs.append(storage.newlineSegment)
-                return addLineSegment(span: span, range: range, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
+                return addLineSegment(range: range, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
             case .segments(let segs):
-                return addLineSegment(span: span, range: range, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
+                return addLineSegment(range: range, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
             case .lazy(_, joinPending: false):
                 preconditionFailure("a continuation line follows a deferred line join")
             }
@@ -664,23 +664,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Append one line of a segment-list leaf (a code/HTML block body line, or a non-contiguous paragraph continuation) as a zero-copy `inSource` segment, returning the updated leaf. Empty ranges append nothing (the surrounding `\n` separators carry blank lines), leaving `pending` unchanged.
-    private mutating func addLineSegment(span: Span<UInt8>, range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    private mutating func addLineSegment(range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         guard !range.isEmpty else { return pending }
         return appendSegment(Segment(offset: Int32(range.lowerBound), length: Int32(range.upperBound - range.lowerBound), inSource: true), to: node, pending: pending)
     }
 
     /// Append the rest of a code/HTML block body line from `bodyStart` to `lineEnd`, after `stripFenceIndent` removed the indentation: a zero-copy `addLine` when no tab was split, otherwise `leadingSpaces` synthetic spaces plus the literal tail.
-    private mutating func appendCodeBodyLine(source: Span<UInt8>, bodyStart: Int, leadingSpaces: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    private mutating func appendCodeBodyLine(bodyStart: Int, leadingSpaces: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         if leadingSpaces == 0 {
-            return addLine(span: source, range: bodyStart..<lineEnd, to: node, pending: pending)
+            return addLine(range: bodyStart..<lineEnd, to: node, pending: pending)
         }
         return appendSplitTabCodeContent(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineEnd, to: node, pending: pending)
     }
 
     /// Append the rest of an HTML block line from `cursor`, where the container prefixes ended at `column`.
-    private mutating func appendLineAfterPrefix(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, column: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
-        let (bodyStart, leadingSpaces) = htmlLineBody(source: source, lineRange: lineRange, cursor: cursor, column: column)
-        return appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: node, pending: pending)
+    private mutating func appendLineAfterPrefix(lineRange: Range<Int>, cursor: Int, column: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        let (bodyStart, leadingSpaces) = htmlLineBody(lineRange: lineRange, cursor: cursor, column: column)
+        return appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: node, pending: pending)
     }
 
     /// The offset at which the rest of an HTML block line from `cursor` begins, given the column `column` the container
@@ -690,10 +690,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// only part of a tab, so `column` lies inside it. Per Tabs, that tab's leftover columns become leading spaces and
     /// the rest of the line is copied verbatim. Otherwise `column` is `cursor`'s own column, nothing is stripped, and
     /// the line stays a zero-copy source slice.
-    private func htmlLineBody(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, column: Int) -> (bodyStart: Int, leadingSpaces: Int) {
-        let priorColumn = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+    private func htmlLineBody(lineRange: Range<Int>, cursor: Int, column: Int) -> (bodyStart: Int, leadingSpaces: Int) {
+        let priorColumn = columnWidth(from: lineRange.lowerBound, to: cursor)
         return stripFenceIndent(
-            source: source,
             range: cursor..<lineRange.upperBound,
             maxColumns: column - priorColumn,
             startColumn: priorColumn
@@ -904,13 +903,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Whether the open paragraph's last accumulated line, the header row, plus the just-arrived
-    /// delimiter-candidate line `delimSpan[delimRange]` open a table (Tables (extension)).
+    /// delimiter-candidate line `sourceBytes[delimRange]` open a table (Tables (extension)).
     ///
     /// Materializes the two lines (header + `\n` + delimiter) into a scratch region of the string arena,
     /// runs `opensTable`, then truncates the scratch back off (`parseTable` re-materializes at
     /// finalize). Reads `pending` through a borrow, so the paragraph's zero-copy accumulated content is
     /// untouched.
-    private mutating func lastLineOpensTable(delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf) -> Bool {
+    private mutating func lastLineOpensTable(delimRange: Range<Int>, pending: borrowing PendingLeaf) -> Bool {
         let scratchStart = storage.strings.count
         switch pending.content {
         case .lazy(let range, let joinPending):
@@ -928,7 +927,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         storage.strings.append(UInt8(ascii: "\n"))
         for i in delimRange {
-            storage.strings.append(delimSpan[i])
+            storage.strings.append(sourceBytes[i])
         }
         let chunk = Chunk(offset: scratchStart, length: storage.strings.count - scratchStart, inSource: false)
         let opens = opensTable(chunk: chunk)
@@ -937,7 +936,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return opens
     }
 
-    /// Decide whether the just-arrived delimiter-candidate line `delimSpan[delimRange]` opens a table with
+    /// Decide whether the just-arrived delimiter-candidate line `sourceBytes[delimRange]` opens a table with
     /// the open paragraph's last accumulated line as the header row, and set the open paragraph's
     /// `tablePending` when it does. A table has a single header row (Tables (extension)), so the
     /// header is always the line immediately before the delimiter row. A candidate that isn't a
@@ -953,9 +952,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `delimIndent` and non-laziness are recorded as the paragraph's second-line metadata (see
     /// `recordSplitDelimiterLine`); the values captured from the paragraph's original second line may be
     /// indented or lazy, which would wrongly veto the finalize-time table check.
-    private mutating func detectPendingTable(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, delimIndent: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    private mutating func detectPendingTable(_ node: DocumentStorage.Index, delimRange: Range<Int>, delimIndent: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         precondition(pending != nil, "an open paragraph always holds its accumulated content")
-        guard lastLineOpensTable(delimSpan: delimSpan, delimRange: delimRange, pending: pending!) else {
+        guard lastLineOpensTable(delimRange: delimRange, pending: pending!) else {
             return pending
         }
         openParagraphTableState!.tablePending = true
@@ -1109,12 +1108,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     // MARK: - Per-line dispatcher
 
     /// Process a line of Markdown.
-    ///  - source: The line content
     ///  - lineRange: The range of the line in the original source, in order to lazily reference it.
-    private mutating func processLine(source: Span<UInt8>, lineRange: Range<Int>, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    private mutating func processLine(lineRange: Range<Int>, pending: consuming PendingLeaf?) -> PendingLeaf? {
         var pending = pending
         // PHASE 1: Walk the open-container chain, stripping each container's continuation prefix. `deepestMatched` is the deepest container whose continuation succeeded (always a container, never a leaf). `cursor` is the byte offset into the line after stripped prefixes.
-        let walk = walkOpenContainers(source: source, lineRange: lineRange)
+        let walk = walkOpenContainers(lineRange: lineRange)
         let deepestMatched = walk.deepestMatched
         let cursor = walk.cursor
         let prefixColumns = walk.prefixColumns
@@ -1125,7 +1123,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // PHASE 2a: Code-block / HTML-block continuation.
         let openKind = storage[current].kind
         if openKind.isCodeBlock || openKind == .htmlBlock {
-            let leaf = continueOrCloseLeafBlock(source: source, lineRange: lineRange, cursor: cursor, prefixColumns: prefixColumns, allMatched: allMatched, pending: pending)
+            let leaf = continueOrCloseLeafBlock(lineRange: lineRange, cursor: cursor, prefixColumns: prefixColumns, allMatched: allMatched, pending: pending)
             let leafStillOpen = leaf.stillOpen
             pending = leaf.pending
             if leafStillOpen {
@@ -1133,7 +1131,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
 
-        let scan = leadingScan(source: source, range: cursor..<lineRange.upperBound, baseColumn: prefixColumns)
+        let scan = leadingScan(range: cursor..<lineRange.upperBound, baseColumn: prefixColumns)
         var line = LineContext(
             lineRange: lineRange,
             deepestMatched: deepestMatched,
@@ -1158,12 +1156,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
 
         // PHASE 2c: Setext heading underline.
-        if underlineParagraph(source: source, line: &line, pending: &pending) {
+        if underlineParagraph(line: &line, pending: &pending) {
             return pending
         }
 
         // PHASE 2d: Paragraph continuation.
-        if absorbParagraphLine(source: source, line: line, pending: &pending) {
+        if absorbParagraphLine(line: line, pending: &pending) {
             return pending
         }
 
@@ -1174,7 +1172,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         // PHASE 4: New-block dispatch. Containers (block quote) loop back so a single line like `> > foo` opens both quotes and then a paragraph.
         return dispatchNewBlocks(
-            source: source,
             lineRange: lineRange,
             startCursor: cursor,
             startColumn: prefixColumns,
@@ -1202,12 +1199,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// An open code block or HTML block takes the line as its content when the prefix walk reached it, unless the line ends the block; then `stillOpen` is `false` and the line dispatches as a fresh block. When the walk failed before the block, the block closes.
-    private mutating func continueOrCloseLeafBlock(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, prefixColumns: Int, allMatched: Bool, pending: consuming PendingLeaf?) -> LeafContinuation {
+    private mutating func continueOrCloseLeafBlock(lineRange: Range<Int>, cursor: Int, prefixColumns: Int, allMatched: Bool, pending: consuming PendingLeaf?) -> LeafContinuation {
         var pending = pending
         let openKind = storage[current].kind
         if openKind.isCodeBlock && allMatched {
             return handleCodeBlockContinuation(
-                source: source,
                 lineRange: lineRange,
                 cursor: cursor,
                 prefixColumns: prefixColumns,
@@ -1215,7 +1211,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             )
         } else if openKind == .htmlBlock && allMatched {
             return handleHTMLBlockContinuation(
-                source: source,
                 lineRange: lineRange,
                 cursor: cursor,
                 prefixColumns: prefixColumns,
@@ -1271,10 +1266,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// list; `r\n|-\n=` → table with a `=` body row). The line falls through to the paragraph continuation.
     ///
     /// The line is done when the underline forms a heading, or when it continues a paragraph that holds only definitions.
-    private mutating func underlineParagraph(source: Span<UInt8>, line: inout LineContext, pending: inout PendingLeaf?) -> Bool {
+    private mutating func underlineParagraph(line: inout LineContext, pending: inout PendingLeaf?) -> Bool {
         let lineRange = line.lineRange
         guard line.openKind == .paragraph && line.allMatched && !openParagraphIsTablePending && line.indent < 4,
-              let level = matchSetextUnderline(source: source, range: line.cursor..<lineRange.upperBound, firstNonSpace: line.firstNonSpace) else {
+              let level = matchSetextUnderline(range: line.cursor..<lineRange.upperBound, firstNonSpace: line.firstNonSpace) else {
             return false
         }
         // Strip any leading reference-link definitions from the paragraph's accumulated content first. If they consume the entire paragraph, the setext heading never forms - the underline line falls through to dispatch as plain text (per spec examples 184 / 185).
@@ -1297,7 +1292,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // `-` that is no thematic break - continues it, and becomes the paragraph's text when the
         // definitions are removed at finalize. A thematic break interrupts it.
         let continuesParagraph = !lineStartsNewBlock(
-            source: source,
             range: line.cursor..<lineRange.upperBound,
             firstNonSpace: line.firstNonSpace,
             indent: line.indent,
@@ -1313,7 +1307,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 ? PendingLeaf(node: para, content: .lazy(range: raw.range))
                 : reseedSegments(raw, map: flatMap, for: para)
             pending = appendNewline(to: para, pending: consume pending)
-            pending = addLine(span: source, range: line.firstNonSpace..<lineRange.upperBound, to: para, pending: consume pending)
+            pending = addLine(range: line.firstNonSpace..<lineRange.upperBound, to: para, pending: consume pending)
             return true
         }
         // Empty after link reference definition extraction - drop the paragraph and let the underline line dispatch as a fresh block.
@@ -1361,13 +1355,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///   - a line indented four or more columns, which starts an indented code block: an indented code
     ///     block cannot interrupt a paragraph (Indented code blocks), but a table is not a paragraph.
     /// These skip the absorb path, so the line is not done: the caller closes the paragraph (finalizing it into the table) and the container, then dispatches this line anew.
-    private mutating func absorbParagraphLine(source: Span<UInt8>, line: LineContext, pending: inout PendingLeaf?) -> Bool {
+    private mutating func absorbParagraphLine(line: LineContext, pending: inout PendingLeaf?) -> Bool {
         let lineRange = line.lineRange
         let tablePending = openParagraphIsTablePending
         let breaksOutOfPendingTable = tablePending
             && (currentLineIsLazyContinuation
                 || line.indent >= 4
-                || Self.isLonePipeRow(span: source, range: line.firstNonSpace..<lineRange.upperBound))
+                || isLonePipeRow(range: line.firstNonSpace..<lineRange.upperBound))
         if line.openKind != .paragraph || breaksOutOfPendingTable {
             return false
         }
@@ -1378,7 +1372,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             && storage[current].parent == line.deepestMatched
         let canInterrupt = Self.mightStartBlock(line.firstNonSpaceByte)
             && lineStartsNewBlock(
-                source: source,
                 range: line.cursor..<lineRange.upperBound,
                 firstNonSpace: line.firstNonSpace,
                 indent: line.indent,
@@ -1392,10 +1385,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         // Continue paragraph (matched or lazy). Don't close stale containers - the paragraph absorbs without breaking the chain.
         if storage.options.contains(.tables) {
-            recordTableDelimiterCandidate(source: source, line: line, pending: &pending)
+            recordTableDelimiterCandidate(line: line, pending: &pending)
         }
         pending = appendNewline(to: current, pending: consume pending)
-        pending = addLine(span: source, range: line.firstNonSpace..<lineRange.upperBound, to: current, pending: consume pending)
+        pending = addLine(range: line.firstNonSpace..<lineRange.upperBound, to: current, pending: consume pending)
         return true
     }
 
@@ -1403,7 +1396,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// Inlined because this runs on every continuation line of a paragraph: as a call, its cost shows as extra retired instructions on prose-heavy input.
     @inline(__always)
-    private mutating func recordTableDelimiterCandidate(source: Span<UInt8>, line: LineContext, pending: inout PendingLeaf?) {
+    private mutating func recordTableDelimiterCandidate(line: LineContext, pending: inout PendingLeaf?) {
         let delimRange = line.firstNonSpace..<line.lineRange.upperBound
         // The first continuation line is the paragraph's second line, its table delimiter-row
         // candidate. Finalize-time table detection can't see its stripped indentation or its
@@ -1420,8 +1413,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // keeps ordinary prose paragraphs from materializing.
         if !openParagraphTableState!.tablePending,
            line.indent < 4, !currentLineIsLazyContinuation,
-           Self.couldBeDelimiterRow(span: source, range: delimRange) {
-            pending = detectPendingTable(current, delimSpan: source, delimRange: delimRange, delimIndent: line.indent, pending: consume pending)
+           couldBeDelimiterRow(range: delimRange) {
+            pending = detectPendingTable(current, delimRange: delimRange, delimIndent: line.indent, pending: consume pending)
         }
     }
 
@@ -1430,7 +1423,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Returns the deepest container whose prefix matched (always a container, never a leaf), the cursor into the line after stripped prefixes, the absolute column the prefix consumption *intended* to reach, and whether every container in the chain matched.
     ///
     /// `prefixColumns` normally equals the column width of `[lineRange.lowerBound, cursor)`, but exceeds it when a container advance consumed *columns* into a tab it could not drop byte-wise (a list item's content indent landing mid-tab): `cursor` sits at that tab while `prefixColumns` records the column the strip reached. The leaf continuation folds the shortfall into its own strip so the straddling tab is split there, its leftover columns becoming spaces (Tabs).
-    private mutating func walkOpenContainers(source: Span<UInt8>, lineRange: Range<Int>) -> (deepestMatched: DocumentStorage.Index, cursor: Int, prefixColumns: Int, allMatched: Bool) {
+    private mutating func walkOpenContainers(lineRange: Range<Int>) -> (deepestMatched: DocumentStorage.Index, cursor: Int, prefixColumns: Int, allMatched: Bool) {
         var cursor = lineRange.lowerBound
         var deepestMatched = documentIndex
         var prefixColumns = 0
@@ -1451,14 +1444,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 deepestMatched = node
             case .blockQuote:
                 if cursor > firstNonSpaceAhead {
-                    firstNonSpaceAhead = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
+                    firstNonSpaceAhead = indexOfFirstNonSpace(range: cursor..<lineRange.upperBound)
                 }
                 let firstNonSpace = firstNonSpaceAhead
                 // `baseColumn: prefixColumns` - an outer quote's marker on this line can leave `cursor`
                 // mid-tab (see `blockQuotePrefixEnd`), so this marker's indent is measured from the
                 // column already reached, as in `dispatchNewBlocks`.
                 if let advanced = matchBlockQuoteMarker(
-                    source: source,
                     range: cursor..<lineRange.upperBound,
                     firstNonSpace: firstNonSpace,
                     baseColumn: prefixColumns
@@ -1470,7 +1462,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // indent. `handleCodeBlockContinuation` folds the shortfall into `stripFenceIndent`,
                     // surfacing the tab's leftover columns as leading spaces.
                     (cursor, prefixColumns) = blockQuotePrefixEnd(
-                        source: source,
                         lineColumns: &lineColumns,
                         markerEnd: firstNonSpace + 1,
                         advanced: advanced
@@ -1496,7 +1487,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // fails the prefix, so the container's open paragraph may continue lazily (the walk stops
                 // here with `allMatched: false`).
                 if cursor > firstNonSpaceAhead {
-                    firstNonSpaceAhead = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
+                    firstNonSpaceAhead = indexOfFirstNonSpace(range: cursor..<lineRange.upperBound)
                 }
                 let firstNonSpace = firstNonSpaceAhead
                 let isBlank = firstNonSpace == lineRange.upperBound
@@ -1507,14 +1498,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // after a marker at any column, or mid-tab after a partially consumed tab, and a tab's
                 // width depends on the column it starts at (Tabs).
                 // Each whitespace byte spans at least one column, so `padding` bytes are enough to decide.
-                let availCols = indentColumns(source: source, from: cursor, to: min(firstNonSpace, cursor + padding), baseColumn: prefixColumns)
+                let availCols = indentColumns(from: cursor, to: min(firstNonSpace, cursor + padding), baseColumn: prefixColumns)
                 if availCols >= padding {
                     // The indent reaches the item's content column: consume exactly `padding` columns and
                     // match. This precedes the empty-item check, so a whitespace-only line whose expanded
                     // indent covers the content column extends even an empty item onto it (a tab after a
                     // bare `-`: 4 columns >= the content column 2).
                     cursor = advanceColumns(
-                        source: source,
                         from: cursor,
                         to: lineRange.upperBound,
                         columns: padding,
@@ -1534,7 +1524,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // definitions or a task list item marker is not empty, since that paragraph is a block of
                     // the item.
                     cursor = firstNonSpace
-                    prefixColumns = lineColumns.column(at: cursor, in: source)
+                    prefixColumns = lineColumns.column(at: cursor, in: sourceBytes)
                     deepestMatched = node
                     blankContinued += 1
                     if blankContinued > Self.emptyRemainderWalkLimit, node != current, let child = storage[node].lastChild {
@@ -1617,21 +1607,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Returns `true` if the line's content (starting at `firstNonSpace`) begins a new block that would interrupt an open paragraph.
     ///
     /// `interruptsParagraph` is `true` when the open paragraph's own container matched this line's continuation prefix, so the line interrupts that paragraph, and `false` when only a shallower container matched, so a list marker starts a sibling item in an existing list.
-    private func lineStartsNewBlock(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indent: Int, baseColumn: Int, currentKind: MarkdownNode.Kind, interruptsParagraph: Bool, lineStart: Int) -> Bool {
+    private func lineStartsNewBlock(range: Range<Int>, firstNonSpace: Int, indent: Int, baseColumn: Int, currentKind: MarkdownNode.Kind, interruptsParagraph: Bool, lineStart: Int) -> Bool {
         // A line indented four or more columns starts no block that interrupts a paragraph.
         if indent >= 4 {
             return false
         }
-        if matchThematicBreak(source: source, range: range, firstNonSpace: firstNonSpace) != nil {
+        if matchThematicBreak(range: range, firstNonSpace: firstNonSpace) != nil {
             return true
         }
-        if matchATXHeading(source: source, range: range, firstNonSpace: firstNonSpace) != nil {
+        if matchATXHeading(range: range, firstNonSpace: firstNonSpace) != nil {
             return true
         }
-        if matchOpeningFence(source: source, range: range, firstNonSpace: firstNonSpace, indent: indent) != nil {
+        if matchOpeningFence(range: range, firstNonSpace: firstNonSpace, indent: indent) != nil {
             return true
         }
-        if matchBlockQuoteMarker(source: source, range: range, firstNonSpace: firstNonSpace, baseColumn: baseColumn) != nil {
+        if matchBlockQuoteMarker(range: range, firstNonSpace: firstNonSpace, baseColumn: baseColumn) != nil {
             return true
         }
         // HTML blocks of types 1–6 interrupt a paragraph; type 7 does not (HTML blocks). When the paragraph's
@@ -1639,18 +1629,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // so a type 7 start opens a block at the ancestor that did match: `>o\n<d>` closes the block quote and
         // opens a top-level HTML block, while a top-level `o\n<d>` keeps `<d>` as paragraph text.
         // `dispatchNewBlocks` then opens it against that ancestor.
-        if matchHTMLBlockStart(source: source, range: range, firstNonSpace: firstNonSpace, allowType7: !interruptsParagraph) != nil {
+        if matchHTMLBlockStart(range: range, firstNonSpace: firstNonSpace, allowType7: !interruptsParagraph) != nil {
             return true
         }
         // A footnote definition opener `[^label]:` interrupts a paragraph, so `[^a]: A\n[^b]: B` opens two
         // definitions rather than folding the second into the first definition's paragraph.
         if storage.options.contains(.footnotes),
            indent < 4,
-           matchFootnoteDefinition(source: source, range: range, firstNonSpace: firstNonSpace) != nil {
+           matchFootnoteDefinition(range: range, firstNonSpace: firstNonSpace) != nil {
             return true
         }
         // A list marker interrupts a paragraph only if it starts a non-empty item, and an ordered one only if it starts with 1 (List items, Lists). This applies at every nesting level: `- a\n  2. b` (the item matched, so `2. b` would interrupt the item's paragraph) keeps `2. b` as text, while `1. a\n2. b` (the item did not match, so the marker sits at the list level) opens a sibling item regardless of start.
-        if let marker = matchListMarker(source: source, range: range, firstNonSpace: firstNonSpace, lineStart: lineStart, indent: indent) {
+        if let marker = matchListMarker(range: range, firstNonSpace: firstNonSpace, lineStart: lineStart, indent: indent) {
             if marker.isEmpty {
                 // `- a\n  +` (the item matched, so the marker would interrupt the item's paragraph) keeps `+` as text, and so does a top-level `a\n+`; `> a\n+` (the block quote failed to match, so nothing is interrupted) opens a new top-level list.
                 return !interruptsParagraph
@@ -1667,12 +1657,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Continue an open HTML block. Returns `true` if the block remains open after handling this line; `false` if the line closed it (for types 1–5 the line is appended in either case; for types 6 and 7, a blank line closes the block without being appended).
-    private mutating func handleHTMLBlockContinuation(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, prefixColumns: Int, pending: consuming PendingLeaf?) -> LeafContinuation {
+    private mutating func handleHTMLBlockContinuation(lineRange: Range<Int>, cursor: Int, prefixColumns: Int, pending: consuming PendingLeaf?) -> LeafContinuation {
         var pending = pending
         guard case .htmlBlock(let type, _) = storage[current].data else {
             preconditionFailure("an HTML block node always carries its block type")
         }
-        let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
+        let firstNonSpace = indexOfFirstNonSpace(range: cursor..<lineRange.upperBound)
         let isBlank = firstNonSpace == lineRange.upperBound
 
         if type == 6 || type == 7 {
@@ -1682,16 +1672,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return LeafContinuation(stillOpen: false, pending: pending)
             }
             pending = appendNewline(to: current, pending: pending)
-            pending = appendLineAfterPrefix(source: source, lineRange: lineRange, cursor: cursor, column: prefixColumns, to: current, pending: pending)
+            pending = appendLineAfterPrefix(lineRange: lineRange, cursor: cursor, column: prefixColumns, to: current, pending: pending)
             return LeafContinuation(stillOpen: true, pending: pending)
         }
 
         // Types 1–5: every line (including blank ones, until the close pattern is seen) is appended verbatim. The line that contains the end pattern is appended *and* closes the block - it's fully consumed, so we return `true` to suppress new-block redispatch on the closing line.
         pending = appendNewline(to: current, pending: pending)
-        pending = appendLineAfterPrefix(source: source, lineRange: lineRange, cursor: cursor, column: prefixColumns, to: current, pending: pending)
+        pending = appendLineAfterPrefix(lineRange: lineRange, cursor: cursor, column: prefixColumns, to: current, pending: pending)
         if htmlBlockLineMatchesEndCondition(
             type: type,
-            source: source,
             range: cursor..<lineRange.upperBound
         ) {
             pending = finalize(node: current, pending: pending, endsOnCurrentLine: true)
@@ -1700,9 +1689,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Continue an open code block. Returns `stillOpen: true` if the block remains open after handling this line; `false` if the line closed it (or is a closing fence). When this returns `false` the caller should *not* dispatch the line content as a fresh block - the closing fence is fully consumed.
-    private mutating func handleCodeBlockContinuation(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, prefixColumns: Int, pending: consuming PendingLeaf?) -> LeafContinuation {
+    private mutating func handleCodeBlockContinuation(lineRange: Range<Int>, cursor: Int, prefixColumns: Int, pending: consuming PendingLeaf?) -> LeafContinuation {
         var pending = pending
-        let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
+        let firstNonSpace = indexOfFirstNonSpace(range: cursor..<lineRange.upperBound)
         let isBlank = firstNonSpace == lineRange.upperBound
 
         if case .codeBlock(let info) = storage[current].kind, info.isFenced {
@@ -1710,9 +1699,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // non-space byte minus the column the container prefixes advanced to. A tab counts to its next
             // tab stop (Tabs), so a leading tab is not mistaken for the ≤3-column indent of a closing fence.
             let closingFenceIndent =
-                columnWidth(source: source, from: lineRange.lowerBound, to: firstNonSpace) - prefixColumns
+                columnWidth(from: lineRange.lowerBound, to: firstNonSpace) - prefixColumns
             if matchClosingFence(
-                source: source,
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
                 indentColumns: closingFenceIndent,
@@ -1732,18 +1720,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // tab here - its consumed columns dropped, its leftover columns surfaced as leading spaces
             // with the rest of the line copied verbatim, so any content tab stays literal (Tabs).
             pending = appendNewline(to: current, pending: pending)
-            let startColumn = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+            let startColumn = columnWidth(from: lineRange.lowerBound, to: cursor)
             let (bodyStart, leadingSpaces) = stripFenceIndent(
-                source: source,
                 range: cursor..<lineRange.upperBound,
                 maxColumns: prefixColumns + info.fenceOffset - startColumn,
                 startColumn: startColumn
             )
-            pending = appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
+            pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
             return LeafContinuation(stillOpen: true, pending: pending)
         }
         // Indented. The indent is measured from `prefixColumns`, the column the container prefixes reached, so a tab they partially consumed counts only its remaining columns (Tabs).
-        let indent = indentColumns(source: source, from: cursor, to: firstNonSpace, baseColumn: prefixColumns)
+        let indent = indentColumns(from: cursor, to: firstNonSpace, baseColumn: prefixColumns)
         // A "blank" line holding more than four columns of whitespace keeps the extra columns as content (spec example 82 - `      ` between two code lines becomes `  `).
         if indent >= 4 || isBlank {
             // Blank lines that end the block are not part of it, so for list tightness the block ends with a blank line until a further code line follows.
@@ -1755,12 +1742,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if indent > 4 || !isBlank {
                 // A tab straddling the fourth column is split: its leftover columns become leading spaces (Tabs).
                 let (bodyStart, leadingSpaces) = stripFenceIndent(
-                    source: source,
                     range: cursor..<lineRange.upperBound,
                     maxColumns: 4,
                     startColumn: prefixColumns
                 )
-                pending = appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
+                pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
             }
             return LeafContinuation(stillOpen: true, pending: pending)
         }
@@ -1829,7 +1815,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// mid-tab). The re-dispatch indent is measured from that column (`firstNonSpaceColumn - column`) so the
     /// tab's consumed columns are not recounted from column 0, which would flip the indented-code /
     /// paragraph decision.
-    private mutating func dispatchNewBlocks(source: Span<UInt8>, lineRange: Range<Int>, startCursor: Int, startColumn: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    ///
+    /// The list marker, block quote marker, fence and ATX heading matchers and the paragraph and ATX heading openers it
+    /// calls on every line that starts a block are inlined into it: left to its own heuristics the optimizer calls them
+    /// out of line, which costs about 3% of the instructions of a prose-heavy parse.
+    private mutating func dispatchNewBlocks(lineRange: Range<Int>, startCursor: Int, startColumn: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         var pending = pending
         var cursor = startCursor
         var column = startColumn
@@ -1838,19 +1828,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var depth = 0
         while true {
             depth += 1
-            let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
+            let firstNonSpace = indexOfFirstNonSpace(range: cursor..<lineRange.upperBound)
             let isBlank = firstNonSpace == lineRange.upperBound
             if isBlank {
                 return pending
             }
-            let indent = lineColumns.column(at: firstNonSpace, in: source) - column
+            let indent = lineColumns.column(at: firstNonSpace, in: sourceBytes) - column
 
             // Block quote opens a container; loop to keep dispatching the rest.
             // `baseColumn: column` - `cursor` can sit mid-tab here (a prior iteration's marker on this
             // same line partially consumed a tab; see the partial-tab branch below), so the matcher must
             // measure the tab's remaining columns from the column already reached, not from an assumed 0.
             if let advanced = matchBlockQuoteMarker(
-                source: source,
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
                 baseColumn: column
@@ -1869,7 +1858,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // fenced code block straddling the tab) can split it, and record the intended column (one
                 // past `>`) in `column`, as `walkOpenContainers` does for a continuation.
                 (cursor, column) = blockQuotePrefixEnd(
-                    source: source,
                     lineColumns: &lineColumns,
                     markerEnd: firstNonSpace + 1,
                     advanced: advanced
@@ -1879,7 +1867,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
             // Thematic break (must be before ATX so `---` etc. wins over content matchers, and before list-marker so `- - -` etc. wins over nested lists).
             // A line indented four or more columns is indented code, not a break.
-            if indent < 4, let breakEnd = matchThematicBreak(source: source, range: cursor..<lineRange.upperBound, firstNonSpace: firstNonSpace) {
+            if indent < 4, let breakEnd = matchThematicBreak(range: cursor..<lineRange.upperBound, firstNonSpace: firstNonSpace) {
                 // A list contains only list items, so an enclosing list closes first.
                 pending = closingOpenList(pending)
                 return openThematicBreak(firstNonSpace: firstNonSpace, end: breakEnd, pending: pending)
@@ -1891,7 +1879,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if storage.options.contains(.footnotes),
                indent < 4,
                let fn = matchFootnoteDefinition(
-                   source: source,
                    range: cursor..<lineRange.upperBound,
                    firstNonSpace: firstNonSpace
                ) {
@@ -1900,7 +1887,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let fnIdx = openFootnoteDefinition(label: fn.label, firstNonSpace: firstNonSpace)
                 current = fnIdx
                 cursor = fn.consumedTo
-                column = lineColumns.column(at: cursor, in: source)
+                column = lineColumns.column(at: cursor, in: sourceBytes)
                 continue
             }
 
@@ -1910,7 +1897,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // distance from the cursor is ≤ 3 because a straddling tab widened it (the `-` after
             // `marker\t\t`, six columns in but two bytes over, falls through to the indented-code branch).
             if indent < 4, depth < Self.maxListNesting, let marker = matchListMarker(
-                source: source,
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
                 lineStart: lineRange.lowerBound,
@@ -1931,11 +1917,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
             // ATX heading. A line indented four or more columns is indented code, not a heading.
             if indent < 4, let heading = matchATXHeading(
-                source: source,
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace
             ) {
-                return openATXHeading(heading, source: source, firstNonSpace: firstNonSpace, pending: pending)
+                return openATXHeading(heading, firstNonSpace: firstNonSpace, pending: pending)
             }
 
             // Fenced code block. A line indented four or more columns is indented code, not a fence, even
@@ -1944,7 +1929,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // quote's fence and its tab-indented `~~~` opens a top-level indented code block whose content
             // is `~~~` rather than a second empty fence.
             if indent < 4, let fence = matchOpeningFence(
-                source: source,
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
                 indent: indent
@@ -1957,21 +1941,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // A line indented four or more columns is indented code, not an HTML block.
             let allowType7 = storage[current].kind != .paragraph
             if indent < 4, let htmlType = matchHTMLBlockStart(
-                source: source,
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
                 allowType7: allowType7
             ) {
-                return openHTMLBlock(htmlType, source: source, lineRange: lineRange, cursor: cursor, column: column, firstNonSpace: firstNonSpace, pending: pending)
+                return openHTMLBlock(htmlType, lineRange: lineRange, cursor: cursor, column: column, firstNonSpace: firstNonSpace, pending: pending)
             }
 
             // Indented code block (only when current container can't continue a paragraph).
             if indent >= 4 && storage[current].kind != .paragraph {
-                return openIndentedCode(source: source, lineRange: lineRange, cursor: cursor, column: column, pending: pending)
+                return openIndentedCode(lineRange: lineRange, cursor: cursor, column: column, pending: pending)
             }
 
             // Paragraph fallback. By this point the list-close-if-needed step above has already ensured `current` isn't a list.
-            return openParagraph(source: source, lineRange: lineRange, firstNonSpace: firstNonSpace, pending: pending)
+            return openParagraph(lineRange: lineRange, firstNonSpace: firstNonSpace, pending: pending)
         }
     }
 
@@ -1995,7 +1978,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Open an ATX heading at `current`, add its content line, and close it.
-    private mutating func openATXHeading(_ heading: ATXMatch, source: Span<UInt8>, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    // why: inlined into `dispatchNewBlocks`; see there.
+    @inline(__always)
+    private mutating func openATXHeading(_ heading: ATXMatch, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         var pending = pending
         let headingIdx = addChild(
             kind: .heading(level: Int(heading.level)),
@@ -2004,7 +1989,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         )
         current = headingIdx
         if !heading.contentRange.isEmpty {
-            pending = addLine(span: source, range: heading.contentRange, to: headingIdx, pending: pending)
+            pending = addLine(range: heading.contentRange, to: headingIdx, pending: pending)
         }
         return finalize(node: headingIdx, pending: pending, lineContentEnd: heading.end)
     }
@@ -2033,9 +2018,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Open an HTML block of start-condition `htmlType` at `current`, add the line's content to it, and close it if the same line satisfies its end condition.
-    private mutating func openHTMLBlock(_ htmlType: UInt8, source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, column: Int, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    private mutating func openHTMLBlock(_ htmlType: UInt8, lineRange: Range<Int>, cursor: Int, column: Int, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         var pending = pending
-        let (bodyStart, leadingSpaces) = htmlLineBody(source: source, lineRange: lineRange, cursor: cursor, column: column)
+        let (bodyStart, leadingSpaces) = htmlLineBody(lineRange: lineRange, cursor: cursor, column: column)
         // A first line that begins with a split tab's leftover columns starts at that tab, whose columns are the
         // block's first content (Tabs).
         let htmlIdx = addChild(
@@ -2045,11 +2030,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             start: leadingSpaces > 0 ? bodyStart - 1 : firstNonSpace
         )
         current = htmlIdx
-        pending = appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: htmlIdx, pending: pending)
+        pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: htmlIdx, pending: pending)
         // Check whether this same line also satisfies the end condition.
         if htmlBlockLineMatchesEndCondition(
             type: htmlType,
-            source: source,
             range: firstNonSpace..<lineRange.upperBound
         ) {
             pending = finalize(node: htmlIdx, pending: pending)
@@ -2058,7 +2042,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Open an indented code block at `current` and add the line's content to it.
-    private mutating func openIndentedCode(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, column: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    private mutating func openIndentedCode(lineRange: Range<Int>, cursor: Int, column: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         // The block's source range starts after the four-column code indent, where its content
         // begins; indentation beyond four columns is content (Indented code blocks). Strip the
         // four columns tab-stop-aware from the current `column`: when a straddling tab crosses
@@ -2067,7 +2051,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // literal. The block then starts at the split tab, whose leftover columns are the first
         // content.
         let (bodyStart, leadingSpaces) = stripFenceIndent(
-            source: source,
             range: cursor..<lineRange.upperBound,
             maxColumns: 4,
             startColumn: column
@@ -2085,17 +2068,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         )
         current = codeIdx
         indentedCodeContentEnd = lineRange.upperBound
-        return appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: codeIdx, pending: pending)
+        return appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: codeIdx, pending: pending)
     }
 
     /// Open a paragraph at `current` and add the line's content to it.
-    private mutating func openParagraph(source: Span<UInt8>, lineRange: Range<Int>, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    // why: inlined into `dispatchNewBlocks`; see there.
+    @inline(__always)
+    private mutating func openParagraph(lineRange: Range<Int>, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         let textRange = firstNonSpace..<lineRange.upperBound
         precondition(storage[current].kind != .paragraph, "dispatch starts below the deepest matched container and opens only containers before a leaf, so `current` is never a paragraph here")
         assert(openParagraphTableState == nil, "the previous paragraph closed before this one opens")
         let paragraphIdx = addChild(kind: .paragraph, parent: current, start: firstNonSpace)
         current = paragraphIdx
-        return addLine(span: source, range: textRange, to: paragraphIdx, pending: pending)
+        return addLine(range: textRange, to: paragraphIdx, pending: pending)
     }
 
     // MARK: - Finalize
@@ -2611,11 +2596,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Walk the leading whitespace of `range` once, computing the first-non-space offset, the indent column width (4-column tab stops, per Tabs), the blank-line flag, and the first content byte.
-    private func leadingScan(source: Span<UInt8>, range: Range<Int>, baseColumn: Int) -> LeadingScan {
+    private func leadingScan(range: Range<Int>, baseColumn: Int) -> LeadingScan {
         var i = range.lowerBound
         var col = baseColumn
         while i < range.upperBound {
-            let b = source[i]
+            let b = sourceBytes[i]
             if b == UInt8(ascii: " ") {
                 col += 1
             } else if b == UInt8(ascii: "\t") {
@@ -2629,10 +2614,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Find the first non-space, non-tab byte in `range`. Returns `range.upperBound` if the range is all whitespace.
-    private func indexOfFirstNonSpace(source: Span<UInt8>, range: Range<Int>) -> Int {
+    private func indexOfFirstNonSpace(range: Range<Int>) -> Int {
         var i = range.lowerBound
         while i < range.upperBound {
-            let b = source[i]
+            let b = sourceBytes[i]
             if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t") {
                 return i
             }
@@ -2647,10 +2632,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// that tab's leading columns: a tab's expansion depends on the column it starts at, so measuring
     /// from an assumed column 0 would recompute the remaining tab as a fresh 4-column tab instead of
     /// the columns actually left over.
-    private func indentColumns(source: Span<UInt8>, from start: Int, to end: Int, baseColumn: Int = 0) -> Int {
+    private func indentColumns(from start: Int, to end: Int, baseColumn: Int = 0) -> Int {
         var col = baseColumn
         for i in start..<end {
-            let b = source[i]
+            let b = sourceBytes[i]
             if b == UInt8(ascii: " ") {
                 col += 1
             } else {
@@ -2686,12 +2671,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// `baseColumn` is the true column of `start` (default 0), as for `indentColumns`: a tab's width depends on
     /// the column it starts at, including a `start` left mid-tab by an outer container's partial consumption.
-    private func advanceColumns(source: Span<UInt8>, from start: Int, to end: Int, columns: Int, baseColumn: Int = 0) -> Int {
+    private func advanceColumns(from start: Int, to end: Int, columns: Int, baseColumn: Int = 0) -> Int {
         var i = start
         var col = baseColumn
         let target = baseColumn + columns
         while i < end && col < target {
-            let b = source[i]
+            let b = sourceBytes[i]
             if b == UInt8(ascii: " ") {
                 col += 1
                 i += 1
@@ -2756,11 +2741,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `indent` is the marker's leading indent in columns, measured from the column the enclosing prefixes
     /// reached. A byte count would under-measure a tab before the marker, including a tab an enclosing `>`
     /// left partially consumed.
-    private func matchListMarker(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, lineStart: Int, indent: Int) -> ListMarkerInfo? {
+    // why: inlined into `dispatchNewBlocks`; see there.
+    @inline(__always)
+    private func matchListMarker(range: Range<Int>, firstNonSpace: Int, lineStart: Int, indent: Int) -> ListMarkerInfo? {
         let markerOffset = indent
         assert(markerOffset <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
-        let first = source[firstNonSpace]
+        let first = sourceBytes[firstNonSpace]
 
         var kind: MarkdownNode.ListInfo.Kind
         var bulletMarker: MarkdownNode.ListInfo.BulletMarker = .hyphen
@@ -2789,18 +2776,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             var i = firstNonSpace
             var digits = 0
             var n = 0
-            while i < range.upperBound, source[i].isASCIIDigit {
+            while i < range.upperBound, sourceBytes[i].isASCIIDigit {
                 if digits >= 9 {
                     return nil
                 }
-                n = n * 10 + Int(source[i] - UInt8(ascii: "0"))
+                n = n * 10 + Int(sourceBytes[i] - UInt8(ascii: "0"))
                 digits += 1
                 i += 1
             }
             if digits == 0 || i >= range.upperBound {
                 return nil
             }
-            let delim = source[i]
+            let delim = sourceBytes[i]
             switch delim {
             case UInt8(ascii: "."):
                 orderedDelimiter = .period
@@ -2817,7 +2804,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let afterMarker = firstNonSpace + markerWidth
         // The marker's absolute column (a tab before the marker widens to its stop); the optional padding
         // run after the marker is measured in columns from here so a tab counts to its next tab stop.
-        let markerColumn = columnWidth(source: source, from: lineStart, to: firstNonSpace)
+        let markerColumn = columnWidth(from: lineStart, to: firstNonSpace)
         let contentColumnAfterMarker = markerColumn + markerWidth
         // Marker must be followed by a space, tab, or end of line.
         var contentStart: Int
@@ -2831,7 +2818,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             contentStartColumn = contentColumnAfterMarker + 1
             isEmpty = true
         } else {
-            let next = source[afterMarker]
+            let next = sourceBytes[afterMarker]
             if next != UInt8(ascii: " ") && next != UInt8(ascii: "\t") {
                 return nil
             }
@@ -2844,7 +2831,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             var col = contentColumnAfterMarker
             var k = afterMarker
             while k < range.upperBound {
-                let b = source[k]
+                let b = sourceBytes[k]
                 if b == UInt8(ascii: " ") {
                     col += 1
                 } else if b == UInt8(ascii: "\t") {
@@ -2916,13 +2903,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private static let cdataEnd = Array("]]>".utf8)
 
     /// Compare a byte range to a lowercase ASCII string case-insensitively (for tag matching).
-    private func bytesEqualASCIICaseInsensitive(span: Span<UInt8>, range: Range<Int>, target: [UInt8]) -> Bool {
+    private func bytesEqualASCIICaseInsensitive(range: Range<Int>, target: [UInt8]) -> Bool {
         let len = range.upperBound - range.lowerBound
         if len != target.count {
             return false
         }
         for i in 0..<len {
-            var a = span[range.lowerBound + i]
+            var a = sourceBytes[range.lowerBound + i]
             let b = target[i]
             if a.isUppercaseASCIILetter {
                 a += 32
@@ -2939,36 +2926,36 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The start conditions are those of HTML blocks.
     ///
     /// The caller has checked that the line is indented less than four columns, past which none of these blocks starts.
-    private func matchHTMLBlockStart(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, allowType7: Bool) -> UInt8? {
+    private func matchHTMLBlockStart(range: Range<Int>, firstNonSpace: Int, allowType7: Bool) -> UInt8? {
         assert(firstNonSpace - range.lowerBound <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
-        if source[firstNonSpace] != UInt8(ascii: "<") {
+        if sourceBytes[firstNonSpace] != UInt8(ascii: "<") {
             return nil
         }
         let after = firstNonSpace + 1
         if after >= range.upperBound {
             return nil
         }
-        let next = source[after]
+        let next = sourceBytes[after]
 
         // Type 2: `<!--`
         if next == UInt8(ascii: "!"),
            after + 2 < range.upperBound,
-           source[after + 1] == UInt8(ascii: "-"),
-           source[after + 2] == UInt8(ascii: "-") {
+           sourceBytes[after + 1] == UInt8(ascii: "-"),
+           sourceBytes[after + 2] == UInt8(ascii: "-") {
             return 2
         }
         // Type 5: `<![CDATA[`. The two brackets are literal; the letters `CDATA` are matched
         // case-sensitively per start condition 5.
         if next == UInt8(ascii: "!"),
            after + 7 < range.upperBound,
-           source[after + 1] == UInt8(ascii: "["),
-           source[after + 7] == UInt8(ascii: "[") {
-            let matched = source[after + 2] == UInt8(ascii: "C")
-                && source[after + 3] == UInt8(ascii: "D")
-                && source[after + 4] == UInt8(ascii: "A")
-                && source[after + 5] == UInt8(ascii: "T")
-                && source[after + 6] == UInt8(ascii: "A")
+           sourceBytes[after + 1] == UInt8(ascii: "["),
+           sourceBytes[after + 7] == UInt8(ascii: "[") {
+            let matched = sourceBytes[after + 2] == UInt8(ascii: "C")
+                && sourceBytes[after + 3] == UInt8(ascii: "D")
+                && sourceBytes[after + 4] == UInt8(ascii: "A")
+                && sourceBytes[after + 5] == UInt8(ascii: "T")
+                && sourceBytes[after + 6] == UInt8(ascii: "A")
             if matched {
                 return 5
             }
@@ -2976,7 +2963,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Type 4: `<!` followed by an uppercase ASCII letter (start condition 4).
         if next == UInt8(ascii: "!"),
            after + 1 < range.upperBound,
-           source[after + 1].isUppercaseASCIILetter {
+           sourceBytes[after + 1].isUppercaseASCIILetter {
             return 4
         }
         // Type 3: `<?`
@@ -2990,12 +2977,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             isClosing = true
             nameStart = after + 1
         }
-        if nameStart >= range.upperBound || !source[nameStart].isASCIILetter {
+        if nameStart >= range.upperBound || !sourceBytes[nameStart].isASCIILetter {
             return nil
         }
         var nameEnd = nameStart + 1
         while nameEnd < range.upperBound,
-              isHTMLTagNameChar(source[nameEnd]) {
+              isHTMLTagNameChar(sourceBytes[nameEnd]) {
             nameEnd += 1
         }
         let nameRange = nameStart..<nameEnd
@@ -3003,10 +2990,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Type 1: pre/script/style, open tag only. A closing tag such as `</pre>` doesn't meet start condition 1, but may start a type 7 block.
         if !isClosing {
             for tag in Self.htmlBlockType1Tags {
-                if bytesEqualASCIICaseInsensitive(span: source, range: nameRange, target: tag) {
+                if bytesEqualASCIICaseInsensitive(range: nameRange, target: tag) {
                     // Must be followed by whitespace (`[ \t\v\f\r\n]`), `>`, or the line end.
                     if nameEnd >= range.upperBound { return 1 }
-                    let follow = source[nameEnd]
+                    let follow = sourceBytes[nameEnd]
                     if follow.isASCIISpace || follow == UInt8(ascii: ">") {
                         return 1
                     }
@@ -3018,16 +3005,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         // Type 6: block-tag-name list.
         for tag in Self.htmlBlockType6Tags {
-            if bytesEqualASCIICaseInsensitive(span: source, range: nameRange, target: tag) {
+            if bytesEqualASCIICaseInsensitive(range: nameRange, target: tag) {
                 // Must be followed by whitespace (`[ \t\v\f\r\n]`), `>`, `/>`, or the line end.
                 if nameEnd >= range.upperBound { return 6 }
-                let follow = source[nameEnd]
+                let follow = sourceBytes[nameEnd]
                 if follow.isASCIISpace || follow == UInt8(ascii: ">") {
                     return 6
                 }
                 if follow == UInt8(ascii: "/"),
                    nameEnd + 1 < range.upperBound,
-                   source[nameEnd + 1] == UInt8(ascii: ">") {
+                   sourceBytes[nameEnd + 1] == UInt8(ascii: ">") {
                     return 6
                 }
                 return nil
@@ -3035,8 +3022,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
 
         // Type 7: any complete open or close tag (with optional attributes for opens) followed only by whitespace until end of line. Type 7 can't interrupt a paragraph - the caller passes `allowType7=false` when the current container is a paragraph.
-        if allowType7, let tagEnd = matchType7Tag(span: source, range: range, nameEnd: nameEnd, isClosing: isClosing) {
-            if isOnlyWhitespaceToEnd(span: source, from: tagEnd, end: range.upperBound) {
+        if allowType7, let tagEnd = matchType7Tag(range: range, nameEnd: nameEnd, isClosing: isClosing) {
+            if isOnlyWhitespaceToEnd(from: tagEnd, end: range.upperBound) {
                 return 7
             }
         }
@@ -3046,11 +3033,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// After parsing a tag name (open or close), validate the rest of the tag per the inline-HTML grammar.
     ///
     /// Returns the byte position just past the closing `>` if valid, otherwise nil. Open tags allow any number of attributes; close tags allow optional whitespace before `>`.
-    private func matchType7Tag(span: Span<UInt8>, range: Range<Int>, nameEnd: Int, isClosing: Bool) -> Int? {
+    private func matchType7Tag(range: Range<Int>, nameEnd: Int, isClosing: Bool) -> Int? {
         var i = nameEnd
         if isClosing {
-            i = skipSpacechars(span: span, from: i, to: range.upperBound)
-            if i >= range.upperBound || span[i] != UInt8(ascii: ">") {
+            i = skipSpacechars(from: i, to: range.upperBound)
+            if i >= range.upperBound || sourceBytes[i] != UInt8(ascii: ">") {
                 return nil
             }
             return i + 1
@@ -3059,7 +3046,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         while i < range.upperBound {
             // Attempt to consume one attribute: `spacechar+ name (= value)?`.
             let beforeAttr = i
-            i = skipSpacechars(span: span, from: i, to: range.upperBound)
+            i = skipSpacechars(from: i, to: range.upperBound)
             if i == beforeAttr {
                 break
             }
@@ -3067,7 +3054,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if i >= range.upperBound {
                 break
             }
-            let first = span[i]
+            let first = sourceBytes[i]
             let isFirstChar = first.isASCIILetter
                 || first == UInt8(ascii: "_")
                 || first == UInt8(ascii: ":")
@@ -3077,7 +3064,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             i += 1
             while i < range.upperBound {
-                let b = span[i]
+                let b = sourceBytes[i]
                 let ok = b.isASCIILetter
                     || b.isASCIIDigit
                     || b == UInt8(ascii: ":") || b == UInt8(ascii: ".")
@@ -3087,17 +3074,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             // Optional value spec.
             let afterName = i
-            i = skipSpacechars(span: span, from: i, to: range.upperBound)
-            if i < range.upperBound && span[i] == UInt8(ascii: "=") {
+            i = skipSpacechars(from: i, to: range.upperBound)
+            if i < range.upperBound && sourceBytes[i] == UInt8(ascii: "=") {
                 i += 1
-                i = skipSpacechars(span: span, from: i, to: range.upperBound)
+                i = skipSpacechars(from: i, to: range.upperBound)
                 if i >= range.upperBound {
                     return nil
                 }
-                let opener = span[i]
+                let opener = sourceBytes[i]
                 if opener == UInt8(ascii: "\"") || opener == UInt8(ascii: "'") {
                     i += 1
-                    while i < range.upperBound, span[i] != opener {
+                    while i < range.upperBound, sourceBytes[i] != opener {
                         i += 1
                     }
                     if i >= range.upperBound { return nil }
@@ -3106,7 +3093,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // An unquoted attribute value (Raw HTML): a nonempty run without whitespace, `"`, `'`, `=`, `<`, `>`, or `` ` ``.
                     let valueStart = i
                     while i < range.upperBound {
-                        let b = span[i]
+                        let b = sourceBytes[i]
                         if b.isASCIISpace
                             || b == UInt8(ascii: "\"") || b == UInt8(ascii: "'")
                             || b == UInt8(ascii: "=") || b == UInt8(ascii: "<")
@@ -3124,21 +3111,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 i = afterName
             }
         }
-        i = skipSpacechars(span: span, from: i, to: range.upperBound)
-        if i < range.upperBound && span[i] == UInt8(ascii: "/") {
+        i = skipSpacechars(from: i, to: range.upperBound)
+        if i < range.upperBound && sourceBytes[i] == UInt8(ascii: "/") {
             i += 1
         }
-        if i >= range.upperBound || span[i] != UInt8(ascii: ">") {
+        if i >= range.upperBound || sourceBytes[i] != UInt8(ascii: ">") {
             return nil
         }
         return i + 1
     }
 
     /// Skip a run of whitespace bytes (`[ \t\v\f\r\n]`, i.e. `UInt8.isASCIISpace`), the class the inline HTML scanner also uses, so block and inline HTML agree on what separates tag parts.
-    private func skipSpacechars(span: Span<UInt8>, from start: Int, to end: Int) -> Int {
+    private func skipSpacechars(from start: Int, to end: Int) -> Int {
         var i = start
         while i < end {
-            if !span[i].isASCIISpace {
+            if !sourceBytes[i].isASCIISpace {
                 break
             }
             i += 1
@@ -3146,46 +3133,46 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return i
     }
 
-    private func isOnlyWhitespaceToEnd(span: Span<UInt8>, from start: Int, end: Int) -> Bool {
-        skipSpacechars(span: span, from: start, to: end) == end
+    private func isOnlyWhitespaceToEnd(from start: Int, end: Int) -> Bool {
+        skipSpacechars(from: start, to: end) == end
     }
 
     /// Check whether a line satisfies the end condition for an HTML block of the given type. The check looks for the closing pattern *anywhere* on the line (HTML blocks).
-    private func htmlBlockLineMatchesEndCondition(type: UInt8, source: Span<UInt8>, range: Range<Int>) -> Bool {
+    private func htmlBlockLineMatchesEndCondition(type: UInt8, range: Range<Int>) -> Bool {
         switch type {
         case 1:
             // `</pre>`, `</script>`, or `</style>` (case-insensitive).
             for tag in Self.htmlBlockType1Tags {
-                if findClosingTag(span: source, range: range, name: tag) {
+                if findClosingTag(range: range, name: tag) {
                     return true
                 }
             }
             return false
         case 2:
-            return findSubstring(span: source, range: range, needle: Self.htmlCommentEnd)
+            return findSubstring(range: range, needle: Self.htmlCommentEnd)
         case 3:
-            return findSubstring(span: source, range: range, needle: Self.processingInstructionEnd)
+            return findSubstring(range: range, needle: Self.processingInstructionEnd)
         case 4:
-            return findByte(span: source, range: range, byte: UInt8(ascii: ">"))
+            return findByte(range: range, byte: UInt8(ascii: ">"))
         case 5:
-            return findSubstring(span: source, range: range, needle: Self.cdataEnd)
+            return findSubstring(range: range, needle: Self.cdataEnd)
         default:
             return false
         }
     }
 
-    /// Search `range` of `span` for any byte equal to `byte`.
-    private func findByte(span: Span<UInt8>, range: Range<Int>, byte: UInt8) -> Bool {
+    /// Search `range` of `sourceBytes` for any byte equal to `byte`.
+    private func findByte(range: Range<Int>, byte: UInt8) -> Bool {
         for i in range {
-            if span[i] == byte {
+            if sourceBytes[i] == byte {
                 return true
             }
         }
         return false
     }
 
-    /// Search `range` of `span` for the first occurrence of the ASCII bytes in `needle`. Caller must ensure the needle is non-empty.
-    private func findSubstring(span: Span<UInt8>, range: Range<Int>, needle: [UInt8]) -> Bool {
+    /// Search `range` of `sourceBytes` for the first occurrence of the ASCII bytes in `needle`. Caller must ensure the needle is non-empty.
+    private func findSubstring(range: Range<Int>, needle: [UInt8]) -> Bool {
         let len = needle.count
         if len == 0 || range.upperBound - range.lowerBound < len {
             return false
@@ -3195,7 +3182,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         while i <= limit {
             var matched = true
             for k in 0..<len {
-                if span[i + k] != needle[k] {
+                if sourceBytes[i + k] != needle[k] {
                     matched = false
                     break
                 }
@@ -3211,7 +3198,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Search for `</tagname>` (case-insensitive) anywhere within `range`. `name` is one of the lowercase `htmlBlockType1Tags`.
     // why: this scans every byte of every type-1 HTML block line once per tag; left to its own heuristics the optimizer calls it out of line, which costs about 2% of corpus parse instructions.
     @inline(__always)
-    private func findClosingTag(span: Span<UInt8>, range: Range<Int>, name: [UInt8]) -> Bool {
+    private func findClosingTag(range: Range<Int>, name: [UInt8]) -> Bool {
         let nameLen = name.count
         // `</` + name + `>` length:
         let totalLen = nameLen + 3
@@ -3221,12 +3208,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var i = range.lowerBound
         let limit = range.upperBound - totalLen
         while i <= limit {
-            if span[i] == UInt8(ascii: "<"),
-               span[i + 1] == UInt8(ascii: "/") {
+            if sourceBytes[i] == UInt8(ascii: "<"),
+               sourceBytes[i + 1] == UInt8(ascii: "/") {
                 let nameRange = (i + 2)..<(i + 2 + nameLen)
                 var matched = true
                 for k in 0..<nameLen {
-                    var a = span[nameRange.lowerBound + k]
+                    var a = sourceBytes[nameRange.lowerBound + k]
                     if a.isUppercaseASCIILetter {
                         a += 32
                     }
@@ -3235,7 +3222,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                         break
                     }
                 }
-                if matched, span[i + 2 + nameLen] == UInt8(ascii: ">") {
+                if matched, sourceBytes[i + 2 + nameLen] == UInt8(ascii: ">") {
                     return true
                 }
             }
@@ -3256,20 +3243,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `range.lowerBound` sits mid-tab because an ancestor marker on this line partially consumed that
     /// tab's leading columns; otherwise `indentColumns` below would measure the tab's remaining columns as
     /// if it started fresh at column 0.
-    private func matchBlockQuoteMarker(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, baseColumn: Int = 0) -> Int? {
+    // why: inlined into `dispatchNewBlocks`; see there.
+    @inline(__always)
+    private func matchBlockQuoteMarker(range: Range<Int>, firstNonSpace: Int, baseColumn: Int = 0) -> Int? {
         // The indent is measured in columns: a byte count would under-measure a tab and admit a `>` indented
         // four columns (`\t>` is not a block quote marker).
-        if indentColumns(source: source, from: range.lowerBound, to: firstNonSpace, baseColumn: baseColumn) > 3 {
+        if indentColumns(from: range.lowerBound, to: firstNonSpace, baseColumn: baseColumn) > 3 {
             return nil
         }
         guard firstNonSpace < range.upperBound else {
             return nil
         }
-        if source[firstNonSpace] != UInt8(ascii: ">") { // >
+        if sourceBytes[firstNonSpace] != UInt8(ascii: ">") { // >
             return nil
         }
         var i = firstNonSpace + 1
-        if i < range.upperBound && (source[i] == UInt8(ascii: " ") || source[i] == UInt8(ascii: "\t")) {
+        if i < range.upperBound && (sourceBytes[i] == UInt8(ascii: " ") || sourceBytes[i] == UInt8(ascii: "\t")) {
             i += 1
         }
         return i
@@ -3283,27 +3272,29 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// the tab byte while the column moves one past `>`. Callers rely on a cursor left on a tab
     /// having a column strictly inside that tab: measuring from a column already at the tab's stop would
     /// recount the whole tab as four fresh columns.
-    private func blockQuotePrefixEnd(source: Span<UInt8>, lineColumns: inout LineColumns, markerEnd: Int, advanced: Int) -> (cursor: Int, column: Int) {
-        let markerEndColumn = lineColumns.column(at: markerEnd, in: source)
-        if advanced == markerEnd + 1, source[markerEnd] == UInt8(ascii: "\t"), 4 - (markerEndColumn & 3) > 1 {
+    private func blockQuotePrefixEnd(lineColumns: inout LineColumns, markerEnd: Int, advanced: Int) -> (cursor: Int, column: Int) {
+        let markerEndColumn = lineColumns.column(at: markerEnd, in: sourceBytes)
+        if advanced == markerEnd + 1, sourceBytes[markerEnd] == UInt8(ascii: "\t"), 4 - (markerEndColumn & 3) > 1 {
             return (markerEnd, markerEndColumn + 1)
         }
-        return (advanced, lineColumns.column(at: advanced, in: source))
+        return (advanced, lineColumns.column(at: advanced, in: sourceBytes))
     }
 
     /// Try to match an opening code fence line (Fenced code blocks).
     ///
     /// `indent` is the fence's indentation in columns, measured from the column the enclosing prefixes reached. The
     /// caller has checked that it is less than four columns, past which none of these blocks starts.
-    private func matchOpeningFence(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indent: Int) -> FenceMatch? {
+    // why: inlined into `dispatchNewBlocks`; see there.
+    @inline(__always)
+    private func matchOpeningFence(range: Range<Int>, firstNonSpace: Int, indent: Int) -> FenceMatch? {
         assert(indent <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
-        let markerCharacter = source[firstNonSpace]
+        let markerCharacter = sourceBytes[firstNonSpace]
         guard let marker = MarkdownNode.CodeBlockInfo.FenceCharacter(character: markerCharacter) else {
             return nil
         }
         var i = firstNonSpace
-        while i < range.upperBound && source[i] == marker.character {
+        while i < range.upperBound && sourceBytes[i] == marker.character {
             i += 1
         }
         let runLength = i - firstNonSpace
@@ -3311,15 +3302,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         var infoStart = i
-        while infoStart < range.upperBound && source[infoStart].isASCIISpace {
+        while infoStart < range.upperBound && sourceBytes[infoStart].isASCIISpace {
             infoStart += 1
         }
         var infoEnd = range.upperBound
-        while infoEnd > infoStart && source[infoEnd - 1].isASCIISpace {
+        while infoEnd > infoStart && sourceBytes[infoEnd - 1].isASCIISpace {
             infoEnd -= 1
         }
         if marker == .backtick {
-            for j in infoStart..<infoEnd where source[j] == UInt8(ascii: "`") {
+            for j in infoStart..<infoEnd where sourceBytes[j] == UInt8(ascii: "`") {
                 return nil
             }
         }
@@ -3339,7 +3330,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// indentation, then a run of the same fence character at least as long as the opening fence, then
     /// only trailing spaces or tabs. A tab advances to the next tab stop, so a tab-led line (4 columns)
     /// fails the test and stays content.
-    private func matchClosingFence(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indentColumns: Int, expectedChar: MarkdownNode.CodeBlockInfo.FenceCharacter?, minimumLength: Int) -> Bool {
+    private func matchClosingFence(range: Range<Int>, firstNonSpace: Int, indentColumns: Int, expectedChar: MarkdownNode.CodeBlockInfo.FenceCharacter?, minimumLength: Int) -> Bool {
         precondition(expectedChar != nil, "a fenced code block always records its fence character")
         let fenceByte = expectedChar!.character
         if indentColumns > 3 {
@@ -3348,11 +3339,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         guard firstNonSpace < range.upperBound else {
             return false
         }
-        if source[firstNonSpace] != fenceByte {
+        if sourceBytes[firstNonSpace] != fenceByte {
             return false
         }
         var i = firstNonSpace
-        while i < range.upperBound && source[i] == fenceByte {
+        while i < range.upperBound && sourceBytes[i] == fenceByte {
             i += 1
         }
         let runLength = i - firstNonSpace
@@ -3360,7 +3351,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return false
         }
         while i < range.upperBound {
-            let b = source[i]
+            let b = sourceBytes[i]
             if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t") {
                 return false
             }
@@ -3378,12 +3369,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// tab straddling the boundary contributes: per Tabs, such a tab's byte is dropped and its leftover
     /// columns become spaces before the rest of the line. A non-straddling strip returns
     /// `leadingSpaces == 0` and stays a zero-copy slice.
-    private func stripFenceIndent(source: Span<UInt8>, range: Range<Int>, maxColumns: Int, startColumn: Int) -> (bodyStart: Int, leadingSpaces: Int) {
+    private func stripFenceIndent(range: Range<Int>, maxColumns: Int, startColumn: Int) -> (bodyStart: Int, leadingSpaces: Int) {
         var i = range.lowerBound
         var column = startColumn
         var consumed = 0
         while i < range.upperBound && consumed < maxColumns {
-            let b = source[i]
+            let b = sourceBytes[i]
             if b == UInt8(ascii: " ") {
                 column += 1
                 consumed += 1
@@ -3407,14 +3398,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return (i, 0)
     }
 
-    /// The absolute column reached after `source[from..<to]`: a tab advances to the next multiple of 4
+    /// The absolute column reached after `sourceBytes[from..<to]`: a tab advances to the next multiple of 4
     /// (Tabs), every other byte counts as one column. Unlike `indentColumns` this does not stop at the
     /// first non-whitespace byte - it measures the full column width of a consumed prefix, container
     /// markers included.
-    private func columnWidth(source: Span<UInt8>, from: Int, to: Int) -> Int {
+    private func columnWidth(from: Int, to: Int) -> Int {
         var column = 0
         for i in from..<to {
-            column += source[i] == UInt8(ascii: "\t") ? 4 - (column & 3) : 1
+            column += sourceBytes[i] == UInt8(ascii: "\t") ? 4 - (column & 3) : 1
         }
         return column
     }
@@ -3448,10 +3439,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Try to match a setext heading underline at `firstNonSpace` within `range` (Setext headings).
     ///
     /// The caller has checked that the line is indented less than four columns, past which none of these blocks starts.
-    private func matchSetextUnderline(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> UInt8? {
+    private func matchSetextUnderline(range: Range<Int>, firstNonSpace: Int) -> UInt8? {
         assert(firstNonSpace - range.lowerBound <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
-        let marker = source[firstNonSpace]
+        let marker = sourceBytes[firstNonSpace]
         let level: UInt8
         switch marker {
         case UInt8(ascii: "="):
@@ -3462,11 +3453,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         var i = firstNonSpace
-        while i < range.upperBound && source[i] == marker {
+        while i < range.upperBound && sourceBytes[i] == marker {
             i += 1
         }
         while i < range.upperBound {
-            let b = source[i]
+            let b = sourceBytes[i]
             if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t") {
                 return nil
             }
@@ -3478,10 +3469,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Try to match a thematic break starting at `firstNonSpace` within `range` (Thematic breaks), returning the offset just past its last marker character.
     ///
     /// The caller has checked that the line is indented less than four columns, past which none of these blocks starts.
-    private func matchThematicBreak(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> Int? {
+    private func matchThematicBreak(range: Range<Int>, firstNonSpace: Int) -> Int? {
         assert(firstNonSpace - range.lowerBound <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
-        let marker = source[firstNonSpace]
+        let marker = sourceBytes[firstNonSpace]
         if marker != UInt8(ascii: "-") && marker != UInt8(ascii: "_") && marker != UInt8(ascii: "*") {
             return nil
         }
@@ -3489,7 +3480,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var end = firstNonSpace
         var i = firstNonSpace
         while i < range.upperBound {
-            let b = source[i]
+            let b = sourceBytes[i]
             if b == marker {
                 count += 1
                 end = i + 1
@@ -3504,11 +3495,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Try to match an ATX heading (ATX headings).
     ///
     /// The caller has checked that the line is indented less than four columns, past which none of these blocks starts.
-    private func matchATXHeading(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> ATXMatch? {
+    private func matchATXHeading(range: Range<Int>, firstNonSpace: Int) -> ATXMatch? {
         assert(firstNonSpace - range.lowerBound <= 3, "block-start matchers run only on a line indented less than four columns")
         var i = firstNonSpace
         var level: Int = 0
-        while i < range.upperBound && source[i] == UInt8(ascii: "#") { // #
+        while i < range.upperBound && sourceBytes[i] == UInt8(ascii: "#") { // #
             level += 1
             i += 1
         }
@@ -3516,32 +3507,32 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         if i < range.upperBound {
-            let b = source[i]
+            let b = sourceBytes[i]
             if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t") {
                 return nil
             }
         }
         var contentStart = i
         while contentStart < range.upperBound
-            && (source[contentStart] == UInt8(ascii: " ") || source[contentStart] == UInt8(ascii: "\t")) {
+            && (sourceBytes[contentStart] == UInt8(ascii: " ") || sourceBytes[contentStart] == UInt8(ascii: "\t")) {
             contentStart += 1
         }
         var contentEnd = range.upperBound
         while contentEnd > contentStart
-            && (source[contentEnd - 1] == UInt8(ascii: " ") || source[contentEnd - 1] == UInt8(ascii: "\t")) {
+            && (sourceBytes[contentEnd - 1] == UInt8(ascii: " ") || sourceBytes[contentEnd - 1] == UInt8(ascii: "\t")) {
             contentEnd -= 1
         }
         let beforeHashes = contentEnd
-        while contentEnd > contentStart && source[contentEnd - 1] == UInt8(ascii: "#") {
+        while contentEnd > contentStart && sourceBytes[contentEnd - 1] == UInt8(ascii: "#") {
             contentEnd -= 1
         }
         let removedHashes = beforeHashes - contentEnd
         if removedHashes > 0 {
             if contentEnd > contentStart {
-                let preceding = source[contentEnd - 1]
+                let preceding = sourceBytes[contentEnd - 1]
                 if preceding == UInt8(ascii: " ") || preceding == UInt8(ascii: "\t") {
                     while contentEnd > contentStart
-                        && (source[contentEnd - 1] == UInt8(ascii: " ") || source[contentEnd - 1] == UInt8(ascii: "\t")) {
+                        && (sourceBytes[contentEnd - 1] == UInt8(ascii: " ") || sourceBytes[contentEnd - 1] == UInt8(ascii: "\t")) {
                         contentEnd -= 1
                     }
                 } else {
@@ -3672,17 +3663,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Returns the label (raw source bytes between `^` and `]`) and the within-line offset just past
     /// the consumed marker (`]:` plus trailing whitespace), where the definition's content begins,
     /// or `nil` if this line is not a footnote-definition opener.
-    private func matchFootnoteDefinition(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> (label: Chunk, consumedTo: Int)? {
+    private func matchFootnoteDefinition(range: Range<Int>, firstNonSpace: Int) -> (label: Chunk, consumedTo: Int)? {
         let end = range.upperBound
         guard firstNonSpace + 1 < end,
-              source[firstNonSpace] == UInt8(ascii: "["),
-              source[firstNonSpace + 1] == UInt8(ascii: "^") else {
+              sourceBytes[firstNonSpace] == UInt8(ascii: "["),
+              sourceBytes[firstNonSpace + 1] == UInt8(ascii: "^") else {
             return nil
         }
         let labelStart = firstNonSpace + 2
         var i = labelStart
         while i < end {
-            let b = source[i]
+            let b = sourceBytes[i]
             if b == UInt8(ascii: "]") {
                 break
             }
@@ -3690,7 +3681,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if b == UInt8(ascii: "[") {
                 return nil
             }
-            if b == UInt8(ascii: "\\"), i + 1 < end, !source[i + 1].isASCIISpace {
+            if b == UInt8(ascii: "\\"), i + 1 < end, !sourceBytes[i + 1].isASCIISpace {
                 i += 2
                 continue
             }
@@ -3703,13 +3694,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         let labelLen = i - labelStart
         guard labelLen > 0,
-              i < end, source[i] == UInt8(ascii: "]"),
-              i + 1 < end, source[i + 1] == UInt8(ascii: ":") else {
+              i < end, sourceBytes[i] == UInt8(ascii: "]"),
+              i + 1 < end, sourceBytes[i + 1] == UInt8(ascii: ":") else {
             return nil
         }
         var contentStart = i + 2
         while contentStart < end {
-            let b = source[contentStart]
+            let b = sourceBytes[contentStart]
             if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t") {
                 break
             }
