@@ -103,7 +103,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:7
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:7
+                  code_block "" "" @1:3-1:6
               block_quote @2:1-2:7
                 code_block "" "  foo\\n" @2:3-2:7
 
@@ -186,7 +186,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:8
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:8
+                  code_block "" "" @1:3-1:6
               block_quote @2:1-2:8
                 code_block "" "  foo\\n" @2:4-2:8
 
@@ -269,7 +269,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:9
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:9
+                  code_block "" "" @1:3-1:6
               block_quote @2:1-2:9
                 code_block "" "  foo\\n" @2:5-2:9
 
@@ -352,7 +352,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:8
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:8
+                  code_block "" "" @1:3-1:6
               block_quote @2:1-2:8
                 code_block "" "foo\\n" @2:5-2:8
 
@@ -449,7 +449,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:7
               list bullet '-' tight @1:1-2:7
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:7
+                  code_block "" "" @1:3-1:6
                 item @2:1-2:7
                   code_block "" "  foo\\n" @2:3-2:7
 
@@ -538,7 +538,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:8
               list bullet '-' tight @1:1-2:8
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:8
+                  code_block "" "" @1:3-1:6
                 item @2:1-2:8
                   code_block "" "  foo\\n" @2:4-2:8
 
@@ -627,7 +627,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:10
               list bullet '-' tight @1:1-2:10
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:10
+                  code_block "" "" @1:3-1:6
                 item @2:1-2:10
                   code_block "" "  foo\\n" @2:6-2:10
 
@@ -716,7 +716,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:8
               list bullet '-' tight @1:1-2:8
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:8
+                  code_block "" "" @1:3-1:6
                 item @2:1-2:8
                   code_block "" "foo\\n" @2:5-2:8
 
@@ -816,7 +816,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:8
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:8
+                  code_block "" "" @1:3-1:6
               list ordered start=1 delim=period tight @2:1-2:8
                 item @2:1-2:8
                   code_block "" " foo\\n" @2:4-2:8
@@ -906,7 +906,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:9
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:9
+                  code_block "" "" @1:3-1:6
               list ordered start=1 delim=period tight @2:1-2:9
                 item @2:1-2:9
                   code_block "" " foo\\n" @2:5-2:9
@@ -996,7 +996,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:11
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:11
+                  code_block "" "" @1:3-1:6
               list ordered start=1 delim=period tight @2:1-2:11
                 item @2:1-2:11
                   code_block "" " foo\\n" @2:7-2:11
@@ -1086,7 +1086,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:10
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:10
+                  code_block "" "" @1:3-1:6
               list ordered start=1 delim=period tight @2:1-2:10
                 item @2:1-2:10
                   code_block "" "foo\\n" @2:7-2:10
@@ -1191,7 +1191,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:10
               list bullet '-' tight @1:1-2:10
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:10
+                  code_block "" "" @1:3-1:6
                 item @2:1-2:10
                   block_quote @2:4-2:10
                     code_block "" "   foo\\n" @2:6-2:10
@@ -1287,7 +1287,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:11
               list bullet '-' tight @1:1-2:11
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:11
+                  code_block "" "" @1:3-1:6
                 item @2:1-2:11
                   block_quote @2:4-2:11
                     code_block "" "   foo\\n" @2:7-2:11
@@ -1383,7 +1383,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:13
               list bullet '-' tight @1:1-2:13
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:13
+                  code_block "" "" @1:3-1:6
                 item @2:1-2:13
                   block_quote @2:4-2:13
                     code_block "" "   foo\\n" @2:9-2:13
@@ -1479,7 +1479,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:12
               list bullet '-' tight @1:1-2:12
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:12
+                  code_block "" "" @1:3-1:6
                 item @2:1-2:12
                   block_quote @2:4-2:12
                     code_block "" "  foo\\n" @2:7-2:12
@@ -1587,7 +1587,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:8
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:8
+                  code_block "" "" @1:3-1:6
               block_quote @2:1-2:8
                 list bullet '-' tight @2:2-2:8
                   item @2:2-2:8
@@ -1684,7 +1684,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:9
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:9
+                  code_block "" "" @1:3-1:6
               block_quote @2:1-2:9
                 list bullet '-' tight @2:2-2:9
                   item @2:2-2:9
@@ -1781,7 +1781,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:11
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:11
+                  code_block "" "" @1:3-1:6
               block_quote @2:1-2:11
                 list bullet '-' tight @2:2-2:11
                   item @2:2-2:11
@@ -1878,7 +1878,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:10
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:10
+                  code_block "" "" @1:3-1:6
               block_quote @2:1-2:10
                 list bullet '-' tight @2:2-2:10
                   item @2:2-2:10
@@ -1985,7 +1985,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:8
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:8
+                  code_block "" "" @1:3-1:6
               block_quote @2:1-2:8
                 block_quote @2:2-2:8
                   code_block "" " foo\\n" @2:4-2:8
@@ -2075,7 +2075,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:9
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:9
+                  code_block "" "" @1:3-1:6
               block_quote @2:1-2:9
                 block_quote @2:2-2:9
                   code_block "" " foo\\n" @2:5-2:9
@@ -2165,7 +2165,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:11
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:11
+                  code_block "" "" @1:3-1:6
               block_quote @2:1-2:11
                 block_quote @2:2-2:11
                   code_block "" " foo\\n" @2:7-2:11
@@ -2255,7 +2255,7 @@ struct IndentedCodeSplitTabTests {
             document @1:1-2:11
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
-                  code_block "" "" @1:3-2:11
+                  code_block "" "" @1:3-1:6
               block_quote @2:1-2:11
                 block_quote @2:2-2:11
                   code_block "" " foo\\n" @2:7-2:11

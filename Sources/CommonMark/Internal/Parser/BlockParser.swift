@@ -240,7 +240,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
             // EOF: finalize all open blocks back up to the document root. By the end every leaf is drained and `pending` is `nil`.
             while current != documentIndex {
-                pending = finalize(node: current, pending: pending, atEOF: true)
+                pending = finalize(node: current, pending: pending, endsOnCurrentLine: true)
             }
             
             // The document root is never passed to `finalize`; stamp its whole-source span here, from the first line's start (after any leading BOM, so it projects to 1:1) to the last line's content end. An empty document has no lines and no source range.
@@ -1631,7 +1631,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 expectedChar: info.fenceCharacter,
                 minimumLength: info.fenceLength
             ) {
-                pending = finalize(node: current, pending: pending)
+                pending = finalize(node: current, pending: pending, endsOnCurrentLine: true)
                 return LeafContinuation(stillOpen: true, pending: pending)
             }
             // Continuation: strip the code block's content indentation - the container prefixes'
@@ -2307,17 +2307,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Close `node`, materialize its accumulated content, and back the parser's `current` pointer up to `node`'s parent.
     ///
+    /// `endsOnCurrentLine` is `true` when the current line is the block's last line: the document ends on it, or it is a fenced code block's closing fence. A block closed because the current line does not continue it ends on the previous line.
+    ///
     /// `lineContentEnd` is the line offset just past the content of a block that is only ever one line, an ATX heading or a thematic break, closed on that line.
-    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, atEOF: Bool = false, lineContentEnd: Int? = nil) -> PendingLeaf? {
+    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, endsOnCurrentLine: Bool = false, lineContentEnd: Int? = nil) -> PendingLeaf? {
         var pending = pending
         let kind = storage[node].kind
 
         if positionsEnabled {
-            // A block ends on the current line at EOF, for the document or a fenced code block, or when it opened on this same line (e.g. an ATX heading finalized immediately); otherwise it ends on the previous line, the last line that is part of it.
+            // A block ends on the current line when that is its last line, for the document, or when it opened on this same line (e.g. an ATX heading finalized immediately); otherwise it ends on the previous line, the last line that is part of it.
             let startByte = storage.sourceRanges[node].start
             let startedThisLine = startByte >= Int32(currentLineSourceRange.lowerBound)
-            let isFenced: Bool
-            if case .codeBlock(let info) = kind { isFenced = info.isFenced } else { isFenced = false }
             let end: Int
             if let lineContentEnd {
                 // An ATX heading or a thematic break ends at its trimmed content extent, not the raw line.
@@ -2325,7 +2325,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // A block whose end is later attributed to this line - notably the document, whose end is stamped from the final line - ends at the block's content end, not the raw line end, so shrink the tracked current-line end to match.
                 currentLineSourceRange = currentLineSourceRange.lowerBound..<end
             } else {
-                end = (atEOF || startedThisLine || kind == .document || isFenced)
+                end = (endsOnCurrentLine || startedThisLine || kind == .document)
                     ? currentLineSourceRange.upperBound
                     : lastLineSourceEnd
             }
