@@ -1107,8 +1107,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     // MARK: - Per-line dispatcher
 
-    /// Process a line of Markdown.
-    ///  - lineRange: The range of the line in the original source, in order to lazily reference it.
+    /// Process the line of Markdown at `lineRange` in the source.
     private mutating func processLine(lineRange: Range<Int>, pending: consuming PendingLeaf?) -> PendingLeaf? {
         var pending = pending
         // PHASE 1: Walk the open-container chain, stripping each container's continuation prefix. `deepestMatched` is the deepest container whose continuation succeeded (always a container, never a leaf). `cursor` is the byte offset into the line after stripped prefixes.
@@ -1815,11 +1814,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// mid-tab). The re-dispatch indent is measured from that column (`firstNonSpaceColumn - column`) so the
     /// tab's consumed columns are not recounted from column 0, which would flip the indented-code /
     /// paragraph decision.
-    ///
-    /// The list marker, block quote marker, fence and ATX heading matchers and the paragraph and ATX heading openers it
-    /// calls on every line that starts a block are inlined into it: left to its own heuristics the optimizer calls them
-    /// out of line, which costs about 3% of the instructions of a prose-heavy parse.
     private mutating func dispatchNewBlocks(lineRange: Range<Int>, startCursor: Int, startColumn: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        // why: the list marker, block quote marker and fence matchers and the paragraph and ATX heading openers this
+        // calls on every line that starts a block are `@inline(__always)`. Left to its own heuristics the optimizer
+        // calls them out of line here, which costs about 3% of the instructions of a prose-heavy parse.
         var pending = pending
         var cursor = startCursor
         var column = startColumn
@@ -1978,7 +1976,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Open an ATX heading at `current`, add its content line, and close it.
-    // why: inlined into `dispatchNewBlocks`; see there.
+    // why: see the top of `dispatchNewBlocks`.
     @inline(__always)
     private mutating func openATXHeading(_ heading: ATXMatch, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         var pending = pending
@@ -2072,7 +2070,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Open a paragraph at `current` and add the line's content to it.
-    // why: inlined into `dispatchNewBlocks`; see there.
+    // why: see the top of `dispatchNewBlocks`.
     @inline(__always)
     private mutating func openParagraph(lineRange: Range<Int>, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         let textRange = firstNonSpace..<lineRange.upperBound
@@ -2741,7 +2739,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `indent` is the marker's leading indent in columns, measured from the column the enclosing prefixes
     /// reached. A byte count would under-measure a tab before the marker, including a tab an enclosing `>`
     /// left partially consumed.
-    // why: inlined into `dispatchNewBlocks`; see there.
+    // why: see the top of `dispatchNewBlocks`.
     @inline(__always)
     private func matchListMarker(range: Range<Int>, firstNonSpace: Int, lineStart: Int, indent: Int) -> ListMarkerInfo? {
         let markerOffset = indent
@@ -3243,7 +3241,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `range.lowerBound` sits mid-tab because an ancestor marker on this line partially consumed that
     /// tab's leading columns; otherwise `indentColumns` below would measure the tab's remaining columns as
     /// if it started fresh at column 0.
-    // why: inlined into `dispatchNewBlocks`; see there.
+    // why: see the top of `dispatchNewBlocks`.
     @inline(__always)
     private func matchBlockQuoteMarker(range: Range<Int>, firstNonSpace: Int, baseColumn: Int = 0) -> Int? {
         // The indent is measured in columns: a byte count would under-measure a tab and admit a `>` indented
@@ -3284,7 +3282,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// `indent` is the fence's indentation in columns, measured from the column the enclosing prefixes reached. The
     /// caller has checked that it is less than four columns, past which none of these blocks starts.
-    // why: inlined into `dispatchNewBlocks`; see there.
+    // why: see the top of `dispatchNewBlocks`.
     @inline(__always)
     private func matchOpeningFence(range: Range<Int>, firstNonSpace: Int, indent: Int) -> FenceMatch? {
         assert(indent <= 3, "block-start matchers run only on a line indented less than four columns")
