@@ -563,8 +563,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     // MARK: - State
     
-    /// Append a node as a child of the given parent. Returns the new node's index.
-    private mutating func addChild(kind: MarkdownNode.Kind, parent: DocumentStorage.Index, data: NodeData? = nil, start: Int? = nil) -> DocumentStorage.Index {
+    /// Append a node that starts at source offset `start` as a child of the given parent. Returns the new node's index.
+    private mutating func addChild(kind: MarkdownNode.Kind, parent: DocumentStorage.Index, data: NodeData? = nil, start: Int) -> DocumentStorage.Index {
         let idx = storage.appendNode(NodeRecord(kind: kind, parent: parent, data: data))
         openBlocksVersion &+= 1
         if itemsEndingInRemovedParagraph.removeValue(forKey: parent) == true {
