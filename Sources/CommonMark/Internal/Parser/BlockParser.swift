@@ -59,6 +59,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// New text is appended here (or to a new child of an ancestor) and finalization unwinds outward toward the root.
     var current: DocumentStorage.Index
 
+    /// Changes whenever a block opens or closes or a paragraph is removed, so whenever the open blocks, or whether an
+    /// open list item holds a block, can change.
+    var openBlocksVersion = 0
+
+    /// Where a line's walk of the open blocks ends when nothing is left of the line at a given open block, kept while
+    /// `version` is `openBlocksVersion` (see `walkPastEmptyRemainder`).
+    struct EmptyRemainderWalk {
+        var version: Int
+        var deepestMatched: DocumentStorage.Index
+        var allMatched: Bool
+    }
+    var emptyRemainderWalks: [DocumentStorage.Index: EmptyRemainderWalk] = [:]
+
+    /// The list items and footnote definitions a line's walk continues with nothing left of the line before it looks up
+    /// and records where the walk ends (`walkPastEmptyRemainder`).
+    static let emptyRemainderWalkLimit = 8
+
     /// The single open leaf's accumulated content together with the node it belongs to.
     ///
     /// At most one leaf (paragraph / heading / code / HTML block) accumulates content at any moment: the parser drains a leaf via `materializePendingContent` before the next one opens, and container blocks (block quote / list / item) never hold text. This state is threaded through the block-parse call chain - functions that begin or extend a leaf's content `consume` the current `PendingLeaf?` and return the updated one, and `parse()` owns the root binding.
@@ -549,6 +566,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Append a node as a child of the given parent. Returns the new node's index.
     private mutating func addChild(kind: MarkdownNode.Kind, parent: DocumentStorage.Index, data: NodeData? = nil, start: Int? = nil) -> DocumentStorage.Index {
         let idx = storage.appendNode(NodeRecord(kind: kind, parent: parent, data: data))
+        openBlocksVersion &+= 1
         if itemsEndingInRemovedParagraph.removeValue(forKey: parent) == true {
             itemsWithBlankLineAroundRemovedParagraph.insert(parent)
         }
@@ -1233,11 +1251,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .blockQuote: false
         default: true
         }
-        var up = storage[container].parent
-        while let up_ = up {
-            storage.nodes[up_].lastLineBlank = false
-            up = storage[up_].parent
-        }
+        // Its ancestors already do not end with a blank line: only the deepest open container can, because a later
+        // line that is not blank clears the flag on the containers it continues and closes the others.
+        assert(storage[container].parent.map { !storage.nodes[$0].lastLineBlank } ?? true, "only the deepest open container ends with a blank line")
         return pending
     }
 
@@ -1425,6 +1441,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Descend from the document to `current` through each open block's last child, which is its open child. A
         // line stops at the first container whose prefix it fails, so it visits no container inside that one.
         var node = documentIndex
+        // The list items and footnote definitions a blank rest of the line has continued.
+        var blankContinued = 0
         while true {
             let kind = storage[node].kind
             switch kind {
@@ -1517,6 +1535,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     cursor = firstNonSpace
                     prefixColumns = lineColumns.column(at: cursor, in: source)
                     deepestMatched = node
+                    blankContinued += 1
+                    if blankContinued > Self.emptyRemainderWalkLimit, node != current, let child = storage[node].lastChild {
+                        let rest = walkPastEmptyRemainder(from: child, deepestMatched: node)
+                        return (rest.deepestMatched, cursor, prefixColumns, rest.allMatched)
+                    }
                 } else {
                     return (deepestMatched, cursor, prefixColumns, false)
                 }
@@ -1534,6 +1557,60 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             node = child
         }
+    }
+
+    /// Continue `walkOpenContainers` from the open block `start` once nothing is left of the line, where
+    /// `deepestMatched` is the deepest container matched so far.
+    ///
+    /// With nothing left, a block quote fails its marker (Block quotes), a list item without a block fails (List items),
+    /// and a list, a list item holding a block and a footnote definition continue, as on a blank line. Where the walk
+    /// ends then depends only on the open blocks from `start` down, so it is recorded for every open block the walk
+    /// passes and reused until a block opens or closes. Without it, each blank line in a chain of `n` open footnote
+    /// definitions walks all `n`, and `n` blank lines walk `n` squared.
+    private mutating func walkPastEmptyRemainder(from start: DocumentStorage.Index, deepestMatched inherited: DocumentStorage.Index) -> (deepestMatched: DocumentStorage.Index, allMatched: Bool) {
+        var node = start
+        var deepestMatched = inherited
+        var allMatched: Bool
+        var passed: [DocumentStorage.Index] = []
+        walk: while true {
+            if let recorded = emptyRemainderWalks[node], recorded.version == openBlocksVersion {
+                deepestMatched = recorded.deepestMatched
+                allMatched = recorded.allMatched
+                break
+            }
+            passed.append(node)
+            switch storage[node].kind {
+            case .blockQuote:
+                allMatched = false
+                break walk
+            case .item:
+                guard storage[node].firstChild != nil || itemsEndingInRemovedParagraph[node] != nil else {
+                    allMatched = false
+                    break walk
+                }
+                deepestMatched = node
+            case .list, .footnoteDefinition:
+                deepestMatched = node
+            case .paragraph, .heading, .codeBlock, .htmlBlock, .text, .thematicBreak:
+                allMatched = true
+                break walk
+            default:
+                break
+            }
+            if node == current {
+                allMatched = true
+                break
+            }
+            guard let child = storage[node].lastChild else {
+                preconditionFailure("each open block above `current` has its open child as its last child")
+            }
+            node = child
+        }
+        let outcome = EmptyRemainderWalk(version: openBlocksVersion, deepestMatched: deepestMatched, allMatched: allMatched)
+        for block in passed {
+            emptyRemainderWalks[block] = outcome
+        }
+        return (deepestMatched, allMatched)
     }
 
     /// Returns `true` if the line's content (starting at `firstNonSpace`) begins a new block that would interrupt an open paragraph.
@@ -2264,6 +2341,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             itemsEndingInRemovedParagraph[item] = false
         }
         storage.unlinkChild(paragraph)
+        openBlocksVersion &+= 1
     }
 
     /// Run the paragraph finalize-time matchers on a single flat content `Chunk`: table detection, then the paragraph's raw content (`paragraphContent`) - which it queues for inline parsing, or drops the node if nothing remains.
@@ -2331,6 +2409,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, endsOnCurrentLine: Bool = false, lineContentEnd: Int? = nil) -> PendingLeaf? {
         var pending = pending
         let kind = storage[node].kind
+        openBlocksVersion &+= 1
 
         if positionsEnabled {
             // A block ends on the current line when that is its last line, for the document, or when it opened on this same line (e.g. an ATX heading finalized immediately); an indented code block ends at its last line that is not blank; otherwise a block ends on the previous line, the last line that is part of it.
