@@ -351,7 +351,7 @@ extension MarkdownNode {
         public var fenceCharacter: FenceCharacter?
         /// Number of fence characters used (3 or more); zero for indented blocks.
         public var fenceLength: Int
-        /// Indentation offset of the opening fence.
+        /// Indentation of the opening fence, in columns from its container's content column; each content line loses up to this many columns of indentation.
         public var fenceOffset: Int
         
         /// Fence character for a code block.

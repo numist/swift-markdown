@@ -124,23 +124,23 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // The opening fence's indentation counts the partially consumed tab as one space, so a content line loses
-    // one column of its tab to the marker and one to the fence indentation, leaving one content space.
-    @Test("tab after `>` on the opening fence line leaves one content space")
-    func openingLineTabFenceOffsetLeavesOneSpace() {
+    // The opening fence is indented by the tab's two columns that the marker leaves, so a content line loses them
+    // all: the marker takes one of its tab's columns and the fence indentation the other two.
+    @Test("tab after `>` on the opening fence line leaves no content spaces")
+    func openingLineTabFenceOffsetLeavesNoSpace() {
         MarkdownDocument.withParsedDocument(">\t```\n>\t") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "code_block fenced fence='`' length=3 offset=1"])
-            #expect(codeBlocks(doc).map(\.literal) == [" \n"])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "code_block fenced fence='`' length=3 offset=2"])
+            #expect(codeBlocks(doc).map(\.literal) == ["\n"])
         }
     }
 
-    @Test("tab after `>` on the opening fence line keeps one space before content")
+    @Test("tab after `>` on the opening fence line leaves the content unindented")
     func openingLineTabFenceOffsetThenContent() {
         MarkdownDocument.withParsedDocument(">\t```\n>\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
-            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "code_block fenced fence='`' length=3 offset=1"])
-            #expect(codeBlocks(doc).map(\.literal) == [" x\n"])
+            #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "code_block fenced fence='`' length=3 offset=2"])
+            #expect(codeBlocks(doc).map(\.literal) == ["x\n"])
         }
     }
 }

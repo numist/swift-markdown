@@ -1540,7 +1540,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if matchATXHeading(source: source, range: range, firstNonSpace: firstNonSpace) != nil {
             return true
         }
-        if matchOpeningFence(source: source, range: range, firstNonSpace: firstNonSpace) != nil {
+        if matchOpeningFence(source: source, range: range, firstNonSpace: firstNonSpace, indent: indent) != nil {
             return true
         }
         if matchBlockQuoteMarker(source: source, range: range, firstNonSpace: firstNonSpace, baseColumn: baseColumn) != nil {
@@ -1855,7 +1855,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if indent < 4, let fence = matchOpeningFence(
                 source: source,
                 range: cursor..<lineRange.upperBound,
-                firstNonSpace: firstNonSpace
+                firstNonSpace: firstNonSpace,
+                indent: indent
             ) {
                 openFencedCode(fence, cursor: cursor, firstNonSpace: firstNonSpace)
                 return pending
@@ -1922,9 +1923,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Decode backslash escapes and HTML entities in the info string so consumers see the canonical language tag (e.g. `foo\+bar` → `foo+bar`, `f&ouml;&ouml;` → `föö`).
         let cleanInfo = unescapeURLChunk(fence.infoChunk)
         let infoRef = storage.intern(replacingNUL(cleanInfo))
-        // The fence offset counts source bytes, so a tab straddling the container prefix and the
-        // fence counts once even though it spans several columns: a fence opened after a partially
-        // consumed tab (`>\t```) strips only one column from its continuation lines.
+        // The fence offset is the fence's indentation in columns, which each content line loses
+        // (Fenced code blocks): a fence opened after a partially consumed tab (`>\t```) is indented
+        // by the tab's remaining two columns.
         let fenceOffset = fence.fenceOffset
         let codeIdx = addChild(
             kind: .codeBlock(MarkdownNode.CodeBlockInfo(
@@ -3193,10 +3194,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Try to match an opening code fence line (Fenced code blocks).
     ///
-    /// The caller has checked that the line is indented less than four columns, past which none of these blocks starts.
-    private func matchOpeningFence(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> FenceMatch? {
-        let fenceOffset = firstNonSpace - range.lowerBound
-        assert(fenceOffset <= 3, "block-start matchers run only on a line indented less than four columns")
+    /// `indent` is the fence's indentation in columns, measured from the column the enclosing prefixes reached. The
+    /// caller has checked that it is less than four columns, past which none of these blocks starts.
+    private func matchOpeningFence(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indent: Int) -> FenceMatch? {
+        assert(indent <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         let markerCharacter = source[firstNonSpace]
         guard let marker = MarkdownNode.CodeBlockInfo.FenceCharacter(character: markerCharacter) else {
@@ -3226,7 +3227,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return FenceMatch(
             character: marker,
             length: runLength,
-            fenceOffset: fenceOffset,
+            fenceOffset: indent,
             infoChunk: Chunk(
                 offset: infoStart,
                 length: infoEnd - infoStart,
