@@ -656,20 +656,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Append the rest of an HTML block line from `cursor`, where the container prefixes ended at `column`.
+    private mutating func appendLineAfterPrefix(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, column: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        let (bodyStart, leadingSpaces) = htmlLineBody(source: source, lineRange: lineRange, cursor: cursor, column: column)
+        return appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: node, pending: pending)
+    }
+
+    /// Where the rest of an HTML block line from `cursor` begins, where the container prefixes ended at `column`, and
+    /// how many leading spaces a split tab contributes.
     ///
     /// `cursor` sits mid-tab when a block quote marker's optional space or a list item's content indentation consumed
     /// only part of a tab, so `column` lies inside it. Per Tabs, that tab's leftover columns become leading spaces and
     /// the rest of the line is copied verbatim. Otherwise `column` is `cursor`'s own column, nothing is stripped, and
     /// the line stays a zero-copy source slice.
-    private mutating func appendLineAfterPrefix(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, column: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    private func htmlLineBody(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, column: Int) -> (bodyStart: Int, leadingSpaces: Int) {
         let priorColumn = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
-        let (bodyStart, leadingSpaces) = stripFenceIndent(
+        return stripFenceIndent(
             source: source,
             range: cursor..<lineRange.upperBound,
             maxColumns: column - priorColumn,
             startColumn: priorColumn
         )
-        return appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: node, pending: pending)
     }
 
     /// Append `spaces` synthetic leading spaces followed by the verbatim source bytes `[sourceStart, lineEnd)`
@@ -1944,14 +1950,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Open an HTML block of start-condition `htmlType` at `current`, add the line's content to it, and close it if the same line satisfies its end condition.
     private mutating func openHTMLBlock(_ htmlType: UInt8, source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, column: Int, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         var pending = pending
+        let (bodyStart, leadingSpaces) = htmlLineBody(source: source, lineRange: lineRange, cursor: cursor, column: column)
+        // A first line that begins with a split tab's leftover columns starts at that tab, whose columns are the
+        // block's first content (Tabs).
         let htmlIdx = addChild(
             kind: .htmlBlock,
             parent: current,
             data: .htmlBlock(type: htmlType, literal: .empty),
-            start: firstNonSpace
+            start: leadingSpaces > 0 ? bodyStart - 1 : firstNonSpace
         )
         current = htmlIdx
-        pending = appendLineAfterPrefix(source: source, lineRange: lineRange, cursor: cursor, column: column, to: htmlIdx, pending: pending)
+        pending = appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: htmlIdx, pending: pending)
         // Check whether this same line also satisfies the end condition.
         if htmlBlockLineMatchesEndCondition(
             type: htmlType,
