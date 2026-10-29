@@ -15,7 +15,7 @@ extension BlockParser {
 
     /// Transform `node` (a table-pending `.paragraph`) and its content `chunk` into a `.table`, enqueueing its cells for the deferred inline-parsing pass.
     ///
-    /// The paragraph is table-pending only after `classifyTableOpen` returned `.opens` for this same header and delimiter line, so the content always opens a table.
+    /// The paragraph is table-pending only after `opensTable` held for this same header and delimiter line, so the content always opens a table.
     internal mutating func parseTable(node: DocumentStorage.Index, chunk inputChunk: Chunk, sourceMap: [ArenaRun]) {
         // The table machinery (line splitting, cell extraction, pipe-unescape) reads exclusively from `storage.strings`. Paragraph content is usually already materialized there, but the source-contiguity fast path can supply an `inSource` chunk (a zero-copy multi-line source range), which is copied into the arena so the rest of this function can address it uniformly.
         let chunk: Chunk
@@ -67,32 +67,20 @@ extension BlockParser {
         }
     }
 
-    /// The outcome of testing whether a header line + a just-arrived delimiter-candidate line open a
-    /// table (see `classifyTableOpen`).
-    internal enum TableOpenClassification {
-        /// The candidate line is a delimiter row and the header row's cell count matches — a table opens.
-        case opens
-        /// The candidate line is a delimiter row but the header row's cell count differs, so no table is
-        /// recognized (Tables (extension)). The paragraph never becomes a table, even if a later line would
-        /// match.
-        case headerMismatch
-        /// The candidate line is not a delimiter row; a later line can open a table.
-        case notDelimiterRow
-    }
-
-    /// Classify a materialized `chunk` (an `inSource == false` region of `storage.strings` holding a header
-    /// line + its just-arrived delimiter-candidate line, separated by `\n`). On `.opens` the block parser
+    /// Whether a materialized `chunk` (an `inSource == false` region of `storage.strings` holding a header
+    /// line + its just-arrived delimiter-candidate line, separated by `\n`) opens a table: the candidate is a
+    /// delimiter row and the header row has as many cells (Tables (extension)). When it does, the block parser
     /// marks the paragraph table-pending, so the table, not a paragraph, is the open block for the
     /// following line: a lazy continuation line breaks out, a setext heading underline is suppressed, and a
     /// block start closes the table rather than becoming a body row (Tables (extension): the table is
     /// broken at the beginning of another block-level structure).
-    internal mutating func classifyTableOpen(chunk: Chunk) -> TableOpenClassification {
+    internal mutating func opensTable(chunk: Chunk) -> Bool {
         let lines = splitLines(chunk: chunk)
         precondition(lines.count >= 2, "a table candidate holds a header line and a delimiter-candidate line")
         guard let alignments = parseDelimRow(line: lines[1]) else {
-            return .notDelimiterRow
+            return false
         }
-        return splitCells(line: lines[0]).cells.count == alignments.count ? .opens : .headerMismatch
+        return splitCells(line: lines[0]).cells.count == alignments.count
     }
 
     /// Whether `span[range]` consists solely of GFM delimiter-row bytes — `-`, `:`, `|`, and delimiter-marker

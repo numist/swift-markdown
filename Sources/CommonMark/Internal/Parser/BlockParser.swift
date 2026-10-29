@@ -147,8 +147,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         /// so it is recorded here.
         var secondLineIsLazy: Bool
 
-        /// `true` when the paragraph's first two lines form a table's header and delimiter rows, `false`
-        /// when they never can, and `nil` while undecided.
+        /// `true` once a line of the paragraph and the line after it form a table's header and delimiter
+        /// rows.
         ///
         /// Such a paragraph is a table from its delimiter row onward, and a lazy continuation line continues
         /// only a paragraph, so a later line that fails an open container's prefix closes the table and that
@@ -156,7 +156,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         /// `processLine` consults this flag to break the first such line, and everything after it, out of
         /// the table and its container. Only `true` when the delimiter row is a non-indented, non-lazy
         /// continuation line.
-        var tablePending: Bool?
+        var tablePending = false
     }
 
     /// The table state of the open paragraph, or `nil` before the paragraph's second line arrives and while
@@ -875,14 +875,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return i
     }
 
-    /// Classify whether the open paragraph's last accumulated line, the header row, plus the just-arrived
+    /// Whether the open paragraph's last accumulated line, the header row, plus the just-arrived
     /// delimiter-candidate line `delimSpan[delimRange]` open a table (Tables (extension)).
     ///
     /// Materializes the two lines (header + `\n` + delimiter) into a scratch region of the string arena,
-    /// runs `classifyTableOpen`, then truncates the scratch back off (`parseTable` re-materializes at
+    /// runs `opensTable`, then truncates the scratch back off (`parseTable` re-materializes at
     /// finalize). Reads `pending` through a borrow, so the paragraph's zero-copy accumulated content is
     /// untouched.
-    private mutating func classifyTableHeader(delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf) -> TableOpenClassification {
+    private mutating func lastLineOpensTable(delimSpan: Span<UInt8>, delimRange: Range<Int>, pending: borrowing PendingLeaf) -> Bool {
         let scratchStart = storage.strings.count
         switch pending.content {
         case .lazy(let range, let joinPending):
@@ -903,18 +903,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             storage.strings.append(delimSpan[i])
         }
         let chunk = Chunk(offset: scratchStart, length: storage.strings.count - scratchStart, inSource: false)
-        let classification = classifyTableOpen(chunk: chunk)
+        let opens = opensTable(chunk: chunk)
         // Keeping the scratch would leave dead bytes in the arena for the parse's lifetime.
         storage.strings.removeLast(storage.strings.count - scratchStart)
-        return classification
+        return opens
     }
 
     /// Decide whether the just-arrived delimiter-candidate line `delimSpan[delimRange]` opens a table with
     /// the open paragraph's last accumulated line as the header row, and set the open paragraph's
-    /// `tablePending` accordingly. A table has a single header row (Tables (extension)), so the header is always the line
-    /// immediately before the delimiter row. A header row whose cell count differs from the delimiter row's
-    /// means the paragraph never forms a table (`false`); a candidate that isn't a delimiter row leaves the
-    /// flag unset so a later line can open a table.
+    /// `tablePending` when it does. A table has a single header row (Tables (extension)), so the header is always the line
+    /// immediately before the delimiter row. A candidate that isn't a delimiter row, or whose cell count differs from the
+    /// header row's, opens no table and continues the paragraph, so a later line can still open one.
     ///
     /// When earlier paragraph lines precede that header, they are split off here into a fresh paragraph
     /// inserted before `node`, and `node`'s pending content is re-seeded to the header line alone so the
@@ -927,15 +926,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// indented or lazy, which would wrongly veto the finalize-time table check.
     private mutating func detectPendingTable(_ node: DocumentStorage.Index, delimSpan: Span<UInt8>, delimRange: Range<Int>, delimIndent: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         precondition(pending != nil, "an open paragraph always holds its accumulated content")
-        switch classifyTableHeader(delimSpan: delimSpan, delimRange: delimRange, pending: pending!) {
-        case .notDelimiterRow:
+        guard lastLineOpensTable(delimSpan: delimSpan, delimRange: delimRange, pending: pending!) else {
             return pending
-        case .headerMismatch:
-            openParagraphTableState!.tablePending = false
-            return pending
-        case .opens:
-            openParagraphTableState!.tablePending = true
         }
+        openParagraphTableState!.tablePending = true
         let leaf = pending!
         switch consume leaf.content {
         case .lazy(let range, _):
@@ -1239,7 +1233,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Whether the open paragraph's first two lines form a table's header and delimiter rows.
     private var openParagraphIsTablePending: Bool {
         assert(openParagraphTableState == nil || openParagraphTableState!.node == current, "the recorded table state belongs to the open leaf")
-        return openParagraphTableState?.tablePending ?? false
+        return openParagraphTableState?.tablePending == true
     }
 
     /// Setext heading underline transforms an open paragraph that's a direct descendant of the deepest matched container. Special case: when we're inside a list item AND the line is a dashes-style underline that ALSO matches a thematic break, the thematic break wins (it closes the list rather than turning the item's paragraph into a heading). See spec examples 64, 69, 27, 30.
@@ -1393,11 +1387,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         assert(openParagraphTableState!.node == current, "the recorded state belongs to the open paragraph")
         // Detect whether this line opens a table with the paragraph's last accumulated line as the
         // header row. The first delimiter-shaped, non-indented, non-lazy continuation line that
-        // settles the question sets `tablePending` so it isn't re-evaluated; a candidate
-        // that isn't a delimiter row leaves the flag unset so a later line can open a table.
+        // opens one sets `tablePending`, so no later line is evaluated.
         // When earlier lines precede the header, the split happens here. `couldBeDelimiterRow`
         // keeps ordinary prose paragraphs from materializing.
-        if openParagraphTableState!.tablePending == nil,
+        if !openParagraphTableState!.tablePending,
            line.indent < 4, !currentLineIsLazyContinuation,
            Self.couldBeDelimiterRow(span: source, range: delimRange) {
             pending = detectPendingTable(current, delimSpan: source, delimRange: delimRange, delimIndent: line.indent, pending: consume pending)
@@ -2273,7 +2266,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // table. A delimiter row indented four or more columns or arriving as a lazy continuation line is
         // paragraph text; its indentation and laziness are gone here, so consult
         // the recorded `secondLineIndent` and `secondLineIsLazy`.
-        if let table = openParagraphTableState, table.tablePending == true, table.secondLineIndent < 4, !table.secondLineIsLazy {
+        if let table = openParagraphTableState, table.tablePending, table.secondLineIndent < 4, !table.secondLineIsLazy {
             // The header is the raw paragraph content, before link reference definitions are extracted.
             let tableContent = raw.trimmingTrailing(using: self)
             // Rows that aren't source-contiguous (a container prefix, leading whitespace, or a CRLF between

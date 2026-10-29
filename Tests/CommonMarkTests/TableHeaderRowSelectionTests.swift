@@ -171,8 +171,8 @@ struct TableHeaderRowSelectionTests {
             """)
     }
 
-    @Test("a header and delimiter that differ in cell count form no table: top level")
-    func headerCellCountMismatchTopLevel() {
+    @Test("a header and delimiter that differ in cell count leave a later header and delimiter free to open a table: top level")
+    func headerCellCountMismatchThenTableTopLevel() {
         let source = "x\na|b|c\n-|-\nd|e\n-|-\n"
         #expect(TreeDump.dump(source, options: [.tables]) == """
             document
@@ -182,30 +182,34 @@ struct TableHeaderRowSelectionTests {
                 text "a|b|c"
                 softbreak
                 text "-|-"
-                softbreak
-                text "d|e"
-                softbreak
-                text "-|-"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "d"
+                  table_cell align=none colspan=1 rowspan=1
+                    text "e"
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
             document @1:1-5:4
-              paragraph @1:1-5:4
+              paragraph @1:1-3:4
                 text "x" @1:1-1:2
                 softbreak @-
                 text "a|b|c" @2:1-2:6
                 softbreak @-
                 text "-|-" @3:1-3:4
-                softbreak @-
-                text "d|e" @4:1-4:4
-                softbreak @-
-                text "-|-" @5:1-5:4
+              table @4:1-5:4
+                table_header @4:1-4:4
+                  table_cell align=none colspan=1 rowspan=1 @4:1-4:2
+                    text "d" @4:1-4:2
+                  table_cell align=none colspan=1 rowspan=1 @4:3-4:4
+                    text "e" @4:3-4:4
 
             """)
     }
 
-    @Test("a header and delimiter that differ in cell count form no table: block quote")
-    func headerCellCountMismatchInBlockQuote() {
+    @Test("a header and delimiter that differ in cell count leave a later header and delimiter free to open a table: block quote")
+    func headerCellCountMismatchThenTableInBlockQuote() {
         let source = "> x\n> a|b|c\n> -|-\n> d|e\n> -|-\n"
         #expect(TreeDump.dump(source, options: [.tables]) == """
             document
@@ -216,31 +220,35 @@ struct TableHeaderRowSelectionTests {
                   text "a|b|c"
                   softbreak
                   text "-|-"
-                  softbreak
-                  text "d|e"
-                  softbreak
-                  text "-|-"
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "d"
+                    table_cell align=none colspan=1 rowspan=1
+                      text "e"
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
             document @1:1-5:6
               block_quote @1:1-5:6
-                paragraph @1:3-5:6
+                paragraph @1:3-3:6
                   text "x" @1:3-1:4
                   softbreak @-
                   text "a|b|c" @2:3-2:8
                   softbreak @-
                   text "-|-" @3:3-3:6
-                  softbreak @-
-                  text "d|e" @4:3-4:6
-                  softbreak @-
-                  text "-|-" @5:3-5:6
+                table @4:3-5:6
+                  table_header @4:3-4:6
+                    table_cell align=none colspan=1 rowspan=1 @4:3-4:4
+                      text "d" @4:3-4:4
+                    table_cell align=none colspan=1 rowspan=1 @4:5-4:6
+                      text "e" @4:5-4:6
 
             """)
     }
 
-    @Test("a header and delimiter that differ in cell count form no table: list item")
-    func headerCellCountMismatchInListItem() {
+    @Test("a header and delimiter that differ in cell count leave a later header and delimiter free to open a table: list item")
+    func headerCellCountMismatchThenTableInListItem() {
         let source = "- x\n  a|b|c\n  -|-\n  d|e\n  -|-\n"
         #expect(TreeDump.dump(source, options: [.tables]) == """
             document
@@ -252,32 +260,36 @@ struct TableHeaderRowSelectionTests {
                     text "a|b|c"
                     softbreak
                     text "-|-"
-                    softbreak
-                    text "d|e"
-                    softbreak
-                    text "-|-"
+                  table
+                    table_header
+                      table_cell align=none colspan=1 rowspan=1
+                        text "d"
+                      table_cell align=none colspan=1 rowspan=1
+                        text "e"
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
             document @1:1-5:6
               list bullet '-' tight @1:1-5:6
                 item @1:1-5:6
-                  paragraph @1:3-5:6
+                  paragraph @1:3-3:6
                     text "x" @1:3-1:4
                     softbreak @-
                     text "a|b|c" @2:3-2:8
                     softbreak @-
                     text "-|-" @3:3-3:6
-                    softbreak @-
-                    text "d|e" @4:3-4:6
-                    softbreak @-
-                    text "-|-" @5:3-5:6
+                  table @4:3-5:6
+                    table_header @4:3-4:6
+                      table_cell align=none colspan=1 rowspan=1 @4:3-4:4
+                        text "d" @4:3-4:4
+                      table_cell align=none colspan=1 rowspan=1 @4:5-4:6
+                        text "e" @4:5-4:6
 
             """)
     }
 
-    @Test("a header and delimiter that differ in cell count form no table: CRLF")
-    func headerCellCountMismatchWithCRLF() {
+    @Test("a header and delimiter that differ in cell count leave a later header and delimiter free to open a table: CRLF")
+    func headerCellCountMismatchThenTableWithCRLF() {
         let source = "x\r\na|b|c\r\n-|-\r\nd|e\r\n-|-\r\n"
         #expect(TreeDump.dump(source, options: [.tables]) == """
             document
@@ -287,30 +299,34 @@ struct TableHeaderRowSelectionTests {
                 text "a|b|c"
                 softbreak
                 text "-|-"
-                softbreak
-                text "d|e"
-                softbreak
-                text "-|-"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "d"
+                  table_cell align=none colspan=1 rowspan=1
+                    text "e"
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
             document @1:1-5:4
-              paragraph @1:1-5:4
+              paragraph @1:1-3:4
                 text "x" @1:1-1:2
                 softbreak @-
                 text "a|b|c" @2:1-2:6
                 softbreak @-
                 text "-|-" @3:1-3:4
-                softbreak @-
-                text "d|e" @4:1-4:4
-                softbreak @-
-                text "-|-" @5:1-5:4
+              table @4:1-5:4
+                table_header @4:1-4:4
+                  table_cell align=none colspan=1 rowspan=1 @4:1-4:2
+                    text "d" @4:1-4:2
+                  table_cell align=none colspan=1 rowspan=1 @4:3-4:4
+                    text "e" @4:3-4:4
 
             """)
     }
 
-    @Test("a header and delimiter that differ in cell count form no table: tab after the block quote marker")
-    func headerCellCountMismatchAfterQuoteTab() {
+    @Test("a header and delimiter that differ in cell count leave a later header and delimiter free to open a table: tab after the block quote marker")
+    func headerCellCountMismatchThenTableAfterQuoteTab() {
         let source = ">\tx\n>\ta|b|c\n>\t-|-\n>\td|e\n>\t-|-\n"
         #expect(TreeDump.dump(source, options: [.tables]) == """
             document
@@ -321,25 +337,29 @@ struct TableHeaderRowSelectionTests {
                   text "a|b|c"
                   softbreak
                   text "-|-"
-                  softbreak
-                  text "d|e"
-                  softbreak
-                  text "-|-"
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "d"
+                    table_cell align=none colspan=1 rowspan=1
+                      text "e"
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
             document @1:1-5:6
               block_quote @1:1-5:6
-                paragraph @1:3-5:6
+                paragraph @1:3-3:6
                   text "x" @1:3-1:4
                   softbreak @-
                   text "a|b|c" @2:3-2:8
                   softbreak @-
                   text "-|-" @3:3-3:6
-                  softbreak @-
-                  text "d|e" @4:3-4:6
-                  softbreak @-
-                  text "-|-" @5:3-5:6
+                table @4:3-5:6
+                  table_header @4:3-4:6
+                    table_cell align=none colspan=1 rowspan=1 @4:3-4:4
+                      text "d" @4:3-4:4
+                    table_cell align=none colspan=1 rowspan=1 @4:5-4:6
+                      text "e" @4:5-4:6
 
             """)
     }
