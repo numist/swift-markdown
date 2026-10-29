@@ -72,8 +72,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
     var emptyRemainderWalks: [DocumentStorage.Index: EmptyRemainderWalk] = [:]
 
-    /// The list items and footnote definitions a line's walk continues with nothing left of the line before it looks up
-    /// and records where the walk ends (`walkPastEmptyRemainder`).
+    /// How many list items and footnote definitions a line's walk continues with nothing left of the line before
+    /// `walkPastEmptyRemainder` takes over.
     static let emptyRemainderWalkLimit = 8
 
     /// The single open leaf's accumulated content together with the node it belongs to.
@@ -1251,8 +1251,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .blockQuote: false
         default: true
         }
-        // Its ancestors already do not end with a blank line: only the deepest open container can, because a later
-        // line that is not blank clears the flag on the containers it continues and closes the others.
+        // Its ancestors already do not end with a blank line. Only the deepest open container, which is then the open
+        // block, ends with one: a line that opens a block inside it first clears its flag, and a line it does not
+        // continue closes it.
         assert(storage[container].parent.map { !storage.nodes[$0].lastLineBlank } ?? true, "only the deepest open container ends with a blank line")
         return pending
     }
@@ -1565,8 +1566,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// With nothing left, a block quote fails its marker (Block quotes), a list item without a block fails (List items),
     /// and a list, a list item holding a block and a footnote definition continue, as on a blank line. Where the walk
     /// ends then depends only on the open blocks from `start` down, so it is recorded for every open block the walk
-    /// passes and reused until a block opens or closes. Without it, each blank line in a chain of `n` open footnote
-    /// definitions walks all `n`, and `n` blank lines walk `n` squared.
+    /// passes and reused until a block opens or closes or a paragraph is removed. Without it, each blank line in a
+    /// chain of `n` open footnote definitions walks all `n`, and `n` blank lines walk `n` squared.
     private mutating func walkPastEmptyRemainder(from start: DocumentStorage.Index, deepestMatched inherited: DocumentStorage.Index) -> (deepestMatched: DocumentStorage.Index, allMatched: Bool) {
         var node = start
         var deepestMatched = inherited

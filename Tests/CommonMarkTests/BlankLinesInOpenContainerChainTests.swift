@@ -11,13 +11,13 @@
 import Testing
 import CommonMark
 
-/// Blank lines in more than eight open list items or footnote definitions.
+/// Blank lines in a long chain of open list items or footnote definitions.
 ///
 /// A blank line continues a footnote definition and a list item that holds a block, and closes a list item without a
 /// block (List items) and a block quote (Block quotes), so a run of blank lines keeps the chain open down to the first
-/// block it closes. Each case has more than eight such containers open. The chains end in a block quote, an empty
-/// list item, a list item holding a paragraph and a paragraph, and the blank lines are empty, hold spaces, or hold
-/// tabs that continue some of the footnote definitions.
+/// block it closes. The chains end in a block quote, an empty list item, a list item holding a paragraph and a
+/// paragraph. The blank lines are empty, hold spaces, or hold tabs that continue some of the footnote definitions, and
+/// several follow each other, so later ones meet the same open blocks.
 @Suite("Blank lines in a long chain of open containers")
 struct BlankLinesInOpenContainerChainTests {
 
@@ -83,15 +83,41 @@ struct BlankLinesInOpenContainerChainTests {
             """
         ),
         Case(
-            "ten footnote definitions, blank lines of tabs that continue some of them",
-            "[^a]\n\n[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:x\n\n\t\n\t\t\n\n",
+            "twelve footnote definitions, blank lines of tabs that continue some of them",
+            "[^a]\n\n[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:x\n\n\t\n\t\t\n\n",
             """
             document @1:1-7:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
-              footnote_definition "a" @3:46-7:1
-                paragraph @3:51-3:52
-                  text "x" @3:51-3:52
+              footnote_definition "a" @3:56-7:1
+                paragraph @3:61-3:62
+                  text "x" @3:61-3:62
+
+            """
+        ),
+        Case(
+            "twelve footnote definitions, three empty lines",
+            "[^a]\n\n[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:x\n\n\n\n",
+            """
+            document @1:1-6:1
+              paragraph @1:1-1:5
+                footnote_reference "1" @1:1-1:5
+              footnote_definition "a" @3:56-6:1
+                paragraph @3:61-3:62
+                  text "x" @3:61-3:62
+
+            """
+        ),
+        Case(
+            "twelve footnote definitions, empty lines around a line of spaces that continues the outermost",
+            "[^a]\n\n[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:x\n\n\n    \n\n",
+            """
+            document @1:1-7:1
+              paragraph @1:1-1:5
+                footnote_reference "1" @1:1-1:5
+              footnote_definition "a" @3:56-7:1
+                paragraph @3:61-3:62
+                  text "x" @3:61-3:62
 
             """
         ),
