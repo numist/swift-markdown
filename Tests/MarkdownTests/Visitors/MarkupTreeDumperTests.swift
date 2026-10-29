@@ -73,7 +73,7 @@ final class MarkupTreeDumperTests: XCTestCase {
         │  func foo() {
         │      let x = 1
         │  }
-        ├─ CodeBlock @27:5-28:1 #56 language: none
+        ├─ CodeBlock @27:5-27:43 #56 language: none
         │  // Is this real code? Or just fantasy?
         ├─ Paragraph @29:1-29:31 #57
         │  ├─ Text @29:1-29:12 #58 "This is an "

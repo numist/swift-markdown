@@ -110,6 +110,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     var currentLineSourceRange: Range<Int> = 0..<0
     var lastLineSourceEnd: Int = 0
 
+    /// The source offset just past the open indented code block's last line that is not blank, where the block ends:
+    /// blank lines following an indented code block are not part of it (Indented code blocks).
+    var indentedCodeContentEnd: Int = 0
+
     /// `true` when the line currently being processed is a *lazy* paragraph continuation: at least one open container's continuation prefix failed to match on this line (a block quote with no `>`, or a list item indented less than its content column), so the container-prefix walk stopped short of the open leaf. Set per line in `processLine` from the walk's `allMatched`.
     var currentLineIsLazyContinuation: Bool = false
 
@@ -1667,6 +1671,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // Blank lines that end the block are not part of it, so for list tightness the block ends with a blank line until a further code line follows.
             storage.nodes[current].lastLineBlank = isBlank
             pending = appendNewline(to: current, pending: pending)
+            if !isBlank {
+                indentedCodeContentEnd = lineRange.upperBound
+            }
             if indent > 4 || !isBlank {
                 // A tab straddling the fourth column is split: its leftover columns become leading spaces (Tabs).
                 let (bodyStart, leadingSpaces) = stripFenceIndent(
@@ -1999,6 +2006,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             start: leadingSpaces > 0 ? bodyStart - 1 : bodyStart
         )
         current = codeIdx
+        indentedCodeContentEnd = lineRange.upperBound
         return appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: codeIdx, pending: pending)
     }
 
@@ -2334,6 +2342,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 end = lineContentEnd
                 // A block whose end is later attributed to this line - notably the document, whose end is stamped from the final line - ends at the block's content end, not the raw line end, so shrink the tracked current-line end to match.
                 currentLineSourceRange = currentLineSourceRange.lowerBound..<end
+            } else if case .codeBlock(let info) = kind, !info.isFenced {
+                end = indentedCodeContentEnd
             } else {
                 end = (endsOnCurrentLine || startedThisLine || kind == .document)
                     ? currentLineSourceRange.upperBound
