@@ -665,8 +665,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: node, pending: pending)
     }
 
-    /// Where the rest of an HTML block line from `cursor` begins, where the container prefixes ended at `column`, and
-    /// how many leading spaces a split tab contributes.
+    /// The offset at which the rest of an HTML block line from `cursor` begins, given the column `column` the container
+    /// prefixes reached, and how many leading spaces a split tab contributes.
     ///
     /// `cursor` sits mid-tab when a block quote marker's optional space or a list item's content indentation consumed
     /// only part of a tab, so `column` lies inside it. Per Tabs, that tab's leftover columns become leading spaces and
@@ -2325,7 +2325,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Close `node`, materialize its accumulated content, and back the parser's `current` pointer up to `node`'s parent.
     ///
-    /// `endsOnCurrentLine` is `true` when the current line is the block's last line: the document ends on it, it is a fenced code block's closing fence, or it meets an HTML block's end condition. A block closed because the current line does not continue it ends on the previous line.
+    /// `endsOnCurrentLine` is `true` when the current line is the block's last line: the document ends on it, it is a fenced code block's closing fence, or it meets an HTML block's end condition. A block closed because the current line does not continue it ends on the previous line. An indented code block ends at its last line that is not blank either way.
     ///
     /// `lineContentEnd` is the line offset just past the content of a block that is only ever one line, an ATX heading or a thematic break, closed on that line.
     private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, endsOnCurrentLine: Bool = false, lineContentEnd: Int? = nil) -> PendingLeaf? {
@@ -2333,7 +2333,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let kind = storage[node].kind
 
         if positionsEnabled {
-            // A block ends on the current line when that is its last line, for the document, or when it opened on this same line (e.g. an ATX heading finalized immediately); otherwise it ends on the previous line, the last line that is part of it.
+            // A block ends on the current line when that is its last line, for the document, or when it opened on this same line (e.g. an ATX heading finalized immediately); an indented code block ends at its last line that is not blank; otherwise a block ends on the previous line, the last line that is part of it.
             let startByte = storage.sourceRanges[node].start
             let startedThisLine = startByte >= Int32(currentLineSourceRange.lowerBound)
             let end: Int

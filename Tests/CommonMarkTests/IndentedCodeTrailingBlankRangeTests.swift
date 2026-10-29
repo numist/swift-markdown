@@ -18,8 +18,8 @@ import CommonMark
 /// hold fewer than four columns of whitespace, more than four columns, or a tab, and the block closes at a line that
 /// is not indented, at a line that does not continue its container, or at the end of the document. Each is tried at
 /// the top level, in a block quote, in a bullet and an ordered list item, in a footnote definition and in a block
-/// quote in a list item. A block closed by the line right after its last line ends on that line, and so does one whose
-/// last line ends with spaces.
+/// quote in a list item. A block closed by the line right after its last line, and one whose last line ends with
+/// spaces, end at the end of their last line.
 @Suite("An indented code block ends at its last line that is not blank")
 struct IndentedCodeTrailingBlankRangeTests {
 
