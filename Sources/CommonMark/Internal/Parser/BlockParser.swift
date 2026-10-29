@@ -45,13 +45,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The root document node - always index 0.
     let documentIndex: DocumentStorage.Index
 
-    /// The capacity initially reserved for the reused open-container chain buffer.
-    ///
-    /// `walkOpenContainers` rebuilds the open block-quote/list ancestor chain into this buffer each line.
-    /// The buffer grows on demand for deeper nesting, so this reservation only avoids reallocation for
-    /// typical documents.
-    static let initialOpenContainerCapacity = 256
-
     /// The block-start depth on one line at which a list marker stops opening a list.
     ///
     /// Each block start matched on a line, such as a block quote marker or a list marker, is one level of
@@ -231,8 +224,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         var reader = LineReader(source: sourceBytes)
 
-        // One reused buffer for the open-container ancestor chain that `walkOpenContainers` rebuilds per line. Heap-backed and reserved once to `initialOpenContainerCapacity` (growing on demand for deeper nesting); reset (keeping capacity) per line. The single open leaf's accumulated content (`pending`) is `~Copyable`, threaded by move through the per-line dispatch and drained to `nil` by the EOF-finalize loop below.
-        var chain = UniqueArray<DocumentStorage.Index>(minimumCapacity: Self.initialOpenContainerCapacity)
+        // The single open leaf's accumulated content (`pending`) is `~Copyable`, threaded by move through the per-line dispatch and drained to `nil` by the EOF-finalize loop below.
         do {
             var pending: PendingLeaf? = nil
             while reader.next() != nil {
@@ -243,10 +235,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     lastLineSourceEnd = currentLineSourceRange.upperBound
                 }
                 currentLineSourceRange = lineRangeInOriginalSource
-                pending = processLine(source: sourceBytes, lineRange: lineRangeInOriginalSource, chain: &chain, pending: pending)
+                pending = processLine(source: sourceBytes, lineRange: lineRangeInOriginalSource, pending: pending)
             }
 
-            // EOF: finalize all open blocks back up to the document root. Runs inside this closure (it doesn't touch `chain`) so `pending` stays local - by the end every leaf is drained and `pending` is `nil`.
+            // EOF: finalize all open blocks back up to the document root. By the end every leaf is drained and `pending` is `nil`.
             while current != documentIndex {
                 pending = finalize(node: current, pending: pending, atEOF: true)
             }
@@ -1096,10 +1088,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Process a line of Markdown.
     ///  - source: The line content
     ///  - lineRange: The range of the line in the original source, in order to lazily reference it.
-    private mutating func processLine(source: Span<UInt8>, lineRange: Range<Int>, chain: inout UniqueArray<DocumentStorage.Index>, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    private mutating func processLine(source: Span<UInt8>, lineRange: Range<Int>, pending: consuming PendingLeaf?) -> PendingLeaf? {
         var pending = pending
         // PHASE 1: Walk the open-container chain, stripping each container's continuation prefix. `deepestMatched` is the deepest container whose continuation succeeded (always a container, never a leaf). `cursor` is the byte offset into the line after stripped prefixes.
-        let walk = walkOpenContainers(source: source, lineRange: lineRange, chain: &chain)
+        let walk = walkOpenContainers(source: source, lineRange: lineRange)
         let deepestMatched = walk.deepestMatched
         let cursor = walk.cursor
         let prefixColumns = walk.prefixColumns
@@ -1417,7 +1409,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Returns the deepest container whose prefix matched (always a container, never a leaf), the cursor into the line after stripped prefixes, the absolute column the prefix consumption *intended* to reach, and whether every container in the chain matched.
     ///
     /// `prefixColumns` normally equals the column width of `[lineRange.lowerBound, cursor)`, but exceeds it when a container advance consumed *columns* into a tab it could not drop byte-wise (a list item's content indent landing mid-tab): `cursor` sits at that tab while `prefixColumns` records the column the strip reached. The leaf continuation folds the shortfall into its own strip so the straddling tab is split there, its leftover columns becoming spaces (Tabs).
-    private mutating func walkOpenContainers(source: Span<UInt8>, lineRange: Range<Int>, chain: inout UniqueArray<DocumentStorage.Index>) -> (deepestMatched: DocumentStorage.Index, cursor: Int, prefixColumns: Int, allMatched: Bool) {
+    private mutating func walkOpenContainers(source: Span<UInt8>, lineRange: Range<Int>) -> (deepestMatched: DocumentStorage.Index, cursor: Int, prefixColumns: Int, allMatched: Bool) {
         var cursor = lineRange.lowerBound
         var deepestMatched = documentIndex
         var prefixColumns = 0
@@ -1426,19 +1418,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // consume only whitespace leave it unchanged, so a chain of nested items scans the line's indent once.
         var firstNonSpaceAhead = -1
 
-        // Build top-down chain via parent walk + reverse. `chain` is a caller-owned reused buffer (reset here per line) so we don't allocate/zero a fresh array each line.
-        chain.removeSubrange(0..<chain.count)
-        var idx: DocumentStorage.Index? = current
-        while let idx_ = idx {
-            chain.append(idx_)
-            idx = storage[idx_].parent
-        }
-
-        var i = chain.count - 1
-        while i >= 0 {
-            let node = chain[i]
-            i -= 1
-            
+        // Descend from the document to `current` through each open block's last child, which is its open child. A
+        // line stops at the first container whose prefix it fails, so it visits no container inside that one.
+        var node = documentIndex
+        while true {
             let kind = storage[node].kind
             switch kind {
             case .document:
@@ -1539,8 +1522,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             default:
                 break
             }
+            if node == current {
+                return (deepestMatched, cursor, prefixColumns, true)
+            }
+            guard let child = storage[node].lastChild else {
+                preconditionFailure("each open block above `current` has its open child as its last child")
+            }
+            node = child
         }
-        return (deepestMatched, cursor, prefixColumns, true)
     }
 
     /// Returns `true` if the line's content (starting at `firstNonSpace`) begins a new block that would interrupt an open paragraph.
