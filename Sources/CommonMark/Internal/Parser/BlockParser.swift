@@ -108,24 +108,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var pending: PendingLeaf?
     }
 
-    /// `true` when the line currently being processed is passed to `processLine` as a slice of `self.source` (i.e. no per-line tab expansion applies).
-    ///
-    /// Used by `addLine` to decide whether the bytes can be addressed lazily by source-range, deferring materialization until the paragraph spans multiple lines or otherwise transforms the content.
-    var currentLineMapsToSource: Bool = false
-
-    /// For a tab-expanded (materialized) line, the buffer offset where `expandPrefixTabs`'s verbatim tail begins, and the corresponding original-line byte offset. Since the tail is copied byte-for-byte, every content offset in it maps back to source by the constant delta `currentLineSourceRange.lowerBound + materializedRestStart - materializedTailBufferStart`; offsets inside the expanded prefix are recovered from `materializedPrefixColumns`. Only meaningful while `!currentLineMapsToSource` (see `sourceOffset` for the positions path, and `materializedSourceOffset` / `materializedSourceStart` for the positions-independent content paths).
-    var materializedTailBufferStart: Int = 0
-    var materializedRestStart: Int = 0
-
-    /// For a tab-expanded (materialized) line, the buffer offset at which the expansion of each byte of the original line's prefix (`[0, materializedRestStart)`) begins, ascending, followed by the prefix's expanded width. Filled once per materialized line, so mapping a prefix offset back to the source is a binary search rather than a walk of the prefix: a line opening many containers maps one offset per container. Only meaningful while `!currentLineMapsToSource`.
-    var materializedPrefixColumns = UniqueArray<Int>()
-
     /// `true` when `.sourcePosition` tracking is on.
     ///
     /// Hoisted so the per-node stamping in `addChild` and `finalize` is a single bool test on the hot path when positions are off.
     let positionsEnabled: Bool
 
-    /// Original-source byte range of the line currently being processed, tracked for every line (positions on or off). Stamps block end positions at finalize time and to recover a materialized code/HTML body line's literal source bytes. `lastLineSourceEnd` keeps the previous line's content end so a block closed by a *later* line can attribute its end to the line it actually ended on.
+    /// Original-source byte range of the line currently being processed, tracked for every line (positions on or off). Stamps block end positions at finalize time. `lastLineSourceEnd` keeps the previous line's content end so a block closed by a *later* line can attribute its end to the line it actually ended on.
     var currentLineSourceRange: Range<Int> = 0..<0
     var lastLineSourceEnd: Int = 0
 
@@ -247,36 +235,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var chain = UniqueArray<DocumentStorage.Index>(minimumCapacity: Self.initialOpenContainerCapacity)
         do {
             var pending: PendingLeaf? = nil
-            while let line = reader.next() {
-
-                // Pre-expand leading tabs (and tabs after container markers like `>` or list markers) into spaces. This sidesteps the partial-tab consumption problem for cases like `>\t\tfoo` and `-\t\tfoo`, where a marker would consume only part of a tab byte and the leftover columns need to remain visible to the next inner block. Skipped for lines inside an open fenced code block.
-                let inFencedCode = if case .codeBlock(let info) = storage[current].kind, info.isFenced {
-                    true
-                } else {
-                    false
-                }
-
+            while reader.next() != nil {
                 let lineRangeInOriginalSource = reader.lineRange
                 if positionsEnabled {
                     // Record this line's start (for byte→line/col conversion) and remember the previous line's content end before advancing `currentLineSourceRange`.
                     storage.lineStarts.append(lineRangeInOriginalSource.lowerBound)
                     lastLineSourceEnd = currentLineSourceRange.upperBound
                 }
-                // Tracked unconditionally: recovering a materialized line's literal source bytes - a code/HTML body line (`appendMaterializedCodeContent`) or paragraph/heading text (`addLine`, `addLineSegment`) - needs the current line's source range even when positions are off, since content must preserve tabs regardless of `.sourcePosition`.
                 currentLineSourceRange = lineRangeInOriginalSource
-                
-                // Per-line materialized buffer used when a line's leading tabs need to be expanded into spaces so partial-tab consumption by container markers works correctly.
-                if !inFencedCode, let materialized = expandPrefixTabs(line: line) {
-                    currentLineMapsToSource = false
-                    materializedTailBufferStart = materialized.tailBufferStart
-                    materializedRestStart = materialized.restStart
-                    recordMaterializedPrefixColumns()
-                    let span = materialized.buffer.span
-                    pending = processLine(source: span, lineRange: 0..<span.count, chain: &chain, pending: pending)
-                } else {
-                    currentLineMapsToSource = true
-                    pending = processLine(source: sourceBytes, lineRange: lineRangeInOriginalSource, chain: &chain, pending: pending)
-                }
+                pending = processLine(source: sourceBytes, lineRange: lineRangeInOriginalSource, chain: &chain, pending: pending)
             }
 
             // EOF: finalize all open blocks back up to the document root. Runs inside this closure (it doesn't touch `chain`) so `pending` stays local - by the end every leaf is drained and `pending` is `nil`.
@@ -594,68 +561,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return idx
     }
 
-    /// The global original-source byte offset for a within-current-line offset.
-    ///
-    /// When the line maps to source the passed offset is a global source offset (the line is processed as a slice of `sourceBytes`). For a tab-expanded (materialized) line, the offset is a transient-buffer offset: `expandPrefixTabs` only expands the leading whitespace/marker prefix and copies the rest of the line verbatim, so a tail offset maps back by a constant delta and a prefix offset is recovered from the prefix's column table (see `originalPrefixSourceOffset`). Returns `nil` for a materialized line when positions are off, since its callers only stamp positions; content that must be read back from source uses `materializedSourceOffset`, which doesn't depend on `.sourcePosition`.
-    private func sourceOffset(_ lineOffset: Int) -> Int? {
-        if currentLineMapsToSource {
-            return lineOffset
-        }
-        guard positionsEnabled else { return nil }
-        return materializedSourceOffset(lineOffset)
-    }
-
-    /// Map a materialized-buffer offset back to its original-source byte offset, independent of
-    /// `positionsEnabled` (unlike `sourceOffset`, which gates on positions). A tail offset maps by a
-    /// constant delta; an offset inside the expanded prefix resolves to the byte whose expansion covers
-    /// it (a mid-tab offset resolves to that tab's byte). Callers must hold `!currentLineMapsToSource`.
-    private func materializedSourceOffset(_ bufferOffset: Int) -> Int {
-        if bufferOffset >= materializedTailBufferStart {
-            // Verbatim tail: a single constant delta covers every content offset.
-            return currentLineSourceRange.lowerBound + materializedRestStart + (bufferOffset - materializedTailBufferStart)
-        }
-        // Inside the expanded prefix (e.g. an indented-code `bodyStart` landing mid-prefix, or a container marker): find the byte covering this buffer offset.
-        return originalPrefixSourceOffset(bufferOffset: bufferOffset)
-    }
-
-    /// Map a buffer offset lying inside a materialized line's expanded prefix back to an original-source byte offset.
-    ///
-    /// Returns the source offset of the prefix byte whose expansion covers `bufferOffset` (`materializedPrefixByte`). A tab covers its whole `4 - (col & 3)` run, so a buffer offset landing mid-tab resolves to that tab's byte.
-    private func originalPrefixSourceOffset(bufferOffset: Int) -> Int {
-        materializedPrefixByte(covering: bufferOffset).sourceOffset
-    }
-
-    /// Fill `materializedPrefixColumns` for the current materialized line, with the tab-expansion rule `expandPrefixTabs` uses.
-    private mutating func recordMaterializedPrefixColumns() {
-        materializedPrefixColumns.removeSubrange(0..<materializedPrefixColumns.count)
-        let lineStart = currentLineSourceRange.lowerBound
-        var col = 0
-        for i in lineStart..<(lineStart + materializedRestStart) {
-            materializedPrefixColumns.append(col)
-            col += sourceBytes[i] == UInt8(ascii: "\t") ? 4 - (col & 3) : 1
-        }
-        materializedPrefixColumns.append(col)
-    }
-
-    /// The byte of the current materialized line's prefix whose expansion covers buffer offset `bufferOffset`: its source offset, and the buffer offsets its expansion starts at and ends before.
-    private func materializedPrefixByte(covering bufferOffset: Int) -> (sourceOffset: Int, column: Int, end: Int) {
-        let columns = materializedPrefixColumns.span
-        let prefixLength = columns.count - 1
-        precondition(bufferOffset >= 0 && bufferOffset < columns[prefixLength], "a buffer offset inside the expanded prefix is covered by the prefix")
-        // The last prefix byte whose expansion starts at or before `bufferOffset`.
-        var lo = 0
-        var hi = prefixLength
-        while hi - lo > 1 {
-            let mid = (lo + hi) / 2
-            if columns[mid] <= bufferOffset {
-                lo = mid
-            } else {
-                hi = mid
-            }
-        }
-        return (currentLineSourceRange.lowerBound + lo, columns[lo], columns[lo + 1])
-    }
-
     /// Consume `pending` and return `node`'s accumulated content, or `nil` if `node` has none (either nothing is pending, or a *different* node's leaf is - which the single-open-leaf invariant forbids).
     ///
     /// Moves the content out; the leaf is destroyed. Used by the append helpers, which always either find their own node's content or none.
@@ -699,23 +604,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         switch take(pending, ifNode: node) {
         case .none:
-            // Fast path: first content for this node and the current line maps directly into `self.source` - store the range lazily and skip the byte copy.
+            // First content for this node: store the source range lazily and skip the byte copy.
             precondition(nodeKind.canAccumulateText, "only paragraphs and headings accumulate text lines")
-            if currentLineMapsToSource {
-                return PendingLeaf(node: node, content: .lazy(range: range))
-            }
-            // Tab-expanded line: per Tabs, tabs behave as spaces only where they define block structure and stay literal in content, so the content is the literal source range rather than the expanded buffer. `expandPrefixTabs` expands only the consumed indentation and copies the rest verbatim, so the first content byte maps to a genuine source byte (never inside an expanded tab's spaces) and the content end maps to the source line end. This covers content that maps 1:1 (the `*` of `*5*` after `*\t` or `>\t`) and content straddling an expanded tab (`**\tx`, where no block marker consumes the tab, so it lands inside the paragraph). The mapping reads only unconditionally tracked line state, so the content is the same whether or not `.sourcePosition` is set.
-            return PendingLeaf(node: node, content: .lazy(range: materializedSourceOffset(range.lowerBound)..<materializedSourceOffset(range.upperBound)))
+            return PendingLeaf(node: node, content: .lazy(range: range))
         case .some(let existing):
-            // Contiguity fast path: a `\n` separator is deferred after a `.lazy` span (`appendNewline` set its `joinPending`). If this line is also source-backed and immediately follows the previous span in the source - i.e. it starts one byte past the previous span and that byte is a single `\n` - then the join needs no synthesized separator: the embedded `\n` already lives in the source, so we keep the whole run as one zero-copy `.lazy` range. This holds for top-level paragraphs with LF line endings and no stripped container prefix; block quote/list continuation (prefix stripped → non-adjacent range), CRLF/CR (separator isn't a lone `\n` at `prev.upperBound`), and tab-expanded lines (`!currentLineMapsToSource`) all fall through to the segment-list arm below.
+            // Contiguity fast path: a `\n` separator is deferred after a `.lazy` span (`appendNewline` set its `joinPending`). If this line is also source-backed and immediately follows the previous span in the source - i.e. it starts one byte past the previous span and that byte is a single `\n` - then the join needs no synthesized separator: the embedded `\n` already lives in the source, so we keep the whole run as one zero-copy `.lazy` range. This holds for top-level paragraphs with LF line endings and no stripped container prefix; block quote/list continuation (prefix stripped → non-adjacent range), and CRLF/CR (separator isn't a lone `\n` at `prev.upperBound`) fall through to the segment-list arm below.
             switch consume existing {
-            case .lazy(let prev, joinPending: true) where currentLineMapsToSource
-                    && range.lowerBound == prev.upperBound + 1
+            case .lazy(let prev, joinPending: true) where range.lowerBound == prev.upperBound + 1
                     && prev.upperBound < sourceBytes.count
                     && sourceBytes[prev.upperBound] == UInt8(ascii: "\n"):
                 return PendingLeaf(node: node, content: .lazy(range: prev.lowerBound..<range.upperBound))
             case .lazy(let prev, joinPending: true):
-                // Non-contiguous continuation (block-quote/list prefix stripped, CRLF, tab): switch to a source-segment list rather than copying bytes - the previous span becomes a zero-copy source segment, joined to this line by the shared interned `\n`.
+                // Non-contiguous continuation (block-quote/list prefix stripped, CRLF): switch to a source-segment list rather than copying bytes - the previous span becomes a zero-copy source segment, joined to this line by the shared interned `\n`.
                 var segs = UniqueArray<Segment>()
                 segs.append(Segment(offset: Int32(prev.lowerBound), length: Int32(prev.count), inSource: true))
                 segs.append(storage.newlineSegment)
@@ -749,41 +649,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Append one body line of a code/HTML block as a `Segment`, without copying source bytes, returning the updated leaf.
-    ///
-    /// A source-mapped line (`currentLineMapsToSource`) becomes a zero-copy `inSource` segment; a line that doesn't map to source (e.g. a tab-expanded line whose `span` is a transient per-line buffer) is copied into the additions arena and referenced by an `inSource: false` segment. Empty ranges append nothing (the surrounding `\n` separators carry blank lines), leaving `pending` unchanged.
+    /// Append one line of a segment-list leaf (a code/HTML block body line, or a non-contiguous paragraph continuation) as a zero-copy `inSource` segment, returning the updated leaf. Empty ranges append nothing (the surrounding `\n` separators carry blank lines), leaving `pending` unchanged.
     private mutating func addLineSegment(span: Span<UInt8>, range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         guard !range.isEmpty else { return pending }
-        if currentLineMapsToSource {
-            return appendSegment(Segment(offset: Int32(range.lowerBound), length: Int32(range.upperBound - range.lowerBound), inSource: true), to: node, pending: pending)
-        }
-        // Materialized (tab-expanded) line. `expandPrefixTabs` turned leading whitespace and container markers into spaces so column matching works on byte offsets, but per Tabs a tab in a code or HTML block body stays literal; only a tab split by the consumed indentation becomes spaces. Recover the literal source bytes instead of copying the expanded buffer.
-        let nodeKind = storage[node].kind
-        if nodeKind.isCodeBlock || nodeKind == .htmlBlock {
-            // `appendMaterializedCodeContent` maps the content end to the source line end, so every code/HTML body add must run to the buffer's line end (`span.count`). Every caller does: fenced code, the one construct that trims content, never materializes.
-            assert(range.upperBound == span.count, "materialized code/HTML body must extend to the line end")
-            return appendMaterializedCodeContent(bufferStart: range.lowerBound, to: node, pending: pending)
-        }
-        // A tab-expanded paragraph continuation. Its surviving content - the first non-space byte to the line end - is byte-identical to source: `expandPrefixTabs` only expands the prefix and copies the tail verbatim, and the content begins at the first non-space byte, so no expanded-tab space reaches it. Map it back to a zero-copy source segment rather than copying the expanded bytes into the arena. Keeping the content in-source also keeps it readable: a multi-segment inline `ContentSpan` resolves source segments plus the interned `\n` directly (see `ContentSpan.multiByte`).
-        assert(range.upperBound == span.count, "materialized paragraph continuation must extend to the line end")
-        let sourceStart = materializedSourceOffset(range.lowerBound)
-        let lineEnd = currentLineSourceRange.upperBound
-        return appendSegment(Segment(offset: Int32(sourceStart), length: Int32(lineEnd - sourceStart), inSource: true), to: node, pending: pending)
-    }
-
-    /// Append one body line of a materialized (tab-expanded) code/HTML block as its literal source content, preserving content tabs that `expandPrefixTabs` expanded into spaces.
-    ///
-    /// `bufferStart` is the body's start offset in the per-line materialized buffer (past the consumed indentation). The line's remaining source bytes - tabs and all - become the content, preceded by synthetic spaces for a tab that the consumed indentation split: per Tabs, the split tab's remaining columns become spaces and the tab byte itself is dropped. Callers always add the whole rest of the line, so the content runs to the source line end. The common no-split case stays a zero-copy `inSource` segment; a split tab copies the spaces plus the literal tail into the arena as one segment (the code/HTML segment list is one content segment per line, which the finalize normalizers rely on).
-    private mutating func appendMaterializedCodeContent(bufferStart: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
-        let lineEnd = currentLineSourceRange.upperBound
-        let (sourceStart, splitTabSpaces) = materializedSourceStart(bufferStart: bufferStart)
-
-        if splitTabSpaces == 0 {
-            return appendSegment(
-                Segment(offset: Int32(sourceStart), length: Int32(lineEnd - sourceStart), inSource: true),
-                to: node, pending: pending)
-        }
-        return appendSplitTabCodeContent(spaces: splitTabSpaces, sourceStart: sourceStart, lineEnd: lineEnd, to: node, pending: pending)
+        return appendSegment(Segment(offset: Int32(range.lowerBound), length: Int32(range.upperBound - range.lowerBound), inSource: true), to: node, pending: pending)
     }
 
     /// Append the rest of a code/HTML block body line from `bodyStart` to `lineEnd`, after `stripFenceIndent` removed the indentation: a zero-copy `addLine` when no tab was split, otherwise `leadingSpaces` synthetic spaces plus the literal tail.
@@ -792,6 +661,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return addLine(span: source, range: bodyStart..<lineEnd, to: node, pending: pending)
         }
         return appendSplitTabCodeContent(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineEnd, to: node, pending: pending)
+    }
+
+    /// Append the rest of an HTML block line from `cursor`, where the container prefixes ended at `column`.
+    ///
+    /// `cursor` sits mid-tab when a block quote marker's optional space or a list item's content indentation consumed
+    /// only part of a tab, so `column` lies inside it. Per Tabs, that tab's leftover columns become leading spaces and
+    /// the rest of the line is copied verbatim. Otherwise `column` is `cursor`'s own column, nothing is stripped, and
+    /// the line stays a zero-copy source slice.
+    private mutating func appendLineAfterPrefix(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, column: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        let priorColumn = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
+        let (bodyStart, leadingSpaces) = stripFenceIndent(
+            source: source,
+            range: cursor..<lineRange.upperBound,
+            maxColumns: column - priorColumn,
+            startColumn: priorColumn
+        )
+        return appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: node, pending: pending)
     }
 
     /// Append `spaces` synthetic leading spaces followed by the verbatim source bytes `[sourceStart, lineEnd)`
@@ -812,24 +698,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return appendSegment(
             Segment(offset: Int32(offset), length: Int32(spaces + (lineEnd - sourceStart)), inSource: false),
             to: node, pending: pending)
-    }
-
-    /// Map a materialized-buffer offset back to the original source for a code/HTML body line: the source byte where the literal content begins, plus the count of synthetic spaces that must precede it.
-    ///
-    /// A non-zero space count arises only when `bufferStart` lands inside an expanded tab - the consumed indentation split that tab, so its remaining columns become spaces and the split tab byte itself is dropped (the source start advances past it). Finds the prefix byte like `originalPrefixSourceOffset`, independent of `positionsEnabled`.
-    private func materializedSourceStart(bufferStart: Int) -> (sourceStart: Int, splitTabSpaces: Int) {
-        let lineStart = currentLineSourceRange.lowerBound
-        if bufferStart >= materializedTailBufferStart {
-            // In the verbatim tail: copied byte-for-byte, so it maps by a constant delta with no split tab.
-            return (lineStart + materializedRestStart + (bufferStart - materializedTailBufferStart), 0)
-        }
-        // In the expanded prefix: find the prefix byte whose expansion covers it.
-        let byte = materializedPrefixByte(covering: bufferStart)
-        if bufferStart == byte.column {
-            return (byte.sourceOffset, 0)
-        }
-        // A tab split by the consumed indentation: emit its remaining columns as spaces, resume after it.
-        return (byte.sourceOffset + 1, byte.end - bufferStart)
     }
 
     // MARK: - NUL -> U+FFFD replacement (Insecure characters)
@@ -1250,7 +1118,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
 
-        let scan = leadingScan(source: source, range: cursor..<lineRange.upperBound)
+        let scan = leadingScan(source: source, range: cursor..<lineRange.upperBound, baseColumn: prefixColumns)
         var line = LineContext(
             lineRange: lineRange,
             deepestMatched: deepestMatched,
@@ -1259,6 +1127,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             firstNonSpace: scan.firstNonSpace,
             firstNonSpaceByte: scan.firstNonSpaceByte,
             indent: scan.indentColumns,
+            prefixColumns: prefixColumns,
             openKind: storage[current].kind
         )
 
@@ -1311,6 +1180,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var firstNonSpaceByte: UInt8
         /// The indentation, in columns, measured from the container prefix.
         var indent: Int
+        /// The column the container prefixes reached (see `walkOpenContainers`).
+        var prefixColumns: Int
         /// The kind of the open block, `current`.
         var openKind: MarkdownNode.Kind
     }
@@ -1332,6 +1203,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 source: source,
                 lineRange: lineRange,
                 cursor: cursor,
+                prefixColumns: prefixColumns,
                 pending: pending
             )
         } else if openKind.isCodeBlock || openKind == .htmlBlock {
@@ -1387,7 +1259,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The line is done when the underline forms a heading, or when it continues a paragraph that holds only definitions.
     private mutating func underlineParagraph(source: Span<UInt8>, line: inout LineContext, pending: inout PendingLeaf?) -> Bool {
         let lineRange = line.lineRange
-        guard line.openKind == .paragraph && line.allMatched && !openParagraphIsTablePending,
+        guard line.openKind == .paragraph && line.allMatched && !openParagraphIsTablePending && line.indent < 4,
               let level = matchSetextUnderline(source: source, range: line.cursor..<lineRange.upperBound, firstNonSpace: line.firstNonSpace) else {
             return false
         }
@@ -1415,6 +1287,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             range: line.cursor..<lineRange.upperBound,
             firstNonSpace: line.firstNonSpace,
             indent: line.indent,
+            baseColumn: line.prefixColumns,
             currentKind: .paragraph,
             interruptsParagraph: true,
             lineStart: lineRange.lowerBound
@@ -1495,6 +1368,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 range: line.cursor..<lineRange.upperBound,
                 firstNonSpace: line.firstNonSpace,
                 indent: line.indent,
+                baseColumn: line.prefixColumns,
                 currentKind: line.openKind,
                 interruptsParagraph: interruptsParagraph,
                 lineStart: lineRange.lowerBound
@@ -1588,9 +1462,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // part of it: leave the tab byte at `cursor` so the leaf strip can split it, and record
                     // the intended column (one past `>`) in `prefixColumns`, as for a list item's content
                     // indent. `handleCodeBlockContinuation` folds the shortfall into `stripFenceIndent`,
-                    // surfacing the tab's leftover columns as leading spaces. This arises only on a
-                    // source-mapped fenced code body line; every other line has its prefix tabs expanded
-                    // to spaces (`expandPrefixTabs`).
+                    // surfacing the tab's leftover columns as leading spaces.
                     (cursor, prefixColumns) = blockQuotePrefixEnd(
                         source: source,
                         lineColumns: &lineColumns,
@@ -1674,7 +1546,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Returns `true` if the line's content (starting at `firstNonSpace`) begins a new block that would interrupt an open paragraph.
     ///
     /// `interruptsParagraph` is `true` when the open paragraph's own container matched this line's continuation prefix, so the line interrupts that paragraph, and `false` when only a shallower container matched, so a list marker starts a sibling item in an existing list.
-    private func lineStartsNewBlock(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indent: Int, currentKind: MarkdownNode.Kind, interruptsParagraph: Bool, lineStart: Int) -> Bool {
+    private func lineStartsNewBlock(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, indent: Int, baseColumn: Int, currentKind: MarkdownNode.Kind, interruptsParagraph: Bool, lineStart: Int) -> Bool {
+        // A line indented four or more columns starts no block that interrupts a paragraph.
+        if indent >= 4 {
+            return false
+        }
         if matchThematicBreak(source: source, range: range, firstNonSpace: firstNonSpace) != nil {
             return true
         }
@@ -1684,7 +1560,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if matchOpeningFence(source: source, range: range, firstNonSpace: firstNonSpace) != nil {
             return true
         }
-        if matchBlockQuoteMarker(source: source, range: range, firstNonSpace: firstNonSpace) != nil {
+        if matchBlockQuoteMarker(source: source, range: range, firstNonSpace: firstNonSpace, baseColumn: baseColumn) != nil {
             return true
         }
         // HTML blocks of types 1–6 interrupt a paragraph; type 7 does not (HTML blocks). When the paragraph's
@@ -1720,7 +1596,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Continue an open HTML block. Returns `true` if the block remains open after handling this line; `false` if the line closed it (for types 1–5 the line is appended in either case; for types 6 and 7, a blank line closes the block without being appended).
-    private mutating func handleHTMLBlockContinuation(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, pending: consuming PendingLeaf?) -> LeafContinuation {
+    private mutating func handleHTMLBlockContinuation(source: Span<UInt8>, lineRange: Range<Int>, cursor: Int, prefixColumns: Int, pending: consuming PendingLeaf?) -> LeafContinuation {
         var pending = pending
         guard case .htmlBlock(let type, _) = storage[current].data else {
             preconditionFailure("an HTML block node always carries its block type")
@@ -1735,13 +1611,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return LeafContinuation(stillOpen: false, pending: pending)
             }
             pending = appendNewline(to: current, pending: pending)
-            pending = addLine(span: source, range: cursor..<lineRange.upperBound, to: current, pending: pending)
+            pending = appendLineAfterPrefix(source: source, lineRange: lineRange, cursor: cursor, column: prefixColumns, to: current, pending: pending)
             return LeafContinuation(stillOpen: true, pending: pending)
         }
 
         // Types 1–5: every line (including blank ones, until the close pattern is seen) is appended verbatim. The line that contains the end pattern is appended *and* closes the block - it's fully consumed, so we return `true` to suppress new-block redispatch on the closing line.
         pending = appendNewline(to: current, pending: pending)
-        pending = addLine(span: source, range: cursor..<lineRange.upperBound, to: current, pending: pending)
+        pending = appendLineAfterPrefix(source: source, lineRange: lineRange, cursor: cursor, column: prefixColumns, to: current, pending: pending)
         if htmlBlockLineMatchesEndCondition(
             type: type,
             source: source,
@@ -1757,13 +1633,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var pending = pending
         let firstNonSpace = indexOfFirstNonSpace(source: source, range: cursor..<lineRange.upperBound)
         let isBlank = firstNonSpace == lineRange.upperBound
-        let indent = indentColumns(source: source, from: cursor, to: firstNonSpace)
 
         if case .codeBlock(let info) = storage[current].kind, info.isFenced {
             // Fenced. The closing fence's indent is measured in columns: the absolute column of the first
             // non-space byte minus the column the container prefixes advanced to. A tab counts to its next
-            // tab stop (Tabs); a fenced code body line skips leading-tab pre-expansion, so a raw leading tab
-            // must not be mistaken for the ≤3-column indent of a closing fence.
+            // tab stop (Tabs), so a leading tab is not mistaken for the ≤3-column indent of a closing fence.
             let closingFenceIndent =
                 columnWidth(source: source, from: lineRange.lowerBound, to: firstNonSpace) - prefixColumns
             if matchClosingFence(
@@ -1797,34 +1671,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             pending = appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
             return LeafContinuation(stillOpen: true, pending: pending)
         }
-        // Indented.
-        if isBlank {
-            // For an open indented code block, a "blank" line that actually contains 5+ columns of whitespace preserves the extra columns as content (per spec example 82 - `      ` between two code lines becomes `  ` in the rendered code block).
-            let availCols = indentColumns(source: source, from: cursor, to: lineRange.upperBound)
-            pending = appendNewline(to: current, pending: pending)
-            if availCols > 4 {
-                let bodyStart = advanceColumns(
-                    source: source,
-                    from: cursor,
-                    to: lineRange.upperBound,
-                    columns: 4
-                )
-                pending = addLine(span: source, range: bodyStart..<lineRange.upperBound, to: current, pending: pending)
-            }
+        // Indented. The indent is measured from `prefixColumns`, the column the container prefixes reached, so a tab they partially consumed counts only its remaining columns (Tabs).
+        let indent = indentColumns(source: source, from: cursor, to: firstNonSpace, baseColumn: prefixColumns)
+        // A "blank" line holding more than four columns of whitespace keeps the extra columns as content (spec example 82 - `      ` between two code lines becomes `  `).
+        if indent >= 4 || isBlank {
             // Blank lines that end the block are not part of it, so for list tightness the block ends with a blank line until a further code line follows.
-            storage.nodes[current].lastLineBlank = true
-            return LeafContinuation(stillOpen: true, pending: pending)
-        }
-        if indent >= 4 {
-            storage.nodes[current].lastLineBlank = false
-            let bodyStart = advanceColumns(
-                source: source,
-                from: cursor,
-                to: lineRange.upperBound,
-                columns: 4
-            )
+            storage.nodes[current].lastLineBlank = isBlank
             pending = appendNewline(to: current, pending: pending)
-            pending = addLine(span: source, range: bodyStart..<lineRange.upperBound, to: current, pending: pending)
+            if indent > 4 || !isBlank {
+                // A tab straddling the fourth column is split: its leftover columns become leading spaces (Tabs).
+                let (bodyStart, leadingSpaces) = stripFenceIndent(
+                    source: source,
+                    range: cursor..<lineRange.upperBound,
+                    maxColumns: 4,
+                    startColumn: prefixColumns
+                )
+                pending = appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
+            }
             return LeafContinuation(stillOpen: true, pending: pending)
         }
         // Non-indented, non-blank line ends the block.
@@ -1837,7 +1700,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// On exit, `current` points at the newly-opened item.
     private mutating func openListItem(marker: ListMarkerInfo, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         var pending = pending
-        let start = sourceOffset(firstNonSpace)
+        let start = firstNonSpace
         let parentList: DocumentStorage.Index
         if case .list(let info) = storage[current].kind,
            Self.marker(marker, continues: info) {
@@ -1923,16 +1786,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let quoteIdx = addChild(
                     kind: .blockQuote,
                     parent: current,
-                    start: sourceOffset(firstNonSpace)
+                    start: firstNonSpace
                 )
                 current = quoteIdx
                 // The block quote marker consumes `>` plus one optional following space column. Per Tabs,
                 // when that column falls on a tab wider than one column the marker consumes only part of
                 // it: leave the tab byte at `cursor` so a leaf opened later on this line (an indented or
                 // fenced code block straddling the tab) can split it, and record the intended column (one
-                // past `>`) in `column`, as `walkOpenContainers` does for a continuation. This arises only
-                // when a raw prefix tab reaches here unexpanded (`expandPrefixTabs` is skipped while
-                // continuing an open fenced code block).
+                // past `>`) in `column`, as `walkOpenContainers` does for a continuation.
                 (cursor, column) = blockQuotePrefixEnd(
                     source: source,
                     lineColumns: &lineColumns,
@@ -1943,7 +1804,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
 
             // Thematic break (must be before ATX so `---` etc. wins over content matchers, and before list-marker so `- - -` etc. wins over nested lists).
-            // A line indented four or more columns is indented code, not a break. A raw prefix tab reaches here unexpanded only on a fenced code body line; see the fenced-code branch below.
+            // A line indented four or more columns is indented code, not a break.
             if indent < 4, let breakEnd = matchThematicBreak(source: source, range: cursor..<lineRange.upperBound, firstNonSpace: firstNonSpace) {
                 // A list contains only list items, so an enclosing list closes first.
                 pending = closingOpenList(pending)
@@ -1994,7 +1855,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // From this point on the line isn't a list item, and a list contains only list items, so any open list at `current` closes before the new block attaches.
             pending = closingOpenList(pending)
 
-            // ATX heading. A line indented four or more columns is indented code, not a heading; see the fenced-code branch below for how a raw prefix tab reaches an opener unexpanded.
+            // ATX heading. A line indented four or more columns is indented code, not a heading.
             if indent < 4, let heading = matchATXHeading(
                 source: source,
                 range: cursor..<lineRange.upperBound,
@@ -2004,10 +1865,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
 
             // Fenced code block. A line indented four or more columns is indented code, not a fence, even
-            // when its byte distance from the cursor is <= 3 because a straddling tab widened it. A raw prefix tab reaches here only on a line processed while an open fenced
-            // code block is `current` (the one case `expandPrefixTabs` is skipped, per the `inFencedCode`
-            // guard); every other line has its prefix tabs expanded to spaces first, so its byte distance
-            // already equals its column indent. Example: in `>~~~` then `\t~~~`, the second line closes the
+            // when its byte distance from the cursor is <= 3 because a straddling tab widened it. Example:
+            // in `>~~~` then `\t~~~`, the second line closes the
             // quote's fence and its tab-indented `~~~` opens a top-level indented code block whose content
             // is `~~~` rather than a second empty fence.
             if indent < 4, let fence = matchOpeningFence(
@@ -2020,7 +1879,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
 
             // HTML block (types 1–7). Leading 0–3 spaces of indent are preserved verbatim in the block's content. Type 7 is detected only when the current container isn't a paragraph, since it can't interrupt one (HTML blocks).
-            // A line indented four or more columns is indented code, not an HTML block; see the fenced-code branch above for how a raw prefix tab reaches an opener unexpanded.
+            // A line indented four or more columns is indented code, not an HTML block.
             let allowType7 = storage[current].kind != .paragraph
             if indent < 4, let htmlType = matchHTMLBlockStart(
                 source: source,
@@ -2054,7 +1913,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let breakIdx = addChild(
             kind: .thematicBreak,
             parent: current,
-            start: sourceOffset(firstNonSpace)
+            start: firstNonSpace
         )
         current = breakIdx
         return finalize(node: breakIdx, pending: pending, lineContentEnd: end)
@@ -2066,7 +1925,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let headingIdx = addChild(
             kind: .heading(level: Int(heading.level)),
             parent: current,
-            start: sourceOffset(firstNonSpace)
+            start: firstNonSpace
         )
         current = headingIdx
         if !heading.contentRange.isEmpty {
@@ -2078,25 +1937,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Open a fenced code block at `current` for the opening fence `fence`. The block stays open as `current`.
     private mutating func openFencedCode(_ fence: FenceMatch, cursor: Int, firstNonSpace: Int) {
         // Decode backslash escapes and HTML entities in the info string so consumers see the canonical language tag (e.g. `foo\+bar` → `foo+bar`, `f&ouml;&ouml;` → `föö`).
-        // The info string lives in `expandPrefixTabs`'s verbatim tail (the fence char isn't a prefix byte), so on a tab-materialized line the matcher measured its bounds against the transient buffer. Map them back to source (the tail copies byte-for-byte, so the constant delta preserves the length) before interning, giving the same `inSource: true` chunk a source-mapped line produces; the mapping reads only unconditionally-tracked line state, so it is correct even when `.sourcePosition` is off. A source-mapped line already carries real source offsets.
-        let infoChunk: Chunk
-        if currentLineMapsToSource {
-            infoChunk = fence.infoChunk
-        } else {
-            let start = materializedSourceStart(bufferStart: fence.infoChunk.offset).sourceStart
-            let end = materializedSourceStart(bufferStart: fence.infoChunk.range.upperBound).sourceStart
-            infoChunk = Chunk(offset: start, length: end - start, inSource: true)
-        }
-        let cleanInfo = unescapeURLChunk(infoChunk)
+        let cleanInfo = unescapeURLChunk(fence.infoChunk)
         let infoRef = storage.intern(replacingNUL(cleanInfo))
         // The fence offset counts source bytes, so a tab straddling the container prefix and the
-        // fence counts once even though it spans several columns. On a materialized line the prefix
-        // tabs are expanded to spaces, so the buffer distance over-counts that tab; map both
-        // endpoints back to source so a fence opened after a partially consumed tab (`>\t```) strips
-        // only one column from its continuation lines, not the tab's full width.
-        let fenceOffset = currentLineMapsToSource
-            ? fence.fenceOffset
-            : materializedSourceOffset(firstNonSpace) - materializedSourceOffset(cursor)
+        // fence counts once even though it spans several columns: a fence opened after a partially
+        // consumed tab (`>\t```) strips only one column from its continuation lines.
+        let fenceOffset = fence.fenceOffset
         let codeIdx = addChild(
             kind: .codeBlock(MarkdownNode.CodeBlockInfo(
                 isFenced: true,
@@ -2106,7 +1952,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             )),
             parent: current,
             data: .codeBlock(info: infoRef, literal: .empty),
-            start: sourceOffset(firstNonSpace)
+            start: firstNonSpace
         )
         current = codeIdx
     }
@@ -2118,24 +1964,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             kind: .htmlBlock,
             parent: current,
             data: .htmlBlock(type: htmlType, literal: .empty),
-            start: sourceOffset(firstNonSpace)
+            start: firstNonSpace
         )
         current = htmlIdx
-        // `cursor` can sit mid-tab here (an ancestor container - block quote or list item -
-        // partially consumed it with its own optional-column/padding advance; see the
-        // `dispatchNewBlocks`'s block quote and list marker branches). Split that tab the same way the
-        // indented-code-block opener below does (Tabs): leftover columns become synthetic leading
-        // spaces, then the rest of the line copies verbatim. `maxColumns` is 0 in the ordinary
-        // (non-straddling) case, so `stripFenceIndent` is a no-op and the zero-copy `addLine` path
-        // is taken.
-        let priorColumn = columnWidth(source: source, from: lineRange.lowerBound, to: cursor)
-        let (bodyStart, leadingSpaces) = stripFenceIndent(
-            source: source,
-            range: cursor..<lineRange.upperBound,
-            maxColumns: column - priorColumn,
-            startColumn: priorColumn
-        )
-        pending = appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: htmlIdx, pending: pending)
+        pending = appendLineAfterPrefix(source: source, lineRange: lineRange, cursor: cursor, column: column, to: htmlIdx, pending: pending)
         // Check whether this same line also satisfies the end condition.
         if htmlBlockLineMatchesEndCondition(
             type: htmlType,
@@ -2154,10 +1986,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // four columns tab-stop-aware from the current `column`: when a straddling tab crosses
         // the boundary its consumed columns are dropped and its leftover columns surface as
         // leading spaces (Tabs), the rest of the line copied verbatim so any content tab stays
-        // literal.
-        // A leftover only ever arises on a source-mapped line (materialized lines pre-expand
-        // their prefix tabs to spaces), where `source` is the shared source buffer and `bodyStart`
-        // a real source offset, so the arena split-tab append is well-formed.
+        // literal. The block then starts at the split tab, whose leftover columns are the first
+        // content.
         let (bodyStart, leadingSpaces) = stripFenceIndent(
             source: source,
             range: cursor..<lineRange.upperBound,
@@ -2173,7 +2003,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             )),
             parent: current,
             data: .codeBlock(info: .empty, literal: .empty),
-            start: sourceOffset(bodyStart)
+            start: leadingSpaces > 0 ? bodyStart - 1 : bodyStart
         )
         current = codeIdx
         return appendCodeBodyLine(source: source, bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: codeIdx, pending: pending)
@@ -2184,7 +2014,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let textRange = firstNonSpace..<lineRange.upperBound
         precondition(storage[current].kind != .paragraph, "dispatch starts below the deepest matched container and opens only containers before a leaf, so `current` is never a paragraph here")
         assert(openParagraphTableState == nil, "the previous paragraph closed before this one opens")
-        let paragraphIdx = addChild(kind: .paragraph, parent: current, start: sourceOffset(firstNonSpace))
+        let paragraphIdx = addChild(kind: .paragraph, parent: current, start: firstNonSpace)
         current = paragraphIdx
         return addLine(span: source, range: textRange, to: paragraphIdx, pending: pending)
     }
@@ -2507,10 +2337,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if case .codeBlock(let info) = kind { isFenced = info.isFenced } else { isFenced = false }
             let end: Int
             if let lineContentEnd {
-                // An ATX heading or a thematic break ends at its trimmed content extent, not the raw line. Map the line-offset through `sourceOffset` exactly like the block's start, so tab-expanded lines resolve correctly.
-                let mappedEnd = sourceOffset(lineContentEnd)
-                precondition(mappedEnd != nil, "with positions tracked, every line offset maps to source")
-                end = mappedEnd!
+                // An ATX heading or a thematic break ends at its trimmed content extent, not the raw line.
+                end = lineContentEnd
                 // A block whose end is later attributed to this line - notably the document, whose end is stamped from the final line - ends at the block's content end, not the raw line end, so shrink the tracked current-line end to match.
                 currentLineSourceRange = currentLineSourceRange.lowerBound..<end
             } else {
@@ -2700,9 +2528,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Walk the leading whitespace of `range` once, computing the first-non-space offset, the indent column width (4-column tab stops, per Tabs), the blank-line flag, and the first content byte.
-    private func leadingScan(source: Span<UInt8>, range: Range<Int>) -> LeadingScan {
+    private func leadingScan(source: Span<UInt8>, range: Range<Int>, baseColumn: Int) -> LeadingScan {
         var i = range.lowerBound
-        var col = 0
+        var col = baseColumn
         while i < range.upperBound {
             let b = source[i]
             if b == UInt8(ascii: " ") {
@@ -2710,11 +2538,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             } else if b == UInt8(ascii: "\t") {
                 col += 4 - (col & 3)
             } else {
-                return LeadingScan(firstNonSpace: i, indentColumns: col, isBlank: false, firstNonSpaceByte: b)
+                return LeadingScan(firstNonSpace: i, indentColumns: col - baseColumn, isBlank: false, firstNonSpaceByte: b)
             }
             i += 1
         }
-        return LeadingScan(firstNonSpace: range.upperBound, indentColumns: col, isBlank: true, firstNonSpaceByte: 0)
+        return LeadingScan(firstNonSpace: range.upperBound, indentColumns: col - baseColumn, isBlank: true, firstNonSpaceByte: 0)
     }
 
     /// Find the first non-space, non-tab byte in `range`. Returns `range.upperBound` if the range is all whitespace.
@@ -2748,114 +2576,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
         return col - baseColumn
-    }
-
-    /// A line whose leading tabs were expanded into spaces, plus the mapping needed to recover original-source byte offsets for positions on that line (consumed by `sourceOffset`).
-    struct MaterializedLine: ~Copyable {
-        /// The expanded line: prefix tabs turned into spaces, the rest of the line copied verbatim.
-        var buffer: UniqueArray<UInt8>
-        /// Original-line byte offset where the verbatim tail begins (the prefix is `[0, restStart)`).
-        var restStart: Int
-        /// Buffer offset where the verbatim tail begins.
-        var tailBufferStart: Int
-    }
-
-    /// Pre-expand tabs that appear in the line's "marker prefix" - leading whitespace plus block quote (`>`) and list (`-`, `+`, `*`, digits + `.`/`)`) markers.
-    ///
-    /// We materialize the line with each prefix tab expanded to the right number of spaces. Tabs in content (after the first non-prefix byte) are preserved.
-    ///
-    /// Returns nil if the prefix has no tabs (most lines).
-    private func expandPrefixTabs(line: Span<UInt8>) -> MaterializedLine? {
-        // Scan the prefix region, counting tabs, stopping at the first non-prefix byte.
-        //
-        // Every prefix byte (space, tab, `>`, `-`, `+`, `*`, digits, `.`, `)`) is ASCII - so a raw byte scan is correct: those bytes never appear inside a multi-byte UTF-8 sequence, and the first non-prefix (including any multi-byte lead) byte stops the scan. We must count *every* prefix tab (not just detect the first) so the materialized buffer can be sized for the worst-case expansion below.
-        let bytes = line
-        let count = bytes.count
-        var prefixTabs = 0
-        var k = 0
-        
-        func isPrefixByte(_ b: UInt8) -> Bool {
-            switch b {
-            case UInt8(ascii: " "), UInt8(ascii: "\t"),
-                UInt8(ascii: ">"),
-                UInt8(ascii: "-"), UInt8(ascii: "+"), UInt8(ascii: "*"),
-                UInt8(ascii: "."), UInt8(ascii: ")"),
-                UInt8(ascii: "0")...UInt8(ascii: "9"):
-                return true
-            default:
-                return false
-            }
-        }
-        
-        while k < count {
-            let b = bytes[k]
-            // Stop at first non-prefix byte.
-            if !isPrefixByte(b) {
-                break
-            }
-            if b == UInt8(ascii: "\t") {
-                prefixTabs += 1
-            }
-            k += 1
-        }
-        guard prefixTabs > 0 else {
-            // No need to materialize
-            return nil
-        }
-
-        // Walk the prefix, expanding tabs to spaces. Stop at the first non-prefix byte and copy the rest verbatim. Each prefix tab expands to between 1 and 4 spaces, so it can add at most 3 bytes; every other byte is copied as-is.
-        var output = UniqueArray<UInt8>(minimumCapacity: count + 3 * prefixTabs)
-        var col = 0
-        // `i` consumes each byte (advancing past it) before classifying. `restStart` marks where the verbatim tail begins; it stays at `count` if the whole line is prefix (nothing left to copy).
-        var i = 0
-        var restStart = count
-
-        prefix: while i < count {
-            let b = bytes[i]
-            i += 1
-            switch b {
-            case UInt8(ascii: " "), UInt8(ascii: ">"), UInt8(ascii: "-"), UInt8(ascii: "+"), UInt8(ascii: "*"):
-                output.append(b)
-                col += 1
-            case UInt8(ascii: "\t"):
-                let advance = 4 - (col & 3)
-                for _ in 0..<advance {
-                    output.append(UInt8(ascii: " "))
-                }
-                col += advance
-            case UInt8(ascii: "0")...UInt8(ascii: "9"):
-                // A digit run. If it's an ordered-list marker (`.`/`)`), its trailing whitespace is prefix - a tab after it must keep expanding, exactly as after a bullet marker - so emit the marker and continue the loop. Otherwise the digit begins content. `i` is just past the first digit.
-                var j = i
-                while j < count, bytes[j].isASCIIDigit {
-                    j += 1
-                }
-                if j < count, bytes[j] == UInt8(ascii: ".") || bytes[j] == UInt8(ascii: ")") {
-                    // An ordered-list marker: emit the digits and delimiter as-is. Each is one column, so advance `col` by the marker's byte width and resume the prefix scan just past the delimiter - keeping the tab-expansion column in lockstep with `recordMaterializedPrefixColumns`, which re-derives it byte-by-byte with the same one-column-per-marker-byte rule.
-                    output.append(b)
-                    for m in i..<(j + 1) {
-                        output.append(bytes[m])
-                    }
-                    col += (j + 1) - (i - 1)
-                    i = j + 1
-                } else {
-                    // Not a marker: the digit begins the content, copy it verbatim with the rest.
-                    restStart = i - 1
-                    break prefix
-                }
-            default:
-                // A non-prefix byte begins the content; back up so it is copied verbatim.
-                restStart = i - 1
-                break prefix
-            }
-        }
-
-        // Copy the (un-expanded) remainder of the line verbatim.
-        let tailBufferStart = output.count
-        for n in restStart..<count {
-            output.append(bytes[n])
-        }
-
-        return MaterializedLine(buffer: output, restStart: restStart, tailBufferStart: tailBufferStart)
     }
 
     /// A superset of the first-content bytes that any block construct can start with.
@@ -2908,7 +2628,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private struct ATXMatch {
         var level: UInt8
         var contentRange: Range<Int>
-        /// The heading's source end, as a line-offset in `matchATXHeading`'s coordinate space (same as `firstNonSpace`), to be mapped through `sourceOffset`. An ATX heading ends at its trimmed content, not the line end: non-empty content ends at the trimmed content; empty content whose closing `#` sequence is stripped ends just past the opening `#`s; otherwise (empty, no closing run) it ends at the raw line end.
+        /// The heading's source end offset. An ATX heading ends at its trimmed content, not the line end: non-empty content ends at the trimmed content; empty content whose closing `#` sequence is stripped ends just past the opening `#`s; otherwise (empty, no closing run) it ends at the raw line end.
         var end: Int
     }
 
@@ -2955,9 +2675,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// left partially consumed.
     private func matchListMarker(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, lineStart: Int, indent: Int) -> ListMarkerInfo? {
         let markerOffset = indent
-        if markerOffset > 3 {
-            return nil
-        }
+        assert(markerOffset <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         let first = source[firstNonSpace]
 
@@ -3136,10 +2854,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Try to match the start of an HTML block at `firstNonSpace` and return the type number (1–7), or `nil` if no HTML block starts here. Type 7 is matched only when `allowType7` is set (it cannot interrupt a paragraph).
     ///
     /// The start conditions are those of HTML blocks.
+    ///
+    /// The caller has checked that the line is indented less than four columns, past which none of these blocks starts.
     private func matchHTMLBlockStart(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, allowType7: Bool) -> UInt8? {
-        if firstNonSpace - range.lowerBound > 3 {
-            return nil
-        }
+        assert(firstNonSpace - range.lowerBound <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         if source[firstNonSpace] != UInt8(ascii: "<") {
             return nil
@@ -3456,11 +3174,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// tab's leading columns; otherwise `indentColumns` below would measure the tab's remaining columns as
     /// if it started fresh at column 0.
     private func matchBlockQuoteMarker(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int, baseColumn: Int = 0) -> Int? {
-        // The indent is measured in columns. Leading whitespace is byte-identical to its column width unless
-        // it contains a tab, which reaches here only on a fenced code body line (every other line has its
-        // prefix tabs expanded by `expandPrefixTabs`). A byte count would under-measure a tab and admit a `>`
-        // indented four columns (`\t>` inside an open block quote's fenced code is not a continuation
-        // marker).
+        // The indent is measured in columns: a byte count would under-measure a tab and admit a `>` indented
+        // four columns (`\t>` is not a block quote marker).
         if indentColumns(source: source, from: range.lowerBound, to: firstNonSpace, baseColumn: baseColumn) > 3 {
             return nil
         }
@@ -3494,11 +3209,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Try to match an opening code fence line (Fenced code blocks).
+    ///
+    /// The caller has checked that the line is indented less than four columns, past which none of these blocks starts.
     private func matchOpeningFence(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> FenceMatch? {
         let fenceOffset = firstNonSpace - range.lowerBound
-        if fenceOffset > 3 {
-            return nil
-        }
+        assert(fenceOffset <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         let markerCharacter = source[firstNonSpace]
         guard let marker = MarkdownNode.CodeBlockInfo.FenceCharacter(character: markerCharacter) else {
@@ -3648,10 +3363,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Try to match a setext heading underline at `firstNonSpace` within `range` (Setext headings).
+    ///
+    /// The caller has checked that the line is indented less than four columns, past which none of these blocks starts.
     private func matchSetextUnderline(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> UInt8? {
-        if firstNonSpace - range.lowerBound > 3 {
-            return nil
-        }
+        assert(firstNonSpace - range.lowerBound <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         let marker = source[firstNonSpace]
         let level: UInt8
@@ -3678,10 +3393,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Try to match a thematic break starting at `firstNonSpace` within `range` (Thematic breaks), returning the offset just past its last marker character.
+    ///
+    /// The caller has checked that the line is indented less than four columns, past which none of these blocks starts.
     private func matchThematicBreak(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> Int? {
-        if firstNonSpace - range.lowerBound > 3 {
-            return nil
-        }
+        assert(firstNonSpace - range.lowerBound <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         let marker = source[firstNonSpace]
         if marker != UInt8(ascii: "-") && marker != UInt8(ascii: "_") && marker != UInt8(ascii: "*") {
@@ -3704,10 +3419,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Try to match an ATX heading (ATX headings).
+    ///
+    /// The caller has checked that the line is indented less than four columns, past which none of these blocks starts.
     private func matchATXHeading(source: Span<UInt8>, range: Range<Int>, firstNonSpace: Int) -> ATXMatch? {
-        if firstNonSpace - range.lowerBound > 3 {
-            return nil
-        }
+        assert(firstNonSpace - range.lowerBound <= 3, "block-start matchers run only on a line indented less than four columns")
         var i = firstNonSpace
         var level: Int = 0
         while i < range.upperBound && source[i] == UInt8(ascii: "#") { // #
@@ -3917,12 +3632,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             contentStart += 1
         }
-        // The label is read back from the original source. On a line whose prefix tabs were expanded, the
-        // label (which follows `[^`) lies in the copy's verbatim tail, so it maps back by the tail's constant
-        // delta whether or not positions are tracked.
-        let labelOffset = currentLineMapsToSource ? labelStart : materializedSourceOffset(labelStart)
         return (
-            label: Chunk(offset: labelOffset, length: labelLen, inSource: true),
+            label: Chunk(offset: labelStart, length: labelLen, inSource: true),
             consumedTo: contentStart
         )
     }
@@ -3939,7 +3650,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             kind: .footnoteDefinition,
             parent: current,
             data: .footnoteDefinition(label: labelRef),
-            start: sourceOffset(firstNonSpace)
+            start: firstNonSpace
         )
         storage.footnoteDefinitionOrder.append(fnIdx)
         return fnIdx

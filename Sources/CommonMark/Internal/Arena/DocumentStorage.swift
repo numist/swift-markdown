@@ -109,7 +109,7 @@ internal struct DocumentStorage: ~Copyable {
         return idx
     }
 
-    /// Record the source byte offset (into the original source) where `node`'s content begins. No-op when positions are off or `offset` is `nil` (e.g. a tab-expanded line that doesn't map to source).
+    /// Record the source byte offset (into the original source) where `node`'s content begins. No-op when positions are off or `offset` is `nil`.
     internal mutating func setSourceStart(_ node: Index, _ offset: Int?) {
         if let offset, positionsEnabled {
             sourceRanges[node].start = offset
