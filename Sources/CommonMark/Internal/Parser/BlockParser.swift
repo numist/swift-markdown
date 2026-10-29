@@ -1616,7 +1616,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             source: source,
             range: cursor..<lineRange.upperBound
         ) {
-            pending = finalize(node: current, pending: pending)
+            pending = finalize(node: current, pending: pending, endsOnCurrentLine: true)
         }
         return LeafContinuation(stillOpen: true, pending: pending)
     }
@@ -2325,7 +2325,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Close `node`, materialize its accumulated content, and back the parser's `current` pointer up to `node`'s parent.
     ///
-    /// `endsOnCurrentLine` is `true` when the current line is the block's last line: the document ends on it, or it is a fenced code block's closing fence. A block closed because the current line does not continue it ends on the previous line.
+    /// `endsOnCurrentLine` is `true` when the current line is the block's last line: the document ends on it, it is a fenced code block's closing fence, or it meets an HTML block's end condition. A block closed because the current line does not continue it ends on the previous line.
     ///
     /// `lineContentEnd` is the line offset just past the content of a block that is only ever one line, an ATX heading or a thematic break, closed on that line.
     private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, endsOnCurrentLine: Bool = false, lineContentEnd: Int? = nil) -> PendingLeaf? {
