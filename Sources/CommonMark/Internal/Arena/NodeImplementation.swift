@@ -10,35 +10,33 @@
 
 /// Per-kind storage variant for a node.
 internal enum NodeData {
-    /// Inline literal content (text, code spans, raw HTML inlines) and code-block bodies.
+    /// Inline literal content: text, code spans, raw HTML.
     case literal(ContentRef)
 
-    /// Code block content - info string (language tag) and the literal body. Fence metadata (`isFenced`, fence character/length/offset) lives on the node's `kind` as `CodeBlockInfo`.
+    /// Code block info string and body. Fence metadata lives on the node's `kind`.
     case codeBlock(info: ContentRef, literal: ContentRef)
 
-    /// Link or image destination + title.
     case link(url: ContentRef, title: ContentRef)
 
-    /// Raw HTML block - its type (1–7, the numbered start conditions under HTML blocks) + body literal.
+    /// HTML block start condition (1–7, HTML blocks) and body.
     case htmlBlock(type: UInt8, literal: ContentRef)
 
-    /// `^[…]` inline attribute. The ref is the raw uninterpreted attribute string (e.g. `"color: red, rainbow: 'extreme'"`).
+    /// `^[…]` inline attribute: the uninterpreted attribute string.
     case attribute(ContentRef)
 
-    /// Footnote reference - the original label (used for resolution and rendering). The assigned 1-based index lives on the node's `kind`.
+    /// Footnote reference label. The assigned index lives on the node's `kind`.
     case footnoteReference(label: ContentRef)
 
-    /// Footnote definition - original label.
     case footnoteDefinition(label: ContentRef)
 
-    /// Table - column count. `alignmentsOffset` is always 0: per-column alignments live on each cell's `kind`.
+    /// `alignmentsOffset` is always 0; column alignments live on each cell's `kind`.
     case table(columnCount: Int, alignmentsOffset: Int)
 
-    /// List item - `padding` is the column at which the item's content starts, relative to the line position where the parent list/item walk began - used by the per-line container walk to strip leading indentation on continuation lines. A task list item's checked state lives on the node's `kind`.
+    /// `padding` is the indent, in columns past the enclosing containers' prefixes, that a continuation line needs to belong to the item (List items).
     case item(padding: Int)
 }
 
-/// Fixed-size record for one AST node. Stored contiguously in `DocumentStorage.nodes`.
+/// One node, stored contiguously in `DocumentStorage.nodes`.
 internal struct NodeRecord {
     internal var kind: MarkdownNode.Kind
     internal var firstChild: DocumentStorage.Index?
@@ -48,7 +46,7 @@ internal struct NodeRecord {
     internal var parent: DocumentStorage.Index?
     internal var data: NodeData?
 
-    /// `true` when the most recent line processed while this node is open is blank. Drives tight/loose list detection (`detectLooseList` / `endsWithBlankLine`).
+    /// Whether the last line processed while this node was open was blank; drives tight/loose list detection.
     internal var lastLineBlank: Bool = false
 
     internal init(

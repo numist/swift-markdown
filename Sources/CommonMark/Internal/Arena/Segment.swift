@@ -8,11 +8,9 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// One piece of a node's content: a byte range that lives in either the borrowed source `Span` (`inSource == true`) or `DocumentStorage`'s additions arena (`inSource == false`).
+/// One piece of a node's content: a byte range in the source (`inSource`) or the string arena.
 ///
-/// A `Segment` is the N-way generalization of `Chunk`'s `inSource` two-buffer scheme. Nodes reference an ordered run of these (see `ContentRef`) so that content spanning multiple source ranges (a multi-line paragraph) or mixing source with synthetic bytes (a joined line ending, a decoded entity) can be represented without copying the source bytes into an intermediate buffer.
-///
-/// `Int32` fields keep the per-document segment pool compact; markdown sources are far below the 2 GiB limit this implies.
+/// A run of segments (`ContentRef`) represents content that spans several source ranges or mixes in synthetic bytes, without copying the source. `Int32` fields keep the segment pool compact.
 internal struct Segment: Equatable {
     internal var offset: Int32
     internal var length: Int32
@@ -28,16 +26,14 @@ internal struct Segment: Equatable {
         self.init(offset: Int32(chunk.offset), length: Int32(chunk.length), inSource: chunk.inSource)
     }
 
-    /// A `Chunk` view of this segment, for parser code that works in the single-buffer `Chunk` vocabulary.
     internal var chunk: Chunk {
         Chunk(offset: Int(offset), length: Int(length), inSource: inSource)
     }
 }
 
-/// One run of a single-segment arena buffer's arena→source map: `length` consecutive content bytes that image a contiguous source range beginning at `sourceOffset`.
+/// One run of an arena chunk's map to the source: `length` content bytes that image the source from `sourceOffset`.
 ///
-/// A `sourceOffset < 0` marks a synthetic gap - the interned `"\n"` line join between reconstructed lines - which has no source position (`nil`). Runs are contiguous and ordered (they tile the content from its first byte), so the map walks exactly like the multi-segment `Segment` list, minus the byte reads (bytes come from the flat arena span). This lets inline stamping recover per-line source columns for content flattened into one arena chunk (a non-contiguous setext heading), and in the single-run case it expresses the constant shift of a `\|`-unescaped table cell.
-///
+/// A negative `sourceOffset` marks a `"\n"` line join, which has no source position. Runs tile the content in order, so inline positions resolve through arena content such as a non-contiguous setext heading or a `\|`-unescaped table cell.
 internal struct ArenaRun: Equatable {
     internal var length: Int32
     internal var sourceOffset: Int32
@@ -48,7 +44,7 @@ internal struct ArenaRun: Equatable {
     }
 }
 
-/// A single arena chunk's source image: its content-relative run map (`ArenaRun`), keyed from `base`, the chunk's first arena byte.
+/// An arena chunk's run map, for the chunk starting at arena offset `base`.
 internal struct ContentImage {
     internal let base: Int
     internal let runs: [ArenaRun]
@@ -65,7 +61,7 @@ internal struct ContentImage {
         }
     }
 
-    /// The source offset imaged by arena byte `offset`, or `nil` for a byte outside the chunk. Callers resolve only bytes that aren't line joins, the chunk's one kind of synthetic gap.
+    /// The source offset imaged by arena byte `offset`, or `nil` outside the chunk. `offset` must not be a line join.
     internal func sourceOffset(ofArenaByte offset: Int) -> Int? {
         let k = offset - base
         guard k >= 0, let total = runEnds.last, k < total else {
@@ -76,7 +72,7 @@ internal struct ContentImage {
         return Int(runs[i].sourceOffset) + (k - runStart(i))
     }
 
-    /// The runs imaging the arena bytes `[offset, offset + length)`, rebased so the first begins at offset 0 (`parser.sliceRuns` over just the runs the window overlaps, so slicing many windows of a large image stays linear in its size).
+    /// The runs imaging arena bytes `[offset, offset + length)`, rebased to start at 0. Only the overlapping runs are sliced, so slicing many windows of a large image stays linear in its size.
     internal func runs(from offset: Int, length: Int, in parser: borrowing BlockParser) -> [ArenaRun] {
         let k = offset - base
         let first = firstRun(endingAfter: k)
@@ -105,9 +101,7 @@ internal struct ContentImage {
     }
 }
 
-/// A node's content, expressed as a contiguous slice `[first, first + count)` of `DocumentStorage.segments`.
-///
-/// The overwhelmingly common case is `count == 1` (a single source range - most text runs, URLs, and labels), which costs the same as a single inline `Chunk`. `totalLength` caches the total byte length across the segments so length queries don't have to walk the pool.
+/// A node's content: the slice `[first, first + count)` of `DocumentStorage.segments`. `totalLength` is the byte length summed over the segments.
 internal struct ContentRef: Equatable {
     internal var first: Int32
     internal var count: Int32

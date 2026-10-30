@@ -8,9 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// A byte-range reference into either the original source buffer or `DocumentStorage`'s string arena.
-///
-/// Two-buffer scheme because some node content (text spans, URLs) points directly into the source while other content (entity-decoded text, normalized link references) is materialized into the string arena during parsing.
+/// A byte range in either the source (`inSource`) or `DocumentStorage`'s string arena, which holds bytes the parser materializes, such as decoded entities.
 internal struct Chunk: Equatable, Hashable {
     internal var offset: Int
     internal var length: Int
@@ -30,24 +28,22 @@ internal struct Chunk: Equatable, Hashable {
         offset..<(offset + length)
     }
 
-    /// Narrow to `bounds`, a range of indices relative to this chunk's own content (0-based, like `Span.extracting(_:)`), preserving `inSource`.
+    /// Narrows to `bounds`, which is relative to this chunk's first byte.
     internal func extracting(_ bounds: Range<Int>) -> Chunk {
         Chunk(offset: offset + bounds.lowerBound, length: bounds.count, inSource: inSource)
     }
 
-    /// Return a copy narrowed to drop leading and trailing ASCII whitespace (space, tab, `\n`, `\r`), reading bytes through `parser` (which resolves this chunk's buffer via `inSource`).
+    /// Drops leading and trailing spaces, tabs, and line endings.
     internal func trimming(using parser: borrowing BlockParser) -> Chunk {
         trimming(using: parser, leading: true, where: \.isSpaceTabOrNewline)
     }
 
-    /// Return a copy narrowed to drop TRAILING ASCII whitespace only (space, tab, `\n`, `\r`), preserving any leading whitespace.
+    /// Drops trailing spaces, tabs, and line endings.
     internal func trimmingTrailing(using parser: borrowing BlockParser) -> Chunk {
         trimming(using: parser, leading: false, where: \.isSpaceTabOrNewline)
     }
 
-    /// Return a copy narrowed to drop leading and trailing whitespace characters as the spec defines them -
-    /// space, tab, line feed, line tabulation, form feed and carriage return - the removal that forms a
-    /// paragraph's or setext heading's raw content (spec "Paragraphs", "Setext headings").
+    /// Drops leading and trailing whitespace characters (Characters and lines), as forms a paragraph's or setext heading's raw content.
     internal func trimmingWhitespace(using parser: borrowing BlockParser) -> Chunk {
         trimming(using: parser, leading: true, where: \.isASCIISpace)
     }
@@ -66,11 +62,7 @@ internal struct Chunk: Equatable, Hashable {
     }
 }
 
-/// A registered link reference definition.
-///
-/// Each successful `[label]: dest "title"` parsed at the start of a paragraph populates one of these in `DocumentStorage.referenceMap`, keyed by the label's normalized form (Link reference definitions).
-///
-/// `destination` and `title` are `Chunk`s pointing into the materialized string arena (`storage.strings`) since paragraph content is normalized into that buffer before ref-def extraction runs.
+/// A link reference definition, stored in `DocumentStorage.referenceMap` under its normalized label.
 internal struct ReferenceDefinition {
     internal var destination: Chunk
     internal var title: Chunk
