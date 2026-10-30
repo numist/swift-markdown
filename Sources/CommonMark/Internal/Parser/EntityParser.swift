@@ -8,9 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// A fixed 8-byte inline buffer.
-///
-/// A value generic like `InlineArray<8, UInt8>` requires the anyAppleOS 26 runtime; this wraps a `SIMD8<UInt8>`, so it back-deploys and stack-allocates. Indices are `0..<8`.
+/// A fixed 8-byte inline buffer. It wraps `SIMD8` because `InlineArray` requires the anyAppleOS 26 runtime.
 internal struct Bytes8 {
     private var storage = SIMD8<UInt8>()
 
@@ -26,15 +24,13 @@ internal enum EntityParser {
     // MARK: - HTML entities
 
     internal struct EntityMatch {
-        /// Decoded UTF-8 bytes, stored inline (no heap allocation). Named-entity values are at most 6 bytes (the longest entry in `HTMLEntities.entityValueBuffer`) and numeric entities at most 4, so 8 is a safely oversized fixed capacity. `count` is the number of leading bytes that are valid.
+        /// The decoded UTF-8, in the first `count` bytes. Entity values are at most 6 bytes and numeric references at most 4.
         var bytes: Bytes8
         var count: Int
         var afterSemi: Int
     }
 
-    /// Try to match an HTML entity beginning at `start` (which points at `&`).
-    ///
-    /// Returns the decoded UTF-8 bytes and the offset just past the trailing `;` (spec "Entity and numeric character references").
+    /// Matches a reference at the `&` at `start`, returning its decoded bytes and the offset past its `;` (Entity and numeric character references).
     internal static func matchEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
         let after = start + 1
         if after >= end {
@@ -47,9 +43,7 @@ internal enum EntityParser {
         return matchNamedEntity(start: start, end: end, source: source)
     }
 
-    /// Match `&#NNN;` (decimal) or `&#xHHH;` / `&#XHHH;` (hex).
-    ///
-    /// Accepts 1–7 decimal or 1–6 hexadecimal digits (spec "Entity and numeric character references").
+    /// Matches `&#` and 1–7 decimal digits, or `&#x` or `&#X` and 1–6 hexadecimal digits, then `;`.
     private static func matchNumericEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
         var i = start + 2 // past `&#`
         if i >= end {
@@ -100,9 +94,8 @@ internal enum EntityParser {
         return EntityMatch(bytes: encoded.bytes, count: encoded.count, afterSemi: afterSemi)
     }
 
-    /// Match `&name;` against the embedded HTML entity table (binary search over `HTMLEntities.entityNames`).
+    /// Matches `&name;` against `HTMLEntities.entityNames`.
     private static func matchNamedEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
-        // Scan name: ASCII letters or digits.
         var i = start + 1
         while i < end {
             let b = source[i]
@@ -121,7 +114,7 @@ internal enum EntityParser {
         let afterSemi = i + 1
         if let idx = lookupEntity(range: nameRange, source: source) {
             let off = HTMLEntities.entityValueOffsets[idx]
-            // Length is derived from the next offset: values are packed contiguously in index order, and a trailing sentinel offset (== buffer count) gives the final entry its end.
+            // Each value ends where the next begins; a sentinel offset ends the last.
             let len = HTMLEntities.entityValueOffsets[idx + 1] - off
             var bytes = Bytes8()
             for k in 0..<len {
@@ -132,9 +125,7 @@ internal enum EntityParser {
         return nil
     }
 
-    /// Binary search the entity-name table for a name spanning `range`.
-    ///
-    /// Returns the index into `HTMLEntities.entityNames` or nil.
+    /// The index in `HTMLEntities.entityNames` of the name spanning `range`.
     private static func lookupEntity(range: Range<Int>, source: Span<UInt8>) -> Int? {
         var lo = 0
         var hi = HTMLEntities.entityNames.count
@@ -156,9 +147,7 @@ internal enum EntityParser {
         return nil
     }
 
-    /// Compare entityNames[index] against the bytes in `range`.
-    ///
-    /// Returns negative if the table entry is less, 0 if equal, positive otherwise.
+    /// Negative if `entityNames[index]` sorts before the bytes in `range`, 0 if equal, positive otherwise.
     private static func compareEntityName(index: Int, range: Range<Int>, source: Span<UInt8>) -> Int {
         let name = HTMLEntities.entityNames[index].utf8
         let nameLen = name.count
@@ -173,7 +162,6 @@ internal enum EntityParser {
         return nameLen - inputLen
     }
 
-    /// Encode a single Unicode codepoint to its UTF-8 byte representation, returned inline with a valid-byte count.
     private static func encodeCodepointUTF8(_ cp: UInt32) -> (bytes: Bytes8, count: Int) {
         var bytes = Bytes8()
         if cp < 0x80 {

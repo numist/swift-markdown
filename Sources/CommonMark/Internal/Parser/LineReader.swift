@@ -10,11 +10,11 @@
 
 /// Enumerate a UTF8-containing `Span` by lines.
 internal struct LineReader: ~Escapable, ~Copyable {
-    /// The unconsumed remainder of the source, as a byte `Span`. Shrinks as lines are read.
+    /// The unread rest of the source.
     internal var source: Span<UInt8>
     internal var lineNumber = 0
 
-    /// Byte range of the most recently returned line, in the *original* (pre-shrink, post-BOM) source coordinate space - what the block parser indexes its cached `sourceBytes` with.
+    /// The source offsets of the most recently returned line.
     internal var lineRange: Range<Int>
     var nextStart: Int
 
@@ -25,7 +25,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
         lineRange = 0..<0
         nextStart = 0
 
-        // Skip a leading UTF-8 byte-order mark (U+FEFF encodes as the three bytes EF BB BF).
+        // Skip a leading UTF-8 byte order mark.
         if source.count >= 3,
            source[0] == 0xEF, source[1] == 0xBB, source[2] == 0xBF {
             self.source = source.extracting(3..<source.count)
@@ -35,7 +35,6 @@ internal struct LineReader: ~Escapable, ~Copyable {
 
     @_lifetime(copy self)
     internal mutating func next() -> Span<UInt8>? {
-        // Start the next line at the last line's end (offset into the original source).
         let start = nextStart
         let bytes = source
         let count = bytes.count
@@ -50,7 +49,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
 
         lineNumber += 1
 
-        // Find the next line ending (`\n` 0x0A or `\r` 0x0D). In valid UTF-8 these bytes only ever appear as standalone ASCII scalars - never inside a multi-byte sequence - so a raw byte scan finds boundaries correctly. The scan is vectorized (16 bytes per step) since it touches every source byte exactly once and is a measurable slice of parse time.
+        // `\n` and `\r` never occur inside a multi-byte UTF-8 sequence, so a byte scan finds line endings.
         let i = Self.firstLineTerminator(in: bytes)
 
         if i < count {
@@ -76,11 +75,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
         return result
     }
 
-    /// Index of the first `\n` or `\r` in `span`, or `span.count` if neither is present.
-    ///
-    /// Scans 16 bytes at a time with a SIMD compare against both bytes, recovering the first matching lane via a per-lane index reduce; the sub-16-byte remainder is scanned scalar.
-    ///
-    /// Shared with `BlockParser.parseInlineOnly`'s line-break scan so the vectorized line-ending search lives in exactly one place.
+    /// The index of the first `\n` or `\r` in `span`, or `span.count` if there is none.
     @inline(__always)
     internal static func firstLineTerminator(in span: Span<UInt8>) -> Int {
         let count = span.count
@@ -88,7 +83,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
 
         let nl = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
         let cr = SIMD16<UInt8>(repeating: UInt8(ascii: "\r"))
-        // Lane index for matching lanes; non-matching lanes are forced to 16 so `.min()` yields the first matching lane (or 16 = "no match in this chunk").
+        // Non-matching lanes become 16, so `.min()` is the first matching lane.
         let lanes = SIMD16<UInt8>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
         let noMatch = SIMD16<UInt8>(repeating: 16)
 
@@ -115,14 +110,14 @@ internal struct LineReader: ~Escapable, ~Copyable {
 }
 
 extension RawSpan {
-    /// The 16 bytes at `offset ..< offset + 16`, which must lie within the span, as one vector. Shared by the SIMD byte scans.
+    /// The 16 bytes at `offset`, which must lie within the span.
     @inline(__always)
     internal func loadSIMD16(fromByteOffset offset: Int) -> SIMD16<UInt8> {
         #if compiler(>=6.4)
         return load(fromByteOffset: offset, as: SIMD16<UInt8>.self)
         #else
-        // SAFETY: Every bit pattern is a valid `SIMD16<UInt8>`, and `unsafeLoadUnaligned(fromByteOffset:as:)` traps unless all 16 bytes lie within the span.
-        //         Before Swift 6.4 the standard library has no `ConvertibleFromBytes` protocol, so there is no safe `RawSpan.load(fromByteOffset:as:)` to load a vector from bytes.
+        // SAFETY: Every bit pattern is a valid `SIMD16<UInt8>`, and `unsafeLoadUnaligned` traps unless all 16 bytes lie within the span.
+        //         Before Swift 6.4 the standard library has no `ConvertibleFromBytes`, so `RawSpan` has no safe `load`.
         return unsafe unsafeLoadUnaligned(fromByteOffset: offset, as: SIMD16<UInt8>.self)
         #endif
     }

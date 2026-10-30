@@ -10,11 +10,7 @@
 
 internal import BasicContainers
 
-/// Byte-level scanners for link labels, destinations, titles, and the whitespace constructs that separate them.
-///
-/// They sit alongside the other parsing helpers and read `storage`/`sourceBytes` directly instead of taking them as parameters. They're used by both block-level reference-definition parsing (`BlockParser`) and inline link parsing (the InlineParser extensions).
-///
-/// The shared ASCII byte-classifier predicates (`isASCIISpace`, `isASCIIPunct`, `isASCIILetter`, `isASCIIDigit`) live on `UInt8` in `ASCIIByte.swift` so they're usable without a parser instance.
+/// Scanners for link labels, destinations, titles and the whitespace between them, shared by link reference definitions and inline links.
 extension BlockParser {
 
     // MARK: - Link label
@@ -24,24 +20,21 @@ extension BlockParser {
         var afterEnd: Int
     }
 
-    /// Parse a `[label]` link label (spec "Links"). Returns the interior chunk (excluding brackets) and the offset just past the closing `]`. Allows ASCII `\X` escapes inside the label. Capped per `maxLinkLabelLength`.
+    /// Matches a link label (Links), returning its interior and the offset past its `]`.
     internal func matchLinkLabel(_ chunk: Chunk) -> LinkLabelMatch? {
         precondition(!chunk.isEmpty, "a link label scan starts on a content byte")
         let match = scanLinkLabel(from: chunk.offset, end: chunk.range.upperBound) { readByte(at: $0, in: chunk) }
         return match.map { LinkLabelMatch(interior: subchunk(of: chunk, $0.interior), afterEnd: $0.afterEnd) }
     }
 
-    /// The part of `chunk` at `range`, expressed in the offsets `chunk` is.
+    /// The part of `chunk` at `range`.
     private func subchunk(of chunk: Chunk, _ range: Range<Int>) -> Chunk {
         Chunk(offset: range.lowerBound, length: range.count, inSource: chunk.inSource)
     }
 
-    /// Scan a link label, reading bytes through `byte`: the scan behind both `matchLinkLabel(_:)` over a `Chunk` and
-    /// `matchLinkLabel(from:end:in:)` over inline content, which may be multi-segment. A full reference's link label may span a line ending (`[text][la\nbel]`). Scans from
-    /// `start` to the closing `]`; returns the interior's virtual range (excluding the brackets) and the
-    /// offset just past `]`, or nil when `start` is not `[`, on an interior `[` or at the content end. Allows
-    /// ASCII `\X` escapes, capped per `maxLinkLabelLength`. The interior may span segments, so callers
-    /// resolve it with `normalizeLabel(virtualRange:in:)`, not a `Chunk`.
+    /// Scans a link label through `byte`, for both `matchLinkLabel` overloads. A full reference's label may span a
+    /// line ending. Returns the interior's range and the offset past `]`, or nil at an unescaped `[`, past
+    /// `maxLinkLabelLength`, or at the end.
     @inline(__always)
     private func scanLinkLabel(from start: Int, end: Int, byte: (Int) -> UInt8) -> (interior: Range<Int>, afterEnd: Int)? {
         if start >= end || byte(start) != UInt8(ascii: "[") {
@@ -82,10 +75,8 @@ extension BlockParser {
         scanLinkLabel(from: start, end: end) { content[$0] }
     }
 
-    /// Whether a label that is looked up without being scanned by `matchLinkLabel` - the text at
-    /// virtual `range` of `content`, measured raw and untrimmed - is within `maxLinkLabelLength`. That is
-    /// a shortcut or collapsed reference's link text (between the opener's `[` / `![` and the `]`) or a
-    /// footnote reference's label (past its `^`); a longer label matches no definition.
+    /// Whether a label that `matchLinkLabel` didn't scan, such as a shortcut reference's link text or a footnote
+    /// reference's label, fits `maxLinkLabelLength` untrimmed. A longer label matches no definition.
     internal func linkLabelFitsLengthCap(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> Bool {
         let maxLabelLength = Self.maxLinkLabelLength
         var length = 0
@@ -98,15 +89,10 @@ extension BlockParser {
         return true
     }
 
-    /// The maximum link-label length that `matchLinkLabel` accepts before rewinding and that
-    /// `linkLabelFitsLengthCap` accepts for a shortcut or footnote label, in the units of
-    /// `labelLengthWeight`: a link label has "at most 999 characters" (spec "Links").
+    /// A link label has at most 999 characters (Links), counted by `labelLengthWeight`.
     private static let maxLinkLabelLength = 999
 
-    /// A content byte's contribution to the link-label length against `maxLinkLabelLength`.
-    ///
-    /// Counts characters (Unicode code points, spec "Characters and lines"): a UTF-8
-    /// continuation byte counts 0 and every other byte, NUL included, counts 1.
+    /// Counts characters (code points): a UTF-8 continuation byte counts 0 and every other byte 1.
     private func labelLengthWeight(_ byte: UInt8) -> Int {
         return byte & 0xC0 == 0x80 ? 0 : 1
     }
@@ -118,23 +104,21 @@ extension BlockParser {
         var afterEnd: Int
     }
 
-    /// Whether a `\` inside a `<…>` link destination escapes `next`, the byte after it. A backslash escapes
-    /// only ASCII punctuation (spec "Backslash escapes"), so a `\` before a line ending leaves the line ending
-    /// in the destination, which a `<…>` destination may not contain (spec "Links").
+    /// Whether a `\` inside a `<…>` link destination escapes `next`. Only ASCII punctuation can be escaped
+    /// (Backslash escapes), so a `\` before a line ending leaves it in the destination, which a `<…>`
+    /// destination may not contain (Links).
     private func escapesNext(_ next: UInt8?) -> Bool {
         next?.isASCIIPunct ?? false
     }
 
-    /// Parse a link destination - either `<...>` (no internal `<`, `>`, or line ending) or a bare URL (no ASCII space or control character, balanced parens up to depth 32, ASCII `\X` escapes).
+    /// Matches a link destination (Links).
     internal func matchLinkDestination(_ chunk: Chunk) -> LinkDestinationMatch? {
         let match = scanLinkDestination(from: chunk.offset, end: chunk.range.upperBound) { readByte(at: $0, in: chunk) }
         return match.map { LinkDestinationMatch(chunk: subchunk(of: chunk, $0.destination), afterEnd: $0.afterEnd) }
     }
 
-    /// Scan a link destination, reading bytes through `byte`: the scan behind both `matchLinkDestination(_:)` over a `Chunk` and
-    /// `matchLinkDestination(from:end:in:)` over inline content, which may be multi-segment. Scans from `start` to `end`; returns the destination's virtual range (excluding any
-    /// `<` `>`) and the offset just past it. A bare destination ends at the first space or line ending, which
-    /// a segment join is. Callers materialize the range with `materializedChunk`, not a contiguous `Chunk`.
+    /// Scans a link destination through `byte`, for both `matchLinkDestination` overloads. Returns the
+    /// destination's range, without any `<` `>`, and the offset past it.
     @inline(__always)
     private func scanLinkDestination(from start: Int, end: Int, byte: (Int) -> UInt8) -> (destination: Range<Int>, afterEnd: Int)? {
         if start >= end {
@@ -159,8 +143,8 @@ extension BlockParser {
             }
             return nil
         }
-        // A bare destination contains no ASCII space or control character (spec "Links"). A NUL stands
-        // for U+FFFD (spec "Insecure characters"), so it is destination content.
+        // A bare destination contains no ASCII space or control character (Links). A NUL stands for
+        // U+FFFD (Insecure characters), so it is destination content.
         func terminatesDestination(_ b: UInt8) -> Bool {
             b == UInt8(ascii: " ") || (b != 0 && b < 0x20) || b == 0x7F
         }
@@ -171,9 +155,7 @@ extension BlockParser {
         var nbParen = 0
         while i < end {
             let c = byte(i)
-            // A backslash escapes only an ASCII-punctuation byte, so a `\` before a line ending (or any
-            // non-punctuation byte) is a literal destination character - a destination never spans a
-            // line ending.
+            // Only ASCII punctuation can be escaped, so a `\` before a line ending is literal.
             if c == UInt8(ascii: "\\") && i + 1 < end && byte(i + 1).isASCIIPunct {
                 i += 2
                 continue
@@ -199,11 +181,11 @@ extension BlockParser {
             }
             i += 1
         }
-        // A bare destination includes parentheses only when they are escaped or balanced (spec "Links").
+        // A bare destination includes parentheses only when they are escaped or balanced (Links).
         if nbParen != 0 {
             return nil
         }
-        // Empty bare URL is allowed for inline links - `[a]()` should match with an empty destination.
+        // An inline link's destination may be empty: `[a]()`.
         return (start..<i, i)
     }
 
@@ -219,18 +201,15 @@ extension BlockParser {
         var afterEnd: Int
     }
 
-    /// Match `"…"`, `'…'`, or `(…)` with ASCII `\X` escapes. Parens form disallows unescaped `(` inside.
+    /// Matches a link title (Links).
     internal func matchLinkTitle(_ chunk: Chunk) -> LinkTitleMatch? {
         let match = scanLinkTitle(from: chunk.offset, end: chunk.range.upperBound) { readByte(at: $0, in: chunk) }
         return match.map { LinkTitleMatch(chunk: subchunk(of: chunk, $0.interior), afterEnd: $0.afterEnd) }
     }
 
-    /// Scan a link title, reading bytes through `byte`: the scan behind both `matchLinkTitle(_:)` over a `Chunk` and
-    /// `matchLinkTitle(from:end:in:)` over inline content, which may be multi-segment. A title may span a line ending (`[](f (\n))`) and its furthest closing delimiter may
-    /// lie past one that ends the first line (`'\'` LF `'` closes on the second line). Scans from `start` (the
-    /// opening delimiter) to `end`; returns the interior's virtual range (excluding the delimiters) and the
-    /// offset just past the closer, or nil when the opener is not a delimiter or no closer is reached. The
-    /// interior may span segments, so callers materialize it with `materializedChunk`, not a contiguous `Chunk`.
+    /// Scans a link title through `byte`, for both `matchLinkTitle` overloads. A title may span a line ending, and
+    /// its furthest closer may lie past one that ends the first line (`'\'` LF `'`). Returns the interior's
+    /// range and the offset past the closer.
     @inline(__always)
     private func scanLinkTitle(from start: Int, end: Int, byte: (Int) -> UInt8) -> (interior: Range<Int>, afterEnd: Int)? {
         if start >= end {
@@ -248,16 +227,10 @@ extension BlockParser {
         default:
             return nil
         }
-        // A `\` in the body has two readings at once: the start of a backslash escape (spec "Backslash
-        // escapes") or a literal byte. The title closes at the furthest closing delimiter either reading
-        // reaches, so `'\')` has the title `\`: no later `'` exists for the escape to land on, so the `\`
-        // is literal and the `'` after it closes. Two states track the readings:
-        //   - `inBody`: inside the body, able to consume a content byte, begin an escape, or close on
-        //     the delimiter;
-        //   - `afterBackslash`: just consumed a `\` that begins an escape and needs an ASCII punctuation
-        //     byte to complete it.
-        // A content byte is any byte other than the opening and closing delimiters (for quote forms
-        // `opener == closer`).
+        // A `\` in the body may begin a backslash escape or be literal, and the title closes at the furthest
+        // closer either reading reaches: `'\')` has the title `\`, since no later `'` completes the escape.
+        // `inBody` may take a content byte (any byte but a delimiter), begin an escape, or close;
+        // `afterBackslash` needs ASCII punctuation to complete an escape.
         var inBody = true
         var afterBackslash = false
         var closeAfterEnd: Int? = nil
@@ -297,10 +270,9 @@ extension BlockParser {
 
     // MARK: - Whitespace
 
-    // These are `mutating` though they only read: a non-mutating method of the large `BlockParser` copies the whole parser before each call, which costs more per call than the byte scan.
+    // These are `mutating` though they only read: a non-mutating method of the large `BlockParser` copies the parser per call, which costs more than the scan.
 
-    /// Skip zero or more space, tab, line tabulation (U+000B) and form feed (U+000C) bytes, from `cursor` up
-    /// to the end of `chunk`.
+    /// Skips spaces, tabs, line tabulations and form feeds.
     internal mutating func skipLineWhitespace(from cursor: Int, in chunk: Chunk) -> Int {
         let end = chunk.range.upperBound
         var i = cursor
@@ -314,7 +286,7 @@ extension BlockParser {
         return i
     }
 
-    /// Zero or more whitespace bytes other than line endings (`skipLineWhitespace`), then *at most one* line ending, then more of them. Scans from `cursor` up to the end of `chunk`.
+    /// Skips line whitespace, at most one line ending, and more line whitespace.
     internal mutating func skipSpacesAndOneLineEnd(from cursor: Int, in chunk: Chunk) -> Int {
         let end = chunk.range.upperBound
         var i = skipLineWhitespace(from: cursor, in: chunk)
@@ -330,7 +302,7 @@ extension BlockParser {
         return i
     }
 
-    /// Match a line ending or end-of-input at `cursor`. Returns the offset just past the line ending, or `nil` if `cursor` is neither at a line ending nor at the end of `chunk`.
+    /// The offset past a line ending at `cursor`, `cursor` at the end of `chunk`, or `nil`.
     internal mutating func skipLineEndOrEOF(from cursor: Int, in chunk: Chunk) -> Int? {
         let end = chunk.range.upperBound
         if cursor >= end {
@@ -346,7 +318,7 @@ extension BlockParser {
 
     // MARK: - Label normalization
 
-    /// Normalizes a link label for matching (spec "Links"): trims outer whitespace, line tabulation and form feed included, collapses interior whitespace runs to a single space, then case-folds with `String.lowercased()`, so `[ΑΓΩ]` and `[αγω]` resolve to the same key.
+    /// Normalizes a link label for matching (Links): trims whitespace, collapses interior runs to one space, and case-folds with `lowercased()`. Whitespace includes line tabulation and form feed.
     internal func normalizeLabel(chunk: Chunk) -> String {
         let span = if chunk.inSource {
             sourceBytes.extracting(chunk.range)
@@ -357,9 +329,8 @@ extension BlockParser {
         return Self.normalizeLabel(span)
     }
 
-    /// Label normalization for a label at virtual `range` of `content`. A label within one segment is read
-    /// from its chunk; one that spans a line ending (`[foo\nbar]` used as a reference) is read through
-    /// `content`, which resolves each line join to `\n`, collapsing like any other interior whitespace.
+    /// A label within one segment is read from its chunk; one spanning a line ending is read through
+    /// `content`, whose line joins read as `\n`.
     internal func normalizeLabel(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> String {
         if let chunk = content.contiguousChunk(fromVirtual: range.lowerBound, limit: range.upperBound),
            chunk.length == range.count {
@@ -373,17 +344,13 @@ extension BlockParser {
         return Self.normalizeLabel(bytes.span)
     }
 
-    /// Label normalization over a resolved span; `static` because it touches no parser state.
-    ///
-    /// Replaces each NUL with U+FFFD (spec "Insecure characters") in its own output buffer rather than in
-    /// `storage.strings`: a link reference definition's label can be normalized while other borrows of
-    /// `storage.strings` are live (while a setext heading underline is examined against the paragraph that holds the
-    /// definition), and growing that arena would invalidate them. `span.count * 3` covers every byte
-    /// being NUL, so the one-pass loop never resizes.
+    /// Replaces each NUL with U+FFFD (Insecure characters) in its own buffer rather than `storage.strings`,
+    /// because a definition's label can be normalized while that arena is borrowed. `span.count * 3` fits
+    /// every byte being a NUL.
     private static func normalizeLabel(_ span: Span<UInt8>) -> String {
         String(unsafeUninitializedCapacity: span.count * 3) { buffer in
-            // SAFETY: `buffer` is the string's uninitialized storage, valid for this closure only. `OutputSpan(buffer:initializedCount: 0)` claims none of it as initialized, every append is capacity-checked (`span.count * 3` covers the worst case), `output.finalize(for: buffer)` checks that `buffer` is the buffer `output` covers before reporting its initialized count, and the initializer repairs any invalid UTF-8 in that prefix.
-            //         No String initializer fills its UTF-8 storage through an `OutputSpan`; the safe route builds the bytes in an owned array and copies them with `String(decoding:as:)`, which measured about 1.2% more spec.txt parse instructions.
+            // SAFETY: The `OutputSpan` starts with none of `buffer` initialized, every append is capacity-checked against `span.count * 3` (the worst case), `finalize(for:)` verifies `buffer` before reporting the initialized count, and the initializer repairs invalid UTF-8.
+            //         No `String` initializer fills its storage through an `OutputSpan`; building the bytes in an owned array and copying them costs about 1.2% more instructions to parse spec.txt.
             var output = unsafe OutputSpan(buffer: buffer, initializedCount: 0)
             var pendingSpace = false
 
