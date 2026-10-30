@@ -10,9 +10,9 @@
 
 internal import BasicContainers
 
-/// A 3×5 `Int` matrix - rows indexed by `length % 3`, columns by delimiter-char index (`*_~'"`) - used as the emphasis `openersBottom` search-floor table.
+/// The emphasis `openersBottom` table: rows by `length % 3`, columns by delimiter character (`*_~'"`).
 ///
-/// Backed by the first 15 lanes of a `SIMD16<Int>` (row-major, lane `row * 5 + col`), so it back-deploys and stack-allocates (a nested `InlineArray` would be value-generic and require the anyAppleOS 26 runtime). The 16th lane is unused.
+/// It wraps `SIMD16` because a nested `InlineArray` requires the anyAppleOS 26 runtime.
 internal struct OpenersBottom {
     private var storage: SIMD16<Int>
 
@@ -26,10 +26,9 @@ internal struct OpenersBottom {
     }
 }
 
-/// Per-kind stretch of scan-start offsets from which a spec (first-closer) raw-HTML closer scan is known to
-/// fail in the current `parseInline` pass. A scan that fails from `p` reached the content end, so it rules
-/// out every start at or after `p`.
-/// Without it, every unclosed opener of a kind rescans to the content end. Reset per `parseInline` pass.
+/// Per kind, the starts from which a raw-HTML closer scan fails in the current `parseInline` pass. A scan
+/// that fails from `p` reached the content end, ruling out every start at or after `p`, so an unclosed opener
+/// doesn't rescan to the end.
 internal struct HTMLCloserMisses {
     var comment: Range<Int> = 0..<0
     var cdata: Range<Int> = 0..<0
@@ -37,17 +36,15 @@ internal struct HTMLCloserMisses {
     var processingInstruction: Range<Int> = 0..<0
 }
 
-/// The backtick runs a closing-backtick scan in one `parseInline` pass passed on its way to the content end without
-/// finding a closer, which prove for any later opener whether a closer of its length follows.
+/// The backtick runs that a closer scan passed on its way to the content end in one `parseInline` pass.
 ///
-/// A scan starts just past an opening run, so it splits the content into the same maximal runs as any other scan
-/// from a run's end. Once a scan has run from `scannedToEndFrom` to the content end, every run at or past that offset
-/// is recorded, so an opener ending at or past it has a closer exactly when a run of its length starts at or past its
-/// end. A later opener is then either ruled out or scans to a closer, so at most one scan per pass reaches the end.
+/// A scan from a run's end splits the content into the same runs as any other, so once a scan has reached the end from
+/// `scannedToEndFrom`, an opener ending at or past it has a closer exactly when a run of its length starts at or past its
+/// end. At most one scan per pass reaches the end.
 internal struct BacktickRunsSeen {
     /// The earliest offset from which a scan has run to the content end without finding a closer, if any has.
     var scannedToEndFrom: Int?
-    /// The latest start offset of a run of each length at or past `scannedToEndFrom`, by length.
+    /// The latest start of a run of each length at or past `scannedToEndFrom`.
     var latestStart: [Int: Int] = [:]
 
     /// Whether no run of `length` backticks starts at or past `openEnd`, the end of an opening run of that length.
@@ -66,9 +63,7 @@ internal struct BacktickRunsSeen {
 /// Inline-level Markdown parsing functions.
 extension BlockParser {
 
-    /// Parse the inline content of `parent`. The raw byte content of the parent has already been materialized into `content` (resolved from a `Chunk`, typically pointing into `storage.strings`) by the block parser.
-    ///
-    /// On exit, `parent` has zero or more inline child nodes attached. Returns without emitting any child if `content` is empty.
+    /// Parses `content` into inline children of `parent`.
     mutating func parseInline(
         content: borrowing ContentSpan,
         into parent: DocumentStorage.Index,
@@ -77,7 +72,7 @@ extension BlockParser {
         if content.isEmpty {
             return
         }
-        // The delimiter and bracket stacks are parser-owned scratch buffers, reused across every paragraph in the document. Reset the stacks and their tops rather than allocating per call.
+        // The delimiter and bracket stacks are reused across blocks rather than allocated per call.
         delimiters.removeSubrange(0..<delimiters.count)
         brackets.removeSubrange(0..<brackets.count)
         
@@ -87,7 +82,6 @@ extension BlockParser {
         lastDelim = nil
         lastBracket = nil
 
-        // Hoisted once for the plain-text skip in the `default` case below.
         let strikethroughEnabled = storage.options.contains(.strikethrough)
         let gfmAutolinkEnabled = storage.options.contains(.gfmAutolink)
         let smartEnabled = storage.options.contains(.smart)
@@ -173,7 +167,7 @@ extension BlockParser {
                 cursor = handleGFMAutolinkTrigger(byte, at: cursor, content: content, parent: parent, pendingTextStart: &pendingTextStart)
 
             case UInt8(ascii: "'"), UInt8(ascii: "\""):
-                // Smart quotes: push a quote delimiter (resolved to curly open/close in `processEmphasis`). Without `.smart`, the byte is ordinary text.
+                // `processEmphasis` resolves quote delimiters to curly quotes.
                 if smartEnabled {
                     cursor = handleQuoteDelim(
                         char: byte,
@@ -187,7 +181,6 @@ extension BlockParser {
                 }
 
             case UInt8(ascii: "-"):
-                // Smart dashes: a run of 2+ hyphens becomes en/em dashes. A lone `-` is left in the pending-text region (identical text, fewer nodes).
                 if smartEnabled {
                     cursor = handleSmartHyphen(
                         start: cursor,
@@ -200,7 +193,6 @@ extension BlockParser {
                 }
 
             case UInt8(ascii: "."):
-                // Smart ellipsis: exactly `...` becomes a single ellipsis. Other runs of dots stay in the pending-text region.
                 if smartEnabled {
                     cursor = handleEllipsis(at: cursor, content: content, parent: parent, pendingTextStart: &pendingTextStart)
                 } else {
@@ -208,7 +200,7 @@ extension BlockParser {
                 }
 
             default:
-                // Plain text: SIMD-skip to the next inline-significant byte instead of stepping one byte at a time. The skipped run stays pending and is flushed when that byte emits.
+                // Skip plain text to the next significant byte; the skipped run stays pending.
                 cursor = content.nextSignificant(
                     from: cursor,
                     strikethrough: strikethroughEnabled,
@@ -229,9 +221,9 @@ extension BlockParser {
         )
     }
 
-    // Each `handle` step below consumes the construct that starts with the byte at `cursor`, emits what it forms, and returns the offset where scanning resumes: past the construct when one formed, otherwise past the single byte, which stays in the pending text.
+    // Each `handle` step consumes the construct starting at `cursor` and returns where scanning resumes: past the construct, or past the one byte, which stays pending text.
 
-    /// A code span (Code spans): line endings become spaces before one leading and trailing space is stripped. An unmatched backtick run is skipped whole and stays pending text.
+    /// A code span (Code spans). An unmatched backtick run stays pending text whole.
     private mutating func handleBackticks(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         if let span = matchCodeSpan(
             start: cursor,
@@ -248,7 +240,6 @@ extension BlockParser {
             )
             return span.afterClose
         }
-        // No matching close - skip past the run; the backticks become part of the pending text region.
         return scanBacktickRun(
             start: cursor,
             content: content
@@ -259,7 +250,7 @@ extension BlockParser {
     private mutating func handleLineEnding(at cursor: Int, preserveWhitespace: Bool, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         let info: LineBreakInfo
         if preserveWhitespace {
-            // Preserving whitespace, a line ending is literal text rather than a soft line break or a trailing-space hard line break. A backslash before it forms a hard line break (Hard line breaks).
+            // Preserving whitespace, a line ending is literal text unless a backslash before it forms a hard line break (Hard line breaks).
             guard cursor > pendingTextStart, content[cursor - 1] == UInt8(ascii: "\\") else {
                 return cursor + 1
             }
@@ -286,15 +277,11 @@ extension BlockParser {
 
     /// An entity or numeric character reference (Entity and numeric character references).
     private mutating func handleCharacterReference(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
-        // Entity matching reads a flat buffer by raw offset, so scan through a contiguous
-        // window (see `contiguousChunk`): identity for single-segment content, the single
-        // source segment's slice for multi-segment content (whose virtual offsets index no
-        // single buffer). The line ending at a segment join terminates any entity name or
-        // number, so a window from `&` to the segment end is sufficient.
+        // Entity matching reads one buffer, so it scans `&`'s segment; a line join ends any reference anyway.
         let contiguous = content.contiguousChunk(fromVirtual: cursor, limit: content.endOffset)
         precondition(contiguous != nil, "an `&` lies in a source segment: the only synthetic segment is the line join")
         let window = contiguous!
-        // Match in an expression of its own so the borrowed `source` span (lifetime-dependent) stays scoped to the call and can't escape into the body.
+        // A separate expression keeps the borrowed `source` span scoped to the call.
         let entity: EntityParser.EntityMatch? = if window.inSource {
             EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: sourceBytes)
         } else {
@@ -308,7 +295,6 @@ extension BlockParser {
             count: entity.count,
             into: &storage.strings
         )
-        // Convert the scanner-returned buffer offset back to a virtual content offset via the window base (identity for single-segment content).
         let afterSemi = cursor + (entity.afterSemi - window.offset)
         let textIdx = emitLiteral(
             .text,
@@ -353,9 +339,7 @@ extension BlockParser {
             start: cursor,
             content: content
         ) {
-            // The literal is the tag's raw bytes, zero-copy when they lie in one segment. A tag
-            // spanning a line ending in a non-contiguous paragraph has its bytes in separate
-            // segments, so the joined literal is materialized into the arena.
+            // A tag spanning a line ending in multi-segment content is materialized; otherwise the literal is zero-copy.
             emitLiteral(
                 .htmlInline,
                 materializedChunk(start: cursor, end: htmlEnd, content: content),
@@ -408,12 +392,12 @@ extension BlockParser {
         return cursor + 1
     }
 
-    /// A backslash escape (Backslash escapes): `\<ASCII punct>` emits the punct as a single-byte text node. The line ending case handles `\<line ending>`. Anything else leaves the backslash as literal text.
+    /// A backslash escape (Backslash escapes). A backslash before a line ending is handled with the line ending; one before anything but ASCII punctuation is literal.
     private mutating func handleBackslash(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         if cursor + 1 < content.endOffset {
             let next = content[cursor + 1]
             if next.isASCIIPunct {
-                // The node's content is the single unescaped char (`cursor + 1`), but its source span is the 2-byte `\<punct>` escape starting at `cursor`, so the run keeps the backslash's column.
+                // The node's content is the escaped character, but its source range starts at the backslash.
                 emitLiteral(
                     .text,
                     content.chunk(offset: cursor + 1, length: 1),
@@ -431,11 +415,9 @@ extension BlockParser {
 
     /// A `://` or `www.` extended autolink, triggered by `byte` (`:`, `w` or `W`).
     private mutating func handleGFMAutolinkTrigger(_ byte: UInt8, at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
-        // `://` and `www.` extended autolinks are detected in this pass. Extended email autolinks
-        // are detected by `gfmEmailAutolinkPass` after emphasis resolution, so a `_` or `*` beside
-        // an email resolves as emphasis (or not) before the email's boundaries are decided.
-        // The parser forms no `://` or `www.` extended autolink while a `[` or `![` opener is on
-        // the bracket stack, so `[a http://t.t` is text. An `^[` opener does not suppress one.
+        // Extended email autolinks are found after emphasis resolution (`gfmEmailAutolinkPass`), so a `_`
+        // or `*` beside an email resolves first. No `://` or `www.` autolink forms while a `[` or `![`
+        // opener is open, so `[a http://t.t` is text; an `^[` opener does not suppress one.
         let insideLinkOrImageBracket = lastBracket.map { brackets[$0].insideLinkOrImage } ?? false
         if storage.options.contains(.gfmAutolink),
            !insideLinkOrImageBracket,
@@ -461,14 +443,14 @@ extension BlockParser {
         return cursor + 1
     }
 
-    /// A smart ellipsis: exactly `...`.
+    /// A smart ellipsis, `...`.
     private mutating func handleEllipsis(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         guard cursor + 2 < content.endOffset,
               content[cursor + 1] == UInt8(ascii: "."),
               content[cursor + 2] == UInt8(ascii: ".") else {
             return cursor + 1
         }
-        // The ellipsis glyph is arena-backed and its byte length differs from the `...` it replaces; its source span is the three dots, so it keeps their columns.
+        // The ellipsis is arena-backed, but its source range is the three dots.
         emitLiteral(
             .text,
             smartConstantChunk(Self.ellipsis),
@@ -483,13 +465,11 @@ extension BlockParser {
 
     // MARK: - Links / images (bracket stack)
 
-    /// Bracket-stack opener kind.
     internal enum BracketKind {
         case link
         case image
         case attribute
 
-        /// The kind of the node the bracket becomes when it resolves.
         var nodeKind: MarkdownNode.Kind {
             switch self {
             case .link: .link
@@ -499,20 +479,20 @@ extension BlockParser {
         }
     }
 
-    /// Bracket-stack entry recording an open `[` (LINK), `![` (IMAGE), or `^[` (ATTRIBUTE, the inline-attribute syntax). Like the delimiter stack, it's a linked list embedded in an array; `previous` is an index into `brackets` (or `nil`).
+    /// An open `[`, `![` or `^[` on the bracket stack, a linked list through `previous` in `brackets`.
     internal struct BracketRecord {
         var kind: BracketKind
         var inlText: DocumentStorage.Index
-        /// Virtual content offset of the opening `[` / `![` / `^[` byte. `buildLinkOrImage` / `handleCloseBracketAttribute` derive the wrapper's start from this so the map-aware stamp resolves arena/multi-segment content (the opener text node's stored chunk offset is already a source offset and would double-map).
+        /// The opener's virtual offset, from which the wrapper's start is stamped. The opener text node's range is in source offsets, so stamping from it would map twice.
         var virtualStart: Int
-        /// Delimiter-stack index at time of push. Passed to `processEmphasis` as `stackBottom` after a successful link match so emphasis inside the link text gets resolved without leaking out.
+        /// The delimiter stack top at push: the `stackBottom` for resolving emphasis inside the link text.
         var delimPosition: Int
-        /// `true` once any later bracket has been pushed on top of this one. Such a bracket's text holds an unescaped bracket, which no link label does, so it skips the shortcut-reference label lookup.
+        /// Whether a bracket was pushed after this one. Its text then holds an unescaped bracket, which no link label does, so it skips the shortcut lookup.
         var bracketAfter: Bool = false
-        /// `true` when this bracket, or any bracket enclosing it, is a `.link` or `.image` opener. `://` and `www.` extended autolinks don't form while such a bracket is open; an `.attribute`-only chain does not suppress them.
+        /// Whether this bracket or one enclosing it is a link or image opener, which suppresses `://` and `www.` extended autolinks.
         var insideLinkOrImage: Bool
-        /// `true` once a link or autolink formed after this opener, which then cannot form a link: links may not
-        /// contain other links (Links).
+        /// Whether a link or autolink formed after this opener, which then can't form a link: links may not contain
+        /// other links (Links).
         var linkFormedAfter: Bool = false
         var previous: Int?
     }
@@ -528,9 +508,7 @@ extension BlockParser {
         }
     }
 
-    /// Push a `kind` opener whose literal text is the `length` bytes at `cursor` (`[`, `![` or `^[`), returning the offset past it.
-    ///
-    /// An opener that never resolves survives as literal text with its own source range, so it keeps its columns when it consolidates with neighbors; a resolved one is unlinked first.
+    /// Pushes a `kind` opener, the `length` bytes at `cursor`, and returns the offset past it. An unresolved opener stays literal text with its own source range.
     private mutating func openBracket(_ kind: BracketKind, length: Int, at cursor: Int, to parent: DocumentStorage.Index, pendingTextStart: inout Int, content: borrowing ContentSpan) -> Int {
         let textIdx = emitLiteral(.text, content.chunk(offset: cursor, length: length), start: cursor, end: cursor + length, to: parent, pendingTextStart: &pendingTextStart, content: content)
         pushBracket(kind: kind, inlText: textIdx, virtualStart: cursor, delimPosition: lastDelim ?? -1)
@@ -562,7 +540,7 @@ extension BlockParser {
         }
     }
     
-    /// Process a `]`. A link or image form after it - an inline `(destination "title")` or a reference to a definition - or an attribute form turns the innermost open bracket into that node; a `[^label]` naming a footnote definition becomes a footnote reference; otherwise the `]` is literal text. Returns the offset to resume scanning from.
+    /// Handles a `]`: the innermost opener becomes a link, image or attribute when that form follows, or a footnote reference when `[^label]` names a definition. Otherwise the `]` is literal.
     private mutating func handleCloseBracket(cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index) -> Int {
         let afterBracket = cursor + 1
         guard let openerIdx = lastBracket else {
@@ -590,14 +568,13 @@ extension BlockParser {
             }
             return formed.end
         }
-        // With no link form matched, a `[^label]` whose label names a footnote definition is a footnote
-        // reference. Any other bracket stays literal text; the footnote map is complete before inline parsing.
+        // Failing a link form, a `[^label]` naming a footnote definition is a footnote reference. The
+        // footnote map is complete before inline parsing.
         let footnoteBracketStart = openerStart + (openerKind == .image ? 1 : 0)
         if openerKind != .attribute,
            storage.options.contains(.footnotes),
            let defIdx = footnoteDefinition(referencedFrom: footnoteBracketStart, closeBracket: cursor, in: content) {
-            // Resolve emphasis inside the bracket first (clearing its delimiters from the stack) so
-            // removing the inner nodes below doesn't leave stale delimiters for `processEmphasis`.
+            // Resolve emphasis inside the bracket first, so removing its nodes leaves no stale delimiters.
             processEmphasis(stackBottom: openerDelimPos, content: content)
             emitFootnoteReference(openerInl: openerInl, definition: defIdx, span: footnoteBracketStart..<afterBracket, content: content)
             popBracket()
@@ -608,11 +585,9 @@ extension BlockParser {
         return afterBracket
     }
 
-    /// The link or image data for the form after the `]` at `cursor`, and the offset just past that form.
+    /// The link or image data for the form after the `]` at `cursor`, and the offset past it. Tries the inline form, then full, collapsed and shortcut references.
     ///
-    /// `shortcutLabelStart` is where the shortcut form's label begins, just past the opener (it runs to `cursor` and may span a line ending, `[foo\nbar]`); `nil` when a bracket is nested under the opener, which excludes the shortcut form.
-    ///
-    /// The inline form `(destination "title")` is tried first, then the reference forms: full `[label]`, collapsed `[]` and shortcut.
+    /// `shortcutLabelStart` is where the shortcut label begins, or `nil` when a bracket nested under the opener rules it out.
     @inline(__always)
     private mutating func matchLinkForm(shortcutLabelStart: Int?, cursor: Int, content: borrowing ContentSpan) -> (data: NodeData, end: Int)? {
         let end = content.endOffset
@@ -625,14 +600,13 @@ extension BlockParser {
         var afterReference = pos
         if let label = matchLabelKey(from: pos, content: content) {
             key = label.key
-            // A whitespace-only `[ ]` is neither a link label nor `[]` (Links: a link label holds a
-            // non-whitespace character), so a shortcut reference before it leaves it as text.
+            // A whitespace-only `[ ]` is neither a link label nor `[]` (Links), so after a shortcut
+            // reference it stays text.
             if !key.isEmpty || label.afterEnd == pos + 2 {
                 afterReference = label.afterEnd
             }
         }
-        // A collapsed `[]`, a whitespace-only `[   ]` or no label falls back to the shortcut form, whose
-        // label is the bracket text, when no bracket is nested under this opener.
+        // A collapsed or blank label, or none, falls back to the shortcut form, whose label is the bracket text.
         if key.isEmpty, let textStart = shortcutLabelStart {
             // A link label has at most 999 characters inside its brackets (Links), so a longer shortcut stays literal.
             if cursor > textStart, linkLabelFitsLengthCap(virtualRange: textStart..<cursor, in: content) {
@@ -645,9 +619,9 @@ extension BlockParser {
         return (.link(url: storage.intern(definition.destination), title: storage.intern(definition.title)), afterReference)
     }
 
-    /// Match an inline link's `destination "title")` following its `(`, returning the cleaned destination and title and the offset just past the `)`.
+    /// Matches an inline link's `destination "title")` after its `(`, returning the cleaned destination and title and the offset past the `)`.
     ///
-    /// The destination and title are scanned over virtual offsets: either may span a line ending in multi-segment content (`<a\` LF `b>`, `'\'` LF `'`). The destination is trimmed, then unescaped and entity-decoded; the title is unescaped and entity-decoded without trimming. Inside arena content (a non-contiguous setext heading, a table cell with `\|`) either can be arena-backed, and either may span a line ending, so both are materialized (zero-copy within one segment).
+    /// Either may span a line ending, so both are materialized, zero-copy within one segment.
     @inline(__always)
     private mutating func matchInlineLinkTail(afterParen: Int, content: borrowing ContentSpan) -> (url: Chunk, title: Chunk, end: Int)? {
         let end = content.endOffset
@@ -674,7 +648,7 @@ extension BlockParser {
         )
     }
 
-    /// The normalized key of the `[label]` at `pos` (empty for a blank label) and the offset just past its `]`, or `nil` when no label starts at `pos`. The label may span a line ending.
+    /// The normalized key of the label at `pos`, empty for a blank one, and the offset past its `]`.
     ///
     /// `mutating` so that calling its non-mutating callees does not copy `self`, which costs more than the call.
     private mutating func matchLabelKey(from pos: Int, content: borrowing ContentSpan) -> (key: String, afterEnd: Int)? {
@@ -686,7 +660,7 @@ extension BlockParser {
         return (label.interior.isEmpty ? "" : normalizeLabel(virtualRange: label.interior, in: content), label.afterEnd)
     }
 
-    /// Append a one-byte `]` text node at `cursor`. Used by the failure paths of `handleCloseBracket`.
+    /// Appends a `]` text node.
     private mutating func emitBracketLiteral(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index) {
         appendInline(.text, .literal(storage.intern(content.chunk(offset: cursor, length: 1))), to: parent, start: cursor, end: cursor + 1, content: content)
     }
@@ -709,10 +683,8 @@ extension BlockParser {
 
     // MARK: - Footnote references
 
-    /// The footnote definition the footnote-shaped bracket from `open` to `closeBracket` references, or `nil`.
-    /// Its label - everything after the `^` - matches a definition's label after the normalization link labels
-    /// get (Links: case-folded, with runs of whitespace, line endings included, collapsed to one
-    /// space and leading and trailing whitespace removed), so it may span a line ending.
+    /// The definition the footnote-shaped bracket from `open` to `closeBracket` references, or `nil`. Its label,
+    /// everything after the `^`, is normalized as a link label (Links), so it may span a line ending.
     private func footnoteDefinition(referencedFrom open: Int, closeBracket: Int, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
         let labelStart = open + 2
         guard labelStart < closeBracket, content[open + 1] == UInt8(ascii: "^"),
@@ -722,17 +694,10 @@ extension BlockParser {
         return storage.footnoteMap[normalizeLabel(virtualRange: labelStart..<closeBracket, in: content)]
     }
 
-    /// Splice a `.footnoteReference` node in place of the opener's bracket text node and any inner-content text nodes.
+    /// Replaces the opener's text and the bracket's inner nodes with a `.footnoteReference` to `definition` over `span`.
     ///
-    /// Only called with the `definition` the reference's label resolved to (`footnoteDefinition`). The reference's index is assigned later, by the footnote post-processing pass over the
-    /// finalized tree, because an enclosing bracket can discard this reference; until then it
-    /// carries a placeholder index of 0. The emitted reference carries the *definition's* raw label, so
-    /// `[^Foo]` resolving to `[^foo]` displays `foo`.
-    ///
-    /// The opener node is removed whole: a `[` (`![^a]` never opens an image bracket, see the `!` dispatch,
-    /// so it reaches here as a literal `!` followed by a `[` opener).
-    ///
-    /// The reference's source range is `span`, the virtual range of `content` it replaces: from its opener to just past its `]`.
+    /// The reference carries the definition's label, so `[^Foo]` resolving to `[^foo]` displays `foo`. Its index is 0
+    /// until the footnote pass numbers the finalized tree, because an enclosing bracket can still discard it.
     private mutating func emitFootnoteReference(openerInl: DocumentStorage.Index, definition defIdx: DocumentStorage.Index, span: Range<Int>, content: borrowing ContentSpan) {
         guard case .footnoteDefinition(let defLabel) = storage[defIdx].data else {
             preconditionFailure("footnoteMap holds only footnote definitions")
@@ -746,7 +711,7 @@ extension BlockParser {
         storage.insertChildBefore(fnRefIdx, before: openerInl)
         stampInline(fnRefIdx, span.lowerBound, span.upperBound, content: content)
         storage.unlinkChild(openerInl)
-        // Detach inner-content text nodes (the `^label` part) that follow the reference. They aren't part of the reference's emitted text - the reference is rendered by the consumer based on its label and index.
+        // The inner `^label` nodes go; a reference is rendered from its label and index.
         var sib = storage[fnRefIdx].next
         while let sib_ = sib {
             let nextSib = storage[sib_].next
@@ -757,13 +722,10 @@ extension BlockParser {
 
     // MARK: - Extended attributes (`^[..]`)
 
-    /// The attribute data for the form after the `]` at `cursor` that closes an `^[…]` opener, and the offset just past that form.
-    ///
-    /// The inline form `(attrs)` is tried first, then the reference form `[label]` whose label resolves in `storage.attributeReferenceMap`.
+    /// The attribute data for the form after the `]` closing an `^[` opener, and the offset past it: an inline `(attrs)`, or a `[label]` naming an attribute definition.
     private mutating func matchAttributeForm(cursor: Int, content: borrowing ContentSpan) -> (data: NodeData, end: Int)? {
         let end = content.endOffset
         let pos = cursor + 1
-        // The attribute scanner allows whitespace and balanced parens - this is *not* a link-URL scan.
         if pos < end, content[pos] == UInt8(ascii: "("),
            let scanned = matchAttributeAttributes(start: pos + 1, content: content),
            scanned.afterEnd < end,
@@ -784,9 +746,7 @@ extension BlockParser {
         var afterEnd: Int
     }
 
-    /// Scan the inside of an attribute form's `(…)`.
-    ///
-    /// Allows whitespace and nested balanced parens up to depth 32. Backslash before ASCII punctuation is treated as an escape (and consumed as a 2-byte unit). Differs from a link-URL scan in that whitespace is not a terminator.
+    /// Scans an attribute form's `(…)` interior, which may hold whitespace, parentheses balanced to depth 32, and backslash escapes.
     private mutating func matchAttributeAttributes(start: Int, content: borrowing ContentSpan) -> AttributeAttributesMatch? {
         let end = content.endOffset
         var i = start
@@ -823,12 +783,7 @@ extension BlockParser {
         return nil
     }
 
-    /// The attribute interior `[start, end)` as a single readable chunk.
-    ///
-    /// Zero-copy when the range lies in one segment. An interior spanning a line ending in a
-    /// non-contiguous paragraph (e.g. ` ^[](\n)`) lies in separate segments, so its joined bytes are
-    /// materialized into the arena; the line ending is ordinary attribute content. An empty `()` is a
-    /// zero-length chunk.
+    /// The attribute interior as one chunk, materialized only when it spans segments.
     private mutating func attributeContentChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         if start == end {
             return content.chunk(offset: start, length: 0)
@@ -846,58 +801,53 @@ extension BlockParser {
 
     // MARK: - Emphasis / strong (delimiter stack)
 
-    /// One node in the delimiter stack of the emphasis-resolution algorithm (Appendix: A parsing strategy). Each record points at a `.text` node whose literal contains a delimiter run scanned during the forward pass.
+    /// A delimiter run on the emphasis stack (Appendix: A parsing strategy), pointing at the `.text` node holding it.
     ///
-    /// The stack is a doubly-linked list embedded in a `UniqueArray<DelimiterRecord>` array - `previous`/`next` are array indices, `nil` means "none". When emphasis is resolved, individual records are unlinked from the list but the array itself isn't shrunk (so other indices stay valid).
+    /// The stack is a doubly-linked list through `delimiters`; unlinking a record leaves the array, and so other indices, intact.
     internal struct DelimiterRecord {
         var character: UInt8
         var length: Int
         var canOpen: Bool
         var canClose: Bool
         var inlText: DocumentStorage.Index
-        /// The delimiter run's span in *virtual* content coordinates (`[virtualStart, virtualEnd)`), fixed at creation. `insertEmph` derives the emph/strong node's source range from these virtual offsets so the map-aware stamp resolves arena/multi-segment content correctly - not from the run's stored chunk offset, which is already a source offset and would double-map.
+        /// The run's virtual range, from which `insertEmph` stamps the emphasis node. The run's text node is in source offsets, so stamping from it would map twice.
         var virtualStart: Int
         var virtualEnd: Int
         var previous: Int?
         var next: Int?
     }
 
-    /// The flanking classification of a `*`/`_`/`~`/quote delimiter run, computed against the
-    /// characters bordering the run.
+    /// The flanking classification of a delimiter run.
     private struct Flanking {
         var leftFlanking: Bool
         var rightFlanking: Bool
-        /// The (skip-adjusted) character immediately before the run, used by the quote `]`/`)` rule.
+        /// The byte before the run, past any skipped `~` run, for the quote `]`/`)` rule.
         var beforeChar: UInt8
-        /// Whether that before/after character is ASCII punctuation, used by the `_` intraword rule.
+        /// Whether the bordering characters are punctuation, for the `_` intraword rule.
         var beforeIsPunct: Bool
         var afterIsPunct: Bool
     }
 
-    /// Classify a delimiter run as left- and/or right-flanking (Emphasis and strong emphasis).
+    /// Classifies a delimiter run as left- or right-flanking (Emphasis and strong emphasis).
     ///
-    /// With strikethrough enabled, a `*`, `_` or quote run reads its bordering characters past any
-    /// adjacent `~` run, so the closing `*` in `*-*~a` borders `a`, is left-flanking only, and closes
-    /// no emphasis. A `~` run reads its immediate neighbours.
+    /// With strikethrough on, a `*`, `_` or quote run reads its neighbours past any adjacent `~` run, so the
+    /// closing `*` in `*-*~a` borders `a` and closes no emphasis.
     private func classifyFlanking(char: UInt8, start: Int, runEnd: Int, content: borrowing ContentSpan) -> Flanking {
         let end = content.endOffset
         let chunkStart = content.startOffset
         let tilde = UInt8(ascii: "~")
         let skipTilde = char != tilde && storage.options.contains(.strikethrough)
-        // "Before" character - the start of the content counts as a line ending; skip a leading `~` run.
+        // The content's start and end count as line endings.
         var beforeIdx = start - 1
         if skipTilde {
             while beforeIdx >= chunkStart, content[beforeIdx] == tilde { beforeIdx -= 1 }
         }
         let beforeChar: UInt8 = beforeIdx >= chunkStart ? content[beforeIdx] : UInt8(ascii: "\n")
-        // "After" character - same convention at end of content; skip a trailing `~` run.
         var afterIdx = runEnd
         if skipTilde {
             while afterIdx < end, content[afterIdx] == tilde { afterIdx += 1 }
         }
-        // Flanking is defined over characters, so a non-ASCII Unicode whitespace character or
-        // punctuation character neighbour (e.g. U+00A0, U+2014) counts as one. `beforeChar` keeps the
-        // raw byte for the quote `]`/`)` rule; a multi-byte scalar never equals those.
+        // Flanking is defined over characters, so a multi-byte whitespace or punctuation neighbour counts.
         let beforeScalar: Int32 = beforeIdx >= chunkStart
             ? Self.flankingScalarBefore(endingAt: beforeIdx, lowerBound: chunkStart, content: content)
             : 0x0A
@@ -919,9 +869,7 @@ extension BlockParser {
         )
     }
 
-    /// The Unicode scalar just before a delimiter run, whose last byte is at `endIdx`. An ASCII byte is
-    /// its own scalar (the common fast path); otherwise walk back over UTF-8 continuation bytes (not past
-    /// `lowerBound`) to the lead byte and decode.
+    /// The scalar whose last byte is at `endIdx`, decoded from its lead byte at or after `lowerBound`.
     @inline(__always)
     private static func flankingScalarBefore(endingAt endIdx: Int, lowerBound: Int, content: borrowing ContentSpan) -> Int32 {
         let last = content[endIdx]
@@ -931,7 +879,6 @@ extension BlockParser {
         return decodeUTF8Scalar(at: lead, content: content)
     }
 
-    /// The Unicode scalar just after a delimiter run, beginning at `idx`.
     @inline(__always)
     private static func flankingScalarAfter(startingAt idx: Int, content: borrowing ContentSpan) -> Int32 {
         let first = content[idx]
@@ -939,7 +886,7 @@ extension BlockParser {
         return decodeUTF8Scalar(at: idx, content: content)
     }
 
-    /// Decode the multi-byte UTF-8 scalar whose lead byte is at `idx`. Inline content is valid UTF-8 cut only on
+    /// Decodes the multi-byte scalar whose lead byte is at `idx`. Inline content is valid UTF-8 cut only at
     /// ASCII bytes, so the whole sequence lies inside the content.
     private static func decodeUTF8Scalar(at idx: Int, content: borrowing ContentSpan) -> Int32 {
         let b0 = content[idx]
@@ -953,8 +900,7 @@ extension BlockParser {
         return (Int32(b0 & 0x07) << 18) | (Int32(content[idx + 1] & 0x3F) << 12) | (Int32(content[idx + 2] & 0x3F) << 6) | Int32(content[idx + 3] & 0x3F)
     }
 
-    /// Whether `uc` is a Unicode whitespace character (Characters and lines): the Zs general category
-    /// plus tab, line feed, form feed and carriage return.
+    /// Whether `uc` is a Unicode whitespace character (Characters and lines).
     @inline(__always)
     private static func isUnicodeWhitespace(_ uc: Int32) -> Bool {
         if uc < 0x80 { return UInt8(uc).isFlankingSpace }
@@ -966,8 +912,7 @@ extension BlockParser {
         }
     }
 
-    /// Whether `uc` is a punctuation character (Characters and lines): an ASCII punctuation character or
-    /// a member of the Pc, Pd, Pe, Pf, Pi, Po or Ps general categories.
+    /// Whether `uc` is a punctuation character (Characters and lines).
     @inline(__always)
     private static func isUnicodePunctuation(_ uc: Int32) -> Bool {
         if uc < 0x80 { return UInt8(uc).isASCIIPunct }
@@ -1006,9 +951,7 @@ extension BlockParser {
         }
     }
 
-    /// Scan a maximal delimiter run of `char` starting at `start`, decide whether it can open and close (Emphasis and strong emphasis), emit a `.text` node for the run, and (if it can open or close) push a delimiter record onto the stack. Returns the offset just past the run.
-    ///
-    /// The start of the content counts as a line ending before the run.
+    /// Scans the delimiter run at `start`, emits its text, and pushes a delimiter if it can open or close (Emphasis and strong emphasis). Returns the offset past the run.
     private mutating func handleDelimRun(char: UInt8, start: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         let end = content.endOffset
         var runEnd = start
@@ -1026,26 +969,25 @@ extension BlockParser {
         let canOpen: Bool
         let canClose: Bool
         if char == UInt8(ascii: "_") {
-            // Intraword `_` is rejected on whichever side has letters/digits.
+            // Rules 2, 4, 6 and 8 (Emphasis and strong emphasis).
             canOpen = leftFlanking && (!rightFlanking || beforeIsPunct)
             canClose = rightFlanking && (!leftFlanking || afterIsPunct)
         } else {
             canOpen = leftFlanking
             canClose = rightFlanking
         }
-        // A run that can neither open nor close stays in the pending text, so the extended email
-        // autolink pass sees an unbroken local part (`a.b-c_d@a.b`). A `~` run always emits its own
-        // text node; a non-flanking `~` run is surrounded by whitespace, so it never falls inside an
-        // autolink.
+        // A run that can neither open nor close stays pending text, so the email autolink pass sees an
+        // unbroken local part (`a.b-c_d@a.b`). A non-flanking `~` run is surrounded by whitespace, so its
+        // own text node never splits an autolink.
         let isStrikethrough = char == UInt8(ascii: "~")
         if !canOpen && !canClose && !isStrikethrough {
             return runEnd
         }
-        // A delimiter that forms no emphasis stays literal text, and this range keeps its columns when it consolidates with adjacent text.
+        // An unpaired delimiter stays literal text with its own source range.
         let textIdx = emitLiteral(.text, content.chunk(offset: start, length: count), start: start, end: runEnd, to: parent, pendingTextStart: &pendingTextStart, content: content)
         if canOpen || canClose {
-            // Strikethrough (extension) wraps text in two tildes. The parser also accepts a single tilde
-            // unless `.strikethroughDoubleTilde` is set; a `~` run of any other length stays literal text.
+            // Strikethrough (extension) uses two tildes, or one unless `.strikethroughDoubleTilde` is set.
+            // Other `~` runs stay literal.
             let pushDelim: Bool
             if isStrikethrough {
                 let doubleTilde = storage.options.contains(.strikethroughDoubleTilde)
@@ -1076,13 +1018,13 @@ extension BlockParser {
         return runEnd
     }
 
-    /// Resolve emphasis pairs. Walks forward from the first delimiter above `stackBottom` (use `-1` to process the entire stack). For each closer, looks back for the most recent compatible opener and pairs them via `insertEmph`.
+    /// Resolves emphasis among the delimiters above `stackBottom` (`-1` for the whole stack), pairing each closer with the nearest compatible opener.
     ///
-    /// `openersBottom` is the per-(length%3, char) search-floor optimization: once we fail to find an opener for a closer of a given (length%3, char), no later closer of the same shape needs to look behind that point.
+    /// `openersBottom` records, per closer length mod 3 and character, where a failed opener search stopped, so no later closer searches below it.
     private mutating func processEmphasis(stackBottom: Int, content: borrowing ContentSpan) {
         // openersBottom[length % 3, char-index]: 0=`*`, 1=`_`, 2=`~`, 3=`'`, 4=`"`.
         var openersBottom = OpenersBottom(fill: stackBottom)
-        // Find the earliest (smallest-index) delimiter strictly above stackBottom.
+        // The earliest delimiter above `stackBottom`.
         var closer: Int? = nil
         var walker = lastDelim
         while let w = walker, w > stackBottom {
@@ -1097,7 +1039,6 @@ extension BlockParser {
             let closerChar = delimiters[c].character
             let charIdx = charIndex(for: closerChar)
             let lenMod = delimiters[c].length % 3
-            // Look backward for first matching opener.
             var opener = delimiters[c].previous
             var openerFound = false
             while let o = opener, o > stackBottom,
@@ -1106,10 +1047,9 @@ extension BlockParser {
                     && delimiters[o].character == closerChar {
                     let cl = delimiters[c]
                     let op = delimiters[o]
-                    // The parser applies the multiple-of-3 test of rules 9 and 10 (Emphasis and strong
-                    // emphasis) to `~` as well as `*` and `_`. A `~` opener is accepted whatever its length:
-                    // `insertEmph` discards a mismatched pair, so a closer never reaches past the nearest
-                    // `~` opener to a farther one of equal length.
+                    // The multiple-of-3 test of rules 9 and 10 (Emphasis and strong emphasis) applies to `~`
+                    // too. A `~` opener of any length is accepted: `insertEmph` discards a mismatched pair,
+                    // so a closer never reaches past the nearest `~` opener.
                     if !(cl.canOpen || op.canClose)
                         || cl.length % 3 == 0
                         || (op.length + cl.length) % 3 != 0 {
@@ -1121,7 +1061,7 @@ extension BlockParser {
             }
             let oldCloser = c
             if closerChar == UInt8(ascii: "'") || closerChar == UInt8(ascii: "\"") {
-                // Smart quote: the closer is already the right (closing) curly form - `handleQuoteDelim` sets `'`→rightSingleQuote and a `"` closer (which by definition `canClose`)→rightDoubleQuote at creation, so re-interning it here would only move its segment to the pool's end and break the pool-contiguity that `consolidateTextNodes` relies on to merge it with its neighbours (e.g. the apostrophe in `it's`). Only the opener needs its glyph flipped.
+                // A quote closer already has its closing glyph from `handleQuoteDelim`. Re-interning it would move its segment to the pool's end, so `consolidateTextNodes` could not merge it with its neighbours (the apostrophe in `it's`).
                 let single = closerChar == UInt8(ascii: "'")
                 let next = delimiters[c].next
                 if openerFound, let opener {
@@ -1165,7 +1105,7 @@ extension BlockParser {
         }
     }
 
-    /// Pair `opener` with `closer`, build an `.emphasis` (1-char match) or `.strong` (2-char match) node, reparent the inner siblings into it, trim the matched chars off the opener's and closer's text nodes, remove freed delimiters from the stack, and return the next closer to process (which is `closer.next` if we consumed the closer's text fully, otherwise `closer` itself for another round).
+    /// Wraps the nodes between `opener` and `closer` in an `.emphasis`, `.strong` or `.strikethrough` node, trims the used delimiters, and returns the next closer to process: `closer` again if part of its run remains.
     private mutating func insertEmph(opener: Int, closer: Int, content: borrowing ContentSpan) -> Int? {
         let openerInl = delimiters[opener].inlText
         let closerInl = delimiters[closer].inlText
@@ -1175,9 +1115,8 @@ extension BlockParser {
         let useDelims: Int
         let kind: MarkdownNode.Kind
         if openerChar == UInt8(ascii: "~") {
-            // Strikethrough forms only between runs of equal length. On a mismatch both runs stay
-            // literal text, and every delimiter from the closer back through the opener is removed,
-            // so a farther opener can't pair with this closer.
+            // Strikethrough forms only between runs of equal length. On a mismatch both stay literal, and
+            // every delimiter from the closer back through the opener goes, so no farther opener pairs with it.
             if openerNumChars != closerNumChars {
                 let next = delimiters[closer].next
                 var d: Int? = closer
@@ -1189,7 +1128,6 @@ extension BlockParser {
                 removeDelim(opener)
                 return next
             }
-            // Equal run lengths: consume the entire run from each side.
             useDelims = openerNumChars
             kind = .strikethrough
         } else {
@@ -1198,27 +1136,21 @@ extension BlockParser {
         }
         openerNumChars -= useDelims
         closerNumChars -= useDelims
-        // The delimiter records' `length` stays the original run length: the multiple-of-3 test of
-        // rules 9 and 10 sums the lengths of the delimiter runs, and `processEmphasis` indexes
-        // `openersBottom` by it. A closer reduced from 4 to 2 must keep its original slot, or a floor
-        // lowered by an unpairable interior run would suppress the leftover pairing (`****a**o****`
-        // nests as Strong>Strong>Text "a**o"). The remaining count, which governs how many characters
-        // this pairing consumes, is the text literal's length (`literalLength` above).
-        // Trim `useDelims` chars off the END of the opener literal.
+        // A record's `length` stays the original run length, which rules 9 and 10 sum and `openersBottom`
+        // is indexed by: a closer reduced from 4 to 2 keeps its slot, or `****a**o****` would not nest as
+        // Strong>Strong. The count still available is the text literal's length.
         storage.trimLiteral(of: openerInl, trimStart: 0, newLength: openerNumChars)
-        // Trim `useDelims` chars off the START of the closer literal.
         storage.trimLiteral(of: closerInl, trimStart: useDelims, newLength: closerNumChars)
-        // Free intervening delimiters (their inl_text nodes survive - they become children of the new emph/strong).
+        // Intervening delimiters go; their text nodes become children of the new node.
         var d = delimiters[closer].previous
         while let dd = d, dd != opener {
             let prev = delimiters[dd].previous
             removeDelim(dd)
             d = prev
         }
-        // Build the wrapping node and reparent siblings.
         let parentIdx = storage[openerInl].parent
         let emphIdx = storage.appendNode(NodeRecord(kind: kind, parent: parentIdx))
-        // The emph/strong range covers only the consumed delimiters plus content and never overlaps the leftover text: advance the start past the opener's leftover delimiters and pull the end back before the closer's (`**o*` → `Emphasis @1:2-1:5`). For balanced runs both counts are zero. Both offsets are VIRTUAL content offsets so the map-aware `content:` overload resolves them through the arena/segment map (identity for source-backed content).
+        // The node covers the used delimiters and the content, not the leftover delimiters (`**o*` → `Emphasis @1:2-1:5`).
         let start = delimiters[opener].virtualStart + openerNumChars
         let end = delimiters[closer].virtualEnd - closerNumChars
         stampInline(emphIdx, start, end, content: content)
@@ -1267,7 +1199,7 @@ extension BlockParser {
 
     // MARK: - Smart punctuation
 
-    /// UTF-8 bytes for the smart-punctuation replacement characters.
+    /// Smart-punctuation replacement characters.
     static let leftSingleQuote = "\u{2018}"
     static let rightSingleQuote = "\u{2019}"
     static let leftDoubleQuote = "\u{201C}"
@@ -1276,14 +1208,13 @@ extension BlockParser {
     static let emDash = "\u{2014}"
     static let ellipsis = "\u{2026}"
 
-    /// Append a constant UTF-8 byte sequence into the string arena.
     private mutating func appendSmartConstant(_ s: String) {
         for b in s.utf8 {
             storage.strings.append(b)
         }
     }
 
-    /// Append a constant UTF-8 byte sequence into the string arena, returning the chunk it occupies.
+    /// Appends `s` to the arena, returning its chunk.
     private mutating func smartConstantChunk(_ s: String) -> Chunk {
         let offset = storage.strings.count
         appendSmartConstant(s)
@@ -1296,7 +1227,7 @@ extension BlockParser {
         storage[nodeIdx].data = .literal(ref)
     }
 
-    /// Handle a run of `-` under `.smart`. A run of two or more hyphens is decomposed into en/em dashes. A lone hyphen is left in the pending-text region. Returns the offset just past the run.
+    /// A run of two or more hyphens becomes en and em dashes; a lone hyphen stays pending text.
     private mutating func handleSmartHyphen(start: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         let end = content.endOffset
         var runEnd = start
@@ -1306,7 +1237,6 @@ extension BlockParser {
         }
         let numHyphens = runEnd - start
         if numHyphens < 2 {
-            // Lone hyphen: leave it in pending text (identical output, no extra node).
             return runEnd
         }
         var enCount = 0
@@ -1330,39 +1260,36 @@ extension BlockParser {
             appendSmartConstant(Self.enDash)
         }
         let chunk = Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
-        // The node's content is arena-backed en/em-dash glyphs whose byte length differs from the source hyphen run; its source span is the `-` run, so the dashes keep their source columns.
+        // The dashes are arena-backed, but their source range is the hyphen run.
         emitLiteral(.text, chunk, start: start, end: runEnd, to: parent, pendingTextStart: &pendingTextStart, content: content)
         return runEnd
     }
 
-    /// Handle a `'` or `"` under `.smart`. Emits a text node carrying the initial curly form and, if the quote can open or close, pushes a delimiter so `processEmphasis` can resolve the open/close pairing.
-    ///
-    /// Returns the offset just past the quote.
+    /// Emits a `'` or `"` as its initial curly quote and, if it can open or close, pushes a delimiter for `processEmphasis` to pair.
     private mutating func handleQuoteDelim(char: UInt8, start: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
-        // Quotes are limited to a single delimiter character (unlike `*`/`_`/`~` runs).
+        // A quote delimiter is one character.
         let runEnd = start + 1
         let flanking = classifyFlanking(char: char, start: start, runEnd: runEnd, content: content)
         let leftFlanking = flanking.leftFlanking
         let rightFlanking = flanking.rightFlanking
         let beforeChar = flanking.beforeChar
-        // Quote-specific flanking rules.
         let canOpen = leftFlanking && !rightFlanking && beforeChar != UInt8(ascii: "]") && beforeChar != UInt8(ascii: ")")
         let canClose = rightFlanking
-        // Initial curly form: `'` is always a right single quote (apostrophe); `"` is a closing quote when it can close, otherwise an opening quote.
+        // `'` starts as an apostrophe; `"` as a closing quote when it can close, otherwise an opening one.
         let literal: String
         if char == UInt8(ascii: "'") {
             literal = Self.rightSingleQuote
         } else {
             literal = canClose ? Self.rightDoubleQuote : Self.leftDoubleQuote
         }
-        // The node's content is the arena-backed curly glyph (3 UTF-8 bytes), but its source span is the single straight-quote byte at `start`, so the quote keeps its column.
+        // The curly quote is arena-backed, but its source range is the straight quote.
         let textIdx = emitLiteral(.text, smartConstantChunk(literal), start: start, end: runEnd, to: parent, pendingTextStart: &pendingTextStart, content: content)
         if canOpen || canClose {
             let prev = lastDelim
             let newIdx = delimiters.count
             delimiters.append(DelimiterRecord(
                 character: char,
-                // The curly glyph is 3 UTF-8 bytes; recording that as the delimiter length makes the rule-of-three opener check (`length % 3 == 0`) always admit a quote pairing.
+                // A length of 3 makes the multiple-of-3 test always admit a quote pairing.
                 length: 3,
                 canOpen: canOpen,
                 canClose: canClose,
@@ -1383,18 +1310,17 @@ extension BlockParser {
     // MARK: - Code spans
 
     private struct CodeSpanMatch {
-        var content: Chunk      // the code-span literal (with one-space-each-side trimmed if applicable)
+        var content: Chunk      // the raw code-span content
         var afterClose: Int     // offset just past the closing backtick run
         var backtickCount: Int  // number of backticks in the opening/closing run
     }
 
-    /// Match a code span starting at `start` (which must point at a backtick). Returns the resulting content chunk and the offset just past the closing backtick run, or `nil` if no closing run of equal length exists in `start..<end`.
+    /// Matches a code span at the backtick run at `start`, or `nil` if no closing run of equal length follows.
     private mutating func matchCodeSpan(start: Int, content: borrowing ContentSpan) -> CodeSpanMatch? {
         let end = content.endOffset
         let openEnd = scanBacktickRun(start: start, content: content)
         let runLength = openEnd - start
-        // Scanning the rest of the paragraph afresh for every unmatched opener makes a paragraph of distinct-length
-        // runs quadratic.
+        // Rescanning for every unmatched opener would make a paragraph of distinct-length runs quadratic.
         if backtickRunsSeen.rulesOutCloser(length: runLength, after: openEnd) {
             return nil
         }
@@ -1407,11 +1333,8 @@ extension BlockParser {
                 let closeEnd = scanBacktickRun(start: i, content: content)
                 let closeLength = closeEnd - i
                 if closeLength == runLength {
-                    // Return the raw content `[openEnd, i)`; the caller converts line endings to spaces before
-                    // the one-space strip, which compares the converted bytes. A span crossing a line ending in
-                    // a non-contiguous paragraph lies in separate segments, which `materializedChunk` joins
-                    // (zero-copy within one segment). Each continuation line, lazy or not, begins at its first
-                    // non-space character, so its leading whitespace is not part of the content (Paragraphs).
+                    // The caller normalizes the raw content. A continuation line's leading whitespace is not
+                    // part of it (Paragraphs).
                     let contentChunk = materializedChunk(start: openEnd, end: i, content: content)
                     return CodeSpanMatch(content: contentChunk, afterClose: closeEnd, backtickCount: runLength)
                 }
@@ -1420,9 +1343,8 @@ extension BlockParser {
             }
             i += 1
         }
-        // The scan reached the content end without a closer. Its runs are recorded in a second walk, which a
-        // paragraph takes at most once, rather than during every scan, which would cost each scan that does find a
-        // closer the bookkeeping.
+        // Runs are recorded in a second walk, taken at most once per paragraph, so scans that find a closer skip
+        // the bookkeeping.
         backtickRunsSeen.scannedToEndFrom = min(backtickRunsSeen.scannedToEndFrom ?? openEnd, openEnd)
         var k = openEnd
         while k < end {
@@ -1437,7 +1359,7 @@ extension BlockParser {
         return nil
     }
 
-    /// Scan `start..<end` for the run of backticks beginning at `start`. Returns the offset just past the last consecutive backtick.
+    /// The offset past the backtick run at `start`.
     private func scanBacktickRun(start: Int, content: borrowing ContentSpan) -> Int {
         let end = content.endOffset
         var i = start
@@ -1447,12 +1369,7 @@ extension BlockParser {
         return i
     }
 
-    /// Apply code span normalization (Code spans) to raw content.
-    ///
-    /// 1. Replace each line ending with a single space. (Inline content joins lines with `\n` alone.)
-    /// 2. If the result begins AND ends with a space and isn't all spaces, strip one space from each end.
-    ///
-    /// Returns either the original chunk (if no changes) or a new chunk pointing at materialized bytes in `storage.strings`.
+    /// Normalizes code span content (Code spans), copying only if a line ending becomes a space.
     private mutating func normalizeCodeSpanContent(_ chunk: Chunk) -> Chunk {
         var hasNewline = false
         let endOff = chunk.offset + chunk.length
@@ -1465,7 +1382,6 @@ extension BlockParser {
         }
         var workChunk: Chunk
         if hasNewline {
-            // Materialize with line endings replaced by spaces.
             let outOffset = storage.strings.count
             var i = chunk.offset
             while i < endOff {
@@ -1490,16 +1406,13 @@ extension BlockParser {
         return trimSingleSpaces(workChunk)
     }
 
-    /// Apply the code span one-space strip (Code spans).
-    ///
-    /// If the content is non-empty, begins with a space, ends with a space, and contains at least one non-space byte, strip exactly one space from each end.
+    /// The code span one-space strip (Code spans).
     private func trimSingleSpaces(_ chunk: Chunk) -> Chunk {
         let start = chunk.offset
         let end = chunk.range.upperBound
         if start < end,
            readByte(at: start, in: chunk) == UInt8(ascii: " "),
            readByte(at: end - 1, in: chunk) == UInt8(ascii: " ") {
-            // Verify there's at least one non-space byte strictly between the two enclosing spaces. For 1- and 2-byte runs there are no inner bytes, so the strip rule doesn't apply.
             let innerStart = start + 1
             let innerEnd = end - 1
             var hasNonSpace = false
@@ -1526,11 +1439,8 @@ extension BlockParser {
         var textEnd: Int  // exclusive end of the pending-text region (excludes the marker bytes)
     }
 
-    /// Decide whether the line ending at `newlineOffset` is a soft or hard line break (Hard line breaks):
-    /// - Hard if a `\` immediately precedes the line ending (with at least one byte in the pending-text region).
-    /// - Hard if 2+ spaces immediately precede the line ending.
-    /// - Soft otherwise.
-    /// Returns the kind plus the offset at which to truncate pending text (excluding the marker bytes - backslash or trailing spaces).
+    /// Classifies the line ending at `newlineOffset` as a soft or hard line break (Hard line breaks), with where the
+    /// pending text ends, before any backslash or trailing spaces.
     private func classifyLineBreak(at newlineOffset: Int, pendingTextStart: Int, content: borrowing ContentSpan) -> LineBreakInfo {
         // Backslash hard break.
         if newlineOffset > pendingTextStart {
@@ -1539,9 +1449,9 @@ extension BlockParser {
                 return LineBreakInfo(isHard: true, textEnd: newlineOffset - 1)
             }
         }
-        // Spaces and tabs before a line ending are not part of the text, whatever the break kind; a
-        // line tabulation or form feed is (`a\f\t  \n` keeps `a\f`). The break is hard when the two
-        // characters immediately before the line ending are spaces, so `a  \t\n` is soft.
+        // Spaces and tabs before a line ending are not text, whatever the break; a line tabulation or form
+        // feed is (`a\f\t  \n` keeps `a\f`). The break is hard when the two characters before the line ending
+        // are spaces, so `a  \t\n` is soft.
         var textEnd = newlineOffset
         var leadingSpaces = 0
         var inSpaceRun = true
@@ -1567,7 +1477,7 @@ extension BlockParser {
         var isEmail: Bool
     }
 
-    /// Try to match an autolink (Autolinks) starting at `start` (which points at `<`). URI form first, email form as fallback.
+    /// Matches an autolink (Autolinks) at the `<` at `start`.
     private func matchAutolink(start: Int, content: borrowing ContentSpan) -> AutolinkMatch? {
         if let uri = matchURIAutolink(start: start, content: content) {
             return uri
@@ -1575,7 +1485,7 @@ extension BlockParser {
         return matchEmailAutolink(start: start, content: content)
     }
 
-    /// URI autolink: `<scheme:rest>` where scheme is `[A-Za-z][A-Za-z0-9+.-]{1,31}` and rest contains no `<`, `>`, ASCII whitespace, or ASCII control characters.
+    /// A URI autolink (Autolinks).
     private func matchURIAutolink(start: Int, content: borrowing ContentSpan) -> AutolinkMatch? {
         let end = content.endOffset
         var i = start + 1
@@ -1630,7 +1540,7 @@ extension BlockParser {
         return nil
     }
 
-    /// Email autolink: `<local@domain>` where `local@domain` is an email address as Autolinks defines it, with `domain` made of dot-separated labels.
+    /// An email autolink (Autolinks).
     private func matchEmailAutolink(start: Int, content: borrowing ContentSpan) -> AutolinkMatch? {
         let end = content.endOffset
         var i = start + 1
@@ -1651,9 +1561,7 @@ extension BlockParser {
         if localChars == 0 || i >= end {
             return nil
         }
-        // The local-part loop stopped on the `@`.
         i += 1
-        // Domain: 1+ labels separated by `.`. Each label is 1 to 63 letters, digits and hyphens, and neither starts nor ends with a hyphen.
         var labelStart = i
         while true {
             if i >= end {
@@ -1671,8 +1579,7 @@ extension BlockParser {
                 }
                 labelStart = i + 1
             } else if !(b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: "-")) {
-                // Stop at the first byte no domain can contain: scanning on to a distant `>` or the block's
-                // end would make each unclosed `<local@` cost O(block length).
+                // Stopping at the first byte no domain holds keeps an unclosed `<local@` from scanning the block.
                 return nil
             }
             i += 1
@@ -1700,8 +1607,7 @@ extension BlockParser {
         }
     }
 
-    /// Whether `b` may appear in the local part of an extended email autolink (Autolinks (extension)):
-    /// alphanumeric, `.`, `-`, `_` or `+`.
+    /// Whether `b` may appear in an extended email autolink's local part (Autolinks (extension)).
     private func isGFMEmailLocalChar(_ b: UInt8) -> Bool {
         if b.isASCIILetter || b.isASCIIDigit {
             return true
@@ -1714,9 +1620,9 @@ extension BlockParser {
         }
     }
 
-    /// Emit a `.link` node + a single `.text` child for an autolink match.
+    /// Emits a `.link` with one `.text` child for an autolink.
     ///
-    /// The text is the interior with entity and numeric character references decoded, materialized into the string arena only when a `&` is present; backslash escapes do not work in autolinks (Backslash escapes). For email forms, the URL gets a `mailto:` prefix and is materialized into the string arena; an email address admits no `;`, so its interior holds no reference to decode. For URI forms, the URL is the decoded text.
+    /// The text has character references decoded, but not backslash escapes (Backslash escapes). An email's URL gets a `mailto:` prefix; an email admits no `;`, so it holds no reference.
     private mutating func emitAutolink(auto: AutolinkMatch, into parent: DocumentStorage.Index, content: borrowing ContentSpan) {
         let textChunk = unescapeURLChunk(
             content.chunk(offset: auto.interior.lowerBound, length: auto.interior.count),
@@ -1724,7 +1630,6 @@ extension BlockParser {
         )
         let urlChunk: Chunk
         if auto.isEmail {
-            // Build `mailto:` + interior into the string arena.
             let offset = storage.strings.count
             for b in "mailto:".utf8 {
                 storage.strings.append(b)
@@ -1732,7 +1637,6 @@ extension BlockParser {
             for j in auto.interior {
                 storage.strings.append(content[j])
             }
-            // Materialized into the arena, so `inSource: false` regardless of `content`'s buffer.
             urlChunk = Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
         } else {
             urlChunk = textChunk
@@ -1746,16 +1650,7 @@ extension BlockParser {
 
     // MARK: - Raw inline HTML
 
-    /// Match raw inline HTML starting at `start` (which points at `<`). Returns the offset just past the closing `>`, or `nil` if the bytes do not form one of the six accepted patterns:
-    ///
-    /// - open tag: `<name attrs… />` / `<name>`
-    /// - close tag: `</name>`
-    /// - comment: `<!--…-->` (and the empty forms `<!-->` / `<!--->`)
-    /// - processing instruction: `<?…?>`
-    /// - declaration: `<!NAME …>`
-    /// - CDATA section: `<![CDATA[…]]>`
-    ///
-    /// (Raw HTML)
+    /// Matches raw HTML (Raw HTML) at the `<` at `start`, returning the offset past its end.
     private mutating func matchInlineHTML(start: Int, content: borrowing ContentSpan) -> Int? {
         let end = content.endOffset
         let after = start + 1
@@ -1778,32 +1673,27 @@ extension BlockParser {
         }
     }
 
-    /// Match an HTML open tag starting at `<`.
-    ///
-    /// Tagname `[A-Za-z][A-Za-z0-9-]*`, then any number of attributes (each preceded by `spacechar+`), then optional trailing whitespace, optional `/`, then `>`.
+    /// Matches an open tag (Raw HTML).
     private func matchHTMLOpenTag(start: Int, content: borrowing ContentSpan) -> Int? {
         let end = content.endOffset
         var i = start + 1
-        // Tag name.
         let afterName = scanTagName(start: i, content: content)
         precondition(afterName != nil, "an open tag is matched only when its `<` is followed by a letter")
         i = afterName!
-        // Attributes.
         while i < end {
             let saved = i
-            // Need at least one spacechar.
+            // Each attribute follows whitespace.
             let afterSpaces = skipSpaceChars(start: i, content: content)
             if afterSpaces == saved {
                 break
             }
-            // Then the attribute name (or we may just be skipping trailing whitespace before `/>` / `>`).
+            // Otherwise this is whitespace before `/>` or `>`.
             guard let afterAttr = scanAttribute(start: afterSpaces, content: content) else {
                 i = afterSpaces
                 break
             }
             i = afterAttr
         }
-        // Optional trailing whitespace, optional `/`, then `>`.
         i = skipSpaceChars(start: i, content: content)
         if i < end, content[i] == UInt8(ascii: "/") {
             i += 1
@@ -1817,10 +1707,9 @@ extension BlockParser {
         return i + 1
     }
 
-    /// Match an HTML close tag `</name spacechar* >` starting at `<`.
+    /// Matches a closing tag (Raw HTML).
     private func matchHTMLCloseTag(start: Int, content: borrowing ContentSpan) -> Int? {
         let end = content.endOffset
-        // Skip the leading `</`.
         var i = start + 2
         guard let afterName = scanTagName(
             start: i, content: content
@@ -1840,7 +1729,6 @@ extension BlockParser {
     /// Dispatch `<!`-prefixed HTML forms: comment, CDATA, declaration.
     private mutating func matchHTMLBangForm(start: Int, content: borrowing ContentSpan) -> Int? {
         let end = content.endOffset
-        // start[0] == '<', start[1] == '!' guaranteed by caller.
         let i = start + 2
         if i >= end {
             return nil
@@ -1855,10 +1743,9 @@ extension BlockParser {
         return matchHTMLDeclaration(start: start, content: content)
     }
 
-    /// Match `<!--…-->`. Accepts the empty forms `<!-->` and `<!--->` per HTML5, then scans for the first `-->` terminator (rejecting NUL bytes in the body).
+    /// Matches an HTML comment (Raw HTML).
     private mutating func matchHTMLComment(start: Int, content: borrowing ContentSpan) -> Int? {
         let end = content.endOffset
-        // Need at least `<!--`.
         if start + 4 > end {
             return nil
         }
@@ -1877,7 +1764,7 @@ extension BlockParser {
         return Self.scanRawHTMLCloser("-->", from: bodyStart, content: content, misses: &htmlCloserMisses.comment)
     }
 
-    /// Match `<!NAME …>` where NAME is `[A-Z]+`, followed by at least one spacechar, any non-`>` non-NUL chars, then `>`.
+    /// Matches a declaration (Raw HTML).
     private mutating func matchHTMLDeclaration(start: Int, content: borrowing ContentSpan) -> Int? {
         let end = content.endOffset
         var i = start + 2
@@ -1903,7 +1790,7 @@ extension BlockParser {
         return Self.scanRawHTMLCloser(">", from: afterSpaces, content: content, misses: &htmlCloserMisses.declaration)
     }
 
-    /// Match a raw HTML form that is a fixed `opener` followed by the first `closer`, scanned through `misses`: a CDATA section `<![CDATA[…]]>`, whose content is any run not containing `]]>`, or a processing instruction `<?…?>`, whose body may be empty and is any string not including `?>` (Raw HTML). `opener` is matched case-sensitively.
+    /// Matches a CDATA section or processing instruction (Raw HTML): the case-sensitive `opener`, then the first `closer`.
     private static func matchHTMLOpenerToCloser(_ opener: String, _ closer: String, start: Int, content: borrowing ContentSpan, misses: inout Range<Int>) -> Int? {
         let end = content.endOffset
         let openerLength = opener.utf8.count
@@ -1918,9 +1805,9 @@ extension BlockParser {
         return scanRawHTMLCloser(closer, from: start + openerLength, content: content, misses: &misses)
     }
 
-    /// Scan for the first `closer` starting at or after `start`. Returns the offset just past it, or `nil` if the end of the content comes first.
+    /// The offset past the first `closer` at or after `start`, or `nil`.
     ///
-    /// `misses` is the kind's stretch of scan starts already known to fail (`HTMLCloserMisses`): a `start` inside it returns `nil` without rescanning, and a failing scan replaces it with the stretch that scan rules out. Both are exact: a scan from any later start inside that stretch sees a subset of the same bytes, none of which begins `closer`, and then the same content end.
+    /// A failing scan records in `misses` that every start from `start` fails, since a later start sees a subset of the same bytes and the same content end.
     private static func scanRawHTMLCloser(
         _ closer: String, from start: Int, content: borrowing ContentSpan, misses: inout Range<Int>
     ) -> Int? {
@@ -1948,7 +1835,7 @@ extension BlockParser {
         return nil
     }
 
-    /// Scan `[A-Za-z][A-Za-z0-9-]*`. Returns the offset just past the last tag-name byte, or `nil` if the first byte isn't a letter.
+    /// Scans a tag name (Raw HTML).
     private func scanTagName(start: Int, content: borrowing ContentSpan) -> Int? {
         let end = content.endOffset
         if start >= end {
@@ -1972,10 +1859,9 @@ extension BlockParser {
         return i
     }
 
-    /// Scan one attribute: `attributename attributevaluespec?` (caller has already consumed the leading `spacechar+`). Returns the offset just past the attribute, or `nil` if no attribute name is present.
+    /// Scans an attribute after its leading whitespace (Raw HTML), or `nil` without an attribute name.
     private func scanAttribute(start: Int, content: borrowing ContentSpan) -> Int? {
         let end = content.endOffset
-        // attributename = [a-zA-Z_:][a-zA-Z0-9:._-]*
         if start >= end {
             return nil
         }
@@ -1998,7 +1884,6 @@ extension BlockParser {
             }
             i += 1
         }
-        // Optional value spec: spacechar* '=' spacechar* attributevalue
         let savedAfterName = i
         let afterSpace1 = skipSpaceChars(
             start: i, content: content
@@ -2038,7 +1923,6 @@ extension BlockParser {
             }
             return nil
         }
-        // Unquoted value: 1+ of [^ \t\r\n\v\f"'=<>`\x00].
         var i = start
         var count = 0
         while i < end {
@@ -2062,7 +1946,7 @@ extension BlockParser {
         return i
     }
 
-    /// Skip zero or more spacechar bytes. Spacechar = ` `, `\t`, `\n`, `\r`, VT (0x0B), FF (0x0C). Returns the offset just past the run.
+    /// Skips whitespace characters (Characters and lines).
     private func skipSpaceChars(start: Int, content: borrowing ContentSpan) -> Int {
         let end = content.endOffset
         var i = start
@@ -2078,18 +1962,17 @@ extension BlockParser {
 
     // MARK: - Extended autolinks
 
-    /// Form of a matched extended autolink - affects how the destination URL is built when the node is emitted (`www.` needs a synthetic `http://` prefix; emails need `mailto:`).
+    /// The form of an extended autolink, which decides the scheme prefix its destination gets.
     private enum GFMAutolinkForm {
         case uri      // already has http:// or https:// or ftp:// prefix
         case www      // needs http:// synthesized
         case email    // needs mailto: synthesized
     }
 
-    /// Result of an extended autolink match. Carries the visible text range (used for the link's child `.text` node) plus the form so the emit step knows whether to synthesize a scheme prefix.
+    /// An extended autolink's visible text range and form.
     ///
-    /// `emailSchemeFolded` is set only for the email form when `[urlStart, urlEnd)` holds a folded
-    /// `mailto:`/`xmpp:` scheme. The destination is then the folded run itself, with no synthetic
-    /// `mailto:` prefix, so `xmpp:` keeps its own scheme.
+    /// `emailSchemeFolded` marks an email whose range begins with a `mailto:` or `xmpp:` scheme, so the range is the
+    /// destination as is.
     private struct GFMAutolinkMatch {
         var urlStart: Int
         var urlEnd: Int
@@ -2097,7 +1980,7 @@ extension BlockParser {
         var emailSchemeFolded: Bool = false
     }
 
-    /// Dispatch a `://` or `www.` extended autolink trial based on the trigger byte. Returns nil if no autolink starts at / contains `cursor`. The `@`-triggered email form is handled separately in `gfmEmailAutolinkPass`, not here.
+    /// Matches a `://` or `www.` extended autolink at `cursor`. Emails are matched by `gfmEmailAutolinkPass`.
     private func matchGFMAutolink(trigger: UInt8, cursor: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         if trigger == UInt8(ascii: ":") {
             return matchGFMSchemeAutolink(
@@ -2140,8 +2023,7 @@ extension BlockParser {
         )
     }
 
-    /// Find the start position of `http`, `https`, or `ftp` (matched case-insensitively) ending just
-    /// before `colon`. Returns the scheme's first-byte offset, or nil.
+    /// The start of a case-insensitive `http`, `https` or `ftp` ending just before `colon`.
     private func matchSchemeBackward(colon: Int, content: borrowing ContentSpan) -> Int? {
         let chunkStart = content.startOffset
         if colon - 5 >= chunkStart,
@@ -2186,13 +2068,9 @@ extension BlockParser {
         return GFMAutolinkMatch(urlStart: start, urlEnd: trimmedEnd, form: .www)
     }
 
-    /// Decide whether the `:` at `colon` completes the given lowercase scheme literal (`mailto:` /
-    /// `xmpp:`, `:` included) sitting at a boundary, so the scheme folds into an extended email autolink.
-    /// Returns the scheme's byte length, or nil.
-    ///
-    /// A scheme qualifies when its bytes lie fully within the scan window `[localBound, colon]`, match the
-    /// literal case-sensitively (`MAILTO:` does not match), and either begin exactly at `localBound` or are
-    /// preceded by a non-alphanumeric byte (`amailto:` fails).
+    /// The length of lowercase `scheme` (`mailto:` or `xmpp:`) ending at `colon`, when it lies within
+    /// `[localBound, colon]` and starts at `localBound` or after a non-alphanumeric byte, so it folds into an
+    /// extended email autolink.
     private func matchEmailScheme(_ scheme: String, colon: Int, localBound: Int, content: borrowing ContentSpan) -> Int? {
         let len = scheme.utf8.count
         let schemeStart = colon + 1 - len
@@ -2212,32 +2090,21 @@ extension BlockParser {
         return len
     }
 
-    /// `@`-triggered: scans backward (bounded by `localBound`) for the email local part and forward for the
-    /// domain, restarting from a second `@` met mid-domain (see the loop).
+    /// Matches an extended email autolink around the `@` at `at`, scanning back no further than `localBound`:
+    /// the content start, or the end of the previous candidate.
     ///
-    /// `localBound` is the earliest offset the backward local-part scan may reach - the content start for a
-    /// fresh scan, or the end of the previous email or failed candidate when scanning a text node with several
-    /// `@`s.
-    ///
-    /// On a non-match the function returns nil and sets `resumeAt` to the offset just past everything it
-    /// scanned (`> at` always), which is also the floor of the next local part. Every `@` in `[at, resumeAt)` -
-    /// the trial `@` plus any `@`s the restart walked over - is settled by this scan, so the caller skips
-    /// straight to `resumeAt`. This keeps the whole pass O(content length) even on `@`-dense input.
+    /// On failure `resumeAt` is past everything scanned, and every `@` before it is settled, so the pass stays
+    /// linear on `@`-dense input.
     private func matchGFMEmailAutolink(at: Int, localBound: Int, content: borrowing ContentSpan, resumeAt: inout Int) -> GFMAutolinkMatch? {
         let end = content.endOffset
-        // `atSign` is the `@` under trial. A second `@` met during the domain scan abandons the current
-        // candidate and restarts from that `@`, the run between the two becoming the new local part. The
-        // scheme state and the period count below carry across the restart; `localStart` and the domain cursor
-        // are recomputed from `atSign`.
+        // A second `@` in the domain restarts the trial there, the run between becoming the local part. The
+        // scheme state and the period flag carry across the restart.
         var atSign = at
         var schemeFolded = false
         var isXmpp = false
         var hasPeriodBeforeAlphanumeric = false
         while true {
-            // The local part stops at the first character an extended email autolink's local part can't
-            // hold (`isGFMEmailLocalChar`). A `:` completing a lowercase `mailto:` or `xmpp:` scheme at a
-            // boundary is instead folded into the link text and destination; an `xmpp:` destination keeps
-            // that scheme.
+            // A `:` completing a lowercase `mailto:` or `xmpp:` at a boundary folds the scheme into the link.
             var localStart = atSign
             while localStart > localBound {
                 let b = content[localStart - 1]
@@ -2260,15 +2127,14 @@ extension BlockParser {
                 }
                 break
             }
-            // No local part and no folded scheme: not an email at this `@`; resume just past it. A folded
-            // scheme moves `localStart` back even when the local part is empty, so `mailto:@a.b` is accepted
-            // here.
+            // Without a local part or a folded scheme this `@` is no email. A folded scheme alone suffices, so
+            // `mailto:@a.b` is accepted.
             if localStart == atSign {
                 resumeAt = atSign + 1
                 return nil
             }
-            // The domain is a run of ASCII alphanumerics, `-`, `_`, and periods each followed by an
-            // alphanumeric, with `/` too after an `xmpp:` scheme. A period no alphanumeric follows ends it.
+            // The domain is ASCII alphanumerics, `-`, `_`, and periods followed by an alphanumeric, with `/`
+            // too after `xmpp:`.
             var i = atSign + 1
             var sawSecondAt = false
             while i < end {
@@ -2298,7 +2164,7 @@ extension BlockParser {
         }
     }
 
-    /// Emit a `.link` node + a single `.text` child for an extended autolink match. `www.` and email forms get a synthetic scheme prefix (`http://` or `mailto:`) materialized into the string arena.
+    /// Emits a `.link` with one `.text` child for a `://` or `www.` autolink; `www.` gets an `http://` prefix.
     private mutating func emitGFMAutolink(auto: GFMAutolinkMatch, content: borrowing ContentSpan, into parent: DocumentStorage.Index) {
         precondition(auto.form != .email, "email autolinks are emitted by gfmEmailAutolinkPass")
         let urlChunk: Chunk
@@ -2324,9 +2190,7 @@ extension BlockParser {
         appendInline(.text, .literal(textRef), to: linkIdx, start: auto.urlStart, end: auto.urlEnd, content: content)
     }
 
-    /// Append `prefix` + the content bytes of `start..<end` into `storage.strings`, returning a chunk pointing at the appended region.
-    ///
-    /// The bytes are read from `content` (the scratch/source view, independent of `storage.strings`) so the read region doesn't alias the buffer being appended to.
+    /// Appends `prefix` and the content bytes `start..<end` to the arena, returning their chunk.
     private mutating func materializeAutolinkURL(prefix: String, start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         let offset = storage.strings.count
         for b in prefix.utf8 {
@@ -2342,10 +2206,7 @@ extension BlockParser {
         )
     }
 
-    /// Walk forward until a URL boundary: space, tab, line feed, carriage return or `<`.
-    ///
-    /// `>`, line tabulation and form feed are ordinary URL bytes, hence `isSpaceTabOrNewline` rather than
-    /// `isASCIISpace`.
+    /// Scans to a URL boundary: a space, tab, line ending or `<`. `>`, line tabulation and form feed are URL bytes.
     private func scanGFMURLBody(
         start: Int,
         content: borrowing ContentSpan
@@ -2362,19 +2223,9 @@ extension BlockParser {
         return i
     }
 
-    /// Trailing-boundary trim for an extended autolink URL (extended autolink path validation, Autolinks
-    /// (extension)), as a single pass from the end of the `[urlStart, urlEnd)` run that `scanGFMURLBody`
-    /// produced:
-    ///
-    /// - a trailing `? ! . , : * _ ~ ' "` is peeled, one character at a time;
-    /// - a trailing `)` is peeled only when the run holds more `)` than `(`, so balanced parentheses
-    ///   (`…/Pikachu_(Electric)`) are kept while a stray closing paren is dropped. The `(`/`)` totals are
-    ///   counted once over the whole run; `closing` is decremented as each unbalanced `)` is removed;
-    /// - a trailing `;` peels a whole `&…;` entity tail when one precedes it (`&`, then one or more ASCII
-    ///   letters, then `;`), otherwise it peels just the `;`.
-    ///
-    /// These `)`, punctuation, and `;` cases are interleaved in one loop, so a mixed tail like `');` peels
-    /// right-to-left. A `<` never appears in the run: `scanGFMURLBody` stops at it.
+    /// Trims an extended autolink's trailing punctuation (Autolinks (extension)), right to left: `? ! . , : * _ ~ ' "`
+    /// one at a time, a `)` only while the URL holds more `)` than `(`, and at a `;` a whole `&letters;` entity
+    /// tail, or else just the `;`.
     private func trimTrailingPunctuation(urlStart: Int, urlEnd: Int, content: borrowing ContentSpan) -> Int {
         var opening = 0
         var closing = 0
@@ -2400,9 +2251,7 @@ extension BlockParser {
                  UInt8(ascii: "'"), UInt8(ascii: "\""):
                 i -= 1
             case UInt8(ascii: ";"):
-                // Scan ASCII letters back from the char before the `;`; an entity tail is `&` + those
-                // letters + `;`. Requiring at least one letter (`entityStart < i - 2`) makes `&;` and a
-                // bare `;` peel only the `;`.
+                // An entity tail needs at least one letter, so `&;` peels only the `;`.
                 var entityStart = i - 2
                 while entityStart > urlStart, content[entityStart].isASCIILetter {
                     entityStart -= 1
@@ -2419,14 +2268,13 @@ extension BlockParser {
         return i
     }
 
-    /// Whether the domain of an extended www or url autolink beginning at `base` is accepted.
+    /// Whether the domain of a www or url extended autolink at `base` is accepted.
     ///
-    /// The scan starts at the domain's second character (a url autolink's first is checked by
-    /// `schemeURLDomainAccepted`, a www autolink's is `w`) and runs over host characters, `-`, `_` and `.` until
-    /// the first other character or the last character of the inline content, which it never examines. A
-    /// backslash makes it examine the character after it in its place. It ignores where the URL body later
-    /// ends. An underscore in either of the last two period-separated segments it covers rejects the domain
-    /// while the scan has passed ten periods or fewer. `requirePeriod` also demands one such period.
+    /// The scan runs from the domain's second character, the first being checked by the caller, over host
+    /// characters, `-`, `_` and `.`, up to the first other character or the content's last character, which it
+    /// never examines. A backslash makes it examine the next character instead. An underscore in either of the
+    /// last two period-separated segments rejects the domain unless the scan passed more than ten periods.
+    /// `requirePeriod` also demands a period.
     private func domainAccepted(base: Int, requirePeriod: Bool, content: borrowing ContentSpan) -> Bool {
         let end = content.endOffset
         let size = end - base
@@ -2456,9 +2304,9 @@ extension BlockParser {
         return !requirePeriod || periods > 0
     }
 
-    /// Whether the domain of an extended url autolink, beginning at `afterSlashes` just past `://`, is accepted:
-    /// its first character is a host character, a character that is neither whitespace nor punctuation, and
-    /// `domainAccepted` accepts the rest.
+    /// Whether a url extended autolink's domain at `afterSlashes` is accepted: its first character is a host
+    /// character or a non-ASCII character that is neither whitespace nor punctuation, and `domainAccepted`
+    /// accepts the rest.
     private func schemeURLDomainAccepted(afterSlashes: Int, content: borrowing ContentSpan) -> Bool {
         let first = content[afterSlashes]
         if first < 0x80 {
@@ -2474,8 +2322,7 @@ extension BlockParser {
         return domainAccepted(base: afterSlashes, requirePeriod: false, content: content)
     }
 
-    /// Whether byte `b` continues a domain scan as a host character: an ASCII character other than
-    /// punctuation, space, tab, line feed, form feed or carriage return. A multi-byte character ends the scan.
+    /// Whether `b` is a host character: ASCII other than punctuation, space, tab, line ending or form feed.
     private func isHostByte(_ b: UInt8) -> Bool {
         b < 0x80 && !b.isASCIIPunct && (b == 0x0B || !b.isASCIISpace)
     }
@@ -2494,10 +2341,7 @@ extension BlockParser {
         }
     }
 
-    /// Compare bytes at `start..(start+target.utf8.count)` against the string target.
-    /// `ignoringASCIICase` folds ASCII case on both sides (`| 0x20`), for the case-insensitive `://`
-    /// scheme literals; the `www.` form compares exactly. Only the comparison folds, so the matched
-    /// destination and text keep the source case.
+    /// Whether `target` is at `start`. `ignoringASCIICase` folds only the comparison; the text keeps its case.
     private func bytesEqual(at start: Int, target: String, content: borrowing ContentSpan, ignoringASCIICase: Bool = false) -> Bool {
         let mask: UInt8 = ignoringASCIICase ? 0x20 : 0
         for (k, targetByte) in target.utf8.enumerated() {
@@ -2508,7 +2352,7 @@ extension BlockParser {
         return true
     }
 
-    /// Append a flat UTF-8 byte array to `bytes` and return a chunk pointing at the appended region.
+    /// Appends `count` bytes to `out`, returning their chunk.
     private static func appendUTF8Bytes(bytes: Bytes8, count: Int, into out: inout UniqueArray<UInt8>) -> Chunk {
         let offset = out.count
         for i in 0..<count {
@@ -2519,10 +2363,7 @@ extension BlockParser {
 
     // MARK: - Helpers
 
-    /// Emit a `.text` node spanning `start..<end` if non-empty.
-    ///
-    /// A text run never holds a line join - every line ending flushes the run before it - so it lies within one line, which
-    /// a single segment of multi-segment content holds.
+    /// Emits a `.text` node over `start..<end` if non-empty. Every line ending flushes the run, so it lies within one segment.
     private mutating func flushPendingText(start: Int, end: Int, content: borrowing ContentSpan, into parent: DocumentStorage.Index) {
         if end <= start {
             return
@@ -2540,7 +2381,7 @@ extension BlockParser {
         return idx
     }
 
-    /// Flush the pending text before `start`, then append an inline node of `kind` whose literal is `chunk` for the virtual range `start..<end`. The pending text resumes at `end`.
+    /// Flushes the pending text before `start`, then appends a `kind` node with literal `chunk` over `start..<end`. Pending text resumes at `end`.
     @discardableResult
     private mutating func emitLiteral(_ kind: MarkdownNode.Kind, _ chunk: Chunk, start: Int, end: Int, to parent: DocumentStorage.Index, pendingTextStart: inout Int, content: borrowing ContentSpan) -> DocumentStorage.Index {
         flushPendingText(start: pendingTextStart, end: start, content: content, into: parent)
@@ -2548,11 +2389,8 @@ extension BlockParser {
         return appendInline(kind, .literal(storage.intern(chunk)), to: parent, start: start, end: end, content: content)
     }
 
-    /// Build a `Chunk` for the virtual range `[start, end)`, materializing into the arena ONLY when the
-    /// range straddles a segment boundary (multi-segment content whose bytes don't lie in one contiguous
-    /// buffer region). Single-segment content and any range confined to one segment stay zero-copy - the
-    /// contiguous slice is returned unchanged. Code spans and link destinations and titles can straddle a
-    /// line join.
+    /// A chunk for `[start, end)`, copied into the arena only when the range spans segments, as a code span or
+    /// link destination or title can.
     private mutating func materializedChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end),
            contiguous.length == end - start {
@@ -2565,9 +2403,9 @@ extension BlockParser {
         return Chunk(offset: outOffset, length: storage.strings.count - outOffset, inSource: false)
     }
 
-    /// Stamp `node`'s source range from *virtual* content offsets, resolving each through `content.sourceOffset(ofVirtual:)`.
+    /// Stamps `node`'s source range from virtual offsets `start..<end`.
     ///
-    /// This is the only stamping path, shared by every inline node, leaf and wrapper: a single-segment source span maps identity (byte offsets pass through unchanged), single-segment arena content resolves through its arena→source run map, and a multi-segment span walks its segment list - so a construct inside a multi-line block quote or list paragraph gets real source positions. `end` is *exclusive* (one past the last byte), so the last content byte `end - 1` is resolved and incremented; this also maps an `end` that lands on the line ending at a segment join back to just past the preceding source byte.
+    /// The last byte, `end - 1`, is resolved, so an `end` at a line join maps to just past the preceding source byte.
     @inline(__always)
     mutating func stampInline(_ node: DocumentStorage.Index, _ start: Int, _ end: Int, content: borrowing ContentSpan) {
         guard positionsEnabled, end > start else {
@@ -2577,11 +2415,7 @@ extension BlockParser {
         storage.setSourceEnd(node, content.sourceOffset(ofVirtual: end - 1) + 1)
     }
 
-    /// Merge runs of adjacent `.text` children into single nodes, throughout `root`'s inline subtree.
-    ///
-    /// Smart-punctuation and entity substitutions emit their replacement as a separate text node (e.g. `"Markdown"` + `"’"` + `"s "`), which this merges into one text run. The merged node's content is the concatenation of the runs' segments and its source range runs from the first run's start to the last run's end.
-    ///
-    /// Walks the subtree without recursing (`DocumentStorage.ascend`), so inline nesting of any depth runs in constant stack.
+    /// Merges adjacent `.text` children throughout `root`'s inline subtree, such as the separate nodes that smart punctuation and character references emit.
     mutating func consolidateTextNodes(_ root: DocumentStorage.Index) {
         var parent = root
         var child = storage[root].firstChild
@@ -2593,7 +2427,6 @@ extension BlockParser {
                 continue
             }
             if storage[current].kind == .text {
-                // Absorb all immediately-following text siblings into `current`.
                 while let next = storage[current].next, storage[next].kind == .text {
                     mergeTextNode(next, into: current)
                 }
@@ -2606,7 +2439,7 @@ extension BlockParser {
         }
     }
 
-    /// Append copies of `ref`'s segments to the pool end. Each is read into a local first, so the read ends before the mutating append.
+    /// Appends copies of `ref`'s segments to the pool.
     private mutating func appendSegments(of ref: ContentRef) {
         for i in 0..<Int(ref.count) {
             let seg = storage.segments[Int(ref.first) + i]
@@ -2614,17 +2447,14 @@ extension BlockParser {
         }
     }
 
-    /// Merge `source` into the preceding text node `dest`, giving `dest` its own start and `source`'s end, and unlink `source`.
-    ///
-    /// When the two runs are pool-contiguous (the common case for adjacent text) this just widens `dest`'s `ContentRef` - no new segments. Otherwise (e.g. a smart-punctuation glyph re-interned at the pool's end sits between them) it appends copies of both runs' segments as a fresh combined run. A destination that already ends the pool grows by copies of the source's segments alone, so merging a run of `n` siblings appends `O(n)` segments in total.
+    /// Merges `source` into the preceding text node `dest` and unlinks it.
     private mutating func mergeTextNode(_ source: DocumentStorage.Index, into dest: DocumentStorage.Index) {
         guard case .literal(let destRef) = storage[dest].data,
               case .literal(let srcRef) = storage[source].data else {
             preconditionFailure("a text node holds a literal")
         }
-        // Pool-contiguous runs widen in place with no new segments. A destination that already ends the pool grows by
-        // copies of the source's segments alone: re-copying the destination for every out-of-order sibling makes a long
-        // run cost quadratic segments and time. Anything else is copied whole to the pool end as a fresh run.
+        // Pool-contiguous runs widen in place. A destination ending the pool grows by copies of the source's segments
+        // alone, since re-copying it per sibling would make a long run quadratic. Otherwise both are copied to the pool end.
         let isContiguous = destRef.first + destRef.count == srcRef.first
         let endsPool = Int(destRef.first + destRef.count) == storage.segments.count
         let first = isContiguous || endsPool ? destRef.first : Int32(storage.segments.count)
@@ -2643,7 +2473,7 @@ extension BlockParser {
             let a = storage.sourceRanges[dest]
             let b = storage.sourceRanges[source]
             precondition(a.start >= 0 && b.start >= 0, "with positions tracked, every text node is stamped before it consolidates")
-            // The merged run spans from the first node's start to the last node's end rather than the union of their ranges; the two differ only when an earlier node ends past the last one.
+            // From the first node's start to the last node's end, which differs from the union only when an earlier node ends past the last.
             storage.sourceRanges[dest] = DocumentStorage.SourceByteRange(
                 start: a.start,
                 end: b.end
@@ -2654,18 +2484,10 @@ extension BlockParser {
 
     // MARK: - Extended email autolink pass
 
-    /// Detect extended email autolinks in a pass over the consolidated inline tree.
+    /// Finds extended email autolinks after emphasis resolution and `consolidateTextNodes`, splitting each text node
+    /// outside a link at each address. A `_` or `*` beside an email is therefore resolved before the email's boundaries are.
     ///
-    /// Runs after emphasis resolution and `consolidateTextNodes`, splitting every text node outside a link
-    /// into `[before, link, after]` at each email match. A `_` or `*` beside an email is therefore already
-    /// resolved as emphasis, or left as literal text in the local part, before the email's boundaries are
-    /// decided.
-    ///
-    /// Every non-link container (emphasis, strong, image, …) is descended into, without recursing
-    /// (`DocumentStorage.ascend`), so inline nesting of any depth runs in constant stack.
-    ///
-    /// A link may not contain another link, so the pass never autolinks inside a link and skips its subtree.
-    /// `image` maps the leaf's arena content back to source, when its content is a single arena chunk with a source image.
+    /// `image` maps the leaf's content to the source when it is a single arena chunk.
     mutating func gfmEmailAutolinkPass(_ root: DocumentStorage.Index, image: ContentImage?) {
         var parent = root
         var child = storage[root].firstChild
@@ -2676,14 +2498,13 @@ extension BlockParser {
                 }
                 continue
             }
-            // Capture the next sibling BEFORE splitting: `splitEmailsInTextNode` inserts the link/after
-            // nodes between `current` and this sibling (and may unlink `current`), and resuming here skips
-            // over everything it produced.
+            // Taken before the split, so resuming here skips the nodes the split inserts.
             let next = storage[current].next
             switch storage[current].kind {
             case .text:
                 splitEmailsInTextNode(current, parent: parent, image: image)
             case .link:
+                // Links may not contain other links (Links).
                 break
             default:
                 parent = current
@@ -2694,35 +2515,27 @@ extension BlockParser {
         }
     }
 
-    /// Split one text node into `[before, link, after]` at each extended email autolink it contains.
+    /// Splits a text node into `[before, link, after]` at each extended email autolink.
     ///
-    /// The node content is materialized into a scratch buffer once and scanned left-to-right in a single
-    /// pass (each backward local-part scan is bounded by the previous match's end), so cost is O(content
-    /// length). `before`/`after`/link text are carved zero-copy from the node's existing segments
-    /// (`subContentRef`); only the `mailto:` URL is materialized into the arena.
-    ///
-    /// The link and its text span the address's source bytes. Each text run keeps the part of the split node's range
-    /// on its side of the address, so a run whose bytes aren't all source bytes (a smart quote, a NUL's U+FFFD)
-    /// has a source range.
+    /// The content is copied once to a scratch buffer and scanned left to right; the text runs are carved from the
+    /// node's segments. The link spans the address's source bytes, and each text run keeps the part of the node's
+    /// range on its side, so a run that isn't all source bytes, such as a smart quote, still has a range.
     private mutating func splitEmailsInTextNode(_ node: DocumentStorage.Index, parent: DocumentStorage.Index, image: ContentImage?) {
         guard case .literal(let ref) = storage[node].data else {
             preconditionFailure("a text node holds a literal")
         }
-        // Cheap early-out: a text node with no `@` is left untouched (no allocation). This is the
-        // overwhelmingly common case.
+        // Most text nodes have no `@`.
         if !contentRefContains(ref, byte: UInt8(ascii: "@")) {
             return
         }
         var scratch = UniqueArray<UInt8>()
         materialize(ref, into: &scratch)
         let total = scratch.count
-        // `content` addresses the whole node content by logical offset (0-based); it borrows `scratch`
-        // only - storage mutations below don't touch it.
+        // `content` borrows only `scratch`, so the storage mutations below don't affect it.
         let content = ContentSpan(span: scratch.span, base: 0, inSource: false)
 
-        // `current` is the text node we are filling as the running `before`/`between` run; `segStart` is
-        // where its text begins (in logical content offsets). `cursor` is the scan position and also the
-        // floor for the next backward local-part scan (so a later `@` can't reach into a prior email).
+        // `current` is the running text node, starting at `segStart`. `cursor` is the floor for the next
+        // backward local-part scan, so a later `@` can't reach into a prior email.
         var current = node
         var segStart = 0
         var cursor = 0
@@ -2740,13 +2553,8 @@ extension BlockParser {
             guard let auto = matchGFMEmailAutolink(
                 at: i, localBound: cursor, content: content, resumeAt: &resumeAt
             ) else {
-                // `matchGFMEmailAutolink` guarantees `resumeAt > i`, so this always advances (and skips any
-                // `@`s the restart already settled - see its doc). O(content length) overall.
-                //
-                // The backward-scan floor `cursor` advances with `i`, so the next `@`'s local part can't
-                // reach into the abandoned candidate. Otherwise a character the domain scan stops at but a
-                // local part accepts (`+`, or a `.` not followed by an alphanumeric) would pull preceding
-                // text into the next email's local part.
+                // `resumeAt > i`, skipping every `@` the trial settled. The floor moves too, or a `+` or `.`
+                // that ended the domain would pull the abandoned candidate into the next local part.
                 cursor = resumeAt
                 i = resumeAt
                 continue
@@ -2763,11 +2571,8 @@ extension BlockParser {
                 storage.setSourceEnd(current, email.start)
             }
 
-            // The link node and its single text child (the visible email address).
-            // A folded `mailto:`/`xmpp:` scheme means the destination is the visible run, so reuse its ref
-            // for the URL when it is one span; a run assembled around a backslash escape is several, and a URL
-            // is read as one span, so it is joined in the arena. A plain email gets `mailto:` synthesized into
-            // the arena.
+            // With a folded scheme the visible run is the destination, joined in the arena if it is several
+            // segments, since a URL is read as one span. A plain email gets `mailto:`.
             let urlRef: ContentRef
             if !auto.emailSchemeFolded {
                 urlRef = materializeURL(prefix: "mailto:", for: emailRef)
@@ -2789,10 +2594,8 @@ extension BlockParser {
                 }
             }
 
-            // A fresh text node for the remaining tail; it becomes the running run, given the next `between` run
-            // on a further match or the final `after` run once the scan ends. Its content is carved only then:
-            // carving the whole remaining tail at every address would re-copy the rest of a long run's segments
-            // per address.
+            // A fresh tail node becomes the running run. Its content is carved once its end is known, since
+            // carving the whole tail per address would re-copy a long run's segments each time.
             let tailIdx = storage.appendNode(NodeRecord(
                 kind: .text, parent: parent, data: .literal(.empty)))
             storage.insertChildAfter(tailIdx, after: linkIdx)
@@ -2801,7 +2604,7 @@ extension BlockParser {
                 storage.setSourceEnd(tailIdx, max(nodeEnd, email.end))
             }
 
-            // An empty `before` / `between` run is not a real text node, so drop it.
+            // Drop an empty run before the address.
             if beforeRef.totalLength == 0 {
                 storage.unlinkChild(current)
             }
@@ -2814,15 +2617,13 @@ extension BlockParser {
         if didSplit {
             let afterRef = subContentRef(of: ref, from: segStart, to: total, resumingAt: &carve)
             storage[current].data = .literal(afterRef)
-            // Drop the final tail run if the split left it empty. Only ever a residual this pass produced, never a
-            // pre-existing `@`-free node.
             if afterRef.totalLength == 0 {
                 storage.unlinkChild(current)
             }
         }
     }
 
-    /// `true` if any byte of `ref`'s content equals `target`. Reads the source / arena buffers directly (no copy).
+    /// Whether any content byte of `ref` is `target`.
     private func contentRefContains(_ ref: ContentRef, byte target: UInt8) -> Bool {
         for s in 0..<Int(ref.count) {
             let seg = storage.segments[Int(ref.first) + s]
@@ -2837,7 +2638,7 @@ extension BlockParser {
         return false
     }
 
-    /// Copy `ref`'s content bytes (across all its segments) into `out`. Reads the source / arena buffers.
+    /// Copies `ref`'s content bytes into `out`.
     private func materialize(_ ref: ContentRef, into out: inout UniqueArray<UInt8>) {
         for s in 0..<Int(ref.count) {
             let seg = storage.segments[Int(ref.first) + s]
@@ -2851,21 +2652,17 @@ extension BlockParser {
         }
     }
 
-    /// Where the next of a left-to-right series of `subContentRef` carves of one ref starts scanning: the index (within
-    /// the ref) of a segment that begins at or before the carve's start, and that segment's logical start offset.
+    /// Where the next of a left-to-right series of `subContentRef` carves resumes: the index within the ref of a
+    /// segment beginning at or before the carve, and that segment's content offset.
     private struct ContentRefCarvePosition {
         var segment = 0
         var start = 0
     }
 
-    /// Carve the logical sub-range `[lo, hi)` of `ref`'s content into a fresh `ContentRef`.
+    /// Carves `[lo, hi)` of `ref`'s content into new segments over the same bytes.
     ///
-    /// Zero-copy: the carved segments point into the same source / arena bytes (with `offset` shifted for
-    /// a partial leading segment); only new `Segment` entries are appended.
-    ///
-    /// The scan starts at `position` and stops at `hi`, leaving `position` at the last segment that begins before
-    /// `hi`. Carves whose ranges never start before an earlier carve's end then visit each segment of `ref` a bounded
-    /// number of times in total, rather than once per carve.
+    /// Resuming from `position`, carves that never start before an earlier carve's end visit each segment of `ref` a
+    /// bounded number of times in total.
     private mutating func subContentRef(of ref: ContentRef, from lo: Int, to hi: Int, resumingAt position: inout ContentRefCarvePosition) -> ContentRef {
         if hi <= lo {
             return .empty
@@ -2878,8 +2675,6 @@ extension BlockParser {
         var total: Int32 = 0
         var v = position.start
         for s in position.segment..<refCount {
-            // Read the source segment into a local before appending, so the read ends before the append (no
-            // aliasing of the growing pool). Original segments keep their indices; appends only grow the end.
             let seg = storage.segments[refFirst + s]
             let segLen = Int(seg.length)
             let segStart = v
@@ -2907,10 +2702,8 @@ extension BlockParser {
         return ContentRef(first: newFirst, count: count, totalLength: total)
     }
 
-    /// Materialize `prefix` + the content bytes of `emailRef` into the string arena as one chunk and intern it.
-    ///
-    /// The email bytes are copied into an independent local buffer first (they may live in the arena, and
-    /// reading the arena while appending to it would alias the growing buffer), then flushed to the arena.
+    /// Copies `prefix` and `emailRef`'s bytes into the arena as one chunk, through a local buffer because they may be
+    /// in the arena.
     private mutating func materializeURL(prefix: String, for emailRef: ContentRef) -> ContentRef {
         var buf = UniqueArray<UInt8>()
         for b in prefix.utf8 {
@@ -2924,8 +2717,7 @@ extension BlockParser {
         return storage.intern(Chunk(offset: offset, length: buf.count, inSource: false))
     }
 
-    /// The source extent of the non-empty `ref`'s bytes: from the start of the source its first byte stands for to
-    /// the end of the source its last byte stands for (`sourceRange(of:local:image:)`).
+    /// The source extent of non-empty `ref`, from what its first byte stands for to what its last does.
     private func sourceSpan(of ref: ContentRef, image: ContentImage?) -> (start: Int, end: Int) {
         precondition(ref.count > 0 && ref.totalLength > 0, "an email address holds at least one byte")
         let firstSeg = storage.segments[Int(ref.first)]
@@ -2935,9 +2727,9 @@ extension BlockParser {
         return (first.lowerBound, last.upperBound)
     }
 
-    /// The source bytes that byte `local` of an address's segment `seg` stands for: a source segment's own byte, an
-    /// arena byte of the leaf's content imaged by `image`, or the whole character reference a decoded byte comes from.
-    /// Every other arena text is punctuation no address holds.
+    /// The source bytes that byte `local` of an address's segment `seg` stands for: a source byte, an arena byte
+    /// imaged by `image`, or the character reference it was decoded from. Other arena text is punctuation, which no
+    /// address holds.
     private func sourceRange(of seg: Segment, local: Int, image: ContentImage?) -> Range<Int> {
         if seg.inSource {
             let offset = Int(seg.offset) + local
