@@ -144,29 +144,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Registered at finalize for paragraph, heading, table-cell and table-preceding-paragraph content that reaches inline parsing as one arena `Chunk` (flattened from segments, NUL-replaced or pipe-unescaped), which loses the per-line source mapping the content had. The content-relative run map lets the inline pass stamp the node's inlines with real source positions. Consulted in the inline pass when building an arena single-segment `ContentSpan`.
     var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
 
-    /// What the table check needs to know about the open paragraph's first two lines, recorded when the
-    /// paragraph is first continued. At most one leaf is open at a time, so there is at most one of these.
-    /// Only populated when `.tables` is enabled.
+    /// What the table check needs to know about the open paragraph, recorded when the paragraph is first
+    /// continued. At most one leaf is open at a time, so there is at most one of these. Only populated when
+    /// `.tables` is enabled.
     struct OpenParagraphTableState {
         /// The paragraph this state describes.
         let node: DocumentStorage.Index
-
-        /// The indent, in columns, of the paragraph's second line.
-        ///
-        /// A table's delimiter row is its paragraph's second line (Tables (extension)), and a delimiter row
-        /// indented four or more columns past its container's content column is paragraph text. Tables are
-        /// detected when the paragraph closes, after each continuation line's leading whitespace is
-        /// stripped, so `runParagraphMatchers` reads the indentation recorded here.
-        var secondLineIndent: Int
-
-        /// `true` when the paragraph's second line, its table delimiter-row candidate, is a lazy
-        /// continuation line.
-        ///
-        /// A table opens only from a delimiter row that matches every open container's continuation prefix;
-        /// a lazy continuation line (Block quotes) continues the paragraph as text, so `>o\n--` and `>o\n|-`
-        /// form no table. Tables are detected when the paragraph closes, where laziness is not observable,
-        /// so it is recorded here.
-        var secondLineIsLazy: Bool
 
         /// `true` once a line of the paragraph and the line after it form a table's header and delimiter
         /// rows.
@@ -947,12 +930,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// inserted before `node`, and `node`'s pending content is re-seeded to the header line alone so the
     /// finalize-time two-line detection builds the table. The content is a source-contiguous range or a
     /// zero-copy segment list (a nested block-quote / list continuation or a CRLF join).
-    ///
-    /// After a multi-line split the delimiter row becomes the re-seeded paragraph's second line, so its
-    /// `delimIndent` and non-laziness are recorded as the paragraph's second-line metadata (see
-    /// `recordSplitDelimiterLine`); the values captured from the paragraph's original second line may be
-    /// indented or lazy, which would wrongly veto the finalize-time table check.
-    private mutating func detectPendingTable(_ node: DocumentStorage.Index, delimRange: Range<Int>, delimIndent: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    private mutating func detectPendingTable(_ node: DocumentStorage.Index, delimRange: Range<Int>, pending: consuming PendingLeaf?) -> PendingLeaf? {
         precondition(pending != nil, "an open paragraph always holds its accumulated content")
         guard lastLineOpensTable(delimRange: delimRange, pending: pending!) else {
             return pending
@@ -964,11 +942,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             guard let lastNewline = lastNewline(in: range) else {
                 return PendingLeaf(node: node, content: .lazy(range: range))
             }
-            recordSplitDelimiterLine(node, delimIndent: delimIndent)
             return splitContiguousHeader(node, range: range, lastNewline: lastNewline)
         case .segments(let segs):
             let lineJoin = lastLineJoin(in: segs)
-            recordSplitDelimiterLine(node, delimIndent: delimIndent)
             return splitSegmentHeader(node, segments: segs, lineJoin: lineJoin)
         }
     }
@@ -1017,19 +993,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let paragraph = storage.appendNode(NodeRecord(kind: .paragraph, parent: storage[node].parent))
         storage.insertChildBefore(paragraph, before: node)
         return paragraph
-    }
-
-    /// After a multi-line paragraph is split so the delimiter row becomes the re-seeded paragraph's second
-    /// line, record the delimiter row's indent and non-laziness as the paragraph's second-line metadata.
-    ///
-    /// `openParagraphTableState` holds the paragraph's original second line,
-    /// which may be indented four or more columns or a lazy continuation line, but the finalize-time table
-    /// check must see the delimiter row, which `detectPendingTable`'s caller has confirmed is indented
-    /// fewer than four columns and not lazy.
-    private mutating func recordSplitDelimiterLine(_ node: DocumentStorage.Index, delimIndent: Int) {
-        assert(openParagraphTableState?.node == node, "the split paragraph is the open one")
-        openParagraphTableState!.secondLineIndent = delimIndent
-        openParagraphTableState!.secondLineIsLazy = false
     }
 
     /// Split a segment-list paragraph (nested block-quote / list continuation, or a CRLF join) into a
@@ -1397,12 +1360,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     @inline(__always)
     private mutating func recordTableDelimiterCandidate(line: LineContext, pending: inout PendingLeaf?) {
         let delimRange = line.firstNonSpace..<line.lineRange.upperBound
-        // The first continuation line is the paragraph's second line, its table delimiter-row
-        // candidate. Finalize-time table detection can't see its stripped indentation or its
-        // laziness, so record both (`leadingScan` measured the indent against the container
-        // prefix) for `runParagraphMatchers`.
         if openParagraphTableState == nil {
-            openParagraphTableState = OpenParagraphTableState(node: current, secondLineIndent: line.indent, secondLineIsLazy: currentLineIsLazyContinuation)
+            openParagraphTableState = OpenParagraphTableState(node: current)
         }
         assert(openParagraphTableState!.node == current, "the recorded state belongs to the open paragraph")
         // Detect whether this line opens a table with the paragraph's last accumulated line as the
@@ -1413,7 +1372,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if !openParagraphTableState!.tablePending,
            line.indent < 4, !currentLineIsLazyContinuation,
            couldBeDelimiterRow(range: delimRange) {
-            pending = detectPendingTable(current, delimRange: delimRange, delimIndent: line.indent, pending: consume pending)
+            pending = detectPendingTable(current, delimRange: delimRange, pending: consume pending)
         }
     }
 
@@ -2341,13 +2300,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Table detection: a header line plus delimiter row turns the node into a `.table` in place.
         // It runs before link reference definition extraction because the paragraph is a table from its
         // delimiter row on, and only a paragraph holds link reference definitions, so `[\n|-\n]:/` is a
-        // table. The paragraph's `tablePending` records whether the table formed during block parsing. A pipe-less
-        // run of `-` or `=` is a setext heading underline instead, handled first by PHASE 2c, which extracts
-        // the definitions: `[o]:o\n-` is a definition followed by a paragraph, while `[o]:o\n|-` is a
-        // table. A delimiter row indented four or more columns or arriving as a lazy continuation line is
-        // paragraph text; its indentation and laziness are gone here, so consult
-        // the recorded `secondLineIndent` and `secondLineIsLazy`.
-        if let table = openParagraphTableState, table.tablePending, table.secondLineIndent < 4, !table.secondLineIsLazy {
+        // table. The paragraph's `tablePending` records whether the table formed during block parsing; a
+        // delimiter row indented four or more columns or arriving as a lazy continuation line forms none and is
+        // paragraph text. A pipe-less run of `-` or `=` is a setext heading underline instead, handled first by
+        // PHASE 2c, which extracts the definitions: `[o]:o\n-` is a definition followed by a paragraph, while
+        // `[o]:o\n|-` is a table.
+        if let table = openParagraphTableState, table.tablePending {
             // The header is the raw paragraph content, before link reference definitions are extracted.
             let tableContent = raw.trimmingTrailing(using: self)
             // Rows that aren't source-contiguous (a container prefix, leading whitespace, or a CRLF between
