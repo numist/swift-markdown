@@ -2019,13 +2019,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func openHTMLBlock(_ htmlType: UInt8, lineRange: Range<Int>, cursor: Int, column: Int, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         var pending = pending
         let (bodyStart, leadingSpaces) = htmlLineBody(lineRange: lineRange, cursor: cursor, column: column)
-        // A first line that begins with a split tab's leftover columns starts at that tab, whose columns are the
-        // block's first content (Tabs).
+        // The block keeps its indentation as content (HTML blocks), so it starts where that indentation does: at
+        // `bodyStart`, or at the split tab whose leftover columns are the first content (Tabs).
         let htmlIdx = addChild(
             kind: .htmlBlock,
             parent: current,
             data: .htmlBlock(type: htmlType, literal: .empty),
-            start: leadingSpaces > 0 ? bodyStart - 1 : firstNonSpace
+            start: leadingSpaces > 0 ? bodyStart - 1 : bodyStart
         )
         current = htmlIdx
         pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: htmlIdx, pending: pending)

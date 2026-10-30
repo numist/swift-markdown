@@ -19,8 +19,9 @@ import CommonMark
 /// quote marker's optional space at the top level, after a paragraph and after a blank line, in a block quote in a
 /// block quote, by a bullet or ordered list item's content column, by a footnote definition's content column in a
 /// block quote, and in a block quote after a list item closes. HTML blocks of types 1, 2, 4, 6 and 7 are tried. A
-/// block quote marker followed by spaces, a tab that stands for one column, and spaces at the top level split no tab,
-/// so the block starts at its `<`.
+/// block quote marker followed by a space, or by a tab that stands for one column, splits no tab and leaves no
+/// indentation, so the block starts at its `<`. Spaces after a block quote marker's optional space, and spaces at the
+/// top level, split no tab either, but they are indentation the block keeps, so it starts at the first of them.
 @Suite("An HTML block that begins with a split tab's columns starts at the tab")
 struct HTMLBlockSplitTabStartTests {
 
@@ -172,7 +173,7 @@ struct HTMLBlockSplitTabStartTests {
             """
             document @1:1-1:10
               block_quote @1:1-1:10
-                html_block "  <div>\\n" @1:5-1:10
+                html_block "  <div>\\n" @1:3-1:10
 
             """
         ),
@@ -193,7 +194,7 @@ struct HTMLBlockSplitTabStartTests {
             "  <div>\n",
             """
             document @1:1-1:8
-              html_block "  <div>\\n" @1:3-1:8
+              html_block "  <div>\\n" @1:1-1:8
 
             """
         ),
