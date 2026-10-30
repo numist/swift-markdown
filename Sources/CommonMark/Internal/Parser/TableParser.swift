@@ -8,20 +8,16 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// GFM-tables detection and transformation.
-///
-/// Called from `BlockParser.finalize` for `.paragraph` nodes when the `.tables` parse option is set. If the paragraph's content matches the GFM table pattern (header line containing `|` followed by a delimiter line of `:?-+:?` cells), the paragraph node is mutated in place into a `.table` node with `.tableRow` / `.tableCell` descendants.
+/// Tables (extension): turns a table-pending paragraph into a `.table` with `.tableRow` and `.tableCell` descendants.
 extension BlockParser {
 
-    /// Transform `node` (a table-pending `.paragraph`) and its content `chunk` into a `.table`, enqueueing its cells for the deferred inline-parsing pass.
-    ///
-    /// The paragraph is table-pending only after `opensTable` held for this same header and delimiter line, so the content always opens a table.
+    /// Turns table-pending `node` into a `.table` and queues its cells for inline parsing. A paragraph is table-pending only once `opensTable` held for its header and delimiter row.
     internal mutating func parseTable(node: DocumentStorage.Index, chunk inputChunk: Chunk, sourceMap: [ArenaRun]) {
-        // The table machinery (line splitting, cell extraction, pipe-unescape) reads exclusively from `storage.strings`. Paragraph content is usually already materialized there, but the source-contiguity fast path can supply an `inSource` chunk (a zero-copy multi-line source range), which is copied into the arena so the rest of this function can address it uniformly.
+        // The table machinery reads only `storage.strings`, so source-backed content is copied there.
         let chunk: Chunk
-        // How the content maps back to source for stamping rows, cells and cell text, through `image` (`nil` when positions are off, so nothing is stamped):
-        //   - A contiguous table: the arena copy below is a byte-for-byte image of an `inSource` range, so arena offset `A` maps to source `A + contiguousDelta`. The common no-leading-whitespace table.
-        //   - A flattened table: arena content carrying a run map - the rows aren't source-contiguous (a container prefix, leading whitespace, or a CRLF separates them), so the paragraph arrived as a segment list, flattened with a run map that images each row's content on its source line (see `runParagraphMatchers`), or NULs were replaced and the map images each U+FFFD back to its NUL.
+        // With positions on, `image` maps the content to the source. A copied contiguous table maps by the
+        // constant `contiguousDelta`; arena content (rows not contiguous in the source, or NULs replaced)
+        // carries its run map.
         var contiguousDelta: Int? = nil
         var runs: [ArenaRun] = []
         if inputChunk.inSource {
@@ -47,12 +43,11 @@ extension BlockParser {
         let alignments = delimiterAlignments!
         precondition(splitCells(line: lines[0]).cells.count == alignments.count, "a table-pending paragraph's header has the delimiter row's column count")
         let columnCount = alignments.count
-        // Mutate the paragraph node in place.
         storage[node].kind = .table
         storage[node].data = .table(columnCount: columnCount, alignmentsOffset: 0)
-        // Per column, the cell a rowspan marker in the next row grows: the nearest cell above that isn't itself a rowspan filler. It is kept rather than found by walking up the rows, so a long column of markers doesn't walk past every filler above each one. Only tracked when `.tableSpans` is on - otherwise it stays empty (no allocation) and the span machinery is skipped entirely.
+        // Per column, the cell a rowspan marker in the next row grows: the nearest cell above that isn't a rowspan filler. It is kept rather than searched for, so a long column of markers stays linear. Empty without `.tableSpans`.
         var rowspanOwners: [DocumentStorage.Index?] = storage.options.contains(.tableSpans) ? Array(repeating: nil, count: columnCount) : []
-        // The header row, then one `.tableRow` per body line; the delimiter line (index 1) is not a row.
+        // The delimiter row (line 1) is not a row.
         for k in lines.indices where k != 1 {
             appendRow(
                 parent: node,
@@ -67,13 +62,9 @@ extension BlockParser {
         }
     }
 
-    /// Whether a materialized `chunk` (an `inSource == false` region of `storage.strings` holding a header
-    /// line + its just-arrived delimiter-candidate line, separated by `\n`) opens a table: the candidate is a
-    /// delimiter row and the header row has as many cells (Tables (extension)). When it does, the block parser
-    /// marks the paragraph table-pending, so the table, not a paragraph, is the open block for the
-    /// following line: a lazy continuation line breaks out, a setext heading underline is suppressed, and a
-    /// block start closes the table rather than becoming a body row (Tables (extension): the table is
-    /// broken at the beginning of another block-level structure).
+    /// Whether arena `chunk`, a header line and a delimiter-candidate line, opens a table: the candidate is a
+    /// delimiter row and the header has as many cells (Tables (extension)). The block parser then marks the
+    /// paragraph table-pending, so the table, not a paragraph, is the open block for the next line.
     internal mutating func opensTable(chunk: Chunk) -> Bool {
         let lines = splitLines(chunk: chunk)
         precondition(lines.count >= 2, "a table candidate holds a header line and a delimiter-candidate line")
@@ -83,11 +74,8 @@ extension BlockParser {
         return splitCells(line: lines[0]).cells.count == alignments.count
     }
 
-    /// Whether `sourceBytes[range]` consists solely of GFM delimiter-row bytes — `-`, `:`, `|`, and delimiter-marker
-    /// whitespace (space, tab, VT, FF) — and contains at least one `-`. A cheap necessary condition for a
-    /// table delimiter row (`parseDelimRow` applies the exact rule on the materialized cells); lets the
-    /// block parser's table-pending pre-check skip materializing a paragraph's two lines when the second
-    /// line obviously isn't a delimiter row (ordinary prose, which starts with a letter).
+    /// Whether `sourceBytes[range]` holds only `-`, `:`, `|` and delimiter-row padding, with at least one `-`.
+    /// This necessary condition for a delimiter row lets the block parser skip materializing ordinary prose.
     internal func couldBeDelimiterRow(range: Range<Int>) -> Bool {
         var sawDash = false
         for i in range {
@@ -103,14 +91,8 @@ extension BlockParser {
         return sawDash
     }
 
-    /// Whether `sourceBytes[range]` is a lone-pipe row — a single unescaped `|` with only spaces, tabs, line
-    /// tabulations or form feeds after it — which has zero cells. Such a line is not a table row, so it
-    /// closes an open table rather than becoming a body row with one empty cell. The source-span
-    /// counterpart of `splitCells`' zero-cell case.
-    ///
-    /// Every caller passes a `firstNonSpace..<end` body-row range, so this never sees leading whitespace.
-    /// It does not classify a header row, where leading whitespace before `|` forms one empty cell (see
-    /// `splitCells`).
+    /// Whether body-row `sourceBytes[range]`, from its first non-space byte, is a lone `|` with only padding
+    /// after it. Such a row has no cells (`splitCells`), so it closes the table.
     internal func isLonePipeRow(range: Range<Int>) -> Bool {
         var s = range.lowerBound
         var e = range.upperBound
@@ -128,9 +110,9 @@ extension BlockParser {
 
     // MARK: - Row construction
 
-    /// Build a `.tableRow` node + its cells under `parent`. Missing trailing cells are emitted as empty; extras beyond `columnCount` are dropped.
+    /// Appends a `.tableRow` and its cells under `parent`, padding missing cells and dropping extras.
     ///
-    /// When `.tableSpans` is on, each cell carries `.tableCell` span data: an empty `||` cell becomes a colspan filler (colspan 0) and grows the nearest preceding real cell's colspan (a leading filler has none, so it just carries colspan 0); a cell whose content is the lone rowspan marker (`^`, or `"` when `.tableRowspanDitto` is on) becomes a rowspan filler (rowspan 0) and grows its column's cell in the nearest non-filler row above (`rowspanOwners`), with its marker text suppressed. Each of the row's cells that isn't a rowspan filler becomes its column's owner for the rows below.
+    /// With `.tableSpans`, an empty `||` cell is a colspan filler (0) that grows the nearest real cell to its left, and a cell holding only the rowspan marker (`^`, or `"` with `.tableRowspanDitto`) is a rowspan filler (0) that grows its column's owner above and drops its text. Every other cell becomes its column's owner.
     private mutating func appendRow(
         parent: DocumentStorage.Index,
         line: Range<Int>,
@@ -147,7 +129,7 @@ extension BlockParser {
             data: nil
         ))
         storage.appendChild(rowIdx, to: parent)
-        // The source offset imaged by arena byte `arena`, or `nil` when positions are off. Every byte a row or cell boundary lands on lies inside the content, so with positions on it resolves.
+        // The source offset imaged by arena byte `arena`, or `nil` with positions off.
         func sourceStart(arena: Int) -> Int? {
             guard let image else { return nil }
             guard let offset = image.sourceOffset(ofArenaByte: arena) else {
@@ -155,11 +137,11 @@ extension BlockParser {
             }
             return offset
         }
-        // The half-open source end of the content ending at arena offset `arena`: just past the source byte its last byte images, so a range ending in a U+FFFD ends just past its NUL. `nil` when positions are off.
+        // Just past the source byte that the content's last byte images, so a range ending in a U+FFFD ends past its NUL.
         func sourceEnd(arena: Int) -> Int? {
             sourceStart(arena: arena - 1).map { $0 + 1 }
         }
-        // A row's source range covers its whole source line, trailing whitespace included. Interior rows reach their line ending via `splitLines`, but the paragraph content has its trailing whitespace trimmed (`runParagraphMatchers`), so the last row's untrimmed end comes from the table node's own end (the paragraph's extent, stamped before this runs). The same end closes the rightmost cell of a row with no closing pipe.
+        // A row covers its whole source line, trailing whitespace included. Paragraph content has its trailing whitespace trimmed, so the last row ends where the table node, already stamped with the paragraph's extent, ends. So does the rightmost cell of a row with no closing pipe.
         let rowEnd = isLastLine && image != nil ? Int(storage.sourceRanges[parent].end) : sourceEnd(arena: line.upperBound)
         storage.setSourceStart(rowIdx, sourceStart(arena: line.lowerBound))
         storage.setSourceEnd(rowIdx, rowEnd)
@@ -170,26 +152,22 @@ extension BlockParser {
             trimCellContent(range: cells[col], stripLeadingVTFF: col > 0 || hadLeadingPipe)
         }
 
-        // Span bookkeeping is only allocated/computed when `.tableSpans` is on. With spans off these stay empty (the empty `Array` is a non-allocating singleton) and every per-cell read below is guarded by `spansEnabled`, so the common table path does no extra allocation or work.
+        // Empty without `.tableSpans`, so the common path does not allocate.
         let spansEnabled = storage.options.contains(.tableSpans)
         var colspans: [Int] = []
         var rowspans: [Int] = []
         var skipContent: [Bool] = []
         if spansEnabled {
-            // Colspan accumulates over every parsed cell, not only the first `columnCount`: an empty cell
-            // beyond `columnCount` grows the nearest preceding real cell's colspan, uncapped. The emit loop
-            // below drops cells past `columnCount`, but a surviving cell keeps its accumulated colspan
-            // (possibly > `columnCount`). `colspans` covers the full cell list so a cell beyond
-            // `columnCount` has its own slot (a real cell there absorbs the fillers after it).
+            // Colspan accumulates over every cell, so empty cells past `columnCount`, which are dropped, still
+            // grow the nearest real cell to their left, uncapped.
             colspans = [Int](repeating: 1, count: max(columnCount, cells.count))
             rowspans = [Int](repeating: 1, count: columnCount)
             skipContent = [Bool](repeating: false, count: columnCount)
             let markerByte = storage.options.contains(.tableRowspanDitto) ? UInt8(ascii: "\"") : UInt8(ascii: "^")
-            // The nearest cell to the left that isn't a colspan filler. It is kept rather than searched for, so a long
-            // run of fillers doesn't walk back over all of them for each one.
+            // The nearest cell to the left that isn't a colspan filler, kept so a long run of fillers stays linear.
             var lastRealCell: Int? = nil
             for col in 0..<cells.count {
-                // Colspan filler: a zero-width cell (literally `||`), in any column, the first included. The nearest preceding real cell (if any) absorbs the span; a leading filler has none, so it just carries colspan 0.
+                // A zero-width cell (`||`) in any column is a colspan filler; a leading one has no cell to grow.
                 if cells[col].isEmpty {
                     colspans[col] = 0
                     if let lastRealCell {
@@ -198,9 +176,7 @@ extension BlockParser {
                 } else {
                     lastRealCell = col
                 }
-                // Rowspan marker: the cell's trimmed content is exactly the marker byte. A cell beyond
-                // `columnCount` is dropped, so only emitted cells track a marker. The test reads the cell's
-                // content, so a pipe-preceded cell's leading line tabulation or form feed is padding here.
+                // A cell whose content is exactly the marker byte is a rowspan marker.
                 if col < columnCount {
                     let trimmed = content(col)
                     if trimmed.count == 1 && storage.strings[trimmed.lowerBound] == markerByte {
@@ -208,7 +184,7 @@ extension BlockParser {
                     }
                 }
             }
-            // Resolve rowspan markers against the cell that owns the span above them, past any filler rows (body rows only - the header has no row above), and grow it.
+            // The header has no row above to grow.
             if !isHeader {
                 for col in 0..<columnCount where rowspans[col] == 0 {
                     if let spanning = rowspanOwners[col] {
@@ -234,12 +210,12 @@ extension BlockParser {
                 rowspanOwners[col] = cellIdx
             }
             guard col < cells.count else { continue }
-            // A cell's source range is its untrimmed between-pipes span: a cell with content ends just past its last non-pipe byte, which is `cr.upperBound`. A cell whose content trims to empty, a zero-width `||` cell included, also covers its closing pipe, so its end is one byte further. Such a cell always has a closing pipe (`splitCells` drops a trailing empty cell, which the row then pads), so `+1` never overshoots the row.
+            // A cell covers its untrimmed span between pipes. A cell whose content trims to empty also covers its closing pipe, which it always has, because `splitCells` drops a trailing empty cell.
             let cr = cells[col]
             let cellRange = content(col)
             storage.setSourceStart(cellIdx, sourceStart(arena: cr.lowerBound))
             if col == cells.count - 1 && !hadClosingPipe {
-                // Rightmost cell on a row with no closing pipe: with no pipe to stop at, the cell covers its trailing whitespace through the row's untrimmed end, the same extent the row spans, rather than the trimmed-content end in `cr.upperBound`.
+                // With no closing pipe, the rightmost cell runs to the row's untrimmed end.
                 storage.setSourceEnd(cellIdx, rowEnd)
             } else {
                 storage.setSourceEnd(cellIdx, sourceEnd(arena: cellRange.isEmpty ? cr.upperBound + 1 : cr.upperBound))
@@ -247,25 +223,16 @@ extension BlockParser {
             if cellRange.isEmpty || (spansEnabled && skipContent[col]) { continue }
             // `\|` includes a pipe in a cell's content, even inside a code span (Tables (extension)), so it becomes `|` before inline parsing.
             let cellChunk = unescapePipes(range: cellRange)
-            // Cell inlines parse in `BlockParser`'s post-block pass (via `pendingInlines`), as paragraphs
-            // and headings do, so a link or footnote reference in a cell resolves against definitions
-            // anywhere in the document, including after the table. That pass also consolidates text
-            // nodes and runs the extended email autolink pass, as for a paragraph.
-            //
-            // The cell has no `\|` iff `unescapePipes` returns the range unchanged. A contiguous table's
-            // unescaped cell is then a contiguous source slice, so it is enqueued source-backed and its
-            // inlines take source positions directly. A flattened or escaped cell parses from its arena
-            // copy with an arena→source run map (registered in `arenaSourceMaps`); with positions off no
-            // map is registered.
+            // Cell inlines parse after the block pass, so a reference in a cell resolves against definitions
+            // anywhere in the document. A contiguous table's cell without `\|` is a source slice and is
+            // queued source-backed; any other cell parses from the arena, with its run map in
+            // `arenaSourceMaps` when positions are on.
             let noEscape = cellChunk.offset == cellRange.lowerBound && cellChunk.length == cellRange.count
             if let contiguousDelta, noEscape {
                 pendingInlines.append((cellIdx, storage.intern(
                     Chunk(offset: cellRange.lowerBound + contiguousDelta, length: cellRange.count, inSource: true))))
             } else {
-                // The cell's run map is the table's map over the cell: one constant-shift run for a
-                // contiguous table, the row's runs for a flattened one, split at each U+FFFD so its
-                // three bytes image the one NUL. An escaped cell's map drops the image of each stripped
-                // backslash (`unescapedPipesMap`).
+                // The table's map over the cell, less each stripped backslash for an escaped cell.
                 if let image {
                     let cellMap = image.runs(from: cellRange.lowerBound, length: cellRange.count, in: self)
                     arenaSourceMaps[cellIdx] = noEscape
@@ -277,7 +244,6 @@ extension BlockParser {
         }
     }
 
-    /// Grow the rowspan of a `.tableCell` node by one, preserving its alignment and colspan.
     private mutating func growRowspan(_ idx: DocumentStorage.Index) {
         guard case .tableCell(let alignment, let colspan, let rowspan) = storage[idx].kind else {
             preconditionFailure("a span row holds only table cells")
@@ -285,7 +251,7 @@ extension BlockParser {
         storage[idx].kind = .tableCell(alignment: alignment, columns: colspan, rows: rowspan + 1)
     }
 
-    /// If `range` (in `storage.strings`) contains any `\|` sequences, materialize a copy with each replaced by `|` and return a chunk pointing at the new region. Otherwise return a chunk pointing at the original range.
+    /// `range` with each `\|` replaced by `|`, copied only if it has one.
     private mutating func unescapePipes(range: Range<Int>) -> Chunk {
         let hasEscape = range.dropLast().contains { storage.strings[$0] == UInt8(ascii: "\\") && storage.strings[$0 + 1] == UInt8(ascii: "|") }
         if !hasEscape {
@@ -300,7 +266,7 @@ extension BlockParser {
 
     // MARK: - Line / cell splitting
 
-    /// Split `chunk` on `\n` boundaries. Returns ranges into `storage.strings` (caller must have `chunk.inSource == false`).
+    /// Splits arena `chunk` into lines.
     private mutating func splitLines(chunk: Chunk) -> [Range<Int>] {
         var lines: [Range<Int>] = []
         let endOff = chunk.offset + chunk.length
@@ -319,15 +285,13 @@ extension BlockParser {
         return lines
     }
 
-    /// Parse the delimiter row into per-column alignments. Returns nil if the line isn't a delimiter row. After pipe splitting, each cell must be `:?-+:?` padded only by spaces, tabs, line tabulations (VT) or form feeds (FF), with at least one column. Alignment colons are read from the cell trimmed of spaces and tabs only, so a colon behind a leading or trailing VT/FF sets no alignment, though the cell stays a valid delimiter.
+    /// The delimiter row's column alignments, or nil if `line` isn't one. Each cell is `:?-+:?` padded by spaces, tabs, line tabulations or form feeds. Colons are read inside spaces and tabs only, so a colon behind a line tabulation or form feed sets no alignment.
     private func parseDelimRow(line: Range<Int>) -> [MarkdownNode.TableAlignment]? {
         let cells = splitCells(line: line).cells
         precondition(!cells.isEmpty, "a delimiter-candidate line holds a `-`, so it splits into at least one cell")
         var alignments: [MarkdownNode.TableAlignment] = []
         alignments.reserveCapacity(cells.count)
         for cell in cells {
-            // Trim all padding to isolate the `:?-+:?` shape; an interior VT/FF fails the all-dashes check
-            // below.
             let marker = trim(cell, leading: \.isExtensionScannerSpace, trailing: \.isExtensionScannerSpace)
             var s = marker.lowerBound
             var e = marker.upperBound
@@ -345,8 +309,7 @@ extension BlockParser {
                     return nil
                 }
             }
-            // Colons are read from `aligned`, not `marker` (see the doc comment). `aligned` is non-empty
-            // because it contains the non-empty `marker`.
+            // `aligned` contains the non-empty `marker`, so it is non-empty.
             let aligned = trim(cell, leading: \.isSpaceOrTab, trailing: \.isSpaceOrTab)
             let leftColon = storage.strings[aligned.lowerBound] == UInt8(ascii: ":")
             let rightColon = storage.strings[aligned.upperBound - 1] == UInt8(ascii: ":")
@@ -362,24 +325,21 @@ extension BlockParser {
         return alignments
     }
 
-    /// Split `line` into cells on unescaped `|`. Strips a single trailing `|` if present, along with any whitespace after it, and a single leading `|` only when the row's first byte is that pipe (no whitespace before it). `hadClosingPipe` reports whether a trailing `|` is stripped, so the caller can tell a rightmost cell capped by a pipe from one that runs to the line end.
+    /// Splits `line` into cells on unescaped `|`, stripping a closing `|` and the padding after it, and a leading `|` only as the row's first byte.
     private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool, hadLeadingPipe: Bool) {
         var s = line.lowerBound
         var e = line.upperBound
         while e > s && storage.strings[e - 1].isSpaceOrTab {
             e -= 1
         }
-        // A leading pipe is stripped only when it is the row's first byte. A pipe after leading
-        // whitespace closes an empty first cell holding that whitespace (` |` is one empty cell, colspan 0,
-        // not the zero-column lone-pipe row that `|` alone is).
+        // A pipe after leading whitespace closes an empty first cell: ` |` is one empty cell, not a lone-pipe row.
         var hadLeadingPipe = false
         if s < e && storage.strings[s] == UInt8(ascii: "|") {
             s += 1
             hadLeadingPipe = true
         }
         var hadClosingPipe = false
-        // A closing pipe may be followed by spaces, tabs, VTs or FFs. Spaces and tabs are trimmed above;
-        // look past any trailing VT/FF for an unescaped pipe. Without one, the trailing VT/FF is the last
+        // A closing pipe may be followed by line tabulations or form feeds; without one, they are the last
         // cell's content.
         var pipeEnd = e
         while pipeEnd > s && storage.strings[pipeEnd - 1].isExtensionScannerSpace {
@@ -396,9 +356,8 @@ extension BlockParser {
         var cellStart = s
         var i = s
         while i < e {
-            // A `|` is a cell delimiter unless the byte directly before it is a backslash, however many
-            // backslashes precede that one. `unescapePipes` later drops the one backslash directly before
-            // the pipe.
+            // A `|` directly after a backslash is escaped, however many backslashes precede it;
+            // `unescapePipes` drops that one backslash.
             if storage.strings[i] == UInt8(ascii: "|")
                 && (i == s || storage.strings[i - 1] != UInt8(ascii: "\\")) {
                 cells.append(cellStart..<i)
@@ -406,10 +365,8 @@ extension BlockParser {
             }
             i += 1
         }
-        // A lone leading pipe with only padding after it (`|`, or `|` followed by spaces, tabs, VTs or
-        // FFs) is zero cells, not one empty cell, so a `|` header does not match a one-column delimiter row
-        // (`|\n-|` is a paragraph). A leading and trailing pipe (`||`) has `hadClosingPipe`, so its one
-        // empty cell (appended below) is kept.
+        // A lone leading pipe with only padding after it is zero cells, so `|\n-|` is a paragraph. `||` has
+        // a closing pipe, so its one empty cell is kept.
         if cells.isEmpty && hadLeadingPipe && !hadClosingPipe
             && (cellStart..<e).allSatisfy({ storage.strings[$0].isExtensionScannerSpace }) {
             return (cells, hadClosingPipe, hadLeadingPipe)
@@ -418,7 +375,6 @@ extension BlockParser {
         return (cells, hadClosingPipe, hadLeadingPipe)
     }
 
-    /// Trim bytes from `range` (in `storage.strings`) while `leading` holds at its start and `trailing` holds at its end.
     private func trim(_ range: Range<Int>, leading: (UInt8) -> Bool, trailing: (UInt8) -> Bool) -> Range<Int> {
         var s = range.lowerBound
         var e = range.upperBound
@@ -431,11 +387,8 @@ extension BlockParser {
         return s..<e
     }
 
-    /// Trim a cell's range to the content that is inline-parsed and tested for the lone rowspan marker. A
-    /// pipe-preceded cell drops its leading spaces, tabs, VTs and FFs (`stripLeadingVTFF: true`). A row's
-    /// first cell with no leading pipe keeps a leading VT/FF; its leading spaces and tabs are already
-    /// trimmed from the row (`false`). The trailing edge drops only spaces and tabs, so a trailing VT/FF
-    /// is content. The cell node's source range comes from the untrimmed range.
+    /// A cell's content. A pipe-preceded cell drops all leading padding; a row's first cell without a leading
+    /// pipe keeps a leading line tabulation or form feed. A trailing line tabulation or form feed is content.
     private func trimCellContent(range: Range<Int>, stripLeadingVTFF: Bool) -> Range<Int> {
         precondition(stripLeadingVTFF || range.isEmpty || !storage.strings[range.lowerBound].isSpaceOrTab, "a row's first cell starts past the row's leading spaces and tabs")
         return trim(range, leading: { stripLeadingVTFF && $0.isExtensionScannerSpace }, trailing: \.isSpaceOrTab)
