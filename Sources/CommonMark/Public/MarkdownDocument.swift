@@ -10,7 +10,7 @@
 
 /// A parsed Markdown document.
 ///
-/// A document borrows the UTF-8 bytes of its source instead of copying them, so its lifetime is bounded by that borrow and the source must outlive it. Because a document can't escape its borrow scope, the entry point that works on every OS release is `withParsedDocument(_:options:_:)`, which passes the borrowed document to a closure. Where `UTF8Span` is available, `init(parsing:options:)` returns a document whose lifetime is tied to the source instead.
+/// A document borrows its source's UTF-8 bytes rather than copying them, so the source must outlive it. `withParsedDocument(_:options:_:)` works on every OS release; where `UTF8Span` is available, `init(parsing:options:)` returns a document whose lifetime is tied to the source.
 ///
 ///     let source = "# Hello\n\nworld"
 ///     MarkdownDocument.withParsedDocument(source) { document in
@@ -46,7 +46,7 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
 
     /// Parses a string as Markdown and passes the borrowed document to a closure.
     ///
-    /// Use this method to parse on any supported OS release. The document borrows the string's UTF-8 bytes for the duration of `body`, so neither the document nor any `MarkdownNode` obtained from it can escape the closure.
+    /// This works on any supported OS release. Neither the document nor its nodes can escape `body`.
     ///
     /// - Parameters:
     ///   - source: The Markdown text to parse.
@@ -64,12 +64,12 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
             let document = MarkdownDocument(parsing: utf8, options: options)
             return try body(document)
         }
-        // Pre-26 fallback: borrow the contiguous UTF-8 (makeContiguousUTF8 normalizes, copying only a non-contiguous string).
+        // `makeContiguousUTF8` copies only a non-contiguous string.
         var contiguous = copy source
         contiguous.makeContiguousUTF8()
         if let result = try contiguous.utf8.withContiguousStorageIfAvailable({ (buffer: UnsafeBufferPointer<UInt8>) throws -> R in
-            // SAFETY: `withContiguousStorageIfAvailable` lends `buffer` over `contiguous`'s UTF-8 for the duration of this closure, and the span over it backs a document that `body` borrows and can't escape, so no access outlives the buffer.
-            //         Before anyAppleOS 26 no API vends a `Span` over a `String`'s UTF-8 (`String.UTF8View.span` and `String.utf8Span` are anyAppleOS 26); the only safe alternative copies the whole source into an owned buffer, which defeats parsing the source in place.
+            // SAFETY: `buffer` is valid for this closure, and the span over it backs a document that `body` borrows and can't escape, so no access outlives it.
+            //         Before anyAppleOS 26 no API vends a `Span` over a `String`'s UTF-8; the only safe alternative copies the whole source.
             let document = MarkdownDocument(parsing: unsafe Span(_unsafeElements: buffer), options: options)
             return try body(document)
         }) {
@@ -80,9 +80,7 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
         return try body(document)
     }
 
-    /// The root node of the document's syntax tree.
-    ///
-    /// Its kind is always `.document`.
+    /// The root node of the document's syntax tree, whose kind is always `.document`.
     public var root: MarkdownNode {
         @_lifetime(borrow self)
         borrowing get {
@@ -101,8 +99,8 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
     public var source: UTF8Span {
         @_lifetime(borrow self)
         borrowing get {
-            // SAFETY: The source is known-valid UTF-8 - it came from a validated `String` or `UTF8Span` at construction - which is `UTF8Span(unchecked:)`'s precondition.
-            //         The safe `UTF8Span(validating:)` rescans the whole source, which would make this O(1) accessor O(n) per call; no API builds a `UTF8Span` from bytes already known valid without that scan.
+            // SAFETY: The source came from a validated `String` or `UTF8Span`, so it meets `UTF8Span(unchecked:)`'s precondition of valid UTF-8.
+            //         The safe `UTF8Span(validating:)` rescans the whole source, making this O(1) accessor O(n); no API skips that scan for bytes known to be valid.
             unsafe UTF8Span(unchecked: _source)
         }
     }

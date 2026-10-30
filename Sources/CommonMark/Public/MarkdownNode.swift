@@ -10,9 +10,7 @@
 
 /// A borrowed view of a single node in a `MarkdownDocument`'s syntax tree.
 ///
-/// A node can't outlive the document that produced it, and moving through the tree neither allocates nor copies. Read a node's type from `kind`, read its content from `content` or `stringContent`, and move through the tree with `children`, `firstChild`, `parent`, `next`, and `previous`.
-///
-/// Content accessors return information appropriate to the node's `kind`. Reading content from a node that has none yields `.none`.
+/// A node can't outlive its document, and moving through the tree neither allocates nor copies.
 public struct MarkdownNode: ~Escapable {
 
     internal let _view: StorageView
@@ -49,7 +47,7 @@ public struct MarkdownNode: ~Escapable {
 
     /// The node's first child, or `nil` if it has no children.
     ///
-    /// A navigated node shares the document's borrow, so you can store it in a `var` and reassign it, which lets you walk the tree iteratively instead of recursively.
+    /// A navigated node shares the document's borrow, so you can reassign a `var` to walk the tree iteratively.
     public var firstChild: MarkdownNode? {
         @_lifetime(copy self)
         borrowing get {
@@ -96,16 +94,12 @@ public struct MarkdownNode: ~Escapable {
             return MarkdownNode(view: _view, index: p)
         }
     }
-
-    // MARK: - Content
-    //
-    // A node's content is read through the single `content` property (see `NodeContent.swift`), which exposes borrowed spans and segment sequences in one switchable value.
 }
 
 extension MarkdownNode {
     /// A sequence of a node's children, returned by `MarkdownNode.children`.
     ///
-    /// Iterate the children with `forEach(_:)`. Iteration doesn't allocate.
+    /// Iterate the children with `forEach(_:)`, which doesn't allocate.
     public struct Children: ~Copyable, ~Escapable {
 
         internal let _view: StorageView
@@ -120,7 +114,7 @@ extension MarkdownNode {
 
         /// Calls `body` with each child node, in document order.
         ///
-        /// Iteration uses a closure rather than `for`-`in` because a `MarkdownNode` is nonescapable and can't be produced by a standard iterator. The node passed to `body` must not escape the call.
+        /// A `MarkdownNode` is nonescapable, so iteration takes a closure rather than using `for`-`in`.
         ///
         /// - Parameter body: A closure that receives each child node.
         public borrowing func forEach<E: Swift.Error>(_ body: (borrowing MarkdownNode) throws(E) -> Void) throws(E) {
@@ -137,7 +131,7 @@ extension MarkdownNode {
 extension MarkdownNode {
     /// The literal text of a node, as an ordered sequence of contiguous UTF-8 segments.
     ///
-    /// You obtain a value of this type from the `Segments`-bearing cases of `MarkdownNode.Content`, such as `.text`, `.codeBlock`, and `.htmlBlock`. Each segment addresses the document's bytes in place, without allocating or copying. Iterate the segments with `forEach(_:)`.
+    /// The `.text`, `.codeBlock`, and `.htmlBlock` cases of `MarkdownNode.Content` carry it. Each segment addresses the document's bytes in place.
     public struct Segments: ~Copyable, ~Escapable {
 
         internal let _view: StorageView
@@ -150,7 +144,7 @@ extension MarkdownNode {
             self._ref = ref
         }
 
-        /// The number of segments (`0` for empty content; `1` for the common single-range case).
+        /// The number of segments.
         public var count: Int {
             Int(_ref.count)
         }
@@ -167,7 +161,7 @@ extension MarkdownNode {
 
         /// Calls `body` with each segment, in order.
         ///
-        /// Iteration uses a closure because a `UTF8Span` is noncopyable and can't be produced by a standard iterator. The span passed to `body` must not escape the call. For an owned `String` form, or to read content on an OS release without `UTF8Span`, use `MarkdownNode.stringContent`.
+        /// A `UTF8Span` is nonescapable, so iteration takes a closure rather than using `for`-`in`.
         ///
         /// - Parameter body: A closure that receives each segment.
         @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
@@ -183,7 +177,7 @@ extension MarkdownNode {
 extension MarkdownNode {
     /// The kind of a node in the syntax tree.
     ///
-    /// Several cases carry the node's defining metadata directly as associated values - `.heading(level:)`, `.item(checked:)`, `.list(_:)`, `.codeBlock(_:)`, `.tableRow(isHeader:)`, `.tableCell(alignment:columns:rows:)`, `.codeInline(backtickCount:)`, `.footnoteReference(index:)` - so inspect a node's kind with a `switch` or `if case` rather than `==`.
+    /// Several cases carry metadata as associated values, so match a kind with `switch` or `if case` rather than `==`.
     public enum Kind: Sendable, Hashable {
         // Block kinds
 
@@ -191,11 +185,11 @@ extension MarkdownNode {
         case document
         /// A block quote (`>`-prefixed lines).
         case blockQuote
-        /// A bullet or ordered list. The associated `ListInfo` carries the marker style, start number, and tightness.
+        /// A bullet or ordered list.
         case list(ListInfo)
-        /// A list item. With `MarkdownDocument.ParseOptions.tasklist`, `checked` is the state of a task list item's checkbox (`true` when checked, `false` when unchecked); it is `nil` for any other item.
+        /// A list item. With `MarkdownDocument.ParseOptions.tasklist`, `checked` is a task list item's checkbox state; it is `nil` for any other item.
         case item(checked: Bool?)
-        /// A fenced or indented code block. The associated `CodeBlockInfo` describes the fence.
+        /// A fenced or indented code block.
         case codeBlock(CodeBlockInfo)
         /// A block of raw HTML.
         case htmlBlock
@@ -215,7 +209,7 @@ extension MarkdownNode {
         case tableRow(isHeader: Bool)
         /// A table cell, carrying its column `alignment` and the number of `columns` and `rows` it spans.
         ///
-        /// `columns` and `rows` are both `1` for an ordinary cell. Values other than `1` arise only with `MarkdownDocument.ParseOptions.tableSpans` (and, for the `"` rowspan marker, `.tableRowspanDitto`): a cell that *begins* a span reports the span size (`2`, `3`, …), while a *filler* cell that merely continues a neighbour's span reports `0`.
+        /// Both are `1` for an ordinary cell. With `MarkdownDocument.ParseOptions.tableSpans` or `.tableRowspanDitto`, a cell that begins a span reports its size, and a cell that continues a neighbour's span reports `0`.
         case tableCell(alignment: TableAlignment, columns: Int, rows: Int)
 
         // Inline kinds
@@ -226,7 +220,7 @@ extension MarkdownNode {
         case softBreak
         /// A hard line break (a line ending with two or more spaces or a backslash).
         case lineBreak
-        /// Inline code span. `backtickCount` is the number of backticks in the opening/closing delimiter run (`1` for `` `x` ``, `2` for ``` ``x`` ```, …). Use it to distinguish multi-backtick spans and to widen the span's source range over its delimiters.
+        /// An inline code span. `backtickCount` is the length of each delimiter run, which the node's source range excludes.
         case codeInline(backtickCount: Int)
         /// An inline span of raw HTML.
         case htmlInline
@@ -240,7 +234,7 @@ extension MarkdownNode {
         case link
         /// An image. The source URL and title are available through the node's content.
         case image
-        /// A footnote reference (`[^label]`). `index` is the 1-based number assigned to the label in order of first reference - the first distinct label is `1`, the next `2`, and repeated references to the same label reuse its number. Produced when parsing with `MarkdownDocument.ParseOptions.footnotes`.
+        /// A footnote reference (`[^label]`), produced when parsing with `MarkdownDocument.ParseOptions.footnotes`. `index` numbers labels from 1 in order of first reference; repeated references reuse it.
         case footnoteReference(index: Int)
         /// Struck-through text (`~text~` or `~~text~~`), produced when parsing with `MarkdownDocument.ParseOptions.strikethrough`.
         case strikethrough
@@ -264,7 +258,7 @@ extension MarkdownNode {
             !isBlock
         }
 
-        /// `true` for the two leaf blocks that lazily accumulate inline text (`.paragraph`, `.heading`).
+        /// The leaf blocks that accumulate text lines.
         internal var canAccumulateText: Bool {
             switch self {
             case .paragraph, .heading:
@@ -274,7 +268,6 @@ extension MarkdownNode {
             }
         }
 
-        /// `true` for any `.codeBlock` (fenced or indented), ignoring its `CodeBlockInfo`.
         internal var isCodeBlock: Bool {
             if case .codeBlock = self {
                 return true
@@ -282,7 +275,6 @@ extension MarkdownNode {
             return false
         }
 
-        /// `true` for any `.list`, ignoring its `ListInfo`.
         internal var isList: Bool {
             if case .list = self {
                 return true
@@ -382,7 +374,7 @@ extension MarkdownNode {
 }
 
 extension MarkdownNode {
-    /// A 1-based position in the source: `line` counts from 1, `column` is the 1-based UTF-8 **byte** offset within that line (so a leading multi-byte scalar advances the column by its byte count).
+    /// A position in the source: a 1-based line and a 1-based UTF-8 byte column within it.
     public struct SourcePosition: Comparable, Hashable, Sendable {
         /// The 1-based line number.
         public var line: Int
@@ -409,7 +401,7 @@ extension MarkdownNode {
 extension MarkdownNode {
     /// The node's source range, or `nil` without `MarkdownDocument.ParseOptions.sourcePosition` or for a node that has no source range.
     ///
-    /// `lowerBound` is the position of the node's first content byte. `upperBound` is the position just past its last content byte (half-open) - i.e. the column equals the last byte's 1-based column **plus one**.
+    /// The range runs from the node's first content byte to just past its last.
     public var sourceRange: Range<SourcePosition>? {
         _view.sourceRange(of: _index)
     }

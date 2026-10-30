@@ -11,7 +11,7 @@
 extension MarkdownDocument {
     /// Options that control how a `MarkdownDocument` parses its source.
     ///
-    /// Pass a set of options when creating a document to enable GitHub Flavored Markdown extensions (tables, strikethrough, autolinks, task lists, and footnotes) or inline attributes, to turn on source-position tracking, or to select an inline-only parsing mode. The default value (an empty set) parses plain CommonMark.
+    /// Options enable GitHub Flavored Markdown extensions, inline attributes, source positions, or inline-only parsing. The empty set parses CommonMark.
     ///
     ///     let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .footnotes]
     ///     MarkdownDocument.withParsedDocument(source, options: options) { doc in
@@ -23,8 +23,6 @@ extension MarkdownDocument {
 
         /// Creates a set of parse options from a raw bit mask.
         ///
-        /// Prefer combining the named options, such as `.tables` or `.footnotes`, rather than constructing a value from a raw bit mask directly.
-        ///
         /// - Parameter rawValue: The bit mask that represents the options.
         public init(rawValue: Int) {
             self.rawValue = rawValue
@@ -32,7 +30,7 @@ extension MarkdownDocument {
 
         /// Tracks a source range for each node, which you read with `MarkdownNode.sourceRange`.
         ///
-        /// Without this option, the parser does no position bookkeeping and `MarkdownNode.sourceRange` returns `nil`.
+        /// Without this option, `MarkdownNode.sourceRange` returns `nil`.
         public static let sourcePosition = MarkdownDocument.ParseOptions(rawValue: 1 << 1)
 
         /// Converts straight quotes to curly quotes, `--` to an en dash, `---` to an em dash, and `...` to an ellipsis.
@@ -66,7 +64,7 @@ extension MarkdownDocument {
 
         /// Enables GFM task list items.
         ///
-        /// A list item whose first paragraph begins with a task list item marker (`[ ]`, `[x]`, or `[X]`, as defined under Task list items (extension)) becomes an unchecked or checked task list item. Without this option, the brackets stay as ordinary text in the item's first paragraph.
+        /// A list item whose first paragraph begins with `[ ]`, `[x]`, or `[X]` becomes an unchecked or checked task list item.
         public static let tasklist = MarkdownDocument.ParseOptions(rawValue: 1 << 23)
 
         /// Enables GFM extended autolinks.
@@ -76,12 +74,12 @@ extension MarkdownDocument {
 
         /// Enables GFM tables.
         ///
-        /// A paragraph whose second line is a delimiter row, such as `---`, `:---`, `---:`, or `:---:`, becomes a table with aligned columns. Columns are separated by `|`; a single-column table has one delimiter cell and needs no `|` in its header line.
+        /// A paragraph whose second line is a delimiter row, such as `| --- | :---: |`, becomes a table.
         public static let tables = MarkdownDocument.ParseOptions(rawValue: 1 << 25)
 
         /// Enables inline attributes, written as `^[text](key: value)`, and attribute definitions, written as `^[label]: key: value`.
         ///
-        /// An inline attribute becomes an `.attribute` node whose children are the bracketed text; `^[text][label]` takes its attributes from the definition with that label. Without this option, `^` is ordinary text, the brackets after it follow the usual link rules, and a `^[label]:` line is ordinary paragraph content.
+        /// An inline attribute becomes an `.attribute` node whose children are the bracketed text; `^[text][label]` takes its attributes from the definition with that label. Without this option, `^[` has no special meaning.
         public static let attributes = MarkdownDocument.ParseOptions(rawValue: 1 << 28)
     }
 }
