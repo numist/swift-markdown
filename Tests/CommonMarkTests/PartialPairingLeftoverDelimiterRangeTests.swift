@@ -94,4 +94,35 @@ struct PartialPairingLeftoverDelimiterRangeTests {
             "text b 1:6-1:7",
         ])
     }
+
+    @Test("leftover delimiters in link text")
+    func leftoverInLinkText() {
+        #expect(nodes(in: "[**o*](u)") == [
+            "document  1:1-1:10",
+            "paragraph  1:1-1:10",
+            "link  1:1-1:10",
+            "text * 1:2-1:3",
+            "emphasis  1:3-1:6",
+            "text o 1:4-1:5",
+        ])
+    }
+
+    /// Leftover delimiter text merges with the text beside it, and the merged node runs from the first part's start to the last part's end.
+    @Test("leftover delimiters merged with adjacent text")
+    func leftoverMergedWithText() {
+        #expect(nodes(in: "a **o*") == [
+            "document  1:1-1:7",
+            "paragraph  1:1-1:7",
+            "text a * 1:1-1:4",
+            "emphasis  1:4-1:7",
+            "text o 1:5-1:6",
+        ])
+        #expect(nodes(in: "*o** b") == [
+            "document  1:1-1:7",
+            "paragraph  1:1-1:7",
+            "emphasis  1:1-1:4",
+            "text o 1:2-1:3",
+            "text * b 1:4-1:7",
+        ])
+    }
 }
