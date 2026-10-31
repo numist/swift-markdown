@@ -816,12 +816,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
             }
         }
-        storage.strings.append(UInt8(ascii: "\n"))
+        let headerEnd = storage.strings.count
         for i in delimRange {
             storage.strings.append(sourceBytes[i])
         }
-        let chunk = Chunk(offset: scratchStart, length: storage.strings.count - scratchStart, inSource: false)
-        let opens = opensTable(chunk: chunk)
+        let opens = opensTable(header: scratchStart..<headerEnd, delimiter: headerEnd..<storage.strings.count)
         // Keeping the scratch would leave dead bytes in the arena for the parse's lifetime.
         storage.strings.removeLast(storage.strings.count - scratchStart)
         return opens

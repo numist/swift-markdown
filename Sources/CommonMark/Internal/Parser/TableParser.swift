@@ -38,9 +38,7 @@ extension BlockParser {
         let image = positionsEnabled ? ContentImage(base: chunk.offset, runs: runs) : nil
         let lines = splitLines(chunk: chunk)
         precondition(lines.count >= 2, "a table-pending paragraph holds its header and delimiter lines")
-        let delimiterAlignments = parseDelimRow(line: lines[1])
-        precondition(delimiterAlignments != nil, "a table-pending paragraph's delimiter line is a delimiter row")
-        let alignments = delimiterAlignments!
+        let alignments = parseDelimRow(line: lines[1])
         precondition(splitCells(line: lines[0]).cells.count == alignments.count, "a table-pending paragraph's header has the delimiter row's column count")
         let columnCount = alignments.count
         storage[node].kind = .table
@@ -62,16 +60,28 @@ extension BlockParser {
         }
     }
 
-    /// Whether arena `chunk`, a header line and a delimiter-candidate line, opens a table: the candidate is a
-    /// delimiter row and the header has as many cells (Tables (extension)). The block parser then marks the
-    /// paragraph table-pending, so the table, not a paragraph, is the open block for the next line.
-    internal mutating func opensTable(chunk: Chunk) -> Bool {
-        let lines = splitLines(chunk: chunk)
-        precondition(lines.count >= 2, "a table candidate holds a header line and a delimiter-candidate line")
-        guard let alignments = parseDelimRow(line: lines[1]) else {
+    /// Whether arena lines `header` and `delimiter` open a table: `delimiter` is a delimiter row and `header` has as
+    /// many cells (Tables (extension)). The block parser then marks the paragraph table-pending, so the table, not a
+    /// paragraph, is the open block for the next line.
+    ///
+    /// Every delimiter-shaped paragraph line asks this, so it counts cells without building arrays.
+    // Non-mutating, it measured 8% slower on a paragraph of delimiter-shaped lines.
+    internal mutating func opensTable(header: Range<Int>, delimiter: Range<Int>) -> Bool {
+        var columns = 0
+        var isDelimiterRow = true
+        forEachCell(in: delimiter) { cell in
+            columns += 1
+            if isDelimiterRow && delimiterAlignment(of: cell) == nil {
+                isDelimiterRow = false
+            }
+        }
+        guard isDelimiterRow else {
             return false
         }
-        return splitCells(line: lines[0]).cells.count == alignments.count
+        precondition(columns > 0, "a delimiter-candidate line holds a `-`, so it splits into at least one cell")
+        var headerCells = 0
+        forEachCell(in: header) { _ in headerCells += 1 }
+        return headerCells == columns
     }
 
     /// Whether `sourceBytes[range]` holds only `-`, `:`, `|` and delimiter-row padding, with at least one `-`.
@@ -285,48 +295,62 @@ extension BlockParser {
         return lines
     }
 
-    /// The delimiter row's column alignments, or nil if `line` isn't one. Each cell is `:?-+:?` padded by spaces, tabs, line tabulations or form feeds. Colons are read inside spaces and tabs only, so a colon behind a line tabulation or form feed sets no alignment.
-    private func parseDelimRow(line: Range<Int>) -> [MarkdownNode.TableAlignment]? {
+    /// Delimiter row `line`'s column alignments.
+    private func parseDelimRow(line: Range<Int>) -> [MarkdownNode.TableAlignment] {
         let cells = splitCells(line: line).cells
         precondition(!cells.isEmpty, "a delimiter-candidate line holds a `-`, so it splits into at least one cell")
-        var alignments: [MarkdownNode.TableAlignment] = []
-        alignments.reserveCapacity(cells.count)
-        for cell in cells {
-            let marker = trim(cell, leading: \.isExtensionScannerSpace, trailing: \.isExtensionScannerSpace)
-            var s = marker.lowerBound
-            var e = marker.upperBound
-            if s < e && storage.strings[s] == UInt8(ascii: ":") {
-                s += 1
-            }
-            if e > s && storage.strings[e - 1] == UInt8(ascii: ":") {
-                e -= 1
-            }
-            if s >= e {
-                return nil
-            }
-            for j in s..<e {
-                if storage.strings[j] != UInt8(ascii: "-") {
-                    return nil
-                }
-            }
-            // `aligned` contains the non-empty `marker`, so it is non-empty.
-            let aligned = trim(cell, leading: \.isSpaceOrTab, trailing: \.isSpaceOrTab)
-            let leftColon = storage.strings[aligned.lowerBound] == UInt8(ascii: ":")
-            let rightColon = storage.strings[aligned.upperBound - 1] == UInt8(ascii: ":")
-            let a: MarkdownNode.TableAlignment
-            switch (leftColon, rightColon) {
-            case (true, true): a = .center
-            case (true, false): a = .left
-            case (false, true): a = .right
-            case (false, false): a = .none
-            }
-            alignments.append(a)
+        return cells.map { cell in
+            let alignment = delimiterAlignment(of: cell)
+            precondition(alignment != nil, "a table-pending paragraph's delimiter line is a delimiter row")
+            return alignment!
         }
-        return alignments
     }
 
-    /// Splits `line` into cells on unescaped `|`, stripping a closing `|` and the padding after it, and a leading `|` only as the row's first byte.
+    /// A delimiter-row cell's alignment, or nil if `cell` isn't one. A cell is `:?-+:?` padded by spaces, tabs, line
+    /// tabulations or form feeds. Colons are read inside spaces and tabs only, so a colon behind a line tabulation or
+    /// form feed sets no alignment.
+    private func delimiterAlignment(of cell: Range<Int>) -> MarkdownNode.TableAlignment? {
+        let marker = trim(cell, leading: \.isExtensionScannerSpace, trailing: \.isExtensionScannerSpace)
+        var s = marker.lowerBound
+        var e = marker.upperBound
+        if s < e && storage.strings[s] == UInt8(ascii: ":") {
+            s += 1
+        }
+        if e > s && storage.strings[e - 1] == UInt8(ascii: ":") {
+            e -= 1
+        }
+        if s >= e {
+            return nil
+        }
+        for j in s..<e {
+            if storage.strings[j] != UInt8(ascii: "-") {
+                return nil
+            }
+        }
+        // `aligned` contains the non-empty `marker`, so it is non-empty.
+        let aligned = trim(cell, leading: \.isSpaceOrTab, trailing: \.isSpaceOrTab)
+        let leftColon = storage.strings[aligned.lowerBound] == UInt8(ascii: ":")
+        let rightColon = storage.strings[aligned.upperBound - 1] == UInt8(ascii: ":")
+        switch (leftColon, rightColon) {
+        case (true, true): return .center
+        case (true, false): return .left
+        case (false, true): return .right
+        case (false, false): return MarkdownNode.TableAlignment.none
+        }
+    }
+
+    /// `forEachCell`'s cells of `line`, collected.
     private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool, hadLeadingPipe: Bool) {
+        var cells: [Range<Int>] = []
+        let pipes = forEachCell(in: line) { cells.append($0) }
+        return (cells, pipes.hadClosingPipe, pipes.hadLeadingPipe)
+    }
+
+    /// Calls `body` with each cell of `line`, in order. Cells split on unescaped `|`, stripping a closing `|` and the
+    /// padding after it, and a leading `|` only as the row's first byte.
+    // Out of line, a table-heavy parse costs 0.7% more.
+    @discardableResult @inline(__always)
+    private func forEachCell(in line: Range<Int>, _ body: (Range<Int>) -> Void) -> (hadClosingPipe: Bool, hadLeadingPipe: Bool) {
         var s = line.lowerBound
         var e = line.upperBound
         while e > s && storage.strings[e - 1].isSpaceOrTab {
@@ -352,7 +376,7 @@ extension BlockParser {
                 hadClosingPipe = true
             }
         }
-        var cells: [Range<Int>] = []
+        var cellCount = 0
         var cellStart = s
         var i = s
         while i < e {
@@ -360,19 +384,20 @@ extension BlockParser {
             // `unescapePipes` drops that one backslash.
             if storage.strings[i] == UInt8(ascii: "|")
                 && (i == s || storage.strings[i - 1] != UInt8(ascii: "\\")) {
-                cells.append(cellStart..<i)
+                body(cellStart..<i)
+                cellCount += 1
                 cellStart = i + 1
             }
             i += 1
         }
         // A lone leading pipe with only padding after it is zero cells, so `|\n-|` is a paragraph. `||` has
         // a closing pipe, so its one empty cell is kept.
-        if cells.isEmpty && hadLeadingPipe && !hadClosingPipe
+        if cellCount == 0 && hadLeadingPipe && !hadClosingPipe
             && (cellStart..<e).allSatisfy({ storage.strings[$0].isExtensionScannerSpace }) {
-            return (cells, hadClosingPipe, hadLeadingPipe)
+            return (hadClosingPipe, hadLeadingPipe)
         }
-        cells.append(cellStart..<e)
-        return (cells, hadClosingPipe, hadLeadingPipe)
+        body(cellStart..<e)
+        return (hadClosingPipe, hadLeadingPipe)
     }
 
     private func trim(_ range: Range<Int>, leading: (UInt8) -> Bool, trailing: (UInt8) -> Bool) -> Range<Int> {
