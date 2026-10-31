@@ -350,7 +350,7 @@ extension BlockParser {
     private static func normalizeLabel(_ span: Span<UInt8>) -> String {
         String(unsafeUninitializedCapacity: span.count * 3) { buffer in
             // SAFETY: The `OutputSpan` starts with none of `buffer` initialized, every append is capacity-checked against `span.count * 3` (the worst case), `finalize(for:)` verifies `buffer` before reporting the initialized count, and the initializer repairs invalid UTF-8.
-            //         No `String` initializer fills its storage through an `OutputSpan`; building the bytes in an owned array and copying them costs about 1.2% more instructions to parse spec.txt.
+            //         No String initializer fills its UTF-8 storage through an `OutputSpan`. Building the bytes with `Array(capacity:initializingWith:)` and copying them with `String(decoding:as:)` measured up to 21% more parse instructions on reference- and footnote-heavy input. Building them in `withTemporaryAllocation(of:capacity:_:)` and copying them with `String(copying:)` after `UTF8Span(validating:)` exists only on anyAppleOS 26 and measured up to 0.95% more.
             var output = unsafe OutputSpan(buffer: buffer, initializedCount: 0)
             var pendingSpace = false
 

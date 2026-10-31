@@ -69,7 +69,7 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
         contiguous.makeContiguousUTF8()
         if let result = try contiguous.utf8.withContiguousStorageIfAvailable({ (buffer: UnsafeBufferPointer<UInt8>) throws -> R in
             // SAFETY: `buffer` is valid for this closure, and the span over it backs a document that `body` borrows and can't escape, so no access outlives it.
-            //         Before anyAppleOS 26 no API vends a `Span` over a `String`'s UTF-8; the only safe alternative copies the whole source.
+            //         Before anyAppleOS 26 no API vends a `Span` over a `String`'s UTF-8 (`String.UTF8View.span` and `String.utf8Span` are anyAppleOS 26). The safe spans available there, such as `ContiguousArray.span`, cover only storage the caller owns, so they require copying the whole source, which defeats parsing the source in place.
             let document = MarkdownDocument(parsing: unsafe Span(_unsafeElements: buffer), options: options)
             return try body(document)
         }) {
@@ -100,7 +100,7 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
         @_lifetime(borrow self)
         borrowing get {
             // SAFETY: The source came from a validated `String` or `UTF8Span`, so it meets `UTF8Span(unchecked:)`'s precondition of valid UTF-8.
-            //         The safe `UTF8Span(validating:)` rescans the whole source, making this O(1) accessor O(n); no API skips that scan for bytes known to be valid.
+            //         A stored property can't have a type newer than the deployment target, so the document can't keep the validated `UTF8Span`, and `UTF8Span(validating:)` would make this O(1) accessor O(n).
             unsafe UTF8Span(unchecked: _source)
         }
     }

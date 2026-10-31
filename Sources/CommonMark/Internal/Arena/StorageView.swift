@@ -87,7 +87,7 @@ internal struct StorageView: ~Escapable, Copyable {
         }
         return String(unsafeUninitializedCapacity: Int(ref.totalLength)) { buffer in
             // SAFETY: The `OutputSpan` starts with none of `buffer` initialized, every append is capacity-checked against `ref.totalLength` (the sum of the segment lengths), `finalize(for:)` verifies `buffer` before reporting the initialized count, and the initializer repairs invalid UTF-8.
-            //         No `String` initializer fills its storage through an `OutputSpan`; building the bytes in an owned array and copying them costs about 3% more instructions to parse spec.txt and read every node's content.
+            //         No String initializer fills its UTF-8 storage through an `OutputSpan`. Building the bytes with `Array(capacity:initializingWith:)` and copying them with `String(decoding:as:)` measured 4.8% more instructions to parse spec.txt and read every node's `stringContent`. Building them in `withTemporaryAllocation(of:capacity:_:)` and copying them with `String(copying:)` after `UTF8Span(validating:)` exists only on anyAppleOS 26 and measured 0.7% more.
             var output = unsafe OutputSpan(buffer: buffer, initializedCount: 0)
             for i in 0..<Int(ref.count) {
                 let span = bytes(of: segments[Int(ref.first) + i].chunk)
@@ -122,8 +122,8 @@ internal struct StorageView: ~Escapable, Copyable {
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @_lifetime(borrow self)
     internal func utf8Span(of chunk: Chunk) -> UTF8Span {
-        // SAFETY: Content bytes are valid UTF-8 (the source comes from a validated `String` or `UTF8Span`, and the parser writes whole scalars to the arena) and the parser cuts them only at ASCII bytes, which meets `UTF8Span(unchecked:)`'s precondition.
-        //         The safe `UTF8Span(validating:)` rescans every byte, making this O(1) accessor O(n); no API skips that scan for bytes known to be valid.
+        // SAFETY: A source chunk lies within source text that a `String` or `UTF8Span` validated, and the parser cuts it only at ASCII bytes or just past a leading byte-order mark, so it starts and ends on scalar boundaries; an arena chunk holds bytes the parser writes as whole scalars. Either way the bytes are valid UTF-8, which is `UTF8Span(unchecked:)`'s precondition.
+        //         A stored property can't have a type newer than the deployment target, so this view can carry the validated source only as an existential `UTF8Span` holder. Copying that holder with every node, deriving each source chunk from it with `UTF8Span.UnicodeScalarIterator.reset(roundingBackwardsFrom:)` and `prefix()`/`suffix()`, and validating arena chunks measured up to 8.4% more instructions to parse a document and read every node's content, and 19% more where the arena is half the size of the source. Calling `UTF8Span(validating:)` on every chunk instead measured up to 3.7% more, and 24% more where the arena is half the size of the source.
         unsafe UTF8Span(unchecked: bytes(of: chunk))
     }
 }
