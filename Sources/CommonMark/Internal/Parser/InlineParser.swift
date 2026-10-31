@@ -810,7 +810,9 @@ extension BlockParser {
         var canOpen: Bool
         var canClose: Bool
         var inlText: DocumentStorage.Index
-        /// The run's virtual range, from which `insertEmph` stamps the emphasis node. The run's text node is in source offsets, so stamping from it would map twice.
+        /// The virtual range of the run's unused delimiters, from which `insertEmph` stamps the emphasis node. The run's text node is in source offsets, so stamping from it would map twice.
+        ///
+        /// A closer uses delimiters from its start and an opener from its end, so the unused ones stay contiguous.
         var virtualStart: Int
         var virtualEnd: Int
         var previous: Int?
@@ -1151,9 +1153,14 @@ extension BlockParser {
         let parentIdx = storage[openerInl].parent
         let emphIdx = storage.appendNode(NodeRecord(kind: kind, parent: parentIdx))
         // The node covers the used delimiters and the content, not the leftover delimiters (`**o*` → `Emphasis @1:2-1:5`).
-        let start = delimiters[opener].virtualStart + openerNumChars
-        let end = delimiters[closer].virtualEnd - closerNumChars
+        let start = delimiters[opener].virtualEnd - useDelims
+        let end = delimiters[closer].virtualStart + useDelims
         stampInline(emphIdx, start, end, content: content)
+        // The unused delimiters stay text covering only themselves.
+        stampInline(openerInl, delimiters[opener].virtualStart, start, content: content)
+        stampInline(closerInl, end, delimiters[closer].virtualEnd, content: content)
+        delimiters[opener].virtualEnd = start
+        delimiters[closer].virtualStart = end
         var sibling = storage[openerInl].next
         while let sibling_ = sibling, sibling_ != closerInl {
             let nextSibling = storage[sibling_].next
