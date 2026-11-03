@@ -79,6 +79,15 @@ extension BlockParser {
     /// reference's label, fits `maxLinkLabelLength` untrimmed. A longer label matches no definition.
     internal func linkLabelFitsLengthCap(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> Bool {
         let maxLabelLength = Self.maxLinkLabelLength
+        // A character takes one to four bytes, so a label of at most `maxLabelLength` bytes fits and one of more than
+        // four times that doesn't. Settling those without weighing each byte keeps a label that spans many nested
+        // brackets cheap.
+        if range.count <= maxLabelLength {
+            return true
+        }
+        if range.count > 4 * maxLabelLength {
+            return false
+        }
         var length = 0
         for i in range {
             length += labelLengthWeight(content[i])
