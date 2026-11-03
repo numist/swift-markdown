@@ -318,7 +318,7 @@ extension BlockParser {
 
     // MARK: - Label normalization
 
-    /// Normalizes a link label for matching (Links): trims whitespace, collapses interior runs to one space, and case-folds with `lowercased()`. Whitespace includes line tabulation and form feed.
+    /// Normalizes a link label for matching (Links): trims whitespace, collapses interior runs to one space, and applies the Unicode case fold. Whitespace includes line tabulation and form feed.
     internal func normalizeLabel(chunk: Chunk) -> String {
         let span = if chunk.inSource {
             sourceBytes.extracting(chunk.range)
@@ -346,14 +346,16 @@ extension BlockParser {
 
     /// Replaces each NUL with U+FFFD (Insecure characters) in its own buffer rather than `storage.strings`,
     /// because a definition's label can be normalized while that arena is borrowed. Each NUL takes three bytes, and
-    /// every other byte at most one, since a whitespace run becomes at most one space. Sizing the buffer to that,
-    /// rather than to a worst case, stores a short label inline instead of in a heap allocation.
+    /// every other byte at most one, since a whitespace run becomes at most one space. Sizing the buffer to that, rather
+    /// than to three bytes per source byte, stores a short label inline instead of in a heap allocation. ASCII letters are
+    /// lowercased in the same pass, which completes the case fold of a label with no non-ASCII bytes.
     private static func normalizeLabel(_ span: Span<UInt8>) -> String {
+        var hasNonASCII = false
         var nulCount = 0
         for i in 0..<span.count where span[i] == 0 {
             nulCount += 1
         }
-        return String(unsafeUninitializedCapacity: span.count + 2 * nulCount) { buffer in
+        let label = String(unsafeUninitializedCapacity: span.count + 2 * nulCount) { buffer in
             // SAFETY: The `OutputSpan` starts with none of `buffer` initialized, every append is capacity-checked against `span.count + 2 * nulCount` (the most the label can need), `finalize(for:)` verifies `buffer` before reporting the initialized count, and the initializer repairs invalid UTF-8.
             //         No String initializer fills its UTF-8 storage through an `OutputSpan`. Building the bytes with `Array(capacity:initializingWith:)` and copying them with `String(decoding:as:)` measured up to 21% more parse instructions on reference- and footnote-heavy input. Building them in `withTemporaryAllocation(of:capacity:_:)` and copying them with `String(copying:)` after `UTF8Span(validating:)` exists only on anyAppleOS 26 and measured up to 0.95% more.
             var output = unsafe OutputSpan(buffer: buffer, initializedCount: 0)
@@ -379,12 +381,25 @@ extension BlockParser {
                     output.append(0xEF)
                     output.append(0xBF)
                     output.append(0xBD)
+                } else if b >= UInt8(ascii: "A") && b <= UInt8(ascii: "Z") {
+                    output.append(b + (UInt8(ascii: "a") - UInt8(ascii: "A")))
                 } else {
+                    hasNonASCII = hasNonASCII || b >= 0x80
                     output.append(b)
                 }
             }
 
             return unsafe output.finalize(for: buffer)
-        }.lowercased()
+        }
+        return hasNonASCII ? caseFold(label) : label
+    }
+
+    /// `label` with each scalar replaced by a stand-in for its Unicode case fold, so two labels' results are equal
+    /// exactly when their case folds are. Lowercasing, uppercasing and lowercasing again yields one stand-in for each
+    /// case fold, except for dotless `ı`: it folds to itself, but uppercases to the `I` that `i` folds with.
+    private static func caseFold(_ label: String) -> String {
+        label.lowercased().unicodeScalars.split(separator: "ı", omittingEmptySubsequences: false)
+            .map { Substring($0).uppercased().lowercased() }
+            .joined(separator: "ı")
     }
 }
