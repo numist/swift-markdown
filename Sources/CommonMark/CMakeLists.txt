@@ -11,6 +11,7 @@ add_library(CommonMark
   Internal/Arena/Chunk.swift
   Internal/Arena/DocumentStorage.swift
   Internal/Arena/NodeImplementation.swift
+  Internal/Arena/OutputValidation.swift
   Internal/Arena/Segment.swift
   Internal/Arena/StorageView.swift
   Internal/Parser/ASCIIByte.swift

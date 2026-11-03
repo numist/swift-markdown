@@ -29,6 +29,7 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
         let parser = BlockParser(storage: storage, source: source)
         self._storage = parser.parse()
         self._source = source
+        assert(_storage.validateOutput(source: source))
     }
 
     /// Creates a document by parsing UTF-8 text.
