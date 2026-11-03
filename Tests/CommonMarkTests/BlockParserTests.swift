@@ -1849,7 +1849,7 @@ struct TableTests {
         let root = doc.root
         root.children.forEach { block in
             if block.kind == .table {
-                if case .table(let cols, _) = doc._storage[block._index].data {
+                if case .table(let cols) = doc._storage[block._index].data {
                     foundCols = cols
                 }
             }

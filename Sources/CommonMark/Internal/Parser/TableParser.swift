@@ -42,7 +42,7 @@ extension BlockParser {
         precondition(splitCells(line: lines[0]).cells.count == alignments.count, "a table-pending paragraph's header has the delimiter row's column count")
         let columnCount = alignments.count
         storage[node].kind = .table
-        storage[node].data = .table(columnCount: columnCount, alignmentsOffset: 0)
+        storage[node].data = .table(columnCount: columnCount)
         // Per column, the cell a rowspan marker in the next row grows: the nearest cell above that isn't a rowspan filler. It is kept rather than searched for, so a long column of markers stays linear. Empty without `.tableSpans`.
         var rowspanOwners: [DocumentStorage.Index?] = storage.options.contains(.tableSpans) ? Array(repeating: nil, count: columnCount) : []
         // The delimiter row (line 1) is not a row.
