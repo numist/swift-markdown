@@ -345,11 +345,16 @@ extension BlockParser {
     }
 
     /// Replaces each NUL with U+FFFD (Insecure characters) in its own buffer rather than `storage.strings`,
-    /// because a definition's label can be normalized while that arena is borrowed. `span.count * 3` fits
-    /// every byte being a NUL.
+    /// because a definition's label can be normalized while that arena is borrowed. Each NUL takes three bytes, and
+    /// every other byte at most one, since a whitespace run becomes at most one space. Sizing the buffer to that,
+    /// rather than to a worst case, stores a short label inline instead of in a heap allocation.
     private static func normalizeLabel(_ span: Span<UInt8>) -> String {
-        String(unsafeUninitializedCapacity: span.count * 3) { buffer in
-            // SAFETY: The `OutputSpan` starts with none of `buffer` initialized, every append is capacity-checked against `span.count * 3` (the worst case), `finalize(for:)` verifies `buffer` before reporting the initialized count, and the initializer repairs invalid UTF-8.
+        var nulCount = 0
+        for i in 0..<span.count where span[i] == 0 {
+            nulCount += 1
+        }
+        return String(unsafeUninitializedCapacity: span.count + 2 * nulCount) { buffer in
+            // SAFETY: The `OutputSpan` starts with none of `buffer` initialized, every append is capacity-checked against `span.count + 2 * nulCount` (the most the label can need), `finalize(for:)` verifies `buffer` before reporting the initialized count, and the initializer repairs invalid UTF-8.
             //         No String initializer fills its UTF-8 storage through an `OutputSpan`. Building the bytes with `Array(capacity:initializingWith:)` and copying them with `String(decoding:as:)` measured up to 21% more parse instructions on reference- and footnote-heavy input. Building them in `withTemporaryAllocation(of:capacity:_:)` and copying them with `String(copying:)` after `UTF8Span(validating:)` exists only on anyAppleOS 26 and measured up to 0.95% more.
             var output = unsafe OutputSpan(buffer: buffer, initializedCount: 0)
             var pendingSpace = false
