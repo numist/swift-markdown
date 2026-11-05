@@ -2915,18 +2915,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         while i < range.upperBound && sourceBytes[i] == fenceByte {
             i += 1
         }
-        let runLength = i - firstNonSpace
-        if runLength < minimumLength {
-            return false
-        }
-        while i < range.upperBound {
-            let b = sourceBytes[i]
-            if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t") {
-                return false
-            }
-            i += 1
-        }
-        return true
+        return i - firstNonSpace >= minimumLength && isSpaceOrTabOnly(i..<range.upperBound)
+    }
+
+    /// Whether `sourceBytes[range]` holds only spaces and tabs.
+    // Inlined because out of line it costs about 0.5% of the spec text's parse instructions.
+    @inline(__always)
+    private func isSpaceOrTabOnly(_ range: Range<Int>) -> Bool {
+        range.allSatisfy { sourceBytes[$0].isSpaceOrTab }
     }
 
     /// Strips up to `maxColumns` columns of leading whitespace from a code or HTML block line at column `startColumn`.
@@ -3009,14 +3005,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         while i < range.upperBound && sourceBytes[i] == marker {
             i += 1
         }
-        while i < range.upperBound {
-            let b = sourceBytes[i]
-            if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t") {
-                return nil
-            }
-            i += 1
-        }
-        return level
+        return isSpaceOrTabOnly(i..<range.upperBound) ? level : nil
     }
 
     /// Matches a thematic break (Thematic breaks), returning the offset past its last marker character.
