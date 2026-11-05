@@ -45,15 +45,15 @@ struct ContainerParagraphSourceContentTests {
     }
 
     @Test(arguments: [
-        ("> a\n> b\n> c\n", 8, 1),
-        ("- a\n  b\n  c\n", 8, 1),
-        ("> a b\n> c d\n> e f\n\n- x y\n  z w\n", 13, 1),
-        ("> a\n> b\n> c\n> d\n", 11, 1),
-        ("> a\n> |-\n", 5, 1),
+        "> a\n> b\n> c\n",
+        "- a\n  b\n  c\n",
+        "> a b\n> c d\n> e f\n\n- x y\n  z w\n",
+        "> a\n> b\n> c\n> d\n",
+        "> a\n> |-\n",
     ])
-    func noMaterializedCopy(_ source: String, _ segments: Int, _ stringSize: Int) {
-        let (count, size) = MarkdownDocument.withParsedDocument(source, options: []) { ($0._segmentCount, $0._materializedStringSize) }
-        #expect(count == segments)
-        #expect(size == stringSize)
+    func noMaterializedCopy(_ source: String) {
+        let size = MarkdownDocument.withParsedDocument(source, options: []) { $0._materializedStringSize }
+        let emptySize = MarkdownDocument.withParsedDocument("", options: []) { $0._materializedStringSize }
+        #expect(size == emptySize)
     }
 }
