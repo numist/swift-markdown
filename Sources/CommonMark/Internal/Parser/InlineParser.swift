@@ -1641,66 +1641,19 @@ extension BlockParser {
         case UInt8(ascii: "?"):
             return Self.matchHTMLOpenerToCloser("<?", "?>", start: start, content: content, misses: &htmlCloserMisses.processingInstruction)
         case UInt8(ascii: "/"):
-            return matchHTMLCloseTag(start: start, content: content)
+            return matchHTMLTag(nameStart: start + 2, isClosing: true, content: content)
         default:
-            if c.isASCIILetter {
-                return matchHTMLOpenTag(start: start, content: content)
-            }
-            return nil
+            return matchHTMLTag(nameStart: after, isClosing: false, content: content)
         }
     }
 
-    /// Matches an open tag (Raw HTML).
-    private func matchHTMLOpenTag(start: Int, content: borrowing ContentSpan) -> Int? {
+    /// Matches an open or closing tag (Raw HTML) whose name starts at `nameStart`.
+    private func matchHTMLTag(nameStart: Int, isClosing: Bool, content: borrowing ContentSpan) -> Int? {
         let end = content.endOffset
-        var i = start + 1
-        let afterName = scanTagName(start: i, content: content)
-        precondition(afterName != nil, "an open tag is matched only when its `<` is followed by a letter")
-        i = afterName!
-        while i < end {
-            let saved = i
-            // Each attribute follows whitespace.
-            let afterSpaces = skipSpaceChars(start: i, content: content)
-            if afterSpaces == saved {
-                break
-            }
-            // Otherwise this is whitespace before `/>` or `>`.
-            guard let afterAttr = scanAttribute(start: afterSpaces, content: content) else {
-                i = afterSpaces
-                break
-            }
-            i = afterAttr
-        }
-        i = skipSpaceChars(start: i, content: content)
-        if i < end, content[i] == UInt8(ascii: "/") {
-            i += 1
-        }
-        if i >= end {
+        guard let nameEnd = htmlTagNameEnd(from: nameStart, end: end, byte: { content[$0] }) else {
             return nil
         }
-        if content[i] != UInt8(ascii: ">") {
-            return nil
-        }
-        return i + 1
-    }
-
-    /// Matches a closing tag (Raw HTML).
-    private func matchHTMLCloseTag(start: Int, content: borrowing ContentSpan) -> Int? {
-        let end = content.endOffset
-        var i = start + 2
-        guard let afterName = scanTagName(
-            start: i, content: content
-        ) else {
-            return nil
-        }
-        i = skipSpaceChars(start: afterName, content: content)
-        if i >= end {
-            return nil
-        }
-        if content[i] != UInt8(ascii: ">") {
-            return nil
-        }
-        return i + 1
+        return htmlTagEnd(afterName: nameEnd, isClosing: isClosing, end: end) { content[$0] }
     }
 
     /// Dispatch `<!`-prefixed HTML forms: comment, CDATA, declaration.
@@ -1810,117 +1763,6 @@ extension BlockParser {
         }
         misses = start..<Int.max
         return nil
-    }
-
-    /// Scans a tag name (Raw HTML).
-    private func scanTagName(start: Int, content: borrowing ContentSpan) -> Int? {
-        let end = content.endOffset
-        if start >= end {
-            return nil
-        }
-        let first = content[start]
-        if !first.isASCIILetter {
-            return nil
-        }
-        var i = start + 1
-        while i < end {
-            let b = content[i]
-            let ok = b.isASCIILetter
-                || b.isASCIIDigit
-                || b == UInt8(ascii: "-")
-            if !ok {
-                break
-            }
-            i += 1
-        }
-        return i
-    }
-
-    /// Scans an attribute after its leading whitespace (Raw HTML), or `nil` without an attribute name.
-    private func scanAttribute(start: Int, content: borrowing ContentSpan) -> Int? {
-        let end = content.endOffset
-        if start >= end {
-            return nil
-        }
-        let first = content[start]
-        let isFirstChar = first.isASCIILetter || first == UInt8(ascii: "_") || first == UInt8(ascii: ":")
-        if !isFirstChar {
-            return nil
-        }
-        var i = start + 1
-        while i < end {
-            let b = content[i]
-            let ok = b.isASCIILetter
-                || b.isASCIIDigit
-                || b == UInt8(ascii: ":")
-                || b == UInt8(ascii: ".")
-                || b == UInt8(ascii: "_")
-                || b == UInt8(ascii: "-")
-            if !ok {
-                break
-            }
-            i += 1
-        }
-        let savedAfterName = i
-        let afterSpace1 = skipSpaceChars(
-            start: i, content: content
-        )
-        if afterSpace1 < end,
-           content[afterSpace1] == UInt8(ascii: "=") {
-            let afterEq = afterSpace1 + 1
-            let afterSpace2 = skipSpaceChars(
-                start: afterEq, content: content
-            )
-            guard let afterValue = scanAttributeValue(
-                start: afterSpace2, content: content
-            ) else {
-                return nil
-            }
-            return afterValue
-        }
-        return savedAfterName
-    }
-
-    /// Scan an attribute value: unquoted, single-quoted, or double-quoted.
-    private func scanAttributeValue(start: Int, content: borrowing ContentSpan) -> Int? {
-        let end = content.endOffset
-        if start >= end {
-            return nil
-        }
-        let first = content[start]
-        if first == UInt8(ascii: "'") || first == UInt8(ascii: "\"") {
-            var i = start + 1
-            while i < end {
-                let b = content[i]
-                assert(b != 0, "inline content holds no NUL: the block parser replaces it with U+FFFD")
-                if b == first {
-                    return i + 1
-                }
-                i += 1
-            }
-            return nil
-        }
-        var i = start
-        var count = 0
-        while i < end {
-            let b = content[i]
-            assert(b != 0, "inline content holds no NUL: the block parser replaces it with U+FFFD")
-            if b.isASCIISpace
-                || b == UInt8(ascii: "\"")
-                || b == UInt8(ascii: "'")
-                || b == UInt8(ascii: "=")
-                || b == UInt8(ascii: "<")
-                || b == UInt8(ascii: ">")
-                || b == UInt8(ascii: "`") {
-                break
-            }
-            count += 1
-            i += 1
-        }
-        if count == 0 {
-            return nil
-        }
-        return i
     }
 
     /// Skips whitespace characters (Characters and lines).

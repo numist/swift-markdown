@@ -10,7 +10,7 @@
 
 internal import BasicContainers
 
-/// Scanners for link labels, destinations, titles and the whitespace between them, shared by link reference definitions and inline links.
+/// Scanners for link labels, destinations, titles and the whitespace between them, shared by link reference definitions and inline links, and for raw HTML tags.
 extension BlockParser {
 
     // MARK: - Link label
@@ -275,6 +275,99 @@ extension BlockParser {
     /// `matchLinkTitle(_:)` over virtual offsets of inline content.
     internal func matchLinkTitle(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
         scanLinkTitle(from: start, end: end) { content[$0] }
+    }
+
+    // MARK: - HTML tags
+
+    /// The offset past an HTML tag name (Raw HTML) at `start`, read through `byte` up to `end`, or nil when no ASCII
+    /// letter starts one.
+    @inline(__always)
+    internal func htmlTagNameEnd(from start: Int, end: Int, byte: (Int) -> UInt8) -> Int? {
+        guard start < end, byte(start).isASCIILetter else {
+            return nil
+        }
+        var i = start + 1
+        while i < end, byte(i).isASCIILetter || byte(i).isASCIIDigit || byte(i) == UInt8(ascii: "-") {
+            i += 1
+        }
+        return i
+    }
+
+    /// The offset past the rest of an open or closing tag (Raw HTML) whose name ends at `nameEnd`: an open tag's
+    /// attributes, each after whitespace, then optional whitespace and `/>` or `>`, or a closing tag's optional
+    /// whitespace and `>`. nil when the rest forms no tag.
+    @inline(__always)
+    internal func htmlTagEnd(afterName nameEnd: Int, isClosing: Bool, end: Int, byte: (Int) -> UInt8) -> Int? {
+        func skipWhitespace(from start: Int) -> Int {
+            var i = start
+            while i < end, byte(i).isASCIISpace {
+                i += 1
+            }
+            return i
+        }
+        var i = nameEnd
+        while !isClosing {
+            let attributeStart = skipWhitespace(from: i)
+            guard attributeStart > i, attributeStart < end else {
+                break
+            }
+            let first = byte(attributeStart)
+            guard first.isASCIILetter || first == UInt8(ascii: "_") || first == UInt8(ascii: ":") else {
+                break
+            }
+            var k = attributeStart + 1
+            while k < end {
+                let b = byte(k)
+                guard b.isASCIILetter || b.isASCIIDigit || b == UInt8(ascii: ":") || b == UInt8(ascii: ".")
+                        || b == UInt8(ascii: "_") || b == UInt8(ascii: "-") else {
+                    break
+                }
+                k += 1
+            }
+            i = k
+            let equals = skipWhitespace(from: k)
+            guard equals < end, byte(equals) == UInt8(ascii: "=") else {
+                continue
+            }
+            let valueStart = skipWhitespace(from: equals + 1)
+            guard valueStart < end else {
+                return nil
+            }
+            let opener = byte(valueStart)
+            if opener == UInt8(ascii: "\"") || opener == UInt8(ascii: "'") {
+                k = valueStart + 1
+                while k < end, byte(k) != opener {
+                    k += 1
+                }
+                guard k < end else {
+                    return nil
+                }
+                i = k + 1
+            } else {
+                k = valueStart
+                while k < end {
+                    let b = byte(k)
+                    if b.isASCIISpace || b == UInt8(ascii: "\"") || b == UInt8(ascii: "'") || b == UInt8(ascii: "=")
+                        || b == UInt8(ascii: "<") || b == UInt8(ascii: ">") || b == UInt8(ascii: "`") {
+                        break
+                    }
+                    k += 1
+                }
+                // An unquoted value is nonempty, so `<a b=>` is no tag.
+                guard k > valueStart else {
+                    return nil
+                }
+                i = k
+            }
+        }
+        i = skipWhitespace(from: i)
+        if !isClosing, i < end, byte(i) == UInt8(ascii: "/") {
+            i += 1
+        }
+        guard i < end, byte(i) == UInt8(ascii: ">") else {
+            return nil
+        }
+        return i + 1
     }
 
     // MARK: - Whitespace
