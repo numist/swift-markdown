@@ -2441,14 +2441,10 @@ extension BlockParser {
     /// Whether any content byte of `ref` is `target`.
     private func contentRefContains(_ ref: ContentRef, byte target: UInt8) -> Bool {
         for s in 0..<Int(ref.count) {
-            let seg = storage.segments[Int(ref.first) + s]
-            let base = Int(seg.offset)
-            let end = base + Int(seg.length)
-            if seg.inSource {
-                for k in base..<end where sourceBytes[k] == target { return true }
-            } else {
-                for k in base..<end where storage.strings[k] == target { return true }
-            }
+            let chunk = storage.segments[Int(ref.first) + s].chunk
+            // Every text node is scanned, so the bytes are chosen once per segment rather than per byte.
+            let bytes = chunk.inSource ? sourceBytes : storage.strings.span
+            for k in chunk.range where bytes[k] == target { return true }
         }
         return false
     }
@@ -2456,14 +2452,8 @@ extension BlockParser {
     /// Copies `ref`'s content bytes into `out`.
     private func materialize(_ ref: ContentRef, into out: inout UniqueArray<UInt8>) {
         for s in 0..<Int(ref.count) {
-            let seg = storage.segments[Int(ref.first) + s]
-            let base = Int(seg.offset)
-            let end = base + Int(seg.length)
-            if seg.inSource {
-                for k in base..<end { out.append(sourceBytes[k]) }
-            } else {
-                for k in base..<end { out.append(storage.strings[k]) }
-            }
+            let chunk = storage.segments[Int(ref.first) + s].chunk
+            for k in chunk.range { out.append(readByte(at: k, in: chunk)) }
         }
     }
 

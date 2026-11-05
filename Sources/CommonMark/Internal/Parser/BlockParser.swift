@@ -1966,12 +1966,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         for i in 0..<segs.count {
             let seg = segs[i]
             let len = Int(seg.length)
-            let end = Int(seg.offset) + len
-            if seg.inSource {
-                for j in Int(seg.offset)..<end { buf.append(sourceBytes[j]) }
-            } else {
-                for j in Int(seg.offset)..<end { buf.append(storage.strings[j]) }
-            }
+            for j in seg.chunk.range { buf.append(readByte(at: j, in: seg.chunk)) }
             if len > 0 {
                 if seg.inSource {
                     map.append(ArenaRun(length: Int32(len), sourceOffset: seg.offset))
@@ -2261,20 +2256,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Whether `segment` holds only spaces and tabs. Code block content holds no `\n`.
     private func isAllWhitespace(_ segment: Segment) -> Bool {
-        let s = Int(segment.offset)
-        let e = s + Int(segment.length)
-        if segment.inSource {
-            for i in s..<e {
-                let b = sourceBytes[i]
-                if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t") { return false }
-            }
-        } else {
-            for i in s..<e {
-                let b = storage.strings[i]
-                if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t") { return false }
-            }
-        }
-        return true
+        segment.chunk.range.allSatisfy { readByte(at: $0, in: segment.chunk).isSpaceOrTab }
     }
 
     // MARK: - Helpers
