@@ -12,8 +12,8 @@ import Markdown
 import Testing
 
 /// An inline attribute is `^[text](attributes)` or `^[text][label]` where `label` names an attribute
-/// definition. As with a full reference link whose label matches no definition (spec "Links"), a
-/// following `[label]` that names no attribute definition is not part of the construct and stays text.
+/// definition. A `[label]` directly after `^[text]` that names no attribute definition is dropped, and
+/// `^[text]` stays text. A `[label]` after the `(attributes)` form is not part of the construct and stays text.
 struct InlineAttributeUnresolvedLabelTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)
@@ -23,7 +23,7 @@ struct InlineAttributeUnresolvedLabelTests {
         #expect(tree("^[][]") == """
             Document @1:1-1:6
             └─ Paragraph @1:1-1:6
-               └─ Text @1:1-1:6 "^[][]"
+               └─ Text @1:1-1:6 "^[]"
             """)
     }
 
@@ -49,9 +49,7 @@ struct InlineAttributeUnresolvedLabelTests {
         #expect(tree("[^[][\n]]") == """
             Document @1:1-2:3
             └─ Paragraph @1:1-2:3
-               ├─ Text @1:1-1:6 "[^[]["
-               ├─ SoftBreak
-               └─ Text @2:1-2:3 "]]"
+               └─ Text @1:1-2:3 "[^[]]"
             """)
     }
 

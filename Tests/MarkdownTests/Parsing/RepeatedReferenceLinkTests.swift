@@ -124,12 +124,12 @@ class RepeatedReferenceLinkTests: XCTestCase {
         XCTAssertEqual(150, links(oneShort))
     }
 
-    /// `[bar]` names no inline attribute definition, so after each `^[t]` it is a link.
+    /// `[bar]` names no inline attribute definition, so after each `^[t]` it is dropped.
     func testAttributeLookupOfLinkReference() {
         let markdown = Self.definition("bar", destinationBytes: 2001) + Self.uses("^[t][bar]", 10) + " " + Self.uses("[bar]", 60)
         let result = surface(markdown)
         XCTAssertEqual(0, count("InlineAttributes", in: result))
-        XCTAssertEqual(70, count("Link destination:", in: result))
+        XCTAssertEqual(60, count("Link destination:", in: result))
     }
 
     /// Each `^[t](a)` forms inline attributes, and every `[bar]` is a link.

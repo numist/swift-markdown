@@ -178,7 +178,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
         #expect(TreeDump.dump("^[][$]\n^[$]:l \n", options: Self.options) == """
             document
               paragraph
-                text "^[][$]"
+                text "^[]"
                 softbreak
                 text "^[$]:l"
 

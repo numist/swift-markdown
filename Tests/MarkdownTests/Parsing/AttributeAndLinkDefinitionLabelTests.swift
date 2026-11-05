@@ -21,9 +21,9 @@ class AttributeAndLinkDefinitionLabelTests: XCTestCase {
     /// Inline attributes have no collapsed or shortcut reference form: an empty `[]` label never resolves,
     /// and a bare `^[foo]` never looks up its content.
     func testNoCollapsedOrShortcutForm() {
-        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo][]\"", tree("[foo]: /u\n^[foo]: attrs\n\n^[foo][]"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", tree("[foo]: /u\n^[foo]: attrs\n\n^[foo][]"))
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", tree("[foo]: /u\n^[foo]: attrs\n\n^[foo]"))
-        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo][]\"", tree("^[foo]: attrs\n\n^[foo][]"))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", tree("^[foo]: attrs\n\n^[foo][]"))
     }
 
 

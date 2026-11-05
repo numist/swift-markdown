@@ -16,89 +16,68 @@ import Testing
 struct FootnoteCaretBracketNewlineInLabelTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink, .footnotes]
 
-    /// `[^[` opens no footnote reference, because a label may not contain an unescaped `[` (Links), and `^[]` followed
-    /// by `[` rather than `(` is not inline attributes. The brackets stay literal text unless a later pair forms a link.
+    /// `[^[` opens no footnote reference, because a label may not contain an unescaped `[` (Links). The bracket pair after
+    /// `^[]` is a link label that names no attribute definition, so it is dropped and `^[]` stays literal text.
     @Test func testBracketStaysLiteral() {
         let cases: [(markdown: String, expected: String)] = [
             ("[^[][\n]]", """
                 document
                   paragraph
-                    text "[^[]["
-                    softbreak
-                    text "]]"
+                    text "[^[]]"
 
                 """),
             ("[^[][\nx]]", """
                 document
                   paragraph
-                    text "[^[]["
-                    softbreak
-                    text "x]]"
+                    text "[^[]]"
 
                 """),
             ("[^[][\r\n]]", """
                 document
                   paragraph
-                    text "[^[]["
-                    softbreak
-                    text "]]"
+                    text "[^[]]"
 
                 """),
             ("[^[x][\n]]", """
                 document
                   paragraph
-                    text "[^[x]["
-                    softbreak
-                    text "]]"
+                    text "[^[x]]"
 
                 """),
             ("a [^[][\n]] b", """
                 document
                   paragraph
-                    text "a [^[]["
-                    softbreak
-                    text "]] b"
+                    text "a [^[]] b"
 
                 """),
             ("[^[][ ]]", """
                 document
                   paragraph
-                    text "[^[][ ]]"
+                    text "[^[]]"
 
                 """),
             ("[^a ^[][\n]]", """
                 document
                   paragraph
-                    text "[^a ^[]["
-                    softbreak
-                    text "]]"
+                    text "[^a ^[]]"
 
                 """),
             ("[^[][\n]()]", """
                 document
                   paragraph
-                    text "[^[]"
-                    link "" ""
-                      softbreak
-                    text "]"
+                    text "[^[]()]"
 
                 """),
             ("[^[][a\nb\nc]]", """
                 document
                   paragraph
-                    text "[^[][a"
-                    softbreak
-                    text "b"
-                    softbreak
-                    text "c]]"
+                    text "[^[]]"
 
                 """),
             ("[^[][\n]\n]", """
                 document
                   paragraph
-                    text "[^[]["
-                    softbreak
-                    text "]"
+                    text "[^[]"
                     softbreak
                     text "]"
 
@@ -107,9 +86,7 @@ struct FootnoteCaretBracketNewlineInLabelTests {
                 document
                   block_quote
                     paragraph
-                      text "[^[]["
-                      softbreak
-                      text "]]"
+                      text "[^[]]"
 
                 """),
             ("[^x ![a][b\nc]]\n\n[b c]: /u", """

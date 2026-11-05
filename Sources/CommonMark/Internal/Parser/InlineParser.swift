@@ -544,7 +544,7 @@ extension BlockParser {
     private mutating func handleCloseBracket(cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index) -> Int {
         let afterBracket = cursor + 1
         guard let openerIdx = lastBracket else {
-            emitBracketLiteral(at: cursor, content: content, parent: parent)
+            emitBracketLiteral(at: cursor, end: afterBracket, content: content, parent: parent)
             return afterBracket
         }
         let openerKind = brackets[openerIdx].kind
@@ -554,12 +554,18 @@ extension BlockParser {
         // A link opener cannot form a link inside another link, or after a link formed at its level.
         if openerKind == .link, brackets[openerIdx].linkFormedAfter {
             popBracket()
-            emitBracketLiteral(at: cursor, content: content, parent: parent)
+            emitBracketLiteral(at: cursor, end: afterBracket, content: content, parent: parent)
             return afterBracket
         }
-        let formed = openerKind == .attribute
-            ? matchAttributeForm(cursor: cursor, content: content)
-            : matchLinkForm(shortcutLabelStart: brackets[openerIdx].bracketAfter ? nil : openerStart + (openerKind == .image ? 2 : 1), cursor: cursor, content: content)
+        let formed: (data: NodeData, end: Int)?
+        var literalEnd = afterBracket
+        if openerKind == .attribute {
+            let attribute = matchAttributeForm(cursor: cursor, content: content)
+            formed = attribute.data.map { ($0, attribute.end) }
+            literalEnd = attribute.end
+        } else {
+            formed = matchLinkForm(shortcutLabelStart: brackets[openerIdx].bracketAfter ? nil : openerStart + (openerKind == .image ? 2 : 1), cursor: cursor, content: content)
+        }
         if let formed {
             wrapBracketContent(openerKind.nodeKind, formed.data, openerInl: openerInl, delimPosition: openerDelimPos, start: openerStart, end: formed.end, content: content)
             popBracket()
@@ -581,8 +587,8 @@ extension BlockParser {
             return afterBracket
         }
         popBracket()
-        emitBracketLiteral(at: cursor, content: content, parent: parent)
-        return afterBracket
+        emitBracketLiteral(at: cursor, end: literalEnd, content: content, parent: parent)
+        return literalEnd
     }
 
     /// The link or image data for the form after the `]` at `cursor`, and the offset past it. Tries the inline form, then full, collapsed and shortcut references.
@@ -660,9 +666,9 @@ extension BlockParser {
         return (label.interior.isEmpty ? "" : normalizeLabel(virtualRange: label.interior, in: content), label.afterEnd)
     }
 
-    /// Appends a `]` text node.
-    private mutating func emitBracketLiteral(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index) {
-        appendInline(.text, .literal(storage.intern(content.chunk(offset: cursor, length: 1))), to: parent, start: cursor, end: cursor + 1, content: content)
+    /// Appends a text node holding the `]` at `cursor`, spanning `cursor..<end`.
+    private mutating func emitBracketLiteral(at cursor: Int, end: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index) {
+        appendInline(.text, .literal(storage.intern(content.chunk(offset: cursor, length: 1))), to: parent, start: cursor, end: end, content: content)
     }
 
     /// Wrap the nodes after the opener's text in a new `kind` node spanning the virtual range `start..<end`, remove the opener's text, and resolve emphasis inside the new node with the opener's delimiter position as the floor.
@@ -722,8 +728,10 @@ extension BlockParser {
 
     // MARK: - Extended attributes (`^[..]`)
 
-    /// The attribute data for the form after the `]` closing an `^[` opener, and the offset past it: an inline `(attrs)`, or a `[label]` naming an attribute definition.
-    private mutating func matchAttributeForm(cursor: Int, content: borrowing ContentSpan) -> (data: NodeData, end: Int)? {
+    /// The attribute data for the form after the `]` closing an `^[` opener, and the offset past it: an inline `(attrs)`, or a `[label]`.
+    ///
+    /// A label belongs to the form whether or not it names an attribute definition; the data is `nil` when it names none, or when no form follows.
+    private mutating func matchAttributeForm(cursor: Int, content: borrowing ContentSpan) -> (data: NodeData?, end: Int) {
         let end = content.endOffset
         let pos = cursor + 1
         if pos < end, content[pos] == UInt8(ascii: "("),
@@ -732,11 +740,11 @@ extension BlockParser {
            content[scanned.afterEnd] == UInt8(ascii: ")") {
             return (.attribute(storage.intern(scanned.chunk)), scanned.afterEnd + 1)
         }
-        // A label naming no attribute definition is not part of the construct, so it is parsed again as text.
-        guard let label = matchLabelKey(from: pos, content: content),
-              !label.key.isEmpty,
-              let attributes = storage.attributeReferenceMap[label.key] else {
-            return nil
+        guard let label = matchLabelKey(from: pos, content: content) else {
+            return (nil, pos)
+        }
+        guard !label.key.isEmpty, let attributes = storage.attributeReferenceMap[label.key] else {
+            return (nil, label.afterEnd)
         }
         return (.attribute(storage.intern(attributes)), label.afterEnd)
     }

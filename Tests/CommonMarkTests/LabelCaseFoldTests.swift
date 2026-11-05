@@ -80,7 +80,7 @@ struct LabelCaseFoldTests {
         #expect(TreeDump.dump("^[\(definition)]: c\n\n^[x][\(use)]", options: [.attributes]) == """
             document
               paragraph
-                text "^[x][\(use)]"
+                text "^[x]"
 
             """)
     }
