@@ -991,23 +991,7 @@ extension BlockParser {
                 pushDelim = true
             }
             if pushDelim {
-                let prev = lastDelim
-                let newIdx = delimiters.count
-                delimiters.append(DelimiterRecord(
-                    character: char,
-                    length: count,
-                    canOpen: canOpen,
-                    canClose: canClose,
-                    inlText: textIdx,
-                    virtualStart: start,
-                    virtualEnd: runEnd,
-                    previous: prev,
-                    next: nil
-                ))
-                if let prev {
-                    delimiters[prev].next = newIdx
-                }
-                lastDelim = newIdx
+                pushDelimiter(char, length: count, canOpen: canOpen, canClose: canClose, inlText: textIdx, range: start..<runEnd)
             }
         }
         return runEnd
@@ -1114,12 +1098,7 @@ extension BlockParser {
             // every delimiter from the closer back through the opener goes, so no farther opener pairs with it.
             if openerNumChars != closerNumChars {
                 let next = delimiters[closer].next
-                var d: Int? = closer
-                while let dd = d, dd != opener {
-                    let prev = delimiters[dd].previous
-                    removeDelim(dd)
-                    d = prev
-                }
+                removeDelims(after: opener, through: closer)
                 removeDelim(opener)
                 return next
             }
@@ -1137,11 +1116,8 @@ extension BlockParser {
         storage.trimLiteral(of: openerInl, trimStart: 0, newLength: openerNumChars)
         storage.trimLiteral(of: closerInl, trimStart: useDelims, newLength: closerNumChars)
         // Intervening delimiters go; their text nodes become children of the new node.
-        var d = delimiters[closer].previous
-        while let dd = d, dd != opener {
-            let prev = delimiters[dd].previous
-            removeDelim(dd)
-            d = prev
+        if let previous = delimiters[closer].previous, previous != opener {
+            removeDelims(after: opener, through: previous)
         }
         let parentIdx = storage[openerInl].parent
         let emphIdx = storage.appendNode(NodeRecord(kind: kind, parent: parentIdx))
@@ -1174,6 +1150,16 @@ extension BlockParser {
             resultCloser = next
         }
         return resultCloser
+    }
+
+    /// Removes the delimiters from `last` back to, but not including, `first`.
+    private mutating func removeDelims(after first: Int, through last: Int) {
+        var d: Int? = last
+        while let dd = d, dd != first {
+            let prev = delimiters[dd].previous
+            removeDelim(dd)
+            d = prev
+        }
     }
 
     private mutating func removeDelim(_ idx: Int) {
@@ -1285,26 +1271,31 @@ extension BlockParser {
         // The curly quote is arena-backed, but its source range is the straight quote.
         let textIdx = emitLiteral(.text, smartConstantChunk(literal), start: start, end: runEnd, to: parent, pendingTextStart: &pendingTextStart, content: content)
         if canOpen || canClose {
-            let prev = lastDelim
-            let newIdx = delimiters.count
-            delimiters.append(DelimiterRecord(
-                character: char,
-                // A length of 3 makes the multiple-of-3 test always admit a quote pairing.
-                length: 3,
-                canOpen: canOpen,
-                canClose: canClose,
-                inlText: textIdx,
-                virtualStart: start,
-                virtualEnd: runEnd,
-                previous: prev,
-                next: nil
-            ))
-            if let prev {
-                delimiters[prev].next = newIdx
-            }
-            lastDelim = newIdx
+            // A length of 3 makes the multiple-of-3 test always admit a quote pairing.
+            pushDelimiter(char, length: 3, canOpen: canOpen, canClose: canClose, inlText: textIdx, range: start..<runEnd)
         }
         return runEnd
+    }
+
+    /// Pushes a delimiter run spanning virtual `range` onto the delimiter stack.
+    private mutating func pushDelimiter(_ char: UInt8, length: Int, canOpen: Bool, canClose: Bool, inlText: DocumentStorage.Index, range: Range<Int>) {
+        let prev = lastDelim
+        let newIdx = delimiters.count
+        delimiters.append(DelimiterRecord(
+            character: char,
+            length: length,
+            canOpen: canOpen,
+            canClose: canClose,
+            inlText: inlText,
+            virtualStart: range.lowerBound,
+            virtualEnd: range.upperBound,
+            previous: prev,
+            next: nil
+        ))
+        if let prev {
+            delimiters[prev].next = newIdx
+        }
+        lastDelim = newIdx
     }
 
     // MARK: - Code spans
