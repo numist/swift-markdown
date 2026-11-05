@@ -540,7 +540,7 @@ extension BlockParser {
         }
     }
     
-    /// Handles a `]`: the innermost opener becomes a link, image or attribute when that form follows, or a footnote reference when `[^label]` names a definition. Otherwise the `]` is literal.
+    /// Handles a `]`: the innermost opener becomes a link, image or attribute when that form follows, or a footnote reference when `[^label]` names a definition. Otherwise the `]` is literal; after an `^[` opener its text also spans the label that follows it.
     private mutating func handleCloseBracket(cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index) -> Int {
         let afterBracket = cursor + 1
         guard let openerIdx = lastBracket else {
@@ -558,13 +558,14 @@ extension BlockParser {
             return afterBracket
         }
         let formed: (data: NodeData, end: Int)?
-        var literalEnd = afterBracket
+        let literalEnd: Int
         if openerKind == .attribute {
             let attribute = matchAttributeForm(cursor: cursor, content: content)
             formed = attribute.data.map { ($0, attribute.end) }
             literalEnd = attribute.end
         } else {
             formed = matchLinkForm(shortcutLabelStart: brackets[openerIdx].bracketAfter ? nil : openerStart + (openerKind == .image ? 2 : 1), cursor: cursor, content: content)
+            literalEnd = afterBracket
         }
         if let formed {
             wrapBracketContent(openerKind.nodeKind, formed.data, openerInl: openerInl, delimPosition: openerDelimPos, start: openerStart, end: formed.end, content: content)
@@ -730,7 +731,7 @@ extension BlockParser {
 
     /// The attribute data for the form after the `]` closing an `^[` opener, and the offset past it: an inline `(attrs)`, or a `[label]`.
     ///
-    /// A label belongs to the form whether or not it names an attribute definition; the data is `nil` when it names none, or when no form follows.
+    /// A link label, or a collapsed or blank one, belongs to the form whether or not it names an attribute definition; the data is `nil` when it names none, or when no form follows.
     private mutating func matchAttributeForm(cursor: Int, content: borrowing ContentSpan) -> (data: NodeData?, end: Int) {
         let end = content.endOffset
         let pos = cursor + 1

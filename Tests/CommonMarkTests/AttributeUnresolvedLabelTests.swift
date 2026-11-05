@@ -11,7 +11,7 @@
 import Testing
 import CommonMark
 
-/// A link label (Links) directly after the `]` that closes an `^[` opener belongs to the inline attribute. When the
+/// A link label (Links), or a collapsed or blank one, directly after the `]` that closes an `^[` opener belongs to the inline attribute. When the
 /// label names an attribute definition the attribute takes that definition's attributes. Otherwise `^[…]` stays text
 /// and the label is dropped; the text's source range spans the dropped label.
 @Suite("Inline attributes with a label that names no attribute definition")
@@ -151,6 +151,35 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
+    @Test("an unclosed label stays text")
+    func unclosedLabel() {
+        #expect(tree("^[x][b") == """
+            document @1:1-1:7
+              paragraph @1:1-1:7
+                text "^[x][b" @1:1-1:7
+
+            """)
+    }
+
+    /// A link label has at most 999 characters inside its brackets (Links), so a longer bracket pair is no label.
+    @Test("an unresolved label at the length cap is dropped, and a longer bracket pair stays text")
+    func labelLengthCap() {
+        let atCap = String(repeating: "a", count: 999)
+        #expect(tree("^[x][\(atCap)] y") == """
+            document @1:1-1:1008
+              paragraph @1:1-1:1008
+                text "^[x] y" @1:1-1:1008
+
+            """)
+        let overCap = String(repeating: "a", count: 1000)
+        #expect(tree("^[x][\(overCap)] y") == """
+            document @1:1-1:1009
+              paragraph @1:1-1:1009
+                text "^[x][\(overCap)] y" @1:1-1:1009
+
+            """)
+    }
+
     @Test("an escaped bracket after the attribute's text starts no label")
     func escapedBracketAfterText() {
         #expect(tree(#"^[x]\[b]"#) == """
@@ -168,6 +197,30 @@ struct AttributeUnresolvedLabelTests {
             document @1:1-2:5
               paragraph @1:1-2:5
                 text "^[x] y" @1:1-2:5
+
+            """)
+    }
+
+    @Test("an unresolved label spanning a block quote's line ending is dropped")
+    func unresolvedLabelSpanningBlockQuoteLineEnding() {
+        #expect(tree("> ^[x][b\n> c] y") == """
+            document @1:1-2:7
+              block_quote @1:1-2:7
+                paragraph @1:3-2:7
+                  text "^[x] y" @1:3-2:7
+
+            """)
+    }
+
+    @Test("a resolved label spanning a block quote's line ending forms an attribute")
+    func resolvedLabelSpanningBlockQuoteLineEnding() {
+        #expect(tree("^[b c]: d\n\n> ^[x][b\n> c] y") == """
+            document @1:1-4:7
+              block_quote @3:1-4:7
+                paragraph @3:3-4:7
+                  attribute "d" @3:3-4:5
+                    text "x" @3:5-3:6
+                  text " y" @4:5-4:7
 
             """)
     }
@@ -245,7 +298,7 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    @Test("an unresolved label is dropped before an inline link can follow it")
+    @Test("the parentheses after an unresolved label stay text")
     func inlineLinkTailAfterUnresolvedLabel() {
         #expect(tree("^[x][b](c)") == """
             document @1:1-1:11
@@ -276,6 +329,52 @@ struct AttributeUnresolvedLabelTests {
                 emph @1:3-1:6
                   text "x" @1:4-1:5
                 text "]" @1:6-1:10
+
+            """)
+    }
+
+    /// A label after an attribute's text is not a footnote reference, even when it names a footnote definition.
+    @Test("an unresolved label shaped as a footnote reference is dropped")
+    func unresolvedFootnoteShapedLabel() {
+        #expect(TreeDump.dump("^[x][^fn]\n\n[^fn]: n", options: [.sourcePosition, .attributes, .footnotes], sourceRanges: true) == """
+            document @1:1-3:9
+              paragraph @1:1-1:10
+                text "^[x]" @1:1-1:10
+
+            """)
+    }
+
+    @Test("a resolved label shaped as a footnote reference forms an attribute")
+    func resolvedFootnoteShapedLabel() {
+        #expect(TreeDump.dump("^[^fn]: d\n\n^[x][^fn]\n\n[^fn]: n", options: [.sourcePosition, .attributes, .footnotes], sourceRanges: true) == """
+            document @1:1-5:9
+              paragraph @3:1-3:10
+                attribute "d" @3:1-3:10
+                  text "x" @3:3-3:4
+
+            """)
+    }
+
+    @Test("an inner attribute's unresolved label is dropped inside an outer attribute")
+    func unresolvedLabelInsideAttribute() {
+        #expect(tree("^[^[x][b]][c]\n\n^[c]: d") == """
+            document @1:1-3:8
+              paragraph @1:1-1:14
+                attribute "d" @1:1-1:14
+                  text "^[x]" @1:3-1:10
+
+            """)
+    }
+
+    @Test("an outer attribute's unresolved label is dropped after an inner attribute")
+    func unresolvedLabelAfterInnerAttribute() {
+        #expect(tree("^[^[x][c]][b]\n\n^[c]: d") == """
+            document @1:1-3:8
+              paragraph @1:1-1:14
+                text "^[" @1:1-1:3
+                attribute "d" @1:3-1:10
+                  text "x" @1:5-1:6
+                text "]" @1:10-1:14
 
             """)
     }
@@ -432,7 +531,7 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    @Test("with attributes off, the bracket text and label form a link or stay text")
+    @Test("without attributes, the bracket text and label form a link or stay text")
     func attributesOff() {
         #expect(TreeDump.dump("[b]: /u\n\n^[x][b]", options: [.sourcePosition], sourceRanges: true) == """
             document @1:1-3:8
