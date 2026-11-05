@@ -400,6 +400,9 @@ extension BlockParser {
 
             return unsafe output.finalize(for: buffer)
         }
+        // The spec matches labels by their case folds alone (Links). Labels are compared as `String`s, whose equality is
+        // canonical equivalence, so labels whose case folds are canonically equivalent but differ in their bytes, such as
+        // precomposed `é` and `e` followed by U+0301, also match.
         return hasNonASCII ? caseFold(label) : label
     }
 
