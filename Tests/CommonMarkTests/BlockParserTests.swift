@@ -640,8 +640,9 @@ struct FencedCodeTests {
 
     @Test("info string in a tab-indented list item")
     func infoStringInTabIndentedListItem() {
-        // The tab after `*` is expanded into a copy of the line, whose bytes are offset from the source. The
-        // unindented ``` line opens a second, top-level fence with an empty info string.
+        // The tab after `*` advances to the next tab stop (Tabs), so the item's content starts at the fence, one byte
+        // but three columns past the end of the marker (List items). The unindented ``` line opens a second, top-level
+        // fence with an empty info string.
         let source = "*\t```n\na\n```"
         MarkdownDocument.withParsedDocument(source) { doc in
             let blocks = codeBlocks(doc)
@@ -651,8 +652,7 @@ struct FencedCodeTests {
 
     @Test("unclosed info string in a tab-indented list item does not crash")
     func unclosedInfoStringInTabIndentedListItem() {
-        // The tab-expanded copy of the line is longer than the source, and the info string runs to the end of
-        // input.
+        // The tab after `*` is one byte but three columns (Tabs), and the info string runs to the end of input.
         let source = "*\t```n"
         MarkdownDocument.withParsedDocument(source) { doc in
             let blocks = codeBlocks(doc)
