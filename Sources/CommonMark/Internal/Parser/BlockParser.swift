@@ -83,16 +83,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Result of `materializePendingContent`. `map` is the content's run map when it is flattened from a segment list.
-    struct LeafMaterialization : ~Copyable {
+    struct LeafMaterialization {
         var chunk: Chunk
-        var pending: PendingLeaf?
         var map: [ArenaRun] = []
-    }
-
-    /// Result of `drainSegments`: the drained segment list plus the cleared leaf.
-    struct LeafSegments : ~Copyable {
-        var segments: UniqueArray<Segment>
-        var pending: PendingLeaf?
     }
 
     /// Result of the code/HTML block continuation handlers: whether the block stays open plus the updated leaf.
@@ -742,15 +735,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Drains `node`'s pending segment list, for code and HTML block finalize.
-    private func drainSegments(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> LeafSegments {
+    private func drainSegments(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> UniqueArray<Segment> {
         switch consume pending {
         case .none:
-            return LeafSegments(segments: UniqueArray(), pending: nil)
+            return UniqueArray()
         case .some(let leaf):
             precondition(leaf.node == node, "pending content belongs to the one open leaf, which drains when it closes")
             switch consume leaf.content {
             case .segments(let segs):
-                return LeafSegments(segments: segs, pending: nil)
+                return segs
             default:
                 // Only code/HTML blocks drain here, and they only ever accumulate segments.
                 fatalError("drainSegments called on non-segment content")
@@ -766,11 +759,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         switch consume leaf.content {
         case .lazy(let range, let joinPending):
             precondition(!joinPending, "a deferred line join is always consumed by the next line")
-            return LeafMaterialization(chunk: Chunk(offset: range.lowerBound, length: range.count, inSource: true), pending: nil)
+            return LeafMaterialization(chunk: Chunk(offset: range.lowerBound, length: range.count, inSource: true))
         case .segments(let segs):
             var map: [ArenaRun] = []
             let chunk = flattenSegments(segs, map: &map)
-            return LeafMaterialization(chunk: chunk, pending: nil, map: map)
+            return LeafMaterialization(chunk: chunk, map: map)
         }
     }
 
@@ -1126,7 +1119,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let raw = materialized.chunk
         // Empty unless the content was flattened from segments.
         let flatMap = materialized.map
-        pending = materialized.pending
+        pending = nil
         let trimmedHead = raw.trimmingWhitespace(using: self)
         let stripped = parseDefinitions(in: trimmedHead)
         if !self.isBlank(chunk: stripped) {
@@ -1845,7 +1838,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     private struct LeafDrainResult: ~Copyable {
         var content: DrainedLeaf
-        var pending: PendingLeaf?
         /// A `.chunk`'s run map when it is arena content with a source image.
         var map: [ArenaRun] = []
     }
@@ -1854,7 +1846,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func drainLeaf(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> LeafDrainResult {
         switch consume pending {
         case .none:
-            return LeafDrainResult(content: .chunk(.empty), pending: nil)
+            return LeafDrainResult(content: .chunk(.empty))
         case .some(let leaf):
             precondition(leaf.node == node, "pending content belongs to the one open leaf, which drains when it closes")
             switch consume leaf.content {
@@ -1865,14 +1857,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     var map: [ArenaRun] = []
                     let flat = flattenSegments(segs, map: &map)
                     let replaced = replacingNUL(flat, map: &map)
-                    return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
+                    return LeafDrainResult(content: .chunk(replaced), map: map)
                 }
-                return LeafDrainResult(content: .segments(segs), pending: nil)
+                return LeafDrainResult(content: .segments(segs))
             case .lazy(let range, let joinPending):
                 precondition(!joinPending, "a deferred line join is always consumed by the next line")
                 var map: [ArenaRun] = []
                 let replaced = replacingNUL(Chunk(offset: range.lowerBound, length: range.count, inSource: true), map: &map)
-                return LeafDrainResult(content: .chunk(replaced), pending: nil, map: map)
+                return LeafDrainResult(content: .chunk(replaced), map: map)
             }
         }
     }
@@ -2136,7 +2128,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             assert(openParagraphTableState == nil || openParagraphTableState!.node == node, "the recorded table state belongs to the paragraph being closed")
             defer { openParagraphTableState = nil }
             let drained = drainLeaf(node, pending: pending)
-            pending = drained.pending
+            pending = nil
             let map = drained.map
             switch consume drained.content {
             case .chunk(let raw):
@@ -2154,7 +2146,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         case .heading:
             let drained = drainLeaf(node, pending: pending)
-            pending = drained.pending
+            pending = nil
             var map = drained.map
             let raw: Chunk
             switch consume drained.content {
@@ -2173,9 +2165,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 pendingInlines.append((node, storage.intern(trimmed)))
             }
         case .codeBlock(let info):
-            let drained = drainSegments(node, pending: pending)
-            var segs = drained.segments
-            pending = drained.pending
+            var segs = drainSegments(node, pending: pending)
+            pending = nil
             normalizeCodeBlockSegments(&segs, isFenced: info.isFenced)
             replacingNULInSegments(&segs)
             let literalRef = storage.intern(segs)
@@ -2183,9 +2174,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 storage[node].data = .codeBlock(info: info, literal: literalRef)
             }
         case .htmlBlock:
-            let drained = drainSegments(node, pending: pending)
-            var segs = drained.segments
-            pending = drained.pending
+            var segs = drainSegments(node, pending: pending)
+            pending = nil
             normalizeHTMLBlockSegments(&segs)
             replacingNULInSegments(&segs)
             let literalRef = storage.intern(segs)
