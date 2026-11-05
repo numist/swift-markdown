@@ -345,34 +345,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             start = 3
         }
 
-        // Count lines and note any CR in one pass, so LF-only input stays zero-copy below.
+        // Count lines and note any CR in one pass, so LF-only input stays zero-copy below. A BOM-only input counts as
+        // one empty line.
         var hasCR = false
-        var lines = 0
         // Where the last line's content ends: its terminator's first byte, or the end of input for an unterminated last line.
         var contentEnd = count
-        var i = start
-        // A BOM-only input is one empty line, and that line opens the paragraph.
-        repeat {
+        var reader = LineReader(source: sourceBytes)
+        while reader.next() != nil {
             if positionsEnabled {
-                storage.lineStarts.append(i)
+                storage.lineStarts.append(reader.lineRange.lowerBound)
             }
-            let brk = i + LineReader.firstLineTerminator(in: sourceBytes.extracting(i..<count))
-            if brk == count {
-                lines += 1
-                contentEnd = count
-                break
-            }
-            lines += 1
-            contentEnd = brk
-            if sourceBytes[brk] == UInt8(ascii: "\r") {
-                hasCR = true
-                // A `\r` immediately followed by `\n` is a single CRLF terminator.
-                i = (brk + 1 < count && sourceBytes[brk + 1] == UInt8(ascii: "\n")) ? brk + 2 : brk + 1
-            } else {
-                i = brk + 1
-            }
-        } while i < count
-        storage.lineCount = lines
+            contentEnd = reader.lineRange.upperBound
+            hasCR = hasCR || (contentEnd < count && sourceBytes[contentEnd] == UInt8(ascii: "\r"))
+        }
+        storage.lineCount = reader.lineNumber
 
         // Link reference definitions leading the content are consumed, and the paragraph is kept even when
         // nothing, or only whitespace, remains.
