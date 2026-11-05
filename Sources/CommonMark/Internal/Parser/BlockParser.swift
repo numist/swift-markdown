@@ -3349,15 +3349,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func parseOneLinkDefinition(_ chunk: Chunk) -> Int? {
         let end = chunk.range.upperBound
         let inSource = chunk.inSource
-        guard let label = matchLinkLabel(chunk) else {
+        guard let (label, i) = matchDefinitionLabel(chunk) else {
             return nil
         }
-        var i = label.afterEnd
-        if i >= end || readByte(at: i, in: chunk) != UInt8(ascii: ":") {
-            return nil
-        }
-        i += 1
-        i = skipSpacesAndOneLineEnd(from: i, in: chunk)
         guard let dest = matchLinkDestination(
             Chunk(offset: i, length: end - i, inSource: inSource)
         ) else {
@@ -3368,10 +3362,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if storage.options.contains(.inlineOnly), dest.afterEnd >= end {
             return nil
         }
-        i = dest.afterEnd
         // When the line doesn't end after a title, the definition ends at the destination instead.
-        let beforeTitle = i
-        let afterTitleSpnl = skipSpacesAndOneLineEnd(from: i, in: chunk)
+        let beforeTitle = dest.afterEnd
+        let afterTitleSpnl = skipSpacesAndOneLineEnd(from: beforeTitle, in: chunk)
         var titleChunk: Chunk = .empty
         var afterAll = -1
         if afterTitleSpnl > beforeTitle,
@@ -3393,9 +3386,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         // `normalizeLabel` replaces a NUL itself (Insecure characters), so the key matches a reference's even
         // in content `drainLeaf` hasn't NUL-replaced yet (the setext underline path).
-        let key = normalizeLabel(
-            chunk: label.interior
-        )
+        let key = normalizeLabel(chunk: label)
         if key.isEmpty {
             return nil
         }
@@ -3412,6 +3403,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return afterAll
     }
 
+    /// Matches a definition's label and `:` at the start of `chunk`, returning the label's interior and where the
+    /// definition's content begins, past whitespace including at most one line ending.
+    private mutating func matchDefinitionLabel(_ chunk: Chunk) -> (label: Chunk, contentStart: Int)? {
+        guard let label = matchLinkLabel(chunk) else {
+            return nil
+        }
+        let colon = label.afterEnd
+        guard colon < chunk.range.upperBound, readByte(at: colon, in: chunk) == UInt8(ascii: ":") else {
+            return nil
+        }
+        return (label.interior, skipSpacesAndOneLineEnd(from: colon + 1, in: chunk))
+    }
+
     // MARK: - Attribute definition
 
     /// Parses one `^[label]: attrs` definition, returning the offset past it and its line ending.
@@ -3420,16 +3424,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let end = chunk.range.upperBound
         let inSource = chunk.inSource
         precondition(start < end && readByte(at: start, in: chunk) == UInt8(ascii: "^"), "an attribute definition is parsed only from a `^`")
-        guard let label = matchLinkLabel(chunk.extracting(1..<chunk.length)) else {
+        guard let (label, attrsStart) = matchDefinitionLabel(chunk.extracting(1..<chunk.length)) else {
             return nil
         }
-        var i = label.afterEnd
-        if i >= end || readByte(at: i, in: chunk) != UInt8(ascii: ":") {
-            return nil
-        }
-        i += 1
-        i = skipSpacesAndOneLineEnd(from: i, in: chunk)
-        let attrsStart = i
+        var i = attrsStart
         while i < end {
             let b = readByte(at: i, in: chunk)
             if b == UInt8(ascii: "\n") {
@@ -3444,9 +3442,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let lineEnd = skipLineEndOrEOF(from: i, in: chunk)
         precondition(lineEnd != nil, "an attribute definition's attributes run to a line end or the content end")
         let afterAll = lineEnd!
-        let key = normalizeLabel(
-            chunk: label.interior
-        )
+        let key = normalizeLabel(chunk: label)
         if key.isEmpty {
             return nil
         }
