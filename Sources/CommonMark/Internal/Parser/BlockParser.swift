@@ -654,21 +654,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `replacingNUL(_:)` that also updates `chunk`'s run map `map`: each of a U+FFFD's three bytes images its NUL. With positions off, `map` is untouched.
     private mutating func replacingNUL(_ chunk: Chunk, map: inout [ArenaRun]) -> Chunk {
         guard positionsEnabled, containsNUL(chunk) else { return replacingNUL(chunk) }
-        let image = sourceImage(of: chunk, map: map)
-        assert(image.isEmpty || image.reduce(0) { $0 + Int($1.length) } == chunk.length, "a run map must tile its chunk")
-        var replacedMap: [ArenaRun] = []
+        map = rewrittenMap(sourceImage(of: chunk, map: map), of: chunk) { readByte(at: $0, in: chunk) == 0 ? 3 : 1 }
+        return replacingNUL(chunk)
+    }
+
+    /// `chunk`'s run map `map` after a rewrite that turns `chunk`'s byte at each offset into `copies(offset)` bytes,
+    /// each imaging what that byte images. An empty `map` stays empty.
+    private func rewrittenMap(_ map: [ArenaRun], of chunk: Chunk, copies: (Int) -> Int) -> [ArenaRun] {
+        assert(map.isEmpty || map.reduce(0) { $0 + Int($1.length) } == chunk.length, "a run map must tile its chunk")
+        var rewritten: [ArenaRun] = []
         var i = chunk.offset
-        for run in image {
+        for run in map {
             for local in 0..<Int(run.length) {
                 let sourceOffset = run.sourceOffset < 0 ? -1 : Int(run.sourceOffset) + local
-                for _ in 0..<(readByte(at: i, in: chunk) == 0 ? 3 : 1) {
-                    Self.appendContentByte(imaging: sourceOffset, to: &replacedMap)
+                for _ in 0..<copies(i) {
+                    Self.appendContentByte(imaging: sourceOffset, to: &rewritten)
                 }
                 i += 1
             }
         }
-        map = replacedMap
-        return replacingNUL(chunk)
+        return rewritten
     }
 
     /// `chunk`'s run map: `map`, or for source content with an empty `map`, the one run imaging its own range.
@@ -682,21 +687,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `raw`'s run map `map` after `unescapePipes`, without each stripped backslash.
     func unescapedPipesMap(_ map: [ArenaRun], of raw: Chunk) -> [ArenaRun] {
         assert(map.reduce(0) { $0 + Int($1.length) } == raw.length, "a run map must tile its chunk")
-        var unescapedMap: [ArenaRun] = []
-        var i = raw.offset
         let end = raw.offset + raw.length
-        for run in map {
-            for local in 0..<Int(run.length) {
-                defer { i += 1 }
-                // The same `\|` match as `unescapePipes`: a backslash immediately followed by a pipe.
-                if readByte(at: i, in: raw) == UInt8(ascii: "\\"), i + 1 < end, readByte(at: i + 1, in: raw) == UInt8(ascii: "|") {
-                    continue
-                }
-                let sourceOffset = run.sourceOffset < 0 ? -1 : Int(run.sourceOffset) + local
-                Self.appendContentByte(imaging: sourceOffset, to: &unescapedMap)
-            }
+        // The same `\|` match as `unescapePipes`: a backslash immediately followed by a pipe.
+        return rewrittenMap(map, of: raw) { i in
+            readByte(at: i, in: raw) == UInt8(ascii: "\\") && i + 1 < end && readByte(at: i + 1, in: raw) == UInt8(ascii: "|") ? 0 : 1
         }
-        return unescapedMap
     }
 
     /// Replaces NUL with U+FFFD in a code or HTML block's segments, copying only the segments that hold one.
