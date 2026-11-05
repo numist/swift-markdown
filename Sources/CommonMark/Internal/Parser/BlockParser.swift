@@ -662,7 +662,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 storage.strings.append(b)
             }
         }
-        return Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
+        return arenaChunk(from: offset)
     }
 
     /// `replacingNUL(_:)` that also updates `chunk`'s run map `map`: each of a U+FFFD's three bytes images its NUL. With positions off, `map` is untouched.
@@ -3534,11 +3534,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             storage.strings.append(b)
             j += 1
         }
-        return Chunk(
-            offset: outOffset,
-            length: storage.strings.count - outOffset,
-            inSource: false
-        )
+        return arenaChunk(from: outOffset)
+    }
+
+    /// The arena bytes from `offset` to the arena's end, as just appended.
+    mutating func arenaChunk(from offset: Int) -> Chunk {
+        Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
     }
 
     /// Trims a link destination's spaces, tabs and line endings, keeping line tabulation and form feed, then unescapes it.

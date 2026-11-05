@@ -271,7 +271,7 @@ extension BlockParser {
         for j in range where !(storage.strings[j] == UInt8(ascii: "\\") && j + 1 < range.upperBound && storage.strings[j + 1] == UInt8(ascii: "|")) {
             storage.strings.append(storage.strings[j])
         }
-        return Chunk(offset: outOffset, length: storage.strings.count - outOffset, inSource: false)
+        return arenaChunk(from: outOffset)
     }
 
     // MARK: - Line / cell splitting

@@ -781,7 +781,7 @@ extension BlockParser {
             }
             if c == UInt8(ascii: ")") {
                 if nbParen == 0 {
-                    return AttributeAttributesMatch(chunk: attributeContentChunk(start: start, end: i, content: content), afterEnd: i)
+                    return AttributeAttributesMatch(chunk: materializedChunk(start: start, end: i, content: content), afterEnd: i)
                 }
                 nbParen -= 1
                 i += 1
@@ -790,22 +790,6 @@ extension BlockParser {
             i += 1
         }
         return nil
-    }
-
-    /// The attribute interior as one chunk, materialized only when it spans segments.
-    private mutating func attributeContentChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
-        if start == end {
-            return content.chunk(offset: start, length: 0)
-        }
-        if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end),
-           contiguous.length == end - start {
-            return contiguous
-        }
-        let outOffset = storage.strings.count
-        for k in start..<end {
-            storage.strings.append(content[k])
-        }
-        return Chunk(offset: outOffset, length: storage.strings.count - outOffset, inSource: false)
     }
 
     // MARK: - Emphasis / strong (delimiter stack)
@@ -1234,7 +1218,7 @@ extension BlockParser {
     private mutating func smartConstantChunk(_ s: String) -> Chunk {
         let offset = storage.strings.count
         appendSmartConstant(s)
-        return Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
+        return arenaChunk(from: offset)
     }
 
     /// Replace a text node's literal with a constant smart-punctuation glyph.
@@ -1275,7 +1259,7 @@ extension BlockParser {
         for _ in 0..<enCount {
             appendSmartConstant(Self.enDash)
         }
-        let chunk = Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
+        let chunk = arenaChunk(from: offset)
         // The dashes are arena-backed, but their source range is the hyphen run.
         emitLiteral(.text, chunk, start: start, end: runEnd, to: parent, pendingTextStart: &pendingTextStart, content: content)
         return runEnd
@@ -1411,11 +1395,7 @@ extension BlockParser {
                 storage.strings.append(b)
                 i += 1
             }
-            workChunk = Chunk(
-                offset: outOffset,
-                length: storage.strings.count - outOffset,
-                inSource: false
-            )
+            workChunk = arenaChunk(from: outOffset)
         } else {
             workChunk = chunk
         }
@@ -1644,19 +1624,9 @@ extension BlockParser {
             content.chunk(offset: auto.interior.lowerBound, length: auto.interior.count),
             backslashEscapes: false
         )
-        let urlChunk: Chunk
-        if auto.isEmail {
-            let offset = storage.strings.count
-            for b in "mailto:".utf8 {
-                storage.strings.append(b)
-            }
-            for j in auto.interior {
-                storage.strings.append(content[j])
-            }
-            urlChunk = Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
-        } else {
-            urlChunk = textChunk
-        }
+        let urlChunk = auto.isEmail
+            ? materializeAutolinkURL(prefix: "mailto:", start: auto.interior.lowerBound, end: auto.interior.upperBound, content: content)
+            : textChunk
         let urlRef = storage.intern(urlChunk)
         let textRef = storage.intern(textChunk)
         // The link spans the whole `<…>`; the text child spans just the interior visible bytes.
@@ -2215,11 +2185,7 @@ extension BlockParser {
         for j in start..<end {
             storage.strings.append(content[j])
         }
-        return Chunk(
-            offset: offset,
-            length: storage.strings.count - offset,
-            inSource: false
-        )
+        return arenaChunk(from: offset)
     }
 
     /// Scans to a URL boundary: a space, tab, line ending or `<`. `>`, line tabulation and form feed are URL bytes.
@@ -2416,7 +2382,7 @@ extension BlockParser {
         for k in start..<end {
             storage.strings.append(content[k])
         }
-        return Chunk(offset: outOffset, length: storage.strings.count - outOffset, inSource: false)
+        return arenaChunk(from: outOffset)
     }
 
     /// Stamps `node`'s source range from virtual offsets `start..<end`.
