@@ -113,13 +113,6 @@ extension BlockParser {
         var afterEnd: Int
     }
 
-    /// Whether a `\` inside a `<…>` link destination escapes `next`. Only ASCII punctuation can be escaped
-    /// (Backslash escapes), so a `\` before a line ending leaves it in the destination, which a `<…>`
-    /// destination may not contain (Links).
-    private func escapesNext(_ next: UInt8?) -> Bool {
-        next?.isASCIIPunct ?? false
-    }
-
     /// Matches a link destination (Links).
     internal func matchLinkDestination(_ chunk: Chunk) -> LinkDestinationMatch? {
         let match = scanLinkDestination(from: chunk.offset, end: chunk.range.upperBound) { readByte(at: $0, in: chunk) }
@@ -141,7 +134,9 @@ extension BlockParser {
                 if c == UInt8(ascii: ">") {
                     return ((start + 1)..<i, i + 1)
                 }
-                if c == UInt8(ascii: "\\"), escapesNext(i + 1 < end ? byte(i + 1) : nil) {
+                // Only ASCII punctuation can be escaped (Backslash escapes), so a `\` before a line ending leaves it in
+                // the destination, which a `<…>` destination may not contain (Links).
+                if c == UInt8(ascii: "\\") && i + 1 < end && byte(i + 1).isASCIIPunct {
                     i += 2
                     continue
                 }

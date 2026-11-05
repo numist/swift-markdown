@@ -1046,26 +1046,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// An open code block or HTML block takes the line as its content when the prefix walk reached it, unless the line ends the block; then `stillOpen` is `false` and the line dispatches as a fresh block. When the walk failed before the block, the block closes.
     private mutating func continueOrCloseLeafBlock(lineRange: Range<Int>, cursor: Int, prefixColumns: Int, allMatched: Bool, pending: consuming PendingLeaf?) -> LeafContinuation {
-        var pending = pending
-        let openKind = storage[current].kind
-        if openKind.isCodeBlock && allMatched {
-            return handleCodeBlockContinuation(
-                lineRange: lineRange,
-                cursor: cursor,
-                prefixColumns: prefixColumns,
-                pending: pending
-            )
-        } else if openKind == .htmlBlock && allMatched {
-            return handleHTMLBlockContinuation(
-                lineRange: lineRange,
-                cursor: cursor,
-                prefixColumns: prefixColumns,
-                pending: pending
-            )
-        } else if openKind.isCodeBlock || openKind == .htmlBlock {
-            pending = finalize(node: current, pending: pending)
+        guard allMatched else {
+            return LeafContinuation(stillOpen: false, pending: finalize(node: current, pending: pending))
         }
-        return LeafContinuation(stillOpen: false, pending: pending)
+        if storage[current].kind.isCodeBlock {
+            return handleCodeBlockContinuation(lineRange: lineRange, cursor: cursor, prefixColumns: prefixColumns, pending: pending)
+        }
+        return handleHTMLBlockContinuation(lineRange: lineRange, cursor: cursor, prefixColumns: prefixColumns, pending: pending)
     }
 
     /// A blank line closes the open leaf and any container that failed to continue, and records the line for list tightness (Lists).
@@ -1455,21 +1442,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         guard case .htmlBlock(let type, _) = storage[current].data else {
             preconditionFailure("an HTML block node always carries its block type")
         }
-        let firstNonSpace = indexOfFirstNonSpace(range: cursor..<lineRange.upperBound)
-        let isBlank = firstNonSpace == lineRange.upperBound
-
-        if type == 6 || type == 7 {
-            // Types 6 and 7 end at a blank line, which is not part of the block.
-            if isBlank {
-                pending = finalize(node: current, pending: pending)
-                return LeafContinuation(stillOpen: false, pending: pending)
-            }
-            pending = appendNewline(to: current, pending: pending)
-            pending = appendLineAfterPrefix(lineRange: lineRange, cursor: cursor, column: prefixColumns, to: current, pending: pending)
-            return LeafContinuation(stillOpen: true, pending: pending)
+        // Types 6 and 7 end at a blank line, which is not part of the block.
+        if type >= 6, indexOfFirstNonSpace(range: cursor..<lineRange.upperBound) == lineRange.upperBound {
+            return LeafContinuation(stillOpen: false, pending: finalize(node: current, pending: pending))
         }
-
-        // Types 1–5 take every line; the one meeting the end condition closes the block and is consumed.
+        // Every other line belongs to the block; for types 1–5, the one meeting the end condition closes the block and
+        // is consumed.
         pending = appendNewline(to: current, pending: pending)
         pending = appendLineAfterPrefix(lineRange: lineRange, cursor: cursor, column: prefixColumns, to: current, pending: pending)
         if htmlBlockLineMatchesEndCondition(
@@ -2542,6 +2520,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private static let htmlCommentEnd = Array("-->".utf8)
     private static let processingInstructionEnd = Array("?>".utf8)
     private static let cdataEnd = Array("]]>".utf8)
+    private static let declarationEnd = Array(">".utf8)
 
     /// Whether `range` equals lowercase `target`, ignoring ASCII case.
     private func bytesEqualASCIICaseInsensitive(range: Range<Int>, target: [UInt8]) -> Bool {
@@ -2780,21 +2759,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case 3:
             return findSubstring(range: range, needle: Self.processingInstructionEnd)
         case 4:
-            return findByte(range: range, byte: UInt8(ascii: ">"))
+            return findSubstring(range: range, needle: Self.declarationEnd)
         case 5:
             return findSubstring(range: range, needle: Self.cdataEnd)
         default:
             return false
         }
-    }
-
-    private func findByte(range: Range<Int>, byte: UInt8) -> Bool {
-        for i in range {
-            if sourceBytes[i] == byte {
-                return true
-            }
-        }
-        return false
     }
 
     /// Whether `needle` occurs in `range`.
