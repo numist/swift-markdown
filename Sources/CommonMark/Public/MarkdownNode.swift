@@ -209,7 +209,9 @@ extension MarkdownNode {
         case tableRow(isHeader: Bool)
         /// A table cell, carrying its column `alignment` and the number of `columns` and `rows` it spans.
         ///
-        /// Both are `1` for an ordinary cell. With `MarkdownDocument.ParseOptions.tableSpans` or `.tableRowspanDitto`, a cell that begins a span reports its size, and a cell that continues a neighbour's span reports `0`.
+        /// Both are `1` for an ordinary cell. With `MarkdownDocument.ParseOptions.tableSpans`:
+        /// - An empty cell, with nothing between its pipes (`||`), reports `columns: 0`. The nearest cell to its left that isn't empty, if there is one, counts it in `columns`, so a non-empty cell's `columns` is one plus the number of empty cells directly after it, including empty cells past the table's last column, which the row doesn't hold.
+        /// - A cell holding only the rowspan marker, `^` (`"` in its place with `.tableRowspanDitto`), reports `rows: 0`. The nearest cell above it that isn't a marker cell counts it in `rows`, and the marker cell's text is dropped. A marker cell with no such cell above it, such as one in the header row, keeps its marker text.
         case tableCell(alignment: TableAlignment, columns: Int, rows: Int)
 
         // Inline kinds

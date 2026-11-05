@@ -122,7 +122,7 @@ extension BlockParser {
 
     /// Appends a `.tableRow` and its cells under `parent`, padding missing cells and dropping extras.
     ///
-    /// With `.tableSpans`, an empty `||` cell is a colspan filler (0) that grows the nearest real cell to its left, and a cell holding only the rowspan marker (`^`, or `"` with `.tableRowspanDitto`) is a rowspan filler (0) that grows its column's owner above and drops its text. Every other cell becomes its column's owner.
+    /// With `.tableSpans`, an empty `||` cell is a colspan filler (0) that grows the nearest real cell to its left, and a cell holding only the rowspan marker (`^`, or `"` with `.tableRowspanDitto`) is a rowspan filler (0) that, when its column has an owner above, grows that owner and drops its text. Every cell that isn't a rowspan marker, colspan fillers and padding cells included, becomes its column's owner.
     private mutating func appendRow(
         parent: DocumentStorage.Index,
         line: Range<Int>,
