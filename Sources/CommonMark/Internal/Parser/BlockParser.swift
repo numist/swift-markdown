@@ -2398,8 +2398,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var bulletMarker: MarkdownNode.ListInfo.BulletMarker
         var orderedDelimiter: MarkdownNode.ListInfo.OrderedDelimiter
         var start: Int
-        var markerOffset: Int     // columns of leading whitespace before marker
-        var markerWidth: Int      // bytes of marker (1 for bullet, 2..10 for ordered)
         var contentColumn: Int    // content's column past the container prefix
         // The content's absolute column, past `consumedTo`'s when the padding consumed part of a tab, which stays at
         // `consumedTo`.
@@ -2485,14 +2483,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let contentColumnAfterMarker = markerColumn + markerWidth
         // Marker must be followed by a space, tab, or end of line.
         var contentStart: Int
-        var contentColumn: Int
-        var contentStartColumn: Int
+        // The columns from the marker's end to the content.
+        var padding = 1
         var isEmpty = false
         if afterMarker >= range.upperBound {
             // Empty item - the line is just `- ` (or end of input after marker).
             contentStart = afterMarker
-            contentColumn = markerOffset + markerWidth + 1
-            contentStartColumn = contentColumnAfterMarker + 1
             isEmpty = true
         } else {
             let next = sourceBytes[afterMarker]
@@ -2524,13 +2520,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 } else {
                     contentStart = afterMarker + 1
                 }
-                contentColumn = markerOffset + markerWidth + 1
-                contentStartColumn = contentColumnAfterMarker + 1
             } else {
                 // 1–4 columns: the whole run is padding; content begins at the first non-blank byte.
                 contentStart = k
-                contentColumn = markerOffset + markerWidth + runColumns
-                contentStartColumn = contentColumnAfterMarker + runColumns
+                padding = runColumns
             }
         }
 
@@ -2539,10 +2532,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             bulletMarker: bulletMarker,
             orderedDelimiter: orderedDelimiter,
             start: startNumber,
-            markerOffset: markerOffset,
-            markerWidth: markerWidth,
-            contentColumn: contentColumn,
-            contentStartColumn: contentStartColumn,
+            contentColumn: markerOffset + markerWidth + padding,
+            contentStartColumn: contentColumnAfterMarker + padding,
             consumedTo: contentStart,
             isEmpty: isEmpty
         )
