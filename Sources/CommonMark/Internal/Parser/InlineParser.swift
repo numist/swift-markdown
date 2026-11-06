@@ -603,6 +603,10 @@ extension BlockParser {
            let inline = matchInlineLinkTail(afterParen: pos + 1, content: content) {
             return (.link(url: storage.intern(inline.url), title: storage.intern(inline.title)), inline.end)
         }
+        // A reference matches only a link reference definition, so without one no label is normalized.
+        if storage.referenceMap.isEmpty {
+            return nil
+        }
         var key = ""
         var afterReference = pos
         if let label = matchLabelKey(from: pos, content: content) {
@@ -694,7 +698,7 @@ extension BlockParser {
     /// everything after the `^`, is normalized as a link label (Links), so it may span a line ending.
     private func footnoteDefinition(referencedFrom open: Int, closeBracket: Int, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
         let labelStart = open + 2
-        guard labelStart < closeBracket, content[open + 1] == UInt8(ascii: "^"),
+        guard !storage.footnoteMap.isEmpty, labelStart < closeBracket, content[open + 1] == UInt8(ascii: "^"),
               linkLabelFitsLengthCap(virtualRange: labelStart..<closeBracket, in: content) else {
             return nil
         }
@@ -740,6 +744,10 @@ extension BlockParser {
            scanned.afterEnd < end,
            content[scanned.afterEnd] == UInt8(ascii: ")") {
             return (.attribute(storage.intern(scanned.chunk)), scanned.afterEnd + 1)
+        }
+        // Without an attribute definition the label names none, but still belongs to the form.
+        if storage.attributeReferenceMap.isEmpty {
+            return (nil, matchLinkLabel(from: pos, end: end, in: content)?.afterEnd ?? pos)
         }
         guard let label = matchLabelKey(from: pos, content: content) else {
             return (nil, pos)
