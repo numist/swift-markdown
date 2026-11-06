@@ -495,11 +495,45 @@ extension BlockParser {
     }
 
     /// `label` with each scalar replaced by a stand-in for its Unicode case fold, so two labels' results are equal
-    /// exactly when their case folds are. Lowercasing, uppercasing and lowercasing again yields one stand-in for each
-    /// case fold, except for dotless `ı`: it folds to itself, but uppercases to the `I` that `i` folds with.
+    /// exactly when their case folds are. Lowercasing a scalar, then uppercasing and lowercasing again each scalar of
+    /// the result, yields one stand-in for each case fold, except for dotless `ı`: it folds to itself, but uppercases to
+    /// the `I` that `i` folds with, so it stands for itself.
     private static func caseFold(_ label: String) -> String {
-        label.lowercased().unicodeScalars.split(separator: "ı", omittingEmptySubsequences: false)
-            .map { Substring($0).uppercased().lowercased() }
-            .joined(separator: "ı")
+        let scalars = label.unicodeScalars
+        var folded = ""
+        // The scalars from `unchangedStart` up to the current one are their own stand-ins, so they are appended as a run.
+        var unchangedStart = scalars.startIndex
+        // Labels repeat scalars, so the last non-ASCII one found to be its own stand-in is remembered.
+        var lastUnchanged: Unicode.Scalar = "a"
+        var i = scalars.startIndex
+        while i != scalars.endIndex {
+            let scalar = scalars[i]
+            let next = scalars.index(after: i)
+            // A scalar that doesn't change when case mapped is its own stand-in, as is an ASCII scalar once
+            // `normalizeLabel` has lowercased it.
+            if !scalar.isASCII && scalar != lastUnchanged {
+                if scalar.properties.changesWhenCaseMapped {
+                    folded.append(contentsOf: Substring(scalars[unchangedStart..<i]))
+                    for lower in scalar.properties.lowercaseMapping.unicodeScalars {
+                        if lower == "ı" {
+                            folded.unicodeScalars.append(lower)
+                        } else {
+                            for upper in lower.properties.uppercaseMapping.unicodeScalars {
+                                folded += upper.properties.lowercaseMapping
+                            }
+                        }
+                    }
+                    unchangedStart = next
+                } else {
+                    lastUnchanged = scalar
+                }
+            }
+            i = next
+        }
+        if unchangedStart == scalars.startIndex {
+            return label
+        }
+        folded.append(contentsOf: Substring(scalars[unchangedStart...]))
+        return folded
     }
 }
