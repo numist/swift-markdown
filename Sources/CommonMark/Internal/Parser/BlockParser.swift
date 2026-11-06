@@ -610,7 +610,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// holds a NUL. The finalize normalizers rely on one segment per line.
     private mutating func appendCodeLineCopy(spaces: Int, sourceStart: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
         let offset = storage.strings.count
-        storage.strings.reserveCapacity(offset + spaces + (lineEnd - sourceStart))
         for _ in 0..<spaces {
             storage.strings.append(UInt8(ascii: " "))
         }
