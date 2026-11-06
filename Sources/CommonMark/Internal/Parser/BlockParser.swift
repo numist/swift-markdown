@@ -100,6 +100,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     var currentLineSourceRange: Range<Int> = 0..<0
     var lastLineSourceEnd: Int = 0
 
+    /// The source offset before which the line reader has read every byte.
+    var sourceReadEnd: Int = 0
+
+    /// No source byte from here up to `sourceReadEnd` is a NUL, so content there needs no NUL replacement.
+    var nulFreeSourceStart: Int = 0
+
     /// The source offset just past the open indented code block's last line that is not blank, where the block ends:
     /// blank lines following an indented code block are not part of it (Indented code blocks).
     var indentedCodeContentEnd: Int = 0
@@ -195,6 +201,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     lastLineSourceEnd = currentLineSourceRange.upperBound
                 }
                 currentLineSourceRange = lineRangeInOriginalSource
+                noteLineRead(reader)
                 pending = processLine(lineRange: lineRangeInOriginalSource, pending: pending)
             }
 
@@ -357,6 +364,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             contentEnd = reader.lineRange.upperBound
             hasCR = hasCR || (contentEnd < count && sourceBytes[contentEnd] == UInt8(ascii: "\r"))
+            noteLineRead(reader)
         }
         storage.lineCount = reader.lineNumber
 
@@ -369,11 +377,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         storage.setSourceEnd(paragraph, contentEnd)
 
         // A NUL becomes U+FFFD (Insecure characters), which forces the arena copy below.
-        var hasNUL = false
-        for k in start..<count where sourceBytes[k] == 0 {
-            hasNUL = true
-            break
-        }
+        let hasNUL = containsNUL(Chunk(offset: start, length: contentEnd - start, inSource: true))
         // The arena copy's source image, for the email autolink pass.
         var image: ContentImage? = nil
         var scratch = InlineScratch()
@@ -574,10 +578,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Appends the rest of a code or HTML block line from `bodyStart`, after `leadingSpaces` spaces from a split tab.
     private mutating func appendCodeBodyLine(bodyStart: Int, leadingSpaces: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
-        if leadingSpaces == 0 {
+        // The line reader has read the line, so a line not known to be free of NUL holds one.
+        if leadingSpaces == 0 && isKnownFreeOfNUL(Chunk(offset: bodyStart, length: lineEnd - bodyStart, inSource: true)) {
             return addLine(range: bodyStart..<lineEnd, to: node, pending: pending)
         }
-        return appendSplitTabCodeContent(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineEnd, to: node, pending: pending)
+        return appendCodeLineCopy(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineEnd, to: node, pending: pending)
     }
 
     /// Append the rest of an HTML block line from `cursor`, where the container prefixes ended at `column`.
@@ -600,19 +605,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         )
     }
 
-    /// Appends `spaces` spaces and the source bytes `[sourceStart, lineEnd)` as one arena segment, for a code or HTML
-    /// block line whose stripped indent split a tab (Tabs). The finalize normalizers rely on one segment per line.
-    private mutating func appendSplitTabCodeContent(spaces: Int, sourceStart: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
+    /// Appends `spaces` spaces and the source bytes `[sourceStart, lineEnd)`, each NUL replaced with U+FFFD (Insecure
+    /// characters), as one arena segment, for a code or HTML block line whose stripped indent split a tab (Tabs) or that
+    /// holds a NUL. The finalize normalizers rely on one segment per line.
+    private mutating func appendCodeLineCopy(spaces: Int, sourceStart: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
         let offset = storage.strings.count
         storage.strings.reserveCapacity(offset + spaces + (lineEnd - sourceStart))
         for _ in 0..<spaces {
             storage.strings.append(UInt8(ascii: " "))
         }
-        for i in sourceStart..<lineEnd {
-            storage.strings.append(sourceBytes[i])
-        }
+        appendReplacingNUL(sourceBytes.extracting(sourceStart..<lineEnd))
         return appendSegment(
-            Segment(offset: Int32(offset), length: Int32(spaces + (lineEnd - sourceStart)), inSource: false),
+            Segment(offset: Int32(offset), length: Int32(storage.strings.count - offset), inSource: false),
             to: node, pending: pending)
     }
 
@@ -624,7 +628,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return span.firstIndex(matching: { $0 .== nul }, or: { $0 == 0 })
     }
 
+    /// Records the line `reader` last read, so content within the lines read since its last NUL needs no NUL scan.
+    private mutating func noteLineRead(_ reader: borrowing LineReader) {
+        if reader.lineFirstNUL < reader.lineRange.upperBound {
+            nulFreeSourceStart = reader.lineRange.upperBound
+        }
+        sourceReadEnd = reader.lineRange.upperBound
+    }
+
+    /// Whether `chunk` is source content the line reader has read and found free of NUL.
+    private func isKnownFreeOfNUL(_ chunk: Chunk) -> Bool {
+        chunk.inSource && chunk.offset >= nulFreeSourceStart && chunk.offset + chunk.length <= sourceReadEnd
+    }
+
     private func containsNUL(_ chunk: Chunk) -> Bool {
+        if isKnownFreeOfNUL(chunk) {
+            return false
+        }
         let bytes = chunk.inSource ? sourceBytes.extracting(chunk.range) : storage.strings.span.extracting(chunk.range)
         return Self.firstNUL(in: bytes) < bytes.count
     }
@@ -715,18 +735,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // The same `\|` match as `unescapePipes`: a backslash immediately followed by a pipe.
         return rewrittenMap(map, of: raw) { i in
             readByte(at: i, in: raw) == UInt8(ascii: "\\") && i + 1 < end && readByte(at: i + 1, in: raw) == UInt8(ascii: "|") ? 0 : 1
-        }
-    }
-
-    /// Replaces NUL with U+FFFD in a code or HTML block's segments, copying only the segments that hold one.
-    ///
-    /// Inline multi-segment content can hold no arena segment but a line join, so it flattens instead (`flattenSegments`).
-    private mutating func replacingNULInSegments(_ segs: inout UniqueArray<Segment>) {
-        for i in 0..<segs.count {
-            let chunk = segs[i].chunk
-            if containsNUL(chunk) {
-                segs[i] = Segment(replacingNUL(chunk))
-            }
         }
     }
 
@@ -2146,7 +2154,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             var segs = drainSegments(node, pending: pending)
             pending = nil
             normalizeCodeBlockSegments(&segs, isFenced: info.isFenced)
-            replacingNULInSegments(&segs)
             let literalRef = storage.intern(segs)
             if case .codeBlock(let info, _) = storage[node].data {
                 storage[node].data = .codeBlock(info: info, literal: literalRef)
@@ -2155,7 +2162,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             var segs = drainSegments(node, pending: pending)
             pending = nil
             normalizeHTMLBlockSegments(&segs)
-            replacingNULInSegments(&segs)
             let literalRef = storage.intern(segs)
             if case .htmlBlock(let type, _) = storage[node].data {
                 storage[node].data = .htmlBlock(type: type, literal: literalRef)

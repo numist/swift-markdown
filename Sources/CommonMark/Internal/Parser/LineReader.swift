@@ -16,6 +16,9 @@ internal struct LineReader: ~Escapable, ~Copyable {
 
     /// The source offsets of the most recently returned line.
     internal var lineRange: Range<Int>
+
+    /// The source offset of the most recently returned line's first NUL, or the line's end when it holds none.
+    internal var lineFirstNUL = 0
     var nextStart: Int
 
     @_lifetime(copy source)
@@ -44,13 +47,19 @@ internal struct LineReader: ~Escapable, ~Copyable {
             guard lineNumber == 0, start > 0 else { return nil }
             lineNumber = 1
             lineRange = start..<start
+            lineFirstNUL = start
             return bytes
         }
 
         lineNumber += 1
 
-        // `\n` and `\r` never occur inside a multi-byte UTF-8 sequence, so a byte scan finds line endings.
-        let i = Self.firstLineTerminator(in: bytes)
+        // `\n` and `\r` never occur inside a multi-byte UTF-8 sequence, so a byte scan finds line endings, and the
+        // line's first NUL with them.
+        var i = Self.firstLineTerminatorOrNUL(in: bytes)
+        lineFirstNUL = start + i
+        if i < count, bytes[i] == 0 {
+            i += 1 + Self.firstLineTerminator(in: bytes.extracting((i + 1)..<count))
+        }
 
         if i < count {
             let line = bytes.extracting(0..<i)
@@ -73,6 +82,18 @@ internal struct LineReader: ~Escapable, ~Copyable {
         let result = source
         source = bytes.extracting(count..<count) // Empty
         return result
+    }
+
+    /// The index of the first `\n`, `\r` or NUL in `span`, or `span.count` if there is none.
+    @inline(__always)
+    internal static func firstLineTerminatorOrNUL(in span: Span<UInt8>) -> Int {
+        let nl = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
+        let cr = SIMD16<UInt8>(repeating: UInt8(ascii: "\r"))
+        let nul = SIMD16<UInt8>(repeating: 0)
+        return span.firstIndex(
+            matching: { ($0 .== nl) .| ($0 .== cr) .| ($0 .== nul) },
+            or: { $0 == UInt8(ascii: "\n") || $0 == UInt8(ascii: "\r") || $0 == 0 }
+        )
     }
 
     /// The index of the first `\n` or `\r` in `span`, or `span.count` if there is none.
