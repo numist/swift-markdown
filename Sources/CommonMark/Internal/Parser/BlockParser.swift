@@ -657,7 +657,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Replaces each NUL in `chunk` with U+FFFD (Insecure characters), copying only if it has one.
     private mutating func replacingNUL(_ chunk: Chunk) -> Chunk {
-        guard containsNUL(chunk) else { return chunk }
+        containsNUL(chunk) ? copyReplacingNUL(chunk) : chunk
+    }
+
+    /// `chunk` copied to the arena with each NUL replaced with U+FFFD.
+    private mutating func copyReplacingNUL(_ chunk: Chunk) -> Chunk {
         let offset = storage.strings.count
         if chunk.inSource {
             appendReplacingNUL(sourceBytes.extracting(chunk.range))
@@ -696,9 +700,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// `replacingNUL(_:)` that also updates `chunk`'s run map `map`: each of a U+FFFD's three bytes images its NUL. With positions off, `map` is untouched.
     private mutating func replacingNUL(_ chunk: Chunk, map: inout [ArenaRun]) -> Chunk {
-        guard positionsEnabled, containsNUL(chunk) else { return replacingNUL(chunk) }
-        map = rewrittenMap(sourceImage(of: chunk, map: map), of: chunk) { readByte(at: $0, in: chunk) == 0 ? 3 : 1 }
-        return replacingNUL(chunk)
+        guard containsNUL(chunk) else { return chunk }
+        if positionsEnabled {
+            map = rewrittenMap(sourceImage(of: chunk, map: map), of: chunk) { readByte(at: $0, in: chunk) == 0 ? 3 : 1 }
+        }
+        return copyReplacingNUL(chunk)
     }
 
     /// `chunk`'s run map `map` after a rewrite that turns `chunk`'s byte at each offset into `copies(offset)` bytes,
@@ -1956,7 +1962,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         for i in 0..<segs.count {
             let seg = segs[i]
             let len = Int(seg.length)
-            for j in seg.chunk.range { buf.append(readByte(at: j, in: seg.chunk)) }
+            if seg.inSource {
+                buf.append(copying: sourceBytes.extracting(seg.chunk.range))
+            } else {
+                buf.append(copying: storage.strings.span.extracting(seg.chunk.range))
+            }
             if len > 0 {
                 if seg.inSource {
                     map.append(ArenaRun(length: Int32(len), sourceOffset: seg.offset))
