@@ -398,9 +398,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                         Self.appendContentByte(imaging: j, to: &runs)
                     }
                 } else if byte == 0 {
-                    storage.strings.append(0xEF)
-                    storage.strings.append(0xBF)
-                    storage.strings.append(0xBD)
+                    appendReplacementCharacter()
                     if positionsEnabled {
                         for _ in 0..<3 {
                             Self.appendContentByte(imaging: j, to: &runs)
@@ -620,11 +618,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     // MARK: - NUL -> U+FFFD replacement (Insecure characters)
 
+    /// The index of the first NUL in `span`, or `span.count` if there is none.
+    private static func firstNUL(in span: Span<UInt8>) -> Int {
+        let nul = SIMD16<UInt8>(repeating: 0)
+        return span.firstIndex(matching: { $0 .== nul }, or: { $0 == 0 })
+    }
+
     private func containsNUL(_ chunk: Chunk) -> Bool {
-        for i in chunk.range where readByte(at: i, in: chunk) == 0 {
-            return true
-        }
-        return false
+        let bytes = chunk.inSource ? sourceBytes.extracting(chunk.range) : storage.strings.span.extracting(chunk.range)
+        return Self.firstNUL(in: bytes) < bytes.count
     }
 
     private func segmentsContainNUL(_ segs: borrowing UniqueArray<Segment>) -> Bool {
@@ -638,17 +640,39 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func replacingNUL(_ chunk: Chunk) -> Chunk {
         guard containsNUL(chunk) else { return chunk }
         let offset = storage.strings.count
-        for i in chunk.range {
-            let b = readByte(at: i, in: chunk)
-            if b == 0 {
-                storage.strings.append(0xEF)
-                storage.strings.append(0xBF)
-                storage.strings.append(0xBD)
-            } else {
-                storage.strings.append(b)
+        if chunk.inSource {
+            appendReplacingNUL(sourceBytes.extracting(chunk.range))
+        } else {
+            // The arena can't be read through a span while it grows, so its bytes are copied one at a time.
+            for i in chunk.range {
+                let b = storage.strings[i]
+                if b == 0 {
+                    appendReplacementCharacter()
+                } else {
+                    storage.strings.append(b)
+                }
             }
         }
         return arenaChunk(from: offset)
+    }
+
+    /// Appends `bytes` to the arena with each NUL replaced with U+FFFD.
+    private mutating func appendReplacingNUL(_ bytes: Span<UInt8>) {
+        var rest = bytes
+        while !rest.isEmpty {
+            let nul = Self.firstNUL(in: rest)
+            storage.strings.append(copying: rest.extracting(0..<nul))
+            if nul < rest.count {
+                appendReplacementCharacter()
+            }
+            rest = rest.extracting(min(nul + 1, rest.count)..<rest.count)
+        }
+    }
+
+    private mutating func appendReplacementCharacter() {
+        storage.strings.append(0xEF)
+        storage.strings.append(0xBF)
+        storage.strings.append(0xBD)
     }
 
     /// `replacingNUL(_:)` that also updates `chunk`'s run map `map`: each of a U+FFFD's three bytes images its NUL. With positions off, `map` is untouched.

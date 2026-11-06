@@ -78,29 +78,36 @@ internal struct LineReader: ~Escapable, ~Copyable {
     /// The index of the first `\n` or `\r` in `span`, or `span.count` if there is none.
     @inline(__always)
     internal static func firstLineTerminator(in span: Span<UInt8>) -> Int {
-        let count = span.count
-        let bytes = span.bytes
-
         let nl = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
         let cr = SIMD16<UInt8>(repeating: UInt8(ascii: "\r"))
+        return span.firstIndex(
+            matching: { ($0 .== nl) .| ($0 .== cr) },
+            or: { $0 == UInt8(ascii: "\n") || $0 == UInt8(ascii: "\r") }
+        )
+    }
+}
+
+extension Span where Element == UInt8 {
+    /// The index of the first byte that `matches` flags among each 16 bytes, or that `isMatch` accepts among the
+    /// fewer than 16 after them, or `count` if there is none. The two must accept the same bytes.
+    @inline(__always)
+    internal func firstIndex(matching matches: (SIMD16<UInt8>) -> SIMDMask<SIMD16<Int8>>, or isMatch: (UInt8) -> Bool) -> Int {
+        let bytes = self.bytes
         // Non-matching lanes become 16, so `.min()` is the first matching lane.
         let lanes = SIMD16<UInt8>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
         let noMatch = SIMD16<UInt8>(repeating: 16)
 
         var i = 0
         while i + 16 <= count {
-            let chunk = bytes.loadSIMD16(fromByteOffset: i)
-            let matched = (chunk .== nl) .| (chunk .== cr)
+            let matched = matches(bytes.loadSIMD16(fromByteOffset: i))
             if any(matched) {
                 let lane = lanes.replacing(with: noMatch, where: .!matched).min()
                 return i + Int(lane)
             }
             i += 16
         }
-        // Scalar tail (< 16 bytes).
         while i < count {
-            let b = span[i]
-            if b == UInt8(ascii: "\n") || b == UInt8(ascii: "\r") {
+            if isMatch(self[i]) {
                 return i
             }
             i += 1
