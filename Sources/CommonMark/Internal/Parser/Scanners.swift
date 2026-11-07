@@ -367,10 +367,8 @@ extension BlockParser {
 
     // MARK: - Whitespace
 
-    // These are `mutating` though they only read: a non-mutating method of the large `BlockParser` copies the parser per call, which costs more than the scan.
-
     /// Skips spaces, tabs, line tabulations and form feeds.
-    internal mutating func skipLineWhitespace(from cursor: Int, in chunk: Chunk) -> Int {
+    internal func skipLineWhitespace(from cursor: Int, in chunk: Chunk) -> Int {
         let end = chunk.range.upperBound
         var i = cursor
         while i < end {
@@ -384,7 +382,7 @@ extension BlockParser {
     }
 
     /// Skips line whitespace, at most one line ending, and more line whitespace.
-    internal mutating func skipSpacesAndOneLineEnd(from cursor: Int, in chunk: Chunk) -> Int {
+    internal func skipSpacesAndOneLineEnd(from cursor: Int, in chunk: Chunk) -> Int {
         let end = chunk.range.upperBound
         var i = skipLineWhitespace(from: cursor, in: chunk)
         if i >= end {
@@ -400,7 +398,7 @@ extension BlockParser {
     }
 
     /// The offset past a line ending at `cursor`, `cursor` at the end of `chunk`, or `nil`.
-    internal mutating func skipLineEndOrEOF(from cursor: Int, in chunk: Chunk) -> Int? {
+    internal func skipLineEndOrEOF(from cursor: Int, in chunk: Chunk) -> Int? {
         let end = chunk.range.upperBound
         if cursor >= end {
             return cursor
