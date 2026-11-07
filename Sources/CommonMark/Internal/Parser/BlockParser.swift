@@ -155,14 +155,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// decoded arena range and its source range.
     var characterReferenceSources: [(arena: Range<Int>, source: Range<Int>)] = []
 
-    /// The delimiter stack (see `DelimiterRecord`), topped by `lastDelim` and reused across passes.
-    var delimiters = UniqueArray<DelimiterRecord>()
-    var lastDelim: Int? = nil
-
-    /// The bracket stack (see `BracketRecord`), topped by `lastBracket` and reused across passes.
-    var brackets = UniqueArray<BracketRecord>()
-    var lastBracket: Int? = nil
-
     // MARK: - Init
     
     @_lifetime(copy source)
@@ -220,12 +212,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // With all blocks closed every definition is known, so references resolve forward.
         let pending = pendingInlines
         
+        var delimiters = UniqueArray<DelimiterRecord>()
+        var brackets = UniqueArray<BracketRecord>()
         var scratch = InlineScratch()
 
         for (node, ref) in pending {
             precondition(ref.totalLength > 0, "only non-empty content is queued for inline parsing")
             if ref.count == 1 {
-                parseInline(chunk: storage.segments[Int(ref.first)].chunk, scratch: &scratch, into: node)
+                parseInline(chunk: storage.segments[Int(ref.first)].chunk, scratch: &scratch, into: node, delimiters: &delimiters, brackets: &brackets)
             } else {
                 // Multi-segment content is parsed from the source through a copy of its segment list.
                 scratch.removeAllPieces()
@@ -234,7 +228,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
                 parseInline(
                     content: ContentSpan(source: sourceBytes, segments: scratch.pieces.span, segmentEnds: scratch.pieceEnds.span, virtualLength: Int(ref.totalLength)),
-                    into: node
+                    into: node,
+                    delimiters: &delimiters,
+                    brackets: &brackets
                 )
             }
 
@@ -314,13 +310,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         chunk: Chunk,
         scratch: inout InlineScratch,
         into node: DocumentStorage.Index,
-        preserveWhitespace: Bool = false
+        preserveWhitespace: Bool = false,
+        delimiters: inout UniqueArray<DelimiterRecord>,
+        brackets: inout UniqueArray<BracketRecord>
     ) {
         if chunk.inSource {
             parseInline(
                 content: ContentSpan(span: sourceBytes.extracting(chunk.range), base: chunk.offset, inSource: true),
                 into: node,
-                preserveWhitespace: preserveWhitespace
+                preserveWhitespace: preserveWhitespace,
+                delimiters: &delimiters,
+                brackets: &brackets
             )
             return
         }
@@ -333,7 +333,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         parseInline(
             content: ContentSpan(span: scratch.bytes.span, base: chunk.offset, runs: scratch.pieces.span, runEnds: scratch.pieceEnds.span),
             into: node,
-            preserveWhitespace: preserveWhitespace
+            preserveWhitespace: preserveWhitespace,
+            delimiters: &delimiters,
+            brackets: &brackets
         )
     }
 
@@ -382,10 +384,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let hasNUL = containsNUL(Chunk(offset: start, length: contentEnd - start, inSource: true))
         // The arena copy's source image, for the email autolink pass.
         var image: ContentImage? = nil
+        var delimiters = UniqueArray<DelimiterRecord>()
+        var brackets = UniqueArray<BracketRecord>()
         var scratch = InlineScratch()
         if !hasCR && !hasNUL {
             let rest = parseDefinitions(in: Chunk(offset: start, length: count - start, inSource: true))
-            parseInline(chunk: rest, scratch: &scratch, into: paragraph, preserveWhitespace: true)
+            parseInline(chunk: rest, scratch: &scratch, into: paragraph, preserveWhitespace: true, delimiters: &delimiters, brackets: &brackets)
         } else {
             // Copy the content to the arena with line endings normalized to `\n` and NULs to U+FFFD. With positions on, record
             // its run map: a CRLF's `\n` images its LF, so a node ending at the break covers the CRLF, as for LF input (a node
@@ -427,7 +431,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 chunk: rest,
                 scratch: &scratch,
                 into: paragraph,
-                preserveWhitespace: true
+                preserveWhitespace: true,
+                delimiters: &delimiters,
+                brackets: &brackets
             )
             if positionsEnabled {
                 image = ContentImage(base: arenaStart, runs: runs)
