@@ -281,6 +281,27 @@ extension MarkdownNode {
             }
             return false
         }
+
+        internal var isParagraph: Bool {
+            if case .paragraph = self {
+                return true
+            }
+            return false
+        }
+
+        internal var isHTMLBlock: Bool {
+            if case .htmlBlock = self {
+                return true
+            }
+            return false
+        }
+
+        internal var isText: Bool {
+            if case .text = self {
+                return true
+            }
+            return false
+        }
     }
 
     /// Column alignment for a GFM table cell.

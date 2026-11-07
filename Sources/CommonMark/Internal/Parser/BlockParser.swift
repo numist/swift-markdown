@@ -582,7 +582,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func addLine(range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         // Code and HTML block bodies, which are never inline-parsed, accumulate as segments.
         let nodeKind = storage[node].kind
-        if nodeKind.isCodeBlock || nodeKind == .htmlBlock {
+        if nodeKind.isCodeBlock || nodeKind.isHTMLBlock {
             return addLineSegment(range: range, to: node, pending: pending)
         }
         switch take(pending, ifNode: node) {
@@ -616,7 +616,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Appends a line join to `node`'s pending content. A `.lazy` range defers it (`joinPending`), so the next `addLine` can keep the run zero-copy.
     private mutating func appendNewline(to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         let nodeKind = storage[node].kind
-        if nodeKind.isCodeBlock || nodeKind == .htmlBlock {
+        if nodeKind.isCodeBlock || nodeKind.isHTMLBlock {
             return appendSegment(storage.newlineSegment, to: node, pending: pending)
         }
         switch take(pending, ifNode: node) {
@@ -1059,7 +1059,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let allMatched = walk.allMatched
 
         let openKind = storage[current].kind
-        if openKind.isCodeBlock || openKind == .htmlBlock {
+        if openKind.isCodeBlock || openKind.isHTMLBlock {
             let leaf = continueOrCloseLeafBlock(lineRange: lineRange, cursor: cursor, prefixColumns: prefixColumns, allMatched: allMatched, pending: pending)
             let consumedLine = leaf.consumedLine
             pending = leaf.pending
@@ -1181,7 +1181,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// A table-pending paragraph is a table, so a `-` or `=` line can't underline it (`r\n|-\n=` is a table with a `=` body row).
     private mutating func underlineParagraph(line: inout LineContext, pending: inout PendingLeaf?) -> Bool {
         let lineRange = line.lineRange
-        guard line.openKind == .paragraph && line.allMatched && !openParagraphIsTablePending && line.indent < 4,
+        guard line.openKind.isParagraph && line.allMatched && !openParagraphIsTablePending && line.indent < 4,
               let underline = matchSetextUnderline(range: line.cursor..<lineRange.upperBound, firstNonSpace: line.firstNonSpace) else {
             return false
         }
@@ -1575,7 +1575,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             && (!line.allMatched
                 || line.indent >= 4
                 || isLonePipeRow(range: line.firstNonSpace..<lineRange.upperBound))
-        if line.openKind != .paragraph || breaksOutOfPendingTable {
+        if !line.openKind.isParagraph || breaksOutOfPendingTable {
             return false
         }
         // `mightStartBlock` covers the first byte of every block start `lineStartsNewBlock` matches, so a line starting
@@ -2203,7 +2203,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     @inline(__always)
     private mutating func openParagraph(lineRange: Range<Int>, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         let textRange = firstNonSpace..<lineRange.upperBound
-        precondition(storage[current].kind != .paragraph, "dispatch starts at the deepest matched container, which is never a leaf, and opens only containers before a leaf, so `current` is never a paragraph here")
+        precondition(!storage[current].kind.isParagraph, "dispatch starts at the deepest matched container, which is never a leaf, and opens only containers before a leaf, so `current` is never a paragraph here")
         assert(openParagraphState == nil, "the previous paragraph closed before this one opens")
         let paragraphIdx = addChild(kind: .paragraph, parent: current, start: firstNonSpace)
         current = paragraphIdx
@@ -2524,7 +2524,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if positionsEnabled {
             if let lineContentEnd {
                 storage.setSourceEnd(node, lineContentEnd)
-            } else if kind.isCodeBlock || kind == .htmlBlock {
+            } else if kind.isCodeBlock || kind.isHTMLBlock {
                 storage.setSourceEnd(node, blockContentEnd)
             } else if Self.isContainer(kind) {
                 let ownEnd = storage.sourceRanges[node].end
