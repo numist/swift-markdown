@@ -24,13 +24,13 @@ internal struct DocumentStorage: ~Copyable {
     internal var segments: UniqueArray<Segment> = UniqueArray(minimumCapacity: 16)
 
     /// Link reference definitions by normalized label. The first definition of a label wins.
-    internal var referenceMap: [String: ReferenceDefinition] = [:]
+    internal var referenceMap = [String: ReferenceDefinition]()
 
     /// `^[label]: attrs` definitions, keyed like `referenceMap` but kept apart so `[foo]` and `^[foo]` don't collide. The first definition wins.
-    internal var attributeReferenceMap: [String: Chunk] = [:]
+    internal var attributeReferenceMap = [String: Chunk]()
 
     /// Footnote definition nodes by normalized label. The first definition to close wins, so a definition nested in a same-label one wins over its encloser.
-    internal var footnoteMap: [String: Index] = [:]
+    internal var footnoteMap = [String: Index]()
 
     /// Every `.footnoteDefinition` node in document order, so unreferenced ones can be dropped.
     internal var footnoteDefinitionOrder: [Index] = []

@@ -59,7 +59,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var deepestMatched: DocumentStorage.Index
         var allMatched: Bool
     }
-    var emptyRemainderWalks: [DocumentStorage.Index: EmptyRemainderWalk] = [:]
+    var emptyRemainderWalks = [DocumentStorage.Index: EmptyRemainderWalk]()
 
     /// How many list items and footnote definitions a line's walk continues with nothing left of the line before
     /// `walkPastEmptyRemainder` takes over.
@@ -117,7 +117,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     var pendingInlines: [(DocumentStorage.Index, ContentRef)] = []
 
     /// Run maps for content that reaches the inline pass as one arena chunk (flattened, NUL-replaced or pipe-unescaped), keyed by node, so its inlines get source positions.
-    var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
+    var arenaSourceMaps = [DocumentStorage.Index: [ArenaRun]]()
 
     /// What the table check needs to know about the open paragraph, recorded when the paragraph is first
     /// continued. Only populated with `.tables`.
@@ -139,11 +139,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// The removed paragraph still counts as a block for list looseness (Lists) and `endsWithBlankLine`, and keeps
     /// the item from counting as empty, so a blank line after it does not close the item (List items).
-    var itemsEndingInRemovedParagraph: [DocumentStorage.Index: Bool] = [:]
+    var itemsEndingInRemovedParagraph = [DocumentStorage.Index: Bool]()
 
     /// List items that directly contain a removed paragraph that held only definitions or a task list item marker,
     /// and another block with a blank line between them, which makes their list loose (Lists). Consulted by `detectLooseList`.
-    var itemsWithBlankLineAroundRemovedParagraph: Set<DocumentStorage.Index> = []
+    var itemsWithBlankLineAroundRemovedParagraph = Set<DocumentStorage.Index>()
 
     /// Reset per `parseInline` pass.
     var htmlCloserMisses = HTMLCloserMisses()
