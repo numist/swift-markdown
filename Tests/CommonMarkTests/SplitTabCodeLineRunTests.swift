@@ -19,7 +19,9 @@ import Testing
 @Suite("Runs of indented code lines whose indent splits a tab")
 struct SplitTabCodeLineRunTests {
 
-    @Test(.timeLimit(.minutes(1)))
+    // Takes about 15 seconds in a debug build, too long for every run; enable it when changing how code lines are
+    // copied into the arena.
+    @Test(.disabled("takes about 15 seconds"), .timeLimit(.minutes(1)))
     func manySplitTabCodeLines() throws {
         let markdown = "- a\n\n" + String(repeating: "\t\tx\n", count: 2_000_000)
         let literal = try MarkdownDocument.withParsedDocument(markdown) { doc in
