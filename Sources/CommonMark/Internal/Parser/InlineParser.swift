@@ -1194,30 +1194,28 @@ extension BlockParser {
     // MARK: - Smart punctuation
 
     /// Smart-punctuation replacement characters.
-    static let leftSingleQuote = "\u{2018}"
-    static let rightSingleQuote = "\u{2019}"
-    static let leftDoubleQuote = "\u{201C}"
-    static let rightDoubleQuote = "\u{201D}"
-    static let enDash = "\u{2013}"
-    static let emDash = "\u{2014}"
-    static let ellipsis = "\u{2026}"
+    static let leftSingleQuote: Unicode.Scalar = "\u{2018}"
+    static let rightSingleQuote: Unicode.Scalar = "\u{2019}"
+    static let leftDoubleQuote: Unicode.Scalar = "\u{201C}"
+    static let rightDoubleQuote: Unicode.Scalar = "\u{201D}"
+    static let enDash: Unicode.Scalar = "\u{2013}"
+    static let emDash: Unicode.Scalar = "\u{2014}"
+    static let ellipsis: Unicode.Scalar = "\u{2026}"
 
-    private mutating func appendSmartConstant(_ s: String) {
-        for b in s.utf8 {
-            storage.strings.append(b)
-        }
+    private mutating func appendSmartConstant(_ glyph: Unicode.Scalar) {
+        UTF8.encode(glyph) { storage.strings.append($0) }
     }
 
-    /// Appends `s` to the arena, returning its chunk.
-    private mutating func smartConstantChunk(_ s: String) -> Chunk {
+    /// Appends `glyph` to the arena, returning its chunk.
+    private mutating func smartConstantChunk(_ glyph: Unicode.Scalar) -> Chunk {
         let offset = storage.strings.count
-        appendSmartConstant(s)
+        appendSmartConstant(glyph)
         return arenaChunk(from: offset)
     }
 
     /// Replace a text node's literal with a constant smart-punctuation glyph.
-    private mutating func setSmartLiteral(of nodeIdx: DocumentStorage.Index, _ s: String) {
-        let ref = storage.intern(smartConstantChunk(s))
+    private mutating func setSmartLiteral(of nodeIdx: DocumentStorage.Index, _ glyph: Unicode.Scalar) {
+        let ref = storage.intern(smartConstantChunk(glyph))
         storage[nodeIdx].data = .literal(ref)
     }
 
@@ -1270,7 +1268,7 @@ extension BlockParser {
         let canOpen = leftFlanking && !rightFlanking && beforeChar != UInt8(ascii: "]") && beforeChar != UInt8(ascii: ")")
         let canClose = rightFlanking
         // `'` starts as an apostrophe; `"` as a closing quote when it can close, otherwise an opening one.
-        let literal: String
+        let literal: Unicode.Scalar
         if char == UInt8(ascii: "'") {
             literal = Self.rightSingleQuote
         } else {
@@ -1854,15 +1852,15 @@ extension BlockParser {
     private func matchSchemeBackward(colon: Int, content: borrowing ContentSpan) -> Int? {
         let chunkStart = content.startOffset
         if colon - 5 >= chunkStart,
-           bytesEqual(at: colon - 5, target: "https", content: content, ignoringASCIICase: true) {
+           bytesEqual(at: colon - 5, target: Self.httpsScheme, content: content, ignoringASCIICase: true) {
             return colon - 5
         }
         if colon - 4 >= chunkStart,
-           bytesEqual(at: colon - 4, target: "http", content: content, ignoringASCIICase: true) {
+           bytesEqual(at: colon - 4, target: Self.httpScheme, content: content, ignoringASCIICase: true) {
             return colon - 4
         }
         if colon - 3 >= chunkStart,
-           bytesEqual(at: colon - 3, target: "ftp", content: content, ignoringASCIICase: true) {
+           bytesEqual(at: colon - 3, target: Self.ftpScheme, content: content, ignoringASCIICase: true) {
             return colon - 3
         }
         return nil
@@ -1881,7 +1879,7 @@ extension BlockParser {
         if start + 4 > end {
             return nil
         }
-        if !bytesEqual(at: start, target: "www.", content: content) {
+        if !bytesEqual(at: start, target: Self.wwwPrefix, content: content) {
             return nil
         }
         guard domainAccepted(base: start, requirePeriod: true, content: content) else {
@@ -2164,11 +2162,17 @@ extension BlockParser {
         }
     }
 
+    /// The autolink prefixes `bytesEqual` matches, as UTF-8 bytes.
+    private static let httpsScheme = Array("https".utf8)
+    private static let httpScheme = Array("http".utf8)
+    private static let ftpScheme = Array("ftp".utf8)
+    private static let wwwPrefix = Array("www.".utf8)
+
     /// Whether `target` is at `start`. `ignoringASCIICase` folds only the comparison; the text keeps its case.
-    private func bytesEqual(at start: Int, target: String, content: borrowing ContentSpan, ignoringASCIICase: Bool = false) -> Bool {
+    private func bytesEqual(at start: Int, target: [UInt8], content: borrowing ContentSpan, ignoringASCIICase: Bool = false) -> Bool {
         let mask: UInt8 = ignoringASCIICase ? 0x20 : 0
-        for (k, targetByte) in target.utf8.enumerated() {
-            if (content[start + k] | mask) != (targetByte | mask) {
+        for k in 0..<target.count {
+            if (content[start + k] | mask) != (target[k] | mask) {
                 return false
             }
         }
