@@ -322,16 +322,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Numbers each footnote reference by the order of its definition's first reference in document order, and
     /// returns the referenced definitions in that order.
     ///
-    /// The walk covers footnote definitions too, whose content can reference other footnotes, and keeps an explicit
-    /// stack so deep nesting can't overflow the call stack.
+    /// The walk covers footnote definitions too, whose content can reference other footnotes.
     private mutating func numberFootnoteReferences() -> [DocumentStorage.Index] {
         var referencedDefs: [DocumentStorage.Index] = []
         var indices: [DocumentStorage.Index: Int] = [:]
-        var pending: [DocumentStorage.Index] = []
-        if let first = storage[documentIndex].firstChild {
-            pending.append(first)
-        }
-        while let node = pending.popLast() {
+        var parent = documentIndex
+        var child = storage[documentIndex].firstChild
+        while true {
+            guard let node = child else {
+                guard storage.ascend(from: &parent, resumingAt: &child, within: documentIndex) else {
+                    return referencedDefs
+                }
+                continue
+            }
             if case .footnoteReference(let label) = storage[node].data,
                let defIdx = storage.footnoteMap[normalizeLabel(chunk: storage.chunk(of: label))] {
                 let index: Int
@@ -344,14 +347,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
                 storage[node].kind = .footnoteReference(index: index)
             }
-            if let next = storage[node].next {
-                pending.append(next)
-            }
-            if let child = storage[node].firstChild {
-                pending.append(child)
+            if let first = storage[node].firstChild {
+                parent = node
+                child = first
+            } else {
+                child = storage[node].next
             }
         }
-        return referencedDefs
     }
 
     /// Parses `node`'s inline content in `chunk`. Arena content, with its run map from `arenaSourceMaps` when it has one, is parsed from a copy, since `parseInline` appends to the arena.
