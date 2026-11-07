@@ -2356,6 +2356,7 @@ extension BlockParser {
             return
         }
         var scratch = UniqueArray<UInt8>()
+        scratch.reserveCapacity(Int(ref.totalLength))
         materialize(ref, into: &scratch)
         let total = scratch.count
         // `content` borrows only `scratch`, so the storage mutations below don't affect it.
@@ -2452,11 +2453,12 @@ extension BlockParser {
 
     /// Whether any content byte of `ref` is `target`.
     private func contentRefContains(_ ref: ContentRef, byte target: UInt8) -> Bool {
+        let targets = SIMD16<UInt8>(repeating: target)
         for s in 0..<Int(ref.count) {
-            let chunk = storage.segments[Int(ref.first) + s].chunk
-            // Every text node is scanned, so the bytes are chosen once per segment rather than per byte.
-            let bytes = chunk.inSource ? sourceBytes : storage.strings.span
-            for k in chunk.range where bytes[k] == target { return true }
+            let bytes = contentBytes(of: storage.segments[Int(ref.first) + s].chunk)
+            if bytes.firstIndex(matching: { $0 .== targets }, or: { $0 == target }) < bytes.count {
+                return true
+            }
         }
         return false
     }
@@ -2464,9 +2466,14 @@ extension BlockParser {
     /// Copies `ref`'s content bytes into `out`.
     private func materialize(_ ref: ContentRef, into out: inout UniqueArray<UInt8>) {
         for s in 0..<Int(ref.count) {
-            let chunk = storage.segments[Int(ref.first) + s].chunk
-            for k in chunk.range { out.append(readByte(at: k, in: chunk)) }
+            out.append(copying: contentBytes(of: storage.segments[Int(ref.first) + s].chunk))
         }
+    }
+
+    /// The bytes of `chunk`, in the source or the arena.
+    @_lifetime(borrow self)
+    private func contentBytes(of chunk: Chunk) -> Span<UInt8> {
+        (chunk.inSource ? sourceBytes : storage.strings.span).extracting(chunk.range)
     }
 
     /// Where the next of a left-to-right series of `subContentRef` carves resumes: the index within the ref of a
