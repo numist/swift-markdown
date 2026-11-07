@@ -46,7 +46,7 @@ internal struct BacktickRunsSeen {
     /// The offset from which this pass's one scan to the content end began, or `nil` if no scan has reached the end.
     var scannedToEndFrom: Int?
     /// The latest start of a run of each length at or past `scannedToEndFrom`.
-    var latestStart: [Int: Int] = [:]
+    var latestStart = [Int: Int]()
 
     /// Whether the scan to the content end shows that no run of `length` backticks starts at or past `openEnd`, the end of an opening run of that length.
     func rulesOutCloser(length: Int, after openEnd: Int) -> Bool {

@@ -56,7 +56,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var deepestMatched: DocumentStorage.Index
         var allMatched: Bool
     }
-    var emptyRemainderWalks: [DocumentStorage.Index: EmptyRemainderWalk] = [:]
+    var emptyRemainderWalks = [DocumentStorage.Index: EmptyRemainderWalk]()
 
     /// Once a line's walk has continued more than this many list items and footnote definitions with nothing left of
     /// the line, `walkPastEmptyRemainder` walks the rest.
@@ -107,7 +107,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     var pendingInlines: [(DocumentStorage.Index, ContentRef)] = []
 
     /// Run maps for content that reaches the inline pass as one arena chunk (flattened, NUL-replaced or pipe-unescaped), keyed by node, so its inlines get source positions.
-    var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
+    var arenaSourceMaps = [DocumentStorage.Index: [ArenaRun]]()
 
     /// What the table check and setext underlines need to know about the open paragraph, recorded when either first
     /// needs it: the table check at the first continuation line it sees, with `.tables`, and the first underline.
@@ -162,15 +162,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// The removed paragraph still counts as a block for list looseness (Lists) and `endsWithBlankLine`, and keeps
     /// the item from counting as empty, so a blank line after it does not close the item (List items).
-    var itemsEndingInRemovedParagraph: [DocumentStorage.Index: Bool] = [:]
+    var itemsEndingInRemovedParagraph = [DocumentStorage.Index: Bool]()
 
     /// List items that directly contain a removed paragraph that held only definitions or a task list item marker,
     /// and another block with a blank line between them, which makes their list loose (Lists). Consulted by `detectLooseList`.
-    var itemsWithBlankLineAroundRemovedParagraph: Set<DocumentStorage.Index> = []
+    var itemsWithBlankLineAroundRemovedParagraph = Set<DocumentStorage.Index>()
 
     /// List items whose first block is a removed paragraph that held only definitions or a task list item marker, so
     /// no later paragraph is their first block (Task list items (extension)).
-    var itemsWithRemovedFirstParagraph: Set<DocumentStorage.Index> = []
+    var itemsWithRemovedFirstParagraph = Set<DocumentStorage.Index>()
 
     /// Reset per `parseInline` pass.
     var htmlCloserMisses = HTMLCloserMisses()
