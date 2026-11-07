@@ -12,20 +12,20 @@ extension MarkdownNode {
 
     /// A node's content, exposed as borrowed spans you inspect with a single `switch`.
     ///
-    /// The spans point into the document's storage, so a `Content` value can't outlive the node's borrow. For owned strings, or on any OS release, use `stringContent`.
+    /// Because the cases carry spans that point into the document's storage, a `Content` value can't escape the node's borrow scope or be stored - read it in place. For an owned `String` form that you can store, and that reads content on any OS release, use `stringContent`.
     ///
-    /// Textual content can span several segments, so iterate them rather than assuming one contiguous span.
+    /// Textual content is always a `Segments` sequence. Inline literals are usually a single segment, but code- and HTML-block bodies can span several - their lines are stored non-contiguously - so iterate the segments rather than assuming one contiguous span.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     public enum Content: ~Copyable, ~Escapable {
         /// No content (structural nodes: document, list, item, table, breaks, emphasis, …).
         case none
         /// Inline literal text - `.text`, `.codeInline`, `.htmlInline`.
         case text(Segments)
-        /// A code block's info string and body.
+        /// A code block: the info-string span plus the (possibly multi-line) body as segments.
         case codeBlock(info: UTF8Span, body: Segments)
-        /// An HTML block's body.
+        /// An HTML block body as segments.
         case htmlBlock(body: Segments)
-        /// A link or image destination and title, either of which may be empty.
+        /// A link or image: destination URL and title spans (either may be empty).
         case link(url: UTF8Span, title: UTF8Span)
         /// The attribute string of an `^[…]` inline attribute: the text between its parentheses as written, or for `^[text][label]` the definition's attributes with backslash escapes and character references decoded.
         case attribute(UTF8Span)
@@ -33,7 +33,9 @@ extension MarkdownNode {
         case footnote(label: UTF8Span)
     }
 
-    /// The node's content as borrowed spans. For owned strings, or on an OS release without `UTF8Span`, use `stringContent`.
+    /// The node's content as borrowed spans, the companion to `kind`.
+    ///
+    /// For an owned `String` form, or to read content on an OS release without `UTF8Span`, use `stringContent`.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     public var content: Content {
         @_lifetime(borrow self)
@@ -62,7 +64,9 @@ extension MarkdownNode {
 
 extension MarkdownNode {
 
-    /// A node's content as owned strings, which can outlive the node.
+    /// A node's content as owned `String` values, the companion to `kind`.
+    ///
+    /// Unlike `Content`, these values are `Copyable` and `Escapable`, so you can store them and let them outlive the node. Where `UTF8Span` is available, `content` provides the same information as borrowed spans, without copying.
     public enum StringContent: Sendable, Hashable {
         /// No content (structural nodes: document, list, item, table, breaks, emphasis, …).
         case none
@@ -70,9 +74,9 @@ extension MarkdownNode {
         case text(String)
         /// A code block's info string and body.
         case codeBlock(info: String, body: String)
-        /// An HTML block's body.
+        /// An HTML block body.
         case htmlBlock(body: String)
-        /// A link or image destination and title, either of which may be empty.
+        /// A link or image: destination URL and title (either may be empty).
         case link(url: String, title: String)
         /// The attribute string of an `^[…]` inline attribute: the text between its parentheses as written, or for `^[text][label]` the definition's attributes with backslash escapes and character references decoded.
         case attribute(String)
@@ -80,7 +84,9 @@ extension MarkdownNode {
         case footnote(label: String)
     }
 
-    /// The node's content as owned strings. Where `UTF8Span` is available, `content` reads it without copying.
+    /// The node's content as owned `String` values.
+    ///
+    /// For a borrowed, non-copying form where `UTF8Span` is available, use `content`.
     public var stringContent: StringContent {
         borrowing get {
             switch _view.record(at: _index).data {

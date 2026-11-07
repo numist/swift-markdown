@@ -84,12 +84,12 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
         }
     }
 
-    /// The options that controlled parsing.
+    /// The options the document was parsed with.
     public var options: MarkdownDocument.ParseOptions {
         borrowing get { _storage.options }
     }
 
-    /// The source text of the document.
+    /// The source text the document was parsed from.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     public var source: UTF8Span {
         @_lifetime(borrow self)

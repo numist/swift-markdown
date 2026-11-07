@@ -10,7 +10,9 @@
 
 /// A borrowed view of a single node in a `MarkdownDocument`'s syntax tree.
 ///
-/// A node can't outlive its document, and moving through the tree neither allocates nor copies.
+/// A node can't outlive the document that produced it, and moving through the tree neither allocates nor copies. Read a node's type from `kind`, read its content from `content` or `stringContent`, and move through the tree with `children`, `firstChild`, `parent`, `next`, and `previous`.
+///
+/// Content accessors return information appropriate to the node's `kind`. Reading content from a node that has none yields `.none`.
 public struct MarkdownNode: ~Escapable {
 
     internal let _view: StorageView
@@ -47,7 +49,7 @@ public struct MarkdownNode: ~Escapable {
 
     /// The node's first child, or `nil` if it has no children.
     ///
-    /// A navigated node shares the document's borrow, so you can reassign a `var` to walk the tree iteratively.
+    /// A navigated node shares the document's borrow, so you can store it in a `var` and reassign it, which lets you walk the tree iteratively instead of recursively.
     public var firstChild: MarkdownNode? {
         @_lifetime(copy self)
         borrowing get {
@@ -99,7 +101,7 @@ public struct MarkdownNode: ~Escapable {
 extension MarkdownNode {
     /// A node's children, returned by `MarkdownNode.children`.
     ///
-    /// Iterate the children with `forEach(_:)`, which doesn't allocate.
+    /// Iterate the children with `forEach(_:)`. Iteration doesn't allocate.
     public struct Children: ~Copyable, ~Escapable {
 
         internal let _view: StorageView
@@ -131,7 +133,7 @@ extension MarkdownNode {
 extension MarkdownNode {
     /// The literal text of a node, as an ordered sequence of contiguous UTF-8 segments.
     ///
-    /// The `.text`, `.codeBlock`, and `.htmlBlock` cases of `MarkdownNode.Content` carry it. Each segment addresses the document's bytes in place.
+    /// You obtain a value of this type from the `Segments`-bearing cases of `MarkdownNode.Content`, such as `.text`, `.codeBlock`, and `.htmlBlock`. Each segment addresses the document's bytes in place, without allocating or copying. Iterate the segments with `forEach(_:)`.
     public struct Segments: ~Copyable, ~Escapable {
 
         internal let _view: StorageView
@@ -144,7 +146,7 @@ extension MarkdownNode {
             self._ref = ref
         }
 
-        /// The number of segments.
+        /// The number of segments (`0` for empty content; `1` for the common single-range case).
         public var count: Int {
             _ref.count
         }
@@ -177,7 +179,7 @@ extension MarkdownNode {
 extension MarkdownNode {
     /// The kind of a node in the syntax tree.
     ///
-    /// Several cases carry metadata as associated values, so match a kind with `switch` or `if case` rather than `==`.
+    /// Several cases carry the node's defining metadata directly as associated values - `.heading(level:)`, `.item(checked:)`, `.list(_:)`, `.codeBlock(_:)`, `.tableRow(isHeader:)`, `.tableCell(alignment:columns:rows:)`, `.codeInline(backtickCount:)`, `.footnoteReference(index:)` - so inspect a node's kind with a `switch` or `if case` rather than `==`.
     public enum Kind: Sendable, Hashable {
         // Block kinds
 
@@ -185,11 +187,11 @@ extension MarkdownNode {
         case document
         /// A block quote (`>`-prefixed lines).
         case blockQuote
-        /// A bullet or ordered list.
+        /// A bullet or ordered list. The associated `ListInfo` carries the marker style, start number, and tightness.
         case list(ListInfo)
-        /// A list item. With `MarkdownDocument.ParseOptions.tasklist`, `checked` is a task list item's checkbox state; it is `nil` for any other item.
+        /// A list item. `checked` is `nil` for an ordinary item, or the task-list state (`true` when checked, `false` when unchecked) when the document was parsed with `MarkdownDocument.ParseOptions.tasklist`.
         case item(checked: Bool?)
-        /// A fenced or indented code block.
+        /// A fenced or indented code block. The associated `CodeBlockInfo` describes the fence.
         case codeBlock(CodeBlockInfo)
         /// A block of raw HTML.
         case htmlBlock
@@ -268,6 +270,7 @@ extension MarkdownNode {
             }
         }
 
+        /// `true` for any `.codeBlock` (fenced or indented), ignoring its `CodeBlockInfo`.
         internal var isCodeBlock: Bool {
             if case .codeBlock = self {
                 return true
@@ -275,6 +278,7 @@ extension MarkdownNode {
             return false
         }
 
+        /// `true` for any `.list`, ignoring its `ListInfo`.
         internal var isList: Bool {
             if case .list = self {
                 return true

@@ -23,6 +23,8 @@ extension MarkdownDocument {
 
         /// Creates a set of parse options from a raw bit mask.
         ///
+        /// Prefer combining the named options, such as `.tables` or `.footnotes`, rather than constructing a value from a raw bit mask directly.
+        ///
         /// - Parameter rawValue: The bit mask that represents the options.
         public init(rawValue: Int) {
             self.rawValue = rawValue

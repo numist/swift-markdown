@@ -8,29 +8,36 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// ASCII byte classes shared by the parsers, inlined because they sit in hot scanning loops.
+/// Shared ASCII byte-classifier predicates on `UInt8`.
+///
+/// The parsers work over raw UTF-8 bytes, so these live on `UInt8` rather than any one parser type - `BlockParser`, the InlineParser extensions, and `EntityParser` all classify bytes and none should re-derive the ranges inline. They're `@inline(__always)` because they sit in the hot byte-scanning loops.
 extension UInt8 {
+    /// ASCII letter: `a`-`z` or `A`-`Z`.
     @inline(__always)
     var isASCIILetter: Bool {
         (self >= UInt8(ascii: "a") && self <= UInt8(ascii: "z"))
             || (self >= UInt8(ascii: "A") && self <= UInt8(ascii: "Z"))
     }
 
+    /// Uppercase ASCII letter: `A`-`Z`.
     @inline(__always)
     var isUppercaseASCIILetter: Bool {
         self >= UInt8(ascii: "A") && self <= UInt8(ascii: "Z")
     }
 
+    /// ASCII decimal digit: `0`-`9`.
     @inline(__always)
     var isASCIIDigit: Bool {
         self >= UInt8(ascii: "0") && self <= UInt8(ascii: "9")
     }
 
+    /// Space or horizontal tab (ASCII "blank").
     @inline(__always)
     var isSpaceOrTab: Bool {
         self == UInt8(ascii: " ") || self == UInt8(ascii: "\t")
     }
 
+    /// Space, horizontal tab, line feed, or carriage return.
     @inline(__always)
     var isSpaceTabOrLineEnding: Bool {
         self == UInt8(ascii: " ") || self == UInt8(ascii: "\t")

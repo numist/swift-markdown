@@ -1194,6 +1194,7 @@ extension BlockParser {
         }
         let numHyphens = runEnd - start
         if numHyphens < 2 {
+            // Lone hyphen: leave it in pending text (identical output, no extra node).
             return runEnd
         }
         var enCount = 0
@@ -1367,6 +1368,7 @@ extension BlockParser {
         if start < end,
            readByte(at: start, in: chunk) == UInt8(ascii: " "),
            readByte(at: end - 1, in: chunk) == UInt8(ascii: " ") {
+            // Verify there's at least one non-space byte strictly between the two enclosing spaces. For 1- and 2-byte runs there are no inner bytes, so the strip rule doesn't apply.
             let innerStart = start + 1
             let innerEnd = end - 1
             var hasNonSpace = false

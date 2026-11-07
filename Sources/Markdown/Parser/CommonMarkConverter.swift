@@ -213,8 +213,9 @@ struct MarkupParser {
         }
     }
 
-    /// Convert a `.table` node, grouping its header row and body rows into `tableHead` and `tableBody`
-    /// and taking per-column alignments from the header cells.
+    /// Convert a `.table` node, regrouping cmark-swift's flat header/body rows into swift-markdown's
+    /// `tableHead` + `tableBody` shape and deriving per-column alignments from the header cells.
+    /// Tables are shallow, so cell contents are converted via the (iterative) `convert` driver.
     private static func convertTable(_ node: borrowing MarkdownNode, parsedRange: SourceRange?, source: URL?, options: ParseOptions) -> RawMarkup {
         var header: RawMarkup?
         var bodyRows: [RawMarkup] = []
@@ -258,6 +259,7 @@ struct MarkupParser {
         }
 
         let head = header ?? .tableHead(parsedRange: nil, columns: [])
+        // Body spans the first body row's start through the table's end.
         let bodyRange: SourceRange?
         if let start = firstBodyRowStart, let tableEnd = parsedRange?.upperBound {
             bodyRange = start..<tableEnd
