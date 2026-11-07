@@ -9,7 +9,7 @@
 */
 
 /// A type for adjusting the columns of elements that are parsed in *line runs*
-/// of the block directive parser to their locations before their indentation is trimmed.
+/// of the block directive parser to their locations before their indentation was trimmed.
 struct RangeAdjuster: MarkupWalker {
     /// The line number of the first line in the line run that needs adjustment.
     var startLine: Int

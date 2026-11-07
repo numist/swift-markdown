@@ -45,31 +45,39 @@ internal struct DocumentStorage: ~Copyable {
         internal static let unset = SourceByteRange(start: -1, end: -1)
     }
 
-    /// The source offset at which each line begins; index `i` is line `i + 1`. Built only with `.sourcePosition`.
+    /// Byte offset (into the original source, post-BOM) at which each line begins.
+    ///
+    /// Index `i` holds the start of line `i+1`. Built during `parse()` ONLY when `.sourcePosition` is set; empty otherwise. Used to convert a node's byte range into 1-based (line, column) positions.
     internal var lineStarts: UniqueArray<Int> = UniqueArray()
 
     /// Each node's source range, index-aligned with `nodes`. Built only with `.sourcePosition`.
     internal var sourceRanges: UniqueArray<SourceByteRange> = UniqueArray()
 
+    /// Parse options used to create this document.
     internal let options: MarkdownDocument.ParseOptions
 
+    /// `true` when source-position tracking is on.
     internal var positionsEnabled: Bool {
         options.contains(.sourcePosition)
     }
 
     internal init(options: MarkdownDocument.ParseOptions) {
         self.options = options
-        // Byte 0 is a shared `"\n"`, so multi-line content joins its lines without copying a `\n` per join.
+        // Reserve byte 0 of the additions arena as a shared `"\n"`. Multi-line code/HTML block bodies (and any future multi-segment join) reference this single byte via `newlineSegment` for their line separators instead of copying a `\n` into the arena per join.
         strings = UniqueArray(repeating: UInt8(ascii: "\n"), count: 1)
     }
 
+    /// The arena offset of the shared interned `"\n"` byte reserved in `init`.
     internal static let newlineOffset: Int32 = 0
 
+    /// A `Segment` addressing the shared interned `"\n"`.
+    ///
+    /// Used as the line separator when a node's content is accumulated as a segment list (e.g. multi-line code blocks), so joins cost a pooled `Segment` entry rather than a copied byte.
     internal var newlineSegment: Segment {
         Segment(offset: Self.newlineOffset, length: 1, inSource: false)
     }
 
-    /// Appends a node unlinked; the caller links it into the tree.
+    /// Append a new node and return its index. The caller is responsible for wiring sibling/child links.
     internal mutating func appendNode(_ record: NodeRecord) -> Index {
         let idx = Index(nodes.count)
         nodes.append(record)
@@ -87,6 +95,7 @@ internal struct DocumentStorage: ~Copyable {
         }
     }
 
+    /// Record the half-open source byte offset just past `node`'s last content byte.
     internal mutating func setSourceEnd(_ node: Index, _ offset: Int?) {
         if let offset, positionsEnabled {
             sourceRanges[node].end = offset
@@ -139,6 +148,7 @@ internal struct DocumentStorage: ~Copyable {
         set { nodes[index] = newValue }
     }
 
+    /// Append `childIndex` as a child of `parentIndex`. Maintains the `firstChild` / `lastChild` / `next` / `previous` invariants.
     internal mutating func appendChild(_ childIndex: Index, to parentIndex: Index) {
         nodes[childIndex].parent = parentIndex
         if let existingLast = nodes[parentIndex].lastChild {
@@ -185,7 +195,9 @@ internal struct DocumentStorage: ~Copyable {
         nodes[childIndex].next = nil
     }
 
-    /// `newChild` must not be linked anywhere.
+    /// Insert `newChild` immediately after `referenceChild` in the parent's child list.
+    ///
+    /// The new child must not already be linked anywhere. Used during emphasis resolution to splice a fresh `.emphasis` / `.strong` node between the opener's and closer's surrounding text.
     internal mutating func insertChildAfter(_ newChild: Index, after referenceChild: Index) {
         let parent = nodes[referenceChild].parent
         let next = nodes[referenceChild].next
@@ -200,7 +212,9 @@ internal struct DocumentStorage: ~Copyable {
         }
     }
 
-    /// `newChild` must not be linked anywhere.
+    /// Insert `newChild` immediately before `referenceChild` in the parent's child list.
+    ///
+    /// Mirror of `insertChildAfter`. Used by link/image resolution to splice the new `.link` / `.image` node into the position of the opening `[` text node before reparenting the inner siblings.
     internal mutating func insertChildBefore(_ newChild: Index, before referenceChild: Index) {
         let parent = nodes[referenceChild].parent
         let prev = nodes[referenceChild].previous

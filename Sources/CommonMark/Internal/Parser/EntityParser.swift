@@ -24,7 +24,7 @@ internal enum EntityParser {
     // MARK: - HTML entities
 
     internal struct EntityMatch {
-        /// The decoded UTF-8, in the first `count` bytes. Entity values are at most 6 bytes and numeric references at most 4.
+        /// Decoded UTF-8 bytes, stored inline (no heap allocation). Named-entity values are at most 6 bytes (the longest entry in `HTMLEntities.entityValueBuffer`) and numeric entities at most 4, so 8 is a safely oversized fixed capacity. `count` is the number of leading bytes that are valid.
         var bytes: Bytes8
         var count: Int
         var afterSemi: Int
@@ -43,7 +43,7 @@ internal enum EntityParser {
         return matchNamedEntity(start: start, end: end, source: source)
     }
 
-    /// Matches `&#` and 1–7 decimal digits, or `&#x` or `&#X` and 1–6 hexadecimal digits, then `;`.
+    /// Match `&#NNN;` (decimal, 1–7 digits) or `&#xHHH;` / `&#XHHH;` (hex, 1–6 digits).
     private static func matchNumericEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
         var i = start + 2 // past `&#`
         if i >= end {
@@ -85,7 +85,7 @@ internal enum EntityParser {
             return nil
         }
         let afterSemi = i + 1
-        // U+0000 and anything that is not a Unicode scalar value become U+FFFD.
+        // Validate codepoint per CommonMark / Unicode.
         if n == 0 || n > 0x10FFFF || (n >= 0xD800 && n <= 0xDFFF) {
             let encoded = encodeCodepointUTF8(0xFFFD)
             return EntityMatch(bytes: encoded.bytes, count: encoded.count, afterSemi: afterSemi)
@@ -94,8 +94,9 @@ internal enum EntityParser {
         return EntityMatch(bytes: encoded.bytes, count: encoded.count, afterSemi: afterSemi)
     }
 
-    /// Matches `&name;` against `HTMLEntities.entityNames`.
+    /// Match `&name;` against the embedded HTML entity table (binary search over `HTMLEntities.entityNames`).
     private static func matchNamedEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
+        // Scan name: ASCII letters or digits.
         var i = start + 1
         while i < end {
             let b = source[i]
@@ -114,7 +115,7 @@ internal enum EntityParser {
         let afterSemi = i + 1
         if let idx = lookupEntity(range: nameRange, source: source) {
             let off = HTMLEntities.entityValueOffsets[idx]
-            // Each value ends where the next begins; a sentinel offset ends the last.
+            // Length is derived from the next offset: values are packed contiguously in index order, and a trailing sentinel offset (== buffer count) gives the final entry its end.
             let len = HTMLEntities.entityValueOffsets[idx + 1] - off
             var bytes = Bytes8()
             for k in 0..<len {
@@ -125,7 +126,9 @@ internal enum EntityParser {
         return nil
     }
 
-    /// The index in `HTMLEntities.entityNames` of the name spanning `range`.
+    /// Binary search the entity-name table for a name spanning `range`.
+    ///
+    /// Returns the index into `HTMLEntities.entityNames` or nil.
     private static func lookupEntity(range: Range<Int>, source: Span<UInt8>) -> Int? {
         var lo = 0
         var hi = HTMLEntities.entityNames.count
@@ -162,6 +165,7 @@ internal enum EntityParser {
         return nameLen - inputLen
     }
 
+    /// Encode a single Unicode codepoint to its UTF-8 byte representation, returned inline with a valid-byte count.
     private static func encodeCodepointUTF8(_ cp: UInt32) -> (bytes: Bytes8, count: Int) {
         var bytes = Bytes8()
         if cp < 0x80 {

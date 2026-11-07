@@ -28,7 +28,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
         lineRange = 0..<0
         nextStart = 0
 
-        // Skip a leading UTF-8 byte order mark.
+        // Skip a leading UTF-8 byte-order mark (U+FEFF encodes as the three bytes EF BB BF).
         if source.count >= 3,
            source[0] == 0xEF, source[1] == 0xBB, source[2] == 0xBF {
             self.source = source.extracting(3..<source.count)
@@ -38,6 +38,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
 
     @_lifetime(copy self)
     internal mutating func next() -> Span<UInt8>? {
+        // Start the next line at the last line's end (offset into the original source).
         let start = nextStart
         let bytes = source
         let count = bytes.count
@@ -65,7 +66,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
             let line = bytes.extracting(0..<i)
             lineRange = start..<(start + i)
 
-            // Consume the line ending. A `\r` immediately followed by `\n` is a single line ending.
+            // Consume the terminator. A `\r` immediately followed by `\n` is a single CRLF terminator.
             let b = bytes[i]
             var terminatorEnd = i + 1
             if b == UInt8(ascii: "\r"), terminatorEnd < count, bytes[terminatorEnd] == UInt8(ascii: "\n") {
@@ -76,7 +77,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
             return line
         }
 
-        // End of input without a line ending.
+        // EOF without terminator.
         lineRange = start..<(start + count)
         nextStart = lineRange.upperBound
         let result = source

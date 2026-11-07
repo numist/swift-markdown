@@ -2219,7 +2219,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var lo = 0
         var hi = segs.count
 
-        // Fenced code emits a separator before its first line; indented code doesn't.
+        // Drop a leading separator (fenced code's "appendNewline then addLine" emits one before the first body line; indented code's first line has none).
         var strippedLeading = false
         if lo < hi && segs[lo] == nl {
             lo += 1
@@ -2253,7 +2253,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         segs.removeSubrange(hi..<segs.count)
         segs.removeSubrange(0..<lo)
-        // End with one line ending. A fenced block ending on a blank line keeps it, using the separator dropped in front.
+        // Ensure a single trailing newline. For fenced code, re-add the separator we conceptually moved from the leading strip (so a block ending on a blank line keeps that blank).
         if segs[segs.count - 1] != nl {
             segs.append(nl)
         } else if isFenced && strippedLeading {

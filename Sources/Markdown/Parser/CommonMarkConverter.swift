@@ -88,11 +88,11 @@ struct MarkupParser {
 
     /// Convert the subtree rooted at `root` into `RawMarkup`.
     ///
-    /// Iterative rather than recursive, because block quotes and lists can nest deeply enough to
-    /// overflow the call stack. `accStack[d]` holds the converted children accumulated for the open
-    /// ancestor at depth `d`; a node is built once all its children are collected (post-order). Tables
-    /// are built whole by `convertTable` and not descended into, since grouping their rows into head
-    /// and body needs the original node structure.
+    /// Iterative (explicit heap stack) rather than recursive: documents can nest thousands of levels
+    /// deep (e.g. 15k nested block quotes), which would overflow the call stack. `accStack[d]` holds
+    /// the converted children accumulated for the open ancestor at depth `d`; a node is built once all
+    /// its children are collected (post-order). Tables are built atomically by `convertTable` and not
+    /// descended into, since their head/body regrouping needs the original node structure.
     private static func convert(_ root: borrowing MarkdownNode, source: URL?, options: ParseOptions) -> RawMarkup {
         var accStack: [[RawMarkup]] = [[]]
         var node = copy root
@@ -222,8 +222,9 @@ struct MarkupParser {
         }
     }
 
-    /// Convert a `.table` node, grouping its header row and body rows into `tableHead` and `tableBody`
-    /// and taking per-column alignments from the header cells.
+    /// Convert a `.table` node, regrouping cmark-swift's flat header/body rows into swift-markdown's
+    /// `tableHead` + `tableBody` shape and deriving per-column alignments from the header cells.
+    /// Tables are shallow, so cell contents are converted via the (iterative) `convert` driver.
     private static func convertTable(_ node: borrowing MarkdownNode, parsedRange: SourceRange?, source: URL?, options: ParseOptions) -> RawMarkup {
         var header: RawMarkup?
         var bodyRows: [RawMarkup] = []
@@ -267,6 +268,7 @@ struct MarkupParser {
         }
 
         let head = header ?? .tableHead(parsedRange: nil, columns: [])
+        // Body spans the first body row's start through the table's end.
         let bodyRange: SourceRange?
         if let start = firstBodyRowStart, let tableEnd = parsedRange?.upperBound {
             bodyRange = start..<tableEnd

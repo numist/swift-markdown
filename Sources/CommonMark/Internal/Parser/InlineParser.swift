@@ -215,7 +215,7 @@ extension BlockParser {
                 }
 
             default:
-                // Skip plain text to the next significant byte; the skipped run stays pending.
+                // Plain text: SIMD-skip to the next inline-significant byte instead of stepping one byte at a time. The skipped run stays pending and is flushed when that byte emits.
                 cursor = content.nextSignificant(
                     from: cursor,
                     strikethrough: strikethroughEnabled,
@@ -1049,6 +1049,7 @@ extension BlockParser {
             let closerChar = delimiters[c].character
             let charIdx = charIndex(for: closerChar)
             let lenMod = delimiters[c].length % 3
+            // Look backward for first matching opener.
             var opener = delimiters[c].previous
             var openerFound = false
             while let o = opener, o > stackBottom,
@@ -1254,6 +1255,7 @@ extension BlockParser {
         }
         let numHyphens = runEnd - start
         if numHyphens < 2 {
+            // Lone hyphen: leave it in pending text (identical output, no extra node).
             return runEnd
         }
         var enCount = 0
@@ -1431,6 +1433,7 @@ extension BlockParser {
         if start < end,
            readByte(at: start, in: chunk) == UInt8(ascii: " "),
            readByte(at: end - 1, in: chunk) == UInt8(ascii: " ") {
+            // Verify there's at least one non-space byte strictly between the two enclosing spaces. For 1- and 2-byte runs there are no inner bytes, so the strip rule doesn't apply.
             let innerStart = start + 1
             let innerEnd = end - 1
             var hasNonSpace = false
@@ -1810,7 +1813,7 @@ extension BlockParser {
         return i
     }
 
-    // MARK: - Extended autolinks
+    // MARK: - GFM extended autolinks
 
     /// The form of an extended autolink, which decides the scheme prefix its destination gets.
     private enum GFMAutolinkForm {

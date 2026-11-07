@@ -145,7 +145,7 @@ extension Markup {
 // MARK: - Public API
 
 extension Markup {
-    /// The element's source range, or `nil` for an element not produced by parsing.
+    /// The text range where this element was parsed, or `nil` if it was constructed outside of parsing.
     ///
     /// - Complexity: `O(height)` (The root element holds range information for its subtree)
     public var range: SourceRange? {

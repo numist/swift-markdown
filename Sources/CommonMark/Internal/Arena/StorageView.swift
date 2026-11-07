@@ -31,7 +31,7 @@ internal struct StorageView: ~Escapable, Copyable {
 
     /// The 1-based line and byte column of a source byte. Requires a populated `lineStarts`.
     internal func position(ofByte offset: Int) -> MarkdownNode.SourcePosition {
-        // Binary search for the last line starting at or before `offset`.
+        // Largest line index `i` with lineStarts[i] <= offset (binary search; lineStarts is ascending).
         var lo = 0
         var hi = lineStarts.count
         while lo < hi {
