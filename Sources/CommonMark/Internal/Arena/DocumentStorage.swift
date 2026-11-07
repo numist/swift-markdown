@@ -17,7 +17,7 @@ internal struct DocumentStorage: ~Copyable {
     /// All nodes in creation order; the document is index 0. The initial capacity fits a typical inline-only document.
     internal var nodes: UniqueArray<NodeRecord> = UniqueArray(minimumCapacity: 16)
 
-    /// Arena for bytes that aren't a contiguous range of the source, such as decoded entities and autolink scheme prefixes. Source bytes are never copied here.
+    /// Arena for bytes that aren't a contiguous range of the source, such as decoded entities, autolink scheme prefixes, and content whose lines are flattened from several source ranges.
     internal var strings: UniqueArray<UInt8>
 
     /// Append-only pool that `ContentRef`s slice.

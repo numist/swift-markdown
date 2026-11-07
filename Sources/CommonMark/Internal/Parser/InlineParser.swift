@@ -1072,7 +1072,7 @@ extension BlockParser {
             }
             let oldCloser = c
             if closerChar == UInt8(ascii: "'") || closerChar == UInt8(ascii: "\"") {
-                // A quote closer already has its closing glyph from `handleQuoteDelim`. Re-interning it would move its segment to the pool's end, so `consolidateTextNodes` could not merge it with its neighbours (the apostrophe in `it's`).
+                // A quote closer already has its closing glyph from `handleQuoteDelim`. Re-interning it would move its segment to the pool's end, so `consolidateTextNodes` would copy it and its neighbours (the apostrophe in `it's`) to merge them instead of widening their run in place.
                 let single = closerChar == UInt8(ascii: "'")
                 let next = delimiters[c].next
                 if openerFound, let opener {

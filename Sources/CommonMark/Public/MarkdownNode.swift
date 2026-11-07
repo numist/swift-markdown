@@ -224,7 +224,7 @@ extension MarkdownNode {
         case softBreak
         /// A hard line break (a line ending with two or more spaces or a backslash).
         case lineBreak
-        /// An inline code span. `backtickCount` is the length of each delimiter run, which the node's source range excludes.
+        /// An inline code span. `backtickCount` is the length of each delimiter run, which the node's source range includes.
         case codeInline(backtickCount: Int)
         /// An inline span of raw HTML.
         case htmlInline

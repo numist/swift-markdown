@@ -46,7 +46,7 @@ internal struct NodeRecord {
     internal var parent: DocumentStorage.Index?
     internal var data: NodeData?
 
-    /// Whether the last line processed while this node was open was blank; drives tight/loose list detection.
+    /// Whether a blank line ends this node, for tight/loose list detection; `handleBlankLine` sets it on the deepest container the blank line continues, unless that is a block quote, and on that container's last block.
     internal var lastLineBlank: Bool = false
 
     internal init(
