@@ -18,7 +18,7 @@ struct RangeAdjuster: MarkupWalker {
     var ranges: RangeTracker
 
     /// An array of whitespace spans that were removed for each line, indexed
-    /// by line number. `nil` means that no whitespace was removed on that line.
+    /// by line number. `0` means that no whitespace was removed on that line.
     var trimmedIndentationPerLine: [Int]
 
     mutating func defaultVisit(_ markup: Markup) {
