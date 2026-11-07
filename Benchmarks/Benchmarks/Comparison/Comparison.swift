@@ -66,6 +66,8 @@ let inlineSamples = [
     "Here is a longer line that weaves together many *emphasis* runs, **strong emphasis** spans, `code spans`, and [hyperlinks](https://example.com/very/long/path?q=value) so the inline parser builds and unwinds a deep delimiter stack while resolving links and adjacent **bold**`code`*italic* runs.",
 ]
 
+let inlineSwiftOptions: MarkdownDocument.ParseOptions = [.inlineOnly, .attributes]
+
 let inlineFiles = inlineSamples.map { content in
     PreparedFile(
         name: "inline-\(content.utf8.count)b",
@@ -251,7 +253,7 @@ let benchmarks: @Sendable () -> Void = {
     Benchmark("Parse inline strings (cmark-swift, inline-only)") { benchmark in
         for _ in benchmark.scaledIterations {
             for file in inlineFiles {
-                MarkdownDocument.withParsedDocument(file.content, options: [.inlineOnly, .attributes]) { document in blackHole(document.root.kind) }
+                MarkdownDocument.withParsedDocument(file.content, options: inlineSwiftOptions) { document in blackHole(document.root.kind) }
             }
         }
     }
