@@ -525,7 +525,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func addLine(range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         // Code and HTML block bodies, which are never inline-parsed, accumulate as segments.
         let nodeKind = storage[node].kind
-        if nodeKind.isCodeBlock || nodeKind == .htmlBlock {
+        if nodeKind.isCodeBlock || nodeKind.isHTMLBlock {
             return addLineSegment(range: range, to: node, pending: pending)
         }
         switch take(pending, ifNode: node) {
@@ -558,7 +558,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Appends a line join to `node`'s pending content. A `.lazy` range defers it (`joinPending`), so the next `addLine` can keep the run zero-copy.
     private mutating func appendNewline(to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         let nodeKind = storage[node].kind
-        if nodeKind.isCodeBlock || nodeKind == .htmlBlock {
+        if nodeKind.isCodeBlock || nodeKind.isHTMLBlock {
             return appendSegment(storage.newlineSegment, to: node, pending: pending)
         }
         switch take(pending, ifNode: node) {
@@ -989,7 +989,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         // PHASE 2a: Code-block / HTML-block continuation.
         let openKind = storage[current].kind
-        if openKind.isCodeBlock || openKind == .htmlBlock {
+        if openKind.isCodeBlock || openKind.isHTMLBlock {
             let leaf = continueOrCloseLeafBlock(lineRange: lineRange, cursor: cursor, prefixColumns: prefixColumns, allMatched: allMatched, pending: pending)
             let leafStillOpen = leaf.stillOpen
             pending = leaf.pending
@@ -1117,7 +1117,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// A table-pending paragraph is a table, so a `-` or `=` line can't underline it (`r\n|-\n=` is a table with a `=` body row).
     private mutating func underlineParagraph(line: inout LineContext, pending: inout PendingLeaf?) -> Bool {
         let lineRange = line.lineRange
-        guard line.openKind == .paragraph && line.allMatched && !openParagraphIsTablePending && line.indent < 4,
+        guard line.openKind.isParagraph && line.allMatched && !openParagraphIsTablePending && line.indent < 4,
               let level = matchSetextUnderline(range: line.cursor..<lineRange.upperBound, firstNonSpace: line.firstNonSpace) else {
             return false
         }
@@ -1200,7 +1200,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             && (currentLineIsLazyContinuation
                 || line.indent >= 4
                 || isLonePipeRow(range: line.firstNonSpace..<lineRange.upperBound))
-        if line.openKind != .paragraph || breaksOutOfPendingTable {
+        if !line.openKind.isParagraph || breaksOutOfPendingTable {
             return false
         }
         // `mightStartBlock` covers every matcher's first byte, so prose skips the ladder. A list marker interrupts the
@@ -1689,7 +1689,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
 
             // Type 7 can't interrupt a paragraph (HTML blocks).
-            let allowType7 = storage[current].kind != .paragraph
+            let allowType7 = !storage[current].kind.isParagraph
             if indent < 4, let htmlType = matchHTMLBlockStart(
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
@@ -1699,7 +1699,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
 
             // An indented code block can't interrupt a paragraph (Indented code blocks).
-            if indent >= 4 && storage[current].kind != .paragraph {
+            if indent >= 4 && !storage[current].kind.isParagraph {
                 return openIndentedCode(lineRange: lineRange, cursor: cursor, column: column, pending: pending)
             }
 
@@ -1818,7 +1818,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     @inline(__always)
     private mutating func openParagraph(lineRange: Range<Int>, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         let textRange = firstNonSpace..<lineRange.upperBound
-        precondition(storage[current].kind != .paragraph, "dispatch starts below the deepest matched container and opens only containers before a leaf, so `current` is never a paragraph here")
+        precondition(!storage[current].kind.isParagraph, "dispatch starts below the deepest matched container and opens only containers before a leaf, so `current` is never a paragraph here")
         assert(openParagraphTableState == nil, "the previous paragraph closed before this one opens")
         let paragraphIdx = addChild(kind: .paragraph, parent: current, start: firstNonSpace)
         current = paragraphIdx

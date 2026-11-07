@@ -2253,8 +2253,8 @@ extension BlockParser {
                 }
                 continue
             }
-            if storage[current].kind == .text {
-                while let next = storage[current].next, storage[next].kind == .text {
+            if storage[current].kind.isText {
+                while let next = storage[current].next, storage[next].kind.isText {
                     mergeTextNode(next, into: current)
                 }
             } else {
