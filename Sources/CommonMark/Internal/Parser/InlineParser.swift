@@ -2470,12 +2470,6 @@ extension BlockParser {
         }
     }
 
-    /// The bytes of `chunk`, in the source or the arena.
-    @_lifetime(borrow self)
-    private func contentBytes(of chunk: Chunk) -> Span<UInt8> {
-        (chunk.inSource ? sourceBytes : storage.strings.span).extracting(chunk.range)
-    }
-
     /// Where the next of a left-to-right series of `subContentRef` carves resumes: the index within the ref of a
     /// segment beginning at or before the carve, and that segment's content offset.
     private struct ContentRefCarvePosition {

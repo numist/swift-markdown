@@ -417,13 +417,7 @@ extension BlockParser {
 
     /// Normalizes a link label for matching (Links): trims whitespace, collapses interior runs to one space, and applies the Unicode case fold. Whitespace includes line tabulation and form feed.
     internal func normalizeLabel(chunk: Chunk) -> String {
-        let span = if chunk.inSource {
-            sourceBytes.extracting(chunk.range)
-        } else {
-            storage.strings.span.extracting(chunk.range)
-        }
-
-        return Self.normalizeLabel(span)
+        Self.normalizeLabel(contentBytes(of: chunk))
     }
 
     /// A label within one segment is read from its chunk; one spanning a line ending is read through

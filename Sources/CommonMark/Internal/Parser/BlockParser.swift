@@ -647,7 +647,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if isKnownFreeOfNUL(chunk) {
             return false
         }
-        let bytes = chunk.inSource ? sourceBytes.extracting(chunk.range) : storage.strings.span.extracting(chunk.range)
+        let bytes = contentBytes(of: chunk)
         return Self.firstNUL(in: bytes) < bytes.count
     }
 
@@ -3189,6 +3189,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         chunk.inSource ? sourceBytes[offset] : storage.strings[offset]
     }
 
+    /// The bytes of `chunk`, in the source or the arena.
+    @_lifetime(borrow self)
+    func contentBytes(of chunk: Chunk) -> Span<UInt8> {
+        (chunk.inSource ? sourceBytes : storage.strings.span).extracting(chunk.range)
+    }
+
     /// The raw content of the paragraph `node` whose trimmed lines are `trimmed`: what follows its leading link
     /// reference definitions, from its first non-whitespace byte, less any task list item marker. `trailingSeparator` is
     /// the byte after `trimmed` on its line.
@@ -3448,23 +3454,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return chunk
         }
         
-        let endOff = chunk.offset + chunk.length
-        var hasEscape = false
-        for i in chunk.offset..<endOff {
-            let b = readByte(at: i, in: chunk)
-            if backslashEscapes, b == UInt8(ascii: "\\"), i + 1 < endOff,
-               readByte(at: i + 1, in: chunk).isASCIIPunct {
-                hasEscape = true
-                break
-            }
-            if b == UInt8(ascii: "&") {
-                hasEscape = true
-                break
-            }
-        }
-        if !hasEscape {
+        if !hasURLEscape(chunk, backslashEscapes: backslashEscapes) {
             return chunk
         }
+        let endOff = chunk.offset + chunk.length
         let outOffset = storage.strings.count
         var j = chunk.offset
         while j < endOff {
@@ -3495,6 +3488,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             j += 1
         }
         return arenaChunk(from: outOffset)
+    }
+
+    /// Whether `chunk` holds a character reference or, with `backslashEscapes`, a backslash escape.
+    private func hasURLEscape(_ chunk: Chunk, backslashEscapes: Bool) -> Bool {
+        let bytes = contentBytes(of: chunk)
+        for i in 0..<bytes.count {
+            let b = bytes[i]
+            if backslashEscapes, b == UInt8(ascii: "\\"), i + 1 < bytes.count, bytes[i + 1].isASCIIPunct {
+                return true
+            }
+            if b == UInt8(ascii: "&") {
+                return true
+            }
+        }
+        return false
     }
 
     /// The arena bytes from `offset` to the arena's end, as just appended.
