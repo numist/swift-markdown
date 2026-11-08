@@ -1140,8 +1140,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             indent: line.indent,
             baseColumn: line.prefixColumns,
             currentKind: .paragraph,
-            interruptsParagraph: true,
-            lineStart: lineRange.lowerBound
+            interruptsParagraph: true
         )
         if continuesParagraph {
             // These leading definitions are registered already; restoring them below lets the
@@ -1212,8 +1211,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 indent: line.indent,
                 baseColumn: line.prefixColumns,
                 currentKind: line.openKind,
-                interruptsParagraph: interruptsParagraph,
-                lineStart: lineRange.lowerBound
+                interruptsParagraph: interruptsParagraph
             )
         if canInterrupt {
             return false
@@ -1407,7 +1405,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Whether the line starts a block that ends the open paragraph.
     ///
     /// `interruptsParagraph` is `false` when only a container shallower than the paragraph's matched, so a list marker starts a sibling item.
-    private func lineStartsNewBlock(range: Range<Int>, firstNonSpace: Int, indent: Int, baseColumn: Int, currentKind: MarkdownNode.Kind, interruptsParagraph: Bool, lineStart: Int) -> Bool {
+    private func lineStartsNewBlock(range: Range<Int>, firstNonSpace: Int, indent: Int, baseColumn: Int, currentKind: MarkdownNode.Kind, interruptsParagraph: Bool) -> Bool {
         // A line indented four or more columns starts no block that interrupts a paragraph.
         if indent >= 4 {
             return false
@@ -1438,7 +1436,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return true
         }
         // A list marker interrupts a paragraph only if it starts a non-empty item, and an ordered one only from 1 (List items, Lists), at every level: `- a\n  2. b` keeps `2. b` as text, while in `1. a\n2. b` the item didn't match, so `2.` opens a sibling item.
-        if let marker = matchListMarker(range: range, firstNonSpace: firstNonSpace, lineStart: lineStart, indent: indent) {
+        if let marker = matchListMarker(range: range, firstNonSpace: firstNonSpace, markerColumn: baseColumn + indent, indent: indent) {
             if marker.isEmpty {
                 // `- a\n  +` and `a\n+` keep `+` as text; in `> a\n+` the block quote didn't match, so `+` opens a list.
                 return !interruptsParagraph
@@ -1602,7 +1600,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if isBlank {
                 return pending
             }
-            let indent = lineColumns.column(at: firstNonSpace, in: sourceBytes) - column
+            let firstNonSpaceColumn = lineColumns.column(at: firstNonSpace, in: sourceBytes)
+            let indent = firstNonSpaceColumn - column
 
             // An earlier marker on this line can leave `cursor` mid-tab, so the indent is measured from `column`.
             if let advanced = matchBlockQuoteMarker(
@@ -1654,7 +1653,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if indent < 4, depth < Self.maxListNesting, let marker = matchListMarker(
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
-                lineStart: lineRange.lowerBound,
+                markerColumn: firstNonSpaceColumn,
                 indent: indent
             ) {
                 pending = openListItem(marker: marker, firstNonSpace: firstNonSpace, pending: pending)
@@ -2396,10 +2395,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Matches a list marker at `firstNonSpace` (List items).
     ///
     /// `indent` is the marker's indent in columns from the column the enclosing prefixes reached, since a byte count
-    /// would under-measure a tab. The marker's own column, for the tab stops after it, is measured from `lineStart`.
+    /// would under-measure a tab. `markerColumn` is the marker's own column on its line, for the tab stops after it.
     // Inlined for the reason given in `dispatchNewBlocks`.
     @inline(__always)
-    private func matchListMarker(range: Range<Int>, firstNonSpace: Int, lineStart: Int, indent: Int) -> ListMarkerInfo? {
+    private func matchListMarker(range: Range<Int>, firstNonSpace: Int, markerColumn: Int, indent: Int) -> ListMarkerInfo? {
         let markerOffset = indent
         assert(markerOffset <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
@@ -2459,7 +2458,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         let afterMarker = firstNonSpace + markerWidth
         // The padding after the marker is measured in columns from the marker's own, so a tab counts to its stop.
-        let markerColumn = columnWidth(from: lineStart, to: firstNonSpace)
         let contentColumnAfterMarker = markerColumn + markerWidth
         // Marker must be followed by a space, tab, or end of line.
         var contentStart: Int
