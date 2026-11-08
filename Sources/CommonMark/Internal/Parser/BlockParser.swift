@@ -1410,7 +1410,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if indent >= 4 {
             return false
         }
-        if matchThematicBreak(range: range, firstNonSpace: firstNonSpace) != nil {
+        var noBreakBefore = 0
+        if matchThematicBreak(range: range, firstNonSpace: firstNonSpace, noBreakBefore: &noBreakBefore) != nil {
             return true
         }
         if matchATXHeading(range: range, firstNonSpace: firstNonSpace) != nil {
@@ -1593,6 +1594,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var lineColumns = LineColumns(lineStart: lineRange.lowerBound)
         // The depth of the block start being matched on this line; `maxListNesting` caps list opening by it.
         var depth = 0
+        var noThematicBreakBefore = startCursor
         while true {
             depth += 1
             let firstNonSpace = indexOfFirstNonSpace(range: cursor..<lineRange.upperBound)
@@ -1627,8 +1629,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 continue
             }
 
-            // Before list markers, so `- - -` is a thematic break rather than nested lists.
-            if indent < 4, let breakEnd = matchThematicBreak(range: cursor..<lineRange.upperBound, firstNonSpace: firstNonSpace) {
+            // Before list markers, so `- - -` is a thematic break rather than nested lists. A marker before
+            // `noThematicBreakBefore` skips the scan, so the nested markers of `- - - … x` scan the line once.
+            if indent < 4, firstNonSpace >= noThematicBreakBefore, let breakEnd = matchThematicBreak(
+                range: cursor..<lineRange.upperBound,
+                firstNonSpace: firstNonSpace,
+                noBreakBefore: &noThematicBreakBefore
+            ) {
                 pending = closingOpenList(pending)
                 return openThematicBreak(firstNonSpace: firstNonSpace, end: breakEnd, pending: pending)
             }
@@ -3041,11 +3048,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Matches a thematic break (Thematic breaks), returning the offset past its last marker character.
-    private func matchThematicBreak(range: Range<Int>, firstNonSpace: Int) -> Int? {
+    ///
+    /// Without a match, `noBreakBefore` becomes the offset where the match failed: the first byte that is neither the
+    /// marker character nor a space or tab, or the line's end when the markers are too few. The line from any
+    /// non-whitespace byte between `firstNonSpace` and that offset is no thematic break either, since it holds the same
+    /// marker character, and fewer of them, before that offset.
+    private func matchThematicBreak(range: Range<Int>, firstNonSpace: Int, noBreakBefore: inout Int) -> Int? {
         assert(firstNonSpace - range.lowerBound <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         let marker = sourceBytes[firstNonSpace]
         if marker != UInt8(ascii: "-") && marker != UInt8(ascii: "_") && marker != UInt8(ascii: "*") {
+            noBreakBefore = firstNonSpace
             return nil
         }
         var count = 0
@@ -3057,11 +3070,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 count += 1
                 end = i + 1
             } else if b != UInt8(ascii: " ") && b != UInt8(ascii: "\t") {
+                noBreakBefore = i
                 return nil
             }
             i += 1
         }
-        return count >= 3 ? end : nil
+        if count < 3 {
+            noBreakBefore = range.upperBound
+            return nil
+        }
+        return end
     }
 
     /// Matches an ATX heading (ATX headings).
