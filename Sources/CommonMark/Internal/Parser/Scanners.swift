@@ -28,6 +28,9 @@ internal struct BalancedParenthesesScan {
 
     /// Forgets the latest scan, for scans of other bytes.
     mutating func reset() {
+        if openers.isEmpty {
+            return
+        }
         openers.removeAll(keepingCapacity: true)
         nextOpener = 0
     }
@@ -35,6 +38,7 @@ internal struct BalancedParenthesesScan {
     /// Where a scan from `start` stops, at a `)` that closes no `(` it passed, at a byte `terminates` accepts, or at
     /// `end`, if its parentheses are balanced there. Between resets every scan reads the same bytes up to the same
     /// `end` through `byte` and `terminates`.
+    @inline(__always)
     mutating func balancedEnd(from start: Int, end: Int, byte: (Int) -> UInt8, terminates: (UInt8) -> Bool) -> Int? {
         while nextOpener < openers.count, openers[nextOpener].offset < start - 1 {
             nextOpener += 1
