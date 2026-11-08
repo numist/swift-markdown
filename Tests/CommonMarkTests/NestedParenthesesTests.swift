@@ -262,6 +262,22 @@ struct NestedParenthesesTests {
         ])
     }
 
+    @Test("`^[a](^[b](c)`: the first attribute form is unclosed, and the second holds `c`")
+    func attributeInsideUnclosedAttribute() {
+        #expect(nodes("^[a](^[b](c)") == [
+            "text ^[a](",
+            "attribute c",
+            "text b",
+        ])
+    }
+
+    @Test("`^[a](x^[b]((c)`: both attribute forms are unclosed")
+    func nestedUnclosedAttributes() {
+        #expect(nodes("^[a](x^[b]((c)") == [
+            "text ^[a](x^[b]((c)",
+        ])
+    }
+
     @Test("`^[a](x [b](c d)`: the attribute form is unclosed, and `c d` is no destination")
     func destinationInsideUnclosedAttribute() {
         #expect(nodes("^[a](x [b](c d)") == [
