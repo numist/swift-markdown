@@ -39,12 +39,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The document node, index 0.
     let documentIndex: DocumentStorage.Index
 
-    /// The block-start depth on one line at which a list marker stops opening a list, bounding the cost of deep nesting.
-    ///
-    /// Each block start on a line is one level, counting from 1. A list marker at this depth or deeper is paragraph
-    /// text, so 99 `>` followed by `- ` give no list. Nesting across lines and block quotes are uncapped.
-    static let maxListNesting = 100
-
     /// The deepest open block.
     var current: DocumentStorage.Index
 
@@ -1592,11 +1586,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var cursor = startCursor
         var column = startColumn
         var lineColumns = LineColumns(lineStart: lineRange.lowerBound)
-        // The depth of the block start being matched on this line; `maxListNesting` caps list opening by it.
-        var depth = 0
         var noThematicBreakBefore = startCursor
         while true {
-            depth += 1
             let firstNonSpace = indexOfFirstNonSpace(range: cursor..<lineRange.upperBound)
             let isBlank = firstNonSpace == lineRange.upperBound
             if isBlank {
@@ -1655,9 +1646,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 continue
             }
 
-            // Past `maxListNesting` a marker is paragraph text. Indents are in columns, so a marker a tab pushes four
-            // columns in, though fewer bytes, is indented code.
-            if indent < 4, depth < Self.maxListNesting, let marker = matchListMarker(
+            // Indents are in columns, so a marker a tab pushes four columns in, though fewer bytes, is indented code.
+            if indent < 4, let marker = matchListMarker(
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
                 markerColumn: firstNonSpaceColumn,
