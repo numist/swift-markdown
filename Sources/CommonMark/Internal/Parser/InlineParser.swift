@@ -87,6 +87,8 @@ extension BlockParser {
         let smartEnabled = storage.options.contains(.smart)
 
         htmlCloserMisses = HTMLCloserMisses()
+        destinationParentheses.reset()
+        attributeParentheses.reset()
         // Runs are recorded only once a scan has reached the content end.
         if backtickRunsSeen.scannedToEndFrom != nil {
             backtickRunsSeen = BacktickRunsSeen()
@@ -763,41 +765,15 @@ extension BlockParser {
         var afterEnd: Int
     }
 
-    /// Scans an attribute form's `(…)` interior, which may hold whitespace, parentheses balanced to depth 32, and backslash escapes.
+    /// Scans an attribute form's `(…)` interior, which may hold whitespace, balanced parentheses, and backslash escapes.
     private mutating func matchAttributeAttributes(start: Int, content: borrowing ContentSpan) -> AttributeAttributesMatch? {
         let end = content.endOffset
-        var i = start
-        var nbParen = 0
-        while i < end {
-            let c = content[i]
-            if c == UInt8(ascii: "\\") && i + 1 < end {
-                let next = content[i + 1]
-                if next.isASCIIPunct {
-                    i += 2
-                    continue
-                }
-                i += 1
-                continue
-            }
-            if c == UInt8(ascii: "(") {
-                nbParen += 1
-                if nbParen > 32 {
-                    return nil
-                }
-                i += 1
-                continue
-            }
-            if c == UInt8(ascii: ")") {
-                if nbParen == 0 {
-                    return AttributeAttributesMatch(chunk: materializedChunk(start: start, end: i, content: content), afterEnd: i)
-                }
-                nbParen -= 1
-                i += 1
-                continue
-            }
-            i += 1
+        // No byte ends the run, so a scan that stops before the end stops at the `)` closing the form.
+        guard let close = attributeParentheses.balancedEnd(from: start, end: end, byte: { content[$0] }, terminates: { _ in false }),
+              close < end else {
+            return nil
         }
-        return nil
+        return AttributeAttributesMatch(chunk: materializedChunk(start: start, end: close, content: content), afterEnd: close)
     }
 
     // MARK: - Emphasis / strong (delimiter stack)

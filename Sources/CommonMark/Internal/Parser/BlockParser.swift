@@ -145,6 +145,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Reset per `parseInline` pass.
     var backtickRunsSeen = BacktickRunsSeen()
 
+    /// Reset per `parseInline` pass.
+    var destinationParentheses = BalancedParenthesesScan()
+
+    /// Reset per `parseInline` pass.
+    var attributeParentheses = BalancedParenthesesScan()
+
     /// The character references decoded in this `parseInline` pass with positions on, in arena order: each one's
     /// decoded arena range and its source range.
     var characterReferenceSources: [(arena: Range<Int>, source: Range<Int>)] = []
