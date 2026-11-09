@@ -225,7 +225,7 @@ extension BlockParser {
         )
     }
 
-    // Each `handle` step consumes the construct starting at `cursor` and returns where scanning resumes: past the construct, or past the one byte, which stays pending text.
+    // Each `handle` step consumes the construct starting at `cursor` and returns where scanning resumes: past the construct, or past the bytes it leaves as pending text.
 
     /// A code span (Code spans). An unmatched backtick run stays pending text whole.
     private mutating func handleBackticks(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
@@ -668,7 +668,7 @@ extension BlockParser {
         appendInline(.text, .literal(storage.intern(content.chunk(offset: cursor, length: 1))), to: parent, start: cursor, end: end, content: content)
     }
 
-    /// Wrap the nodes after the opener's text in a new `kind` node spanning the virtual range `start..<end`, remove the opener's text, and resolve emphasis inside the new node with the opener's delimiter position as the floor.
+    /// Wraps the nodes after the opener's text in a new `kind` node spanning the virtual range `start..<end`, removes the opener's text, and resolves emphasis inside the new node with the opener's delimiter position as the floor.
     @inline(__always)
     private mutating func wrapBracketContent(_ kind: MarkdownNode.Kind, _ data: NodeData, openerInl: DocumentStorage.Index, delimPosition: Int, start: Int, end: Int, content: borrowing ContentSpan) {
         let wrapper = storage.appendNode(NodeRecord(kind: kind, parent: storage[openerInl].parent, data: data))
@@ -756,7 +756,6 @@ extension BlockParser {
            let scanned = matchAttributeAttributes(start: pos + 1, content: content) {
             return (.attribute(storage.intern(scanned.chunk)), scanned.afterEnd)
         }
-        // Without an attribute definition the label names none, but still belongs to the form.
         if storage.attributeReferenceMap.isEmpty {
             return (nil, matchLinkLabel(from: pos, end: end, in: content)?.afterEnd ?? pos)
         }
@@ -1164,7 +1163,7 @@ extension BlockParser {
         return arenaChunk(from: offset)
     }
 
-    /// Replace a text node's literal with a constant smart-punctuation glyph.
+    /// Replaces a text node's literal with a constant smart-punctuation glyph.
     private mutating func setSmartLiteral(of nodeIdx: DocumentStorage.Index, _ s: String) {
         let ref = storage.intern(smartConstantChunk(s))
         storage[nodeIdx].data = .literal(ref)
