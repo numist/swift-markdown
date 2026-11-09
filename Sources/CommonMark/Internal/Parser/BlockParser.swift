@@ -94,11 +94,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// No source byte from here up to `sourceReadEnd` is a NUL, so content there needs no NUL replacement.
     var nulFreeSourceStart: Int = 0
 
-    /// The source offset where the open code block's content ends, and so the block unless a closing fence follows.
-    /// For an indented code block it is just past its last line that is not blank, as blank lines following the block are
-    /// not part of it (Indented code blocks). For a fenced one it is just past its last line's content, or, when its
-    /// opening line is its last, past the info string or the opening fence.
-    var codeContentEnd: Int = 0
+    /// The source offset where the open code or HTML block's content ends, and so the block unless a closing fence
+    /// follows. For an indented code block it is just past its last line that is not blank, as blank lines following the
+    /// block are not part of it (Indented code blocks). For a fenced code block or an HTML block it is just past its last
+    /// line's content (see `contentEnd(ofLine:bodyStart:leadingSpaces:)`), or, when a fenced block's opening line is its
+    /// last, past the info string or the opening fence.
+    var blockContentEnd: Int = 0
 
     /// Inline parsing deferred until all blocks close, so a reference resolves against a definition later in the document.
     var pendingInlines: [(DocumentStorage.Index, ContentRef)] = []
@@ -578,10 +579,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return appendCodeLineCopy(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineEnd, to: node, pending: pending)
     }
 
-    /// Append the rest of an HTML block line from `cursor`, where the container prefixes ended at `column`.
-    private mutating func appendLineAfterPrefix(lineRange: Range<Int>, cursor: Int, column: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
-        let (bodyStart, leadingSpaces) = htmlLineBody(lineRange: lineRange, cursor: cursor, column: column)
-        return appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: node, pending: pending)
+    /// Where a code or HTML block line's content ends: at the line's end, or at its start when stripping the container
+    /// prefixes and indentation left no content, so a block ending with that line ends just past the line before.
+    private func contentEnd(ofLine lineRange: Range<Int>, bodyStart: Int, leadingSpaces: Int) -> Int {
+        bodyStart < lineRange.upperBound || leadingSpaces > 0 ? lineRange.upperBound : lineRange.lowerBound
     }
 
     /// Where the rest of an HTML block line from `cursor` begins, given the `column` the container prefixes reached,
@@ -1459,12 +1460,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Every other line belongs to the block; for types 1–5, the one meeting the end condition closes the block and
         // is consumed.
         pending = appendNewline(to: current, pending: pending)
-        pending = appendLineAfterPrefix(lineRange: lineRange, cursor: cursor, column: prefixColumns, to: current, pending: pending)
+        let (bodyStart, leadingSpaces) = htmlLineBody(lineRange: lineRange, cursor: cursor, column: prefixColumns)
+        blockContentEnd = contentEnd(ofLine: lineRange, bodyStart: bodyStart, leadingSpaces: leadingSpaces)
+        pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
         if htmlBlockLineMatchesEndCondition(
             type: type,
             range: cursor..<lineRange.upperBound
         ) {
-            pending = finalize(node: current, pending: pending, endsOnCurrentLine: true)
+            pending = finalize(node: current, pending: pending)
         }
         return LeafContinuation(consumedLine: true, pending: pending)
     }
@@ -1498,8 +1501,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 maxColumns: prefixColumns + info.fenceOffset - startColumn,
                 startColumn: startColumn
             )
-            // A line left empty by stripping holds no content, so the block's content ends just past the line before.
-            codeContentEnd = bodyStart < lineRange.upperBound || leadingSpaces > 0 ? lineRange.upperBound : lineRange.lowerBound
+            blockContentEnd = contentEnd(ofLine: lineRange, bodyStart: bodyStart, leadingSpaces: leadingSpaces)
             pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
             return LeafContinuation(consumedLine: true, pending: pending)
         }
@@ -1511,7 +1513,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             storage.nodes[current].lastLineBlank = isBlank
             pending = appendNewline(to: current, pending: pending)
             if !isBlank {
-                codeContentEnd = lineRange.upperBound
+                blockContentEnd = lineRange.upperBound
             }
             if indent > 4 || !isBlank {
                 // A tab straddling the fourth column is split: its leftover columns become leading spaces (Tabs).
@@ -1757,7 +1759,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             data: .codeBlock(info: infoRef, literal: .empty),
             start: firstNonSpace
         )
-        codeContentEnd = fence.infoChunk.length > 0 ? fence.infoChunk.offset + fence.infoChunk.length : firstNonSpace + fence.length
+        blockContentEnd = fence.infoChunk.length > 0 ? fence.infoChunk.offset + fence.infoChunk.length : firstNonSpace + fence.length
         current = codeIdx
     }
 
@@ -1774,6 +1776,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             start: leadingSpaces > 0 ? bodyStart - 1 : bodyStart
         )
         current = htmlIdx
+        blockContentEnd = lineRange.upperBound
         pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: htmlIdx, pending: pending)
         if htmlBlockLineMatchesEndCondition(
             type: htmlType,
@@ -1805,7 +1808,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             start: leadingSpaces > 0 ? bodyStart - 1 : bodyStart
         )
         current = codeIdx
-        codeContentEnd = lineRange.upperBound
+        blockContentEnd = lineRange.upperBound
         return appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: codeIdx, pending: pending)
     }
 
@@ -2136,7 +2139,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Closes `node`, materializes its content, and makes its parent `current`.
     ///
-    /// A block ends on the current line when `endsOnCurrentLine` (the document ends, an HTML block's end condition, a setext heading's underline) or it opened on that line; otherwise it ends on the previous line, which the current line didn't continue. A fenced code block whose last line is its opening line ends past its info string, or past its opening fence when it has none. An indented code block ends at its last line that is not blank. A container block ends just past its last content byte: where its last child ends, or where its own marker does if that is later (a block quote's `>` on the last line that has one, a list item's list marker, a footnote definition's `[^label]:`), so blank lines and trailing whitespace after its content are not part of it. A paragraph that held only link reference definitions or a task list item marker leaves no child but still counts as content, while a fenced code block's or HTML block's blank lines are its content, so a container ending in one ends on its last line. `lineContentEnd` is where a one-line ATX heading's or thematic break's content ends, or a closing fence's last fence character.
+    /// A block ends on the current line when `endsOnCurrentLine` (the document ends, a setext heading's underline) or it opened on that line; otherwise it ends on the previous line, which the current line didn't continue. A code block or HTML block ends at `blockContentEnd`, unless a closing fence ends it. A container block ends just past its last content byte: where its last child ends, or where its own marker does if that is later (a block quote's `>` on the last line that has one, a list item's list marker, a footnote definition's `[^label]:`), so blank lines and trailing whitespace after its content are not part of it. A paragraph that held only link reference definitions or a task list item marker leaves no child but still counts as content, while a fenced code block's or HTML block's blank lines are its content, so a container ending in one ends on its last line. `lineContentEnd` is where a one-line ATX heading's or thematic break's content ends, or a closing fence's last fence character.
     private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, endsOnCurrentLine: Bool = false, lineContentEnd: Int? = nil) -> PendingLeaf? {
         var pending = pending
         let kind = storage[node].kind
@@ -2150,8 +2153,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // An ATX heading, a thematic break or a closing fence ends at its trimmed content extent, not the raw
                 // line.
                 end = lineContentEnd
-            } else if kind.isCodeBlock {
-                end = codeContentEnd
+            } else if kind.isCodeBlock || kind == .htmlBlock {
+                end = blockContentEnd
             } else if Self.isContainer(kind) {
                 // The end of the container's own marker, or of a removed paragraph's content, if that was later.
                 let ownEnd = storage.sourceRanges[node].end
