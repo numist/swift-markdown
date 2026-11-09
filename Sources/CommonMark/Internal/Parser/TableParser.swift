@@ -244,7 +244,7 @@ extension BlockParser {
             } else {
                 // The table's map over the cell, less each stripped backslash for an escaped cell.
                 if let image {
-                    let cellMap = image.runs(from: cellRange.lowerBound, length: cellRange.count, in: self)
+                    let cellMap = image.runs(from: cellRange.lowerBound, length: cellRange.count)
                     arenaSourceMaps[cellIdx] = noEscape
                         ? cellMap
                         : unescapedPipesMap(cellMap, of: Chunk(offset: cellRange.lowerBound, length: cellRange.count, inSource: false))

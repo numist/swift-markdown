@@ -417,7 +417,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let arenaEnd = storage.strings.count
             let rest = parseDefinitions(in: Chunk(offset: arenaStart, length: arenaEnd - arenaStart, inSource: false))
             if positionsEnabled {
-                arenaSourceMaps[paragraph] = sliceRuns(runs, from: rest.offset - arenaStart, length: rest.length)
+                arenaSourceMaps[paragraph] = Self.sliceRuns(runs, from: rest.offset - arenaStart, length: rest.length)
             }
             parseInline(
                 chunk: rest,
@@ -893,11 +893,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let flat = flattenSegments(preceding, map: &map)
             if let content = tableSplitParagraphContent(flat.trimmingWhitespace(using: self), node: precedingNode) {
                 if positionsEnabled, !content.isEmpty {
-                    let span = sourceSpan(of: sliceRuns(map, from: content.offset - flat.offset, length: content.length))
+                    let span = sourceSpan(of: Self.sliceRuns(map, from: content.offset - flat.offset, length: content.length))
                     storage.setSourceStart(precedingNode, span.start)
                     storage.setSourceEnd(precedingNode, span.end)
                 }
-                let contentMap = positionsEnabled ? sliceRuns(map, from: content.offset - flat.offset, length: content.length) : []
+                let contentMap = positionsEnabled ? Self.sliceRuns(map, from: content.offset - flat.offset, length: content.length) : []
                 enqueueTablePrecedingContent(content, map: contentMap, of: precedingNode)
             } else {
                 storage.unlinkChild(precedingNode)
@@ -2032,7 +2032,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Narrows a run map to `[start, start + length)` of its content, rebased to start at 0.
-    func sliceRuns(_ runs: [ArenaRun], from start: Int, length: Int) -> [ArenaRun] {
+    static func sliceRuns(_ runs: [ArenaRun], from start: Int, length: Int) -> [ArenaRun] {
         let end = start + length
         var result: [ArenaRun] = []
         var v = 0
@@ -2112,7 +2112,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // Arena content carries a run map, narrowed here to the table's content. Source content has none; the
             // table parser maps it by a constant shift.
             let tableMap = (positionsEnabled && !map.isEmpty)
-                ? sliceRuns(map, from: tableContent.offset - raw.offset, length: tableContent.length)
+                ? Self.sliceRuns(map, from: tableContent.offset - raw.offset, length: tableContent.length)
                 : []
             parseTable(node: node, chunk: tableContent, sourceMap: tableMap)
             return
@@ -2129,7 +2129,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         // Narrow the run map to the content that reaches inline parsing.
         if positionsEnabled, !map.isEmpty {
-            let slice = sliceRuns(map, from: contentChunk.offset - raw.offset, length: contentChunk.length)
+            let slice = Self.sliceRuns(map, from: contentChunk.offset - raw.offset, length: contentChunk.length)
             if !slice.isEmpty {
                 arenaSourceMaps[node] = slice
             }
