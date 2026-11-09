@@ -15,9 +15,7 @@ import Testing
 @Suite("Row-span marker after vertical whitespace")
 struct TableRowspanCaretAfterVerticalWhitespaceTests {
 
-    private static let options: MarkdownDocument.ParseOptions = [
-        .tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink,
-    ]
+    private static let options: MarkdownDocument.ParseOptions = [.tables, .tableSpans, .sourcePosition]
 
     @Test func formFeedBeforeCaret() {
         #expect(TreeDump.dump("a\n|-\n|\u{C}^", options: Self.options) == """

@@ -20,9 +20,7 @@ import CommonMark
 /// cannot be lazy: a lazy delimiter row is paragraph text, and a lazy data row closes the table and its container and
 /// starts a paragraph outside them. A row with only an enclosing container's prefix is lazy for the container inside
 /// it. A line without a container's prefix that continues no paragraph opens its block outside the container, where
-/// it can begin a table. The cases cover a block quote, a bullet and an ordered list item, a footnote definition, a
-/// block quote in a block quote, a bullet item in a block quote, and a block quote in a bullet item; each lazy row has
-/// a twin with the full prefix, and the nested containers also have rows with only the outer prefix.
+/// it can begin a table.
 @Suite("A table's header row may be a lazy continuation line, but its delimiter and data rows may not")
 struct TableLazyContinuationRowTests {
 
@@ -59,23 +57,6 @@ struct TableLazyContinuationRowTests {
             """
         ),
         Case(
-            "block quote, prefixed header row",
-            "> x\n> a|b\n> -|-\n",
-            """
-            document @1:1-3:6
-              block_quote @1:1-3:6
-                paragraph @1:3-1:4
-                  text "x" @1:3-1:4
-                table @2:3-3:6
-                  table_header @2:3-2:6
-                    table_cell align=none colspan=1 rowspan=1 @2:3-2:4
-                      text "a" @2:3-2:4
-                    table_cell align=none colspan=1 rowspan=1 @2:5-2:6
-                      text "b" @2:5-2:6
-
-            """
-        ),
-        Case(
             "block quote, lazy delimiter row",
             "> a|b\n-|-\n",
             """
@@ -85,21 +66,6 @@ struct TableLazyContinuationRowTests {
                   text "a|b" @1:3-1:6
                   softbreak @-
                   text "-|-" @2:1-2:4
-
-            """
-        ),
-        Case(
-            "block quote, prefixed delimiter row",
-            "> a|b\n> -|-\n",
-            """
-            document @1:1-2:6
-              block_quote @1:1-2:6
-                table @1:3-2:6
-                  table_header @1:3-1:6
-                    table_cell align=none colspan=1 rowspan=1 @1:3-1:4
-                      text "a" @1:3-1:4
-                    table_cell align=none colspan=1 rowspan=1 @1:5-1:6
-                      text "b" @1:5-1:6
 
             """
         ),
@@ -234,24 +200,6 @@ struct TableLazyContinuationRowTests {
             """
         ),
         Case(
-            "bullet item, prefixed header row",
-            "- x\n  a|b\n  -|-\n",
-            """
-            document @1:1-3:6
-              list bullet '-' tight @1:1-3:6
-                item @1:1-3:6
-                  paragraph @1:3-1:4
-                    text "x" @1:3-1:4
-                  table @2:3-3:6
-                    table_header @2:3-2:6
-                      table_cell align=none colspan=1 rowspan=1 @2:3-2:4
-                        text "a" @2:3-2:4
-                      table_cell align=none colspan=1 rowspan=1 @2:5-2:6
-                        text "b" @2:5-2:6
-
-            """
-        ),
-        Case(
             "bullet item, lazy delimiter row",
             "- a|b\n-|-\n",
             """
@@ -262,22 +210,6 @@ struct TableLazyContinuationRowTests {
                     text "a|b" @1:3-1:6
                     softbreak @-
                     text "-|-" @2:1-2:4
-
-            """
-        ),
-        Case(
-            "bullet item, prefixed delimiter row",
-            "- a|b\n  -|-\n",
-            """
-            document @1:1-2:6
-              list bullet '-' tight @1:1-2:6
-                item @1:1-2:6
-                  table @1:3-2:6
-                    table_header @1:3-1:6
-                      table_cell align=none colspan=1 rowspan=1 @1:3-1:4
-                        text "a" @1:3-1:4
-                      table_cell align=none colspan=1 rowspan=1 @1:5-1:6
-                        text "b" @1:5-1:6
 
             """
         ),

@@ -17,91 +17,94 @@ import CommonMark
 @Suite("Escaped pipe in a code span of a table's preceding paragraph")
 struct TableCodeSpanPipeUnescapeTests {
 
-    /// The literal content of the first `.codeInline` node anywhere in the document (depth-first, pre-order),
-    /// plus whether the document contains a `.table` node.
-    private func firstCodeSpanAndTable(
-        _ source: String, options: MarkdownDocument.ParseOptions
-    ) -> (codeSpan: String?, hasTable: Bool) {
-        MarkdownDocument.withParsedDocument(source, options: options) { doc in
-            var acc = Walk(codeSpan: nil, hasTable: false)
-            walk(doc.root, &acc)
-            return (acc.codeSpan, acc.hasTable)
-        }
-    }
-
     @Test("code span in a table's preceding paragraph keeps its escaped pipe (backtick header)")
-    func precedingParagraphCodeSpanKeepsEscapedPipe() throws {
-        let (codeSpan, hasTable) = firstCodeSpanAndTable("`\\|`\n`\n|-", options: [.tables])
-        try #require(hasTable, "fixture: expected a table to form")
-        try #require(codeSpan != nil, "fixture: expected a code span in the preceding paragraph")
-        #expect(codeSpan == "\\|")
+    func precedingParagraphCodeSpanKeepsEscapedPipe() {
+        #expect(TreeDump.dump("`\\|`\n`\n|-", options: [.tables]) == """
+            document
+              paragraph
+                code "\\\\|"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "`"
+
+            """)
     }
 
     @Test("code span in a table's preceding paragraph keeps its escaped pipe (backslash header)")
-    func precedingParagraphCodeSpanKeepsEscapedPipeBackslashHeader() throws {
-        let (codeSpan, hasTable) = firstCodeSpanAndTable("`\\|`\n\\\n-|", options: [.tables])
-        try #require(hasTable, "fixture: expected a table to form")
-        try #require(codeSpan != nil, "fixture: expected a code span in the preceding paragraph")
-        #expect(codeSpan == "\\|")
+    func precedingParagraphCodeSpanKeepsEscapedPipeBackslashHeader() {
+        #expect(TreeDump.dump("`\\|`\n\\\n-|", options: [.tables]) == """
+            document
+              paragraph
+                code "\\\\|"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "\\\\"
+
+            """)
     }
 
     @Test("code span in a block-quote table's preceding paragraph keeps its escaped pipe")
-    func precedingParagraphCodeSpanKeepsEscapedPipeInBlockQuote() throws {
-        let (codeSpan, hasTable) = firstCodeSpanAndTable("> `\\|`\n> `\n> |-", options: [.tables])
-        try #require(hasTable, "fixture: expected a table to form inside the block quote")
-        try #require(codeSpan != nil, "fixture: expected a code span in the preceding paragraph")
-        #expect(codeSpan == "\\|")
+    func precedingParagraphCodeSpanKeepsEscapedPipeInBlockQuote() {
+        #expect(TreeDump.dump("> `\\|`\n> `\n> |-", options: [.tables]) == """
+            document
+              block_quote
+                paragraph
+                  code "\\\\|"
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "`"
+
+            """)
     }
 
     @Test("code span in a tab-continuation table's preceding paragraph keeps its escaped pipe")
-    func precedingParagraphCodeSpanKeepsEscapedPipeWithTabContinuation() throws {
-        let (codeSpan, hasTable) = firstCodeSpanAndTable("`\\|`\n\tx\n|-", options: [.tables])
-        try #require(hasTable, "fixture: expected a table to form")
-        try #require(codeSpan != nil, "fixture: expected a code span in the preceding paragraph")
-        #expect(codeSpan == "\\|")
+    func precedingParagraphCodeSpanKeepsEscapedPipeWithTabContinuation() {
+        #expect(TreeDump.dump("`\\|`\n\tx\n|-", options: [.tables]) == """
+            document
+              paragraph
+                code "\\\\|"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "x"
+
+            """)
     }
 
     @Test("code span with no table keeps its escaped pipe")
-    func standaloneCodeSpanKeepsEscapedPipe() throws {
-        let (codeSpan, hasTable) = firstCodeSpanAndTable("`\\|`", options: [.tables])
-        try #require(!hasTable, "fixture: expected no table to form")
-        try #require(codeSpan != nil, "fixture: expected a code span")
-        #expect(codeSpan == "\\|")
+    func standaloneCodeSpanKeepsEscapedPipe() {
+        #expect(TreeDump.dump("`\\|`", options: [.tables]) == """
+            document
+              paragraph
+                code "\\\\|"
+
+            """)
     }
 
     @Test("preceding-paragraph code span keeps a non-pipe backslash escape")
-    func precedingParagraphCodeSpanKeepsNonPipeEscape() throws {
-        let (codeSpan, hasTable) = firstCodeSpanAndTable("`\\!`\n`\n|-", options: [.tables])
-        try #require(hasTable, "fixture: expected a table to form")
-        try #require(codeSpan != nil, "fixture: expected a code span in the preceding paragraph")
-        #expect(codeSpan == "\\!")
+    func precedingParagraphCodeSpanKeepsNonPipeEscape() {
+        #expect(TreeDump.dump("`\\!`\n`\n|-", options: [.tables]) == """
+            document
+              paragraph
+                code "\\\\!"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "`"
+
+            """)
     }
 
     @Test("plain code span with an unescaped pipe is unaffected")
-    func plainCodeSpanWithPipeUnaffected() throws {
-        let (codeSpan, hasTable) = firstCodeSpanAndTable("`x|y`", options: [.tables])
-        try #require(!hasTable, "fixture: expected no table to form")
-        try #require(codeSpan != nil, "fixture: expected a code span")
-        #expect(codeSpan == "x|y")
-    }
-}
+    func plainCodeSpanWithPipeUnaffected() {
+        #expect(TreeDump.dump("`x|y`", options: [.tables]) == """
+            document
+              paragraph
+                code "x|y"
 
-/// Depth-first pre-order accumulator for `walk`. `codeSpan` latches the first `.codeInline` literal.
-private struct Walk {
-    var codeSpan: String?
-    var hasTable: Bool
-}
-
-// File-scope + `borrowing MarkdownNode` because a `MarkdownNode` is `~Escapable` and can't be captured by
-// an instance-method closure.
-private func walk(_ node: borrowing MarkdownNode, _ acc: inout Walk) {
-    if node.kind == .table {
-        acc.hasTable = true
-    }
-    if acc.codeSpan == nil, case .codeInline = node.kind {
-        acc.codeSpan = node.literal()
-    }
-    node.children.forEach { child in
-        walk(child, &acc)
+            """)
     }
 }

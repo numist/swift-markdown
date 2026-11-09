@@ -117,7 +117,7 @@ struct TableSpanTests {
         #expect(rows[1].map(\.columns) == [1])
     }
 
-    @Test("a two-column row with one `||` filler caps at the column count")
+    @Test("a two-column row with one `||` filler spans both columns")
     func twoColumnSingleFiller() {
         let rows = MarkdownDocument.withParsedDocument("a|b\n-|-\no||", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [2, 0])

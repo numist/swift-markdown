@@ -54,6 +54,23 @@ struct TableAfterSetextDefinitionTests {
             """)
     }
 
+    /// The `=` line cannot underline a paragraph holding only a link reference definition (Setext headings), so
+    /// it stays paragraph text, and the delimiter row `-|` makes it the header row of a table starting on line 3.
+    @Test("a table whose header row follows a link reference definition starts at the header row")
+    func tableAfterDefinitionStartsAtHeaderRow() {
+        #expect(TreeDump.dump("[b\n ]:o\n=\n-|\na", options: [.sourcePosition, .tables], sourceRanges: true) == """
+            document @1:1-5:2
+              table @3:1-5:2
+                table_header @3:1-3:2
+                  table_cell align=none colspan=1 rowspan=1 @3:1-3:2
+                    text "=" @3:1-3:2
+                table_row @5:1-5:2
+                  table_cell align=none colspan=1 rowspan=1 @5:1-5:2
+                    text "a" @5:1-5:2
+
+            """)
+    }
+
     @Test("without tables, the underline and table lines are one paragraph")
     func oneParagraphWithoutTables() {
         #expect(TreeDump.dump(source, options: []) == """

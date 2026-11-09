@@ -12,9 +12,7 @@ import Testing
 import CommonMark
 
 /// A table's header row is the line immediately before its delimiter row, and the header and delimiter rows must have
-/// the same number of cells (Tables (extension)). The lines before the header remain a paragraph. These cases place the
-/// rows in a top-level paragraph, a block quote, a list item, a paragraph with CRLF line endings, and a block quote
-/// whose marker is followed by a tab.
+/// the same number of cells (Tables (extension)). The lines before the header remain a paragraph.
 @Suite("A table takes the line before its delimiter row as its header row")
 struct TableHeaderRowSelectionTests {
 
@@ -686,6 +684,264 @@ struct TableHeaderRowSelectionTests {
                       text "a" @2:3-2:4
                     table_cell align=none colspan=1 rowspan=1 @2:5-2:7
                       text "b\u{FFFD}" @2:5-2:7
+
+            """)
+    }
+
+    // MARK: - Earlier lines remain a paragraph
+
+    @Test("nested block quote: preceding line splits off, header is the last line")
+    func nestedBlockQuote() {
+        #expect(TreeDump.dump("> x\n> a\n> |-", options: [.tables]) == """
+            document
+              block_quote
+                paragraph
+                  text "x"
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "a"
+
+            """)
+    }
+
+    @Test("nested list item: preceding line splits off, header is the last line")
+    func nestedListItem() {
+        #expect(TreeDump.dump("- x\n  a\n  |-", options: [.tables]) == """
+            document
+              list bullet '-' tight
+                item
+                  paragraph
+                    text "x"
+                  table
+                    table_header
+                      table_cell align=none colspan=1 rowspan=1
+                        text "a"
+
+            """)
+    }
+
+    @Test("CRLF line endings: preceding line splits off, header is the last line")
+    func crlfLineEndings() {
+        #expect(TreeDump.dump("x\r\na\r\n|-", options: [.tables]) == """
+            document
+              paragraph
+                text "x"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "a"
+
+            """)
+    }
+
+    @Test("nested block quote: a following body row joins the table")
+    func nestedBlockQuoteBodyRow() {
+        #expect(TreeDump.dump("> x\n> a\n> |-\n> b", options: [.tables]) == """
+            document
+              block_quote
+                paragraph
+                  text "x"
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "a"
+                  table_row
+                    table_cell align=none colspan=1 rowspan=1
+                      text "b"
+
+            """)
+    }
+
+    @Test("CRLF: a following body row joins the table")
+    func crlfBodyRow() {
+        #expect(TreeDump.dump("x\r\na\r\n|-\r\nb", options: [.tables]) == """
+            document
+              paragraph
+                text "x"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "a"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "b"
+
+            """)
+        #expect(TreeDump.dump("x\r\na\r\n|-\r\nb", options: [.tables, .sourcePosition], sourceRanges: true) == """
+            document @1:1-4:2
+              paragraph @1:1-1:2
+                text "x" @1:1-1:2
+              table @2:1-4:2
+                table_header @2:1-2:2
+                  table_cell align=none colspan=1 rowspan=1 @2:1-2:2
+                    text "a" @2:1-2:2
+                table_row @4:1-4:2
+                  table_cell align=none colspan=1 rowspan=1 @4:1-4:2
+                    text "b" @4:1-4:2
+
+            """)
+    }
+
+    @Test("contiguous: multiple preceding lines split off as one paragraph")
+    func contiguousMultiPreceding() {
+        #expect(TreeDump.dump("x\ny\na\n|-", options: [.tables]) == """
+            document
+              paragraph
+                text "x"
+                softbreak
+                text "y"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "a"
+
+            """)
+    }
+
+    @Test("a tab after the block quote marker splits the same with and without source positions")
+    func tabAfterBlockQuoteMarkerSplit() {
+        #expect(TreeDump.dump(">\tx\n> y\n> |-", options: [.tables]) == """
+            document
+              block_quote
+                paragraph
+                  text "x"
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "y"
+
+            """)
+        #expect(TreeDump.dump(">\tx\n> y\n> |-", options: [.tables, .sourcePosition]) == """
+            document
+              block_quote
+                paragraph
+                  text "x"
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "y"
+
+            """)
+    }
+
+    // MARK: - No earlier lines
+
+    @Test("bare block-quote header: no preceding paragraph")
+    func bareNestedBlockQuoteTable() {
+        #expect(TreeDump.dump("> a\n> |-", options: [.tables]) == """
+            document
+              block_quote
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "a"
+
+            """)
+    }
+
+    @Test("bare list-item header: no preceding paragraph")
+    func bareNestedListTable() {
+        #expect(TreeDump.dump("- a\n  |-", options: [.tables]) == """
+            document
+              list bullet '-' tight
+                item
+                  table
+                    table_header
+                      table_cell align=none colspan=1 rowspan=1
+                        text "a"
+
+            """)
+    }
+
+    // MARK: - No table
+
+    @Test("lazy block-quote continuation: the delimiter is lazy, so no table and no split")
+    func lazyBlockQuoteNoSplit() {
+        // A delimiter row on a lazy continuation line is paragraph text (Block quotes).
+        #expect(TreeDump.dump("> x\na\n|-", options: [.tables]) == """
+            document
+              block_quote
+                paragraph
+                  text "x"
+                  softbreak
+                  text "a"
+                  softbreak
+                  text "|-"
+
+            """)
+    }
+
+    @Test("a nested header row whose cell count differs from the delimiter row's forms no table")
+    func nestedHeaderMismatchStaysParagraph() {
+        #expect(TreeDump.dump("> x\n> a|b\n> |-", options: [.tables]) == """
+            document
+              block_quote
+                paragraph
+                  text "x"
+                  softbreak
+                  text "a|b"
+                  softbreak
+                  text "|-"
+
+            """)
+    }
+
+    @Test("nested block quote: lines with a colon inside the dashes are no delimiter row")
+    func nestedInteriorColonStaysParagraph() {
+        #expect(TreeDump.dump("> a\n> -:-\n> -:-\n", options: [.tables]) == """
+            document
+              block_quote
+                paragraph
+                  text "a"
+                  softbreak
+                  text "-:-"
+                  softbreak
+                  text "-:-"
+
+            """)
+    }
+
+    // MARK: - Only the delimiter row's own line decides whether a table opens
+
+    /// An indented paragraph continuation line is paragraph text (Paragraphs) and becomes the header row;
+    /// only an indented delimiter row would prevent the table.
+    @Test("an indented header row line does not prevent the table")
+    func indentedEarlierLineFormsTable() {
+        #expect(TreeDump.dump("x\n    a\n|-", options: [.tables]) == """
+            document
+              paragraph
+                text "x"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "a"
+
+            """)
+        #expect(TreeDump.dump("> x\n>     a\n> |-", options: [.tables]) == """
+            document
+              block_quote
+                paragraph
+                  text "x"
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "a"
+
+            """)
+    }
+
+    @Test("a header row on a lazy continuation line forms a table when the delimiter row is prefixed")
+    func lazyEarlierLineFormsTable() {
+        #expect(TreeDump.dump("> x\ny\n> |-", options: [.tables]) == """
+            document
+              block_quote
+                paragraph
+                  text "x"
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "y"
 
             """)
     }
