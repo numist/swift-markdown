@@ -892,12 +892,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             var map: [ArenaRun] = []
             let flat = flattenSegments(preceding, map: &map)
             if let content = tableSplitParagraphContent(flat.trimmingWhitespace(using: self), node: precedingNode) {
+                let contentMap = positionsEnabled ? Self.sliceRuns(map, from: content.offset - flat.offset, length: content.length) : []
                 if positionsEnabled, !content.isEmpty {
-                    let span = sourceSpan(of: Self.sliceRuns(map, from: content.offset - flat.offset, length: content.length))
+                    let span = sourceSpan(of: contentMap)
                     storage.setSourceStart(precedingNode, span.start)
                     storage.setSourceEnd(precedingNode, span.end)
                 }
-                let contentMap = positionsEnabled ? Self.sliceRuns(map, from: content.offset - flat.offset, length: content.length) : []
                 enqueueTablePrecedingContent(content, map: contentMap, of: precedingNode)
             } else {
                 storage.unlinkChild(precedingNode)
