@@ -76,9 +76,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case segments(UniqueArray<Segment>)
     }
 
-    /// Result of the code/HTML block continuation handlers: whether the block stays open plus the updated leaf.
+    /// Result of the code/HTML block continuation handlers: whether the block consumed the line, plus the updated leaf.
     struct LeafContinuation : ~Copyable {
-        var stillOpen: Bool
+        var consumedLine: Bool
         var pending: PendingLeaf?
     }
 
@@ -957,9 +957,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let openKind = storage[current].kind
         if openKind.isCodeBlock || openKind == .htmlBlock {
             let leaf = continueOrCloseLeafBlock(lineRange: lineRange, cursor: cursor, prefixColumns: prefixColumns, allMatched: allMatched, pending: pending)
-            let leafStillOpen = leaf.stillOpen
+            let consumedLine = leaf.consumedLine
             pending = leaf.pending
-            if leafStillOpen {
+            if consumedLine {
                 return pending
             }
         }
@@ -1031,10 +1031,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var openKind: MarkdownNode.Kind
     }
 
-    /// An open code block or HTML block takes the line as its content when the prefix walk reached it, unless the line ends the block; then `stillOpen` is `false` and the line dispatches as a fresh block. When the walk failed before the block, the block closes.
+    /// An open code block or HTML block consumes the line when the prefix walk reached it: as content, or as the closing fence or end condition that closes it. A line that the block can't take, or that the walk failed before reaching the block, closes it, and `consumedLine` is `false` so the line dispatches as a fresh block.
     private mutating func continueOrCloseLeafBlock(lineRange: Range<Int>, cursor: Int, prefixColumns: Int, allMatched: Bool, pending: consuming PendingLeaf?) -> LeafContinuation {
         guard allMatched else {
-            return LeafContinuation(stillOpen: false, pending: finalize(node: current, pending: pending))
+            return LeafContinuation(consumedLine: false, pending: finalize(node: current, pending: pending))
         }
         if storage[current].kind.isCodeBlock {
             return handleCodeBlockContinuation(lineRange: lineRange, cursor: cursor, prefixColumns: prefixColumns, pending: pending)
@@ -1440,7 +1440,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return false
     }
 
-    /// Continues an open HTML block. `stillOpen` is `false` when the line is left for new-block dispatch.
+    /// Continues an open HTML block. `consumedLine` is `false` when the line is left for new-block dispatch.
     private mutating func handleHTMLBlockContinuation(lineRange: Range<Int>, cursor: Int, prefixColumns: Int, pending: consuming PendingLeaf?) -> LeafContinuation {
         var pending = pending
         guard case .htmlBlock(let type, _) = storage[current].data else {
@@ -1448,7 +1448,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         // Types 6 and 7 end at a blank line, which is not part of the block.
         if type >= 6, indexOfFirstNonSpace(range: cursor..<lineRange.upperBound) == lineRange.upperBound {
-            return LeafContinuation(stillOpen: false, pending: finalize(node: current, pending: pending))
+            return LeafContinuation(consumedLine: false, pending: finalize(node: current, pending: pending))
         }
         // Every other line belongs to the block; for types 1–5, the one meeting the end condition closes the block and
         // is consumed.
@@ -1460,10 +1460,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         ) {
             pending = finalize(node: current, pending: pending, endsOnCurrentLine: true)
         }
-        return LeafContinuation(stillOpen: true, pending: pending)
+        return LeafContinuation(consumedLine: true, pending: pending)
     }
 
-    /// Continues an open code block. `stillOpen` is `false` when the line is left for new-block dispatch; a closing fence is consumed.
+    /// Continues an open code block. `consumedLine` is `false` when the line is left for new-block dispatch; a closing fence is consumed.
     private mutating func handleCodeBlockContinuation(lineRange: Range<Int>, cursor: Int, prefixColumns: Int, pending: consuming PendingLeaf?) -> LeafContinuation {
         var pending = pending
         let firstNonSpace = indexOfFirstNonSpace(range: cursor..<lineRange.upperBound)
@@ -1481,7 +1481,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 minimumLength: info.fenceLength
             ) {
                 pending = finalize(node: current, pending: pending, endsOnCurrentLine: true)
-                return LeafContinuation(stillOpen: true, pending: pending)
+                return LeafContinuation(consumedLine: true, pending: pending)
             }
             // Strip `prefixColumns` plus `fenceOffset` columns, less the `startColumn` the bytes before `cursor` cover.
             // A tab a container consumed only partly is split here, its leftover columns becoming spaces (Tabs).
@@ -1493,7 +1493,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 startColumn: startColumn
             )
             pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
-            return LeafContinuation(stillOpen: true, pending: pending)
+            return LeafContinuation(consumedLine: true, pending: pending)
         }
         // Measured from `prefixColumns`, so a tab the prefixes partly consumed counts only its remaining columns (Tabs).
         let indent = indentColumns(from: cursor, to: firstNonSpace, baseColumn: prefixColumns)
@@ -1514,10 +1514,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 )
                 pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
             }
-            return LeafContinuation(stillOpen: true, pending: pending)
+            return LeafContinuation(consumedLine: true, pending: pending)
         }
         pending = finalize(node: current, pending: pending)
-        return LeafContinuation(stillOpen: false, pending: pending)
+        return LeafContinuation(consumedLine: false, pending: pending)
     }
 
     /// Opens a list item, in the open list when the marker continues it, otherwise in a new list.
