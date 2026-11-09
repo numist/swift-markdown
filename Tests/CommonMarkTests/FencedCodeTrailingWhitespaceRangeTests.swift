@@ -13,7 +13,9 @@ import CommonMark
 
 /// Spaces and tabs after a closing code fence are ignored (Fenced code blocks), as is whitespace after an opening
 /// fence's info string, so a fenced code block ends just past its closing fence's last fence character, or, when its
-/// opening line is its last, just past its info string or opening fence.
+/// opening line is its last, just past its info string or opening fence. A content line loses the opening fence's
+/// indentation, so a last line holding only that indentation, or only a container's prefix, has no content bytes, and
+/// the block ends at the start of that line.
 @Suite("Fenced code block ranges before trailing whitespace")
 struct FencedCodeTrailingWhitespaceRangeTests {
 
@@ -85,6 +87,44 @@ struct FencedCodeTrailingWhitespaceRangeTests {
               list bullet '-' tight @1:1-3:6
                 item @1:1-3:6
                   code_block "" "a\\n" @1:3-3:6
+
+            """)
+    }
+
+    @Test
+    func lastLineOfStrippedIndentation() {
+        #expect(tree("  ```\n  a\n  \n") == """
+            document @1:1-4:1
+              code_block "" "a\\n\\n" @1:3-3:1
+
+            """)
+    }
+
+    @Test
+    func lastLineOfContainerPrefixOnly() {
+        #expect(tree("> ```\n> \n") == """
+            document @1:1-3:1
+              block_quote @1:1-2:2
+                code_block "" "\\n" @1:3-2:1
+
+            """)
+    }
+
+    @Test
+    func lastLineOfPartlyStrippedTab() {
+        #expect(tree(">\t```\n>\t") == """
+            document @1:1-2:3
+              block_quote @1:1-2:2
+                code_block "" "\\n" @1:3-2:1
+
+            """)
+    }
+
+    @Test
+    func lastLineWhitespaceBeyondIndentation() {
+        #expect(tree("```\n  \n") == """
+            document @1:1-3:1
+              code_block "" "  \\n" @1:1-2:3
 
             """)
     }

@@ -94,9 +94,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// No source byte from here up to `sourceReadEnd` is a NUL, so content there needs no NUL replacement.
     var nulFreeSourceStart: Int = 0
 
-    /// The source offset just past the open indented code block's last line that is not blank, where the block ends:
-    /// blank lines following an indented code block are not part of it (Indented code blocks).
-    var indentedCodeContentEnd: Int = 0
+    /// The source offset where the open code block's content ends, and so the block unless a closing fence follows.
+    /// For an indented code block it is just past its last line that is not blank, as blank lines following the block are
+    /// not part of it (Indented code blocks). For a fenced one it is just past its last line's content, or, when its
+    /// opening line is its last, past the info string or the opening fence.
+    var codeContentEnd: Int = 0
 
     /// Inline parsing deferred until all blocks close, so a reference resolves against a definition later in the document.
     var pendingInlines: [(DocumentStorage.Index, ContentRef)] = []
@@ -1493,6 +1495,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 maxColumns: prefixColumns + info.fenceOffset - startColumn,
                 startColumn: startColumn
             )
+            // A line left empty by stripping holds no content, so the block's content ends just past the line before.
+            codeContentEnd = bodyStart < lineRange.upperBound || leadingSpaces > 0 ? lineRange.upperBound : lineRange.lowerBound
             pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
             return LeafContinuation(consumedLine: true, pending: pending)
         }
@@ -1504,7 +1508,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             storage.nodes[current].lastLineBlank = isBlank
             pending = appendNewline(to: current, pending: pending)
             if !isBlank {
-                indentedCodeContentEnd = lineRange.upperBound
+                codeContentEnd = lineRange.upperBound
             }
             if indent > 4 || !isBlank {
                 // A tab straddling the fourth column is split: its leftover columns become leading spaces (Tabs).
@@ -1750,8 +1754,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             data: .codeBlock(info: infoRef, literal: .empty),
             start: firstNonSpace
         )
-        // Where the opening line's content ends, for a block whose last line it is.
-        storage.setSourceEnd(codeIdx, fence.infoChunk.length > 0 ? fence.infoChunk.offset + fence.infoChunk.length : firstNonSpace + fence.length)
+        codeContentEnd = fence.infoChunk.length > 0 ? fence.infoChunk.offset + fence.infoChunk.length : firstNonSpace + fence.length
         current = codeIdx
     }
 
@@ -1799,7 +1802,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             start: leadingSpaces > 0 ? bodyStart - 1 : bodyStart
         )
         current = codeIdx
-        indentedCodeContentEnd = lineRange.upperBound
+        codeContentEnd = lineRange.upperBound
         return appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: codeIdx, pending: pending)
     }
 
@@ -2135,23 +2138,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // An ATX heading, a thematic break or a closing fence ends at its trimmed content extent, not the raw
                 // line.
                 end = lineContentEnd
-            } else if case .codeBlock(let info) = kind, !info.isFenced {
-                end = indentedCodeContentEnd
+            } else if kind.isCodeBlock {
+                end = codeContentEnd
             } else if Self.isContainer(kind) {
                 // The end of the container's own marker, or of a removed paragraph's content, if that was later.
                 let ownEnd = storage.sourceRanges[node].end
                 end = storage[node].lastChild.map { max(ownEnd, storage.sourceRanges[$0].end) } ?? ownEnd
             } else {
-                let lineEnd = (endsOnCurrentLine || startedThisLine || kind == .document)
+                end = (endsOnCurrentLine || startedThisLine || kind == .document)
                     ? currentLineSourceRange.upperBound
                     : lastLineSourceEnd
-                let openingEnd = Int(storage.sourceRanges[node].end)
-                if kind.isCodeBlock, !(openingEnd..<lineEnd).contains(where: { sourceBytes[$0] == UInt8(ascii: "\n") || sourceBytes[$0] == UInt8(ascii: "\r") }) {
-                    // A fenced code block whose last line is its opening line ends past its info string or fence.
-                    end = openingEnd
-                } else {
-                    end = lineEnd
-                }
             }
             storage.setSourceEnd(node, end)
         }
