@@ -16,39 +16,47 @@ import CommonMark
 @Suite("Inline CDATA section ending in a bracket")
 struct InlineCDATATrailingBracketTests {
 
-    private static let options: MarkdownDocument.ParseOptions = []
-
-    /// The first raw HTML literal in the first paragraph, if any, and the paragraph's concatenated text.
-    private func parse(
-        _ src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> (html: String?, text: String) {
-        let inlines: [(kind: MarkdownNode.Kind, literal: String?)] =
-            MarkdownDocument.withParsedDocument(src, options: options) { doc in
-                paragraphInlines(doc)
-            }
-        let text = inlines.filter { $0.kind == .text }.compactMap(\.literal).joined()
-        try #require(text.contains("o"), "fixture vacuous: leading text 'o' not parsed")
-        let html = inlines.first { $0.kind == .htmlInline }.flatMap(\.literal)
-        return (html, text)
-    }
-
     @Test("`<![CDATA[]]]>` (empty content + trailing `]`) is inline HTML")
-    func emptyTrailingBracketRecognized() throws {
-        #expect(try parse("o<![CDATA[]]]>", options: Self.options).html == "<![CDATA[]]]>")
+    func emptyTrailingBracketRecognized() {
+        #expect(TreeDump.dump("o<![CDATA[]]]>", options: []) == """
+            document
+              paragraph
+                text "o"
+                html_inline "<![CDATA[]]]>"
+
+            """)
     }
 
     @Test("`<![CDATA[x]]]>` (content ending in `]`) is inline HTML")
-    func contentTrailingBracketRecognized() throws {
-        #expect(try parse("o<![CDATA[x]]]>", options: Self.options).html == "<![CDATA[x]]]>")
+    func contentTrailingBracketRecognized() {
+        #expect(TreeDump.dump("o<![CDATA[x]]]>", options: []) == """
+            document
+              paragraph
+                text "o"
+                html_inline "<![CDATA[x]]]>"
+
+            """)
     }
 
     @Test("`<![CDATA[xx]]>` (normal) is inline HTML")
-    func normalCDATARecognized() throws {
-        #expect(try parse("o<![CDATA[xx]]>", options: Self.options).html == "<![CDATA[xx]]>")
+    func normalCDATARecognized() {
+        #expect(TreeDump.dump("o<![CDATA[xx]]>", options: []) == """
+            document
+              paragraph
+                text "o"
+                html_inline "<![CDATA[xx]]>"
+
+            """)
     }
 
     @Test("`<![CDATA[]]>` (empty content) is inline HTML")
-    func emptyCDATARecognized() throws {
-        #expect(try parse("o<![CDATA[]]>", options: Self.options).html == "<![CDATA[]]>")
+    func emptyCDATARecognized() {
+        #expect(TreeDump.dump("o<![CDATA[]]>", options: []) == """
+            document
+              paragraph
+                text "o"
+                html_inline "<![CDATA[]]>"
+
+            """)
     }
 }

@@ -16,49 +16,69 @@ import CommonMark
 @Suite("Inline HTML comments made of dashes")
 struct InlineHTMLCommentDashesTests {
 
-    private static let options: MarkdownDocument.ParseOptions = []
-
-    /// The first raw HTML literal in the first paragraph, if any, and the paragraph's concatenated text.
-    private func parse(
-        _ src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> (html: String?, text: String) {
-        let inlines: [(kind: MarkdownNode.Kind, literal: String?)] =
-            MarkdownDocument.withParsedDocument(src, options: options) { doc in
-                paragraphInlines(doc)
-            }
-        let text = inlines.filter { $0.kind == .text }.compactMap(\.literal).joined()
-        try #require(text.contains("F"), "fixture vacuous: leading text 'F' not parsed")
-        let html = inlines.first { $0.kind == .htmlInline }.flatMap(\.literal)
-        return (html, text)
-    }
-
     @Test("`<!----->` (five dashes) is an inline HTML comment")
-    func fiveDashesRecognized() throws {
-        #expect(try parse("F<!----->", options: Self.options).html == "<!----->")
+    func fiveDashesRecognized() {
+        #expect(TreeDump.dump("F<!----->", options: []) == """
+            document
+              paragraph
+                text "F"
+                html_inline "<!----->"
+
+            """)
     }
 
     @Test("`<!---->` (four dashes) is a comment")
-    func fourDashesRecognized() throws {
-        #expect(try parse("F<!---->", options: Self.options).html == "<!---->")
+    func fourDashesRecognized() {
+        #expect(TreeDump.dump("F<!---->", options: []) == """
+            document
+              paragraph
+                text "F"
+                html_inline "<!---->"
+
+            """)
     }
 
     @Test("`<!--->` (three dashes, empty form) is a comment")
-    func threeDashesRecognized() throws {
-        #expect(try parse("F<!--->", options: Self.options).html == "<!--->")
+    func threeDashesRecognized() {
+        #expect(TreeDump.dump("F<!--->", options: []) == """
+            document
+              paragraph
+                text "F"
+                html_inline "<!--->"
+
+            """)
     }
 
     @Test("`<!-->` (two dashes, empty form) is a comment")
-    func twoDashesRecognized() throws {
-        #expect(try parse("F<!-->", options: Self.options).html == "<!-->")
+    func twoDashesRecognized() {
+        #expect(TreeDump.dump("F<!-->", options: []) == """
+            document
+              paragraph
+                text "F"
+                html_inline "<!-->"
+
+            """)
     }
 
     @Test("`<!--x-->` is a comment")
-    func normalCommentRecognized() throws {
-        #expect(try parse("F<!--x-->", options: Self.options).html == "<!--x-->")
+    func normalCommentRecognized() {
+        #expect(TreeDump.dump("F<!--x-->", options: []) == """
+            document
+              paragraph
+                text "F"
+                html_inline "<!--x-->"
+
+            """)
     }
 
     @Test("`<!-- -->` is a comment")
-    func spaceCommentRecognized() throws {
-        #expect(try parse("F<!-- -->", options: Self.options).html == "<!-- -->")
+    func spaceCommentRecognized() {
+        #expect(TreeDump.dump("F<!-- -->", options: []) == """
+            document
+              paragraph
+                text "F"
+                html_inline "<!-- -->"
+
+            """)
     }
 }
