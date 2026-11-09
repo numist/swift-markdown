@@ -132,4 +132,34 @@ struct FlankingUnicodePunctuationTests {
     func emphasisAroundASCIIPunctNoPair() {
         #expect(render("*.*a") == "*.*a")
     }
+
+    /// U+2E43 (dash with left upturn) and U+1E95E (Adlam initial exclamation mark) are in category Po.
+    @Test("emphasis does not form around other Unicode punctuation with an outer letter")
+    func emphasisAroundOtherUnicodePunctNoPair() {
+        #expect(TreeDump.dump("*\u{2E43}*a", options: []) == """
+            document
+              paragraph
+                text "*\u{2E43}*a"
+
+            """)
+        #expect(TreeDump.dump("*\u{1E95E}*a", options: []) == """
+            document
+              paragraph
+                text "*\u{1E95E}*a"
+
+            """)
+    }
+
+    /// U+166D (Canadian syllabics chi sign) is in category So, so it is not a punctuation character.
+    @Test("emphasis forms around a symbol with an outer letter")
+    func emphasisAroundSymbol() {
+        #expect(TreeDump.dump("*\u{166D}*a", options: []) == """
+            document
+              paragraph
+                emph
+                  text "\u{166D}"
+                text "a"
+
+            """)
+    }
 }
