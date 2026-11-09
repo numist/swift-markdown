@@ -3588,28 +3588,34 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// With `backslashEscapes: false` backslashes stay literal, as in autolinks (Autolinks).
     mutating func unescapeURLChunk(_ chunk: Chunk, backslashEscapes: Bool = true) -> Chunk {
-        guard !chunk.isEmpty else {
-            return chunk
-        }
-        
-        let endOff = chunk.offset + chunk.length
-        var hasEscape = false
-        for i in chunk.offset..<endOff {
-            let b = readByte(at: i, in: chunk)
-            if backslashEscapes, b == UInt8(ascii: "\\"), i + 1 < endOff,
-               readByte(at: i + 1, in: chunk).isASCIIPunct {
-                hasEscape = true
-                break
-            }
-            if b == UInt8(ascii: "&") {
-                hasEscape = true
-                break
-            }
-        }
-        if !hasEscape {
+        guard holdsEscapeOrReference(chunk, backslashEscapes: backslashEscapes) else {
             return chunk
         }
         let outOffset = storage.strings.count
+        appendUnescaped(chunk, backslashEscapes: backslashEscapes)
+        return arenaChunk(from: outOffset)
+    }
+
+    /// Whether `chunk` holds a backslash escape, when `backslashEscapes`, or a character reference.
+    private func holdsEscapeOrReference(_ chunk: Chunk, backslashEscapes: Bool) -> Bool {
+        let endOff = chunk.range.upperBound
+        for i in chunk.range {
+            let b = readByte(at: i, in: chunk)
+            if backslashEscapes, b == UInt8(ascii: "\\"), i + 1 < endOff,
+               readByte(at: i + 1, in: chunk).isASCIIPunct {
+                return true
+            }
+            if b == UInt8(ascii: "&"), characterReference(at: i, in: chunk) != nil {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Appends `chunk`'s bytes to the arena with backslash escapes removed, when `backslashEscapes`, and character
+    /// references decoded.
+    mutating func appendUnescaped(_ chunk: Chunk, backslashEscapes: Bool = true) {
+        let endOff = chunk.range.upperBound
         var j = chunk.offset
         while j < endOff {
             let b = readByte(at: j, in: chunk)
@@ -3621,24 +3627,25 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     continue
                 }
             }
-            if b == UInt8(ascii: "&") {
-                let entity = if chunk.inSource {
-                    EntityParser.matchEntity(start: j, end: endOff, source: sourceBytes)
-                } else {
-                    EntityParser.matchEntity(start: j, end: endOff, source: storage.strings.span)
+            if b == UInt8(ascii: "&"), let entity = characterReference(at: j, in: chunk) {
+                for k in 0..<entity.count {
+                    storage.strings.append(entity.bytes[k])
                 }
-                if let entity {
-                    for k in 0..<entity.count {
-                        storage.strings.append(entity.bytes[k])
-                    }
-                    j = entity.afterSemi
-                    continue
-                }
+                j = entity.afterSemi
+                continue
             }
             storage.strings.append(b)
             j += 1
         }
-        return arenaChunk(from: outOffset)
+    }
+
+    /// The character reference at the `&` at `offset` in `chunk`, or `nil` if none starts there.
+    private func characterReference(at offset: Int, in chunk: Chunk) -> EntityParser.EntityMatch? {
+        if chunk.inSource {
+            EntityParser.matchEntity(start: offset, end: chunk.range.upperBound, source: sourceBytes)
+        } else {
+            EntityParser.matchEntity(start: offset, end: chunk.range.upperBound, source: storage.strings.span)
+        }
     }
 
     /// The arena bytes from `offset` to the arena's end, as just appended.
