@@ -9,7 +9,7 @@
 */
 
 /// A type for adjusting the columns of elements that are parsed in *line runs*
-/// of the block directive parser to their locations before their indentation is trimmed.
+/// of the block directive parser to their locations before their indentation was trimmed.
 struct RangeAdjuster: MarkupWalker {
     /// The line number of the first line in the line run that needs adjustment.
     var startLine: Int
@@ -18,7 +18,7 @@ struct RangeAdjuster: MarkupWalker {
     var ranges: RangeTracker
 
     /// An array of whitespace spans that were removed for each line, indexed
-    /// by line number. `nil` means that no whitespace is removed on that line.
+    /// by line number. `nil` means that no whitespace was removed on that line.
     var trimmedIndentationPerLine: [Int]
 
     mutating func defaultVisit(_ markup: Markup) {

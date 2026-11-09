@@ -102,7 +102,7 @@ struct PendingBlockDirective {
         if line.lex("(") != nil {
             parseState = .argumentsText
             // There may be garbage after the left parenthesis `(`, but we'll
-            // consider subsequent lines for argument text regardless, so we'll
+            // still consider subsequent lines for argument text, so we'll
             // indicate acceptance either way at this point.
             _ = parseArgumentsText(from: line)
             return true
@@ -175,7 +175,7 @@ struct PendingBlockDirective {
             parseState = .done
             endLocation = line.location!
         } else {
-            // If there is remaining content on this line
+            // If there is still some content on this line
             // Consider them to be lineRun
             // "@xx { yy": "yy" will be ignored
             // "@xx { yy }": "yy" will be parsed
@@ -700,7 +700,7 @@ private enum ParseContainer: CustomStringConvertible {
             // this line run.
             let parsedSubdocument = MarkupParser.parseString(logicalText, source: lines.first?.source, options: options)
 
-            // Adjust the columns of all of the source positions as
+            // Now, we'll adjust the columns of all of the source positions as
             // needed to offset that indentation trimming we did above.
             // Note that the child identifiers under this document will start at
             // 0, so we will need to adjust those as well, because child identifiers
@@ -854,8 +854,8 @@ struct ParseContainerStack {
                                                           name: name.text,
                                                           endLocation: name.range!.upperBound)
 
-        // There may be garbage after a block directive opening, but the new
-        // block directive opens regardless, so we'll consider the
+        // There may be garbage after a block directive opening but we were
+        // still able to open a new block directive, so we'll consider the
         // rest of the line to be accepted regardless of what comes after.
         _ = pendingBlockDirective.accept(remainder)
 
