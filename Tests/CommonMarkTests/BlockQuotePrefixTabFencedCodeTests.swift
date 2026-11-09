@@ -106,7 +106,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
     // tab are fewer than the four an indented code block needs, so `x` starts a paragraph in the outer block
     // quote.
     @Test("a missing inner `>` leaves the rest of the line a paragraph, not indented code")
-    func nestedInnerMarkerAbsentReDispatchesParagraph() {
+    func nestedInnerMarkerAbsentOpensParagraph() {
         MarkdownDocument.withParsedDocument(">>```\n>\tx") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds.map(TreeDump.describe) == ["document", "block_quote", "block_quote", "code_block fenced fence='`' length=3 offset=0", "paragraph", "text"])

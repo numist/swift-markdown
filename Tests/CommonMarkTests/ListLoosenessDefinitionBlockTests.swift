@@ -129,16 +129,6 @@ struct ListLoosenessDefinitionBlockTests {
     @Test("tightness", arguments: cases)
     func tightness(_ testCase: (markdown: String, tight: [Bool])) {
         let options: MarkdownDocument.ParseOptions = [.footnotes, .tables, .strikethrough, .tasklist, .attributes]
-        let tight = MarkdownDocument.withParsedDocument(testCase.markdown, options: options) { document in
-            var tight: [Bool] = []
-            collectTightness(document.root, into: &tight)
-            return tight
-        }
-        #expect(tight == testCase.tight, "\(testCase.markdown.debugDescription)")
-    }
-
-    private func collectTightness(_ node: borrowing MarkdownNode, into tight: inout [Bool]) {
-        if case .list(let info) = node.kind { tight.append(info.tight) }
-        node.children.forEach { collectTightness($0, into: &tight) }
+        #expect(listTightness(testCase.markdown, options: options) == testCase.tight, "\(testCase.markdown.debugDescription)")
     }
 }

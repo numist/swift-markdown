@@ -162,7 +162,7 @@ struct ListLoosenessAroundDefinitionsTests {
 
     @Test("tightness", arguments: cases)
     func tightness(_ testCase: (markdown: String, tight: [Bool])) {
-        #expect(Self.listTightness(testCase.markdown) == testCase.tight, "\(testCase.markdown.debugDescription)")
+        #expect(listTightness(testCase.markdown, options: Self.options) == testCase.tight, "\(testCase.markdown.debugDescription)")
     }
 
     static let casesAfterFootnoteDefinition: [(markdown: String, tight: [Bool])] = [
@@ -186,20 +186,8 @@ struct ListLoosenessAroundDefinitionsTests {
     /// next block of its item.
     @Test("tightness after a footnote definition and a blank line", arguments: casesAfterFootnoteDefinition)
     func tightnessAfterFootnoteDefinition(_ testCase: (markdown: String, tight: [Bool])) {
-        #expect(Self.listTightness(testCase.markdown) == testCase.tight, "\(testCase.markdown.debugDescription)")
+        #expect(listTightness(testCase.markdown, options: Self.options) == testCase.tight, "\(testCase.markdown.debugDescription)")
     }
 
-    /// The tightness of every list in `markdown`, in document order.
-    private static func listTightness(_ markdown: String) -> [Bool] {
-        MarkdownDocument.withParsedDocument(markdown, options: [.footnotes, .tables, .attributes]) { document in
-            var tight: [Bool] = []
-            collectTightness(document.root, into: &tight)
-            return tight
-        }
-    }
-
-    private static func collectTightness(_ node: borrowing MarkdownNode, into tight: inout [Bool]) {
-        if case .list(let info) = node.kind { tight.append(info.tight) }
-        node.children.forEach { collectTightness($0, into: &tight) }
-    }
+    private static let options: MarkdownDocument.ParseOptions = [.footnotes, .tables, .attributes]
 }

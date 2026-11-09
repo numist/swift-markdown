@@ -35,6 +35,24 @@ internal func dfsRanges(
     }
 }
 
+/// The tightness of every list in `markdown` parsed with `options`, in document order.
+internal func listTightness(_ markdown: String, options: MarkdownDocument.ParseOptions) -> [Bool] {
+    MarkdownDocument.withParsedDocument(markdown, options: options) { document in
+        var tight: [Bool] = []
+        collectTightness(document.root, into: &tight)
+        return tight
+    }
+}
+
+private func collectTightness(_ node: borrowing MarkdownNode, into tight: inout [Bool]) {
+    if case .list(let info) = node.kind {
+        tight.append(info.tight)
+    }
+    node.children.forEach { child in
+        collectTightness(child, into: &tight)
+    }
+}
+
 /// Collect `(info, literal)` for every code block in the document in DFS order, so tests can assert
 /// on code blocks nested inside containers (e.g. a fenced block inside a list item).
 internal func codeBlocks(_ doc: borrowing MarkdownDocument) -> [(info: String, literal: String)] {
