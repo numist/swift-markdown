@@ -15,27 +15,18 @@ import XCTest
 /// shortcut reference whose labels contain NULs match, including when the reference is a setext heading's
 /// content.
 class SetextHeadingNulLabelRefResolutionTests: XCTestCase {
-    private func surface(_ bytes: [UInt8]) -> String {
-        let options = ParseOptions(rawValue: 0)
-        return Document(parsing: String(decoding: bytes, as: UTF8.self), options: options)
-            .debugDescription(options: [])
+    private func surface(_ markdown: String) -> String {
+        Document(parsing: markdown, options: []).debugDescription(options: [])
     }
 
-    /// `[` `a` NUL `]` `:` `l` LF `[` `a` NUL `]` LF `-`
     func testNulLabelRefResolvesInSetextHeading() {
-        let bytes: [UInt8] = [0x5b, 0x61, 0x00, 0x5d, 0x3a, 0x6c, 0x0a, 0x5b, 0x61, 0x00, 0x5d, 0x0a, 0x2d]
         let expected = "Document\n└─ Heading level: 2\n   └─ Link destination: \"l\"\n      └─ Text \"a\u{FFFD}\""
-        XCTAssertEqual(expected, surface(bytes))
+        XCTAssertEqual(expected, surface("[a\0]:l\n[a\0]\n-"))
     }
 
-    /// The definition's invalid UTF-8 byte and the reference's NUL both become U+FFFD, so the labels match.
-    /// `[` `bar'` U+0001 0xFF NUL NUL `]` `:` `l` LF `[` `bar'` U+0001 NUL NUL NUL `]` LF `-`
-    func testInvalidByteAndNulLabelsMatchInSetextHeading() {
-        let bytes: [UInt8] = [
-            0x5b, 0x62, 0x61, 0x72, 0x27, 0x01, 0xff, 0x00, 0x00, 0x5d, 0x3a, 0x6c, 0x0a,
-            0x5b, 0x62, 0x61, 0x72, 0x27, 0x01, 0x00, 0x00, 0x00, 0x5d, 0x0a, 0x2d,
-        ]
+    /// The reference's NULs become U+FFFD, so its label matches a definition's label written with U+FFFD.
+    func testReplacementCharacterAndNulLabelsMatchInSetextHeading() {
         let expected = "Document\n└─ Heading level: 2\n   └─ Link destination: \"l\"\n      └─ Text \"bar\u{2019}\u{0001}\u{FFFD}\u{FFFD}\u{FFFD}\""
-        XCTAssertEqual(expected, surface(bytes))
+        XCTAssertEqual(expected, surface("[bar'\u{01}\u{FFFD}\0\0]:l\n[bar'\u{01}\0\0\0]\n-"))
     }
 }

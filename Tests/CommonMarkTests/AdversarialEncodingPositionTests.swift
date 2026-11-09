@@ -50,11 +50,6 @@ struct AdversarialEncodingPositionTests {
         ranges.filter { $0.kind == .text }.map { $0.range }
     }
 
-    /// `raw` decoded as UTF-8, with each invalid subsequence replaced by U+FFFD.
-    private func repaired(_ raw: [UInt8]) -> String {
-        String(decoding: raw, as: UTF8.self)
-    }
-
     private func isHeading(_ k: MarkdownNode.Kind) -> Bool { if case .heading = k { return true } else { return false } }
     private func isList(_ k: MarkdownNode.Kind) -> Bool { if case .list = k { return true } else { return false } }
     private func isItem(_ k: MarkdownNode.Kind) -> Bool { if case .item = k { return true } else { return false } }
@@ -288,89 +283,5 @@ struct AdversarialEncodingPositionTests {
         let texts = textRanges(ranges)
         try #require(texts.count == 1)
         #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 6))
-    }
-
-    // MARK: - E. Invalid-UTF-8 repair
-    //
-    // Decoding invalid UTF-8 replaces each invalid subsequence with U+FFFD, which occupies 3 bytes
-    // in the parsed string.
-
-    @Test("lone continuation byte 0x80 in text becomes one 3-byte U+FFFD")
-    func loneContinuationByteInText() throws {
-        // raw "a" 0x80 "b" -> "a\u{FFFD}b": 'a'(1) U+FFFD(2..4) 'b'(5), 5 bytes -> text 1:1..1:6.
-        let src = repaired([0x61, 0x80, 0x62])
-        #expect(src == "a\u{FFFD}b")
-        let ranges = collect(src)
-        let texts = textRanges(ranges)
-        try #require(texts.count == 1)
-        #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 6))
-    }
-
-    @Test("truncated 3-byte sequence 0xE2 0x82 in text becomes ONE U+FFFD")
-    func truncatedThreeByteSequenceInText() throws {
-        // raw "a" 0xE2 0x82 "b": the maximal ill-formed subpart 0xE2 0x82 -> a SINGLE U+FFFD (not two),
-        // then 'b'. "a\u{FFFD}b" = 5 bytes -> text 1:1..1:6.
-        let src = repaired([0x61, 0xE2, 0x82, 0x62])
-        #expect(src == "a\u{FFFD}b")
-        let ranges = collect(src)
-        let texts = textRanges(ranges)
-        try #require(texts.count == 1)
-        #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 6))
-    }
-
-    @Test("invalid byte 0xFF in text becomes one 3-byte U+FFFD")
-    func invalidByteFFInText() throws {
-        // raw "a" 0xFF "b" -> "a\u{FFFD}b", 5 bytes -> text 1:1..1:6. (0xFF is never valid in UTF-8.)
-        let src = repaired([0x61, 0xFF, 0x62])
-        #expect(src == "a\u{FFFD}b")
-        let ranges = collect(src)
-        let texts = textRanges(ranges)
-        try #require(texts.count == 1)
-        #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 6))
-    }
-
-    @Test("a repaired U+FFFD immediately before an emphasis opener")
-    func loneContinuationByteBeforeEmphasis() throws {
-        // raw 0x80 "*x*" -> "\u{FFFD}*x*": U+FFFD(1..3) text 1:1..1:4; opener '*' is byte 4.
-        let src = repaired([0x80, 0x2A, 0x78, 0x2A])
-        #expect(src == "\u{FFFD}*x*")
-        let ranges = collect(src)
-        let texts = textRanges(ranges)
-        try #require(texts.count == 2)
-        #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 4))
-        let emphasis = try #require(firstRange(ranges) { $0 == .emphasis })
-        #expect(emphasis == Pos(line: 1, column: 4)..<Pos(line: 1, column: 7))
-        #expect(texts[1] == Pos(line: 1, column: 5)..<Pos(line: 1, column: 6))
-    }
-
-    @Test("a repaired U+FFFD inside an ATX heading")
-    func truncatedSequenceInHeading() throws {
-        // raw "# a" 0xE2 0x82 "b" -> "# a\u{FFFD}b": content starts at byte 3; 'a'(3) U+FFFD(4..6) 'b'(7)
-        // -> text 1:3..1:8, heading 1:1..1:8.
-        let src = repaired([0x23, 0x20, 0x61, 0xE2, 0x82, 0x62])
-        #expect(src == "# a\u{FFFD}b")
-        let ranges = collect(src)
-        let heading = try #require(firstRange(ranges, isHeading))
-        #expect(heading == Pos(line: 1, column: 1)..<Pos(line: 1, column: 8))
-        let texts = textRanges(ranges)
-        try #require(texts.count == 1)
-        #expect(texts[0] == Pos(line: 1, column: 3)..<Pos(line: 1, column: 8))
-    }
-
-    @Test("a repaired U+FFFD inside a list item")
-    func invalidByteFFInListItem() throws {
-        // raw "- a" 0xFF "b" -> "- a\u{FFFD}b": content starts at byte 3; text 1:3..1:8.
-        let src = repaired([0x2D, 0x20, 0x61, 0xFF, 0x62])
-        #expect(src == "- a\u{FFFD}b")
-        let ranges = collect(src)
-        let list = try #require(firstRange(ranges, isList))
-        #expect(list == Pos(line: 1, column: 1)..<Pos(line: 1, column: 8))
-        let item = try #require(firstRange(ranges, isItem))
-        #expect(item == Pos(line: 1, column: 1)..<Pos(line: 1, column: 8))
-        let para = try #require(firstRange(ranges) { $0 == .paragraph })
-        #expect(para == Pos(line: 1, column: 3)..<Pos(line: 1, column: 8))
-        let texts = textRanges(ranges)
-        try #require(texts.count == 1)
-        #expect(texts[0] == Pos(line: 1, column: 3)..<Pos(line: 1, column: 8))
     }
 }

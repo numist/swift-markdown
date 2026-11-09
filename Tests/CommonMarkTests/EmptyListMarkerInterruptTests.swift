@@ -17,74 +17,74 @@ import CommonMark
 @Suite("Empty list marker paragraph interruption")
 struct EmptyListMarkerInterruptTests {
 
-    private typealias Pos = MarkdownNode.SourcePosition
+    @Test("empty marker in a continued list item stays paragraph text (no nested list)", arguments: [
+        ("- a\n  +", """
+            document
+              list bullet '-' tight
+                item
+                  paragraph
+                    text "a"
+                    softbreak
+                    text "+"
 
-    /// Every `.list` node's `ListInfo`, in depth-first order: `[0]` is the outermost list.
-    private func listInfos(
-        in ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)]
-    ) -> [MarkdownNode.ListInfo] {
-        ranges.compactMap { entry in
-            if case .list(let info) = entry.kind { return info }
-            return nil
-        }
-    }
+            """),
+        ("- a\n  *", """
+            document
+              list bullet '-' tight
+                item
+                  paragraph
+                    text "a"
+                    softbreak
+                    text "*"
 
-    /// Count of nodes of a given kind anywhere in the tree, selected by `predicate`.
-    private func count(
-        in ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)],
-        where predicate: (MarkdownNode.Kind) -> Bool
-    ) -> Int {
-        ranges.reduce(0) { acc, entry in predicate(entry.kind) ? acc + 1 : acc }
-    }
+            """),
+        ("- a\n  1.", """
+            document
+              list bullet '-' tight
+                item
+                  paragraph
+                    text "a"
+                    softbreak
+                    text "1."
 
-    private func parseKinds(
-        _ src: String,
-        _ body: ([(kind: MarkdownNode.Kind, range: Range<Pos>?)], _ topLevelKinds: [MarkdownNode.Kind]) throws -> Void
-    ) throws {
-        try MarkdownDocument.withParsedDocument(src) { doc in
-            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-            dfsRanges(doc.root, into: &ranges)
-            var topLevelKinds: [MarkdownNode.Kind] = []
-            doc.root.children.forEach { topLevelKinds.append($0.kind) }
-            try body(ranges, topLevelKinds)
-        }
-    }
-
-    @Test("empty marker in a continued list item stays paragraph text (no nested list)")
-    func emptyMarkerInNestedItemStaysText() throws {
-        for src in ["- a\n  +", "- a\n  *", "- a\n  2."] {
-            try parseKinds(src) { ranges, _ in
-                let lists = listInfos(in: ranges)
-                try #require(lists.count >= 1, "fixture \(src.debugDescription) must parse to at least the outer list; got \(lists.count)")
-                #expect(lists.count == 1)                                    // no nested list opened
-                #expect(lists[0].kind == .bullet)
-                #expect(count(in: ranges) { if case .item = $0 { return true }; return false } == 1)
-            }
-        }
+            """),
+    ])
+    func emptyMarkerInNestedItemStaysText(markdown: String, tree: String) {
+        #expect(TreeDump.dump(markdown, options: []) == tree)
     }
 
     @Test("empty marker on a line without `>` opens a top-level list after the block quote")
-    func emptyMarkerAfterUnmatchedBlockQuoteOpensTopLevelList() throws {
-        try parseKinds("> a\n+") { ranges, topLevelKinds in
-            try #require(topLevelKinds.count == 2, "expected two top-level blocks (block quote + list); got \(topLevelKinds)")
-            #expect({ if case .blockQuote = topLevelKinds[0] { return true }; return false }())
-            #expect({ if case .list = topLevelKinds[1] { return true }; return false }())
-            let lists = listInfos(in: ranges)
-            #expect(lists.count == 1)
-            #expect(lists[0].kind == .bullet)
-            #expect(count(in: ranges) { if case .blockQuote = $0 { return true }; return false } == 1)
-            #expect(count(in: ranges) { if case .item = $0 { return true }; return false } == 1)
-        }
+    func emptyMarkerAfterUnmatchedBlockQuoteOpensTopLevelList() {
+        #expect(TreeDump.dump("> a\n+", options: []) == """
+            document
+              block_quote
+                paragraph
+                  text "a"
+              list bullet '+' tight
+                item
+
+            """)
     }
 
-    @Test("empty marker after a top-level paragraph stays text")
-    func emptyMarkerAfterTopLevelParagraphStaysText() throws {
-        for src in ["a\n+", "a\n* "] {
-            try parseKinds(src) { ranges, topLevelKinds in
-                try #require(topLevelKinds.count == 1, "fixture \(src.debugDescription) must parse to a single top-level block; got \(topLevelKinds)")
-                #expect({ if case .paragraph = topLevelKinds[0] { return true }; return false }())
-                #expect(listInfos(in: ranges).isEmpty)                       // no list opened
-            }
-        }
+    @Test("empty marker after a top-level paragraph stays text", arguments: [
+        ("a\n+", """
+            document
+              paragraph
+                text "a"
+                softbreak
+                text "+"
+
+            """),
+        ("a\n* ", """
+            document
+              paragraph
+                text "a"
+                softbreak
+                text "*"
+
+            """),
+    ])
+    func emptyMarkerAfterTopLevelParagraphStaysText(markdown: String, tree: String) {
+        #expect(TreeDump.dump(markdown, options: []) == tree)
     }
 }

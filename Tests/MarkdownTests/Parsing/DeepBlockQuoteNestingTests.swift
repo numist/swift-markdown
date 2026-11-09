@@ -11,8 +11,8 @@
 import Markdown
 import Testing
 
-/// Deeply nested block quotes build the full tree and render without overflowing the call stack on any
-/// thread, including the test runner's small-stack worker threads.
+/// Block quotes nest without a depth limit (Block quotes), and a document of deeply nested block quotes dumps and
+/// renders every level.
 struct DeepBlockQuoteNestingTests {
 
     /// A line of `>` markers opens one block quote per marker, and a following line keeps them open.
@@ -30,17 +30,18 @@ struct DeepBlockQuoteNestingTests {
         #expect(depth == 300)
     }
 
-    /// Dumping a deeply nested tree must not recurse one native stack frame per level.
     @Test func deepTreeDebugDescriptionDoesNotOverflow() {
         let document = Document(parsing: String(repeating: ">", count: 300))
         let dump = document.debugDescription(options: .printSourceLocations)
-        #expect(dump.contains("BlockQuote"))
+        let blockQuoteLines = (1...300).map { level in
+            "\n" + String(repeating: " ", count: 3 * (level - 1)) + "└─ BlockQuote @1:\(level)-1:301"
+        }
+        #expect(dump == "Document @1:1-1:301" + blockQuoteLines.joined())
     }
 
-    /// Rendering HTML for a deeply nested tree must likewise not overflow the stack.
-    @Test func deepTreeHTMLRenderDoesNotOverflow() {
+    @Test func deepTreeHTMLRenderRendersEveryLevel() {
         let document = Document(parsing: String(repeating: ">", count: 300))
         let html = HTMLFormatter.format(document)
-        #expect(html.contains("<blockquote>"))
+        #expect(html == String(repeating: "<blockquote>\n", count: 300) + String(repeating: "</blockquote>\n", count: 300))
     }
 }
