@@ -94,6 +94,36 @@ struct InlineOnlyTextConsolidationTests {
             """)
     }
 
+    @Test(arguments: [MarkdownDocument.ParseOptions.inlineOnly, .preserveWhitespace], [
+        ("_f", """
+            document
+              paragraph
+                text "_f"
+
+            """),
+        ("[t", """
+            document
+              paragraph
+                text "[t"
+
+            """),
+        ("a\\*b", """
+            document
+              paragraph
+                text "a*b"
+
+            """),
+        ("a&amp;b", """
+            document
+              paragraph
+                text "a&b"
+
+            """),
+    ])
+    func textMergesWithoutOtherOptions(options: MarkdownDocument.ParseOptions, example: (source: String, tree: String)) {
+        #expect(TreeDump.dump(example.source, options: options) == example.tree)
+    }
+
     @Test func preservedLineEndingMergesWithAdjacentText() {
         #expect(TreeDump.dump("_\nb", options: Self.preserveWhitespace) == """
             document

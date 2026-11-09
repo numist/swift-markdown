@@ -21,35 +21,33 @@ struct TablePrecedingParagraphPipeEscapeTests {
         TreeDump.dump(markdown, options: Self.options, sourceRanges: true)
     }
 
-    private func table(line: Int) -> String {
-        """
-          table @\(line):1-\(line + 1):4
-            table_header @\(line):1-\(line):6
-              table_cell align=none colspan=1 rowspan=1 @\(line):2-\(line):5
-                text "a" @\(line):3-\(line):4
-
-        """
-    }
-
-    @Test func testBackslashBeforePipeInCodeSpanIsLiteral() {
+    @Test func backslashBeforePipeInCodeSpanIsLiteral() {
         #expect(surface("`a\\|b`\n| a |\n|-|") == """
             document @1:1-3:4
               paragraph @1:1-1:7
                 code "a\\\\|b" @1:1-1:7
+              table @2:1-3:4
+                table_header @2:1-2:6
+                  table_cell align=none colspan=1 rowspan=1 @2:2-2:5
+                    text "a" @2:3-2:4
 
-            """ + table(line: 2))
+            """)
     }
 
-    @Test func testEscapedBackslashBeforePipeIsBackslash() {
+    @Test func escapedBackslashBeforePipeIsBackslash() {
         #expect(surface("x\\\\|y\n| a |\n|-|") == """
             document @1:1-3:4
               paragraph @1:1-1:6
                 text "x\\\\|y" @1:1-1:6
+              table @2:1-3:4
+                table_header @2:1-2:6
+                  table_cell align=none colspan=1 rowspan=1 @2:2-2:5
+                    text "a" @2:3-2:4
 
-            """ + table(line: 2))
+            """)
     }
 
-    @Test func testEscapedPipeInBlockQuoteKeepsColumns() {
+    @Test func escapedPipeInBlockQuoteKeepsColumns() {
         #expect(surface("> a\\|b\n> c\n> | x |\n> |-|") == """
             document @1:1-4:6
               block_quote @1:1-4:6
@@ -65,12 +63,16 @@ struct TablePrecedingParagraphPipeEscapeTests {
             """)
     }
 
-    @Test func testEscapedPipeIsPipe() {
+    @Test func escapedPipeIsPipe() {
         #expect(surface("x\\|y\n| a |\n|-|") == """
             document @1:1-3:4
               paragraph @1:1-1:5
                 text "x|y" @1:1-1:5
+              table @2:1-3:4
+                table_header @2:1-2:6
+                  table_cell align=none colspan=1 rowspan=1 @2:2-2:5
+                    text "a" @2:3-2:4
 
-            """ + table(line: 2))
+            """)
     }
 }

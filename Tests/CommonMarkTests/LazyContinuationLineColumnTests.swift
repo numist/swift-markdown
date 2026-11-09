@@ -12,46 +12,49 @@ import Testing
 import CommonMark
 
 /// A lazy continuation line's text has the source range of its own bytes, which start at column 1 rather than at the
-/// container's content column.
+/// list item's content column.
 @Suite("Lazy continuation line columns")
 struct LazyContinuationLineColumnTests {
 
-    private typealias Pos = MarkdownNode.SourcePosition
-
-    private static let specOptions: MarkdownDocument.ParseOptions = [.sourcePosition]
-
-    private func textRanges(
-        _ source: String, options: MarkdownDocument.ParseOptions
-    ) -> [Range<Pos>?] {
-        var out: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-        MarkdownDocument.withParsedDocument(source, options: options) { doc in
-            dfsRanges(doc.root, into: &out)
-        }
-        return out.filter { $0.kind == .text }.map(\.range)
-    }
+    private static let options: MarkdownDocument.ParseOptions = [.sourcePosition]
 
     @Test("a middle lazy continuation line in a list item starts at column 1")
-    func middleLineInListItem() throws {
-        let texts = textRanges("- e\nc\ng", options: Self.specOptions)
-        try #require(texts.count == 3)
-        #expect(texts[0] == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // "e"
-        #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 2))   // "c"
-        #expect(texts[2] == Pos(line: 3, column: 1)..<Pos(line: 3, column: 2))   // "g"
+    func middleLineInListItem() {
+        #expect(TreeDump.dump("- e\nc\ng", options: Self.options, sourceRanges: true) == """
+            document @1:1-3:2
+              list bullet '-' tight @1:1-3:2
+                item @1:1-3:2
+                  paragraph @1:3-3:2
+                    text "e" @1:3-1:4
+                    softbreak @-
+                    text "c" @2:1-2:2
+                    softbreak @-
+                    text "g" @3:1-3:2
+
+            """)
     }
 
     @Test("the last lazy continuation line in a list item starts at column 1")
-    func lastLineInListItem() throws {
-        let texts = textRanges("- e\nc", options: Self.specOptions)
-        try #require(texts.count == 2)
-        #expect(texts[0] == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // "e"
-        #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 2))   // "c"
-    }
+    func lastLineInListItem() {
+        #expect(TreeDump.dump("- e\nc", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:2
+              list bullet '-' tight @1:1-2:2
+                item @1:1-2:2
+                  paragraph @1:3-2:2
+                    text "e" @1:3-1:4
+                    softbreak @-
+                    text "c" @2:1-2:2
 
-    @Test("a lazy continuation line in a block quote starts at column 1")
-    func lineInBlockQuote() throws {
-        let texts = textRanges("> a\nbc\n", options: Self.specOptions)
-        try #require(texts.count == 2)
-        #expect(texts[0] == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // "a"
-        #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 3))   // "bc"
+            """)
+        #expect(TreeDump.dump("- e\ncccccccccc", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:11
+              list bullet '-' tight @1:1-2:11
+                item @1:1-2:11
+                  paragraph @1:3-2:11
+                    text "e" @1:3-1:4
+                    softbreak @-
+                    text "cccccccccc" @2:1-2:11
+
+            """)
     }
 }

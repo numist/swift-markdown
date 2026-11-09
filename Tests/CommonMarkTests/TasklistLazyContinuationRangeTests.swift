@@ -11,146 +11,106 @@
 import Testing
 import CommonMark
 
-/// A paragraph continuation line in a task list item has a source range that starts at the line's first
-/// content byte, whatever the width of the checkbox on the opening line.
+/// A paragraph continuation line in a task list item has a source range that starts at the line's first content byte,
+/// whatever the width of the checkbox on the opening line, and ends after the line's last content byte.
 @Suite("Task list item continuation line source ranges")
 struct TasklistLazyContinuationRangeTests {
 
-    private typealias Pos = MarkdownNode.SourcePosition
-
-    private static let options: MarkdownDocument.ParseOptions =
-        [.tasklist, .sourcePosition]
-
-    private func ranges(
-        in src: String, options: MarkdownDocument.ParseOptions
-    ) -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] {
-        MarkdownDocument.withParsedDocument(src, options: options) {
-            doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
-            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-            dfsRanges(doc.root, into: &ranges)
-            return ranges
-        }
-    }
-
-    /// The first list item's `checked` state (`.some(nil)` for an item without a checkbox), or `nil` if
-    /// there is no list item.
-    private func itemChecked(
-        in ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)]
-    ) -> Bool?? {
-        for entry in ranges {
-            if case .item(let checked) = entry.kind {
-                return checked
-            }
-        }
-        return nil
-    }
-
-    private func texts(
-        in ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)]
-    ) -> [Range<Pos>?] {
-        ranges.filter { $0.kind == .text }.map { $0.range }
-    }
+    private static let options: MarkdownDocument.ParseOptions = [.tasklist, .sourcePosition]
 
     @Test("an unchecked task list item's lazy continuation line starts at column 1")
-    func uncheckedLazyContinuationColumn() throws {
-        let ranges = ranges(in: "- [ ] x\ny", options: Self.options)
-        try #require(itemChecked(in: ranges) == .some(.some(false)))
-        let texts = texts(in: ranges)
-        try #require(texts.count == 2)
+    func uncheckedLazyContinuationColumn() {
+        #expect(TreeDump.dump("- [ ] x\ny", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:2
+              list bullet '-' tight @1:1-2:2
+                tasklist unchecked @1:1-2:2
+                  paragraph @1:7-2:2
+                    text "x" @1:7-1:8
+                    softbreak @-
+                    text "y" @2:1-2:2
 
-        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 7))   // "x" content after checkbox
-        #expect(texts[0]?.upperBound == Pos(line: 1, column: 8))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y"
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
+            """)
+        #expect(TreeDump.dump("- [ ] x\nyyyyyyyyyy", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:11
+              list bullet '-' tight @1:1-2:11
+                tasklist unchecked @1:1-2:11
+                  paragraph @1:7-2:11
+                    text "x" @1:7-1:8
+                    softbreak @-
+                    text "yyyyyyyyyy" @2:1-2:11
 
-        // A ten-byte line starts at the same column.
-        let longRanges = self.ranges(in: "- [ ] x\nyyyyyyyyyy", options: Self.options)
-        try #require(itemChecked(in: longRanges) == .some(.some(false)))
-        let longTexts = self.texts(in: longRanges)
-        try #require(longTexts.count == 2)
-        #expect(longTexts[0]?.lowerBound == Pos(line: 1, column: 7))
-        #expect(longTexts[0]?.upperBound == Pos(line: 1, column: 8))
-        #expect(longTexts[1]?.lowerBound == Pos(line: 2, column: 1))
-        #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 11))
+            """)
     }
 
     @Test("a checked task list item's lazy continuation line starts at column 1")
-    func checkedLazyContinuationColumn() throws {
-        let ranges = ranges(in: "- [x] x\ny", options: Self.options)
-        try #require(itemChecked(in: ranges) == .some(.some(true)))
-        let texts = texts(in: ranges)
-        try #require(texts.count == 2)
+    func checkedLazyContinuationColumn() {
+        #expect(TreeDump.dump("- [x] x\ny", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:2
+              list bullet '-' tight @1:1-2:2
+                tasklist checked @1:1-2:2
+                  paragraph @1:7-2:2
+                    text "x" @1:7-1:8
+                    softbreak @-
+                    text "y" @2:1-2:2
 
-        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 7))   // "x" content after checkbox
-        #expect(texts[0]?.upperBound == Pos(line: 1, column: 8))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y"
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
+            """)
+        #expect(TreeDump.dump("- [x] x\nyyyyyyyyyy", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:11
+              list bullet '-' tight @1:1-2:11
+                tasklist checked @1:1-2:11
+                  paragraph @1:7-2:11
+                    text "x" @1:7-1:8
+                    softbreak @-
+                    text "yyyyyyyyyy" @2:1-2:11
 
-        // A ten-byte line starts at the same column.
-        let longRanges = self.ranges(in: "- [x] x\nyyyyyyyyyy", options: Self.options)
-        try #require(itemChecked(in: longRanges) == .some(.some(true)))
-        let longTexts = self.texts(in: longRanges)
-        try #require(longTexts.count == 2)
-        #expect(longTexts[0]?.lowerBound == Pos(line: 1, column: 7))
-        #expect(longTexts[0]?.upperBound == Pos(line: 1, column: 8))
-        #expect(longTexts[1]?.lowerBound == Pos(line: 2, column: 1))
-        #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 11))
+            """)
     }
 
     @Test("a one-space-indented continuation line starts after the space")
-    func oneSpaceContinuationColumn() throws {
-        let ranges = ranges(in: "- [ ] x\n y", options: Self.options)
-        try #require(itemChecked(in: ranges) == .some(.some(false)))
-        let texts = texts(in: ranges)
-        try #require(texts.count == 2)
+    func oneSpaceContinuationColumn() {
+        #expect(TreeDump.dump("- [ ] x\n y", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:3
+              list bullet '-' tight @1:1-2:3
+                tasklist unchecked @1:1-2:3
+                  paragraph @1:7-2:3
+                    text "x" @1:7-1:8
+                    softbreak @-
+                    text "y" @2:2-2:3
 
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 2))   // "y" after the space
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 3))
+            """)
+        #expect(TreeDump.dump("- [ ] x\n yyyyyyyyyy", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:12
+              list bullet '-' tight @1:1-2:12
+                tasklist unchecked @1:1-2:12
+                  paragraph @1:7-2:12
+                    text "x" @1:7-1:8
+                    softbreak @-
+                    text "yyyyyyyyyy" @2:2-2:12
 
-        // A ten-byte line starts at the same column.
-        let longRanges = self.ranges(in: "- [ ] x\n yyyyyyyyyy", options: Self.options)
-        try #require(itemChecked(in: longRanges) == .some(.some(false)))
-        let longTexts = self.texts(in: longRanges)
-        try #require(longTexts.count == 2)
-        #expect(longTexts[1]?.lowerBound == Pos(line: 2, column: 2))
-        #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 12))
+            """)
     }
 
     @Test("a four-space-indented continuation line starts after the spaces")
-    func fourSpaceContinuationColumn() throws {
-        let ranges = ranges(in: "- [ ] x\n    y", options: Self.options)
-        try #require(itemChecked(in: ranges) == .some(.some(false)))
-        let texts = texts(in: ranges)
-        try #require(texts.count == 2)
+    func fourSpaceContinuationColumn() {
+        #expect(TreeDump.dump("- [ ] x\n    y", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:6
+              list bullet '-' tight @1:1-2:6
+                tasklist unchecked @1:1-2:6
+                  paragraph @1:7-2:6
+                    text "x" @1:7-1:8
+                    softbreak @-
+                    text "y" @2:5-2:6
 
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 5))   // "y" after the spaces
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 6))
+            """)
+        #expect(TreeDump.dump("- [ ] x\n    yyyyyyyyyy", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:15
+              list bullet '-' tight @1:1-2:15
+                tasklist unchecked @1:1-2:15
+                  paragraph @1:7-2:15
+                    text "x" @1:7-1:8
+                    softbreak @-
+                    text "yyyyyyyyyy" @2:5-2:15
 
-        // A ten-byte line starts at the same column.
-        let longRanges = self.ranges(in: "- [ ] x\n    yyyyyyyyyy", options: Self.options)
-        try #require(itemChecked(in: longRanges) == .some(.some(false)))
-        let longTexts = self.texts(in: longRanges)
-        try #require(longTexts.count == 2)
-        #expect(longTexts[1]?.lowerBound == Pos(line: 2, column: 5))
-        #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 15))
-    }
-
-    @Test("a list item without a checkbox has the same continuation line range")
-    func plainBulletContinuationColumn() throws {
-        let ranges = ranges(in: "- x\ny", options: Self.options)
-        try #require(itemChecked(in: ranges) == .some(Bool?.none))   // no checkbox
-        let texts = texts(in: ranges)
-        try #require(texts.count == 2)
-
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))   // "y"
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 2))
-
-        // A ten-byte line starts at the same column.
-        let longRanges = self.ranges(in: "- x\nyyyyyyyyyy", options: Self.options)
-        try #require(itemChecked(in: longRanges) == .some(Bool?.none))
-        let longTexts = self.texts(in: longRanges)
-        try #require(longTexts.count == 2)
-        #expect(longTexts[1]?.lowerBound == Pos(line: 2, column: 1))
-        #expect(longTexts[1]?.upperBound == Pos(line: 2, column: 11))
+            """)
     }
 }

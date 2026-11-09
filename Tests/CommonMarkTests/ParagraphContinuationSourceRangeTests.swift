@@ -11,164 +11,110 @@
 import Testing
 import CommonMark
 
-/// A paragraph continuation line's text starts at the line's first non-whitespace byte, wherever
-/// that falls relative to the paragraph's first line. Paragraphs strip the line's leading
-/// whitespace from the raw content, so the source range begins after it.
+/// A paragraph continuation line's text starts at the line's first non-whitespace byte, wherever that falls relative to
+/// the paragraph's first line, since the line's initial whitespace is not part of the paragraph's content (Paragraphs).
 @Suite("Paragraph continuation line source ranges")
 struct ParagraphContinuationSourceRangeTests {
 
-    private typealias Pos = MarkdownNode.SourcePosition
-
-    private static let specOptions: MarkdownDocument.ParseOptions =
+    private static let options: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
-    /// Every node's kind and source range, in depth-first order.
-    private func ranges(in src: String) -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] {
-        MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
-            doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
-            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-            dfsRanges(doc.root, into: &ranges)
-            return ranges
-        }
-    }
-
-    /// The source range of the first node whose kind equals `kind`, in depth-first order.
-    private func firstRange(
-        _ kind: MarkdownNode.Kind,
-        in ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)]
-    ) -> Range<Pos>? {
-        ranges.first { $0.kind == kind }?.range
-    }
-
     @Test("top-level continuation line text starts after its leading whitespace")
-    func topLevelContinuation() throws {
-        let ranges = ranges(in: "foo\n   bar")
-        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
-        try #require(texts.count == 2)
+    func topLevelContinuation() {
+        #expect(TreeDump.dump("foo\n   bar", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:7
+              paragraph @1:1-2:7
+                text "foo" @1:1-1:4
+                softbreak @-
+                text "bar" @2:4-2:7
 
-        #expect(firstRange(.document, in: ranges)?.lowerBound == Pos(line: 1, column: 1))
-        #expect(firstRange(.document, in: ranges)?.upperBound == Pos(line: 2, column: 7))
-        #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 1, column: 1))
-        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 7))
-
-        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 1))   // "foo"
-        #expect(texts[0]?.upperBound == Pos(line: 1, column: 4))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 4))
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 7))
+            """)
     }
 
+    /// The block quote marker takes `>` and one space, and the remaining three spaces are the paragraph line's
+    /// initial whitespace, so `bar` starts at column 6.
     @Test("block quote continuation line text starts after its leading whitespace")
-    func blockquoteContinuation() throws {
-        // The block quote marker consumes `>` and one space; the remaining three spaces are
-        // stripped as paragraph leading whitespace, so `bar` starts at column 6.
-        let ranges = ranges(in: "> foo\n>    bar")
-        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
-        try #require(texts.count == 2)
+    func blockquoteContinuation() {
+        #expect(TreeDump.dump("> foo\n>    bar", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:9
+              block_quote @1:1-2:9
+                paragraph @1:3-2:9
+                  text "foo" @1:3-1:6
+                  softbreak @-
+                  text "bar" @2:6-2:9
 
-        #expect(firstRange(.blockQuote, in: ranges)?.lowerBound == Pos(line: 1, column: 1))
-        #expect(firstRange(.blockQuote, in: ranges)?.upperBound == Pos(line: 2, column: 9))
-        #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 1, column: 3))
-        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 9))
-
-        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "foo"
-        #expect(texts[0]?.upperBound == Pos(line: 1, column: 6))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 6))
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 9))
+            """)
     }
 
     @Test("lazy continuation line in a block quote starts at column 1")
-    func lazyBlockquoteContinuation() throws {
-        let ranges = ranges(in: "> bar\nbaz")
-        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
-        try #require(texts.count == 2)
+    func lazyBlockquoteContinuation() {
+        #expect(TreeDump.dump("> bar\nbaz", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:4
+              block_quote @1:1-2:4
+                paragraph @1:3-2:4
+                  text "bar" @1:3-1:6
+                  softbreak @-
+                  text "baz" @2:1-2:4
 
-        #expect(firstRange(.blockQuote, in: ranges)?.lowerBound == Pos(line: 1, column: 1))
-        #expect(firstRange(.blockQuote, in: ranges)?.upperBound == Pos(line: 2, column: 4))
-        #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 1, column: 3))
-        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 4))
-
-        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "bar"
-        #expect(texts[0]?.upperBound == Pos(line: 1, column: 6))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 4))
+            """)
     }
 
     @Test("consecutive lazy continuation lines each start at column 1")
-    func lazyMultilineContinuation() throws {
-        let ranges = ranges(in: "> bar\nbaz\nqux")
-        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
-        try #require(texts.count == 3)
+    func lazyMultilineContinuation() {
+        #expect(TreeDump.dump("> bar\nbaz\nqux", options: Self.options, sourceRanges: true) == """
+            document @1:1-3:4
+              block_quote @1:1-3:4
+                paragraph @1:3-3:4
+                  text "bar" @1:3-1:6
+                  softbreak @-
+                  text "baz" @2:1-2:4
+                  softbreak @-
+                  text "qux" @3:1-3:4
 
-        #expect(firstRange(.blockQuote, in: ranges)?.lowerBound == Pos(line: 1, column: 1))
-        #expect(firstRange(.blockQuote, in: ranges)?.upperBound == Pos(line: 3, column: 4))
-        #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 1, column: 3))
-        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 3, column: 4))
-
-        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "bar"
-        #expect(texts[0]?.upperBound == Pos(line: 1, column: 6))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 1))
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 4))
-        #expect(texts[2]?.lowerBound == Pos(line: 3, column: 1))
-        #expect(texts[2]?.upperBound == Pos(line: 3, column: 4))
+            """)
     }
 
     @Test("indented lazy continuation line in a block quote starts after its leading whitespace")
-    func lazyBlockquoteContinuationWithLeadingWhitespace() throws {
-        let ranges = ranges(in: "> foo\n  baz")
-        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
-        try #require(texts.count == 2)
+    func lazyBlockquoteContinuationWithLeadingWhitespace() {
+        #expect(TreeDump.dump("> foo\n  baz", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:6
+              block_quote @1:1-2:6
+                paragraph @1:3-2:6
+                  text "foo" @1:3-1:6
+                  softbreak @-
+                  text "baz" @2:3-2:6
 
-        #expect(firstRange(.blockQuote, in: ranges)?.lowerBound == Pos(line: 1, column: 1))
-        #expect(firstRange(.blockQuote, in: ranges)?.upperBound == Pos(line: 2, column: 6))
-        #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 1, column: 3))
-        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 6))
-
-        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "foo"
-        #expect(texts[0]?.upperBound == Pos(line: 1, column: 6))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 3))
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 6))
+            """)
     }
 
+    /// One space is less than the item's content indent of two, so ` bar` is a lazy continuation line (List items).
     @Test("lazy continuation line in a list item starts after its leading whitespace")
-    func lazyListContinuation() throws {
-        // One space is less than the item's content indent of two, so ` bar` is a lazy continuation
-        // line (List items).
-        let ranges = ranges(in: "- foo\n bar")
-        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
-        try #require(texts.count == 2)
+    func lazyListContinuation() {
+        #expect(TreeDump.dump("- foo\n bar", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:5
+              list bullet '-' tight @1:1-2:5
+                item @1:1-2:5
+                  paragraph @1:3-2:5
+                    text "foo" @1:3-1:6
+                    softbreak @-
+                    text "bar" @2:2-2:5
 
-        let listRange = ranges.first { if case .list = $0.kind { return true } else { return false } }?.range
-        #expect(listRange?.lowerBound == Pos(line: 1, column: 1))
-        #expect(listRange?.upperBound == Pos(line: 2, column: 5))
-        #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 1, column: 3))
-        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 5))
-
-        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "foo"
-        #expect(texts[0]?.upperBound == Pos(line: 1, column: 6))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 2))
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 5))
+            """)
     }
 
+    /// Line 2 matches the outer block quote marker only, so `baz` is a lazy continuation line of the inner block
+    /// quote's paragraph.
     @Test("lazy continuation line in a nested block quote starts after its leading whitespace")
-    func lazyNestedBlockquoteContinuation() throws {
-        // Line 2 matches the outer block quote marker only, so `baz` is a lazy continuation line of
-        // the inner block quote's paragraph.
-        let ranges = ranges(in: "> > foo\n>  baz")
-        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
-        let quotes = ranges.filter { $0.kind == .blockQuote }.map { $0.range }
-        try #require(texts.count == 2)
-        try #require(quotes.count == 2)
+    func lazyNestedBlockquoteContinuation() {
+        #expect(TreeDump.dump("> > foo\n>  baz", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:7
+              block_quote @1:1-2:7
+                block_quote @1:3-2:7
+                  paragraph @1:5-2:7
+                    text "foo" @1:5-1:8
+                    softbreak @-
+                    text "baz" @2:4-2:7
 
-        #expect(quotes[0]?.lowerBound == Pos(line: 1, column: 1))   // outer block quote
-        #expect(quotes[0]?.upperBound == Pos(line: 2, column: 7))
-        #expect(quotes[1]?.lowerBound == Pos(line: 1, column: 3))   // inner block quote
-        #expect(quotes[1]?.upperBound == Pos(line: 2, column: 7))
-        #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 1, column: 5))
-        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 7))
-
-        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 5))   // "foo"
-        #expect(texts[0]?.upperBound == Pos(line: 1, column: 8))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 4))
-        #expect(texts[1]?.upperBound == Pos(line: 2, column: 7))
+            """)
     }
 }

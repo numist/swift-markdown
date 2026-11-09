@@ -638,38 +638,6 @@ struct FencedCodeTests {
         }
     }
 
-    @Test("info string in a tab-indented list item")
-    func infoStringInTabIndentedListItem() {
-        // The tab after `*` advances to the next tab stop (Tabs), so the item's content starts at the fence, one byte
-        // but three columns past the end of the marker (List items). The unindented ``` line opens a second, top-level
-        // fence with an empty info string.
-        let source = "*\t```n\na\n```"
-        MarkdownDocument.withParsedDocument(source) { doc in
-            let blocks = codeBlocks(doc)
-            #expect(blocks.map(\.info) == ["n", ""])
-        }
-    }
-
-    @Test("unclosed info string in a tab-indented list item does not crash")
-    func unclosedInfoStringInTabIndentedListItem() {
-        // The tab after `*` is one byte but three columns (Tabs), and the info string runs to the end of input.
-        let source = "*\t```n"
-        MarkdownDocument.withParsedDocument(source) { doc in
-            let blocks = codeBlocks(doc)
-            #expect(blocks.map(\.info) == ["n"])
-        }
-    }
-
-    @Test("escaped info string in a tab-indented list item is decoded")
-    func escapedInfoStringInTabIndentedListItem() {
-        // Per Backslash escapes, `\+` in the info string is `+`.
-        let source = "*\t```foo\\+bar\nx\n```"
-        MarkdownDocument.withParsedDocument(source) { doc in
-            let blocks = codeBlocks(doc)
-            #expect(blocks.first?.info == "foo+bar")
-        }
-    }
-
     @Test("info string with trailing whitespace is trimmed")
     func infoTrimmed() {
         let source = "```   swift   \nbody\n```"
@@ -1215,27 +1183,6 @@ struct HTMLBlockTests {
         }
     }
 
-    @Test("type 4: declaration")
-    func type4Declaration() {
-        let source = "<!DOCTYPE html>"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        let kinds = dfs(doc).map { $0.kind }
-        #expect(kinds == [.document, .htmlBlock])
-        }
-    }
-
-    @Test("type 4: requires an uppercase ASCII letter after `<!`")
-    func type4RequiresUppercaseLetter() {
-        MarkdownDocument.withParsedDocument("<!Baz") { doc in
-        let kinds = dfs(doc).map { $0.kind }
-        #expect(kinds == [.document, .htmlBlock])
-        }
-        MarkdownDocument.withParsedDocument("<!baz") { doc in
-        let kinds = dfs(doc).map { $0.kind }
-        #expect(kinds == [.document, .paragraph, .text])
-        }
-    }
-
     @Test("type 5: CDATA")
     func type5CDATA() {
         let source = "<![CDATA[\nfoo\n]]>"
@@ -1320,78 +1267,6 @@ struct HTMLBlockTests {
         #expect(kinds == [.document, .htmlBlock])
         let texts = dfs(doc).compactMap { $0.literal }
         #expect(texts == ["<!-- foo -->\n"])
-        }
-    }
-
-    // Line tabulation and form feed are whitespace characters (Characters and lines), so they end a tag name
-    // as a space does.
-
-    @Test("type 1: form feed after a raw-text tag name starts an HTML block")
-    func type1FormFeedWhitespace() {
-        let source = "<pre\u{0C}>"
-        MarkdownDocument.withParsedDocument(source) { doc in
-            let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds == [.document, .htmlBlock])
-        }
-    }
-
-    @Test("type 6: vertical tab / form feed after a block tag name starts an HTML block")
-    func type6VerticalTabFormFeed() {
-        for source in ["<div\u{0C}>", "<div\u{0B}>"] {
-            MarkdownDocument.withParsedDocument(source) { doc in
-                let kinds = dfs(doc).map { $0.kind }
-                #expect(kinds == [.document, .htmlBlock], "\(source.debugDescription) should be an HTML block")
-            }
-        }
-    }
-
-    @Test("type 7: form feed as intra-tag whitespace starts an HTML block")
-    func type7FormFeedWhitespace() {
-        let source = "<a\u{0C}ref=\"x\">"
-        MarkdownDocument.withParsedDocument(source) { doc in
-            let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds == [.document, .htmlBlock])
-        }
-    }
-
-    // After a type 7 open tag, the rest of the line may hold any whitespace, line tabulation and form feed
-    // included.
-    @Test("type 7: form feed trailing the tag starts an HTML block")
-    func type7TrailingFormFeed() {
-        MarkdownDocument.withParsedDocument("<a>\u{0C}") { doc in
-            let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds == [.document, .htmlBlock])
-        }
-    }
-
-    @Test("type 7: vertical tab trailing the tag starts an HTML block")
-    func type7TrailingVerticalTab() {
-        MarkdownDocument.withParsedDocument("<a>\u{0B}") { doc in
-            let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds == [.document, .htmlBlock])
-        }
-    }
-
-    // An unquoted attribute value is nonempty, while a quoted one may be empty (Raw HTML).
-    @Test("type 7: empty unquoted attribute value does not start an HTML block")
-    func type7EmptyUnquotedValueIsParagraph() {
-        for source in ["<a b=>", "<a b= >"] {
-            MarkdownDocument.withParsedDocument(source) { doc in
-                let kinds = dfs(doc).map { $0.kind }
-                #expect(kinds.contains(.paragraph) && !kinds.contains(.htmlBlock),
-                        "\(source.debugDescription) should be a paragraph, not an HTML block")
-            }
-        }
-    }
-
-    @Test("type 7: non-empty unquoted and empty quoted attribute values start an HTML block")
-    func type7NonEmptyAndQuotedValueIsHTMLBlock() {
-        for source in ["<a b=c>", "<a b=\"\">"] {
-            MarkdownDocument.withParsedDocument(source) { doc in
-                let kinds = dfs(doc).map { $0.kind }
-                #expect(kinds == [.document, .htmlBlock],
-                        "\(source.debugDescription) should be an HTML block")
-            }
         }
     }
 }

@@ -58,6 +58,7 @@ struct RepeatedContentStorageGrowthTests {
         Shape("smart quotes before entities", blockAndInlineOnly(.smart)) { "''" + repeated("&amp;", $0) },
         Shape("smart quotes before escapes", blockAndInlineOnly(.smart)) { "''" + repeated("\\*", $0) },
         Shape("smart quotes before backticks", blockAndInlineOnly(.smart)) { "''" + repeated("`", $0) },
+        Shape("smart quotes before brackets", blockAndInlineOnly(.smart)) { "''" + repeated("[a]", $0) },
         Shape("nested smart quotes", blockAndInlineOnly(.smart)) { repeated("\"", $0) + "a" + repeated("\"", $0) },
         Shape("entities", blockAndInlineOnly([])) { repeated("&amp;", $0) },
         Shape("an entity before brackets", blockAndInlineOnly([])) { "&amp;" + repeated("[a]", $0) },
@@ -116,9 +117,8 @@ struct RepeatedContentStorageGrowthTests {
         Shape("cross-line footnote brackets", blockAndInlineOnly(.footnotes)) { repeated("[^a\nb] ", $0) },
         Shape("cross-line footnote brackets in a block quote", blockOnly(.footnotes)) { repeated("> [^a\n> b] ", $0) },
         Shape("footnote brackets nested across lines", blockAndInlineOnly(.footnotes)) { repeated("[^\n", $0) + "a" + repeated("]", $0) },
-        Shape("footnote brackets nested around replaced bytes across a line", blockAndInlineOnly(.footnotes)) {
-            String(decoding: Array(repeating: Array("[^".utf8), count: $0).joined() + Array(repeating: 0xD9, count: 17) + [0x0A]
-                + Array(repeating: 0x99, count: 26) + Array(repeating: UInt8(ascii: "]"), count: $0), as: UTF8.self)
+        Shape("footnote brackets nested around replacement characters across a line", blockAndInlineOnly(.footnotes)) {
+            repeated("[^", $0) + repeated("\u{FFFD}", 17) + "\n" + repeated("\u{FFFD}", 26) + repeated("]", $0)
         },
         Shape("image-shaped footnote brackets nested across a line", blockAndInlineOnly(.footnotes)) { repeated("![^", $0) + "abc\ndef" + repeated("]", $0) },
         Shape("escaped-caret footnote brackets nested", blockAndInlineOnly(.footnotes)) { repeated("[\\^", $0) + "x" + repeated("]", $0) },
@@ -194,6 +194,16 @@ struct RepeatedContentStorageGrowthTests {
 
     static let cases: [Case] = (inlineShapes + autolinkShapes + footnoteAndAttributeShapes + tableShapes + blockShapes).flatMap { shape in
         shape.options.map { Case(shape: shape, options: $0) }
+    }
+
+    @Test("smart quotes before unmatched brackets are one text run")
+    func smartQuotesBeforeBracketsText() {
+        #expect(TreeDump.dump("''[a][a][a]", options: [.smart]) == """
+            document
+              paragraph
+                text "\u{2018}\u{2019}[a][a][a]"
+
+            """)
     }
 
     @Test("storage grows linearly with the repetitions", arguments: cases)

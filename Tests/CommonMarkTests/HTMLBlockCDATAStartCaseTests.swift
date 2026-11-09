@@ -17,73 +17,70 @@ import CommonMark
 @Suite("HTML block CDATA start condition case")
 struct HTMLBlockCDATAStartCaseTests {
 
-    private static let options: MarkdownDocument.ParseOptions = []
-
-    /// The concatenated literal content of `node` and its descendants in document order.
-    private func allText(_ node: borrowing MarkdownNode) -> String {
-        var out = ""
-        if let lit = node.literal() { out += lit }
-        node.children.forEach { out += allText($0) }
-        return out
-    }
-
-    /// The document's first block: its kind and its literal text without a trailing line ending, which an HTML block's
-    /// content has and a paragraph's text does not.
-    private func firstBlock(
-        _ src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> (kind: MarkdownNode.Kind, text: String) {
-        let found: (MarkdownNode.Kind, String)? =
-            MarkdownDocument.withParsedDocument(src, options: options) { doc in
-                var first: (MarkdownNode.Kind, String)? = nil
-                doc.root.children.forEach { child in
-                    if first == nil { first = (child.kind, allText(child)) }
-                }
-                return first
-            }
-        let block = try #require(found, "fixture vacuous: no block parsed for \(src.debugDescription)")
-        let text = block.1.hasSuffix("\n") ? String(block.1.dropLast()) : block.1
-        return (block.0, text)
-    }
-
     @Test("`<![CDAtA[` (lowercase t) is a paragraph")
-    func mixedCaseIsParagraph() throws {
-        let block = try firstBlock("<![CDAtA[", options: Self.options)
-        #expect(block.kind == .paragraph)
-        #expect(block.text == "<![CDAtA[")
+    func mixedCaseIsParagraph() {
+        #expect(TreeDump.dump("<![CDAtA[", options: []) == """
+            document
+              paragraph
+                text "<![CDAtA["
+
+            """)
     }
 
     @Test("`<![cdata[` (all lowercase) is a paragraph")
-    func lowercaseIsParagraph() throws {
-        let block = try firstBlock("<![cdata[", options: Self.options)
-        #expect(block.kind == .paragraph)
-        #expect(block.text == "<![cdata[")
+    func lowercaseIsParagraph() {
+        #expect(TreeDump.dump("<![cdata[", options: []) == """
+            document
+              paragraph
+                text "<![cdata["
+
+            """)
     }
 
     @Test("`<![CDATA[` opens an HTML block")
-    func exactCaseOpensHTMLBlock() throws {
-        let block = try firstBlock("<![CDATA[", options: Self.options)
-        #expect(block.kind == .htmlBlock)
-        #expect(block.text == "<![CDATA[")
+    func exactCaseOpensHTMLBlock() {
+        #expect(TreeDump.dump("<![CDATA[", options: []) == """
+            document
+              html_block "<![CDATA[\\n"
+
+            """)
     }
 
     @Test("`<![CDATAx` (no trailing bracket) is a paragraph")
-    func noTrailingBracket() throws {
-        let block = try firstBlock("<![CDATAx", options: Self.options)
-        #expect(block.kind == .paragraph)
-        #expect(block.text == "<![CDATAx")
+    func noTrailingBracket() {
+        #expect(TreeDump.dump("<![CDATAx", options: []) == """
+            document
+              paragraph
+                text "<![CDATAx"
+
+            """)
     }
 
     @Test("`<!x` (lowercase after `<!`) is a paragraph")
-    func lowercaseAfterBang() throws {
-        let block = try firstBlock("<!x", options: Self.options)
-        #expect(block.kind == .paragraph)
-        #expect(block.text == "<!x")
+    func lowercaseAfterBang() {
+        #expect(TreeDump.dump("<!x", options: []) == """
+            document
+              paragraph
+                text "<!x"
+
+            """)
     }
 
     @Test("`<!DOCTYPE html>` meets start condition 4 and opens an HTML block")
-    func type4Declaration() throws {
-        let block = try firstBlock("<!DOCTYPE html>", options: Self.options)
-        #expect(block.kind == .htmlBlock)
-        #expect(block.text == "<!DOCTYPE html>")
+    func type4Declaration() {
+        #expect(TreeDump.dump("<!DOCTYPE html>", options: []) == """
+            document
+              html_block "<!DOCTYPE html>\\n"
+
+            """)
+    }
+
+    @Test("`<!Baz` meets start condition 4, which needs only an uppercase letter after `<!`")
+    func type4FirstLetterOnly() {
+        #expect(TreeDump.dump("<!Baz", options: []) == """
+            document
+              html_block "<!Baz\\n"
+
+            """)
     }
 }

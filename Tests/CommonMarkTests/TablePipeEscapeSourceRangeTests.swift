@@ -21,7 +21,7 @@ struct TablePipeEscapeSourceRangeTests {
         TreeDump.dump(markdown, options: Self.options, sourceRanges: true)
     }
 
-    @Test func testTextAfterEscapedPipeEndsAtItsLastByte() {
+    @Test func textAfterEscapedPipeEndsAtItsLastByte() {
         #expect(surface("| f\\|a |\n|-|") == """
             document @1:1-2:4
               table @1:1-2:4
@@ -32,7 +32,7 @@ struct TablePipeEscapeSourceRangeTests {
             """)
     }
 
-    @Test func testTextAfterTwoEscapedPipesEndsAtItsLastByte() {
+    @Test func textAfterTwoEscapedPipesEndsAtItsLastByte() {
         #expect(surface("| a\\|b\\|c |\n|-|") == """
             document @1:1-2:4
               table @1:1-2:4
@@ -43,7 +43,7 @@ struct TablePipeEscapeSourceRangeTests {
             """)
     }
 
-    @Test func testTextEndingInEscapedPipeEndsAfterThePipe() {
+    @Test func textEndingInEscapedPipeEndsAfterThePipe() {
         #expect(surface("| a\\| |\n|-|") == """
             document @1:1-2:4
               table @1:1-2:4
@@ -54,7 +54,7 @@ struct TablePipeEscapeSourceRangeTests {
             """)
     }
 
-    @Test func testEmphasisAfterEscapedPipeKeepsItsColumns() {
+    @Test func emphasisAfterEscapedPipeKeepsItsColumns() {
         #expect(surface("| \\|*a* |\n|-|") == """
             document @1:1-2:4
               table @1:1-2:4
@@ -63,19 +63,6 @@ struct TablePipeEscapeSourceRangeTests {
                     text "|" @1:4-1:5
                     emph @1:5-1:8
                       text "a" @1:6-1:7
-
-            """)
-    }
-
-    @Test func testTablePrecedingParagraphTextAfterEscapedPipeEndsAtItsLastByte() {
-        #expect(surface("x\\|y\n| a |\n|-|") == """
-            document @1:1-3:4
-              paragraph @1:1-1:5
-                text "x|y" @1:1-1:5
-              table @2:1-3:4
-                table_header @2:1-2:6
-                  table_cell align=none colspan=1 rowspan=1 @2:2-2:5
-                    text "a" @2:3-2:4
 
             """)
     }
