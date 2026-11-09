@@ -139,7 +139,7 @@ struct TableCellPipeWhitespaceTests {
     @Test("a line tabulation before a row's leading pipe is padding")
     func verticalTabBeforeLeadingPipe() {
         #expect(TreeDump.dump("| a | b |\n|-|-|\n\(Self.vt)| x | y |\n", options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:11
+            document @1:1-4:1
               table @1:1-3:11
                 table_header @1:1-1:10
                   table_cell align=none colspan=1 rowspan=1 @1:2-1:5

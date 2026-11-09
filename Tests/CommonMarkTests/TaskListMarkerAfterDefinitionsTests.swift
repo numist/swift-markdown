@@ -20,7 +20,7 @@ struct TaskListMarkerAfterDefinitionsTests {
     @Test("a marker on the definition's paragraph's next line is text")
     func markerOnNextLine() {
         #expect(TreeDump.dump("- [a]: /u\n  [ ] foo\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:10
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:10
                 item @1:1-2:10
                   paragraph @2:3-2:10
@@ -32,7 +32,7 @@ struct TaskListMarkerAfterDefinitionsTests {
     @Test("a marker after a line tabulation is text")
     func markerAfterLineTabulation() {
         #expect(TreeDump.dump("- [a]: /u\n  \u{0B}[ ] b\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:9
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:9
                 item @1:1-2:9
                   paragraph @2:4-2:9
@@ -44,7 +44,7 @@ struct TaskListMarkerAfterDefinitionsTests {
     @Test("a marker after a form feed before a table is text")
     func markerAfterFormFeedBeforeTable() {
         #expect(TreeDump.dump("- [a]: /u\n  \u{0C}[x] b\n  h|i\n  -|-\n", options: [.tasklist, .tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-4:6
+            document @1:1-5:1
               list bullet '-' tight @1:1-4:6
                 item @1:1-4:6
                   paragraph @2:4-2:9
@@ -62,7 +62,7 @@ struct TaskListMarkerAfterDefinitionsTests {
     @Test("a marker beginning a paragraph after the definitions and a blank line is text")
     func markerAfterBlankLine() {
         #expect(TreeDump.dump("- [a]: /u\n\n  [ ] foo\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:10
+            document @1:1-4:1
               list bullet '-' loose @1:1-3:10
                 item @1:1-3:10
                   paragraph @3:3-3:10

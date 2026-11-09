@@ -30,7 +30,7 @@ struct DeepFootnoteDefinitionBlankLineTests {
 
         if options.contains(.sourcePosition) {
             #expect(tree == """
-                document @1:1-40003:1
+                document @1:1-40004:1
                   paragraph @1:1-1:5
                     footnote_reference "1" @1:1-1:5
                   footnote_definition "a" @3:199996-3:200002

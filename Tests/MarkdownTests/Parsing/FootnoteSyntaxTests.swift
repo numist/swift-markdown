@@ -19,7 +19,7 @@ struct FootnoteSyntaxTests {
     func referenceAndDefinition() {
         let document = Document(parsing: "a[^n]\n\n[^n]: /u\n", source: nil, options: [])
         #expect(document.debugDescription(options: .printSourceLocations) == """
-            Document @1:1-3:9
+            Document @1:1-4:1
             └─ Paragraph @1:1-1:6
                ├─ Text @1:1-1:2 "a"
                └─ Link @1:2-1:6 destination: "/u"

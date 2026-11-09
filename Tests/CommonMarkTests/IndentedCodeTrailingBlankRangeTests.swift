@@ -37,7 +37,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "top level, an empty line, closed by a line that is not indented",
             "    a\n\nb\n",
             """
-            document @1:1-3:2
+            document @1:1-4:1
               code_block "" "a\\n" @1:5-1:6
               paragraph @3:1-3:2
                 text "b" @3:1-3:2
@@ -48,7 +48,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "top level, a line of more than four columns of spaces, closed by a line that is not indented",
             "    a\n      \nb\n",
             """
-            document @1:1-3:2
+            document @1:1-4:1
               code_block "" "a\\n" @1:5-1:6
               paragraph @3:1-3:2
                 text "b" @3:1-3:2
@@ -59,7 +59,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "top level, a line of fewer than four columns of spaces, at the end of the document",
             "    a\n  \n",
             """
-            document @1:1-2:3
+            document @1:1-3:1
               code_block "" "a\\n" @1:5-1:6
 
             """
@@ -68,7 +68,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "top level, a tab, at the end of the document",
             "    a\n\t\n",
             """
-            document @1:1-2:2
+            document @1:1-3:1
               code_block "" "a\\n" @1:5-1:6
 
             """
@@ -77,7 +77,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "top level, several blank lines",
             "    a\n\n    \n\t\nb\n",
             """
-            document @1:1-5:2
+            document @1:1-6:1
               code_block "" "a\\n" @1:5-1:6
               paragraph @5:1-5:2
                 text "b" @5:1-5:2
@@ -88,7 +88,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "top level, a blank line between two lines",
             "    a\n\n    b\n",
             """
-            document @1:1-3:6
+            document @1:1-4:1
               code_block "" "a\\n\\nb\\n" @1:5-3:6
 
             """
@@ -97,7 +97,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "top level, a blank line between two lines, then a blank line",
             "    a\n\n    b\n\n",
             """
-            document @1:1-4:1
+            document @1:1-5:1
               code_block "" "a\\n\\nb\\n" @1:5-3:6
 
             """
@@ -106,7 +106,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "top level, a last line ending with spaces, then a blank line",
             "    a  \n\nb\n",
             """
-            document @1:1-3:2
+            document @1:1-4:1
               code_block "" "a  \\n" @1:5-1:8
               paragraph @3:1-3:2
                 text "b" @3:1-3:2
@@ -117,7 +117,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "top level, closed by the next line",
             "    a\nb\n",
             """
-            document @1:1-2:2
+            document @1:1-3:1
               code_block "" "a\\n" @1:5-1:6
               paragraph @2:1-2:2
                 text "b" @2:1-2:2
@@ -128,7 +128,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "block quote, a blank line, closed by a line that does not continue the block quote",
             ">     a\n>\nb\n",
             """
-            document @1:1-3:2
+            document @1:1-4:1
               block_quote @1:1-2:2
                 code_block "" "a\\n" @1:7-1:8
               paragraph @3:1-3:2
@@ -140,7 +140,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "block quote, more than four columns of spaces, at the end of the document",
             ">     a\n>     \n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               block_quote @1:1-2:2
                 code_block "" "a\\n" @1:7-1:8
 
@@ -150,7 +150,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "bullet item, an empty line, closed by a line that does not continue the item",
             "-     a\n\nb\n",
             """
-            document @1:1-3:2
+            document @1:1-4:1
               list bullet '-' tight @1:1-1:8
                 item @1:1-1:8
                   code_block "" "a\\n" @1:7-1:8
@@ -174,7 +174,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "ordered item, fewer than four columns of spaces, at the end of the document",
             "1.     a\n   \n",
             """
-            document @1:1-2:4
+            document @1:1-3:1
               list ordered start=1 delim=period tight @1:1-1:9
                 item @1:1-1:9
                   code_block "" "a\\n" @1:8-1:9
@@ -185,7 +185,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "footnote definition, an empty line, closed by a line that does not continue the definition",
             "[^a]\n\n[^a]: x\n\n        a\n\nb\n",
             """
-            document @1:1-7:2
+            document @1:1-8:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               paragraph @7:1-7:2
@@ -201,7 +201,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             "block quote in a list item, a blank line, at the end of the document",
             "- >     a\n  >\n",
             """
-            document @1:1-2:4
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:4
                 item @1:1-2:4
                   block_quote @1:3-2:4

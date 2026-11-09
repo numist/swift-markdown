@@ -43,7 +43,7 @@ struct TableLazyContinuationRowTests {
             "block quote, lazy header row",
             "> x\na|b\n> -|-\n",
             """
-            document @1:1-3:6
+            document @1:1-4:1
               block_quote @1:1-3:6
                 paragraph @1:3-1:4
                   text "x" @1:3-1:4
@@ -60,7 +60,7 @@ struct TableLazyContinuationRowTests {
             "block quote, lazy delimiter row",
             "> a|b\n-|-\n",
             """
-            document @1:1-2:4
+            document @1:1-3:1
               block_quote @1:1-2:4
                 paragraph @1:3-2:4
                   text "a|b" @1:3-1:6
@@ -73,7 +73,7 @@ struct TableLazyContinuationRowTests {
             "block quote, lazy data row",
             "> a|b\n> -|-\nc|d\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               block_quote @1:1-2:6
                 table @1:3-2:6
                   table_header @1:3-1:6
@@ -90,7 +90,7 @@ struct TableLazyContinuationRowTests {
             "block quote, prefixed data row",
             "> a|b\n> -|-\n> c|d\n",
             """
-            document @1:1-3:6
+            document @1:1-4:1
               block_quote @1:1-3:6
                 table @1:3-3:6
                   table_header @1:3-1:6
@@ -110,7 +110,7 @@ struct TableLazyContinuationRowTests {
             "block quote, lazy header row and lazy data row",
             "> x\na|b\n> -|-\nc|d\n",
             """
-            document @1:1-4:4
+            document @1:1-5:1
               block_quote @1:1-3:6
                 paragraph @1:3-1:4
                   text "x" @1:3-1:4
@@ -129,7 +129,7 @@ struct TableLazyContinuationRowTests {
             "block quote, lazy header row and prefixed data row",
             "> x\na|b\n> -|-\n> c|d\n",
             """
-            document @1:1-4:6
+            document @1:1-5:1
               block_quote @1:1-4:6
                 paragraph @1:3-1:4
                   text "x" @1:3-1:4
@@ -151,7 +151,7 @@ struct TableLazyContinuationRowTests {
             "block quote, lazy header row and lazy delimiter row",
             "> x\na|b\n-|-\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               block_quote @1:1-3:4
                 paragraph @1:3-3:4
                   text "x" @1:3-1:4
@@ -166,7 +166,7 @@ struct TableLazyContinuationRowTests {
             "block quote, lazy line before a prefixed header row",
             "> x\ny\n> a|b\n> -|-\n",
             """
-            document @1:1-4:6
+            document @1:1-5:1
               block_quote @1:1-4:6
                 paragraph @1:3-2:2
                   text "x" @1:3-1:4
@@ -185,7 +185,7 @@ struct TableLazyContinuationRowTests {
             "bullet item, lazy header row",
             "- x\na|b\n  -|-\n",
             """
-            document @1:1-3:6
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:6
                 item @1:1-3:6
                   paragraph @1:3-1:4
@@ -203,7 +203,7 @@ struct TableLazyContinuationRowTests {
             "bullet item, lazy delimiter row",
             "- a|b\n-|-\n",
             """
-            document @1:1-2:4
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:4
                 item @1:1-2:4
                   paragraph @1:3-2:4
@@ -217,7 +217,7 @@ struct TableLazyContinuationRowTests {
             "bullet item, lazy data row",
             "- a|b\n  -|-\nc|d\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               list bullet '-' tight @1:1-2:6
                 item @1:1-2:6
                   table @1:3-2:6
@@ -235,7 +235,7 @@ struct TableLazyContinuationRowTests {
             "bullet item, prefixed data row",
             "- a|b\n  -|-\n  c|d\n",
             """
-            document @1:1-3:6
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:6
                 item @1:1-3:6
                   table @1:3-3:6
@@ -256,7 +256,7 @@ struct TableLazyContinuationRowTests {
             "bullet item, lazy header row and lazy data row",
             "- x\na|b\n  -|-\nc|d\n",
             """
-            document @1:1-4:4
+            document @1:1-5:1
               list bullet '-' tight @1:1-3:6
                 item @1:1-3:6
                   paragraph @1:3-1:4
@@ -276,7 +276,7 @@ struct TableLazyContinuationRowTests {
             "bullet item, lazy header row and prefixed data row",
             "- x\na|b\n  -|-\n  c|d\n",
             """
-            document @1:1-4:6
+            document @1:1-5:1
               list bullet '-' tight @1:1-4:6
                 item @1:1-4:6
                   paragraph @1:3-1:4
@@ -299,7 +299,7 @@ struct TableLazyContinuationRowTests {
             "bullet item, lazy header row and lazy delimiter row",
             "- x\na|b\n-|-\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:4
                 item @1:1-3:4
                   paragraph @1:3-3:4
@@ -315,7 +315,7 @@ struct TableLazyContinuationRowTests {
             "bullet item, lazy line before a prefixed header row",
             "- x\ny\n  a|b\n  -|-\n",
             """
-            document @1:1-4:6
+            document @1:1-5:1
               list bullet '-' tight @1:1-4:6
                 item @1:1-4:6
                   paragraph @1:3-2:2
@@ -335,7 +335,7 @@ struct TableLazyContinuationRowTests {
             "ordered item, lazy header row",
             "1. x\na|b\n   -|-\n",
             """
-            document @1:1-3:7
+            document @1:1-4:1
               list ordered start=1 delim=period tight @1:1-3:7
                 item @1:1-3:7
                   paragraph @1:4-1:5
@@ -353,7 +353,7 @@ struct TableLazyContinuationRowTests {
             "ordered item, prefixed header row",
             "1. x\n   a|b\n   -|-\n",
             """
-            document @1:1-3:7
+            document @1:1-4:1
               list ordered start=1 delim=period tight @1:1-3:7
                 item @1:1-3:7
                   paragraph @1:4-1:5
@@ -371,7 +371,7 @@ struct TableLazyContinuationRowTests {
             "ordered item, lazy delimiter row",
             "1. a|b\n-|-\n",
             """
-            document @1:1-2:4
+            document @1:1-3:1
               list ordered start=1 delim=period tight @1:1-2:4
                 item @1:1-2:4
                   paragraph @1:4-2:4
@@ -385,7 +385,7 @@ struct TableLazyContinuationRowTests {
             "ordered item, prefixed delimiter row",
             "1. a|b\n   -|-\n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               list ordered start=1 delim=period tight @1:1-2:7
                 item @1:1-2:7
                   table @1:4-2:7
@@ -401,7 +401,7 @@ struct TableLazyContinuationRowTests {
             "ordered item, lazy data row",
             "1. a|b\n   -|-\nc|d\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               list ordered start=1 delim=period tight @1:1-2:7
                 item @1:1-2:7
                   table @1:4-2:7
@@ -419,7 +419,7 @@ struct TableLazyContinuationRowTests {
             "ordered item, prefixed data row",
             "1. a|b\n   -|-\n   c|d\n",
             """
-            document @1:1-3:7
+            document @1:1-4:1
               list ordered start=1 delim=period tight @1:1-3:7
                 item @1:1-3:7
                   table @1:4-3:7
@@ -440,7 +440,7 @@ struct TableLazyContinuationRowTests {
             "ordered item, lazy header row and lazy data row",
             "1. x\na|b\n   -|-\nc|d\n",
             """
-            document @1:1-4:4
+            document @1:1-5:1
               list ordered start=1 delim=period tight @1:1-3:7
                 item @1:1-3:7
                   paragraph @1:4-1:5
@@ -460,7 +460,7 @@ struct TableLazyContinuationRowTests {
             "ordered item, lazy header row and prefixed data row",
             "1. x\na|b\n   -|-\n   c|d\n",
             """
-            document @1:1-4:7
+            document @1:1-5:1
               list ordered start=1 delim=period tight @1:1-4:7
                 item @1:1-4:7
                   paragraph @1:4-1:5
@@ -483,7 +483,7 @@ struct TableLazyContinuationRowTests {
             "ordered item, lazy header row and lazy delimiter row",
             "1. x\na|b\n-|-\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               list ordered start=1 delim=period tight @1:1-3:4
                 item @1:1-3:4
                   paragraph @1:4-3:4
@@ -499,7 +499,7 @@ struct TableLazyContinuationRowTests {
             "ordered item, lazy line before a prefixed header row",
             "1. x\ny\n   a|b\n   -|-\n",
             """
-            document @1:1-4:7
+            document @1:1-5:1
               list ordered start=1 delim=period tight @1:1-4:7
                 item @1:1-4:7
                   paragraph @1:4-2:2
@@ -519,7 +519,7 @@ struct TableLazyContinuationRowTests {
             "footnote definition, lazy header row",
             "[^a]\n\n[^a]: x\na|b\n    -|-\n",
             """
-            document @1:1-5:8
+            document @1:1-6:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               footnote_definition "a" @3:1-5:8
@@ -538,7 +538,7 @@ struct TableLazyContinuationRowTests {
             "footnote definition, prefixed header row",
             "[^a]\n\n[^a]: x\n    a|b\n    -|-\n",
             """
-            document @1:1-5:8
+            document @1:1-6:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               footnote_definition "a" @3:1-5:8
@@ -557,7 +557,7 @@ struct TableLazyContinuationRowTests {
             "footnote definition, lazy delimiter row",
             "[^a]\n\n[^a]: a|b\n-|-\n",
             """
-            document @1:1-4:4
+            document @1:1-5:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               footnote_definition "a" @3:1-4:4
@@ -572,7 +572,7 @@ struct TableLazyContinuationRowTests {
             "footnote definition, prefixed delimiter row",
             "[^a]\n\n[^a]: a|b\n    -|-\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               footnote_definition "a" @3:1-4:8
@@ -589,7 +589,7 @@ struct TableLazyContinuationRowTests {
             "footnote definition, lazy data row",
             "[^a]\n\n[^a]: a|b\n    -|-\nc|d\n",
             """
-            document @1:1-5:4
+            document @1:1-6:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               paragraph @5:1-5:4
@@ -608,7 +608,7 @@ struct TableLazyContinuationRowTests {
             "footnote definition, prefixed data row",
             "[^a]\n\n[^a]: a|b\n    -|-\n    c|d\n",
             """
-            document @1:1-5:8
+            document @1:1-6:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               footnote_definition "a" @3:1-5:8
@@ -630,7 +630,7 @@ struct TableLazyContinuationRowTests {
             "footnote definition, lazy header row and lazy data row",
             "[^a]\n\n[^a]: x\na|b\n    -|-\nc|d\n",
             """
-            document @1:1-6:4
+            document @1:1-7:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               paragraph @6:1-6:4
@@ -651,7 +651,7 @@ struct TableLazyContinuationRowTests {
             "footnote definition, lazy header row and prefixed data row",
             "[^a]\n\n[^a]: x\na|b\n    -|-\n    c|d\n",
             """
-            document @1:1-6:8
+            document @1:1-7:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               footnote_definition "a" @3:1-6:8
@@ -675,7 +675,7 @@ struct TableLazyContinuationRowTests {
             "footnote definition, lazy header row and lazy delimiter row",
             "[^a]\n\n[^a]: x\na|b\n-|-\n",
             """
-            document @1:1-5:4
+            document @1:1-6:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               footnote_definition "a" @3:1-5:4
@@ -692,7 +692,7 @@ struct TableLazyContinuationRowTests {
             "footnote definition, lazy line before a prefixed header row",
             "[^a]\n\n[^a]: x\ny\n    a|b\n    -|-\n",
             """
-            document @1:1-6:8
+            document @1:1-7:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               footnote_definition "a" @3:1-6:8
@@ -713,7 +713,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a block quote, lazy header row",
             "> > x\na|b\n> > -|-\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 block_quote @1:3-3:8
                   paragraph @1:5-1:6
@@ -731,7 +731,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a block quote, prefixed header row",
             "> > x\n> > a|b\n> > -|-\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 block_quote @1:3-3:8
                   paragraph @1:5-1:6
@@ -749,7 +749,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a block quote, lazy delimiter row",
             "> > a|b\n-|-\n",
             """
-            document @1:1-2:4
+            document @1:1-3:1
               block_quote @1:1-2:4
                 block_quote @1:3-2:4
                   paragraph @1:5-2:4
@@ -763,7 +763,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a block quote, prefixed delimiter row",
             "> > a|b\n> > -|-\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               block_quote @1:1-2:8
                 block_quote @1:3-2:8
                   table @1:5-2:8
@@ -779,7 +779,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a block quote, lazy data row",
             "> > a|b\n> > -|-\nc|d\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               block_quote @1:1-2:8
                 block_quote @1:3-2:8
                   table @1:5-2:8
@@ -797,7 +797,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a block quote, prefixed data row",
             "> > a|b\n> > -|-\n> > c|d\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 block_quote @1:3-3:8
                   table @1:5-3:8
@@ -818,7 +818,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a block quote, lazy header row and lazy data row",
             "> > x\na|b\n> > -|-\nc|d\n",
             """
-            document @1:1-4:4
+            document @1:1-5:1
               block_quote @1:1-3:8
                 block_quote @1:3-3:8
                   paragraph @1:5-1:6
@@ -838,7 +838,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a block quote, lazy header row and prefixed data row",
             "> > x\na|b\n> > -|-\n> > c|d\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               block_quote @1:1-4:8
                 block_quote @1:3-4:8
                   paragraph @1:5-1:6
@@ -861,7 +861,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a block quote, lazy header row and lazy delimiter row",
             "> > x\na|b\n-|-\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               block_quote @1:1-3:4
                 block_quote @1:3-3:4
                   paragraph @1:5-3:4
@@ -877,7 +877,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a block quote, lazy line before a prefixed header row",
             "> > x\ny\n> > a|b\n> > -|-\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               block_quote @1:1-4:8
                 block_quote @1:3-4:8
                   paragraph @1:5-2:2
@@ -897,7 +897,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a block quote, header row with only the outer prefix",
             "> > x\n> a|b\n> > -|-\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 block_quote @1:3-3:8
                   paragraph @1:5-1:6
@@ -915,7 +915,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a block quote, delimiter row with only the outer prefix",
             "> > a|b\n> -|-\n",
             """
-            document @1:1-2:6
+            document @1:1-3:1
               block_quote @1:1-2:6
                 block_quote @1:3-2:6
                   paragraph @1:5-2:6
@@ -929,7 +929,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a block quote, data row with only the outer prefix",
             "> > a|b\n> > -|-\n> c|d\n",
             """
-            document @1:1-3:6
+            document @1:1-4:1
               block_quote @1:1-3:6
                 block_quote @1:3-2:8
                   table @1:5-2:8
@@ -947,7 +947,7 @@ struct TableLazyContinuationRowTests {
             "bullet item in a block quote, lazy header row",
             "> - x\na|b\n>   -|-\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 list bullet '-' tight @1:3-3:8
                   item @1:3-3:8
@@ -966,7 +966,7 @@ struct TableLazyContinuationRowTests {
             "bullet item in a block quote, prefixed header row",
             "> - x\n>   a|b\n>   -|-\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 list bullet '-' tight @1:3-3:8
                   item @1:3-3:8
@@ -985,7 +985,7 @@ struct TableLazyContinuationRowTests {
             "bullet item in a block quote, lazy delimiter row",
             "> - a|b\n-|-\n",
             """
-            document @1:1-2:4
+            document @1:1-3:1
               block_quote @1:1-2:4
                 list bullet '-' tight @1:3-2:4
                   item @1:3-2:4
@@ -1000,7 +1000,7 @@ struct TableLazyContinuationRowTests {
             "bullet item in a block quote, prefixed delimiter row",
             "> - a|b\n>   -|-\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               block_quote @1:1-2:8
                 list bullet '-' tight @1:3-2:8
                   item @1:3-2:8
@@ -1017,7 +1017,7 @@ struct TableLazyContinuationRowTests {
             "bullet item in a block quote, lazy data row",
             "> - a|b\n>   -|-\nc|d\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               block_quote @1:1-2:8
                 list bullet '-' tight @1:3-2:8
                   item @1:3-2:8
@@ -1036,7 +1036,7 @@ struct TableLazyContinuationRowTests {
             "bullet item in a block quote, prefixed data row",
             "> - a|b\n>   -|-\n>   c|d\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 list bullet '-' tight @1:3-3:8
                   item @1:3-3:8
@@ -1058,7 +1058,7 @@ struct TableLazyContinuationRowTests {
             "bullet item in a block quote, lazy header row and lazy data row",
             "> - x\na|b\n>   -|-\nc|d\n",
             """
-            document @1:1-4:4
+            document @1:1-5:1
               block_quote @1:1-3:8
                 list bullet '-' tight @1:3-3:8
                   item @1:3-3:8
@@ -1079,7 +1079,7 @@ struct TableLazyContinuationRowTests {
             "bullet item in a block quote, lazy header row and prefixed data row",
             "> - x\na|b\n>   -|-\n>   c|d\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               block_quote @1:1-4:8
                 list bullet '-' tight @1:3-4:8
                   item @1:3-4:8
@@ -1103,7 +1103,7 @@ struct TableLazyContinuationRowTests {
             "bullet item in a block quote, lazy header row and lazy delimiter row",
             "> - x\na|b\n-|-\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               block_quote @1:1-3:4
                 list bullet '-' tight @1:3-3:4
                   item @1:3-3:4
@@ -1120,7 +1120,7 @@ struct TableLazyContinuationRowTests {
             "bullet item in a block quote, lazy line before a prefixed header row",
             "> - x\ny\n>   a|b\n>   -|-\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               block_quote @1:1-4:8
                 list bullet '-' tight @1:3-4:8
                   item @1:3-4:8
@@ -1141,7 +1141,7 @@ struct TableLazyContinuationRowTests {
             "bullet item in a block quote, header row with only the outer prefix",
             "> - x\n> a|b\n>   -|-\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 list bullet '-' tight @1:3-3:8
                   item @1:3-3:8
@@ -1160,7 +1160,7 @@ struct TableLazyContinuationRowTests {
             "bullet item in a block quote, delimiter row with only the outer prefix",
             "> - a|b\n> -|-\n",
             """
-            document @1:1-2:6
+            document @1:1-3:1
               block_quote @1:1-2:6
                 list bullet '-' tight @1:3-2:6
                   item @1:3-2:6
@@ -1175,7 +1175,7 @@ struct TableLazyContinuationRowTests {
             "bullet item in a block quote, data row with only the outer prefix",
             "> - a|b\n>   -|-\n> c|d\n",
             """
-            document @1:1-3:6
+            document @1:1-4:1
               block_quote @1:1-3:6
                 list bullet '-' tight @1:3-2:8
                   item @1:3-2:8
@@ -1194,7 +1194,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a bullet item, lazy header row",
             "- > x\na|b\n  > -|-\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:8
                 item @1:1-3:8
                   block_quote @1:3-3:8
@@ -1213,7 +1213,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a bullet item, prefixed header row",
             "- > x\n  > a|b\n  > -|-\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:8
                 item @1:1-3:8
                   block_quote @1:3-3:8
@@ -1232,7 +1232,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a bullet item, lazy delimiter row",
             "- > a|b\n-|-\n",
             """
-            document @1:1-2:4
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:4
                 item @1:1-2:4
                   block_quote @1:3-2:4
@@ -1247,7 +1247,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a bullet item, prefixed delimiter row",
             "- > a|b\n  > -|-\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:8
                 item @1:1-2:8
                   block_quote @1:3-2:8
@@ -1264,7 +1264,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a bullet item, lazy data row",
             "- > a|b\n  > -|-\nc|d\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               list bullet '-' tight @1:1-2:8
                 item @1:1-2:8
                   block_quote @1:3-2:8
@@ -1283,7 +1283,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a bullet item, prefixed data row",
             "- > a|b\n  > -|-\n  > c|d\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:8
                 item @1:1-3:8
                   block_quote @1:3-3:8
@@ -1305,7 +1305,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a bullet item, lazy header row and lazy data row",
             "- > x\na|b\n  > -|-\nc|d\n",
             """
-            document @1:1-4:4
+            document @1:1-5:1
               list bullet '-' tight @1:1-3:8
                 item @1:1-3:8
                   block_quote @1:3-3:8
@@ -1326,7 +1326,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a bullet item, lazy header row and prefixed data row",
             "- > x\na|b\n  > -|-\n  > c|d\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               list bullet '-' tight @1:1-4:8
                 item @1:1-4:8
                   block_quote @1:3-4:8
@@ -1350,7 +1350,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a bullet item, lazy header row and lazy delimiter row",
             "- > x\na|b\n-|-\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:4
                 item @1:1-3:4
                   block_quote @1:3-3:4
@@ -1367,7 +1367,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a bullet item, lazy line before a prefixed header row",
             "- > x\ny\n  > a|b\n  > -|-\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               list bullet '-' tight @1:1-4:8
                 item @1:1-4:8
                   block_quote @1:3-4:8
@@ -1388,7 +1388,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a bullet item, header row with only the outer prefix",
             "- > x\n  a|b\n  > -|-\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:8
                 item @1:1-3:8
                   block_quote @1:3-3:8
@@ -1407,7 +1407,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a bullet item, delimiter row with only the outer prefix",
             "- > a|b\n  -|-\n",
             """
-            document @1:1-2:6
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:6
                 item @1:1-2:6
                   block_quote @1:3-2:6
@@ -1422,7 +1422,7 @@ struct TableLazyContinuationRowTests {
             "block quote in a bullet item, data row with only the outer prefix",
             "- > a|b\n  > -|-\n  c|d\n",
             """
-            document @1:1-3:6
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:6
                 item @1:1-3:6
                   block_quote @1:3-2:8
@@ -1441,7 +1441,7 @@ struct TableLazyContinuationRowTests {
             "bullet item, lazy header row indented less than the content column",
             "- x\n a|b\n  -|-\n",
             """
-            document @1:1-3:6
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:6
                 item @1:1-3:6
                   paragraph @1:3-1:4
@@ -1459,7 +1459,7 @@ struct TableLazyContinuationRowTests {
             "block quote, a line without its prefix after a heading opens a paragraph",
             "> # h\nc|d\n-|-\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               block_quote @1:1-1:6
                 heading 1 @1:3-1:6
                   text "h" @1:5-1:6
@@ -1476,7 +1476,7 @@ struct TableLazyContinuationRowTests {
             "block quote, a line without its prefix that opens a list item",
             "> a\n- b|c\n  -|-\n",
             """
-            document @1:1-3:6
+            document @1:1-4:1
               block_quote @1:1-1:4
                 paragraph @1:3-1:4
                   text "a" @1:3-1:4

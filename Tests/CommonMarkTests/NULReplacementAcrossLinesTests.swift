@@ -39,7 +39,7 @@ struct NULReplacementAcrossLinesTests {
     @Test("a paragraph after one holding a NUL")
     func paragraphAfterNUL() {
         #expect(tree("a\u{0}\n\nb\n") == """
-            document @1:1-3:2
+            document @1:1-4:1
               paragraph @1:1-1:3
                 text "a\u{FFFD}" @1:1-1:3
               paragraph @3:1-3:2
@@ -76,7 +76,7 @@ struct NULReplacementAcrossLinesTests {
     @Test("fenced code lines with CRLF endings, one holding a NUL")
     func fencedCodeWithCRLF() {
         #expect(tree("```\r\na\u{0}b\r\nc\r\n```\r\n") == """
-            document @1:1-4:4
+            document @1:1-5:1
               code_block "" "a\u{FFFD}b\\nc\\n" @1:1-4:4
 
             """)

@@ -44,7 +44,7 @@ struct FencedCodeColumnIndentTests {
             ">\t```\n>\tx\n",
             offset: 2,
             """
-            document @1:1-2:4
+            document @1:1-3:1
               block_quote @1:1-2:4
                 code_block "" "x\\n" @1:3-2:4
 
@@ -55,7 +55,7 @@ struct FencedCodeColumnIndentTests {
             ">\t```\n>    x\n",
             offset: 2,
             """
-            document @1:1-2:7
+            document @1:1-3:1
               block_quote @1:1-2:7
                 code_block "" " x\\n" @1:3-2:7
 
@@ -66,7 +66,7 @@ struct FencedCodeColumnIndentTests {
             ">\t```\n> x\n",
             offset: 2,
             """
-            document @1:1-2:4
+            document @1:1-3:1
               block_quote @1:1-2:4
                 code_block "" "x\\n" @1:3-2:4
 
@@ -77,7 +77,7 @@ struct FencedCodeColumnIndentTests {
             ">\t```\n>\t\tx\n",
             offset: 2,
             """
-            document @1:1-2:5
+            document @1:1-3:1
               block_quote @1:1-2:5
                 code_block "" "\\tx\\n" @1:3-2:5
 
@@ -88,7 +88,7 @@ struct FencedCodeColumnIndentTests {
             ">\t ```\n>\t\tx\n",
             offset: 3,
             """
-            document @1:1-2:5
+            document @1:1-3:1
               block_quote @1:1-2:5
                 code_block "" "   x\\n" @1:4-2:5
 
@@ -99,7 +99,7 @@ struct FencedCodeColumnIndentTests {
             ">\t ```\n>\t  x\n",
             offset: 3,
             """
-            document @1:1-2:6
+            document @1:1-3:1
               block_quote @1:1-2:6
                 code_block "" " x\\n" @1:4-2:6
 
@@ -110,7 +110,7 @@ struct FencedCodeColumnIndentTests {
             "> \t```\n> \tx\n",
             offset: 2,
             """
-            document @1:1-2:5
+            document @1:1-3:1
               block_quote @1:1-2:5
                 code_block "" "x\\n" @1:4-2:5
 
@@ -121,7 +121,7 @@ struct FencedCodeColumnIndentTests {
             "> \t```\n>\tx\n",
             offset: 2,
             """
-            document @1:1-2:4
+            document @1:1-3:1
               block_quote @1:1-2:4
                 code_block "" "x\\n" @1:4-2:4
 
@@ -132,7 +132,7 @@ struct FencedCodeColumnIndentTests {
             "- a\n\n  \t```\n  \tx\n",
             offset: 2,
             """
-            document @1:1-4:5
+            document @1:1-5:1
               list bullet '-' loose @1:1-4:5
                 item @1:1-4:5
                   paragraph @1:3-1:4
@@ -146,7 +146,7 @@ struct FencedCodeColumnIndentTests {
             "1. a\n\n   \t```\n   \tx\n",
             offset: 1,
             """
-            document @1:1-4:6
+            document @1:1-5:1
               list ordered start=1 delim=period loose @1:1-4:6
                 item @1:1-4:6
                   paragraph @1:4-1:5
@@ -160,7 +160,7 @@ struct FencedCodeColumnIndentTests {
             ">>\t```\n>>\tx\n",
             offset: 1,
             """
-            document @1:1-2:5
+            document @1:1-3:1
               block_quote @1:1-2:5
                 block_quote @1:2-2:5
                   code_block "" "x\\n" @1:4-2:5
@@ -172,7 +172,7 @@ struct FencedCodeColumnIndentTests {
             "[^a]\n\n> [^a]: x\n>\n>    \t```\n>    \ty\n",
             offset: 2,
             """
-            document @1:1-6:8
+            document @1:1-7:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               block_quote @3:1-6:8
@@ -188,7 +188,7 @@ struct FencedCodeColumnIndentTests {
             "1. >\t```\n   >\tx\n",
             offset: 3,
             """
-            document @1:1-2:7
+            document @1:1-3:1
               list ordered start=1 delim=period tight @1:1-2:7
                 item @1:1-2:7
                   block_quote @1:4-2:7
@@ -201,7 +201,7 @@ struct FencedCodeColumnIndentTests {
             "  ```\n  x\n   y\n z\n",
             offset: 2,
             """
-            document @1:1-4:3
+            document @1:1-5:1
               code_block "" "x\\n y\\nz\\n" @1:3-4:3
 
             """

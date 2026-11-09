@@ -50,7 +50,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, A, first line",
             ">\t\tfoo\n",
             """
-            document @1:1-1:7
+            document @1:1-2:1
               block_quote @1:1-1:7
                 code_block "" "  foo\\n" @1:3-1:7
 
@@ -60,7 +60,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, A, after a blank line",
             "\n>\t\tfoo\n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               block_quote @2:1-2:7
                 code_block "" "  foo\\n" @2:3-2:7
 
@@ -70,7 +70,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, A, after a paragraph in the same container",
             "> a\n>\t\tfoo\n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               block_quote @1:1-2:7
                 paragraph @1:3-2:7
                   text "a" @1:3-1:4
@@ -83,7 +83,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, A, after a lazy continuation line",
             "> a\nb\n>\t\tfoo\n",
             """
-            document @1:1-3:7
+            document @1:1-4:1
               block_quote @1:1-3:7
                 paragraph @1:3-3:7
                   text "a" @1:3-1:4
@@ -98,7 +98,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, A, escaping an open fenced code block",
             "- ```\n>\t\tfoo\n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -111,7 +111,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, A, after a closed fenced code block",
             "```\nx\n```\n>\t\tfoo\n",
             """
-            document @1:1-4:7
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               block_quote @4:1-4:7
                 code_block "" "  foo\\n" @4:3-4:7
@@ -122,7 +122,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, A, after an indented code block",
             "    code\n>\t\tfoo\n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               block_quote @2:1-2:7
                 code_block "" "  foo\\n" @2:3-2:7
@@ -133,7 +133,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, B, first line",
             "> \t\tfoo\n",
             """
-            document @1:1-1:8
+            document @1:1-2:1
               block_quote @1:1-1:8
                 code_block "" "  foo\\n" @1:4-1:8
 
@@ -143,7 +143,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, B, after a blank line",
             "\n> \t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               block_quote @2:1-2:8
                 code_block "" "  foo\\n" @2:4-2:8
 
@@ -153,7 +153,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, B, after a paragraph in the same container",
             "> a\n> \t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               block_quote @1:1-2:8
                 paragraph @1:3-2:8
                   text "a" @1:3-1:4
@@ -166,7 +166,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, B, after a lazy continuation line",
             "> a\nb\n> \t\tfoo\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 paragraph @1:3-3:8
                   text "a" @1:3-1:4
@@ -181,7 +181,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, B, escaping an open fenced code block",
             "- ```\n> \t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -194,7 +194,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, B, after a closed fenced code block",
             "```\nx\n```\n> \t\tfoo\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               block_quote @4:1-4:8
                 code_block "" "  foo\\n" @4:4-4:8
@@ -205,7 +205,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, B, after an indented code block",
             "    code\n> \t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               block_quote @2:1-2:8
                 code_block "" "  foo\\n" @2:4-2:8
@@ -216,7 +216,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, C, first line",
             ">   \tfoo\n",
             """
-            document @1:1-1:9
+            document @1:1-2:1
               block_quote @1:1-1:9
                 code_block "" "  foo\\n" @1:5-1:9
 
@@ -226,7 +226,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, C, after a blank line",
             "\n>   \tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               block_quote @2:1-2:9
                 code_block "" "  foo\\n" @2:5-2:9
 
@@ -236,7 +236,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, C, after a paragraph in the same container",
             "> a\n>   \tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               block_quote @1:1-2:9
                 paragraph @1:3-2:9
                   text "a" @1:3-1:4
@@ -249,7 +249,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, C, after a lazy continuation line",
             "> a\nb\n>   \tfoo\n",
             """
-            document @1:1-3:9
+            document @1:1-4:1
               block_quote @1:1-3:9
                 paragraph @1:3-3:9
                   text "a" @1:3-1:4
@@ -264,7 +264,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, C, escaping an open fenced code block",
             "- ```\n>   \tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -277,7 +277,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, C, after a closed fenced code block",
             "```\nx\n```\n>   \tfoo\n",
             """
-            document @1:1-4:9
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               block_quote @4:1-4:9
                 code_block "" "  foo\\n" @4:5-4:9
@@ -288,7 +288,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, C, after an indented code block",
             "    code\n>   \tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               block_quote @2:1-2:9
                 code_block "" "  foo\\n" @2:5-2:9
@@ -299,7 +299,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, D, first line",
             ">\t  foo\n",
             """
-            document @1:1-1:8
+            document @1:1-2:1
               block_quote @1:1-1:8
                 code_block "" "foo\\n" @1:5-1:8
 
@@ -309,7 +309,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, D, after a blank line",
             "\n>\t  foo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               block_quote @2:1-2:8
                 code_block "" "foo\\n" @2:5-2:8
 
@@ -319,7 +319,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, D, after a paragraph in the same container",
             "> a\n>\t  foo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               block_quote @1:1-2:8
                 paragraph @1:3-2:8
                   text "a" @1:3-1:4
@@ -332,7 +332,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, D, after a lazy continuation line",
             "> a\nb\n>\t  foo\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 paragraph @1:3-3:8
                   text "a" @1:3-1:4
@@ -347,7 +347,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, D, escaping an open fenced code block",
             "- ```\n>\t  foo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -360,7 +360,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, D, after a closed fenced code block",
             "```\nx\n```\n>\t  foo\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               block_quote @4:1-4:8
                 code_block "" "foo\\n" @4:5-4:8
@@ -371,7 +371,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, D, after an indented code block",
             "    code\n>\t  foo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               block_quote @2:1-2:8
                 code_block "" "foo\\n" @2:5-2:8
@@ -382,7 +382,7 @@ struct IndentedCodeSplitTabTests {
             "block quote, continuation lines",
             ">\t\tfoo\n> \t\tfoo\n>   \tfoo\n>\t  foo\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               block_quote @1:1-4:8
                 code_block "" "  foo\\n  foo\\n  foo\\nfoo\\n" @1:3-4:8
 
@@ -392,7 +392,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, A, first line",
             "-\t\tfoo\n",
             """
-            document @1:1-1:7
+            document @1:1-2:1
               list bullet '-' tight @1:1-1:7
                 item @1:1-1:7
                   code_block "" "  foo\\n" @1:3-1:7
@@ -403,7 +403,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, A, after a blank line",
             "\n-\t\tfoo\n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               list bullet '-' tight @2:1-2:7
                 item @2:1-2:7
                   code_block "" "  foo\\n" @2:3-2:7
@@ -414,7 +414,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, A, after a paragraph in the same container",
             "- a\n \t\tfoo\n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:7
                 item @1:1-2:7
                   paragraph @1:3-2:7
@@ -428,7 +428,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, A, after a lazy continuation line",
             "- a\nb\n \t\tfoo\n",
             """
-            document @1:1-3:7
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:7
                 item @1:1-3:7
                   paragraph @1:3-3:7
@@ -444,7 +444,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, A, escaping an open fenced code block",
             "- ```\n-\t\tfoo\n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:7
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -457,7 +457,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, A, after a closed fenced code block",
             "```\nx\n```\n-\t\tfoo\n",
             """
-            document @1:1-4:7
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               list bullet '-' tight @4:1-4:7
                 item @4:1-4:7
@@ -469,7 +469,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, A, after an indented code block",
             "    code\n-\t\tfoo\n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               list bullet '-' tight @2:1-2:7
                 item @2:1-2:7
@@ -481,7 +481,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, B, first line",
             "- \t\tfoo\n",
             """
-            document @1:1-1:8
+            document @1:1-2:1
               list bullet '-' tight @1:1-1:8
                 item @1:1-1:8
                   code_block "" "  foo\\n" @1:4-1:8
@@ -492,7 +492,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, B, after a blank line",
             "\n- \t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @2:1-2:8
                 item @2:1-2:8
                   code_block "" "  foo\\n" @2:4-2:8
@@ -503,7 +503,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, B, after a paragraph in the same container",
             "- a\n  \t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:8
                 item @1:1-2:8
                   paragraph @1:3-2:8
@@ -517,7 +517,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, B, after a lazy continuation line",
             "- a\nb\n  \t\tfoo\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:8
                 item @1:1-3:8
                   paragraph @1:3-3:8
@@ -533,7 +533,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, B, escaping an open fenced code block",
             "- ```\n- \t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:8
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -546,7 +546,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, B, after a closed fenced code block",
             "```\nx\n```\n- \t\tfoo\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               list bullet '-' tight @4:1-4:8
                 item @4:1-4:8
@@ -558,7 +558,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, B, after an indented code block",
             "    code\n- \t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               list bullet '-' tight @2:1-2:8
                 item @2:1-2:8
@@ -570,7 +570,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, C, first line",
             "-    \tfoo\n",
             """
-            document @1:1-1:10
+            document @1:1-2:1
               list bullet '-' tight @1:1-1:10
                 item @1:1-1:10
                   code_block "" "  foo\\n" @1:6-1:10
@@ -581,7 +581,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, C, after a blank line",
             "\n-    \tfoo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               list bullet '-' tight @2:1-2:10
                 item @2:1-2:10
                   code_block "" "  foo\\n" @2:6-2:10
@@ -592,7 +592,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, C, after a paragraph in the same container",
             "- a\n     \tfoo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:10
                 item @1:1-2:10
                   paragraph @1:3-2:10
@@ -606,7 +606,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, C, after a lazy continuation line",
             "- a\nb\n     \tfoo\n",
             """
-            document @1:1-3:10
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:10
                 item @1:1-3:10
                   paragraph @1:3-3:10
@@ -622,7 +622,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, C, escaping an open fenced code block",
             "- ```\n-    \tfoo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:10
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -635,7 +635,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, C, after a closed fenced code block",
             "```\nx\n```\n-    \tfoo\n",
             """
-            document @1:1-4:10
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               list bullet '-' tight @4:1-4:10
                 item @4:1-4:10
@@ -647,7 +647,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, C, after an indented code block",
             "    code\n-    \tfoo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               list bullet '-' tight @2:1-2:10
                 item @2:1-2:10
@@ -659,7 +659,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, D, first line",
             "-\t  foo\n",
             """
-            document @1:1-1:8
+            document @1:1-2:1
               list bullet '-' tight @1:1-1:8
                 item @1:1-1:8
                   code_block "" "foo\\n" @1:5-1:8
@@ -670,7 +670,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, D, after a blank line",
             "\n-\t  foo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @2:1-2:8
                 item @2:1-2:8
                   code_block "" "foo\\n" @2:5-2:8
@@ -681,7 +681,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, D, after a paragraph in the same container",
             "- a\n \t  foo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:8
                 item @1:1-2:8
                   paragraph @1:3-2:8
@@ -695,7 +695,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, D, after a lazy continuation line",
             "- a\nb\n \t  foo\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:8
                 item @1:1-3:8
                   paragraph @1:3-3:8
@@ -711,7 +711,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, D, escaping an open fenced code block",
             "- ```\n-\t  foo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:8
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -724,7 +724,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, D, after a closed fenced code block",
             "```\nx\n```\n-\t  foo\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               list bullet '-' tight @4:1-4:8
                 item @4:1-4:8
@@ -736,7 +736,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, D, after an indented code block",
             "    code\n-\t  foo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               list bullet '-' tight @2:1-2:8
                 item @2:1-2:8
@@ -748,7 +748,7 @@ struct IndentedCodeSplitTabTests {
             "bullet item, continuation lines",
             "-\t\tfoo\n  \t\tfoo\n     \tfoo\n \t  foo\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               list bullet '-' tight @1:1-4:8
                 item @1:1-4:8
                   code_block "" "  foo\\n  foo\\n  foo\\nfoo\\n" @1:3-4:8
@@ -759,7 +759,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, A, first line",
             "1.\t\tfoo\n",
             """
-            document @1:1-1:8
+            document @1:1-2:1
               list ordered start=1 delim=period tight @1:1-1:8
                 item @1:1-1:8
                   code_block "" " foo\\n" @1:4-1:8
@@ -770,7 +770,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, A, after a blank line",
             "\n1.\t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list ordered start=1 delim=period tight @2:1-2:8
                 item @2:1-2:8
                   code_block "" " foo\\n" @2:4-2:8
@@ -781,7 +781,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, A, after a paragraph in the same container",
             "1. a\n  \t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list ordered start=1 delim=period tight @1:1-2:8
                 item @1:1-2:8
                   paragraph @1:4-2:8
@@ -795,7 +795,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, A, after a lazy continuation line",
             "1. a\nb\n  \t\tfoo\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               list ordered start=1 delim=period tight @1:1-3:8
                 item @1:1-3:8
                   paragraph @1:4-3:8
@@ -811,7 +811,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, A, escaping an open fenced code block",
             "- ```\n1.\t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -825,7 +825,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, A, after a closed fenced code block",
             "```\nx\n```\n1.\t\tfoo\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               list ordered start=1 delim=period tight @4:1-4:8
                 item @4:1-4:8
@@ -837,7 +837,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, A, after an indented code block",
             "    code\n1.\t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               list ordered start=1 delim=period tight @2:1-2:8
                 item @2:1-2:8
@@ -849,7 +849,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, B, first line",
             "1. \t\tfoo\n",
             """
-            document @1:1-1:9
+            document @1:1-2:1
               list ordered start=1 delim=period tight @1:1-1:9
                 item @1:1-1:9
                   code_block "" " foo\\n" @1:5-1:9
@@ -860,7 +860,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, B, after a blank line",
             "\n1. \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               list ordered start=1 delim=period tight @2:1-2:9
                 item @2:1-2:9
                   code_block "" " foo\\n" @2:5-2:9
@@ -871,7 +871,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, B, after a paragraph in the same container",
             "1. a\n   \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               list ordered start=1 delim=period tight @1:1-2:9
                 item @1:1-2:9
                   paragraph @1:4-2:9
@@ -885,7 +885,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, B, after a lazy continuation line",
             "1. a\nb\n   \t\tfoo\n",
             """
-            document @1:1-3:9
+            document @1:1-4:1
               list ordered start=1 delim=period tight @1:1-3:9
                 item @1:1-3:9
                   paragraph @1:4-3:9
@@ -901,7 +901,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, B, escaping an open fenced code block",
             "- ```\n1. \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -915,7 +915,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, B, after a closed fenced code block",
             "```\nx\n```\n1. \t\tfoo\n",
             """
-            document @1:1-4:9
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               list ordered start=1 delim=period tight @4:1-4:9
                 item @4:1-4:9
@@ -927,7 +927,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, B, after an indented code block",
             "    code\n1. \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               list ordered start=1 delim=period tight @2:1-2:9
                 item @2:1-2:9
@@ -939,7 +939,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, C, first line",
             "1.    \tfoo\n",
             """
-            document @1:1-1:11
+            document @1:1-2:1
               list ordered start=1 delim=period tight @1:1-1:11
                 item @1:1-1:11
                   code_block "" " foo\\n" @1:7-1:11
@@ -950,7 +950,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, C, after a blank line",
             "\n1.    \tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               list ordered start=1 delim=period tight @2:1-2:11
                 item @2:1-2:11
                   code_block "" " foo\\n" @2:7-2:11
@@ -961,7 +961,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, C, after a paragraph in the same container",
             "1. a\n      \tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               list ordered start=1 delim=period tight @1:1-2:11
                 item @1:1-2:11
                   paragraph @1:4-2:11
@@ -975,7 +975,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, C, after a lazy continuation line",
             "1. a\nb\n      \tfoo\n",
             """
-            document @1:1-3:11
+            document @1:1-4:1
               list ordered start=1 delim=period tight @1:1-3:11
                 item @1:1-3:11
                   paragraph @1:4-3:11
@@ -991,7 +991,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, C, escaping an open fenced code block",
             "- ```\n1.    \tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -1005,7 +1005,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, C, after a closed fenced code block",
             "```\nx\n```\n1.    \tfoo\n",
             """
-            document @1:1-4:11
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               list ordered start=1 delim=period tight @4:1-4:11
                 item @4:1-4:11
@@ -1017,7 +1017,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, C, after an indented code block",
             "    code\n1.    \tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               list ordered start=1 delim=period tight @2:1-2:11
                 item @2:1-2:11
@@ -1029,7 +1029,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, D, first line",
             "1.\t   foo\n",
             """
-            document @1:1-1:10
+            document @1:1-2:1
               list ordered start=1 delim=period tight @1:1-1:10
                 item @1:1-1:10
                   code_block "" "foo\\n" @1:7-1:10
@@ -1040,7 +1040,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, D, after a blank line",
             "\n1.\t   foo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               list ordered start=1 delim=period tight @2:1-2:10
                 item @2:1-2:10
                   code_block "" "foo\\n" @2:7-2:10
@@ -1051,7 +1051,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, D, after a paragraph in the same container",
             "1. a\n  \t   foo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               list ordered start=1 delim=period tight @1:1-2:10
                 item @1:1-2:10
                   paragraph @1:4-2:10
@@ -1065,7 +1065,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, D, after a lazy continuation line",
             "1. a\nb\n  \t   foo\n",
             """
-            document @1:1-3:10
+            document @1:1-4:1
               list ordered start=1 delim=period tight @1:1-3:10
                 item @1:1-3:10
                   paragraph @1:4-3:10
@@ -1081,7 +1081,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, D, escaping an open fenced code block",
             "- ```\n1.\t   foo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -1095,7 +1095,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, D, after a closed fenced code block",
             "```\nx\n```\n1.\t   foo\n",
             """
-            document @1:1-4:10
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               list ordered start=1 delim=period tight @4:1-4:10
                 item @4:1-4:10
@@ -1107,7 +1107,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, D, after an indented code block",
             "    code\n1.\t   foo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               list ordered start=1 delim=period tight @2:1-2:10
                 item @2:1-2:10
@@ -1119,7 +1119,7 @@ struct IndentedCodeSplitTabTests {
             "one-digit ordered item, continuation lines",
             "1.\t\tfoo\n   \t\tfoo\n      \tfoo\n  \t   foo\n",
             """
-            document @1:1-4:10
+            document @1:1-5:1
               list ordered start=1 delim=period tight @1:1-4:10
                 item @1:1-4:10
                   code_block "" " foo\\n foo\\n foo\\nfoo\\n" @1:4-4:10
@@ -1130,7 +1130,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, A, first line",
             "-  >\t\tfoo\n",
             """
-            document @1:1-1:10
+            document @1:1-2:1
               list bullet '-' tight @1:1-1:10
                 item @1:1-1:10
                   block_quote @1:4-1:10
@@ -1142,7 +1142,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, A, after a blank line",
             "\n-  >\t\tfoo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               list bullet '-' tight @2:1-2:10
                 item @2:1-2:10
                   block_quote @2:4-2:10
@@ -1154,7 +1154,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, A, after a paragraph in the same container",
             "-  > a\n   >\t\tfoo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:10
                 item @1:1-2:10
                   block_quote @1:4-2:10
@@ -1169,7 +1169,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, A, after a lazy continuation line",
             "-  > a\nb\n   >\t\tfoo\n",
             """
-            document @1:1-3:10
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:10
                 item @1:1-3:10
                   block_quote @1:4-3:10
@@ -1186,7 +1186,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, A, escaping an open fenced code block",
             "- ```\n-  >\t\tfoo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:10
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -1200,7 +1200,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, A, after a closed fenced code block",
             "```\nx\n```\n-  >\t\tfoo\n",
             """
-            document @1:1-4:10
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               list bullet '-' tight @4:1-4:10
                 item @4:1-4:10
@@ -1213,7 +1213,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, A, after an indented code block",
             "    code\n-  >\t\tfoo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               list bullet '-' tight @2:1-2:10
                 item @2:1-2:10
@@ -1226,7 +1226,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, B, first line",
             "-  > \t\tfoo\n",
             """
-            document @1:1-1:11
+            document @1:1-2:1
               list bullet '-' tight @1:1-1:11
                 item @1:1-1:11
                   block_quote @1:4-1:11
@@ -1238,7 +1238,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, B, after a blank line",
             "\n-  > \t\tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               list bullet '-' tight @2:1-2:11
                 item @2:1-2:11
                   block_quote @2:4-2:11
@@ -1250,7 +1250,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, B, after a paragraph in the same container",
             "-  > a\n   > \t\tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:11
                 item @1:1-2:11
                   block_quote @1:4-2:11
@@ -1265,7 +1265,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, B, after a lazy continuation line",
             "-  > a\nb\n   > \t\tfoo\n",
             """
-            document @1:1-3:11
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:11
                 item @1:1-3:11
                   block_quote @1:4-3:11
@@ -1282,7 +1282,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, B, escaping an open fenced code block",
             "- ```\n-  > \t\tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:11
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -1296,7 +1296,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, B, after a closed fenced code block",
             "```\nx\n```\n-  > \t\tfoo\n",
             """
-            document @1:1-4:11
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               list bullet '-' tight @4:1-4:11
                 item @4:1-4:11
@@ -1309,7 +1309,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, B, after an indented code block",
             "    code\n-  > \t\tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               list bullet '-' tight @2:1-2:11
                 item @2:1-2:11
@@ -1322,7 +1322,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, C, first line",
             "-  >    \tfoo\n",
             """
-            document @1:1-1:13
+            document @1:1-2:1
               list bullet '-' tight @1:1-1:13
                 item @1:1-1:13
                   block_quote @1:4-1:13
@@ -1334,7 +1334,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, C, after a blank line",
             "\n-  >    \tfoo\n",
             """
-            document @1:1-2:13
+            document @1:1-3:1
               list bullet '-' tight @2:1-2:13
                 item @2:1-2:13
                   block_quote @2:4-2:13
@@ -1346,7 +1346,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, C, after a paragraph in the same container",
             "-  > a\n   >    \tfoo\n",
             """
-            document @1:1-2:13
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:13
                 item @1:1-2:13
                   block_quote @1:4-2:13
@@ -1361,7 +1361,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, C, after a lazy continuation line",
             "-  > a\nb\n   >    \tfoo\n",
             """
-            document @1:1-3:13
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:13
                 item @1:1-3:13
                   block_quote @1:4-3:13
@@ -1378,7 +1378,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, C, escaping an open fenced code block",
             "- ```\n-  >    \tfoo\n",
             """
-            document @1:1-2:13
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:13
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -1392,7 +1392,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, C, after a closed fenced code block",
             "```\nx\n```\n-  >    \tfoo\n",
             """
-            document @1:1-4:13
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               list bullet '-' tight @4:1-4:13
                 item @4:1-4:13
@@ -1405,7 +1405,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, C, after an indented code block",
             "    code\n-  >    \tfoo\n",
             """
-            document @1:1-2:13
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               list bullet '-' tight @2:1-2:13
                 item @2:1-2:13
@@ -1418,7 +1418,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, D, first line",
             "-  >\t   foo\n",
             """
-            document @1:1-1:12
+            document @1:1-2:1
               list bullet '-' tight @1:1-1:12
                 item @1:1-1:12
                   block_quote @1:4-1:12
@@ -1430,7 +1430,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, D, after a blank line",
             "\n-  >\t   foo\n",
             """
-            document @1:1-2:12
+            document @1:1-3:1
               list bullet '-' tight @2:1-2:12
                 item @2:1-2:12
                   block_quote @2:4-2:12
@@ -1442,7 +1442,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, D, after a paragraph in the same container",
             "-  > a\n   >\t   foo\n",
             """
-            document @1:1-2:12
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:12
                 item @1:1-2:12
                   block_quote @1:4-2:12
@@ -1457,7 +1457,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, D, after a lazy continuation line",
             "-  > a\nb\n   >\t   foo\n",
             """
-            document @1:1-3:12
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:12
                 item @1:1-3:12
                   block_quote @1:4-3:12
@@ -1474,7 +1474,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, D, escaping an open fenced code block",
             "- ```\n-  >\t   foo\n",
             """
-            document @1:1-2:12
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:12
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -1488,7 +1488,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, D, after a closed fenced code block",
             "```\nx\n```\n-  >\t   foo\n",
             """
-            document @1:1-4:12
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               list bullet '-' tight @4:1-4:12
                 item @4:1-4:12
@@ -1501,7 +1501,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, D, after an indented code block",
             "    code\n-  >\t   foo\n",
             """
-            document @1:1-2:12
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               list bullet '-' tight @2:1-2:12
                 item @2:1-2:12
@@ -1514,7 +1514,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in item, continuation lines",
             "-  >\t\tfoo\n   > \t\tfoo\n   >    \tfoo\n   >\t   foo\n",
             """
-            document @1:1-4:12
+            document @1:1-5:1
               list bullet '-' tight @1:1-4:12
                 item @1:1-4:12
                   block_quote @1:4-4:12
@@ -1526,7 +1526,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, A, first line",
             ">-\t\tfoo\n",
             """
-            document @1:1-1:8
+            document @1:1-2:1
               block_quote @1:1-1:8
                 list bullet '-' tight @1:2-1:8
                   item @1:2-1:8
@@ -1538,7 +1538,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, A, after a blank line",
             "\n>-\t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               block_quote @2:1-2:8
                 list bullet '-' tight @2:2-2:8
                   item @2:2-2:8
@@ -1550,7 +1550,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, A, after a paragraph in the same container",
             ">- a\n> \t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               block_quote @1:1-2:8
                 list bullet '-' tight @1:2-2:8
                   item @1:2-2:8
@@ -1565,7 +1565,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, A, after a lazy continuation line",
             ">- a\nb\n> \t\tfoo\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 list bullet '-' tight @1:2-3:8
                   item @1:2-3:8
@@ -1582,7 +1582,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, A, escaping an open fenced code block",
             "- ```\n>-\t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -1597,7 +1597,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, A, after a closed fenced code block",
             "```\nx\n```\n>-\t\tfoo\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               block_quote @4:1-4:8
                 list bullet '-' tight @4:2-4:8
@@ -1610,7 +1610,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, A, after an indented code block",
             "    code\n>-\t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               block_quote @2:1-2:8
                 list bullet '-' tight @2:2-2:8
@@ -1623,7 +1623,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, B, first line",
             ">- \t\tfoo\n",
             """
-            document @1:1-1:9
+            document @1:1-2:1
               block_quote @1:1-1:9
                 list bullet '-' tight @1:2-1:9
                   item @1:2-1:9
@@ -1635,7 +1635,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, B, after a blank line",
             "\n>- \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               block_quote @2:1-2:9
                 list bullet '-' tight @2:2-2:9
                   item @2:2-2:9
@@ -1647,7 +1647,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, B, after a paragraph in the same container",
             ">- a\n>  \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               block_quote @1:1-2:9
                 list bullet '-' tight @1:2-2:9
                   item @1:2-2:9
@@ -1662,7 +1662,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, B, after a lazy continuation line",
             ">- a\nb\n>  \t\tfoo\n",
             """
-            document @1:1-3:9
+            document @1:1-4:1
               block_quote @1:1-3:9
                 list bullet '-' tight @1:2-3:9
                   item @1:2-3:9
@@ -1679,7 +1679,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, B, escaping an open fenced code block",
             "- ```\n>- \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -1694,7 +1694,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, B, after a closed fenced code block",
             "```\nx\n```\n>- \t\tfoo\n",
             """
-            document @1:1-4:9
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               block_quote @4:1-4:9
                 list bullet '-' tight @4:2-4:9
@@ -1707,7 +1707,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, B, after an indented code block",
             "    code\n>- \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               block_quote @2:1-2:9
                 list bullet '-' tight @2:2-2:9
@@ -1720,7 +1720,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, C, first line",
             ">-    \tfoo\n",
             """
-            document @1:1-1:11
+            document @1:1-2:1
               block_quote @1:1-1:11
                 list bullet '-' tight @1:2-1:11
                   item @1:2-1:11
@@ -1732,7 +1732,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, C, after a blank line",
             "\n>-    \tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               block_quote @2:1-2:11
                 list bullet '-' tight @2:2-2:11
                   item @2:2-2:11
@@ -1744,7 +1744,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, C, after a paragraph in the same container",
             ">- a\n>     \tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               block_quote @1:1-2:11
                 list bullet '-' tight @1:2-2:11
                   item @1:2-2:11
@@ -1759,7 +1759,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, C, after a lazy continuation line",
             ">- a\nb\n>     \tfoo\n",
             """
-            document @1:1-3:11
+            document @1:1-4:1
               block_quote @1:1-3:11
                 list bullet '-' tight @1:2-3:11
                   item @1:2-3:11
@@ -1776,7 +1776,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, C, escaping an open fenced code block",
             "- ```\n>-    \tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -1791,7 +1791,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, C, after a closed fenced code block",
             "```\nx\n```\n>-    \tfoo\n",
             """
-            document @1:1-4:11
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               block_quote @4:1-4:11
                 list bullet '-' tight @4:2-4:11
@@ -1804,7 +1804,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, C, after an indented code block",
             "    code\n>-    \tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               block_quote @2:1-2:11
                 list bullet '-' tight @2:2-2:11
@@ -1817,7 +1817,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, D, first line",
             ">-\t   foo\n",
             """
-            document @1:1-1:10
+            document @1:1-2:1
               block_quote @1:1-1:10
                 list bullet '-' tight @1:2-1:10
                   item @1:2-1:10
@@ -1829,7 +1829,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, D, after a blank line",
             "\n>-\t   foo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               block_quote @2:1-2:10
                 list bullet '-' tight @2:2-2:10
                   item @2:2-2:10
@@ -1841,7 +1841,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, D, after a paragraph in the same container",
             ">- a\n> \t   foo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               block_quote @1:1-2:10
                 list bullet '-' tight @1:2-2:10
                   item @1:2-2:10
@@ -1856,7 +1856,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, D, after a lazy continuation line",
             ">- a\nb\n> \t   foo\n",
             """
-            document @1:1-3:10
+            document @1:1-4:1
               block_quote @1:1-3:10
                 list bullet '-' tight @1:2-3:10
                   item @1:2-3:10
@@ -1873,7 +1873,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, D, escaping an open fenced code block",
             "- ```\n>-\t   foo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -1888,7 +1888,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, D, after a closed fenced code block",
             "```\nx\n```\n>-\t   foo\n",
             """
-            document @1:1-4:10
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               block_quote @4:1-4:10
                 list bullet '-' tight @4:2-4:10
@@ -1901,7 +1901,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, D, after an indented code block",
             "    code\n>-\t   foo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               block_quote @2:1-2:10
                 list bullet '-' tight @2:2-2:10
@@ -1914,7 +1914,7 @@ struct IndentedCodeSplitTabTests {
             "item in block quote, continuation lines",
             ">-\t\tfoo\n>  \t\tfoo\n>     \tfoo\n> \t   foo\n",
             """
-            document @1:1-4:10
+            document @1:1-5:1
               block_quote @1:1-4:10
                 list bullet '-' tight @1:2-4:10
                   item @1:2-4:10
@@ -1928,7 +1928,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, A, first line",
             ">>\t\tfoo\n",
             """
-            document @1:1-1:8
+            document @1:1-2:1
               block_quote @1:1-1:8
                 block_quote @1:2-1:8
                   code_block "" " foo\\n" @1:4-1:8
@@ -1939,7 +1939,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, A, after a blank line",
             "\n>>\t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               block_quote @2:1-2:8
                 block_quote @2:2-2:8
                   code_block "" " foo\\n" @2:4-2:8
@@ -1950,7 +1950,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, A, after a paragraph in the same container",
             ">> a\n>>\t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               block_quote @1:1-2:8
                 block_quote @1:2-2:8
                   paragraph @1:4-2:8
@@ -1964,7 +1964,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, A, after a lazy continuation line",
             ">> a\nb\n>>\t\tfoo\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 block_quote @1:2-3:8
                   paragraph @1:4-3:8
@@ -1980,7 +1980,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, A, escaping an open fenced code block",
             "- ```\n>>\t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -1994,7 +1994,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, A, after a closed fenced code block",
             "```\nx\n```\n>>\t\tfoo\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               block_quote @4:1-4:8
                 block_quote @4:2-4:8
@@ -2006,7 +2006,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, A, after an indented code block",
             "    code\n>>\t\tfoo\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               block_quote @2:1-2:8
                 block_quote @2:2-2:8
@@ -2018,7 +2018,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, B, first line",
             ">> \t\tfoo\n",
             """
-            document @1:1-1:9
+            document @1:1-2:1
               block_quote @1:1-1:9
                 block_quote @1:2-1:9
                   code_block "" " foo\\n" @1:5-1:9
@@ -2029,7 +2029,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, B, after a blank line",
             "\n>> \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               block_quote @2:1-2:9
                 block_quote @2:2-2:9
                   code_block "" " foo\\n" @2:5-2:9
@@ -2040,7 +2040,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, B, after a paragraph in the same container",
             ">> a\n>> \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               block_quote @1:1-2:9
                 block_quote @1:2-2:9
                   paragraph @1:4-2:9
@@ -2054,7 +2054,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, B, after a lazy continuation line",
             ">> a\nb\n>> \t\tfoo\n",
             """
-            document @1:1-3:9
+            document @1:1-4:1
               block_quote @1:1-3:9
                 block_quote @1:2-3:9
                   paragraph @1:4-3:9
@@ -2070,7 +2070,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, B, escaping an open fenced code block",
             "- ```\n>> \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -2084,7 +2084,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, B, after a closed fenced code block",
             "```\nx\n```\n>> \t\tfoo\n",
             """
-            document @1:1-4:9
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               block_quote @4:1-4:9
                 block_quote @4:2-4:9
@@ -2096,7 +2096,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, B, after an indented code block",
             "    code\n>> \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               block_quote @2:1-2:9
                 block_quote @2:2-2:9
@@ -2108,7 +2108,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, C, first line",
             ">>    \tfoo\n",
             """
-            document @1:1-1:11
+            document @1:1-2:1
               block_quote @1:1-1:11
                 block_quote @1:2-1:11
                   code_block "" " foo\\n" @1:7-1:11
@@ -2119,7 +2119,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, C, after a blank line",
             "\n>>    \tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               block_quote @2:1-2:11
                 block_quote @2:2-2:11
                   code_block "" " foo\\n" @2:7-2:11
@@ -2130,7 +2130,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, C, after a paragraph in the same container",
             ">> a\n>>    \tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               block_quote @1:1-2:11
                 block_quote @1:2-2:11
                   paragraph @1:4-2:11
@@ -2144,7 +2144,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, C, after a lazy continuation line",
             ">> a\nb\n>>    \tfoo\n",
             """
-            document @1:1-3:11
+            document @1:1-4:1
               block_quote @1:1-3:11
                 block_quote @1:2-3:11
                   paragraph @1:4-3:11
@@ -2160,7 +2160,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, C, escaping an open fenced code block",
             "- ```\n>>    \tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -2174,7 +2174,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, C, after a closed fenced code block",
             "```\nx\n```\n>>    \tfoo\n",
             """
-            document @1:1-4:11
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               block_quote @4:1-4:11
                 block_quote @4:2-4:11
@@ -2186,7 +2186,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, C, after an indented code block",
             "    code\n>>    \tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               block_quote @2:1-2:11
                 block_quote @2:2-2:11
@@ -2198,7 +2198,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, D, first line",
             ">>\t    foo\n",
             """
-            document @1:1-1:11
+            document @1:1-2:1
               block_quote @1:1-1:11
                 block_quote @1:2-1:11
                   code_block "" " foo\\n" @1:7-1:11
@@ -2209,7 +2209,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, D, after a blank line",
             "\n>>\t    foo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               block_quote @2:1-2:11
                 block_quote @2:2-2:11
                   code_block "" " foo\\n" @2:7-2:11
@@ -2220,7 +2220,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, D, after a paragraph in the same container",
             ">> a\n>>\t    foo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               block_quote @1:1-2:11
                 block_quote @1:2-2:11
                   paragraph @1:4-2:11
@@ -2234,7 +2234,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, D, after a lazy continuation line",
             ">> a\nb\n>>\t    foo\n",
             """
-            document @1:1-3:11
+            document @1:1-4:1
               block_quote @1:1-3:11
                 block_quote @1:2-3:11
                   paragraph @1:4-3:11
@@ -2250,7 +2250,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, D, escaping an open fenced code block",
             "- ```\n>>\t    foo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -2264,7 +2264,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, D, after a closed fenced code block",
             "```\nx\n```\n>>\t    foo\n",
             """
-            document @1:1-4:11
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               block_quote @4:1-4:11
                 block_quote @4:2-4:11
@@ -2276,7 +2276,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, D, after an indented code block",
             "    code\n>>\t    foo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               code_block "" "code\\n" @1:5-1:9
               block_quote @2:1-2:11
                 block_quote @2:2-2:11
@@ -2288,7 +2288,7 @@ struct IndentedCodeSplitTabTests {
             "block quote in block quote, continuation lines",
             ">>\t\tfoo\n>> \t\tfoo\n>>    \tfoo\n>>\t    foo\n",
             """
-            document @1:1-4:11
+            document @1:1-5:1
               block_quote @1:1-4:11
                 block_quote @1:2-4:11
                   code_block "" " foo\\n foo\\n foo\\n foo\\n" @1:4-4:11
@@ -2299,7 +2299,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, A, after a blank line",
             "10.  a\n\n\t\t\tfoo\n",
             """
-            document @1:1-3:7
+            document @1:1-4:1
               list ordered start=10 delim=period loose @1:1-3:7
                 item @1:1-3:7
                   paragraph @1:6-1:7
@@ -2312,7 +2312,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, A, after a paragraph in the same container",
             "10.  a\n\t\t\tfoo\n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               list ordered start=10 delim=period tight @1:1-2:7
                 item @1:1-2:7
                   paragraph @1:6-2:7
@@ -2326,7 +2326,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, A, after a lazy continuation line",
             "10.  a\nb\n\t\t\tfoo\n",
             """
-            document @1:1-3:7
+            document @1:1-4:1
               list ordered start=10 delim=period tight @1:1-3:7
                 item @1:1-3:7
                   paragraph @1:6-3:7
@@ -2342,7 +2342,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, A, after a closed fenced code block",
             "10.  a\n\n     ```\n     ```\n\t\t\tfoo\n",
             """
-            document @1:1-5:7
+            document @1:1-6:1
               list ordered start=10 delim=period loose @1:1-5:7
                 item @1:1-5:7
                   paragraph @1:6-1:7
@@ -2356,7 +2356,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, B, after a blank line",
             "10.  a\n\n     \t\tfoo\n",
             """
-            document @1:1-3:11
+            document @1:1-4:1
               list ordered start=10 delim=period loose @1:1-3:11
                 item @1:1-3:11
                   paragraph @1:6-1:7
@@ -2369,7 +2369,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, B, after a paragraph in the same container",
             "10.  a\n     \t\tfoo\n",
             """
-            document @1:1-2:11
+            document @1:1-3:1
               list ordered start=10 delim=period tight @1:1-2:11
                 item @1:1-2:11
                   paragraph @1:6-2:11
@@ -2383,7 +2383,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, B, after a lazy continuation line",
             "10.  a\nb\n     \t\tfoo\n",
             """
-            document @1:1-3:11
+            document @1:1-4:1
               list ordered start=10 delim=period tight @1:1-3:11
                 item @1:1-3:11
                   paragraph @1:6-3:11
@@ -2399,7 +2399,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, B, after a closed fenced code block",
             "10.  a\n\n     ```\n     ```\n     \t\tfoo\n",
             """
-            document @1:1-5:11
+            document @1:1-6:1
               list ordered start=10 delim=period loose @1:1-5:11
                 item @1:1-5:11
                   paragraph @1:6-1:7
@@ -2413,7 +2413,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, C, after a blank line",
             "10.  a\n\n        \tfoo\n",
             """
-            document @1:1-3:13
+            document @1:1-4:1
               list ordered start=10 delim=period loose @1:1-3:13
                 item @1:1-3:13
                   paragraph @1:6-1:7
@@ -2426,7 +2426,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, C, after a paragraph in the same container",
             "10.  a\n        \tfoo\n",
             """
-            document @1:1-2:13
+            document @1:1-3:1
               list ordered start=10 delim=period tight @1:1-2:13
                 item @1:1-2:13
                   paragraph @1:6-2:13
@@ -2440,7 +2440,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, C, after a lazy continuation line",
             "10.  a\nb\n        \tfoo\n",
             """
-            document @1:1-3:13
+            document @1:1-4:1
               list ordered start=10 delim=period tight @1:1-3:13
                 item @1:1-3:13
                   paragraph @1:6-3:13
@@ -2456,7 +2456,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, C, after a closed fenced code block",
             "10.  a\n\n     ```\n     ```\n        \tfoo\n",
             """
-            document @1:1-5:13
+            document @1:1-6:1
               list ordered start=10 delim=period loose @1:1-5:13
                 item @1:1-5:13
                   paragraph @1:6-1:7
@@ -2470,7 +2470,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, D, after a blank line",
             "10.  a\n\n\t\t    foo\n",
             """
-            document @1:1-3:10
+            document @1:1-4:1
               list ordered start=10 delim=period loose @1:1-3:10
                 item @1:1-3:10
                   paragraph @1:6-1:7
@@ -2483,7 +2483,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, D, after a paragraph in the same container",
             "10.  a\n\t\t    foo\n",
             """
-            document @1:1-2:10
+            document @1:1-3:1
               list ordered start=10 delim=period tight @1:1-2:10
                 item @1:1-2:10
                   paragraph @1:6-2:10
@@ -2497,7 +2497,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, D, after a lazy continuation line",
             "10.  a\nb\n\t\t    foo\n",
             """
-            document @1:1-3:10
+            document @1:1-4:1
               list ordered start=10 delim=period tight @1:1-3:10
                 item @1:1-3:10
                   paragraph @1:6-3:10
@@ -2513,7 +2513,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, D, after a closed fenced code block",
             "10.  a\n\n     ```\n     ```\n\t\t    foo\n",
             """
-            document @1:1-5:10
+            document @1:1-6:1
               list ordered start=10 delim=period loose @1:1-5:10
                 item @1:1-5:10
                   paragraph @1:6-1:7
@@ -2527,7 +2527,7 @@ struct IndentedCodeSplitTabTests {
             "two-digit ordered item, continuation lines",
             "10.  a\n\n\t\t\tfoo\n     \t\tfoo\n        \tfoo\n\t\t    foo\n",
             """
-            document @1:1-6:10
+            document @1:1-7:1
               list ordered start=10 delim=period loose @1:1-6:10
                 item @1:1-6:10
                   paragraph @1:6-1:7
@@ -2540,7 +2540,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, A, after a blank line",
             "x[^a]\n\n>[^a]: y\n>\n>\t\t\tfoo\n",
             """
-            document @1:1-5:8
+            document @1:1-6:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2556,7 +2556,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, A, after a paragraph in the same container",
             "x[^a]\n\n>[^a]: y\n>\t\t\tfoo\n",
             """
-            document @1:1-4:8
+            document @1:1-5:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2573,7 +2573,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, A, after a lazy continuation line",
             "x[^a]\n\n>[^a]: y\nb\n>\t\t\tfoo\n",
             """
-            document @1:1-5:8
+            document @1:1-6:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2592,7 +2592,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, A, after a closed fenced code block",
             "x[^a]\n\n>[^a]: y\n>\n>     ```\n>     ```\n>\t\t\tfoo\n",
             """
-            document @1:1-7:8
+            document @1:1-8:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2609,7 +2609,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, B, after a blank line",
             "x[^a]\n\n>[^a]: y\n>\n> \t\t\tfoo\n",
             """
-            document @1:1-5:9
+            document @1:1-6:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2625,7 +2625,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, B, after a paragraph in the same container",
             "x[^a]\n\n>[^a]: y\n> \t\t\tfoo\n",
             """
-            document @1:1-4:9
+            document @1:1-5:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2642,7 +2642,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, B, after a lazy continuation line",
             "x[^a]\n\n>[^a]: y\nb\n> \t\t\tfoo\n",
             """
-            document @1:1-5:9
+            document @1:1-6:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2661,7 +2661,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, B, after a closed fenced code block",
             "x[^a]\n\n>[^a]: y\n>\n>     ```\n>     ```\n> \t\t\tfoo\n",
             """
-            document @1:1-7:9
+            document @1:1-8:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2678,7 +2678,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, C, after a blank line",
             "x[^a]\n\n>[^a]: y\n>\n>       \tfoo\n",
             """
-            document @1:1-5:13
+            document @1:1-6:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2694,7 +2694,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, C, after a paragraph in the same container",
             "x[^a]\n\n>[^a]: y\n>       \tfoo\n",
             """
-            document @1:1-4:13
+            document @1:1-5:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2711,7 +2711,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, C, after a lazy continuation line",
             "x[^a]\n\n>[^a]: y\nb\n>       \tfoo\n",
             """
-            document @1:1-5:13
+            document @1:1-6:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2730,7 +2730,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, C, after a closed fenced code block",
             "x[^a]\n\n>[^a]: y\n>\n>     ```\n>     ```\n>       \tfoo\n",
             """
-            document @1:1-7:13
+            document @1:1-8:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2747,7 +2747,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, D, after a blank line",
             "x[^a]\n\n>[^a]: y\n>\n>\t\t  foo\n",
             """
-            document @1:1-5:9
+            document @1:1-6:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2763,7 +2763,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, D, after a paragraph in the same container",
             "x[^a]\n\n>[^a]: y\n>\t\t  foo\n",
             """
-            document @1:1-4:9
+            document @1:1-5:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2780,7 +2780,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, D, after a lazy continuation line",
             "x[^a]\n\n>[^a]: y\nb\n>\t\t  foo\n",
             """
-            document @1:1-5:9
+            document @1:1-6:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2799,7 +2799,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, D, after a closed fenced code block",
             "x[^a]\n\n>[^a]: y\n>\n>     ```\n>     ```\n>\t\t  foo\n",
             """
-            document @1:1-7:9
+            document @1:1-8:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2816,7 +2816,7 @@ struct IndentedCodeSplitTabTests {
             "footnote definition in block quote, continuation lines",
             "x[^a]\n\n>[^a]: y\n>\n>\t\t\tfoo\n> \t\t\tfoo\n>       \tfoo\n>\t\t  foo\n",
             """
-            document @1:1-8:9
+            document @1:1-9:1
               paragraph @1:1-1:6
                 text "x" @1:1-1:2
                 footnote_reference "1" @1:2-1:6
@@ -2832,7 +2832,7 @@ struct IndentedCodeSplitTabTests {
             "top level, tab after spaces, first line",
             "  \tfoo\n",
             """
-            document @1:1-1:7
+            document @1:1-2:1
               code_block "" "foo\\n" @1:4-1:7
 
             """
@@ -2841,7 +2841,7 @@ struct IndentedCodeSplitTabTests {
             "top level, tab after spaces, after a blank line",
             "\n  \tfoo\n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               code_block "" "foo\\n" @2:4-2:7
 
             """
@@ -2850,7 +2850,7 @@ struct IndentedCodeSplitTabTests {
             "top level, tab after spaces, after a paragraph in the same container",
             "a\n  \tfoo\n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               paragraph @1:1-2:7
                 text "a" @1:1-1:2
                 softbreak @-
@@ -2862,7 +2862,7 @@ struct IndentedCodeSplitTabTests {
             "top level, tab after spaces, after a closed fenced code block",
             "```\nx\n```\n  \tfoo\n",
             """
-            document @1:1-4:7
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               code_block "" "foo\\n" @4:4-4:7
 
@@ -2872,7 +2872,7 @@ struct IndentedCodeSplitTabTests {
             "top level, tab after spaces, after an indented code block",
             "    code\n  \tfoo\n",
             """
-            document @1:1-2:7
+            document @1:1-3:1
               code_block "" "code\\nfoo\\n" @1:5-2:7
 
             """
@@ -2881,7 +2881,7 @@ struct IndentedCodeSplitTabTests {
             "top level, tab after three spaces then a tab, first line",
             "   \t\tfoo\n",
             """
-            document @1:1-1:9
+            document @1:1-2:1
               code_block "" "\\tfoo\\n" @1:5-1:9
 
             """
@@ -2890,7 +2890,7 @@ struct IndentedCodeSplitTabTests {
             "top level, tab after three spaces then a tab, after a blank line",
             "\n   \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               code_block "" "\\tfoo\\n" @2:5-2:9
 
             """
@@ -2899,7 +2899,7 @@ struct IndentedCodeSplitTabTests {
             "top level, tab after three spaces then a tab, after a paragraph in the same container",
             "a\n   \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               paragraph @1:1-2:9
                 text "a" @1:1-1:2
                 softbreak @-
@@ -2911,7 +2911,7 @@ struct IndentedCodeSplitTabTests {
             "top level, tab after three spaces then a tab, after a closed fenced code block",
             "```\nx\n```\n   \t\tfoo\n",
             """
-            document @1:1-4:9
+            document @1:1-5:1
               code_block "" "x\\n" @1:1-3:4
               code_block "" "\\tfoo\\n" @4:5-4:9
 
@@ -2921,7 +2921,7 @@ struct IndentedCodeSplitTabTests {
             "top level, tab after three spaces then a tab, after an indented code block",
             "    code\n   \t\tfoo\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               code_block "" "code\\n\\tfoo\\n" @1:5-2:9
 
             """

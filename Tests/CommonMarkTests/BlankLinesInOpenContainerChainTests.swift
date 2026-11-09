@@ -38,7 +38,7 @@ struct BlankLinesInOpenContainerChainTests {
             "block quote in the innermost of ten footnote definitions",
             "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:>x\n\n\ny\n",
             """
-            document @1:1-6:2
+            document @1:1-7:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               paragraph @6:1-6:2
@@ -54,7 +54,7 @@ struct BlankLinesInOpenContainerChainTests {
             "empty list item in the innermost of ten footnote definitions",
             "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:-\n\n\nx\n",
             """
-            document @1:1-6:2
+            document @1:1-7:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               paragraph @6:1-6:2
@@ -69,7 +69,7 @@ struct BlankLinesInOpenContainerChainTests {
             "list item holding a paragraph in the innermost of ten footnote definitions",
             "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:- a\n\n\n",
             """
-            document @1:1-5:1
+            document @1:1-6:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               footnote_definition "a" @3:46-3:54
@@ -84,7 +84,7 @@ struct BlankLinesInOpenContainerChainTests {
             "twelve footnote definitions, blank lines of tabs that continue some of them",
             "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\t\n\t\t\n\n",
             """
-            document @1:1-7:1
+            document @1:1-8:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               footnote_definition "a" @3:56-3:62
@@ -97,7 +97,7 @@ struct BlankLinesInOpenContainerChainTests {
             "twelve footnote definitions, three empty lines",
             "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\n\n",
             """
-            document @1:1-6:1
+            document @1:1-7:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               footnote_definition "a" @3:56-3:62
@@ -110,7 +110,7 @@ struct BlankLinesInOpenContainerChainTests {
             "twelve footnote definitions, empty lines around a line of spaces that continues the outermost",
             "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\n    \n\n",
             """
-            document @1:1-7:1
+            document @1:1-8:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               footnote_definition "a" @3:56-3:62
@@ -123,7 +123,7 @@ struct BlankLinesInOpenContainerChainTests {
             "ten nested list items holding a paragraph",
             "- - - - - - - - - - x\n\n\ny\n",
             """
-            document @1:1-4:2
+            document @1:1-5:1
               list bullet '-' tight @1:1-1:22
                 item @1:1-1:22
                   list bullet '-' tight @1:3-1:22
@@ -155,7 +155,7 @@ struct BlankLinesInOpenContainerChainTests {
             "eleven nested list items, the innermost without a block",
             "- + - + - + - + - + -\n\n\nx\n",
             """
-            document @1:1-4:2
+            document @1:1-5:1
               list bullet '-' tight @1:1-1:22
                 item @1:1-1:22
                   list bullet '+' tight @1:3-1:22
@@ -187,7 +187,7 @@ struct BlankLinesInOpenContainerChainTests {
             "eleven nested list items, the innermost without a block, a line of spaces",
             "- + - + - + - + - + -\n  \n\nx\n",
             """
-            document @1:1-4:2
+            document @1:1-5:1
               list bullet '-' tight @1:1-1:22
                 item @1:1-1:22
                   list bullet '+' tight @1:3-1:22

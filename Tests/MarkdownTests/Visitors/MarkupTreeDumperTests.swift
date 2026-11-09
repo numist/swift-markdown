@@ -14,7 +14,7 @@ import XCTest
 final class MarkupTreeDumperTests: XCTestCase {
     func testDumpEverything() {
         let expectedDump = """
-        Document @1:1-45:90 Root #\(everythingDocument.raw.metadata.id.rootId) #0
+        Document @1:1-46:1 Root #\(everythingDocument.raw.metadata.id.rootId) #0
         ├─ Heading @1:1-1:9 #1 level: 1
         │  └─ Text @1:3-1:9 #2 "Header"
         ├─ Paragraph @3:1-3:65 #3

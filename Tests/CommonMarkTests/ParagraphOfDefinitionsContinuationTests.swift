@@ -36,7 +36,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func quotedDefinitionsThenUnderlineThenText() {
         let source = "> [a]:\n> /u\n> ===\n> x\n"
         expectTree(source, """
-            document @1:1-4:4
+            document @1:1-5:1
               block_quote @1:1-4:4
                 paragraph @3:3-4:4
                   text "===" @3:3-3:6
@@ -50,7 +50,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func tabExpandedPrefixContinuation() {
         let source = ">\t[a]:\n>\t/u\n>\t===\n>\tx\n"
         expectTree(source, """
-            document @1:1-4:4
+            document @1:1-5:1
               block_quote @1:1-4:4
                 paragraph @3:3-4:4
                   text "===" @3:3-3:6
@@ -64,7 +64,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func tableAfterContinuedParagraph() {
         let source = "> [a]:\n> /u\n> ===\n> x\n> a|b\n> -|-\n"
         expectTree(source, """
-            document @1:1-6:6
+            document @1:1-7:1
               block_quote @1:1-6:6
                 paragraph @3:3-4:4
                   text "===" @3:3-3:6
@@ -84,7 +84,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func nulInContinuedParagraph() {
         let source = "> [a]:\n> /u\n> ===\n> x\u{0}\n> y\n"
         expectTree(source, """
-            document @1:1-5:4
+            document @1:1-6:1
               block_quote @1:1-5:4
                 paragraph @3:3-5:4
                   text "===" @3:3-3:6
@@ -100,7 +100,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func setextHeadingAfterQuotedDefinition() {
         let source = "> [a]: /u\n> foo\n> bar\n> ===\n"
         expectTree(source, """
-            document @1:1-4:6
+            document @1:1-5:1
               block_quote @1:1-4:6
                 heading 1 @2:3-4:6
                   text "foo" @2:3-2:6
@@ -114,7 +114,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func nulInSetextHeading() {
         let source = "> [a]: /u\n> fo\u{0}o\n> bar\n> ---\n"
         expectTree(source, """
-            document @1:1-4:6
+            document @1:1-5:1
               block_quote @1:1-4:6
                 heading 2 @2:3-4:6
                   text "fo\u{FFFD}o" @2:3-2:7
@@ -128,7 +128,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func singleLineHeadingAfterMultiLineDefinition() {
         let source = "> [a]:\n> /u\n> foo\n> ===\n"
         expectTree(source, """
-            document @1:1-4:6
+            document @1:1-5:1
               block_quote @1:1-4:6
                 heading 1 @3:3-4:6
                   text "foo" @3:3-3:6
@@ -140,7 +140,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func crlfTableAfterContinuedParagraph() {
         let source = "[a]:\r\n/u\r\n===\r\nx\r\na|b\r\n-|-\r\n"
         expectTree(source, """
-            document @1:1-6:4
+            document @1:1-7:1
               paragraph @3:1-4:2
                 text "===" @3:1-3:4
                 softbreak @-
@@ -159,7 +159,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func listItemTableAfterContinuedParagraph() {
         let source = "- [a]:\n  /u\n  ===\n  x\n  a|b\n  -|-\n"
         expectTree(source, """
-            document @1:1-6:6
+            document @1:1-7:1
               list bullet '-' tight @1:1-6:6
                 item @1:1-6:6
                   paragraph @3:3-4:4
@@ -180,7 +180,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func lazyLinesStayParagraph() {
         let source = "> [a]:\n> /u\n> ===\nx\na|b\n-|-\n"
         expectTree(source, """
-            document @1:1-6:4
+            document @1:1-7:1
               block_quote @1:1-6:4
                 paragraph @3:3-6:4
                   text "===" @3:3-3:6
@@ -198,7 +198,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func headerCellCountMismatch() {
         let source = "> [a]:\n> /u\n> ===\n> a|b|c\n> -|-\n> x\n"
         expectTree(source, """
-            document @1:1-6:4
+            document @1:1-7:1
               block_quote @1:1-6:4
                 paragraph @3:3-6:4
                   text "===" @3:3-3:6
@@ -216,7 +216,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func loneHyphenContinuesDefinitionParagraph() {
         let source = "> [a]:\n> /u\n> -\n> a|b\n> -|-\n"
         expectTree(source, """
-            document @1:1-5:6
+            document @1:1-6:1
               block_quote @1:1-5:6
                 paragraph @3:3-3:4
                   text "-" @3:3-3:4
@@ -234,7 +234,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func contentTabsStayLiteral() {
         let source = "> [a]:\n> /u\n> ===\n> x\ty\n>\tz\n> a|b\n> -|-\n"
         expectTree(source, """
-            document @1:1-7:6
+            document @1:1-8:1
               block_quote @1:1-7:6
                 paragraph @3:3-5:4
                   text "===" @3:3-3:6
@@ -256,7 +256,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func tableInListInQuote() {
         let source = "> - [a]:\n>   /u\n>   ===\n>   a|b\n>   -|-\n"
         expectTree(source, """
-            document @1:1-5:8
+            document @1:1-6:1
               block_quote @1:1-5:8
                 list bullet '-' tight @1:3-5:8
                   item @1:3-5:8
@@ -276,7 +276,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func nulBeforeHeader() {
         let source = "> [a]:\n> /u\n> ===\n> x\u{0}\n> a|b\n> -|-\n"
         expectTree(source, """
-            document @1:1-6:6
+            document @1:1-7:1
               block_quote @1:1-6:6
                 paragraph @3:3-4:5
                   text "===" @3:3-3:6
@@ -296,7 +296,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func nulInHeader() {
         let source = "> [a]:\n> /u\n> ===\n> x\n> a|b\u{0}\n> -|-\n"
         expectTree(source, """
-            document @1:1-6:6
+            document @1:1-7:1
               block_quote @1:1-6:6
                 paragraph @3:3-4:4
                   text "===" @3:3-3:6
@@ -316,7 +316,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func tabExpandedSetextHeading() {
         let source = ">\t[a]: /u\n>\tfoo\n>\tbar\n>\t===\n"
         expectTree(source, """
-            document @1:1-4:6
+            document @1:1-5:1
               block_quote @1:1-4:6
                 heading 1 @2:3-4:6
                   text "foo" @2:3-2:6
@@ -330,7 +330,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func listItemSetextHeading() {
         let source = "- [a]:\n  /u\n  foo\n  bar\n  ---\n"
         expectTree(source, """
-            document @1:1-5:6
+            document @1:1-6:1
               list bullet '-' tight @1:1-5:6
                 item @1:1-5:6
                   heading 2 @3:3-5:6
@@ -345,7 +345,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func crlfSetextHeading() {
         let source = "[a]:\r\n/u\r\nfoo\r\n===\r\n"
         expectTree(source, """
-            document @1:1-4:4
+            document @1:1-5:1
               heading 1 @3:1-4:4
                 text "foo" @3:1-3:4
 
@@ -356,7 +356,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func loneHyphenDelimiterRow() {
         let source = "> [a]:\n> /u\n> ===\n> x\n> |-\n> a|b\n> -|-\n"
         expectTree(source, """
-            document @1:1-7:6
+            document @1:1-8:1
               block_quote @1:1-7:6
                 paragraph @3:3-3:6
                   text "===" @3:3-3:6
@@ -378,7 +378,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func tabExpandedTable() {
         let source = "> [a]:\n> /u\n> ===\n>\tx\n>\ta|b\n>\t-|-\n"
         expectTree(source, """
-            document @1:1-6:6
+            document @1:1-7:1
               block_quote @1:1-6:6
                 paragraph @3:3-4:4
                   text "===" @3:3-3:6
@@ -398,7 +398,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func twoLinesBeforeHeader() {
         let source = "> [a]:\n> /u\n> ===\n> x\n> y\n> a|b\n> -|-\n> c|d\n"
         expectTree(source, """
-            document @1:1-8:6
+            document @1:1-9:1
               block_quote @1:1-8:6
                 paragraph @3:3-5:4
                   text "===" @3:3-3:6
@@ -425,7 +425,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     func titleLineBelongsToDefinition() {
         let source = "> [a]: /u\n> 'T'\n> ===\n> [a]\n"
         expectTree(source, """
-            document @1:1-4:6
+            document @1:1-5:1
               block_quote @1:1-4:6
                 paragraph @3:3-4:6
                   text "===" @3:3-3:6

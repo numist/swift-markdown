@@ -32,7 +32,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:4
+            document @1:1-4:1
               paragraph @1:1-1:2
                 text "x" @1:1-1:2
               table @2:1-3:4
@@ -62,7 +62,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:6
+            document @1:1-4:1
               block_quote @1:1-3:6
                 paragraph @1:3-1:4
                   text "x" @1:3-1:4
@@ -94,7 +94,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:6
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:6
                 item @1:1-3:6
                   paragraph @1:3-1:4
@@ -125,7 +125,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:4
+            document @1:1-4:1
               paragraph @1:1-1:2
                 text "x" @1:1-1:2
               table @2:1-3:4
@@ -155,7 +155,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:6
+            document @1:1-4:1
               block_quote @1:1-3:6
                 paragraph @1:3-1:4
                   text "x" @1:3-1:4
@@ -189,7 +189,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-5:4
+            document @1:1-6:1
               paragraph @1:1-3:4
                 text "x" @1:1-1:2
                 softbreak @-
@@ -227,7 +227,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-5:6
+            document @1:1-6:1
               block_quote @1:1-5:6
                 paragraph @1:3-3:6
                   text "x" @1:3-1:4
@@ -267,7 +267,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-5:6
+            document @1:1-6:1
               list bullet '-' tight @1:1-5:6
                 item @1:1-5:6
                   paragraph @1:3-3:6
@@ -306,7 +306,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-5:4
+            document @1:1-6:1
               paragraph @1:1-3:4
                 text "x" @1:1-1:2
                 softbreak @-
@@ -344,7 +344,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-5:6
+            document @1:1-6:1
               block_quote @1:1-5:6
                 paragraph @1:3-3:6
                   text "x" @1:3-1:4
@@ -376,7 +376,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:3
+            document @1:1-4:1
               paragraph @1:1-1:2
                 text "x" @1:1-1:2
               table @2:1-3:3
@@ -402,7 +402,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:5
+            document @1:1-4:1
               block_quote @1:1-3:5
                 paragraph @1:3-1:4
                   text "x" @1:3-1:4
@@ -430,7 +430,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:5
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:5
                 item @1:1-3:5
                   paragraph @1:3-1:4
@@ -457,7 +457,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:3
+            document @1:1-4:1
               paragraph @1:1-1:2
                 text "x" @1:1-1:2
               table @2:1-3:3
@@ -483,7 +483,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:5
+            document @1:1-4:1
               block_quote @1:1-3:5
                 paragraph @1:3-1:4
                   text "x" @1:3-1:4
@@ -509,7 +509,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:4
+            document @1:1-3:1
               table @1:1-2:4
                 table_header @1:1-1:4
                   table_cell align=none colspan=1 rowspan=1 @1:1-1:2
@@ -535,7 +535,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:6
+            document @1:1-3:1
               block_quote @1:1-2:6
                 table @1:3-2:6
                   table_header @1:3-1:6
@@ -563,7 +563,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:6
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:6
                 item @1:1-2:6
                   table @1:3-2:6
@@ -590,7 +590,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:4
+            document @1:1-3:1
               table @1:1-2:4
                 table_header @1:1-1:4
                   table_cell align=none colspan=1 rowspan=1 @1:1-1:2
@@ -616,7 +616,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:6
+            document @1:1-3:1
               block_quote @1:1-2:6
                 table @1:3-2:6
                   table_header @1:3-1:6
@@ -644,7 +644,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:4
+            document @1:1-4:1
               paragraph @1:1-1:2
                 text "x" @1:1-1:2
               table @2:1-3:4
@@ -674,7 +674,7 @@ struct TableHeaderRowSelectionTests {
 
             """)
         #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
-            document @1:1-3:6
+            document @1:1-4:1
               block_quote @1:1-3:6
                 paragraph @1:3-1:4
                   text "x" @1:3-1:4

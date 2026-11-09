@@ -38,7 +38,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "top level, type 1, after a line",
             "<pre>\nfoo\n</pre>\n",
             """
-            document @1:1-3:7
+            document @1:1-4:1
               html_block "<pre>\\nfoo\\n</pre>\\n" @1:1-3:7
 
             """
@@ -47,7 +47,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "top level, type 1, on the next line, then a paragraph",
             "<pre>\n</pre>\nfoo\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               html_block "<pre>\\n</pre>\\n" @1:1-2:7
               paragraph @3:1-3:4
                 text "foo" @3:1-3:4
@@ -58,7 +58,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "top level, type 1, with trailing spaces",
             "<pre>\n</pre>  \n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               html_block "<pre>\\n</pre>  \\n" @1:1-2:9
 
             """
@@ -67,7 +67,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "top level, type 2, after a blank line",
             "<!--\n\nx -->\n",
             """
-            document @1:1-3:6
+            document @1:1-4:1
               html_block "<!--\\n\\nx -->\\n" @1:1-3:6
 
             """
@@ -76,7 +76,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "top level, type 3, with text after the end condition",
             "<?php\necho 1; ?> trailing\n",
             """
-            document @1:1-2:20
+            document @1:1-3:1
               html_block "<?php\\necho 1; ?> trailing\\n" @1:1-2:20
 
             """
@@ -85,7 +85,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "top level, type 4, on the next line",
             "<!DOCTYPE\nhtml>\n",
             """
-            document @1:1-2:6
+            document @1:1-3:1
               html_block "<!DOCTYPE\\nhtml>\\n" @1:1-2:6
 
             """
@@ -94,7 +94,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "top level, type 5, after a line",
             "<![CDATA[\nx\n]]>\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               html_block "<![CDATA[\\nx\\n]]>\\n" @1:1-3:4
 
             """
@@ -103,7 +103,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "block quote, type 1, after a line",
             "> <pre>\n> x\n> </pre>\n",
             """
-            document @1:1-3:9
+            document @1:1-4:1
               block_quote @1:1-3:9
                 html_block "<pre>\\nx\\n</pre>\\n" @1:3-3:9
 
@@ -113,7 +113,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "block quote, type 1, after a tab split by the marker",
             ">\t<pre>\n>\t</pre>\n",
             """
-            document @1:1-2:9
+            document @1:1-3:1
               block_quote @1:1-2:9
                 html_block "  <pre>\\n  </pre>\\n" @1:2-2:9
 
@@ -123,7 +123,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "bullet item, type 2, on the next line",
             "- <!--\n  x -->\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:8
                 item @1:1-2:8
                   html_block "<!--\\nx -->\\n" @1:3-2:8
@@ -134,7 +134,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "ordered item, type 3, on the next line",
             "1. <?\n   ?>\n",
             """
-            document @1:1-2:6
+            document @1:1-3:1
               list ordered start=1 delim=period tight @1:1-2:6
                 item @1:1-2:6
                   html_block "<?\\n?>\\n" @1:4-2:6
@@ -145,7 +145,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "footnote definition, type 1, on the next line",
             "[^a]\n\n[^a]: <pre>\n    </pre>\n",
             """
-            document @1:1-4:11
+            document @1:1-5:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               footnote_definition "a" @3:1-4:11
@@ -157,7 +157,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "block quote in a list item, type 5, on the next line",
             "- > <![CDATA[\n  > ]]>\n",
             """
-            document @1:1-2:8
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:8
                 item @1:1-2:8
                   block_quote @1:3-2:8
@@ -169,7 +169,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "list item in a block quote, type 4, on the next line",
             "> - <!X\n>   >\n",
             """
-            document @1:1-2:6
+            document @1:1-3:1
               block_quote @1:1-2:6
                 list bullet '-' tight @1:3-2:6
                   item @1:3-2:6
@@ -181,7 +181,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "top level, type 1, on its first line",
             "<pre>x</pre>\nfoo\n",
             """
-            document @1:1-2:4
+            document @1:1-3:1
               html_block "<pre>x</pre>\\n" @1:1-1:13
               paragraph @2:1-2:4
                 text "foo" @2:1-2:4
@@ -192,7 +192,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "top level, type 6, ended by a blank line",
             "<div>\nx\n\nfoo\n",
             """
-            document @1:1-4:4
+            document @1:1-5:1
               html_block "<div>\\nx\\n" @1:1-2:2
               paragraph @4:1-4:4
                 text "foo" @4:1-4:4
@@ -203,7 +203,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "block quote, type 1, ended by a line that does not continue the block quote",
             "> <pre>\n> x\nfoo\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               block_quote @1:1-2:4
                 html_block "<pre>\\nx\\n" @1:3-2:4
               paragraph @3:1-3:4
@@ -215,7 +215,7 @@ struct HTMLBlockEndConditionLineRangeTests {
             "top level, type 1, open at the end of the document",
             "<pre>\nx\n",
             """
-            document @1:1-2:2
+            document @1:1-3:1
               html_block "<pre>\\nx\\n" @1:1-2:2
 
             """

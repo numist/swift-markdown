@@ -40,7 +40,7 @@ struct ContainerSourceRangeEndTests {
     @Test("a list item ending the document ends before its trailing whitespace and blank lines")
     func itemAtDocumentEnd() {
         #expect(tree("1. a\n\n   b  \n\n\n") == """
-            document @1:1-5:1
+            document @1:1-6:1
               list ordered start=1 delim=period loose @1:1-3:5
                 item @1:1-3:5
                   paragraph @1:4-1:5
@@ -162,7 +162,7 @@ struct ContainerSourceRangeEndTests {
 
             """)
         #expect(tree("> [a]: /u  \n") == """
-            document @1:1-1:12
+            document @1:1-2:1
               block_quote @1:1-1:10
 
             """)
@@ -193,7 +193,7 @@ struct ContainerSourceRangeEndTests {
 
             """)
         #expect(tree("b[^a]\n\n[^a]: A\n\n    B  \n\n\n", options: .footnotes) == """
-            document @1:1-7:1
+            document @1:1-8:1
               paragraph @1:1-1:6
                 text "b" @1:1-1:2
                 footnote_reference "1" @1:2-1:6

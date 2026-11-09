@@ -22,7 +22,7 @@ struct HTMLBlockType6TagNameListTests {
     @Test("`<source` at the line end is paragraph text")
     func sourceAtLineEnd() {
         #expect(TreeDump.dump("<source\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-1:8
+            document @1:1-2:1
               paragraph @1:1-1:8
                 text "<source" @1:1-1:8
 
@@ -32,7 +32,7 @@ struct HTMLBlockType6TagNameListTests {
     @Test("`<search` at the line end is paragraph text")
     func searchAtLineEnd() {
         #expect(TreeDump.dump("<search\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-1:8
+            document @1:1-2:1
               paragraph @1:1-1:8
                 text "<search" @1:1-1:8
 
@@ -42,7 +42,7 @@ struct HTMLBlockType6TagNameListTests {
     @Test("`<search>` doesn't interrupt a paragraph")
     func searchContinuesParagraph() {
         #expect(TreeDump.dump("para\n<search>\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-2:9
+            document @1:1-3:1
               paragraph @1:1-2:9
                 text "para" @1:1-1:5
                 softbreak @-
@@ -54,7 +54,7 @@ struct HTMLBlockType6TagNameListTests {
     @Test("`<search>` on its own line opens a type 7 HTML block")
     func searchOpensType7Block() {
         #expect(TreeDump.dump("<search>\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-1:9
+            document @1:1-2:1
               html_block "<search>\\n" @1:1-1:9
 
             """)
@@ -63,7 +63,7 @@ struct HTMLBlockType6TagNameListTests {
     @Test("`<source>` doesn't interrupt a paragraph")
     func sourceContinuesParagraph() {
         #expect(TreeDump.dump("para\n<source>\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-2:9
+            document @1:1-3:1
               paragraph @1:1-2:9
                 text "para" @1:1-1:5
                 softbreak @-
@@ -75,7 +75,7 @@ struct HTMLBlockType6TagNameListTests {
     @Test("an uppercase `<SOURCE` followed by an attribute is paragraph text")
     func uppercaseSourceWithAttribute() {
         #expect(TreeDump.dump("<SOURCE x\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-1:10
+            document @1:1-2:1
               paragraph @1:1-1:10
                 text "<SOURCE x" @1:1-1:10
 
@@ -85,7 +85,7 @@ struct HTMLBlockType6TagNameListTests {
     @Test("a mixed-case closing `</soURce` is paragraph text")
     func mixedCaseClosingSource() {
         #expect(TreeDump.dump("</soURce\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-1:9
+            document @1:1-2:1
               paragraph @1:1-1:9
                 text "</soURce" @1:1-1:9
 
@@ -95,7 +95,7 @@ struct HTMLBlockType6TagNameListTests {
     @Test("`<source/>` doesn't interrupt a paragraph")
     func selfClosingSourceContinuesParagraph() {
         #expect(TreeDump.dump("para\n<source/>\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-2:10
+            document @1:1-3:1
               paragraph @1:1-2:10
                 text "para" @1:1-1:5
                 softbreak @-
@@ -107,7 +107,7 @@ struct HTMLBlockType6TagNameListTests {
     @Test("`<source` continues a block quote's paragraph lazily")
     func sourceContinuesLazily() {
         #expect(TreeDump.dump("> a\n<source\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-2:8
+            document @1:1-3:1
               block_quote @1:1-2:8
                 paragraph @1:3-2:8
                   text "a" @1:3-1:4
@@ -120,7 +120,7 @@ struct HTMLBlockType6TagNameListTests {
     @Test("a longer name starting with `source` is paragraph text")
     func longerNameIsParagraph() {
         #expect(TreeDump.dump("<sources\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-1:9
+            document @1:1-2:1
               paragraph @1:1-1:9
                 text "<sources" @1:1-1:9
 
@@ -130,7 +130,7 @@ struct HTMLBlockType6TagNameListTests {
     @Test("`<Source` is paragraph text inside a block quote")
     func sourceInBlockQuote() {
         #expect(TreeDump.dump("> <Source\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-1:10
+            document @1:1-2:1
               block_quote @1:1-1:10
                 paragraph @1:3-1:10
                   text "<Source" @1:3-1:10
@@ -142,7 +142,7 @@ struct HTMLBlockType6TagNameListTests {
     @Test("`<source` is paragraph text inside a list item")
     func sourceInListItem() {
         #expect(TreeDump.dump("- <source\nnext\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-2:5
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:5
                 item @1:1-2:5
                   paragraph @1:3-2:5

@@ -143,18 +143,18 @@ struct InlineOnlySourcePositionTests {
 
             """)
         #expect(TreeDump.dump("\u{FEFF}\n", options: options, sourceRanges: true) == """
-            document @1:1-1:1
+            document @1:1-2:1
               paragraph @1:1-1:1
                 text "\\n" @1:1-1:1
 
             """)
     }
 
-    /// Blank lines and a trailing line ending are literal paragraph content, so the paragraph and document span them, but every range ends where the final line ending starts, at the end of the last line.
+    /// Blank lines and a trailing line ending are literal paragraph content, so the paragraph spans them, but it ends where the final line ending starts, at the end of the last line. The document covers the whole input.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func blankLinesAndTrailingLineEnding(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("a\n\n  b\n", options: options, sourceRanges: true) == """
-            document @1:1-3:4
+            document @1:1-4:1
               paragraph @1:1-3:4
                 text "a\\n\\n  b\\n" @1:1-3:4
 

@@ -31,7 +31,7 @@ struct UnclosedProcessingInstructionInListItemTests {
 
             """)
         #expect(TreeDump.dump("- >\ta<?\n  2\u{0} [x] \n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:10
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:9
                 item @1:1-2:9
                   block_quote @1:3-2:9
@@ -57,7 +57,7 @@ struct UnclosedProcessingInstructionInListItemTests {
 
             """)
         #expect(TreeDump.dump("- >\ta\u{0}<?\n  2\u{0} [x] \n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:10
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:9
                 item @1:1-2:9
                   block_quote @1:3-2:9
@@ -83,7 +83,7 @@ struct UnclosedProcessingInstructionInListItemTests {
 
             """)
         #expect(TreeDump.dump("- >a\u{0}<?\n  2\u{0} [x] \n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:10
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:9
                 item @1:1-2:9
                   block_quote @1:3-2:9

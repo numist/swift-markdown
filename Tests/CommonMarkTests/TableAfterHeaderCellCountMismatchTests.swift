@@ -39,7 +39,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "top level, two mismatched pairs before a valid pair",
             "a|b|c\n-|-\np|q\n-|-|-\nd|e\n-|-\n",
             """
-            document @1:1-6:4
+            document @1:1-7:1
               paragraph @1:1-4:6
                 text "a|b|c" @1:1-1:6
                 softbreak @-
@@ -61,7 +61,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "block quote, two mismatched pairs before a valid pair",
             "> a|b|c\n> -|-\n> p|q\n> -|-|-\n> d|e\n> -|-\n",
             """
-            document @1:1-6:6
+            document @1:1-7:1
               block_quote @1:1-6:6
                 paragraph @1:3-4:8
                   text "a|b|c" @1:3-1:8
@@ -84,7 +84,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "list item, two mismatched pairs before a valid pair",
             "- a|b|c\n  -|-\n  p|q\n  -|-|-\n  d|e\n  -|-\n",
             """
-            document @1:1-6:6
+            document @1:1-7:1
               list bullet '-' tight @1:1-6:6
                 item @1:1-6:6
                   paragraph @1:3-4:8
@@ -108,7 +108,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "CRLF, two mismatched pairs before a valid pair",
             "a|b|c\r\n-|-\r\np|q\r\n-|-|-\r\nd|e\r\n-|-\r\n",
             """
-            document @1:1-6:4
+            document @1:1-7:1
               paragraph @1:1-4:6
                 text "a|b|c" @1:1-1:6
                 softbreak @-
@@ -130,7 +130,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "tab after the block quote marker, two mismatched pairs before a valid pair",
             ">\ta|b|c\n>\t-|-\n>\tp|q\n>\t-|-|-\n>\td|e\n>\t-|-\n",
             """
-            document @1:1-6:6
+            document @1:1-7:1
               block_quote @1:1-6:6
                 paragraph @1:3-4:8
                   text "a|b|c" @1:3-1:8
@@ -153,7 +153,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "top level, the mismatched delimiter row is the header row of a valid pair",
             "a|b\n-|-|-\n-|-|-\n",
             """
-            document @1:1-3:6
+            document @1:1-4:1
               paragraph @1:1-1:4
                 text "a|b" @1:1-1:4
               table @2:1-3:6
@@ -171,7 +171,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "block quote, the mismatched delimiter row is the header row of a valid pair",
             "> a|b\n> -|-|-\n> -|-|-\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 paragraph @1:3-1:6
                   text "a|b" @1:3-1:6
@@ -190,7 +190,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "list item, the mismatched delimiter row is the header row of a valid pair",
             "- a|b\n  -|-|-\n  -|-|-\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:8
                 item @1:1-3:8
                   paragraph @1:3-1:6
@@ -210,7 +210,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "CRLF, the mismatched delimiter row is the header row of a valid pair",
             "a|b\r\n-|-|-\r\n-|-|-\r\n",
             """
-            document @1:1-3:6
+            document @1:1-4:1
               paragraph @1:1-1:4
                 text "a|b" @1:1-1:4
               table @2:1-3:6
@@ -228,7 +228,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "tab after the block quote marker, the mismatched delimiter row is the header row of a valid pair",
             ">\ta|b\n>\t-|-|-\n>\t-|-|-\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               block_quote @1:1-3:8
                 paragraph @1:3-1:6
                   text "a|b" @1:3-1:6
@@ -247,7 +247,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "top level, a valid pair after a mismatched pair, with data rows",
             "x\na|b|c\n-|-\nd|e\n-|-\nf|g\nh\n",
             """
-            document @1:1-7:2
+            document @1:1-8:1
               paragraph @1:1-3:4
                 text "x" @1:1-1:2
                 softbreak @-
@@ -276,7 +276,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "block quote, a valid pair after a mismatched pair, with data rows",
             "> x\n> a|b|c\n> -|-\n> d|e\n> -|-\n> f|g\n> h\n",
             """
-            document @1:1-7:4
+            document @1:1-8:1
               block_quote @1:1-7:4
                 paragraph @1:3-3:6
                   text "x" @1:3-1:4
@@ -306,7 +306,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "list item, a valid pair after a mismatched pair, with data rows",
             "- x\n  a|b|c\n  -|-\n  d|e\n  -|-\n  f|g\n  h\n",
             """
-            document @1:1-7:4
+            document @1:1-8:1
               list bullet '-' tight @1:1-7:4
                 item @1:1-7:4
                   paragraph @1:3-3:6
@@ -337,7 +337,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "top level, the later pair also differs in cell count",
             "x\na|b|c\n-|-\nd|e|f|g\n-|-\n",
             """
-            document @1:1-5:4
+            document @1:1-6:1
               paragraph @1:1-5:4
                 text "x" @1:1-1:2
                 softbreak @-
@@ -355,7 +355,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "block quote, the later pair also differs in cell count",
             "> x\n> a|b|c\n> -|-\n> d|e|f|g\n> -|-\n",
             """
-            document @1:1-5:6
+            document @1:1-6:1
               block_quote @1:1-5:6
                 paragraph @1:3-5:6
                   text "x" @1:3-1:4
@@ -374,7 +374,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "list item, the later pair also differs in cell count",
             "- x\n  a|b|c\n  -|-\n  d|e|f|g\n  -|-\n",
             """
-            document @1:1-5:6
+            document @1:1-6:1
               list bullet '-' tight @1:1-5:6
                 item @1:1-5:6
                   paragraph @1:3-5:6
@@ -394,7 +394,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "top level, the later line is not a delimiter row",
             "x\na|b|c\n-|-\nd|e\nf|g\n",
             """
-            document @1:1-5:4
+            document @1:1-6:1
               paragraph @1:1-5:4
                 text "x" @1:1-1:2
                 softbreak @-
@@ -412,7 +412,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "block quote, the later line is not a delimiter row",
             "> x\n> a|b|c\n> -|-\n> d|e\n> f|g\n",
             """
-            document @1:1-5:6
+            document @1:1-6:1
               block_quote @1:1-5:6
                 paragraph @1:3-5:6
                   text "x" @1:3-1:4
@@ -431,7 +431,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "list item, the later line is not a delimiter row",
             "- x\n  a|b|c\n  -|-\n  d|e\n  f|g\n",
             """
-            document @1:1-5:6
+            document @1:1-6:1
               list bullet '-' tight @1:1-5:6
                 item @1:1-5:6
                   paragraph @1:3-5:6
@@ -451,7 +451,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "top level, the later delimiter row is indented four columns",
             "x\na|b|c\n-|-\nd|e\n    -|-\n",
             """
-            document @1:1-5:8
+            document @1:1-6:1
               paragraph @1:1-5:8
                 text "x" @1:1-1:2
                 softbreak @-
@@ -469,7 +469,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "block quote, the later delimiter row is indented four columns",
             "> x\n> a|b|c\n> -|-\n> d|e\n>     -|-\n",
             """
-            document @1:1-5:10
+            document @1:1-6:1
               block_quote @1:1-5:10
                 paragraph @1:3-5:10
                   text "x" @1:3-1:4
@@ -488,7 +488,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "list item, the later delimiter row is indented four columns",
             "- x\n  a|b|c\n  -|-\n  d|e\n      -|-\n",
             """
-            document @1:1-5:10
+            document @1:1-6:1
               list bullet '-' tight @1:1-5:10
                 item @1:1-5:10
                   paragraph @1:3-5:10
@@ -508,7 +508,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "block quote, the later delimiter row is a lazy continuation line",
             "> a|b|c\n> -|-\n> d|e\n-|-\n",
             """
-            document @1:1-4:4
+            document @1:1-5:1
               block_quote @1:1-4:4
                 paragraph @1:3-4:4
                   text "a|b|c" @1:3-1:8
@@ -525,7 +525,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "list item, the later delimiter row is a lazy continuation line",
             "- a|b|c\n  -|-\n  d|e\n-|-\n",
             """
-            document @1:1-4:4
+            document @1:1-5:1
               list bullet '-' tight @1:1-4:4
                 item @1:1-4:4
                   paragraph @1:3-4:4
@@ -543,7 +543,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "top level, a setext heading underline after a mismatched pair",
             "x\na|b|c\n-|-\n===\n",
             """
-            document @1:1-4:4
+            document @1:1-5:1
               heading 1 @1:1-4:4
                 text "x" @1:1-1:2
                 softbreak @-
@@ -557,7 +557,7 @@ struct TableAfterHeaderCellCountMismatchTests {
             "a header row with more cells than its delimiter row, then a body-like row",
             "| abc | def |\n| --- |\n| bar |\n",
             """
-            document @1:1-3:8
+            document @1:1-4:1
               paragraph @1:1-3:8
                 text "| abc | def |" @1:1-1:14
                 softbreak @-

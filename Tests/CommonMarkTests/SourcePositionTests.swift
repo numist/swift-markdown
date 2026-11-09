@@ -45,10 +45,10 @@ struct SourcePositionTests {
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         dfsRanges(doc.root, into: &ranges)
 
-        // MarkdownDocument spans the whole source: 1:1 .. just past "Hello world" (3:12).
+        // The document spans the whole source, through the final line ending.
         let docRange = ranges[0].range
         #expect(docRange?.lowerBound == Pos(line: 1, column: 1))
-        #expect(docRange?.upperBound == Pos(line: 3, column: 12))
+        #expect(docRange?.upperBound == Pos(line: 4, column: 1))
 
         let heading = range(in: ranges) { if case .heading = $0 { return true } else { return false } }
         #expect(heading?.lowerBound == Pos(line: 1, column: 1))
@@ -120,7 +120,7 @@ struct SourcePositionTests {
         // `- -` is an outer item (content column 3) holding an empty inner item (content column 5).
         // Two spaces reach only the outer item's content column.
         #expect(TreeDump.dump("- -\n  \n", options: .sourcePosition, sourceRanges: true) == """
-            document @1:1-2:3
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:4
                 item @1:1-1:4
                   list bullet '-' tight @1:3-1:4
@@ -130,7 +130,7 @@ struct SourcePositionTests {
 
         // Four spaces reach the inner item's content column, but the inner item is empty.
         #expect(TreeDump.dump("- -\n    \n", options: .sourcePosition, sourceRanges: true) == """
-            document @1:1-2:5
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:4
                 item @1:1-1:4
                   list bullet '-' tight @1:3-1:4
@@ -141,7 +141,7 @@ struct SourcePositionTests {
         // Distinct bullets nest three items rather than form a thematic break. Five spaces reach the
         // middle item's content column but not the empty innermost item's (7).
         #expect(TreeDump.dump("- + *\n     \n", options: .sourcePosition, sourceRanges: true) == """
-            document @1:1-2:6
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   list bullet '+' tight @1:3-1:6

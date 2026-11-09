@@ -23,7 +23,7 @@ struct HTMLBlockContinuationPartialTabTests {
     @Test
     func blockQuoteMarkerSpaceInTab() {
         #expect(TreeDump.dump("> <div>\n>\tfoo\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-2:6
+            document @1:1-3:1
               block_quote @1:1-2:6
                 html_block "<div>\\n  foo\\n" @1:3-2:6
 
@@ -33,7 +33,7 @@ struct HTMLBlockContinuationPartialTabTests {
     @Test
     func listItemIndentInTab() {
         #expect(TreeDump.dump("- <div>\n \tfoo\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-2:6
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:6
                 item @1:1-2:6
                   html_block "<div>\\n  foo\\n" @1:3-2:6
@@ -44,7 +44,7 @@ struct HTMLBlockContinuationPartialTabTests {
     @Test
     func blockQuoteMarkerSpaceBeforeTab() {
         #expect(TreeDump.dump("> <div>\n> \tfoo\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-2:7
+            document @1:1-3:1
               block_quote @1:1-2:7
                 html_block "<div>\\n\\tfoo\\n" @1:3-2:7
 
@@ -54,7 +54,7 @@ struct HTMLBlockContinuationPartialTabTests {
     @Test
     func topLevelTab() {
         #expect(TreeDump.dump("<div>\n\tfoo\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-2:5
+            document @1:1-3:1
               html_block "<div>\\n\\tfoo\\n" @1:1-2:5
 
             """)
@@ -63,7 +63,7 @@ struct HTMLBlockContinuationPartialTabTests {
     @Test
     func typeOneBlockQuoteMarkerSpaceInTab() {
         #expect(TreeDump.dump("> <pre>\n>\tfoo\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-2:6
+            document @1:1-3:1
               block_quote @1:1-2:6
                 html_block "<pre>\\n  foo\\n" @1:3-2:6
 

@@ -1,4 +1,4 @@
-document @1:1-4:8
+document @1:1-5:1
   paragraph @1:1-1:19
     text "[^ " @1:1-1:4
     footnote_reference "1" @1:4-1:8

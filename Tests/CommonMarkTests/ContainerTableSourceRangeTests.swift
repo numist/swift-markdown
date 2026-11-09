@@ -227,7 +227,7 @@ struct ContainerTableSourceRangeTests {
     @Test("a lazy lone-pipe header after a split tab is paragraph text")
     func splitTabLonePipeHeaderIsParagraph() {
         #expect(tree("- >x\n \t|\n  >-|\n") == """
-            document @1:1-3:6
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:6
                 item @1:1-3:6
                   block_quote @1:3-3:6
@@ -246,7 +246,7 @@ struct ContainerTableSourceRangeTests {
     @Test("a lazy lone-pipe header is paragraph text")
     func lazyLonePipeHeaderIsParagraph() {
         #expect(tree(">x\n  |\n>-|\n") == """
-            document @1:1-3:4
+            document @1:1-4:1
               block_quote @1:1-3:4
                 paragraph @1:2-3:4
                   text "x" @1:2-1:3

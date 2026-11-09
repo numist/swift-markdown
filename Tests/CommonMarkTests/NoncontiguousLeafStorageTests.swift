@@ -39,7 +39,7 @@ struct NoncontiguousLeafStorageTests {
         let source = "> abc\n> def\n> ===\n"
         #expect(materializedSize(source) == 1)
         #expect(tree(source) == """
-            document @1:1-3:6
+            document @1:1-4:1
               block_quote @1:1-3:6
                 heading 1 @1:3-3:6
                   text "abc" @1:3-1:6
@@ -54,7 +54,7 @@ struct NoncontiguousLeafStorageTests {
         let source = "> [x]: /u\n> abc\n> ===\n"
         #expect(materializedSize(source) == 1)
         #expect(tree(source) == """
-            document @1:1-3:6
+            document @1:1-4:1
               block_quote @1:1-3:6
                 heading 1 @2:3-3:6
                   text "abc" @2:3-2:6
@@ -67,7 +67,7 @@ struct NoncontiguousLeafStorageTests {
         let source = "> [abc\n> def\n"
         #expect(materializedSize(source) == 1)
         #expect(tree(source) == """
-            document @1:1-2:6
+            document @1:1-3:1
               block_quote @1:1-2:6
                 paragraph @1:3-2:6
                   text "[abc" @1:3-1:7
@@ -82,7 +82,7 @@ struct NoncontiguousLeafStorageTests {
         let source = "> [a]: /u\n> abc\n> [a]\n"
         #expect(materializedSize(source) == 1)
         #expect(tree(source) == """
-            document @1:1-3:6
+            document @1:1-4:1
               block_quote @1:1-3:6
                 paragraph @2:3-3:6
                   text "abc" @2:3-2:6
@@ -98,7 +98,7 @@ struct NoncontiguousLeafStorageTests {
         let source = "> ^[a]: b\n> ^[c][a]\n"
         #expect(materializedSize(source) == 1)
         #expect(tree(source) == """
-            document @1:1-2:10
+            document @1:1-3:1
               block_quote @1:1-2:10
                 paragraph @2:3-2:10
                   attribute "b" @2:3-2:10
@@ -113,7 +113,7 @@ struct NoncontiguousLeafStorageTests {
         // "t\nu"
         #expect(materializedSize(source) == 1 + 3)
         #expect(tree(source) == """
-            document @1:1-3:6
+            document @1:1-4:1
               block_quote @1:1-3:6
                 paragraph @3:3-3:6
                   link "/u" "t\\nu" @3:3-3:6
@@ -127,7 +127,7 @@ struct NoncontiguousLeafStorageTests {
         let source = "- [x] a\n  b\n"
         #expect(materializedSize(source) == 1)
         #expect(tree(source) == """
-            document @1:1-2:4
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:4
                 tasklist checked @1:1-2:4
                   paragraph @1:7-2:4
@@ -143,7 +143,7 @@ struct NoncontiguousLeafStorageTests {
         let source = "> \u{0B}[a]: /u\n> b\u{0B}\n"
         #expect(materializedSize(source) == 1)
         #expect(tree(source) == """
-            document @1:1-2:5
+            document @1:1-3:1
               block_quote @1:1-2:4
                 paragraph @2:3-2:4
                   text "b" @2:3-2:4

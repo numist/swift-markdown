@@ -101,7 +101,7 @@ struct TaskListMarkerWhitespaceTests {
     @Test("a checkbox before a line ending")
     func checkboxBeforeLineEnding() {
         #expect(TreeDump.dump("- [ ]\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
-            document @1:1-1:6
+            document @1:1-2:1
               list bullet '-' tight @1:1-1:6
                 tasklist unchecked @1:1-1:6
 
@@ -111,7 +111,7 @@ struct TaskListMarkerWhitespaceTests {
     @Test("a checkbox before an indented continuation line")
     func checkboxBeforeContinuationLine() {
         #expect(TreeDump.dump("- [x]\n  foo\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:6
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:6
                 tasklist checked @1:1-2:6
                   paragraph @2:3-2:6
@@ -123,7 +123,7 @@ struct TaskListMarkerWhitespaceTests {
     @Test("a checkbox before a lazy continuation line")
     func checkboxBeforeLazyContinuationLine() {
         #expect(TreeDump.dump("- [x]\nfoo\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:4
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:4
                 tasklist checked @1:1-2:4
                   paragraph @2:1-2:4
@@ -135,7 +135,7 @@ struct TaskListMarkerWhitespaceTests {
     @Test("a checkbox in a block quote before a continuation line")
     func checkboxInBlockQuoteBeforeContinuationLine() {
         #expect(TreeDump.dump("> - [x]\n>   foo\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:8
+            document @1:1-3:1
               block_quote @1:1-2:8
                 list bullet '-' tight @1:3-2:8
                   tasklist checked @1:3-2:8

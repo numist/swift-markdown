@@ -207,10 +207,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 pending = finalize(node: current, pending: pending, endsOnCurrentLine: true)
             }
             
-            // The document node is never finalized, so it is stamped here, from the first line's start, after any BOM. An empty document has no source range.
+            // The document node is never finalized, so it is stamped here. An empty document has no source range.
             if positionsEnabled, reader.lineNumber > 0 {
-                storage.setSourceStart(documentIndex, storage.lineStarts[0])
-                storage.setSourceEnd(documentIndex, currentLineSourceRange.upperBound)
+                stampDocument()
             }
         }
 
@@ -370,10 +369,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Link reference definitions leading the content are consumed, and the paragraph is kept even when
         // nothing, or only whitespace, remains.
         let paragraph = addChild(kind: .paragraph, parent: documentIndex, start: start)
-        // The paragraph holds the whole input after any BOM, but it and the document end where the last line's content ends, as in block mode.
-        storage.setSourceStart(documentIndex, start)
-        storage.setSourceEnd(documentIndex, contentEnd)
+        // The paragraph holds the whole input after any BOM, but it ends where the last line's content ends, as in block mode.
         storage.setSourceEnd(paragraph, contentEnd)
+        if positionsEnabled {
+            stampDocument()
+        }
 
         // A NUL becomes U+FFFD (Insecure characters), which forces the arena copy below.
         let hasNUL = containsNUL(Chunk(offset: start, length: contentEnd - start, inSource: true))
@@ -433,6 +433,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         finishInlines(paragraph, image: image)
         if positionsEnabled {
             endInlinesWithinLastLine(after: paragraph, contentEnd: contentEnd)
+        }
+    }
+
+    /// Stamps the document with the whole input, from the first line's start, after any BOM. The end of input that ends
+    /// in a line ending is column 1 of the line after its last, so that line's start is recorded too.
+    private mutating func stampDocument() {
+        let end = sourceBytes.count
+        storage.setSourceStart(documentIndex, storage.lineStarts[0])
+        storage.setSourceEnd(documentIndex, end)
+        if sourceBytes[end - 1] == UInt8(ascii: "\n") || sourceBytes[end - 1] == UInt8(ascii: "\r") {
+            storage.lineStarts.append(end)
         }
     }
 
@@ -2121,8 +2132,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if let lineContentEnd {
                 // An ATX heading or a thematic break ends at its trimmed content extent, not the raw line.
                 end = lineContentEnd
-                // A block that later ends on this line, such as the document, ends at this content end too.
-                currentLineSourceRange = currentLineSourceRange.lowerBound..<end
             } else if case .codeBlock(let info) = kind, !info.isFenced {
                 end = indentedCodeContentEnd
             } else if Self.isContainer(kind) {

@@ -40,7 +40,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "block quote, escaped right after the opening fence",
             "> ```\nx\n",
             """
-            document @1:1-2:2
+            document @1:1-3:1
               block_quote @1:1-1:6
                 code_block "" "" @1:3-1:6
               paragraph @2:1-2:2
@@ -52,7 +52,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "block quote, escaped after a content line",
             "> ```\n> a\nx\n",
             """
-            document @1:1-3:2
+            document @1:1-4:1
               block_quote @1:1-2:4
                 code_block "" "a\\n" @1:3-2:4
               paragraph @3:1-3:2
@@ -64,7 +64,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "block quote, escaped after a blank content line",
             "> ```\n>\nx\n",
             """
-            document @1:1-3:2
+            document @1:1-4:1
               block_quote @1:1-2:2
                 code_block "" "\\n" @1:3-2:2
               paragraph @3:1-3:2
@@ -76,7 +76,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "block quote, escaped by a blank line",
             "> ```\n> a\n\nx\n",
             """
-            document @1:1-4:2
+            document @1:1-5:1
               block_quote @1:1-2:4
                 code_block "" "a\\n" @1:3-2:4
               paragraph @4:1-4:2
@@ -88,7 +88,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "block quote, closed by its closing fence",
             "> ```\n> a\n> ```\nx\n",
             """
-            document @1:1-4:2
+            document @1:1-5:1
               block_quote @1:1-3:6
                 code_block "" "a\\n" @1:3-3:6
               paragraph @4:1-4:2
@@ -100,7 +100,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "block quote, open at the end of the document",
             "> ```\n> a\n",
             """
-            document @1:1-2:4
+            document @1:1-3:1
               block_quote @1:1-2:4
                 code_block "" "a\\n" @1:3-2:4
 
@@ -110,7 +110,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "bullet item, escaped right after the opening fence",
             "- ```\nx\n",
             """
-            document @1:1-2:2
+            document @1:1-3:1
               list bullet '-' tight @1:1-1:6
                 item @1:1-1:6
                   code_block "" "" @1:3-1:6
@@ -123,7 +123,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "bullet item, escaped after a content line",
             "- ```\n  a\nx\n",
             """
-            document @1:1-3:2
+            document @1:1-4:1
               list bullet '-' tight @1:1-2:4
                 item @1:1-2:4
                   code_block "" "a\\n" @1:3-2:4
@@ -136,7 +136,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "bullet item, escaped after a blank content line",
             "- ```\n\nx\n",
             """
-            document @1:1-3:2
+            document @1:1-4:1
               list bullet '-' tight @1:1-2:1
                 item @1:1-2:1
                   code_block "" "\\n" @1:3-2:1
@@ -149,7 +149,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "bullet item, escaped by a sibling item",
             "- ```\n  a\n- b\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:4
                 item @1:1-2:4
                   code_block "" "a\\n" @1:3-2:4
@@ -163,7 +163,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "bullet item, closed by its closing fence",
             "- ```\n  a\n  ```\nx\n",
             """
-            document @1:1-4:2
+            document @1:1-5:1
               list bullet '-' tight @1:1-3:6
                 item @1:1-3:6
                   code_block "" "a\\n" @1:3-3:6
@@ -176,7 +176,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "bullet item, open at the end of the document",
             "- ```\n  a\n",
             """
-            document @1:1-2:4
+            document @1:1-3:1
               list bullet '-' tight @1:1-2:4
                 item @1:1-2:4
                   code_block "" "a\\n" @1:3-2:4
@@ -187,7 +187,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "ordered item, escaped right after the opening fence",
             "1. ```\nx\n",
             """
-            document @1:1-2:2
+            document @1:1-3:1
               list ordered start=1 delim=period tight @1:1-1:7
                 item @1:1-1:7
                   code_block "" "" @1:4-1:7
@@ -200,7 +200,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "ordered item, escaped after a content line",
             "1. ```\n   a\nx\n",
             """
-            document @1:1-3:2
+            document @1:1-4:1
               list ordered start=1 delim=period tight @1:1-2:5
                 item @1:1-2:5
                   code_block "" "a\\n" @1:4-2:5
@@ -213,7 +213,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "ordered item, escaped by a sibling item",
             "1. ```\n   a\n2. b\n",
             """
-            document @1:1-3:5
+            document @1:1-4:1
               list ordered start=1 delim=period tight @1:1-3:5
                 item @1:1-2:5
                   code_block "" "a\\n" @1:4-2:5
@@ -227,7 +227,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "footnote definition, escaped right after the opening fence",
             "[^a]\n\n[^a]: ```\nx\n",
             """
-            document @1:1-4:2
+            document @1:1-5:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               paragraph @4:1-4:2
@@ -241,7 +241,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "footnote definition, escaped after a content line",
             "[^a]\n\n[^a]: ```\n    a\nx\n",
             """
-            document @1:1-5:2
+            document @1:1-6:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               paragraph @5:1-5:2
@@ -255,7 +255,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "footnote definition, escaped after a blank content line",
             "[^a]\n\n[^a]: ```\n\nx\n",
             """
-            document @1:1-5:2
+            document @1:1-6:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               paragraph @5:1-5:2
@@ -269,7 +269,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "footnote definition, closed by its closing fence",
             "[^a]\n\n[^a]: ```\n    a\n    ```\nx\n",
             """
-            document @1:1-6:2
+            document @1:1-7:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               paragraph @6:1-6:2
@@ -283,7 +283,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "block quote in an item, escaped after a content line",
             "- > ```\n  > a\n  x\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               list bullet '-' tight @1:1-3:4
                 item @1:1-3:4
                   block_quote @1:3-2:6
@@ -297,7 +297,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "item in a block quote, escaped after a content line",
             "> - ```\n>   a\n> x\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               block_quote @1:1-3:4
                 list bullet '-' tight @1:3-2:6
                   item @1:3-2:6
@@ -311,7 +311,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "block quote in a block quote, escaped after a content line",
             "> > ```\n> > a\n> x\n",
             """
-            document @1:1-3:4
+            document @1:1-4:1
               block_quote @1:1-3:4
                 block_quote @1:3-2:6
                   code_block "" "a\\n" @1:5-2:6
@@ -324,7 +324,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "footnote definition in a block quote, escaped after a content line",
             "[^a]\n\n> [^a]: ```\n>     a\n> x\n",
             """
-            document @1:1-5:4
+            document @1:1-6:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
               block_quote @3:1-5:4
@@ -339,7 +339,7 @@ struct FencedCodeEscapedContainerRangeTests {
             "item in a block quote, escaped by a blank line",
             "> - ```\n>   a\n\nx\n",
             """
-            document @1:1-4:2
+            document @1:1-5:1
               block_quote @1:1-2:6
                 list bullet '-' tight @1:3-2:6
                   item @1:3-2:6

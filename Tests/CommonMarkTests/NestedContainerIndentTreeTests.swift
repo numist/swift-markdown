@@ -24,7 +24,7 @@ struct NestedContainerIndentTreeTests {
     func bulletItemsNestedByTwoSpaces() {
         let source = "- a\n  - b\n    - c\n      - d\n"
         #expect(TreeDump.dump(source, options: Self.options, sourceRanges: true) == """
-            document @1:1-4:10
+            document @1:1-5:1
               list bullet '-' tight @1:1-4:10
                 item @1:1-4:10
                   paragraph @1:3-1:4
@@ -49,7 +49,7 @@ struct NestedContainerIndentTreeTests {
     func bulletItemsNestedByTabs() {
         let source = "- a\n\t- b\n\t\t- c\n\t\t\t- d\n"
         #expect(TreeDump.dump(source, options: Self.options, sourceRanges: true) == """
-            document @1:1-4:7
+            document @1:1-5:1
               list bullet '-' tight @1:1-4:7
                 item @1:1-4:7
                   paragraph @1:3-1:4
@@ -74,7 +74,7 @@ struct NestedContainerIndentTreeTests {
     func linesInDeepestItemAfterShallowerLines() {
         let source = "- a\n  - b\n    - c\n    c2\n  b2\n\n      - d\n    e\n   f\n"
         #expect(TreeDump.dump(source, options: Self.options, sourceRanges: true) == """
-            document @1:1-9:5
+            document @1:1-10:1
               list bullet '-' tight @1:1-9:5
                 item @1:1-9:5
                   paragraph @1:3-1:4
@@ -107,7 +107,7 @@ struct NestedContainerIndentTreeTests {
     func orderedItemsNestedByMarkerWidth() {
         let source = "1. a\n   1. b\n      1. c\n         1. d\n"
         #expect(TreeDump.dump(source, options: Self.options, sourceRanges: true) == """
-            document @1:1-4:14
+            document @1:1-5:1
               list ordered start=1 delim=period tight @1:1-4:14
                 item @1:1-4:14
                   paragraph @1:4-1:5
@@ -132,7 +132,7 @@ struct NestedContainerIndentTreeTests {
     func footnoteDefinitionsIndentedByFourSpaces() {
         let source = "[^a][^b][^c]\n\n[^a]: a\n    [^b]: b\n        [^c]: c\n            more\n    b2\n"
         #expect(TreeDump.dump(source, options: Self.options, sourceRanges: true) == """
-            document @1:1-7:7
+            document @1:1-8:1
               paragraph @1:1-1:13
                 footnote_reference "1" @1:1-1:5
                 footnote_reference "2" @1:5-1:9

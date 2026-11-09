@@ -81,7 +81,7 @@ struct ThematicBreakSourceRangeTests {
     @Test
     func breakThenBlankLines() {
         #expect(TreeDump.dump("***\n\n\n", options: Self.options, sourceRanges: true) == """
-            document @1:1-3:1
+            document @1:1-4:1
               thematic_break @1:1-1:4
 
             """)

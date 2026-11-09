@@ -1,4 +1,4 @@
-document @1:1-4:10
+document @1:1-5:1
   paragraph @1:1-1:9
     text "a[^b]: B" @1:1-1:9
   paragraph @4:1-4:10

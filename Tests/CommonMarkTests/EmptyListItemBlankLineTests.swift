@@ -24,7 +24,7 @@ struct EmptyListItemBlankLineTests {
     @Test("an empty line ends the item")
     func emptyLine() {
         #expect(tree("-\n\n  foo\n") == """
-            document @1:1-3:6
+            document @1:1-4:1
               list bullet '-' tight @1:1-1:2
                 item @1:1-1:2
               paragraph @3:3-3:6
@@ -36,7 +36,7 @@ struct EmptyListItemBlankLineTests {
     @Test("a line of spaces reaching the content column ends the item")
     func spacesLine() {
         #expect(tree("-\n  \n  foo\n") == """
-            document @1:1-3:6
+            document @1:1-4:1
               list bullet '-' tight @1:1-1:2
                 item @1:1-1:2
               paragraph @3:3-3:6
@@ -48,7 +48,7 @@ struct EmptyListItemBlankLineTests {
     @Test("a line holding a tab ends the item")
     func tabLine() {
         #expect(tree("-\n\t\n  foo\n") == """
-            document @1:1-3:6
+            document @1:1-4:1
               list bullet '-' tight @1:1-1:2
                 item @1:1-1:2
               paragraph @3:3-3:6
@@ -60,7 +60,7 @@ struct EmptyListItemBlankLineTests {
     @Test("a nested empty item ends at a line of spaces reaching its content column")
     func nestedEmptyItem() {
         #expect(tree("- -\n    \n    foo\n") == """
-            document @1:1-3:8
+            document @1:1-4:1
               list bullet '-' loose @1:1-3:8
                 item @1:1-3:8
                   list bullet '-' tight @1:3-1:4

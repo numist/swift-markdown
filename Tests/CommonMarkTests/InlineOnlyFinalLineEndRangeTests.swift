@@ -12,9 +12,9 @@ import Testing
 import CommonMark
 
 /// Source ranges in the inline-only modes (`.inlineOnly`, `.preserveWhitespace`) of input that ends in a line ending.
-/// The document, the paragraph and any node holding the final line ending end where that line ending starts, so every
-/// range stays on the input's last line, as in block mode. A line ending before the last one ends a node at the start
-/// of the next line. Columns are 1-based UTF-8 byte offsets and each end is half-open.
+/// The paragraph and any node holding the final line ending end where that line ending starts, so their ranges stay on
+/// the input's last line, as in block mode, while the document covers the whole input. A line ending before the last
+/// one ends a node at the start of the next line. Columns are 1-based UTF-8 byte offsets and each end is half-open.
 @Suite("Source ranges of inline-only input that ends in a line ending")
 struct InlineOnlyFinalLineEndRangeTests {
 
@@ -27,7 +27,7 @@ struct InlineOnlyFinalLineEndRangeTests {
     @Test("a final line feed ends the text where the line feed starts", arguments: modes)
     func finalLineFeed(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("a\n", mode) == """
-            document @1:1-1:2
+            document @1:1-2:1
               paragraph @1:1-1:2
                 text "a\\n" @1:1-1:2
 
@@ -37,7 +37,7 @@ struct InlineOnlyFinalLineEndRangeTests {
     @Test("a final carriage return and line feed end the text where the carriage return starts", arguments: modes)
     func finalCRLF(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("a\r\n", mode) == """
-            document @1:1-1:2
+            document @1:1-2:1
               paragraph @1:1-1:2
                 text "a\\n" @1:1-1:2
 
@@ -47,7 +47,7 @@ struct InlineOnlyFinalLineEndRangeTests {
     @Test("a final lone carriage return ends the text where it starts", arguments: modes)
     func finalCR(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("a\r", mode) == """
-            document @1:1-1:2
+            document @1:1-2:1
               paragraph @1:1-1:2
                 text "a\\n" @1:1-1:2
 
@@ -58,7 +58,7 @@ struct InlineOnlyFinalLineEndRangeTests {
     @Test("a final blank line ends the text at the start of that line", arguments: modes)
     func finalBlankLine(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("a\n\n", mode) == """
-            document @1:1-2:1
+            document @1:1-3:1
               paragraph @1:1-2:1
                 text "a\\n\\n" @1:1-2:1
 
@@ -68,7 +68,7 @@ struct InlineOnlyFinalLineEndRangeTests {
     @Test("a line ending before the last line ends the text at the start of the next line", arguments: modes)
     func interiorLineFeed(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("a\nb\n", mode) == """
-            document @1:1-2:2
+            document @1:1-3:1
               paragraph @1:1-2:2
                 text "a\\nb\\n" @1:1-2:2
 
@@ -79,7 +79,7 @@ struct InlineOnlyFinalLineEndRangeTests {
     @Test("text holding only the final line feed has an empty range", arguments: modes)
     func lineFeedOnlyText(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("*a*\n", mode) == """
-            document @1:1-1:4
+            document @1:1-2:1
               paragraph @1:1-1:4
                 emph @1:1-1:4
                   text "a" @1:2-1:3
@@ -92,7 +92,7 @@ struct InlineOnlyFinalLineEndRangeTests {
     @Test("text holding only a final carriage return and line feed has an empty range at the carriage return", arguments: modes)
     func crlfOnlyText(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("*a*\r\n", mode) == """
-            document @1:1-1:4
+            document @1:1-2:1
               paragraph @1:1-1:4
                 emph @1:1-1:4
                   text "a" @1:2-1:3
@@ -101,10 +101,10 @@ struct InlineOnlyFinalLineEndRangeTests {
             """)
     }
 
-    @Test("input that is a single line feed has empty ranges at its start", arguments: modes)
+    @Test("input that is a single line feed gives the paragraph and the text empty ranges at its start", arguments: modes)
     func lineFeedOnlyInput(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("\n", mode) == """
-            document @1:1-1:1
+            document @1:1-2:1
               paragraph @1:1-1:1
                 text "\\n" @1:1-1:1
 
@@ -115,7 +115,7 @@ struct InlineOnlyFinalLineEndRangeTests {
     @Test("a backslash hard line break before the final line feed leaves the paragraph ending at the line feed", arguments: modes)
     func backslashHardBreak(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("a\\\n", mode) == """
-            document @1:1-1:3
+            document @1:1-2:1
               paragraph @1:1-1:3
                 text "a" @1:1-1:2
                 linebreak @-
@@ -126,7 +126,7 @@ struct InlineOnlyFinalLineEndRangeTests {
     @Test("a paragraph left empty by a reference definition ends where the final line feed starts", arguments: modes)
     func definitionOnly(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("[x]: /u\n", mode) == """
-            document @1:1-1:8
+            document @1:1-2:1
               paragraph @1:1-1:8
 
             """)
@@ -136,7 +136,7 @@ struct InlineOnlyFinalLineEndRangeTests {
     @Test("text with a replaced NUL ends where the final line feed starts", arguments: modes)
     func replacedNUL(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("a\u{0}\n", mode) == """
-            document @1:1-1:3
+            document @1:1-2:1
               paragraph @1:1-1:3
                 text "a\u{FFFD}\\n" @1:1-1:3
 
@@ -146,7 +146,7 @@ struct InlineOnlyFinalLineEndRangeTests {
     @Test("the text after an email autolink ends where the final line feed starts", arguments: modes)
     func afterEmailAutolink(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("a@b.co\n", mode, [.gfmAutolink]) == """
-            document @1:1-1:7
+            document @1:1-2:1
               paragraph @1:1-1:7
                 link "mailto:a@b.co" "" @1:1-1:7
                   text "a@b.co" @1:1-1:7
