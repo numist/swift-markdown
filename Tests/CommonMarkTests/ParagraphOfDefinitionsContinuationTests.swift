@@ -19,19 +19,23 @@ import CommonMark
 @Suite("A paragraph holding only definitions continues")
 struct ParagraphOfDefinitionsContinuationTests {
 
+    /// Checks the tree of `source` with source positions against `tree`, and without them against `tree` with each
+    /// line's ` @…` range removed.
+    private func expectTree(_ source: String, _ tree: String, sourceLocation: SourceLocation = #_sourceLocation) {
+        #expect(
+            TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == tree,
+            sourceLocation: sourceLocation
+        )
+        #expect(
+            TreeDump.dump(source, options: [.tables]) == tree.replacing(/\ @(?:\d+:\d+-\d+:\d+|-)$/.anchorsMatchLineEndings(), with: ""),
+            sourceLocation: sourceLocation
+        )
+    }
+
     @Test("a continuation line follows the underline text in a block quote")
     func quotedDefinitionsThenUnderlineThenText() {
         let source = "> [a]:\n> /u\n> ===\n> x\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "==="
-                  softbreak
-                  text "x"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-4:4
               block_quote @1:1-4:4
                 paragraph @3:3-4:4
@@ -45,16 +49,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("a continuation line after a tab-expanded block quote marker")
     func tabExpandedPrefixContinuation() {
         let source = ">\t[a]:\n>\t/u\n>\t===\n>\tx\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "==="
-                  softbreak
-                  text "x"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-4:4
               block_quote @1:1-4:4
                 paragraph @3:3-4:4
@@ -68,22 +63,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("a table header takes the last line after the continued paragraph")
     func tableAfterContinuedParagraph() {
         let source = "> [a]:\n> /u\n> ===\n> x\n> a|b\n> -|-\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "==="
-                  softbreak
-                  text "x"
-                table
-                  table_header
-                    table_cell align=none colspan=1 rowspan=1
-                      text "a"
-                    table_cell align=none colspan=1 rowspan=1
-                      text "b"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-6:6
               block_quote @1:1-6:6
                 paragraph @3:3-4:4
@@ -103,18 +83,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("NUL in the continued paragraph becomes U+FFFD")
     func nulInContinuedParagraph() {
         let source = "> [a]:\n> /u\n> ===\n> x\u{0}\n> y\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "==="
-                  softbreak
-                  text "x\u{FFFD}"
-                  softbreak
-                  text "y"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-5:4
               block_quote @1:1-5:4
                 paragraph @3:3-5:4
@@ -130,16 +99,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("definitions followed by a two-line setext heading in a block quote")
     func setextHeadingAfterQuotedDefinition() {
         let source = "> [a]: /u\n> foo\n> bar\n> ===\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                heading 1
-                  text "foo"
-                  softbreak
-                  text "bar"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-4:6
               block_quote @1:1-4:6
                 heading 1 @2:3-4:6
@@ -153,16 +113,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("NUL in a setext heading after definitions")
     func nulInSetextHeading() {
         let source = "> [a]: /u\n> fo\u{0}o\n> bar\n> ---\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                heading 2
-                  text "fo\u{FFFD}o"
-                  softbreak
-                  text "bar"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-4:6
               block_quote @1:1-4:6
                 heading 2 @2:3-4:6
@@ -176,14 +127,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("single-line setext heading after a two-line definition")
     func singleLineHeadingAfterMultiLineDefinition() {
         let source = "> [a]:\n> /u\n> foo\n> ===\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                heading 1
-                  text "foo"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-4:6
               block_quote @1:1-4:6
                 heading 1 @3:3-4:6
@@ -195,21 +139,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("CRLF line endings")
     func crlfTableAfterContinuedParagraph() {
         let source = "[a]:\r\n/u\r\n===\r\nx\r\na|b\r\n-|-\r\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              paragraph
-                text "==="
-                softbreak
-                text "x"
-              table
-                table_header
-                  table_cell align=none colspan=1 rowspan=1
-                    text "a"
-                  table_cell align=none colspan=1 rowspan=1
-                    text "b"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-6:4
               paragraph @3:1-4:2
                 text "===" @3:1-3:4
@@ -228,23 +158,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("list item")
     func listItemTableAfterContinuedParagraph() {
         let source = "- [a]:\n  /u\n  ===\n  x\n  a|b\n  -|-\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              list bullet '-' tight
-                item
-                  paragraph
-                    text "==="
-                    softbreak
-                    text "x"
-                  table
-                    table_header
-                      table_cell align=none colspan=1 rowspan=1
-                        text "a"
-                      table_cell align=none colspan=1 rowspan=1
-                        text "b"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-6:6
               list bullet '-' tight @1:1-6:6
                 item @1:1-6:6
@@ -265,20 +179,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("lazy continuation lines never open a table")
     func lazyLinesStayParagraph() {
         let source = "> [a]:\n> /u\n> ===\nx\na|b\n-|-\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "==="
-                  softbreak
-                  text "x"
-                  softbreak
-                  text "a|b"
-                  softbreak
-                  text "-|-"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-6:4
               block_quote @1:1-6:4
                 paragraph @3:3-6:4
@@ -296,20 +197,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("header and delimiter cell counts differ")
     func headerCellCountMismatch() {
         let source = "> [a]:\n> /u\n> ===\n> a|b|c\n> -|-\n> x\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "==="
-                  softbreak
-                  text "a|b|c"
-                  softbreak
-                  text "-|-"
-                  softbreak
-                  text "x"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-6:4
               block_quote @1:1-6:4
                 paragraph @3:3-6:4
@@ -327,20 +215,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("a lone hyphen cannot interrupt the paragraph")
     func loneHyphenContinuesDefinitionParagraph() {
         let source = "> [a]:\n> /u\n> -\n> a|b\n> -|-\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "-"
-                table
-                  table_header
-                    table_cell align=none colspan=1 rowspan=1
-                      text "a"
-                    table_cell align=none colspan=1 rowspan=1
-                      text "b"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-5:6
               block_quote @1:1-5:6
                 paragraph @3:3-3:4
@@ -358,24 +233,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("tabs inside the continued lines")
     func contentTabsStayLiteral() {
         let source = "> [a]:\n> /u\n> ===\n> x\ty\n>\tz\n> a|b\n> -|-\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "==="
-                  softbreak
-                  text "x\\ty"
-                  softbreak
-                  text "z"
-                table
-                  table_header
-                    table_cell align=none colspan=1 rowspan=1
-                      text "a"
-                    table_cell align=none colspan=1 rowspan=1
-                      text "b"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-7:6
               block_quote @1:1-7:6
                 paragraph @3:3-5:4
@@ -397,22 +255,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("list item in block quote")
     func tableInListInQuote() {
         let source = "> - [a]:\n>   /u\n>   ===\n>   a|b\n>   -|-\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                list bullet '-' tight
-                  item
-                    paragraph
-                      text "==="
-                    table
-                      table_header
-                        table_cell align=none colspan=1 rowspan=1
-                          text "a"
-                        table_cell align=none colspan=1 rowspan=1
-                          text "b"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-5:8
               block_quote @1:1-5:8
                 list bullet '-' tight @1:3-5:8
@@ -432,22 +275,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("NUL in the preceding line")
     func nulBeforeHeader() {
         let source = "> [a]:\n> /u\n> ===\n> x\u{0}\n> a|b\n> -|-\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "==="
-                  softbreak
-                  text "x\u{FFFD}"
-                table
-                  table_header
-                    table_cell align=none colspan=1 rowspan=1
-                      text "a"
-                    table_cell align=none colspan=1 rowspan=1
-                      text "b"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-6:6
               block_quote @1:1-6:6
                 paragraph @3:3-4:5
@@ -467,22 +295,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("NUL in the header row")
     func nulInHeader() {
         let source = "> [a]:\n> /u\n> ===\n> x\n> a|b\u{0}\n> -|-\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "==="
-                  softbreak
-                  text "x"
-                table
-                  table_header
-                    table_cell align=none colspan=1 rowspan=1
-                      text "a"
-                    table_cell align=none colspan=1 rowspan=1
-                      text "b\u{FFFD}"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-6:6
               block_quote @1:1-6:6
                 paragraph @3:3-4:4
@@ -502,16 +315,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("tab-expanded setext heading")
     func tabExpandedSetextHeading() {
         let source = ">\t[a]: /u\n>\tfoo\n>\tbar\n>\t===\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                heading 1
-                  text "foo"
-                  softbreak
-                  text "bar"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-4:6
               block_quote @1:1-4:6
                 heading 1 @2:3-4:6
@@ -525,17 +329,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("list item setext heading")
     func listItemSetextHeading() {
         let source = "- [a]:\n  /u\n  foo\n  bar\n  ---\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              list bullet '-' tight
-                item
-                  heading 2
-                    text "foo"
-                    softbreak
-                    text "bar"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-5:6
               list bullet '-' tight @1:1-5:6
                 item @1:1-5:6
@@ -550,13 +344,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("CRLF setext heading")
     func crlfSetextHeading() {
         let source = "[a]:\r\n/u\r\nfoo\r\n===\r\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              heading 1
-                text "foo"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-4:4
               heading 1 @3:1-4:4
                 text "foo" @3:1-3:4
@@ -567,24 +355,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("delimiter row of a single hyphen")
     func loneHyphenDelimiterRow() {
         let source = "> [a]:\n> /u\n> ===\n> x\n> |-\n> a|b\n> -|-\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "==="
-                table
-                  table_header
-                    table_cell align=none colspan=1 rowspan=1
-                      text "x"
-                  table_row
-                    table_cell align=none colspan=1 rowspan=1
-                      text "a"
-                  table_row
-                    table_cell align=none colspan=1 rowspan=1
-                      text "-"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-7:6
               block_quote @1:1-7:6
                 paragraph @3:3-3:6
@@ -606,22 +377,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("tab-expanded table lines")
     func tabExpandedTable() {
         let source = "> [a]:\n> /u\n> ===\n>\tx\n>\ta|b\n>\t-|-\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "==="
-                  softbreak
-                  text "x"
-                table
-                  table_header
-                    table_cell align=none colspan=1 rowspan=1
-                      text "a"
-                    table_cell align=none colspan=1 rowspan=1
-                      text "b"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-6:6
               block_quote @1:1-6:6
                 paragraph @3:3-4:4
@@ -641,29 +397,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("two continued lines precede the header")
     func twoLinesBeforeHeader() {
         let source = "> [a]:\n> /u\n> ===\n> x\n> y\n> a|b\n> -|-\n> c|d\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "==="
-                  softbreak
-                  text "x"
-                  softbreak
-                  text "y"
-                table
-                  table_header
-                    table_cell align=none colspan=1 rowspan=1
-                      text "a"
-                    table_cell align=none colspan=1 rowspan=1
-                      text "b"
-                  table_row
-                    table_cell align=none colspan=1 rowspan=1
-                      text "c"
-                    table_cell align=none colspan=1 rowspan=1
-                      text "d"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-8:6
               block_quote @1:1-8:6
                 paragraph @3:3-5:4
@@ -690,17 +424,7 @@ struct ParagraphOfDefinitionsContinuationTests {
     @Test("a title on the line after the destination stays in the definition")
     func titleLineBelongsToDefinition() {
         let source = "> [a]: /u\n> 'T'\n> ===\n> [a]\n"
-        #expect(TreeDump.dump(source, options: [.tables]) == """
-            document
-              block_quote
-                paragraph
-                  text "==="
-                  softbreak
-                  link "/u" "T"
-                    text "a"
-
-            """)
-        #expect(TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == """
+        expectTree(source, """
             document @1:1-4:6
               block_quote @1:1-4:6
                 paragraph @3:3-4:6
