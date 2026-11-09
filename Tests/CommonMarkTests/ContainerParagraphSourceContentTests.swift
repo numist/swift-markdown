@@ -50,10 +50,11 @@ struct ContainerParagraphSourceContentTests {
         "> a b\n> c d\n> e f\n\n- x y\n  z w\n",
         "> a\n> b\n> c\n> d\n",
         "> a\n> |-\n",
+        "> a | b | c\n> --|--\n",
     ])
     func noMaterializedCopy(_ source: String) {
-        let size = MarkdownDocument.withParsedDocument(source, options: []) { $0._materializedStringSize }
-        let emptySize = MarkdownDocument.withParsedDocument("", options: []) { $0._materializedStringSize }
-        #expect(size == emptySize)
+        // The stored strings hold only the one shared line ending.
+        #expect(MarkdownDocument.withParsedDocument(source, options: []) { $0._materializedStringSize } == 1)
+        #expect(MarkdownDocument.withParsedDocument(source, options: [.tables]) { $0._materializedStringSize } == 1)
     }
 }

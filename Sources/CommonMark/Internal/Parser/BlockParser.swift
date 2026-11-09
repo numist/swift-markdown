@@ -672,7 +672,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    private mutating func appendReplacementCharacter() {
+    mutating func appendReplacementCharacter() {
         storage.strings.append(0xEF)
         storage.strings.append(0xBF)
         storage.strings.append(0xBD)
@@ -689,7 +689,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// `chunk`'s run map `map` after a rewrite that turns `chunk`'s byte at each offset into `copies(offset)` bytes,
     /// each imaging what that byte images. An empty `map` stays empty.
-    private func rewrittenMap(_ map: [ArenaRun], of chunk: Chunk, copies: (Int) -> Int) -> [ArenaRun] {
+    func rewrittenMap(_ map: [ArenaRun], of chunk: Chunk, copies: (Int) -> Int) -> [ArenaRun] {
         assert(map.isEmpty || map.reduce(0) { $0 + Int($1.length) } == chunk.length, "a run map must tile its chunk")
         var rewritten: [ArenaRun] = []
         var i = chunk.offset
@@ -706,21 +706,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// `chunk`'s run map: `map`, or for source content with an empty `map`, the one run imaging its own range.
-    private func sourceImage(of chunk: Chunk, map: [ArenaRun]) -> [ArenaRun] {
+    func sourceImage(of chunk: Chunk, map: [ArenaRun]) -> [ArenaRun] {
         if map.isEmpty, chunk.inSource, chunk.length > 0 {
             return [ArenaRun(length: Int32(chunk.length), sourceOffset: Int32(chunk.offset))]
         }
         return map
-    }
-
-    /// `raw`'s run map `map` after `unescapePipes`, without each stripped backslash.
-    func unescapedPipesMap(_ map: [ArenaRun], of raw: Chunk) -> [ArenaRun] {
-        assert(map.reduce(0) { $0 + Int($1.length) } == raw.length, "a run map must tile its chunk")
-        let end = raw.offset + raw.length
-        // The same `\|` match as `unescapePipes`: a backslash immediately followed by a pipe.
-        return rewrittenMap(map, of: raw) { i in
-            readByte(at: i, in: raw) == UInt8(ascii: "\\") && i + 1 < end && readByte(at: i + 1, in: raw) == UInt8(ascii: "|") ? 0 : 1
-        }
     }
 
     /// Appends `segment` to `node`'s pending segment list, starting one if needed.
@@ -786,31 +776,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Whether the open paragraph's last line, from `lastLineStart` (see `lastLineStart(of:)`), and the
-    /// delimiter-candidate line `sourceBytes[delimRange]` open a table (Tables (extension)). The two lines are copied to
-    /// a scratch region of the arena for `opensTable`, then truncated.
+    /// delimiter-candidate line `sourceBytes[delimRange]` open a table (Tables (extension)).
     private mutating func lastLineOpensTable(delimRange: Range<Int>, pending: borrowing PendingLeaf, lastLineStart: Int) -> Bool {
-        let scratchStart = storage.strings.count
+        let header: Range<Int>
         switch pending.content {
         case .lazy(let range, _):
-            for i in lastLineStart..<range.upperBound {
-                storage.strings.append(sourceBytes[i])
-            }
+            header = lastLineStart..<range.upperBound
         case .segments(let segs):
-            for i in lastLineStart..<segs.count {
-                let seg = segs[i]
-                for j in 0..<Int(seg.length) {
-                    storage.strings.append(segmentByte(seg, j))
-                }
-            }
+            let lastLine = segs[segs.count - 1]
+            precondition(lastLineStart == segs.count - 1 && lastLine.inSource, "a paragraph's last line is the source segment after its last line join")
+            header = lastLine.chunk.range
         }
-        let headerEnd = storage.strings.count
-        for i in delimRange {
-            storage.strings.append(sourceBytes[i])
-        }
-        let opens = opensTable(header: scratchStart..<headerEnd, delimiter: headerEnd..<storage.strings.count)
-        // Keeping the scratch would leave dead bytes in the arena for the parse's lifetime.
-        storage.strings.removeLast(storage.strings.count - scratchStart)
-        return opens
+        return opensTable(header: header, delimiter: delimRange)
     }
 
     /// Sets `tablePending` when delimiter-candidate line `sourceBytes[delimRange]` opens a table whose header is the open
@@ -1957,9 +1934,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             || (last.length > 0 && isControlWhitespace(segmentByte(last, Int(last.length) - 1)))
     }
 
-    /// Whether the content could match a finalize-time matcher: a link reference definition or task list item marker (`[`), an attribute definition (`^[`), or a table.
+    /// Whether the content could match a finalize-time matcher: a link reference definition or task list item marker (`[`), or an attribute definition (`^[`).
     ///
-    /// A false positive costs only a materialization, so this must cover every matcher's necessary condition. A table's is on its second line, since a single-column header needs no pipe (`a\n:-`).
+    /// A false positive costs only a materialization, so this must cover every matcher's necessary condition.
     private func segmentsCouldMatchMatcher(_ segs: borrowing UniqueArray<Segment>) -> Bool {
         // Raw paragraph content begins at the first non-whitespace byte, line tabulation and form feed included.
         let attributesEnabled = storage.options.contains(.attributes)
@@ -1976,38 +1953,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     return true
                 }
                 break outer   // first non-whitespace byte doesn't open a definition
-            }
-        }
-        // A delimiter row holds only `-`, `:`, `|` and delimiter-row padding, with at least one `-`.
-        if storage.options.contains(.tables) {
-            var line = 0
-            var sawDash = false
-            var secondLineClean = true
-            walk: for i in 0..<segs.count {
-                let seg = segs[i]
-                for j in 0..<Int(seg.length) {
-                    let b = segmentByte(seg, j)
-                    if b == UInt8(ascii: "\n") {
-                        if line == 1 { break walk }   // reached the end of the second line
-                        line += 1
-                        continue
-                    }
-                    if line == 1 {
-                        switch b {
-                        case UInt8(ascii: "-"):
-                            sawDash = true
-                        case UInt8(ascii: ":"), UInt8(ascii: "|"), UInt8(ascii: " "), UInt8(ascii: "\t"),
-                             0x0B, 0x0C:
-                            break
-                        default:
-                            secondLineClean = false
-                            break walk
-                        }
-                    }
-                }
-            }
-            if secondLineClean && sawDash {
-                return true
             }
         }
         return false
@@ -2102,7 +2047,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         openBlocksVersion &+= 1
     }
 
-    /// Runs the paragraph matchers on flat content: table detection, then definition and task list item marker extraction. What remains is queued for inline parsing, or the node is dropped.
+    /// Runs the paragraph matchers on flat content: definition and task list item marker extraction. What remains is queued for inline parsing, or the node is dropped.
     ///
     /// `map` is `raw`'s run map, empty for source content.
     private mutating func runParagraphMatchers(node: DocumentStorage.Index, raw: Chunk, map: [ArenaRun]) {
@@ -2110,21 +2055,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if trimmed.isEmpty {
             // A non-blank line can hold only line tabulations and form feeds, which leave the
             // paragraph no raw content (Paragraphs).
-            return
-        }
-        // Tables come before definition extraction: the paragraph is a table from its delimiter row on, and only a
-        // paragraph holds definitions, so `[\n|-\n]:/` is a table. A pipe-less `-` or `=` run is a setext underline
-        // instead, handled earlier with the definitions extracted: `[o]:o\n-` is a definition and a paragraph,
-        // `[o]:o\n|-` a table. A delimiter row indented four or more columns, or lazy, is paragraph text.
-        if let table = openParagraphTableState, table.tablePending {
-            // The header is the raw paragraph content, before link reference definitions are extracted.
-            let tableContent = raw.trimmingTrailing(using: self)
-            // Arena content carries a run map, narrowed here to the table's content. Source content has none; the
-            // table parser maps it by a constant shift.
-            let tableMap = (positionsEnabled && !map.isEmpty)
-                ? Self.sliceRuns(map, from: tableContent.offset - raw.offset, length: tableContent.length)
-                : []
-            parseTable(node: node, chunk: tableContent, sourceMap: tableMap)
             return
         }
         let contentChunk = paragraphContent(of: node, trimmed: trimmed)
@@ -2178,6 +2108,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .paragraph:
             assert(openParagraphTableState.map { $0.node == node } ?? true, "the recorded table state belongs to the paragraph being closed")
             defer { openParagraphTableState = nil }
+            // Tables come before definition extraction: the paragraph is a table from its delimiter row on, and only a
+            // paragraph holds definitions, so `[\n|-\n]:/` is a table. A pipe-less `-` or `=` run is a setext underline
+            // instead, handled earlier with the definitions extracted: `[o]:o\n-` is a definition and a paragraph,
+            // `[o]:o\n|-` a table. A delimiter row indented four or more columns, or lazy, is paragraph text.
+            if openParagraphTableState?.tablePending == true {
+                parseTable(node: node, pending: pending)
+                pending = nil
+                break
+            }
             let drained = drainLeaf(node, pending: pending)
             pending = nil
             let map = drained.map
@@ -2185,14 +2124,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             case .chunk(let raw):
                 runParagraphMatchers(node: node, raw: raw, map: map)
             case .segments(let segs):
-                if openParagraphTableState?.tablePending == true {
-                    // The table parser reads its rows flat.
-                    var map: [ArenaRun] = []
-                    let raw = flattenSegments(trimSegments(segs), map: &map)
-                    runParagraphMatchers(node: node, raw: raw, map: map)
-                } else {
-                    finishParagraph(node, segments: segs)
-                }
+                finishParagraph(node, segments: segs)
             }
         case .heading:
             // The content is already trimmed: an ATX heading's to its line's content, a setext heading's to its raw

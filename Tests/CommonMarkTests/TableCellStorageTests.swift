@@ -11,34 +11,28 @@
 import CommonMark
 import Testing
 
-/// A table cell whose content holds no `\|` is stored as the cell's own source bytes when the table's lines are
-/// contiguous in the source, and is never copied a second time.
-@Suite("Table cells without escaped pipes store no extra copy")
+/// A table's cells are stored as their own source bytes, whether or not the table's lines are contiguous in the
+/// source. Only a cell whose text differs from its source, because it holds `\|` or a NUL, is copied.
+@Suite("Table cells store only the text that differs from the source")
 struct TableCellStorageTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .sourcePosition]
 
-    /// The stored strings take at most the table's lines, without block quote markers, plus `unescapedCells`, the content
-    /// of the cells holding `\|` with each `\|` replaced by `|`.
+    /// The stored strings hold one shared line ending, plus the text of each copied cell: `\|` becomes `|`, and a NUL
+    /// becomes U+FFFD (Insecure characters), which takes three bytes.
     @Test(arguments: [
-        ("| a | b |\n|---|---|\n| c | d |\n", ""),
-        ("> | a | b |\n> |---|---|\n> | c | d |\n", ""),
-        ("> a\n> |-\n", ""),
-        ("| a | b |\n|---|---|\n| c \\| e | d |\n", "c | e"),
-        ("| a | b |\n|---|---|\n| `c\\|d` | `e` |\n", "`c|d`"),
+        ("| a | b |\n|---|---|\n| c | d |\n", 1),
+        ("> | a | b |\n> |---|---|\n> | c | d |\n", 1),
+        ("> a\n> |-\n", 1),
+        ("- a | b\n  --|--\n  c | d\n", 1),
+        ("> p\n> a | b\n> --|--\n", 1),
+        ("| a | b |\n|---|---|\n| c \\| e | d |\n", 6),
+        ("| a | b |\n|---|---|\n| `c\\|d` | `e` |\n", 6),
+        ("| a | b |\n|---|---|\n| c\0 | d |\n", 5),
+        ("> a | b\n> --|--\n> c\0 | d\n", 5),
+        ("| a | b |\n|---|---|\n| \0\\| | d |\n", 5),
     ])
-    func cellsWithoutEscapedPipesAreNotCopiedAgain(_ source: String, _ unescapedCells: String) {
-        let (measured, hasTable) = MarkdownDocument.withParsedDocument(source, options: Self.options) { doc in
-            var hasTable = false
-            doc.root.children.forEach { block in
-                block.children.forEach { if $0.kind == .table { hasTable = true } }
-                if block.kind == .table { hasTable = true }
-            }
-            return (doc._materializedStringSize, hasTable)
-        }
-        let tableLines = source.split(separator: "\n").map { $0.hasPrefix("> ") ? $0.dropFirst(2) : $0 }
-        let tableText = tableLines.joined(separator: "\n") + "\n"
-        #expect(hasTable)
-        #expect(measured <= tableText.utf8.count + unescapedCells.utf8.count)
+    func onlyCellsWithDifferingTextAreCopied(_ source: String, _ storedSize: Int) {
+        #expect(MarkdownDocument.withParsedDocument(source, options: Self.options) { $0._materializedStringSize } == storedSize)
     }
 
     @Test(arguments: [
@@ -53,6 +47,13 @@ struct TableCellStorageTests {
             "a" source
             "b" source
             "c | e" copy
+            "d" source
+
+            """),
+        ("> a | b\n> --|--\n> c\0 | d\n", """
+            "a" source
+            "b" source
+            "c\u{FFFD}" copy
             "d" source
 
             """),
