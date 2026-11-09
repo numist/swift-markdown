@@ -10,32 +10,31 @@
 
 /// A block's inline content.
 ///
-/// Single-segment content is one region of the source or of a copy of the arena, so the arena may grow during inline parsing; it is addressed by that buffer's offsets. Multi-segment content is a list of source line ranges joined by the interned `"\n"`, addressed by virtual offsets from 0, so lines that aren't contiguous in the source are read without copying.
+/// Single-segment content is one region of the source or of the arena, addressed by that buffer's offsets; arena content is read from a copy, since the arena grows during inline parsing. Multi-segment content is a list of source line ranges joined by the interned `"\n"`, addressed by virtual offsets from 0, so lines that aren't contiguous in the source are read without copying.
 internal struct ContentSpan: ~Escapable {
     /// Single-segment: the content bytes. Multi-segment: the whole source.
-    @usableFromInline let span: Span<UInt8>
+    let span: Span<UInt8>
 
     /// Single-segment: the offset of `span[0]`. Multi-segment: 0.
-    @usableFromInline let base: Int
+    let base: Int
 
     /// Single-segment: whether `span` is in the source.
-    @usableFromInline let inSource: Bool
+    let inSource: Bool
 
     /// Multi-segment: the segment list. Single-segment arena content: its run map to the source, whose non-source pieces are line joins. Empty where no offset is resolved through it.
     ///
     /// Held apart from `storage.segments`, which grows during inline parsing.
-    @usableFromInline let pieces: Span<Segment>
+    let pieces: Span<Segment>
 
     /// `pieceEnds[i]` is the content-relative offset just past piece `i`. An offset's piece is found by binary search, because content has a piece per line and the inline pass resolves multi-segment offsets once per byte.
-    @usableFromInline let pieceEnds: Span<Int>
+    let pieceEnds: Span<Int>
 
-    @usableFromInline let isMultiSegment: Bool
+    let isMultiSegment: Bool
 
-    @usableFromInline let multiVirtualLength: Int
+    let multiVirtualLength: Int
 
     /// Single-segment content without a run map, so only source content resolves source offsets.
     @_lifetime(copy span)
-    @inlinable
     init(span: Span<UInt8>, base: Int, inSource: Bool) {
         self.span = span
         self.base = base
@@ -48,7 +47,6 @@ internal struct ContentSpan: ~Escapable {
 
     /// Single-segment arena content with its run map (see `pieces`).
     @_lifetime(copy span, copy runs, copy runEnds)
-    @inlinable
     init(span: Span<UInt8>, base: Int, runs: Span<Segment>, runEnds: Span<Int>) {
         self.span = span
         self.base = base
@@ -61,7 +59,6 @@ internal struct ContentSpan: ~Escapable {
 
     /// Multi-segment content: `segmentEnds` holds the running ends of `segments`, and `virtualLength` their total.
     @_lifetime(copy source, copy segments, copy segmentEnds)
-    @inlinable
     init(source: Span<UInt8>, segments: Span<Segment>, segmentEnds: Span<Int>, virtualLength: Int) {
         self.span = source
         self.base = 0
@@ -71,18 +68,11 @@ internal struct ContentSpan: ~Escapable {
         self.isMultiSegment = true
         self.multiVirtualLength = virtualLength
     }
-
-    @inlinable
     var startOffset: Int { isMultiSegment ? 0 : base }
-
-    @inlinable
     var endOffset: Int { isMultiSegment ? multiVirtualLength : base + span.count }
-
-    @inlinable
     var isEmpty: Bool { isMultiSegment ? multiVirtualLength == 0 : span.count == 0 }
 
     /// The index of the first entry of non-decreasing `ends` past `offset`: the piece covering `offset`, never a zero-length one, or `ends.count` past the end.
-    @inlinable
     static func firstIndex(endingAfter offset: Int, in ends: Span<Int>) -> Int {
         var lo = 0
         var hi = ends.count
@@ -98,18 +88,14 @@ internal struct ContentSpan: ~Escapable {
     }
 
     /// The index of the piece covering content-relative `offset`, or `pieces.count` when `offset` is at or past the end.
-    @inlinable
     func pieceIndex(covering offset: Int) -> Int {
         Self.firstIndex(endingAfter: offset, in: pieceEnds)
     }
 
     /// The content-relative offset of piece `i`'s first byte.
-    @inlinable
     func pieceStart(_ i: Int) -> Int {
         i == 0 ? 0 : pieceEnds[i - 1]
     }
-
-    @inlinable
     subscript(_ offset: Int) -> UInt8 {
         if isMultiSegment {
             return multiByte(at: offset)
@@ -130,12 +116,11 @@ internal struct ContentSpan: ~Escapable {
     }
 
     /// The source offset of the content byte at `offset`, which must image a source byte. Callers resolve only an inline node's first and last bytes, which are never a line join.
-    @inlinable
     func sourceOffset(ofVirtual offset: Int) -> Int {
         if !isMultiSegment && inSource {
             return offset
         }
-        // Arena content reaches here only with positions on, when it carries a run map that tiles it. A `\|`-unescaped table cell is one run, a constant shift that ignores removed backslashes.
+        // Arena content reaches here only with positions on, when it carries a run map that tiles it.
         let k = offset - base
         let i = pieceIndex(covering: k)
         precondition(i < pieces.count, "an inline node's source range lies inside its content's pieces")
@@ -144,8 +129,7 @@ internal struct ContentSpan: ~Escapable {
         return Int(piece.offset) + (k - pieceStart(i))
     }
 
-    /// A `Chunk` for a sub-range, which in multi-segment content must lie within one segment. A caller whose range can cross a line join (a code span) uses `InlineParser.materializedChunk`.
-    @inlinable
+    /// A `Chunk` for a sub-range, which in multi-segment content must lie within one segment. A caller whose range can cross a line join copies it into the arena instead, as `materializedChunk` does.
     func chunk(offset: Int, length: Int) -> Chunk {
         if !isMultiSegment {
             return Chunk(offset: offset, length: length, inSource: inSource)
@@ -160,7 +144,6 @@ internal struct ContentSpan: ~Escapable {
     /// A `Chunk` for scanning forward from `offset`, bounded by `limit` and, in multi-segment content, by the end of the segment containing `offset`.
     ///
     /// Chunk readers such as `EntityParser.matchEntity` index one buffer by the chunk's offsets, which virtual offsets don't, so a form that continues onto the next line isn't seen. Returns `nil` when `offset >= limit` or `offset` is a line join, where no form begins. A scanner's buffer offset `b` maps back to `offset + (b - chunk.offset)`.
-    @inlinable
     func contiguousChunk(fromVirtual offset: Int, limit: Int) -> Chunk? {
         if offset >= limit {
             return nil
