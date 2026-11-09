@@ -11,180 +11,178 @@
 import Testing
 import CommonMark
 
-// Depth-first: each node's kind, text literal, and (for links) destination URL.
-private func dfsAutolinkNodes(
-    _ node: borrowing MarkdownNode,
-    into out: inout [(kind: MarkdownNode.Kind, text: String?, url: String?)]
-) {
-    out.append((node.kind, node.literal(), node.url()))
-    node.children.forEach { child in
-        dfsAutolinkNodes(child, into: &out)
-    }
-}
-
-/// An extended email autolink candidate whose domain runs into a second `@`.
+/// Text holding two `@`s, where an extended email autolink's domain would run into the second `@`.
 ///
-/// The first candidate is abandoned and the match restarts from the second `@`, with the run between the
-/// two `@`s as the new local part. The periods the first candidate's domain held count toward the restarted
-/// address's domain.
+/// An address can't span both `@`s, so the run between them is the local part of an address after the first `@`. A
+/// period between the two `@`s counts as the period that address's domain needs.
 @Suite("Extended email autolink candidate with a second `@`")
 struct AutolinkEmailTrailingAtTests {
 
     private static let options: MarkdownDocument.ParseOptions = [.gfmAutolink]
 
-    private func nodes(
-        in src: String
-    ) -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
-        MarkdownDocument.withParsedDocument(src, options: Self.options) {
-            doc -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] in
-            var out: [(kind: MarkdownNode.Kind, text: String?, url: String?)] = []
-            dfsAutolinkNodes(doc.root, into: &out)
-            return out
-        }
+    @Test("an email links with a `mailto:` destination", arguments: [
+        ("a@b.c", """
+            document
+              paragraph
+                link "mailto:a@b.c" ""
+                  text "a@b.c"
+
+            """),
+        ("o@e.e", """
+            document
+              paragraph
+                link "mailto:o@e.e" ""
+                  text "o@e.e"
+
+            """),
+        ("o@e.ex", """
+            document
+              paragraph
+                link "mailto:o@e.ex" ""
+                  text "o@e.ex"
+
+            """),
+    ])
+    func emailLinks(_ source: String, _ tree: String) {
+        #expect(TreeDump.dump(source, options: Self.options) == tree)
     }
 
-    @Test("a plain email links with a `mailto:` destination")
-    func plainEmailLinks() throws {
-        let ns = nodes(in: "a@b.c")
-        try #require(ns.count == 4, "expected document > paragraph > link > text")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "a@b.c"])
-        #expect(try #require(ns.compactMap(\.url).first) == "mailto:a@b.c")
+    @Test("`o@e.e `: the email links with no text after it")
+    func emailTrailingSpaceLinks() {
+        // A paragraph's final spaces are stripped before inline parsing (Paragraphs).
+        #expect(TreeDump.dump("o@e.e ", options: Self.options) == """
+            document
+              paragraph
+                link "mailto:o@e.e" ""
+                  text "o@e.e"
+
+            """)
     }
 
     // MARK: - Nothing follows the last `@`
 
-    @Test("`o@.e@`: the second `@` has no domain after it, so the run is text")
-    func trailingAtNoLink() {
-        // The candidate restarted at the second `@` has an empty domain.
-        let ns = nodes(in: "o@.e@")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "o@.e@"])
-        #expect(ns.compactMap(\.url) == [])
+    /// The address after the first `@` has an empty domain.
+    @Test("a run ending in `@` is text", arguments: [
+        ("o@.e@", """
+            document
+              paragraph
+                text "o@.e@"
+
+            """),
+        ("d@.d@", """
+            document
+              paragraph
+                text "d@.d@"
+
+            """),
+        ("o@.o@", """
+            document
+              paragraph
+                text "o@.o@"
+
+            """),
+        ("a@.d@", """
+            document
+              paragraph
+                text "a@.d@"
+
+            """),
+    ])
+    func trailingAtIsText(_ source: String, _ tree: String) {
+        #expect(TreeDump.dump(source, options: Self.options) == tree)
     }
 
-    @Test("`d@.d@` is text")
-    func trailingAtNoLinkD() {
-        let ns = nodes(in: "d@.d@")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "d@.d@"])
-        #expect(ns.compactMap(\.url) == [])
+    // MARK: - The address after the first `@`
+
+    @Test("`o@.e@b`: `.e@b` links, using the period of `.e`")
+    func addressAfterFirstAtUsesLocalPartPeriod() {
+        #expect(TreeDump.dump("o@.e@b", options: Self.options) == """
+            document
+              paragraph
+                text "o@"
+                link "mailto:.e@b" ""
+                  text ".e@b"
+
+            """)
     }
 
-    @Test("`o@.o@` is text")
-    func trailingAtNoLinkO() {
-        let ns = nodes(in: "o@.o@")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "o@.o@"])
-        #expect(ns.compactMap(\.url) == [])
+    @Test("`a@b.c@d`: `b.c@d` links, using the period of `b.c`")
+    func addressAfterValidPrefixUsesLocalPartPeriod() {
+        #expect(TreeDump.dump("a@b.c@d", options: Self.options) == """
+            document
+              paragraph
+                text "a@"
+                link "mailto:b.c@d" ""
+                  text "b.c@d"
+
+            """)
     }
 
-    @Test("`a@.d@` is text")
-    func trailingAtNoLinkA() {
-        let ns = nodes(in: "a@.d@")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@.d@"])
-        #expect(ns.compactMap(\.url) == [])
+    @Test("`a@b@c.d`: `b@c.d` links")
+    func addressAfterFirstAtLinks() {
+        #expect(TreeDump.dump("a@b@c.d", options: Self.options) == """
+            document
+              paragraph
+                text "a@"
+                link "mailto:b@c.d" ""
+                  text "b@c.d"
+
+            """)
     }
 
-    // MARK: - The restarted address
+    @Test("`o@.e@ x@y.z`: the valid email after a text run ending in `@` links")
+    func textRunThenValidEmail() {
+        #expect(TreeDump.dump("o@.e@ x@y.z", options: Self.options) == """
+            document
+              paragraph
+                text "o@.e@ "
+                link "mailto:x@y.z" ""
+                  text "x@y.z"
 
-    @Test("`o@.e@b`: the restarted `.e@b` keeps the period of `.e` and links")
-    func restartNeedsOwnPeriod() {
-        let ns = nodes(in: "o@.e@b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "o@", nil, ".e@b"])
-    }
-
-    @Test("`a@b.c@d`: the restarted `b.c@d` keeps the period of `b.c` and links")
-    func restartWithValidPrefixNeedsOwnPeriod() {
-        let ns = nodes(in: "a@b.c@d")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@", nil, "b.c@d"])
-    }
-
-    @Test("`a@b@c.d`: the restarted `b@c.d` links")
-    func restartAfterAtSignIsText() {
-        let ns = nodes(in: "a@b@c.d")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@", nil, "b@c.d"])
-        #expect(ns.compactMap(\.url) == ["mailto:b@c.d"])
-    }
-
-    @Test("`o@.e@ x@y.z`: the valid email after a rejected `@` run links")
-    func failedChainThenValidEmail() {
-        let ns = nodes(in: "o@.e@ x@y.z")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "o@.e@ ", nil, "x@y.z"])
-        #expect(ns.compactMap(\.url) == ["mailto:x@y.z"])
-    }
-
-    // MARK: - Valid addresses
-
-    @Test("`o@e.e` links")
-    func bareEmailLinks() {
-        let ns = nodes(in: "o@e.e")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "o@e.e"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
-    }
-
-    @Test("`o@e.e `: the email links with no after-text")
-    func emailTrailingSpaceLinks() {
-        // A paragraph's final spaces are stripped before inline parsing (Paragraphs).
-        let ns = nodes(in: "o@e.e ")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "o@e.e"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
+            """)
     }
 
     @Test("`@o@e.e`: the leading `@` has an empty local part, and `o@e.e` links")
-    func leadingAtIsText() {
-        let ns = nodes(in: "@o@e.e")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "@", nil, "o@e.e"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@e.e"])
-    }
+    func leadingAtStaysTextBeforeEmail() {
+        #expect(TreeDump.dump("@o@e.e", options: Self.options) == """
+            document
+              paragraph
+                text "@"
+                link "mailto:o@e.e" ""
+                  text "o@e.e"
 
-    @Test("`o@e.ex`: the email links")
-    func emailTrailingLetterLinks() {
-        let ns = nodes(in: "o@e.ex")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "o@e.ex"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@e.ex"])
+            """)
     }
 
     // MARK: - Addresses whose domain has no period
 
-    @Test("`.e@b` is text: its domain has no period")
-    func standaloneDotLocalNoLink() {
-        let ns = nodes(in: ".e@b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, ".e@b"])
-        #expect(ns.compactMap(\.url) == [])
-    }
+    @Test("an address alone whose domain has no period is text", arguments: [
+        (".e@b", """
+            document
+              paragraph
+                text ".e@b"
 
-    @Test("`e@b` is text: its domain has no period")
-    func standaloneNoDotNoLink() {
-        let ns = nodes(in: "e@b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "e@b"])
-        #expect(ns.compactMap(\.url) == [])
-    }
+            """),
+        ("e@b", """
+            document
+              paragraph
+                text "e@b"
 
-    @Test("`b.c@d` is text: its domain has no period")
-    func standaloneDotLocalDomainNoDotNoLink() {
-        let ns = nodes(in: "b.c@d")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "b.c@d"])
-        #expect(ns.compactMap(\.url) == [])
-    }
+            """),
+        ("b.c@d", """
+            document
+              paragraph
+                text "b.c@d"
 
-    @Test("`b@d` is text: its domain has no period")
-    func standaloneShortNoLink() {
-        let ns = nodes(in: "b@d")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text])
-        #expect(ns.map(\.text) == [nil, nil, "b@d"])
-        #expect(ns.compactMap(\.url) == [])
+            """),
+        ("b@d", """
+            document
+              paragraph
+                text "b@d"
+
+            """),
+    ])
+    func domainWithoutPeriodIsText(_ source: String, _ tree: String) {
+        #expect(TreeDump.dump(source, options: Self.options) == tree)
     }
 }

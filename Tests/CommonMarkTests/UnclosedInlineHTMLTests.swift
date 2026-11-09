@@ -23,12 +23,11 @@ private func inlineHTMLLiterals(_ node: borrowing MarkdownNode) -> [String] {
     return literals
 }
 
-/// An unclosed raw HTML opener (`<!--`, `<?`, `<!X `, `<![CDATA[`) scans to its closer, a NUL, or the end of the
-/// inline content. Once a scan of one kind fails from some offset, a later opener of that kind whose scan starts inside
-/// the failed stretch fails too, without a rescan. Every opener inside a failed stretch stays literal, while the empty
-/// comments, closers that overlap a later opener, the other kinds and later paragraphs match.
-@Suite("Inline raw HTML closer miss cache")
-struct InlineHTMLCloserMissCacheTests {
+/// A raw HTML opener (`<!--`, `<?`, `<!X `, `<![CDATA[`) without its closer later in the paragraph is literal text
+/// (Raw HTML). Every later opener of that kind without a closer stays literal too, while the empty comments, a closer
+/// that overlaps a later opener, constructs of other kinds and later paragraphs match.
+@Suite("Unclosed inline raw HTML openers")
+struct UnclosedInlineHTMLTests {
 
     private func htmlLiterals(_ src: String, options: MarkdownDocument.ParseOptions) -> [String] {
         MarkdownDocument.withParsedDocument(src, options: options) { doc -> [String] in
@@ -36,7 +35,7 @@ struct InlineHTMLCloserMissCacheTests {
         }
     }
 
-    // MARK: Every opener inside a failed stretch stays literal
+    // MARK: Every unclosed opener stays literal
 
     @Test("unclosed openers of one kind all stay literal")
     func unclosedOpenersStayLiteral() {
@@ -84,7 +83,10 @@ struct InlineHTMLCloserMissCacheTests {
         #expect(htmlLiterals("x<!A a\nb<!B c>", options: []) == ["<!A a\nb<!B c>"])
     }
 
-    // MARK: A failed scan of one kind does not suppress another kind
+    // MARK: An unclosed opener of one kind does not affect another kind
+
+    // A declaration ends at the first `>`, and every raw HTML construct ends in `>`, so nothing after an unclosed
+    // declaration in the paragraph can match.
 
     @Test("a failed processing instruction leaves later comments, CDATA, and declarations matchable")
     func failedProcessingInstructionLeavesOtherKinds() {
@@ -93,7 +95,6 @@ struct InlineHTMLCloserMissCacheTests {
         #expect(htmlLiterals("x<?a <!B b>", options: []) == ["<!B b>"])
     }
 
-    // Every raw HTML construct ends in `>`, so after a failed declaration nothing later in the run can match.
     @Test("a failed CDATA leaves later declarations and processing instructions matchable")
     func failedCDATALeavesOtherKinds() {
         #expect(htmlLiterals("x<![CDATA[a <!B b>", options: []) == ["<!B b>"])
@@ -111,10 +112,10 @@ struct InlineHTMLCloserMissCacheTests {
         #expect(htmlLiterals("x<!--a <!B b>", options: []) == ["<!B b>"])
     }
 
-    // MARK: Every opener of a kind after a matched construct of that kind is scanned afresh
+    // MARK: A matched construct does not affect later openers of its kind
 
-    @Test("openers after a matched construct of the same kind are scanned afresh")
-    func openersAfterMatchScannedAfresh() {
+    @Test("closed openers after a matched construct of the same kind match")
+    func closedOpenersAfterMatchMatch() {
         #expect(htmlLiterals("x<!--a--> <!--b--> <!--c", options: []) == ["<!--a-->", "<!--b-->"])
         #expect(htmlLiterals("x<?a?> <?b?> <?c", options: []) == ["<?a?>", "<?b?>"])
         #expect(htmlLiterals("x<!A a> <!B b> <!C c", options: []) == ["<!A a>", "<!B b>"])
@@ -123,8 +124,7 @@ struct InlineHTMLCloserMissCacheTests {
 
     // MARK: NUL
 
-    // A NUL is replaced with U+FFFD before inline parsing (Insecure characters), so these cases don't reach the
-    // closer scan's stop at a NUL.
+    // A NUL is replaced with U+FFFD (Insecure characters), which is ordinary content inside a raw HTML construct.
 
     @Test("a NUL in a construct's body is replaced and does not end the closer search")
     func nulDoesNotEndCloserSearch() {
@@ -134,7 +134,7 @@ struct InlineHTMLCloserMissCacheTests {
         #expect(htmlLiterals("x<![CDATA[a\u{0}<![CDATA[b]]>", options: []) == ["<![CDATA[a\u{FFFD}<![CDATA[b]]>"])
     }
 
-    // MARK: Separate paragraphs are scanned independently
+    // MARK: Each paragraph is independent
 
     @Test("a failed scan in one paragraph does not suppress a match in the next")
     func failedScanDoesNotCrossParagraphs() {

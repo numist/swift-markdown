@@ -11,9 +11,8 @@
 import Testing
 import CommonMark
 
-/// A table header line inside a block quote whose `>` is followed by a tab. The block quote marker consumes one
-/// column of the tab (Tabs) and the remaining columns become spaces, so the header line's content is expanded rather
-/// than a slice of the source.
+/// A table inside a block quote whose `>` markers are followed by a tab. The block quote marker consumes one column of
+/// each tab (Tabs), and the remaining columns are padding before the row's content.
 @Suite("Table header from a tab-expanded line")
 struct TabExpandedTableHeaderTests {
 

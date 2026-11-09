@@ -11,9 +11,9 @@
 import CommonMark
 import Testing
 
-/// A task list item whose first paragraph is followed by table lines: the table splits the paragraph, and the item
-/// keeps its checkbox only when its first block is a paragraph beginning with a task list item marker (Tables
-/// (extension), Task list items (extension)).
+/// Lines of a task list item that form a table end the item's first paragraph (Tables (extension)). The item has a
+/// checkbox when that paragraph begins with a task list item marker, even when the marker is all the paragraph holds;
+/// a heading is not such a paragraph (Task list items (extension)).
 @Suite("Table interrupting a task list item paragraph")
 struct TaskItemTableInterruptTests {
 
@@ -225,7 +225,7 @@ struct TaskItemTableInterruptTests {
             """)
     }
 
-    @Test func checkboxAfterBlockQuoteMarkerStaysLiteral() {
+    @Test func checkboxInListInBlockQuote() {
         // The item's first paragraph begins with a task list item marker, whatever precedes the list
         // marker on its line (Task list items (extension)).
         #expect(TreeDump.dump("> - [x] a\n>   b|\n>   -|", options: Self.options) == """
@@ -243,7 +243,7 @@ struct TaskItemTableInterruptTests {
             """)
     }
 
-    @Test func tableIsWholeFirstParagraph() {
+    @Test func mismatchedCellCountsFormNoTable() {
         // The header row `[x] |a|` has two cells and the delimiter row one, so no table forms (Tables
         // (extension)) and the paragraph begins with the task list item marker.
         #expect(TreeDump.dump("- [x] |a|\n  |-|", options: Self.options) == """
@@ -271,7 +271,7 @@ struct TaskItemTableInterruptTests {
             """)
     }
 
-    @Test func setextHeadingKeepsCheckbox() {
+    @Test func setextHeadingHasNoCheckbox() {
         // A heading is not the paragraph a task list item must begin with (Task list items (extension)).
         #expect(TreeDump.dump("- [ ] a\n  b\n  ---", options: Self.options) == """
             document
