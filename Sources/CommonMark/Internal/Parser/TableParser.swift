@@ -92,7 +92,9 @@ extension BlockParser {
             switch sourceBytes[i] {
             case UInt8(ascii: "-"):
                 sawDash = true
-            case UInt8(ascii: ":"), UInt8(ascii: "|"), UInt8(ascii: " "), UInt8(ascii: "\t"), 0x0B, 0x0C:
+            case UInt8(ascii: ":"), UInt8(ascii: "|"):
+                break
+            case let b where b.isLineWhitespace:
                 break
             default:
                 return false

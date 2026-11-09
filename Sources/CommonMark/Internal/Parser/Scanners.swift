@@ -414,7 +414,7 @@ extension BlockParser {
         var i = cursor
         while i < end {
             let c = readByte(at: i, in: chunk)
-            if !c.isSpaceOrTab && c != 0x0B && c != 0x0C {
+            if !c.isLineWhitespace {
                 break
             }
             i += 1
@@ -499,15 +499,11 @@ extension BlockParser {
 
             for i in 0..<span.count {
                 let b = span[i]
-                switch b {
-                case UInt8(ascii: " "), UInt8(ascii: "\t"), UInt8(ascii: "\n"),
-                     UInt8(ascii: "\r"), 0x0B, 0x0C:
+                if b.isASCIISpace {
                     if !output.isEmpty {
                         pendingSpace = true
                     }
                     continue
-                default:
-                    break
                 }
                 if pendingSpace {
                     output.append(UInt8(ascii: " "))
