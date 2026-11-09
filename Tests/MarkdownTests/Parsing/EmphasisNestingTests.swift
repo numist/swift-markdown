@@ -86,22 +86,37 @@ class EmphasisNestingTests: XCTestCase {
     }
 }
 
-/// A `*` or `_` delimiter run directly followed by a `~` run that is itself followed by a letter is
-/// classified as left- or right-flanking as though the letter followed it. After punctuation, such a run is
-/// left-flanking only and cannot close emphasis.
+/// A `~` is a punctuation character (Characters and lines), so a delimiter run beside a `~` run is classified
+/// against the `~`, not against the character past it.
 @Suite struct StrikethroughFlankingEmphasisTests {
-    private func formsEmphasis(_ markdown: String) -> Bool {
-        Document(parsing: markdown).debugDescription(options: []).contains("Emphasis")
+    private func tree(_ markdown: String) -> String {
+        Document(parsing: markdown).debugDescription(options: .printSourceLocations)
     }
 
-    @Test func canOpenTildeAfterPunctuationCloserBlocksEmphasis() throws {
-        // Without these, the expectations below would hold if emphasis never formed at all.
-        try #require(formsEmphasis("*x*~a"), "letter-content closer stays right-flanking; must form emphasis")
-        try #require(formsEmphasis("*-*"), "isolated *-* must form emphasis (closer's after-char is the line end)")
-        try #require(formsEmphasis("*-*~"), "bare trailing ~ (can-close, not can-open) must form emphasis")
+    @Test func closerAfterPunctuationBeforeTilde() {
+        #expect(tree("*-*~a") == """
+            Document @1:1-1:6
+            └─ Paragraph @1:1-1:6
+               ├─ Emphasis @1:1-1:4
+               │  └─ Text @1:2-1:3 "-"
+               └─ Text @1:4-1:6 "~a"
+            """)
+        #expect(tree("*.*~~a") == """
+            Document @1:1-1:7
+            └─ Paragraph @1:1-1:7
+               ├─ Emphasis @1:1-1:4
+               │  └─ Text @1:2-1:3 "."
+               └─ Text @1:4-1:7 "~~a"
+            """)
+    }
 
-        #expect(!formsEmphasis("*-*~a"))
-        #expect(!formsEmphasis("*.*~a"))
+    @Test func openerAfterTildeBeforePunctuation() {
+        #expect(tree("a~*-x*") == """
+            Document @1:1-1:7
+            └─ Paragraph @1:1-1:7
+               ├─ Text @1:1-1:3 "a~"
+               └─ Emphasis @1:3-1:7
+                  └─ Text @1:4-1:6 "-x"
+            """)
     }
 }
-

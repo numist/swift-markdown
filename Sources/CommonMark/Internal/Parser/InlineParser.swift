@@ -789,7 +789,7 @@ extension BlockParser {
     private struct Flanking {
         var leftFlanking: Bool
         var rightFlanking: Bool
-        /// The byte before the run, past any skipped `~` run, for the quote `]`/`)` rule.
+        /// The byte before the run, for the quote `]`/`)` rule.
         var beforeChar: UInt8
         /// Whether the bordering characters are punctuation, for the `_` intraword rule.
         var beforeIsPunct: Bool
@@ -797,30 +797,18 @@ extension BlockParser {
     }
 
     /// Classifies a delimiter run as left- or right-flanking (Emphasis and strong emphasis).
-    ///
-    /// With strikethrough on, a `*`, `_` or quote run reads its neighbours past any adjacent `~` run, so the
-    /// closing `*` in `*-*~a` borders `a` and closes no emphasis.
-    private func classifyFlanking(char: UInt8, start: Int, runEnd: Int, content: borrowing ContentSpan) -> Flanking {
+    private func classifyFlanking(start: Int, runEnd: Int, content: borrowing ContentSpan) -> Flanking {
         let end = content.endOffset
         let chunkStart = content.startOffset
-        let tilde = UInt8(ascii: "~")
-        let skipTilde = char != tilde && storage.options.contains(.strikethrough)
         // The content's start and end count as line endings.
-        var beforeIdx = start - 1
-        if skipTilde {
-            while beforeIdx >= chunkStart, content[beforeIdx] == tilde { beforeIdx -= 1 }
-        }
+        let beforeIdx = start - 1
         let beforeChar: UInt8 = beforeIdx >= chunkStart ? content[beforeIdx] : UInt8(ascii: "\n")
-        var afterIdx = runEnd
-        if skipTilde {
-            while afterIdx < end, content[afterIdx] == tilde { afterIdx += 1 }
-        }
         // Flanking is defined over characters, so a multi-byte whitespace or punctuation neighbour counts.
         let beforeScalar: Int32 = beforeIdx >= chunkStart
             ? Self.flankingScalarBefore(endingAt: beforeIdx, lowerBound: chunkStart, content: content)
             : 0x0A
-        let afterScalar: Int32 = afterIdx < end
-            ? Self.flankingScalarAfter(startingAt: afterIdx, content: content)
+        let afterScalar: Int32 = runEnd < end
+            ? Self.flankingScalarAfter(startingAt: runEnd, content: content)
             : 0x0A
         let beforeIsSpace = Self.isUnicodeWhitespace(beforeScalar)
         let beforeIsPunct = Self.isUnicodePunctuation(beforeScalar)
@@ -928,7 +916,7 @@ extension BlockParser {
         }
 
         let count = runEnd - start
-        let flanking = classifyFlanking(char: char, start: start, runEnd: runEnd, content: content)
+        let flanking = classifyFlanking(start: start, runEnd: runEnd, content: content)
         let leftFlanking = flanking.leftFlanking
         let rightFlanking = flanking.rightFlanking
         let beforeIsPunct = flanking.beforeIsPunct
@@ -1228,7 +1216,7 @@ extension BlockParser {
     private mutating func handleQuoteDelim(char: UInt8, start: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         // A quote delimiter is one character.
         let runEnd = start + 1
-        let flanking = classifyFlanking(char: char, start: start, runEnd: runEnd, content: content)
+        let flanking = classifyFlanking(start: start, runEnd: runEnd, content: content)
         let leftFlanking = flanking.leftFlanking
         let rightFlanking = flanking.rightFlanking
         let beforeChar = flanking.beforeChar
