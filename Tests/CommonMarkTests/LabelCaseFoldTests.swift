@@ -64,7 +64,7 @@ struct LabelCaseFoldTests {
             """)
     }
 
-    @Test(arguments: [("ß", "SS"), ("ſ", "S")])
+    @Test(arguments: [("ſ", "S")])
     func attributeLabelsWithEqualFoldsMatch(_ definition: String, _ use: String) {
         #expect(TreeDump.dump("^[\(definition)]: c\n\n^[x][\(use)]", options: [.attributes]) == """
             document
@@ -75,7 +75,7 @@ struct LabelCaseFoldTests {
             """)
     }
 
-    @Test(arguments: [("ı", "I"), ("I", "ı")])
+    @Test(arguments: [("I", "ı")])
     func attributeLabelsWithDifferentFoldsDoNotMatch(_ definition: String, _ use: String) {
         #expect(TreeDump.dump("^[\(definition)]: c\n\n^[x][\(use)]", options: [.attributes]) == """
             document

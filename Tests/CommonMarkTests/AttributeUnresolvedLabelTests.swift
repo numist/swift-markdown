@@ -11,10 +11,10 @@
 import Testing
 import CommonMark
 
-/// A link label (Links), or a collapsed or blank one, directly after the `]` that closes an `^[` opener belongs to the inline attribute. When the
-/// label names an attribute definition the attribute takes that definition's attributes. Otherwise `^[…]` stays text
-/// and the label is dropped; the text's source range spans the dropped label.
-@Suite("Inline attributes with a label that names no attribute definition")
+/// A link label (Links) directly after the `]` that closes an `^[` opener belongs to the inline attribute, and so do
+/// `[]` and a blank `[ ]`. When the label names an attribute definition the attribute takes that definition's
+/// attributes. Otherwise `^[…]` stays text and the label is dropped; the text's source range spans the dropped label.
+@Suite("Inline attributes with a label")
 struct AttributeUnresolvedLabelTests {
 
     private func tree(_ source: String) -> String {
@@ -237,7 +237,7 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    @Test("a second label after an unresolved one is parsed as text")
+    @Test("a bracket after an unresolved label is ordinary inline content")
     func labelAfterUnresolvedLabel() {
         #expect(tree("^[x][b][c]\n\n^[c]: d") == """
             document @1:1-3:8
@@ -267,7 +267,7 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    @Test("an attribute after an unresolved label forms")
+    @Test("an attribute after an unresolved label resolves its own label")
     func attributeAfterUnresolvedLabel() {
         #expect(tree("^[x][b]^[y][c]\n\n^[c]: d") == """
             document @1:1-3:8
@@ -527,6 +527,45 @@ struct AttributeUnresolvedLabelTests {
             document @1:1-3:8
               paragraph @3:1-3:8
                 text "^[x]" @3:1-3:8
+
+            """)
+    }
+
+    /// An inline attribute's `(attributes)` form takes no label, so a bracket after it is text.
+    @Test("a bracket after the attributes form stays text")
+    func bracketAfterAttributesForm() {
+        #expect(tree("^[](x)[undef]") == """
+            document @1:1-1:14
+              paragraph @1:1-1:14
+                attribute "x" @1:1-1:7
+                text "[undef]" @1:7-1:14
+
+            """)
+        #expect(tree("^[](x)[undef]y") == """
+            document @1:1-1:15
+              paragraph @1:1-1:15
+                attribute "x" @1:1-1:7
+                text "[undef]y" @1:7-1:15
+
+            """)
+    }
+
+    @Test("an empty attribute's collapsed label is dropped")
+    func emptyTextCollapsedLabel() {
+        #expect(tree("^[][]") == """
+            document @1:1-1:6
+              paragraph @1:1-1:6
+                text "^[]" @1:1-1:6
+
+            """)
+    }
+
+    @Test("a blank label spanning a line ending is dropped inside brackets")
+    func blankLabelSpanningLineEndingInsideBrackets() {
+        #expect(tree("[^[][\n]]") == """
+            document @1:1-2:3
+              paragraph @1:1-2:3
+                text "[^[]]" @1:1-2:3
 
             """)
     }
