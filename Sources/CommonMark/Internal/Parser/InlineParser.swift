@@ -358,12 +358,8 @@ extension BlockParser {
 
     /// An image opener `![`.
     private mutating func handleExclamationMark(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
-        // `![^` opens no image: the `!` is literal text and the `[` opens a bracket, so `![^a]`
-        // is `!` followed by a footnote reference, link or literal text.
-        let endOffset = content.endOffset
-        if cursor + 1 < endOffset,
-           content[cursor + 1] == UInt8(ascii: "["),
-           !(cursor + 2 < endOffset && content[cursor + 2] == UInt8(ascii: "^")) {
+        if cursor + 1 < content.endOffset,
+           content[cursor + 1] == UInt8(ascii: "[") {
             return openBracket(
                 .image,
                 length: 2,
@@ -555,8 +551,14 @@ extension BlockParser {
             let attribute = matchAttributeForm(cursor: cursor, content: content)
             formed = attribute.data.map { ($0, attribute.end) }
             literalEnd = attribute.end
+        } else if let inline = matchInlineLinkForm(cursor: cursor, content: content) {
+            formed = inline
+            literalEnd = afterBracket
+        } else if openerKind == .image, emitFootnoteReferenceIfDefined(openerIdx: openerIdx, bracketStart: openerStart + 1, closeBracket: cursor, content: content) {
+            // An image's `[^label]` naming a footnote definition is a footnote reference ahead of a reference image.
+            return afterBracket
         } else {
-            formed = matchLinkForm(shortcutLabelStart: brackets[openerIdx].bracketAfter ? nil : openerStart + (openerKind == .image ? 2 : 1), cursor: cursor, content: content)
+            formed = matchReferenceLinkForm(shortcutLabelStart: brackets[openerIdx].bracketAfter ? nil : openerStart + (openerKind == .image ? 2 : 1), cursor: cursor, content: content)
             literalEnd = afterBracket
         }
         if let formed {
@@ -567,16 +569,8 @@ extension BlockParser {
             }
             return formed.end
         }
-        // Failing a link form, a `[^label]` naming a footnote definition is a footnote reference. The
-        // footnote map is complete before inline parsing.
-        let footnoteBracketStart = openerStart + (openerKind == .image ? 1 : 0)
-        if openerKind != .attribute,
-           storage.options.contains(.footnotes),
-           let defIdx = footnoteDefinition(referencedFrom: footnoteBracketStart, closeBracket: cursor, in: content) {
-            // Resolve emphasis inside the bracket first, so removing its nodes leaves no stale delimiters.
-            processEmphasis(stackBottom: openerDelimPos, content: content)
-            emitFootnoteReference(openerInl: openerInl, definition: defIdx, span: footnoteBracketStart..<afterBracket, content: content)
-            popBracket()
+        // Failing a link form, a `[^label]` naming a footnote definition is a footnote reference.
+        if openerKind == .link, emitFootnoteReferenceIfDefined(openerIdx: openerIdx, bracketStart: openerStart, closeBracket: cursor, content: content) {
             return afterBracket
         }
         popBracket()
@@ -584,17 +578,23 @@ extension BlockParser {
         return literalEnd
     }
 
-    /// The link or image data for the form after the `]` at `cursor`, and the offset past it. Tries the inline form, then full, collapsed and shortcut references.
+    /// The link or image data for an inline link after the `]` at `cursor`, and the offset past it.
+    @inline(__always)
+    private mutating func matchInlineLinkForm(cursor: Int, content: borrowing ContentSpan) -> (data: NodeData, end: Int)? {
+        let pos = cursor + 1
+        guard pos < content.endOffset, content[pos] == UInt8(ascii: "("),
+              let inline = matchInlineLinkTail(afterParen: pos + 1, content: content) else {
+            return nil
+        }
+        return (.link(url: storage.intern(inline.url), title: storage.intern(inline.title)), inline.end)
+    }
+
+    /// The link or image data for a full, collapsed or shortcut reference after the `]` at `cursor`, and the offset past it.
     ///
     /// `shortcutLabelStart` is where the shortcut label begins, or `nil` when a bracket nested under the opener rules it out.
     @inline(__always)
-    private mutating func matchLinkForm(shortcutLabelStart: Int?, cursor: Int, content: borrowing ContentSpan) -> (data: NodeData, end: Int)? {
-        let end = content.endOffset
+    private mutating func matchReferenceLinkForm(shortcutLabelStart: Int?, cursor: Int, content: borrowing ContentSpan) -> (data: NodeData, end: Int)? {
         let pos = cursor + 1
-        if pos < end, content[pos] == UInt8(ascii: "("),
-           let inline = matchInlineLinkTail(afterParen: pos + 1, content: content) {
-            return (.link(url: storage.intern(inline.url), title: storage.intern(inline.title)), inline.end)
-        }
         // A reference matches only a link reference definition, so without one no label is normalized.
         if storage.referenceMap.isEmpty {
             return nil
@@ -697,30 +697,51 @@ extension BlockParser {
         return storage.footnoteMap[normalizeLabel(virtualRange: labelStart..<closeBracket, in: content)]
     }
 
-    /// Replaces the opener's text and the bracket's inner nodes with a `.footnoteReference` to `definition` over `span`.
+    /// When the footnote-shaped bracket from `bracketStart` to the `]` at `closeBracket` names a footnote definition,
+    /// replaces it with a footnote reference, pops its opener, and returns `true`. An image opener's `!` stays text.
+    private mutating func emitFootnoteReferenceIfDefined(openerIdx: Int, bracketStart: Int, closeBracket: Int, content: borrowing ContentSpan) -> Bool {
+        guard storage.options.contains(.footnotes),
+              let defIdx = footnoteDefinition(referencedFrom: bracketStart, closeBracket: closeBracket, in: content) else {
+            return false
+        }
+        let openerInl = brackets[openerIdx].inlText
+        let openerStart = brackets[openerIdx].virtualStart
+        // Resolve emphasis inside the bracket first, so removing its nodes leaves no stale delimiters.
+        processEmphasis(stackBottom: brackets[openerIdx].delimPosition, content: content)
+        emitFootnoteReference(after: openerInl, definition: defIdx, span: bracketStart..<closeBracket + 1, content: content)
+        if bracketStart > openerStart {
+            storage.trimLiteral(of: openerInl, trimStart: 0, newLength: bracketStart - openerStart)
+            stampInline(openerInl, openerStart, bracketStart, content: content)
+        } else {
+            storage.unlinkChild(openerInl)
+        }
+        popBracket()
+        return true
+    }
+
+    /// Replaces the bracket's inner nodes, the siblings after the opener's text, with a `.footnoteReference` to
+    /// `definition` over `span`.
     ///
     /// The reference carries the definition's label, so `[^Foo]` resolving to `[^foo]` displays `foo`. Its index is 0
     /// until the footnote pass numbers the finalized tree, because an enclosing bracket can still discard it.
-    private mutating func emitFootnoteReference(openerInl: DocumentStorage.Index, definition defIdx: DocumentStorage.Index, span: Range<Int>, content: borrowing ContentSpan) {
+    private mutating func emitFootnoteReference(after openerInl: DocumentStorage.Index, definition defIdx: DocumentStorage.Index, span: Range<Int>, content: borrowing ContentSpan) {
         guard case .footnoteDefinition(let defLabel) = storage[defIdx].data else {
             preconditionFailure("footnoteMap holds only footnote definitions")
         }
-        let parentIdx = storage[openerInl].parent
-        let fnRefIdx = storage.appendNode(NodeRecord(
-            kind: .footnoteReference(index: 0),
-            parent: parentIdx,
-            data: .footnoteReference(label: defLabel)
-        ))
-        storage.insertChildBefore(fnRefIdx, before: openerInl)
-        stampInline(fnRefIdx, span.lowerBound, span.upperBound, content: content)
-        storage.unlinkChild(openerInl)
         // The inner `^label` nodes go; a reference is rendered from its label and index.
-        var sib = storage[fnRefIdx].next
+        var sib = storage[openerInl].next
         while let sib_ = sib {
             let nextSib = storage[sib_].next
             storage.unlinkChild(sib_)
             sib = nextSib
         }
+        let fnRefIdx = storage.appendNode(NodeRecord(
+            kind: .footnoteReference(index: 0),
+            parent: storage[openerInl].parent,
+            data: .footnoteReference(label: defLabel)
+        ))
+        storage.insertChildAfter(fnRefIdx, after: openerInl)
+        stampInline(fnRefIdx, span.lowerBound, span.upperBound, content: content)
     }
 
     // MARK: - Extended attributes (`^[..]`)

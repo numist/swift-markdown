@@ -37,7 +37,7 @@ struct FootnoteReferenceSourceRangeTests {
             """)
     }
 
-    /// `![^a]` doesn't open an image, so the `!` stays text and the reference spans `[^a]`.
+    /// `[^a]` names a footnote definition, so `![^a]` is a `!` followed by a reference spanning `[^a]`.
     @Test("an image-shaped reference spans its brackets after the `!`")
     func imageShapedReference() {
         #expect(tree("![^a]\n\n[^a]: z") == """
