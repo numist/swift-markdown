@@ -1941,6 +1941,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let trimmed = trimmedRange(of: segs)
         if trimmed.isEmpty {
             // Lines holding only line tabulations and form feeds leave the paragraph no raw content (Paragraphs).
+            emptySourceRangeAtStart(node)
             return
         }
         let start = rawContentStart(in: segs, trimmed: trimmed, taskItemParagraph: node)
@@ -2062,6 +2063,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return (start, last + 1)
     }
 
+    /// Gives `paragraph`, which has no raw content, an empty source range at its start.
+    private mutating func emptySourceRangeAtStart(_ paragraph: DocumentStorage.Index) {
+        if positionsEnabled {
+            storage.sourceRanges[paragraph].end = storage.sourceRanges[paragraph].start
+        }
+    }
+
     /// Removes `paragraph`, its container's last block, which holds only definitions or a task list item marker.
     ///
     /// In a list item it still counts for looseness as a block of the item (Lists). Its content still counts for its
@@ -2092,6 +2100,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if trimmed.isEmpty {
             // A non-blank line can hold only line tabulations and form feeds, which leave the
             // paragraph no raw content (Paragraphs).
+            emptySourceRangeAtStart(node)
             return
         }
         let contentChunk = paragraphContent(of: node, trimmed: trimmed)

@@ -72,11 +72,11 @@ struct LeafContentControlWhitespaceTests {
     }
 
     /// A line holding only a vertical tab is not blank (spec "Blank lines": only spaces or tabs), so it
-    /// is a paragraph, whose raw content is empty once its whitespace is removed.
+    /// is a paragraph, whose raw content is empty once its whitespace is removed, as is its range.
     @Test func verticalTabOnlyLineIsEmptyParagraph() {
         #expect(tree("\u{0B}") == """
             Document @1:1-1:2
-            └─ Paragraph @1:1-1:2
+            └─ Paragraph @1:1
             """)
     }
 
