@@ -167,9 +167,9 @@ struct SourceRangeCompletenessTests {
     /// A range runs from the first byte of a node's own content to just past its last content byte, so no range starts
     /// or ends on whitespace outside the node's content: the literal whitespace of text, a code block or an HTML block,
     /// or whitespace a child's range holds. A code block or HTML block whose last line is blank ends at that line's
-    /// start, and inline-only parsing keeps the whole input as the paragraph's content. The document covers the whole
-    /// input. Each spec example runs with each line ending preceded by whitespace, as written and nested in each
-    /// `Container`.
+    /// start, not past a container's prefix on it, and inline-only parsing keeps the whole input as the paragraph's
+    /// content. The document covers the whole input. Each spec example runs with each line ending preceded by
+    /// whitespace, as written and nested in each `Container`.
     @Test("no range starts or ends on whitespace outside its content", arguments: ["\n", "  \n", "\t\n", "\u{0B}\n", "\r\n"])
     func rangesEndOnContent(lineEnding: String) throws {
         var checked = 0
@@ -239,6 +239,12 @@ struct SourceRangeCompletenessTests {
             }
             if kind == .paragraph, options.contains(.inlineOnly) {
                 endHeld = true
+            }
+            // A blank last line holds no content bytes, so a block ending with it ends at the line's start, not past a
+            // container's prefix on it.
+            if blockLiteral, !literal.isEmpty, lastLine.isEmpty || lastLine.last == 0x0A, bytes[end - 1] != UInt8(ascii: "`"),
+               bytes[end - 1] != UInt8(ascii: "~"), range.upperBound.column != 1 {
+                failures.append("\(kind) \(range) ends past its blank last line's start")
             }
             if isWhitespace(bytes[start]) && !startHeld { failures.append("\(kind) \(range) starts on whitespace") }
             if isWhitespace(bytes[end - 1]) && !endHeld { failures.append("\(kind) \(range) ends on whitespace") }
