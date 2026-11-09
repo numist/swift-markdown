@@ -17,10 +17,8 @@ import CommonMark
 /// blocks), with tabs expanded to a tab stop of 4 (Tabs). The fence's indentation is measured from its container's
 /// content column, so a tab after a block quote marker, part of which is the marker's optional space, counts only its
 /// remaining columns, and a tab after the marker's space counts to the next tab stop. A content line's tab that crosses
-/// the N-column boundary keeps its remaining columns as spaces, and a tab past the boundary is content. The fence is
-/// tried after a tab that a block quote marker partly consumes, after a tab following the marker's space, in a list
-/// item, in a footnote definition in a block quote and in a block quote in a list item. Fences indented only with
-/// spaces, or after a tab that stands for one column, lose the same indentation in bytes and columns.
+/// the N-column boundary keeps its remaining columns as spaces, and a tab past the boundary is content. Fences indented
+/// only with spaces, or after a tab that stands for one column, lose the same indentation in bytes and columns.
 @Suite("Fenced code content loses the fence's indentation in columns")
 struct FencedCodeColumnIndentTests {
 

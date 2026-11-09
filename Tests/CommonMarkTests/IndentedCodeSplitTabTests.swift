@@ -18,13 +18,11 @@ import CommonMark
 /// a tab, the tab's remaining columns become spaces in the content: `>→→foo` and `-→→foo` both give `  foo`. Those
 /// spaces stand for the split tab, so the block starts at that tab's byte.
 ///
-/// Each container's line is tried with the tab holding a block quote or list marker's optional space partially
-/// consumed and the next tab split (`A`), the marker followed by a space and a later tab split (`B`), a tab after
-/// spaces split (`C`), and indentation that ends on a tab stop, splitting no tab (`D`). Each is tried as the first
-/// line, after a blank line, after a paragraph in the same container (which an indented code block cannot interrupt,
-/// so the line continues it), after a lazy continuation line, while escaping an open fenced code block whose container
-/// the line does not continue, after a closed fenced code block, and after an indented code block. Continuation lines
-/// of one block split their tabs by the same rule.
+/// Case names label the split: `A`, the tab holding a block quote or list marker's optional space is partly consumed
+/// and the next tab split; `B`, a tab after the marker's space is split; `C`, a tab after spaces is split; `D`, the
+/// indentation ends on a tab stop and splits no tab. An indented code block cannot interrupt a paragraph, so after a
+/// paragraph in the same container the line continues it. Continuation lines of one block split their tabs by the same
+/// rule.
 ///
 /// A two-digit ordered list marker followed by five or more columns of whitespace has its content at column four, a tab
 /// stop, so a split arises only on its continuation lines, here an item with two spaces of padding. A footnote

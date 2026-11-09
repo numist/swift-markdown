@@ -15,14 +15,11 @@ import CommonMark
 ///
 /// Per HTML blocks, the start condition may be preceded by up to three spaces of indentation, which the block keeps
 /// as content; per Tabs, a tab in that indentation counts as the columns to the next tab stop and stays a tab. The
-/// block therefore starts at the first byte of that indentation. Each HTML block type is tried at the top level, in a
-/// block quote, a bullet and an ordered list item, a footnote definition whose content indentation is spaces or a
-/// tab, a block quote in a block quote, and a footnote definition in a block quote, with no indentation, one to three
-/// spaces, a tab, and a space and a tab in either order, wherever the indentation spans fewer than four columns.
-/// Indentation the container consumes, including the whitespace after a list marker or a footnote label on the
-/// container's first line, is not content, so with none left over the block starts at its `<`. Four columns of
-/// indentation make the line indented code instead. The block also starts at its indentation when it interrupts a
-/// paragraph, except a type 7 start condition, which cannot interrupt one.
+/// block therefore starts at the first byte of that indentation. Indentation the container consumes, including the
+/// whitespace after a list marker or a footnote label on the container's first line, is not content, so with none left
+/// over the block starts at its `<`. Four columns of indentation make the line indented code instead. The block also
+/// starts at its indentation when it interrupts a paragraph, except a type 7 start condition, which cannot interrupt
+/// one.
 @Suite("An HTML block starts at the first byte of its indentation")
 struct HTMLBlockIndentationStartTests {
 

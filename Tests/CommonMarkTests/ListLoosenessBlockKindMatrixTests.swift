@@ -11,9 +11,7 @@
 import Testing
 import CommonMark
 
-/// List tightness when a blank line follows each kind of block inside a list item, in several list layouts: between
-/// two items, between two blocks of one item, after the last item, with two blank lines, in a nested list, in a block
-/// quote, and in an ordered list.
+/// List tightness when a blank line follows each kind of block inside a list item, in several list layouts.
 ///
 /// A list is loose if its items, or two blocks of one item, are separated by a blank line (Lists). A blank line that
 /// is part of a block, such as one inside a fenced code block or a type 1-5 HTML block, separates nothing. Each
