@@ -14,7 +14,7 @@ import Testing
 /// Footnote-shaped brackets nested many levels deep (Footnotes).
 ///
 /// A `]` closes the innermost open `[^`, so an outer bracket's label spans every bracket nested inside it. A label has
-/// at most 999 characters (Links), so weighing one costs no more than that however deep the nesting, and 32,000 nested
+/// at most 999 characters (Links), so an outer bracket is no label however deep the nesting, and 32,000 nested
 /// brackets, about 96 KB of source, parse well within the time limit.
 @Suite("Footnote brackets under deep nesting")
 struct DeepFootnoteBracketNestingTests {

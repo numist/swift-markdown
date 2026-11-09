@@ -57,11 +57,9 @@ struct SourceRangeCompletenessTests {
         #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
     }
 
-    /// The same check with every `o` in every example replaced by a NUL. Block parsing materializes
-    /// NUL-bearing content into the arena (each NUL becomes U+FFFD) instead of taking the zero-copy source
-    /// slice, so this covers content that must map back to source through an arena run map: paragraphs,
-    /// headings, table cells, and the inlines within them. A letter is replaced rather than a NUL inserted, so
-    /// block markers and most inline syntax stay intact.
+    /// The same check with every `o` in every example replaced by a NUL, which becomes U+FFFD (Insecure characters) in
+    /// paragraphs, headings, table cells and the inlines within them. A letter is replaced rather than a NUL inserted,
+    /// so block markers and most inline syntax stay intact.
     @Test("every non-exempt node carries a valid source range when content contains NULs")
     func everyNonExemptNodeWithNULHasValidRange() throws {
         let audit = try Self.audit(options: Self.options) { $0.replacingOccurrences(of: "o", with: "\u{0}") }
@@ -72,8 +70,8 @@ struct SourceRangeCompletenessTests {
     }
 
     /// A NUL is one source byte, as an `o` is, so replacing each `o` with a NUL leaves every node's source range unchanged
-    /// wherever it leaves the node tree unchanged: this checks the values, not just the presence, of the ranges
-    /// that NUL-bearing content maps back to source through an arena run map.
+    /// wherever it leaves the node tree unchanged: this checks the values, not just the presence, of the ranges of
+    /// content holding a NUL.
     @Test("a NUL projects onto its one source byte")
     func nulReplacementPreservesRanges() throws {
         func nodes(_ markdown: String) -> [(kind: String, range: String)] {
@@ -104,8 +102,7 @@ struct SourceRangeCompletenessTests {
 
     /// The same check over inline-only parsing (`.inlineOnly`, and `.preserveWhitespace`, which
     /// implies it), where each spec example becomes one paragraph of inline content. Each example
-    /// also runs with CRLF line endings, which inline-only parsing normalizes through an arena copy
-    /// rather than a zero-copy source slice.
+    /// also runs with CRLF line endings.
     @Test("every non-exempt node carries a valid source range in inline-only parsing", arguments: [
         MarkdownDocument.ParseOptions.inlineOnly, .preserveWhitespace,
     ], ["\n", "\r\n"])

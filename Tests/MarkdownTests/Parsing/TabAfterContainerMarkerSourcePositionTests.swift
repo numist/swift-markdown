@@ -15,7 +15,7 @@ import XCTest
 /// 4 characters; elsewhere it is not expanded (Tabs). Inline content after a tab that follows a container
 /// marker keeps its source positions, and a tab inside paragraph text stays literal. Columns count a tab as
 /// one byte.
-class MaterializedEmphasisSourcePositionTests: XCTestCase {
+class TabAfterContainerMarkerSourcePositionTests: XCTestCase {
     func testBulletTabEmphasis() {
         let text = "*\t*5*"
 
