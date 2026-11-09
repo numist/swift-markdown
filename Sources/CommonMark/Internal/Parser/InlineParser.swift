@@ -165,7 +165,7 @@ extension BlockParser {
             case UInt8(ascii: "\\"):
                 cursor = handleBackslash(at: cursor, content: content, parent: parent, pendingTextStart: &pendingTextStart)
 
-            case UInt8(ascii: ":"), UInt8(ascii: "w"), UInt8(ascii: "W"):
+            case UInt8(ascii: ":"), UInt8(ascii: "w"):
                 cursor = handleGFMAutolinkTrigger(byte, at: cursor, content: content, parent: parent, pendingTextStart: &pendingTextStart)
 
             case UInt8(ascii: "'"), UInt8(ascii: "\""):
@@ -415,7 +415,7 @@ extension BlockParser {
         return cursor + 1
     }
 
-    /// A `://` or `www.` extended autolink, triggered by `byte` (`:`, `w` or `W`).
+    /// A `://` or `www.` extended autolink, triggered by `byte` (`:` or `w`).
     private mutating func handleGFMAutolinkTrigger(_ byte: UInt8, at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         // Extended email autolinks are found after emphasis resolution (`gfmEmailAutolinkPass`), so a `_`
         // or `*` beside an email resolves first. No `://` or `www.` autolink forms while a `[` or `![`
@@ -1790,7 +1790,7 @@ extension BlockParser {
                 colon: cursor, content: content
             )
         }
-        precondition(trigger == UInt8(ascii: "w") || trigger == UInt8(ascii: "W"), "a GFM autolink trial is dispatched only on `:`, `w` or `W`")
+        precondition(trigger == UInt8(ascii: "w"), "a GFM autolink trial is dispatched only on `:` or `w`")
         return matchGFMWWWAutolink(
             start: cursor, content: content
         )
@@ -1844,7 +1844,7 @@ extension BlockParser {
         return nil
     }
 
-    /// `w`/`W`-triggered: matches `www.` followed by a URL body.
+    /// `w`-triggered: matches `www.` followed by a URL body.
     private func matchGFMWWWAutolink(start: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         let end = content.endOffset
         let chunkStart = content.startOffset

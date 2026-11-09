@@ -234,8 +234,7 @@ internal struct ContentSpan: ~Escapable {
         let lt = SIMD16<UInt8>(repeating: UInt8(ascii: "<"))
         let tilde = SIMD16<UInt8>(repeating: UInt8(ascii: "~"))
         let colon = SIMD16<UInt8>(repeating: UInt8(ascii: ":"))
-        let wCanon = SIMD16<UInt8>(repeating: UInt8(ascii: "w"))   // 'w'|0x20 == 'W'|0x20 == 'w'
-        let lowerBit = SIMD16<UInt8>(repeating: 0x20)
+        let w = SIMD16<UInt8>(repeating: UInt8(ascii: "w"))
         // Smart-punctuation triggers: straight quotes (`'` `"`), `-` (dashes), `.` (ellipsis).
         let squote = SIMD16<UInt8>(repeating: UInt8(ascii: "'"))
         let dquote = SIMD16<UInt8>(repeating: UInt8(ascii: "\""))
@@ -254,7 +253,7 @@ internal struct ContentSpan: ~Escapable {
                 m = m .| (v .== tilde)
             }
             if gfmAutolink {
-                m = m .| (v .== colon) .| ((v | lowerBit) .== wCanon)
+                m = m .| (v .== colon) .| (v .== w)
             }
             if smart {
                 m = m .| (v .== squote) .| (v .== dquote) .| (v .== hyphen) .| (v .== period)
@@ -271,7 +270,7 @@ internal struct ContentSpan: ~Escapable {
                 || b == UInt8(ascii: "\n") || b == UInt8(ascii: "!") || b == UInt8(ascii: "&")
                 || b == UInt8(ascii: "*") || b == UInt8(ascii: "<")
                 || (strikethrough && b == UInt8(ascii: "~"))
-                || (gfmAutolink && (b == UInt8(ascii: ":") || (b | 0x20) == UInt8(ascii: "w")))
+                || (gfmAutolink && (b == UInt8(ascii: ":") || b == UInt8(ascii: "w")))
                 || (smart && (b == UInt8(ascii: "'") || b == UInt8(ascii: "\"") || b == UInt8(ascii: "-") || b == UInt8(ascii: ".")))
             if significant {
                 return i
