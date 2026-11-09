@@ -233,7 +233,7 @@ extension BlockParser {
         ) {
             emitLiteral(
                 .codeInline(backtickCount: span.backtickCount),
-                normalizeCodeSpanContent(span.content),
+                span.content,
                 start: cursor,
                 end: span.afterClose,
                 to: parent,
@@ -656,7 +656,7 @@ extension BlockParser {
         }
         return (
             cleanURLChunk(materializedChunk(start: dest.destination.lowerBound, end: dest.destination.upperBound, content: content)),
-            unescapeURLChunk(materializedChunk(start: titleInterior.lowerBound, end: titleInterior.upperBound, content: content)),
+            unescapedChunk(start: titleInterior.lowerBound, end: titleInterior.upperBound, content: content),
             close + 1
         )
     }
@@ -1285,7 +1285,7 @@ extension BlockParser {
     // MARK: - Code spans
 
     private struct CodeSpanMatch {
-        var content: Chunk      // the raw code-span content
+        var content: Chunk      // the code span's content (Code spans)
         var afterClose: Int     // offset just past the closing backtick run
         var backtickCount: Int  // number of backticks in the opening/closing run
     }
@@ -1308,10 +1308,7 @@ extension BlockParser {
                 let closeEnd = scanBacktickRun(start: i, content: content)
                 let closeLength = closeEnd - i
                 if closeLength == runLength {
-                    // The caller normalizes the raw content. A continuation line's leading whitespace is not
-                    // part of it (Paragraphs).
-                    let contentChunk = materializedChunk(start: openEnd, end: i, content: content)
-                    return CodeSpanMatch(content: contentChunk, afterClose: closeEnd, backtickCount: runLength)
+                    return CodeSpanMatch(content: codeSpanContent(start: openEnd, end: i, content: content), afterClose: closeEnd, backtickCount: runLength)
                 }
                 i = closeEnd
                 continue
@@ -1344,37 +1341,25 @@ extension BlockParser {
         return i
     }
 
-    /// Normalizes code span content (Code spans), copying only if a line ending becomes a space.
-    private mutating func normalizeCodeSpanContent(_ chunk: Chunk) -> Chunk {
-        var hasNewline = false
-        let endOff = chunk.offset + chunk.length
-        for i in chunk.offset..<endOff {
-            let b = readByte(at: i, in: chunk)
-            if b == UInt8(ascii: "\n") {
-                hasNewline = true
+    /// The content of a code span over `start..<end` (Code spans), with line endings converted to spaces and the
+    /// one-space strip applied, copied into the arena only if it holds a line ending.
+    private mutating func codeSpanContent(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
+        if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end), contiguous.length == end - start {
+            var holdsLineEnding = false
+            for i in contiguous.range where readByte(at: i, in: contiguous) == UInt8(ascii: "\n") {
+                holdsLineEnding = true
                 break
             }
-        }
-        var workChunk: Chunk
-        if hasNewline {
-            let outOffset = storage.strings.count
-            var i = chunk.offset
-            while i < endOff {
-                let b = readByte(at: i, in: chunk)
-                assert(b != UInt8(ascii: "\r"), "inline content holds no carriage return: lines split on CR and join with LF")
-                if b == UInt8(ascii: "\n") {
-                    storage.strings.append(UInt8(ascii: " "))
-                    i += 1
-                    continue
-                }
-                storage.strings.append(b)
-                i += 1
+            if !holdsLineEnding {
+                return trimSingleSpaces(contiguous)
             }
-            workChunk = arenaChunk(from: outOffset)
-        } else {
-            workChunk = chunk
         }
-        return trimSingleSpaces(workChunk)
+        let outOffset = storage.strings.count
+        for k in start..<end {
+            let b = content[k]
+            storage.strings.append(b == UInt8(ascii: "\n") ? UInt8(ascii: " ") : b)
+        }
+        return trimSingleSpaces(arenaChunk(from: outOffset))
     }
 
     /// The code span one-space strip (Code spans).
@@ -2198,6 +2183,28 @@ extension BlockParser {
         let outOffset = storage.strings.count
         for k in start..<end {
             storage.strings.append(content[k])
+        }
+        return arenaChunk(from: outOffset)
+    }
+
+    /// A chunk for `[start, end)` with backslash escapes and character references resolved, copied into the arena
+    /// once if the range spans segments or holds either, as a link title can.
+    private mutating func unescapedChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
+        if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end),
+           contiguous.length == end - start {
+            return unescapeURLChunk(contiguous)
+        }
+        // A backslash escape or character reference never continues past a line ending, so each line resolves alone.
+        let outOffset = storage.strings.count
+        var k = start
+        while k < end {
+            if let line = content.contiguousChunk(fromVirtual: k, limit: end) {
+                appendUnescaped(line)
+                k += line.length
+            } else {
+                storage.strings.append(UInt8(ascii: "\n"))
+                k += 1
+            }
         }
         return arenaChunk(from: outOffset)
     }

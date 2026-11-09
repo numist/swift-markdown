@@ -21,11 +21,16 @@ struct InlineLiteralStorageTests {
         // Code spans.
         ("`a`", [], 1),
         ("`a\nb`", [], 4),
+        ("> `a\n> b`", [], 4),
+        ("> `\\!\n> b`", [], 5),
         // Link destinations and titles.
         ("[x](/u \"t\")", [], 1),
         ("[x](/u?a&b \"t&u\")", [], 1),
         ("[x](/u?a&amp;b \"t&amp;u\")", [], 10),
         ("[x](/u \"\\!\")", [], 2),
+        ("> x [x](/u \"a\n> b\")", [], 4),
+        ("> x [x](/u \"\\!\n> b\")", [], 4),
+        ("> x [x](/u \"&amp;\n> b\")", [], 4),
         ("[x]: /u?a&b \"t&u\"\n\n[x]", [], 1),
         ("[x]: /u?a&amp;b\n\n[x]", [], 7),
         // Autolinks.
