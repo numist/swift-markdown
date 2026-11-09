@@ -57,8 +57,9 @@ extension BlockParser {
                 rowspanOwners: &rowspanOwners
             )
         }
-        // The table ends with its last line, the delimiter row when it has no body, before any trailing whitespace.
-        storage.setSourceEnd(node, endTrimmingPadding(lines[lines.count - 1]))
+        // The table runs from its header row to its last line, the delimiter row when it has no body.
+        storage.setSourceStart(node, rowRange(lines[0]).lowerBound)
+        storage.setSourceEnd(node, rowRange(lines[lines.count - 1]).upperBound)
     }
 
     /// Whether source lines `header` and `delimiter` open a table: `delimiter` is a delimiter row and `header` has as
@@ -139,9 +140,9 @@ extension BlockParser {
             data: nil
         ))
         storage.appendChild(rowIdx, to: parent)
-        // A row runs from its first byte to its closing pipe or last cell's content, before any trailing whitespace.
-        storage.setSourceStart(rowIdx, line.lowerBound)
-        storage.setSourceEnd(rowIdx, endTrimmingPadding(line))
+        let range = rowRange(line)
+        storage.setSourceStart(rowIdx, range.lowerBound)
+        storage.setSourceEnd(rowIdx, range.upperBound)
         let cells = splitCells(line: line)
         let columnCount = alignments.count
 
@@ -338,22 +339,24 @@ extension BlockParser {
         body(cellStart..<e)
     }
 
-    /// Where `range` ends without its trailing padding, which is its start when it holds only padding.
-    private func endTrimmingPadding(_ range: Range<Int>) -> Int {
-        var e = range.upperBound
-        while e > range.lowerBound && sourceBytes[e - 1].isLineWhitespace {
-            e -= 1
-        }
-        return e
+    /// Source line `line`'s range as a row, from its leading pipe or first cell's content to its closing pipe or last
+    /// cell's content, without padding: empty at its start when it holds only padding, as its one empty cell is.
+    private func rowRange(_ line: Range<Int>) -> Range<Int> {
+        let content = trimmingPadding(line)
+        return content.isEmpty ? line.lowerBound..<line.lowerBound : content
     }
 
     /// `range` without its leading and trailing padding: every whitespace character other than a line ending, as
     /// the spec trims spaces between pipes and cell content (Tables (extension)).
     private func trimmingPadding(_ range: Range<Int>) -> Range<Int> {
         var s = range.lowerBound
-        while s < range.upperBound && sourceBytes[s].isLineWhitespace {
+        var e = range.upperBound
+        while s < e && sourceBytes[s].isLineWhitespace {
             s += 1
         }
-        return s..<endTrimmingPadding(s..<range.upperBound)
+        while e > s && sourceBytes[e - 1].isLineWhitespace {
+            e -= 1
+        }
+        return s..<e
     }
 }

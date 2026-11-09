@@ -146,7 +146,7 @@ struct TableCellPipeWhitespaceTests {
                     text "a" @1:3-1:4
                   table_cell align=none colspan=1 rowspan=1 @1:7-1:8
                     text "b" @1:7-1:8
-                table_row @3:1-3:11
+                table_row @3:2-3:11
                   table_cell align=none colspan=1 rowspan=1 @3:4-3:5
                     text "x" @3:4-3:5
                   table_cell align=none colspan=1 rowspan=1 @3:8-3:9

@@ -155,6 +155,22 @@ struct TableSourceRangeTests {
             """)
     }
 
+    /// A form feed is padding before a row's first cell or pipe, so the row and the table start after it.
+    @Test
+    func formFeedBeforeRows() {
+        #expect(tree("\u{0C}| a |\n|---|\n\u{0C}x\n") == """
+            document @1:1-4:1
+              table @1:2-3:3
+                table_header @1:2-1:7
+                  table_cell align=none colspan=1 rowspan=1 @1:4-1:5
+                    text "a" @1:4-1:5
+                table_row @3:2-3:3
+                  table_cell align=none colspan=1 rowspan=1 @3:2-3:3
+                    text "x" @3:2-3:3
+
+            """)
+    }
+
     @Test
     func rowspanMarkerCell() {
         #expect(tree("| a |\n|---|\n| ^ |\n") == """
