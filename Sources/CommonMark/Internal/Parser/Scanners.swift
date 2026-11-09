@@ -406,7 +406,7 @@ extension BlockParser {
 
     // MARK: - Whitespace
 
-    // These are `mutating` though they only read: a non-mutating method of the large `BlockParser` copies the parser per call, which costs more than the scan.
+    // These are `mutating` though they only read: non-mutating, they measured 5% more instructions on a document of link reference definitions.
 
     /// Skips spaces, tabs, line tabulations and form feeds.
     internal mutating func skipLineWhitespace(from cursor: Int, in chunk: Chunk) -> Int {
@@ -480,11 +480,13 @@ extension BlockParser {
         return Self.normalizeLabel(bytes.span)
     }
 
-    /// Replaces each NUL with U+FFFD (Insecure characters) in its own buffer rather than `storage.strings`,
-    /// because a definition's label can be normalized while that arena is borrowed. Each NUL takes three bytes, and
-    /// every other byte at most one, since a whitespace run becomes at most one space. Sizing the buffer to that, rather
-    /// than to three bytes per source byte, stores a short label inline instead of in a heap allocation. ASCII letters are
-    /// lowercased in the same pass, which completes the case fold of a label with no non-ASCII bytes.
+    /// `span` normalized as `normalizeLabel(chunk:)` describes, with each NUL replaced with U+FFFD (Insecure characters).
+    ///
+    /// The label is built in its own buffer rather than `storage.strings`, because a definition's label can be normalized
+    /// while that arena is borrowed. Each NUL takes three bytes, and every other byte at most one, since a whitespace run
+    /// becomes at most one space. Sizing the buffer to that, rather than to three bytes per source byte, stores a short
+    /// label inline instead of in a heap allocation. ASCII letters are lowercased in the same pass, which completes the
+    /// case fold of a label with no non-ASCII bytes.
     private static func normalizeLabel(_ span: Span<UInt8>) -> String {
         var hasNonASCII = false
         var nulCount = 0
