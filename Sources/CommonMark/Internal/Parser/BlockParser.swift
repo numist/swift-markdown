@@ -1807,8 +1807,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     // MARK: - Finalize
 
-    // MARK: Segment-content finalize (segment model)
-
     /// Drained leaf content: one chunk, or a segment list kept zero-copy.
     private enum DrainedLeaf: ~Copyable {
         case chunk(Chunk)
@@ -1856,7 +1854,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return storage.strings[Int(seg.offset) + local]
     }
 
-    /// Trims trailing whitespace from the last segment, as `Chunk.trimming(using:)` does. The first segment starts at its first non-space byte.
+    /// Trims trailing spaces, tabs and line endings from the last segment, as `Chunk.trimming(using:)` does. The first segment starts at its first byte that is not a space or tab.
     private func trimSegments(_ segs: consuming UniqueArray<Segment>) -> UniqueArray<Segment> {
         var segs = segs
         precondition(segs.count > 0, "a paragraph's segment list starts with its opening line")
@@ -2015,6 +2013,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func flattenSegments(_ segs: borrowing UniqueArray<Segment>, map: inout [ArenaRun]) -> Chunk {
         var total = 0
         for i in 0..<segs.count { total += Int(segs[i].length) }
+        // Arena segments are read through a span of the arena, which can't be borrowed while the arena grows, so the
+        // content is assembled apart and then appended.
         var buf = UniqueArray<UInt8>(minimumCapacity: total)
         let offset = storage.strings.count
         for i in 0..<segs.count {
@@ -2056,11 +2056,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// The raw content (`paragraphContent`) of the paragraph a table's header row splits off, whose trimmed lines are
-    /// `trimmed`, or `nil` when its definitions or task list item marker leave nothing. `node` is that paragraph, or
-    /// the paragraph it splits from.
+    /// `trimmed`, or `nil` when its definitions or task list item marker leave nothing. `node` is checked for being its
+    /// list item's first block: the split-off paragraph, or before that is inserted, the paragraph it splits from.
     private mutating func tableSplitParagraphContent(_ trimmed: Chunk, node: DocumentStorage.Index) -> Chunk? {
         let content = paragraphContent(of: node, trimmed: trimmed)
-        return content.isEmpty && content.offset != trimmed.offset ? nil : content
+        return content.isEmpty && !trimmed.isEmpty ? nil : content
     }
 
     /// The source extent of `content`, a non-empty window of leaf content `raw` with run map `map` (empty for source
@@ -2448,15 +2448,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var markerWidth: Int
 
         switch first {
-        case UInt8(ascii: "-"): // -
+        case UInt8(ascii: "-"):
             kind = .bullet
             bulletMarker = .hyphen
             markerWidth = 1
-        case UInt8(ascii: "+"): // +
+        case UInt8(ascii: "+"):
             kind = .bullet
             bulletMarker = .plus
             markerWidth = 1
-        case UInt8(ascii: "*"): // *
+        case UInt8(ascii: "*"):
             kind = .bullet
             bulletMarker = .asterisk
             markerWidth = 1
@@ -2502,7 +2502,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var padding = 1
         var isEmpty = false
         if afterMarker >= range.upperBound {
-            // Empty item - the line is just `- ` (or end of input after marker).
+            // Nothing follows the marker, so the item is empty.
             contentStart = afterMarker
             isEmpty = true
         } else {
@@ -2571,7 +2571,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         "pre", "script", "style",
     ].map { Array($0.utf8) }
 
-    /// The end conditions of HTML blocks of types 2 (`-->`), 3 (`?>`) and 5 (`]]>`), as UTF-8 bytes.
+    /// The end conditions of HTML blocks of types 2 (`-->`), 3 (`?>`), 4 (`>`) and 5 (`]]>`), as UTF-8 bytes.
     private static let htmlCommentEnd = Array("-->".utf8)
     private static let processingInstructionEnd = Array("?>".utf8)
     private static let cdataEnd = Array("]]>".utf8)
@@ -2901,7 +2901,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         guard firstNonSpace < range.upperBound else {
             return nil
         }
-        if sourceBytes[firstNonSpace] != UInt8(ascii: ">") { // >
+        if sourceBytes[firstNonSpace] != UInt8(ascii: ">") {
             return nil
         }
         var i = firstNonSpace + 1
@@ -3119,7 +3119,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         assert(firstNonSpace - range.lowerBound <= 3, "block-start matchers run only on a line indented less than four columns")
         var i = firstNonSpace
         var level: Int = 0
-        while i < range.upperBound && sourceBytes[i] == UInt8(ascii: "#") { // #
+        while i < range.upperBound && sourceBytes[i] == UInt8(ascii: "#") {
             level += 1
             i += 1
         }
@@ -3175,12 +3175,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 loose = true
                 break outer
             }
-            // (a) Item ends with a blank line and has a next sibling.
+            // A blank line separates the item from the next.
             if nextItem != nil && storage.nodes[item_].lastLineBlank {
                 loose = true
                 break outer
             }
-            // (b) Any subitem ends with a blank line, AND either the item has a next sibling OR the subitem itself does.
+            // A blank line separates a block the item directly contains from a block after it, in the item or the next.
             var sub = storage[item_].firstChild
             while let sub_ = sub {
                 let nextSub = storage[sub_].next
