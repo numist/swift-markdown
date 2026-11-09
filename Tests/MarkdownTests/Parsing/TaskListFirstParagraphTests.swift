@@ -166,7 +166,9 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    @Test func paragraphBeforeTable() {
+    /// The table takes `a|b` as its header row, so the paragraph before it holds only the checkbox, and the item is a
+    /// task list item.
+    @Test func checkboxLineBeforeTableMakesTaskItem() {
         #expect(tree("- [ ] \n  a|b\n  -|-") == """
             Document @1:1-3:6
             └─ UnorderedList @1:1-3:6

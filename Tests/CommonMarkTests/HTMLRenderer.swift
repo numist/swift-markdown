@@ -468,14 +468,6 @@ internal enum HTMLRenderer {
             || (b >= 0x61 && b <= 0x66)
     }
 
-    private static func hexUpper(_ b: UInt8) -> String {
-        let hi = Int(b >> 4)
-        let lo = Int(b & 0x0F)
-        let table: [Character] = ["0","1","2","3","4","5","6","7",
-                                   "8","9","A","B","C","D","E","F"]
-        return String([table[hi], table[lo]])
-    }
-
     private static func hexUpperBytes(_ b: UInt8) -> [UInt8] {
         let hi = Int(b >> 4)
         let lo = Int(b & 0x0F)
