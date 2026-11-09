@@ -123,12 +123,12 @@ struct BlockPositionEncodingTests {
         try atx("# \u{FFFD}x", literal: "\u{FFFD}x", textEnd: 7)
         // TAB inside content counts as one byte: "a\tb" → text @1:3-1:6.
         try atx("# a\tb", literal: "a\tb", textEnd: 6)
-        // Closing "#" sequence is not part of the content range: "# hi #" → text @1:3-1:5,
-        // heading @1:1-1:5 (the trailing " #" is excluded on both sides).
+        // The closing "#" sequence is the heading's syntax but not its text: "# hi #" → text @1:3-1:5,
+        // heading @1:1-1:7.
         do {
             let out = parse("# hi #")
             try #require(shape(out) == ["document", "heading", "text"])
-            #expect(out[1].range == r(1, 1, 1, 5))
+            #expect(out[1].range == r(1, 1, 1, 7))
             #expect(out[2].range == r(1, 3, 1, 5))
             #expect(out[2].literal == "hi")
         }

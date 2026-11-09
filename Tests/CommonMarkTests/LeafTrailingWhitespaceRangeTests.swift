@@ -14,7 +14,8 @@ import CommonMark
 /// A paragraph's raw content has its final whitespace removed (Paragraphs), as does a setext heading's (Setext
 /// headings), so a paragraph ends just past its last content byte and a setext heading just past its underline's last
 /// `=` or `-`, before any trailing whitespace. An ATX heading's content excludes trailing spaces and tabs (ATX
-/// headings), so it ends just past its content, or past its opening sequence when it has none.
+/// headings), so it ends just past its closing sequence when it has one, otherwise just past its content, or past its
+/// opening sequence when it has neither.
 @Suite("Paragraph and heading ranges before trailing whitespace")
 struct LeafTrailingWhitespaceRangeTests {
 
@@ -163,6 +164,48 @@ struct LeafTrailingWhitespaceRangeTests {
         #expect(tree(source) == """
             document @1:1-2:1
               heading 2 @1:1-1:3
+
+            """)
+    }
+
+    @Test("an ATX heading with a closing sequence followed by spaces and tabs", arguments: ["## a ##  \n", "## a ##\t\n"])
+    func atxHeadingClosingSequence(_ source: String) {
+        #expect(tree(source) == """
+            document @1:1-2:1
+              heading 2 @1:1-1:8
+                text "a" @1:4-1:5
+
+            """)
+    }
+
+    @Test("an empty ATX heading with a closing sequence")
+    func emptyATXHeadingClosingSequence() {
+        #expect(tree("#  #  \n") == """
+            document @1:1-2:1
+              heading 1 @1:1-1:5
+
+            """)
+    }
+
+    @Test("an ATX heading whose trailing `#`s follow its content directly")
+    func atxHeadingHashesWithoutSpace() {
+        #expect(tree("# a#  \n") == """
+            document @1:1-2:1
+              heading 1 @1:1-1:5
+                text "a#" @1:3-1:5
+
+            """)
+    }
+
+    @Test("an ATX heading with a closing sequence in a block quote")
+    func atxHeadingClosingSequenceInBlockQuote() {
+        #expect(tree("> # a #  \n> b\n") == """
+            document @1:1-3:1
+              block_quote @1:1-2:4
+                heading 1 @1:3-1:8
+                  text "a" @1:5-1:6
+                paragraph @2:3-2:4
+                  text "b" @2:3-2:4
 
             """)
     }

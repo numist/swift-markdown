@@ -2376,7 +2376,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private struct ATXMatch {
         var level: UInt8
         var contentRange: Range<Int>
-        /// Where the heading ends: at its trimmed content, or past the opening `#`s when it is empty.
+        /// Where the heading ends: past its closing sequence or trimmed content, or past the opening `#`s when it has
+        /// neither.
         var end: Int
     }
 
@@ -3141,7 +3142,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         }
 
-        let end = contentStart != contentEnd ? contentEnd : i
+        // The closing sequence is the heading's own syntax, so the heading ends past it, as past any content.
+        let end = contentStart != beforeHashes ? beforeHashes : i
         return ATXMatch(level: UInt8(level), contentRange: contentStart..<contentEnd, end: end)
     }
 
