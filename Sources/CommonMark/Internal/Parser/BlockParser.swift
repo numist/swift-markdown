@@ -3426,6 +3426,33 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return arenaChunk(from: offset)
     }
 
+    /// `content`'s bytes at `range` as a chunk with backslash escapes and character references resolved, copied into
+    /// the arena once if `range` holds either or, as a title can, spans a line join.
+    // Inlined like `definitionChunk`, which it stands in for on a link reference definition's destination and title.
+    @inline(__always)
+    private mutating func unescapedDefinitionChunk(_ range: Range<Int>, in content: borrowing ContentSpan) -> Chunk {
+        if range.isEmpty {
+            return .empty
+        }
+        if let contiguous = content.contiguousChunk(fromVirtual: range.lowerBound, limit: range.upperBound),
+           contiguous.length == range.count {
+            return unescapeURLChunk(contiguous)
+        }
+        // A backslash escape or character reference never continues past a line ending, so each line resolves alone.
+        let offset = storage.strings.count
+        var i = range.lowerBound
+        while i < range.upperBound {
+            if let line = content.contiguousChunk(fromVirtual: i, limit: range.upperBound) {
+                appendUnescaped(line)
+                i += line.length
+            } else {
+                storage.strings.append(content[i])
+                i += 1
+            }
+        }
+        return arenaChunk(from: offset)
+    }
+
     // These scanners are `@inline(__always)`, as are `parseOneLinkDefinition`, `matchDefinitionLabel` and
     // `definitionChunk`, and `mutating` though they only read: out of line, or as non-mutating methods of the large
     // `BlockParser`, they measured about 1.5% and 2.6% more instructions on a document of definitions.
@@ -3504,11 +3531,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if storage.referenceMap[key] == nil {
             // A NUL becomes U+FFFD (Insecure characters). The content may not be NUL-replaced yet, so it is done
             // here, where every stored definition passes.
-            let destinationChunk = definitionChunk(destination.destination, in: content)
-            let titleChunk = definitionChunk(title, in: content)
             storage.referenceMap[key] = ReferenceDefinition(
-                destination: replacingNUL(unescapeURLChunk(destinationChunk)),
-                title: replacingNUL(unescapeURLChunk(titleChunk))
+                destination: replacingNUL(unescapedDefinitionChunk(destination.destination, in: content)),
+                title: replacingNUL(unescapedDefinitionChunk(title, in: content))
             )
         }
         return afterAll

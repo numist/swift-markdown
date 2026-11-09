@@ -33,6 +33,9 @@ struct InlineLiteralStorageTests {
         ("> x [x](/u \"&amp;\n> b\")", [], 4),
         ("[x]: /u?a&b \"t&u\"\n\n[x]", [], 1),
         ("[x]: /u?a&amp;b\n\n[x]", [], 7),
+        ("> [x]: /u \"a\n> b\"\n\n[x]", [], 4),
+        ("> [x]: /u \"\\!\n> b\"\n\n[x]", [], 4),
+        ("> [x]: /u \"&amp;\n> b\"\n\n[x]", [], 4),
         // Autolinks.
         ("<http://x?a=1&b=2>", [], 1),
         ("<http://x?a&amp;b>", [], 13),
