@@ -164,6 +164,89 @@ struct SourceRangeCompletenessTests {
         #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
     }
 
+    /// A range runs from the first byte of a node's own content to just past its last content byte, so no range starts
+    /// or ends on whitespace outside the node's content: the literal whitespace of text, a code block or an HTML block,
+    /// or whitespace a child's range holds. A code block or HTML block whose last line is blank ends at that line's
+    /// start, and inline-only parsing keeps the whole input as the paragraph's content. The document covers the whole
+    /// input. Each spec example runs with each line ending preceded by whitespace, as written and nested in each
+    /// `Container`.
+    @Test("no range starts or ends on whitespace outside its content", arguments: ["\n", "  \n", "\t\n", "\u{0B}\n", "\r\n"])
+    func rangesEndOnContent(lineEnding: String) throws {
+        var checked = 0
+        var failures: [String] = []
+        let optionSets: [MarkdownDocument.ParseOptions] = [
+            Self.options, Self.options.union([.footnotes, .gfmAutolink]), Self.options.union(.inlineOnly),
+        ]
+        for ex in try Self.loadSpec() {
+            let markdown = ex.markdown.replacingOccurrences(of: "\n", with: lineEnding)
+            for source in [markdown] + Container.allCases.map({ $0.nest(markdown) }) {
+                for options in optionSets {
+                    let result = Self.boundaryFailures(source, options: options)
+                    checked += result.checked
+                    failures += result.failures.map { "#\(ex.number) [\(ex.section)] \($0); input=\(source.debugDescription)" }
+                }
+            }
+        }
+
+        #expect(checked > 80_000)
+        #expect(failures.isEmpty, Comment(rawValue: failures.prefix(25).joined(separator: "\n")))
+    }
+
+    /// The nodes of `markdown` whose ranges break `rangesEndOnContent`'s rule, and the number of nodes checked.
+    private static func boundaryFailures(_ markdown: String, options: MarkdownDocument.ParseOptions) -> (checked: Int, failures: [String]) {
+        let bytes = Array(markdown.utf8)
+        var lineStarts = [bytes.starts(with: [0xEF, 0xBB, 0xBF]) ? 3 : 0]
+        var i = lineStarts[0]
+        while i < bytes.count {
+            if bytes[i] == 0x0D, i + 1 < bytes.count, bytes[i + 1] == 0x0A { i += 1 }
+            if bytes[i] == 0x0A || bytes[i] == 0x0D { lineStarts.append(i + 1) }
+            i += 1
+        }
+        func offset(_ p: MarkdownNode.SourcePosition) -> Int { lineStarts[p.line - 1] + p.column - 1 }
+        func isWhitespace(_ b: UInt8) -> Bool { b == 0x20 || b == 0x09 || b == 0x0A || b == 0x0D || b == 0x0B || b == 0x0C }
+
+        var checked = 0
+        var failures: [String] = []
+        func check(_ node: borrowing MarkdownNode) {
+            checked += 1
+            node.children.forEach { check($0) }
+            let kind = node.kind
+            let literal = Array((node.literal() ?? "").utf8)
+            var childStarts: Set<Int> = [], childEnds: Set<Int> = []
+            node.children.forEach { child in
+                if let r = child.sourceRange { childStarts.insert(offset(r.lowerBound)); childEnds.insert(offset(r.upperBound)) }
+            }
+            guard let range = node.sourceRange else { return }
+            let start = offset(range.lowerBound), end = offset(range.upperBound)
+            if case .document = kind {
+                if start != lineStarts[0] || end != bytes.count {
+                    failures.append("document \(range) is not the whole input")
+                }
+                return
+            }
+            guard start < end else { return }
+            let lastLine = literal.last == 0x0A ? literal.dropLast() : literal[...]
+            var blockLiteral = false
+            switch kind {
+            case .codeBlock, .htmlBlock: blockLiteral = true
+            default: break
+            }
+            let startHeld = childStarts.contains(start) || (kind == .text || blockLiteral) && literal.first.map(isWhitespace) == true
+            var endHeld = childEnds.contains(end) || kind == .text && literal.last.map(isWhitespace) == true
+                || blockLiteral && lastLine.last.map(isWhitespace) == true
+            if blockLiteral, bytes[end - 1] == 0x0A || bytes[end - 1] == 0x0D, lastLine.isEmpty || lastLine.last == 0x0A {
+                endHeld = true
+            }
+            if kind == .paragraph, options.contains(.inlineOnly) {
+                endHeld = true
+            }
+            if isWhitespace(bytes[start]) && !startHeld { failures.append("\(kind) \(range) starts on whitespace") }
+            if isWhitespace(bytes[end - 1]) && !endHeld { failures.append("\(kind) \(range) ends on whitespace") }
+        }
+        MarkdownDocument.withParsedDocument(markdown, options: options) { check($0.root) }
+        return (checked, failures)
+    }
+
     /// Parses every spec example with `options`, its markdown passed through `transform`, and collects each
     /// node that lacks a valid source range, skipping the exemptions documented on
     /// `everyNonExemptNodeHasValidRange`.
