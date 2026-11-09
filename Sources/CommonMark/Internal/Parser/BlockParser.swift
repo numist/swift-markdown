@@ -98,9 +98,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// blank lines following an indented code block are not part of it (Indented code blocks).
     var indentedCodeContentEnd: Int = 0
 
-    /// Whether the current line is a lazy continuation line: an open container's prefix failed to match, so the walk stopped short of the open leaf.
-    var currentLineIsLazyContinuation: Bool = false
-
     /// Inline parsing deferred until all blocks close, so a reference resolves against a definition later in the document.
     var pendingInlines: [(DocumentStorage.Index, ContentRef)] = []
 
@@ -951,8 +948,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let prefixColumns = walk.prefixColumns
         let allMatched = walk.allMatched
 
-        currentLineIsLazyContinuation = !allMatched
-
         // PHASE 2a: Code-block / HTML-block continuation.
         let openKind = storage[current].kind
         if openKind.isCodeBlock || openKind == .htmlBlock {
@@ -1178,7 +1173,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let lineRange = line.lineRange
         let tablePending = openParagraphIsTablePending
         let breaksOutOfPendingTable = tablePending
-            && (currentLineIsLazyContinuation
+            && (!line.allMatched
                 || line.indent >= 4
                 || isLonePipeRow(range: line.firstNonSpace..<lineRange.upperBound))
         if line.openKind != .paragraph || breaksOutOfPendingTable {
@@ -1223,7 +1218,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // The first such line that opens a table sets `tablePending`, ending the search. `couldBeDelimiterRow` keeps
         // prose from materializing.
         if !openParagraphTableState!.tablePending,
-           line.indent < 4, !currentLineIsLazyContinuation,
+           line.indent < 4, line.allMatched,
            couldBeDelimiterRow(range: delimRange) {
             pending = detectPendingTable(current, delimRange: delimRange, pending: consume pending)
         }
@@ -1656,16 +1651,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // The line is no list item, so an open list closes before the new block attaches.
             pending = closingOpenList(pending)
 
-            if indent < 4, let heading = matchATXHeading(
+            // An indented line continues an open paragraph, so here, where none is open, it starts an indented code
+            // block (Indented code blocks). A fence a tab pushes four columns in is indented code: in `>~~~` then
+            // `\t~~~`, the second line closes the quote's fence and opens an indented code block holding `~~~`.
+            if indent >= 4 {
+                return openIndentedCode(lineRange: lineRange, cursor: cursor, column: column, pending: pending)
+            }
+
+            if let heading = matchATXHeading(
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace
             ) {
                 return openATXHeading(heading, firstNonSpace: firstNonSpace, pending: pending)
             }
 
-            // A fence a tab pushes four columns in is indented code: in `>~~~` then `\t~~~`, the second line closes
-            // the quote's fence and opens an indented code block holding `~~~`.
-            if indent < 4, let fence = matchOpeningFence(
+            if let fence = matchOpeningFence(
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
                 indent: indent
@@ -1674,19 +1674,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 return pending
             }
 
-            // Type 7 can't interrupt a paragraph (HTML blocks).
-            let allowType7 = storage[current].kind != .paragraph
-            if indent < 4, let htmlType = matchHTMLBlockStart(
+            // No open paragraph remains here for a type 7 start to interrupt (HTML blocks).
+            if let htmlType = matchHTMLBlockStart(
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
-                allowType7: allowType7
+                allowType7: true
             ) {
                 return openHTMLBlock(htmlType, lineRange: lineRange, cursor: cursor, column: column, firstNonSpace: firstNonSpace, pending: pending)
-            }
-
-            // An indented code block can't interrupt a paragraph (Indented code blocks).
-            if indent >= 4 && storage[current].kind != .paragraph {
-                return openIndentedCode(lineRange: lineRange, cursor: cursor, column: column, pending: pending)
             }
 
             return openParagraph(lineRange: lineRange, firstNonSpace: firstNonSpace, pending: pending)
