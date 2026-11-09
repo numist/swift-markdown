@@ -39,7 +39,7 @@ extension MarkdownDocument {
         /// Parses footnote references and definitions, written as `[^label]` and `[^label]:`.
         public static let footnotes = MarkdownDocument.ParseOptions(rawValue: 1 << 13)
 
-        /// Requires two tildes for strikethrough, as in `~~text~~`, and rejects a single tilde.
+        /// With `strikethrough`, requires two tildes for strikethrough, as in `~~text~~`, and rejects a single tilde.
         public static let strikethroughDoubleTilde = MarkdownDocument.ParseOptions(rawValue: 1 << 14)
 
         /// Parses only inline content, ignoring block structure.
@@ -64,7 +64,7 @@ extension MarkdownDocument {
 
         /// Enables GFM task list items.
         ///
-        /// A list item whose first paragraph begins with `[ ]`, `[x]`, or `[X]` becomes an unchecked or checked task list item.
+        /// A list item whose first block is a paragraph beginning with `[ ]`, `[x]`, or `[X]`, followed by whitespace or the end of the line, becomes an unchecked or checked task list item. Any whitespace character can stand in for the space between the brackets.
         public static let tasklist = MarkdownDocument.ParseOptions(rawValue: 1 << 23)
 
         /// Enables GFM extended autolinks.
@@ -74,7 +74,7 @@ extension MarkdownDocument {
 
         /// Enables GFM tables.
         ///
-        /// A paragraph whose second line is a delimiter row, such as `| --- | :---: |`, becomes a table.
+        /// A paragraph line followed by a delimiter row, such as `| --- | :---: |`, with as many cells as the line becomes the header row of a table. Any lines of the paragraph before it remain a paragraph.
         public static let tables = MarkdownDocument.ParseOptions(rawValue: 1 << 25)
 
         /// Enables inline attributes, written as `^[text](key: value)`, and attribute definitions, written as `^[label]: key: value`.

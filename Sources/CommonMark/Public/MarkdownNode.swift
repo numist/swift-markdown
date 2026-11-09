@@ -200,6 +200,8 @@ extension MarkdownNode {
         /// A thematic break (a horizontal rule, such as `---`).
         case thematicBreak
         /// A footnote definition (`[^label]: …`), produced when parsing with `MarkdownDocument.ParseOptions.footnotes`.
+        ///
+        /// Footnote definitions are children of the document, after its other blocks, in the order their labels are first referenced. A definition whose label no reference uses is dropped, as is any later definition of the same label.
         case footnoteDefinition
         /// A GFM table, produced when parsing with `MarkdownDocument.ParseOptions.tables`.
         case table
@@ -220,7 +222,7 @@ extension MarkdownNode {
         case softBreak
         /// A hard line break (a line ending with two or more spaces or a backslash).
         case lineBreak
-        /// An inline code span. `backtickCount` is the length of each delimiter run, which the node's source range excludes.
+        /// An inline code span. `backtickCount` is the length of each delimiter run, which the node's source range includes.
         case codeInline(backtickCount: Int)
         /// An inline span of raw HTML.
         case htmlInline
@@ -323,13 +325,13 @@ extension MarkdownNode {
 
         /// Whether the list is a bullet or an ordered list.
         public var kind: Kind
-        /// Start number for ordered lists; ignored for bullet lists.
+        /// The start number of an ordered list; `1` for a bullet list.
         public var start: Int
-        /// A Boolean value that indicates whether the list is tight, with no blank lines between items.
+        /// A Boolean value that indicates whether the list is tight: no blank line separates two of its items, or two blocks that one of its items directly contains.
         public var tight: Bool
-        /// Delimiter style for ordered lists.
+        /// The delimiter of an ordered list's markers; `.period` for a bullet list.
         public var orderedDelimiter: OrderedDelimiter
-        /// Marker character for bullet lists.
+        /// The marker character of a bullet list's items; `.hyphen` for an ordered list.
         public var bulletMarker: BulletMarker
     }
 
@@ -399,7 +401,7 @@ extension MarkdownNode {
 extension MarkdownNode {
     /// The node's source range, or `nil` without `MarkdownDocument.ParseOptions.sourcePosition` or for a node that has no source range.
     ///
-    /// The range runs from the node's first content byte to just past its last.
+    /// The range runs from the node's first byte in the source, such as a block quote's `>` or a code span's opening backtick, to just past its last.
     public var sourceRange: Range<SourcePosition>? {
         _view.sourceRange(of: _index)
     }
