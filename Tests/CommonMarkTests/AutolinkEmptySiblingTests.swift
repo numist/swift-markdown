@@ -11,88 +11,91 @@
 import Testing
 import CommonMark
 
-// Depth-first: each node's kind, text literal, and (for links) destination URL.
-private func dfsAutolinkNodes(
-    _ node: borrowing MarkdownNode,
-    into out: inout [(kind: MarkdownNode.Kind, text: String?, url: String?)]
-) {
-    out.append((node.kind, node.literal(), node.url()))
-    node.children.forEach { child in
-        dfsAutolinkNodes(child, into: &out)
-    }
-}
-
 /// An extended autolink's sibling text nodes hold the text around it, with no empty text node where nothing
 /// precedes or follows it.
 @Suite("Text around extended autolinks")
 struct AutolinkEmptySiblingTests {
 
-    private static let options: MarkdownDocument.ParseOptions = [.gfmAutolink]
-
-    private func nodes(
-        in src: String, options: MarkdownDocument.ParseOptions
-    ) -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
-        MarkdownDocument.withParsedDocument(src, options: options) {
-            doc -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] in
-            var out: [(kind: MarkdownNode.Kind, text: String?, url: String?)] = []
-            dfsAutolinkNodes(doc.root, into: &out)
-            return out
-        }
-    }
-
     @Test("www autolink between text")
     func wwwMidText() {
-        let ns = nodes(in: "x www.example.com y", options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, "x ", nil, "www.example.com", " y"])
-        #expect(ns.compactMap(\.url) == ["http://www.example.com"])
+        #expect(TreeDump.dump("x www.example.com y", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "x "
+                link "http://www.example.com" ""
+                  text "www.example.com"
+                text " y"
+
+            """)
     }
 
     @Test("scheme URL after text")
     func schemeURLAfterText() {
-        let ns = nodes(in: "x https://y.io", options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "x ", nil, "https://y.io"])
-        #expect(ns.compactMap(\.url) == ["https://y.io"])
+        #expect(TreeDump.dump("x https://y.io", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "x "
+                link "https://y.io" ""
+                  text "https://y.io"
+
+            """)
     }
 
     @Test("www autolink alone")
     func wwwAtStart() {
-        let ns = nodes(in: "www.example.com", options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "www.example.com"])
-        #expect(ns.compactMap(\.url) == ["http://www.example.com"])
+        #expect(TreeDump.dump("www.example.com", options: .gfmAutolink) == """
+            document
+              paragraph
+                link "http://www.example.com" ""
+                  text "www.example.com"
+
+            """)
     }
 
     @Test("email autolink alone")
     func emailAlone() {
-        let ns = nodes(in: "o@x.x", options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "o@x.x"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@x.x"])
+        #expect(TreeDump.dump("o@x.x", options: .gfmAutolink) == """
+            document
+              paragraph
+                link "mailto:o@x.x" ""
+                  text "o@x.x"
+
+            """)
     }
 
     @Test("scheme URL alone")
     func schemeURLAlone() {
-        let ns = nodes(in: "https://x.io", options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "https://x.io"])
-        #expect(ns.compactMap(\.url) == ["https://x.io"])
+        #expect(TreeDump.dump("https://x.io", options: .gfmAutolink) == """
+            document
+              paragraph
+                link "https://x.io" ""
+                  text "https://x.io"
+
+            """)
     }
 
     @Test("email autolink before text")
     func emailTrailingText() {
-        let ns = nodes(in: "o@x.x y", options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "o@x.x", " y"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@x.x"])
+        #expect(TreeDump.dump("o@x.x y", options: .gfmAutolink) == """
+            document
+              paragraph
+                link "mailto:o@x.x" ""
+                  text "o@x.x"
+                text " y"
+
+            """)
     }
 
     @Test("email autolink before emphasis")
     func emailBeforeEmphasis() {
-        let ns = nodes(in: "o@x.x*a*", options: Self.options)
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .emphasis, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "o@x.x", nil, "a"])
-        #expect(ns.compactMap(\.url) == ["mailto:o@x.x"])
+        #expect(TreeDump.dump("o@x.x*a*", options: .gfmAutolink) == """
+            document
+              paragraph
+                link "mailto:o@x.x" ""
+                  text "o@x.x"
+                emph
+                  text "a"
+
+            """)
     }
 }

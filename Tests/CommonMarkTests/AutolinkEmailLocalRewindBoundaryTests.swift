@@ -11,17 +11,6 @@
 import Testing
 import CommonMark
 
-// Depth-first: each node's kind, text literal, and (for links) destination URL.
-private func dfsAutolinkNodes(
-    _ node: borrowing MarkdownNode,
-    into out: inout [(kind: MarkdownNode.Kind, text: String?, url: String?)]
-) {
-    out.append((node.kind, node.literal(), node.url()))
-    node.children.forEach { child in
-        dfsAutolinkNodes(child, into: &out)
-    }
-}
-
 /// Extended email autolinks are recognized left to right. When a candidate address is rejected, the next address's
 /// local part starts no earlier than the character that ended the candidate's domain: `+`, or a `.` not followed by
 /// an alphanumeric, ends a domain, while `-`, `_`, alphanumerics and a `.` followed by an alphanumeric continue it.
@@ -29,26 +18,15 @@ private func dfsAutolinkNodes(
 @Suite("Extended email autolink local part after a rejected candidate")
 struct AutolinkEmailLocalRewindBoundaryTests {
 
-    private static let options: MarkdownDocument.ParseOptions = [.gfmAutolink]
-
-    private func nodes(
-        in src: String
-    ) -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] {
-        MarkdownDocument.withParsedDocument(src, options: Self.options) {
-            doc -> [(kind: MarkdownNode.Kind, text: String?, url: String?)] in
-            var out: [(kind: MarkdownNode.Kind, text: String?, url: String?)] = []
-            dfsAutolinkNodes(doc.root, into: &out)
-            return out
-        }
-    }
-
     @Test("a plain email links with a `mailto:` destination")
-    func plainEmailLinks() throws {
-        let ns = nodes(in: "a@b.c")
-        try #require(ns.count == 4, "expected document > paragraph > link > text")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, nil, "a@b.c"])
-        #expect(try #require(ns.compactMap(\.url).first) == "mailto:a@b.c")
+    func plainEmailLinks() {
+        #expect(TreeDump.dump("a@b.c", options: .gfmAutolink) == """
+            document
+              paragraph
+                link "mailto:a@b.c" ""
+                  text "a@b.c"
+
+            """)
     }
 
     // MARK: - `+` ends a domain
@@ -56,109 +34,161 @@ struct AutolinkEmailLocalRewindBoundaryTests {
     @Test("`l@o+@b.b`: the `+` bounds the second local part")
     func plusBoundsLocalPart() {
         // `l@o` is rejected (its domain has no period), and its domain ends at `+`.
-        let ns = nodes(in: "l@o+@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@o", nil, "+@b.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:+@b.b"])
+        #expect(TreeDump.dump("l@o+@b.b", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "l@o"
+                link "mailto:+@b.b" ""
+                  text "+@b.b"
+
+            """)
     }
 
     @Test("`l@oo+@b.b`: the `+` bounds the second local part")
     func plusBoundsLocalPartTwoChars() {
-        let ns = nodes(in: "l@oo+@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@oo", nil, "+@b.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:+@b.b"])
+        #expect(TreeDump.dump("l@oo+@b.b", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "l@oo"
+                link "mailto:+@b.b" ""
+                  text "+@b.b"
+
+            """)
     }
 
     @Test("`a@b+c@d.d`: the `+` bounds the second local part to `+c`")
     func plusBoundsLocalPartWithTrailingAlnum() {
-        let ns = nodes(in: "a@b+c@d.d")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b", nil, "+c@d.d"])
-        #expect(ns.compactMap(\.url) == ["mailto:+c@d.d"])
+        #expect(TreeDump.dump("a@b+c@d.d", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "a@b"
+                link "mailto:+c@d.d" ""
+                  text "+c@d.d"
+
+            """)
     }
 
     @Test("`a@b_+c@d.e`: the `+` bounds the second local part to `+c`")
     func plusBoundsLocalPartAfterUnderscore() {
-        let ns = nodes(in: "a@b_+c@d.e")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b_", nil, "+c@d.e"])
-        #expect(ns.compactMap(\.url) == ["mailto:+c@d.e"])
+        #expect(TreeDump.dump("a@b_+c@d.e", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "a@b_"
+                link "mailto:+c@d.e" ""
+                  text "+c@d.e"
+
+            """)
     }
 
     // MARK: - `.`, `-`, `_` and alphanumerics continue a domain
 
     @Test("`l@o.p@b.b`: the second `@` restarts the address at `o.p`")
     func dotContinuesDomain() {
-        let ns = nodes(in: "l@o.p@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o.p@b.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:o.p@b.b"])
+        #expect(TreeDump.dump("l@o.p@b.b", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "l@"
+                link "mailto:o.p@b.b" ""
+                  text "o.p@b.b"
+
+            """)
     }
 
     @Test("`l@o-p@b.b`: the second `@` restarts the address at `o-p`")
     func hyphenContinuesDomain() {
-        let ns = nodes(in: "l@o-p@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o-p@b.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:o-p@b.b"])
+        #expect(TreeDump.dump("l@o-p@b.b", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "l@"
+                link "mailto:o-p@b.b" ""
+                  text "o-p@b.b"
+
+            """)
     }
 
     @Test("`l@o_p@b.b`: the second `@` restarts the address at `o_p`")
     func underscoreContinuesDomain() {
-        let ns = nodes(in: "l@o_p@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "o_p@b.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:o_p@b.b"])
+        #expect(TreeDump.dump("l@o_p@b.b", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "l@"
+                link "mailto:o_p@b.b" ""
+                  text "o_p@b.b"
+
+            """)
     }
 
     @Test("`l@abc@b.b`: the second `@` restarts the address at `abc`")
     func alnumContinuesDomain() {
-        let ns = nodes(in: "l@abc@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "abc@b.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:abc@b.b"])
+        #expect(TreeDump.dump("l@abc@b.b", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "l@"
+                link "mailto:abc@b.b" ""
+                  text "abc@b.b"
+
+            """)
     }
 
     @Test("`l@+@b.b`: the local part after the rejected `l@` is `+`")
     func plusAtStart() {
-        let ns = nodes(in: "l@+@b.b")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "l@", nil, "+@b.b"])
-        #expect(ns.compactMap(\.url) == ["mailto:+@b.b"])
+        #expect(TreeDump.dump("l@+@b.b", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "l@"
+                link "mailto:+@b.b" ""
+                  text "+@b.b"
+
+            """)
     }
 
     @Test("`xy@ab@c.c`: the second `@` restarts the address at `ab`")
     func alnumFirstLocalPart() {
-        let ns = nodes(in: "xy@ab@c.c")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "xy@", nil, "ab@c.c"])
-        #expect(ns.compactMap(\.url) == ["mailto:ab@c.c"])
+        #expect(TreeDump.dump("xy@ab@c.c", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "xy@"
+                link "mailto:ab@c.c" ""
+                  text "ab@c.c"
+
+            """)
     }
 
     // MARK: - A `.` not followed by an alphanumeric ends a domain
 
     @Test("`a@b.+@c.c`: the local part after the rejected `a@b` is `.+`")
     func dotThenPlusBoundary() {
-        let ns = nodes(in: "a@b.+@c.c")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b", nil, ".+@c.c"])
-        #expect(ns.compactMap(\.url) == ["mailto:.+@c.c"])
+        #expect(TreeDump.dump("a@b.+@c.c", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "a@b"
+                link "mailto:.+@c.c" ""
+                  text ".+@c.c"
+
+            """)
     }
 
     @Test("`a@b_.+@c.c`: the local part after the rejected `a@b_` is `.+`")
     func dotThenPlusBoundaryAfterUnderscore() {
-        let ns = nodes(in: "a@b_.+@c.c")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b_", nil, ".+@c.c"])
-        #expect(ns.compactMap(\.url) == ["mailto:.+@c.c"])
+        #expect(TreeDump.dump("a@b_.+@c.c", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "a@b_"
+                link "mailto:.+@c.c" ""
+                  text ".+@c.c"
+
+            """)
     }
 
     @Test("`a@b..c@d.d`: the local part after the rejected `a@b` is `..c`")
     func doubledDotBoundary() {
-        let ns = nodes(in: "a@b..c@d.d")
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .link, .text])
-        #expect(ns.map(\.text) == [nil, nil, "a@b", nil, "..c@d.d"])
-        #expect(ns.compactMap(\.url) == ["mailto:..c@d.d"])
+        #expect(TreeDump.dump("a@b..c@d.d", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "a@b"
+                link "mailto:..c@d.d" ""
+                  text "..c@d.d"
+
+            """)
     }
 }

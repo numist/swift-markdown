@@ -23,67 +23,190 @@ struct DelimiterShapedParagraphLineTests {
         let line: String
         /// `line` with `:-`, a delimiter row, in place of `-:-`.
         let delimiterRow: String
-        /// The tree of `prefix` followed by `count` lines.
-        let tree: @Sendable (_ count: Int) -> String
+        /// The tree of `prefix` followed by two lines.
+        let twoLines: String
         /// The tree of `prefix` followed by `delimiterRow`.
         let table: String
+        /// The tree of `prefix` alone, which each line extends by `continuation`.
+        let paragraph: String
+        let continuation: String
         let testDescription: String
-
-        func source(count: Int) -> String {
-            prefix + String(repeating: line, count: count)
-        }
-
-        var tableSource: String {
-            prefix + delimiterRow
-        }
     }
 
     private static let longLine = String(repeating: "a", count: 4000)
 
-    /// The trees of `count` continuation lines of `-:-`, indented by `indent`.
-    private static func continuationLineTrees(_ count: Int, indent: String) -> String {
-        String(repeating: "\(indent)softbreak\n\(indent)text \"-:-\"\n", count: count)
-    }
-
-    private static func headerTree(_ header: String, indent: String) -> String {
-        """
-        \(indent)table
-        \(indent)  table_header
-        \(indent)    table_cell align=left colspan=1 rowspan=1
-        \(indent)      text "\(header)"
-
-        """
-    }
-
     static let shapes: [Shape] = [
-        Shape(prefix: "> a\n", line: "> -:-\n", delimiterRow: "> :-\n", tree: {
-            "document\n  block_quote\n    paragraph\n      text \"a\"\n" + continuationLineTrees($0, indent: "      ")
-        }, table: "document\n  block_quote\n" + headerTree("a", indent: "    "), testDescription: "block quote"),
-        Shape(prefix: "a\r\n", line: "-:-\r\n", delimiterRow: ":-\r\n", tree: {
-            "document\n  paragraph\n    text \"a\"\n" + continuationLineTrees($0, indent: "    ")
-        }, table: "document\n" + headerTree("a", indent: "  "), testDescription: "CRLF"),
-        Shape(prefix: "> a\n>\t\tb\n", line: "> -:-\n", delimiterRow: "> :-\n", tree: {
-            "document\n  block_quote\n    paragraph\n      text \"a\"\n      softbreak\n      text \"b\"\n"
-                + continuationLineTrees($0, indent: "      ")
-        }, table: "document\n  block_quote\n    paragraph\n      text \"a\"\n" + headerTree("b", indent: "    "),
-           testDescription: "block quote after a tab-indented line"),
-        Shape(prefix: "> \(longLine)\n", line: "> -:-\n", delimiterRow: "> :-\n", tree: {
-            "document\n  block_quote\n    paragraph\n      text \"\(longLine)\"\n" + continuationLineTrees($0, indent: "      ")
-        }, table: "document\n  block_quote\n" + headerTree(longLine, indent: "    "), testDescription: "block quote after a long line"),
+        Shape(
+            prefix: "> a\n",
+            line: "> -:-\n",
+            delimiterRow: "> :-\n",
+            twoLines: """
+                document
+                  block_quote
+                    paragraph
+                      text "a"
+                      softbreak
+                      text "-:-"
+                      softbreak
+                      text "-:-"
+
+                """,
+            table: """
+                document
+                  block_quote
+                    table
+                      table_header
+                        table_cell align=left colspan=1 rowspan=1
+                          text "a"
+
+                """,
+            paragraph: """
+                document
+                  block_quote
+                    paragraph
+                      text "a"
+
+                """,
+            continuation: """
+                      softbreak
+                      text "-:-"
+
+                """,
+            testDescription: "block quote"
+        ),
+        Shape(
+            prefix: "a\r\n",
+            line: "-:-\r\n",
+            delimiterRow: ":-\r\n",
+            twoLines: """
+                document
+                  paragraph
+                    text "a"
+                    softbreak
+                    text "-:-"
+                    softbreak
+                    text "-:-"
+
+                """,
+            table: """
+                document
+                  table
+                    table_header
+                      table_cell align=left colspan=1 rowspan=1
+                        text "a"
+
+                """,
+            paragraph: """
+                document
+                  paragraph
+                    text "a"
+
+                """,
+            continuation: """
+                    softbreak
+                    text "-:-"
+
+                """,
+            testDescription: "CRLF"
+        ),
+        Shape(
+            prefix: "> a\n>\t\tb\n",
+            line: "> -:-\n",
+            delimiterRow: "> :-\n",
+            twoLines: """
+                document
+                  block_quote
+                    paragraph
+                      text "a"
+                      softbreak
+                      text "b"
+                      softbreak
+                      text "-:-"
+                      softbreak
+                      text "-:-"
+
+                """,
+            table: """
+                document
+                  block_quote
+                    paragraph
+                      text "a"
+                    table
+                      table_header
+                        table_cell align=left colspan=1 rowspan=1
+                          text "b"
+
+                """,
+            paragraph: """
+                document
+                  block_quote
+                    paragraph
+                      text "a"
+                      softbreak
+                      text "b"
+
+                """,
+            continuation: """
+                      softbreak
+                      text "-:-"
+
+                """,
+            testDescription: "block quote after a tab-indented line"
+        ),
+        Shape(
+            prefix: "> \(longLine)\n",
+            line: "> -:-\n",
+            delimiterRow: "> :-\n",
+            twoLines: """
+                document
+                  block_quote
+                    paragraph
+                      text "\(longLine)"
+                      softbreak
+                      text "-:-"
+                      softbreak
+                      text "-:-"
+
+                """,
+            table: """
+                document
+                  block_quote
+                    table
+                      table_header
+                        table_cell align=left colspan=1 rowspan=1
+                          text "\(longLine)"
+
+                """,
+            paragraph: """
+                document
+                  block_quote
+                    paragraph
+                      text "\(longLine)"
+
+                """,
+            continuation: """
+                      softbreak
+                      text "-:-"
+
+                """,
+            testDescription: "block quote after a long line"
+        ),
     ]
 
     @Test(arguments: shapes)
     func linesContinueParagraph(_ shape: Shape) {
-        #expect(TreeDump.dump(shape.source(count: 2), options: .tables) == shape.tree(2))
+        #expect(TreeDump.dump(shape.prefix + shape.line + shape.line, options: .tables) == shape.twoLines)
     }
 
     @Test(arguments: shapes)
     func delimiterRowOpensTable(_ shape: Shape) {
-        #expect(TreeDump.dump(shape.tableSource, options: .tables) == shape.table)
+        #expect(TreeDump.dump(shape.prefix + shape.delimiterRow, options: .tables) == shape.table)
     }
 
     @Test(.timeLimit(.minutes(1)), arguments: shapes)
     func manyLinesContinueParagraph(_ shape: Shape) {
-        #expect(TreeDump.dump(shape.source(count: 40_000), options: .tables) == shape.tree(40_000))
+        let source = shape.prefix + String(repeating: shape.line, count: 40_000)
+        let tree = shape.paragraph + String(repeating: shape.continuation, count: 40_000)
+        #expect(TreeDump.dump(source, options: .tables) == tree)
     }
 }
