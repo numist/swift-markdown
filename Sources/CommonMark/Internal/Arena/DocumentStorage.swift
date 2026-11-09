@@ -126,7 +126,7 @@ internal struct DocumentStorage: ~Copyable {
     /// Trims a single-segment literal in place, dropping `trimStart` bytes and keeping `newLength`. Each leaf owns its segment, so no other node changes.
     internal mutating func trimLiteral(of node: Index, trimStart: Int, newLength: Int) {
         guard case .literal(let ref) = nodes[node].data, ref.count == 1 else {
-            preconditionFailure("a delimiter run's text node is a single-segment literal")
+            preconditionFailure("a delimiter run's or an image opener's text node is a single-segment literal")
         }
         let i = Int(ref.first)
         segments[i].offset += Int32(trimStart)
