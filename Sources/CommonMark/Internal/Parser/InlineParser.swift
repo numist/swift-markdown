@@ -436,8 +436,8 @@ extension BlockParser {
             )
             emitGFMAutolink(
                 auto: auto,
-                content: content,
-                into: parent
+                into: parent,
+                content: content
             )
             pendingTextStart = auto.urlEnd
             return auto.urlEnd
@@ -1731,38 +1731,15 @@ extension BlockParser {
         return nil
     }
 
-    /// Skips whitespace characters (Characters and lines).
-    private func skipSpaceChars(start: Int, content: borrowing ContentSpan) -> Int {
-        let end = content.endOffset
-        var i = start
-        while i < end {
-            let b = content[i]
-            if !b.isASCIISpace {
-                break
-            }
-            i += 1
-        }
-        return i
-    }
-
     // MARK: - Extended autolinks
 
-    /// The form of an extended autolink, which decides the scheme prefix its destination gets.
-    private enum GFMAutolinkForm {
-        case uri      // already has http:// or https:// or ftp:// prefix
-        case www      // needs http:// synthesized
-        case email    // needs mailto: synthesized
-    }
-
-    /// An extended autolink's visible text range and form.
-    ///
-    /// `emailSchemeFolded` marks an email whose range begins with a `mailto:` or `xmpp:` scheme, so the range is the
-    /// destination as is.
+    /// An extended autolink's visible text range, and the scheme its destination adds before that text: `http://`
+    /// for a `www.` link, `mailto:` for an email that doesn't begin with a `mailto:` or `xmpp:` scheme, and nothing
+    /// otherwise.
     private struct GFMAutolinkMatch {
         var urlStart: Int
         var urlEnd: Int
-        var form: GFMAutolinkForm
-        var emailSchemeFolded: Bool = false
+        var destinationPrefix: String
     }
 
     /// Matches a `://` or `www.` extended autolink at `cursor`. Emails are matched by `gfmEmailAutolinkPass`.
@@ -1804,7 +1781,7 @@ extension BlockParser {
         return GFMAutolinkMatch(
             urlStart: schemeStart,
             urlEnd: trimmedEnd,
-            form: .uri
+            destinationPrefix: ""
         )
     }
 
@@ -1850,7 +1827,7 @@ extension BlockParser {
             urlStart: start, urlEnd: urlEnd,
             content: content
         )
-        return GFMAutolinkMatch(urlStart: start, urlEnd: trimmedEnd, form: .www)
+        return GFMAutolinkMatch(urlStart: start, urlEnd: trimmedEnd, destinationPrefix: "http://")
     }
 
     /// The length of lowercase `scheme` (`mailto:` or `xmpp:`) ending at `colon`, when it lies within
@@ -1945,30 +1922,19 @@ extension BlockParser {
             guard i > atSign + 1, hasPeriodBeforeAlphanumeric, content[i - 1].isASCIILetter else {
                 return nil
             }
-            return GFMAutolinkMatch(urlStart: localStart, urlEnd: i, form: .email, emailSchemeFolded: schemeFolded)
+            return GFMAutolinkMatch(urlStart: localStart, urlEnd: i, destinationPrefix: schemeFolded ? "" : "mailto:")
         }
     }
 
-    /// Emits a `.link` with one `.text` child for a `://` or `www.` autolink; `www.` gets an `http://` prefix.
-    private mutating func emitGFMAutolink(auto: GFMAutolinkMatch, content: borrowing ContentSpan, into parent: DocumentStorage.Index) {
-        precondition(auto.form != .email, "email autolinks are emitted by gfmEmailAutolinkPass")
-        let urlChunk: Chunk
-        if auto.form == .uri {
-            urlChunk = content.chunk(
-                offset: auto.urlStart,
-                length: auto.urlEnd - auto.urlStart
-            )
-        } else {
-            urlChunk = materializeAutolinkURL(
-                prefix: "http://",
-                start: auto.urlStart, end: auto.urlEnd,
-                content: content
-            )
-        }
+    /// Emits a `.link` with one `.text` child for a `://` or `www.` autolink.
+    private mutating func emitGFMAutolink(auto: GFMAutolinkMatch, into parent: DocumentStorage.Index, content: borrowing ContentSpan) {
         let textChunk = content.chunk(
             offset: auto.urlStart,
             length: auto.urlEnd - auto.urlStart
         )
+        let urlChunk = auto.destinationPrefix.isEmpty
+            ? textChunk
+            : materializeAutolinkURL(prefix: auto.destinationPrefix, start: auto.urlStart, end: auto.urlEnd, content: content)
         let urlRef = storage.intern(urlChunk)
         let textRef = storage.intern(textChunk)
         let linkIdx = appendInline(.link, .link(url: urlRef, title: .empty), to: parent, start: auto.urlStart, end: auto.urlEnd, content: content)
@@ -2133,6 +2099,22 @@ extension BlockParser {
         return true
     }
 
+    // MARK: - Helpers
+
+    /// Skips whitespace characters (Characters and lines).
+    private func skipSpaceChars(start: Int, content: borrowing ContentSpan) -> Int {
+        let end = content.endOffset
+        var i = start
+        while i < end {
+            let b = content[i]
+            if !b.isASCIISpace {
+                break
+            }
+            i += 1
+        }
+        return i
+    }
+
     /// Appends `count` bytes to `out`, returning their chunk.
     private static func appendUTF8Bytes(bytes: Bytes8, count: Int, into out: inout UniqueArray<UInt8>) -> Chunk {
         let offset = out.count
@@ -2141,8 +2123,6 @@ extension BlockParser {
         }
         return Chunk(offset: offset, length: count, inSource: false)
     }
-
-    // MARK: - Helpers
 
     /// Emits a `.text` node over `start..<end` if non-empty. Every line ending flushes the run, so it lies within one segment.
     private mutating func flushPendingText(start: Int, end: Int, content: borrowing ContentSpan, into parent: DocumentStorage.Index) {
@@ -2378,14 +2358,9 @@ extension BlockParser {
 
             // With a folded scheme the visible run is the destination, joined in the arena if it is several
             // segments, since a URL is read as one span. A plain email gets `mailto:`.
-            let urlRef: ContentRef
-            if !auto.emailSchemeFolded {
-                urlRef = materializeURL(prefix: "mailto:", for: emailRef)
-            } else if emailRef.count > 1 {
-                urlRef = materializeURL(prefix: "", for: emailRef)
-            } else {
-                urlRef = emailRef
-            }
+            let urlRef = auto.destinationPrefix.isEmpty && emailRef.count == 1
+                ? emailRef
+                : materializeURL(prefix: auto.destinationPrefix, for: emailRef)
             let linkIdx = storage.appendNode(NodeRecord(
                 kind: .link, parent: parent, data: .link(url: urlRef, title: .empty)))
             let childIdx = storage.appendNode(NodeRecord(
