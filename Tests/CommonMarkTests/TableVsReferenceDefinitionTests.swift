@@ -17,167 +17,108 @@ import CommonMark
 @Suite("GFM table vs link reference definition precedence")
 struct TableVsReferenceDefinitionTests {
 
-    private struct Block {
-        enum Kind { case none, paragraph, heading, table, other }
-        var kind: Kind = .none
-        var alignments: [MarkdownNode.TableAlignment] = []
-        var headerCells: [String] = []
-        var bodyRows: [[String]] = []
-        /// The concatenated literal text of the block's direct-child inlines (paragraph / heading; empty for a table / other).
-        var text: String = ""
-    }
-
-    /// Extract a `.table` node's header-cell texts, per-column alignments, and body-row cell texts.
-    private func tableBlock(from node: borrowing MarkdownNode) -> Block {
-        var block = Block()
-        block.kind = .table
-        node.children.forEach { row in
-            guard case .tableRow(let isHeader) = row.kind else { return }
-            var cellTexts: [String] = []
-            var aligns: [MarkdownNode.TableAlignment] = []
-            row.children.forEach { cell in
-                guard case .tableCell(let alignment, _, _) = cell.kind else { return }
-                aligns.append(alignment)
-                var text = ""
-                cell.children.forEach { inline in
-                    if let lit = inline.literal() { text += lit }
-                }
-                cellTexts.append(text)
-            }
-            if isHeader {
-                block.headerCells = cellTexts
-                block.alignments = aligns
-            } else {
-                block.bodyRows.append(cellTexts)
-            }
-        }
-        return block
-    }
-
-    /// The document's top-level blocks, each classified as paragraph / heading / table (with shape).
-    private func blocks(
-        _ source: String,
-        options: MarkdownDocument.ParseOptions = [.tables]
-    ) -> [Block] {
-        MarkdownDocument.withParsedDocument(source, options: options) { doc -> [Block] in
-            var out: [Block] = []
-            doc.root.children.forEach { child in
-                var block = Block()
-                switch child.kind {
-                case .paragraph:
-                    block.kind = .paragraph
-                    child.children.forEach { inline in
-                        if let lit = inline.literal() { block.text += lit }
-                    }
-                case .heading:
-                    block.kind = .heading
-                    child.children.forEach { inline in
-                        if let lit = inline.literal() { block.text += lit }
-                    }
-                case .table:
-                    block = self.tableBlock(from: child)
-                default:
-                    block.kind = .other
-                }
-                out.append(block)
-            }
-            return out
-        }
-    }
-
-    /// The first resolved reference-link URL anywhere in `source`, or `nil`.
-    private func firstLinkURL(
-        _ source: String,
-        options: MarkdownDocument.ParseOptions = [.tables]
-    ) -> String? {
-        MarkdownDocument.withParsedDocument(source, options: options) { doc -> String? in
-            var found: String? = nil
-            func walk(_ n: borrowing MarkdownNode) {
-                if found == nil, case .link = n.kind { found = n.url() }
-                n.children.forEach { walk($0) }
-            }
-            walk(doc.root)
-            return found
-        }
-    }
-
+    /// Read as a whole, `[\n|-\n]:/` is a link reference definition with label `\n|-\n`.
     @Test("a delimiter-row second line forms a table even when the paragraph reads as a link reference definition")
-    func delimiterRowBeatsReferenceDefinition() throws {
-        // Read as a whole, `[\n|-\n]:/` is a link reference definition with label `\n|-\n`.
-        let doc = blocks("[\n|-\n]:/")
-        let table = try #require(doc.first, "expected a block, got an empty document")
-        try #require(table.kind == .table, "expected a table, got \(table.kind)")
-        #expect(table.alignments == [.none])
-        #expect(table.headerCells == ["["])
-        #expect(table.bodyRows == [["]:/"]])
-        #expect(doc.count == 1)
+    func delimiterRowBeatsReferenceDefinition() {
+        #expect(TreeDump.dump("[\n|-\n]:/", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "["
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "]:/"
+
+            """)
     }
 
     @Test("the same table forms when the paragraph does not read as a link reference definition")
-    func delimiterRowWithoutColon() throws {
-        let doc = blocks("[\n|-\n]a")
-        let table = try #require(doc.first, "expected a block, got an empty document")
-        try #require(table.kind == .table, "expected a table, got \(table.kind)")
-        #expect(table.alignments == [.none])
-        #expect(table.headerCells == ["["])
-        #expect(table.bodyRows == [["]a"]])
-        #expect(doc.count == 1)
+    func delimiterRowWithoutColon() {
+        #expect(TreeDump.dump("[\n|-\n]a", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "["
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "]a"
+
+            """)
     }
 
+    /// No definition exists, so a later `[foo]` stays literal.
     @Test("a complete first-line link reference definition becomes the header cell when a delimiter row follows")
-    func firstLineReferenceDefinitionAbsorbedAsHeader() throws {
-        let doc = blocks("[foo]: /bar\n|-\n|x")
-        let table = try #require(doc.first, "expected a block, got an empty document")
-        try #require(table.kind == .table, "expected a table, got \(table.kind)")
-        #expect(table.headerCells == ["[foo]: /bar"])
-        #expect(table.bodyRows == [["x"]])
-        #expect(doc.count == 1)
-        // No definition exists, so a later `[foo]` stays literal.
-        #expect(firstLinkURL("[foo]: /bar\n|-\n|x\n\n[foo]") == nil, "the link reference definition must not be registered")
+    func firstLineReferenceDefinitionAbsorbedAsHeader() {
+        #expect(TreeDump.dump("[foo]: /bar\n|-\n|x", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "[foo]: /bar"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "x"
+
+            """)
+        #expect(TreeDump.dump("[foo]: /bar\n|-\n|x\n\n[foo]", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "[foo]: /bar"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "x"
+              paragraph
+                text "[foo]"
+
+            """)
     }
 
     @Test("a multi-line link reference definition without a delimiter row defines a link")
-    func multiLineReferenceDefinition() throws {
-        let doc = blocks("[a\nb]: /u\n\n[a b]")
-        try #require(doc.count == 1, "expected the link reference definition to be consumed, leaving one block; got \(doc.count)")
-        #expect(doc[0].kind == .paragraph, "expected a paragraph, got \(doc[0].kind)")
-        let url = try #require(firstLinkURL("[a\nb]: /u\n\n[a b]"), "expected `[a b]` to resolve to a link")
-        #expect(url == "/u")
+    func multiLineReferenceDefinition() {
+        #expect(TreeDump.dump("[a\nb]: /u\n\n[a b]", options: [.tables]) == """
+            document
+              paragraph
+                link "/u" ""
+                  text "a b"
+
+            """)
     }
 
     // MARK: - Delimiter row after a complete link reference definition
 
-    /// The definition's paragraph is open when the bare `-` is read, and an empty list item cannot interrupt a
-    /// paragraph (List items), so the `-` is paragraph text once the definition is removed.
-    @Test("a bare `-` after a complete single-line link reference definition is paragraph text")
-    func bareDelimiterAfterCompleteReferenceDefinition() {
-        #expect(TreeDump.dump("[o]:o\n-", options: [.tables]) == """
+    /// The `-` underlines no setext heading, since the paragraph before it holds only a link reference definition
+    /// (Setext headings), and an empty list item cannot interrupt a paragraph (List items), so the `-` is paragraph text.
+    @Test("a bare `-` after a complete single-line link reference definition is paragraph text", arguments: [
+        ("[o]:o\n-", """
             document
               paragraph
                 text "-"
 
-            """)
-    }
-
-    /// The definition's paragraph is open when the bare `-` is read, and an empty list item cannot interrupt a
-    /// paragraph (List items), so the `-` is paragraph text once the definition is removed.
-    @Test("a bare `-` after a link reference definition with a space before the destination is paragraph text")
-    func bareDelimiterAfterCompleteReferenceDefinitionWithSpace() {
-        #expect(TreeDump.dump("[o]: o\n-", options: [.tables]) == """
+            """),
+        ("[o]: o\n-", """
             document
               paragraph
                 text "-"
 
-            """)
+            """),
+    ])
+    func bareDelimiterAfterCompleteReferenceDefinition(_ source: String, _ tree: String) {
+        #expect(TreeDump.dump(source, options: [.tables]) == tree)
     }
 
     @Test("a pipe delimiter row after a complete link reference definition forms a table")
-    func pipeDelimiterAfterCompleteReferenceDefinitionFormsTable() throws {
-        let doc = blocks("[o]:o\n|-")
-        let table = try #require(doc.first, "expected a block, got an empty document")
-        try #require(table.kind == .table, "expected a table, got \(table.kind)")
-        #expect(table.headerCells == ["[o]:o"])
-        #expect(table.bodyRows == [])
-        #expect(doc.count == 1)
+    func pipeDelimiterAfterCompleteReferenceDefinitionFormsTable() {
+        #expect(TreeDump.dump("[o]:o\n|-", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "[o]:o"
+
+            """)
     }
 }

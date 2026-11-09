@@ -16,72 +16,106 @@ import CommonMark
 @Suite("Table delimiter row on a lazy continuation line")
 struct TableLazyDelimiterTests {
 
-    private func nodeKinds(_ source: String) -> (hasTable: Bool, hasHeading: Bool, hasParagraph: Bool) {
-        MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> (Bool, Bool, Bool) in
-            var hasTable = false, hasHeading = false, hasParagraph = false
-            func walk(_ n: borrowing MarkdownNode) {
-                switch n.kind {
-                case .table: hasTable = true
-                case .heading: hasHeading = true
-                case .paragraph: hasParagraph = true
-                default: break
-                }
-                n.children.forEach { walk($0) }
-            }
-            walk(doc.root)
-            return (hasTable, hasHeading, hasParagraph)
-        }
-    }
-
     // MARK: - Lazy continuation lines
 
     @Test("lazy `--` continuation in a block quote is paragraph text")
     func lazyDashDash() {
-        let k = nodeKinds(">o\n--")
-        #expect(!k.hasTable && k.hasParagraph)
+        #expect(TreeDump.dump(">o\n--", options: [.tables]) == """
+            document
+              block_quote
+                paragraph
+                  text "o"
+                  softbreak
+                  text "--"
+
+            """)
     }
 
     @Test("lazy pipe delimiter continuation in a block quote is paragraph text")
     func lazyPipeDelim() {
-        let k = nodeKinds(">o\n|-")
-        #expect(!k.hasTable && k.hasParagraph)
+        #expect(TreeDump.dump(">o\n|-", options: [.tables]) == """
+            document
+              block_quote
+                paragraph
+                  text "o"
+                  softbreak
+                  text "|-"
+
+            """)
     }
 
     @Test("lazy colon delimiter continuation in a block quote is paragraph text")
     func lazyColonDelim() {
-        let k = nodeKinds(">o\n:-")
-        #expect(!k.hasTable && k.hasParagraph)
+        #expect(TreeDump.dump(">o\n:-", options: [.tables]) == """
+            document
+              block_quote
+                paragraph
+                  text "o"
+                  softbreak
+                  text ":-"
+
+            """)
     }
 
     @Test("lazy pipe delimiter continuation in a list item is paragraph text")
     func lazyPipeDelimInList() {
-        let k = nodeKinds("- o\n|-")
-        #expect(!k.hasTable && k.hasParagraph)
+        #expect(TreeDump.dump("- o\n|-", options: [.tables]) == """
+            document
+              list bullet '-' tight
+                item
+                  paragraph
+                    text "o"
+                    softbreak
+                    text "|-"
+
+            """)
     }
 
     // MARK: - Prefixed and top-level lines
 
     @Test("a prefixed pipe delimiter in a block quote forms a table")
     func prefixedPipeFormsTable() {
-        let k = nodeKinds(">o\n>|-")
-        #expect(k.hasTable)
+        #expect(TreeDump.dump(">o\n>|-", options: [.tables]) == """
+            document
+              block_quote
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "o"
+
+            """)
     }
 
     @Test("a prefixed `--` in a block quote is a setext heading underline")
     func prefixedDashDashIsHeading() {
-        let k = nodeKinds(">o\n>--")
-        #expect(k.hasHeading && !k.hasTable)
+        #expect(TreeDump.dump(">o\n>--", options: [.tables]) == """
+            document
+              block_quote
+                heading 2
+                  text "o"
+
+            """)
     }
 
     @Test("a top-level pipe delimiter forms a table")
     func plainPipeFormsTable() {
-        let k = nodeKinds("o\n|-")
-        #expect(k.hasTable)
+        #expect(TreeDump.dump("o\n|-", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+
+            """)
     }
 
     @Test("a top-level `--` is a setext heading underline")
     func plainDashDashIsHeading() {
-        let k = nodeKinds("o\n--")
-        #expect(k.hasHeading && !k.hasTable)
+        #expect(TreeDump.dump("o\n--", options: [.tables]) == """
+            document
+              heading 2
+                text "o"
+
+            """)
     }
 }

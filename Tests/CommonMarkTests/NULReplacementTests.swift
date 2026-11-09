@@ -15,271 +15,223 @@ import CommonMark
 /// Other control characters are kept.
 @Suite("NUL replacement (U+0000 -> U+FFFD)")
 struct NULReplacementTests {
-    private static let replacement = "\u{FFFD}"
-    private static let nul = "\u{0}"
-
-    /// Concatenated `.text` / literal content across the whole tree (DFS), for coarse content checks.
-    private func allText(_ node: borrowing MarkdownNode) -> String {
-        var out = ""
-        if let lit = node.literal() { out += lit }
-        node.children.forEach { out += allText($0) }
-        return out
-    }
-
-    /// The whole document's literal text (DFS concatenation), parsed with `options`.
-    private func firstText(
-        _ source: String,
-        options: MarkdownDocument.ParseOptions = []
-    ) -> String {
-        MarkdownDocument.withParsedDocument(source, options: options) { doc in
-            allText(doc.root)
-        }
-    }
 
     @Test("NUL in paragraph text becomes U+FFFD")
     func paragraphText() {
-        let text = firstText("a\u{0}b")
-        #expect(text.contains(Self.replacement))
-        #expect(!text.contains(Self.nul))
-        #expect(text == "a\u{FFFD}b")
+        #expect(TreeDump.dump("a\u{0}b", options: []) == """
+            document
+              paragraph
+                text "a\u{FFFD}b"
+
+            """)
     }
 
     @Test("NUL in a code span becomes U+FFFD")
     func codeSpan() {
-        let text = MarkdownDocument.withParsedDocument("`\u{0}`") { doc -> String in
-            var out = ""
-            doc.root.children.forEach { p in
-                p.children.forEach { inline in
-                    if case .codeInline = inline.kind, let lit = inline.literal() { out += lit }
-                }
-            }
-            return out
-        }
-        #expect(text.contains(Self.replacement))
-        #expect(!text.contains(Self.nul))
-        #expect(text == "\u{FFFD}")
+        #expect(TreeDump.dump("`\u{0}`", options: []) == """
+            document
+              paragraph
+                code "\u{FFFD}"
+
+            """)
     }
 
     @Test("NUL in a fenced code block body becomes U+FFFD")
     func fencedCodeBlock() {
-        let body = MarkdownDocument.withParsedDocument("```\n\u{0}\n```") { doc -> String in
-            var out = ""
-            doc.root.children.forEach { if case .codeBlock = $0.kind, let b = $0.literal() { out += b } }
-            return out
-        }
-        #expect(body.contains(Self.replacement))
-        #expect(!body.contains(Self.nul))
+        #expect(TreeDump.dump("```\n\u{0}\n```", options: []) == """
+            document
+              code_block "" "\u{FFFD}\\n"
+
+            """)
     }
 
     @Test("NUL in an indented code block body becomes U+FFFD")
     func indentedCodeBlock() {
-        let body = MarkdownDocument.withParsedDocument("    \u{0}") { doc -> String in
-            var out = ""
-            doc.root.children.forEach { if case .codeBlock = $0.kind, let b = $0.literal() { out += b } }
-            return out
-        }
-        #expect(body.contains(Self.replacement))
-        #expect(!body.contains(Self.nul))
+        #expect(TreeDump.dump("    \u{0}", options: []) == """
+            document
+              code_block "" "\u{FFFD}\\n"
+
+            """)
     }
 
     @Test("NUL in a fenced code block info string becomes U+FFFD")
     func codeBlockInfoString() {
-        let info = MarkdownDocument.withParsedDocument("```\u{0}x\n\n```") { doc -> String in
-            var out = ""
-            doc.root.children.forEach { if let i = $0.codeBlockInfoString() { out += i } }
-            return out
-        }
-        #expect(info.contains(Self.replacement))
-        #expect(!info.contains(Self.nul))
-        #expect(info == "\u{FFFD}x")
+        #expect(TreeDump.dump("```\u{0}x\n\n```", options: []) == """
+            document
+              code_block "\u{FFFD}x" "\\n"
+
+            """)
     }
 
     @Test("NUL in an HTML block body becomes U+FFFD")
     func htmlBlock() {
-        let body = MarkdownDocument.withParsedDocument("<div>\n\u{0}\n</div>") { doc -> String in
-            var out = ""
-            doc.root.children.forEach { if case .htmlBlock = $0.kind, let b = $0.literal() { out += b } }
-            return out
-        }
-        #expect(body.contains(Self.replacement))
-        #expect(!body.contains(Self.nul))
+        #expect(TreeDump.dump("<div>\n\u{0}\n</div>", options: []) == """
+            document
+              html_block "<div>\\n\u{FFFD}\\n</div>\\n"
+
+            """)
     }
 
     @Test("NUL in an inline link destination becomes U+FFFD")
     func inlineLinkDestination() {
-        let url = MarkdownDocument.withParsedDocument("[a](\u{0})") { doc -> String in
-            var out = ""
-            doc.root.children.forEach { p in
-                p.children.forEach { inline in
-                    if case .link = inline.kind, let u = inline.url() { out += u }
-                }
-            }
-            return out
-        }
-        #expect(url.contains(Self.replacement))
-        #expect(!url.contains(Self.nul))
-        #expect(url == "\u{FFFD}")
+        #expect(TreeDump.dump("[a](\u{0})", options: []) == """
+            document
+              paragraph
+                link "\u{FFFD}" ""
+                  text "a"
+
+            """)
     }
 
     @Test("NUL in a reference-definition destination becomes U+FFFD")
     func referenceDefinitionDestination() {
-        let url = MarkdownDocument.withParsedDocument("[a]\n\n[a]: \u{0}") { doc -> String in
-            var out = ""
-            doc.root.children.forEach { p in
-                p.children.forEach { inline in
-                    if case .link = inline.kind, let u = inline.url() { out += u }
-                }
-            }
-            return out
-        }
-        #expect(url.contains(Self.replacement))
-        #expect(!url.contains(Self.nul))
-        #expect(url == "\u{FFFD}")
+        #expect(TreeDump.dump("[a]\n\n[a]: \u{0}", options: []) == """
+            document
+              paragraph
+                link "\u{FFFD}" ""
+                  text "a"
+
+            """)
     }
 
     /// The `===` line follows a paragraph holding only a link reference definition, which it cannot
     /// underline (Setext headings).
     @Test("NUL in a link reference definition destination followed by `===` becomes U+FFFD")
     func setextStrippedReferenceDefinition() {
-        let url = MarkdownDocument.withParsedDocument("[a]: /u\u{0}\n===\n\n[a]") { doc -> String in
-            var found: String? = nil
-            func walk(_ n: borrowing MarkdownNode) {
-                if found == nil, case .link = n.kind { found = n.url() }
-                n.children.forEach { walk($0) }
-            }
-            walk(doc.root)
-            return found ?? ""
-        }
-        #expect(url == "/u\u{FFFD}")
-        #expect(!url.contains(Self.nul))
+        #expect(TreeDump.dump("[a]: /u\u{0}\n===\n\n[a]", options: []) == """
+            document
+              paragraph
+                text "==="
+              paragraph
+                link "/u\u{FFFD}" ""
+                  text "a"
+
+            """)
     }
 
     @Test("NUL in a footnote definition's content becomes U+FFFD")
-    func footnoteDefinitionContent() throws {
-        try MarkdownDocument.withParsedDocument("[^a]: x\u{0}\n\n[^a]", options: [.footnotes]) { doc in
-            var defText: String? = nil
-            var hasRef = false
-            func walk(_ n: borrowing MarkdownNode) {
-                if case .footnoteDefinition = n.kind { defText = self.allText(n) }
-                if case .footnoteReference = n.kind { hasRef = true }
-                n.children.forEach { walk($0) }
-            }
-            walk(doc.root)
-            let text = try #require(defText, "expected a footnote definition")
-            #expect(text == "x\u{FFFD}")
-            #expect(!text.contains(Self.nul))
-            #expect(hasRef, "expected a footnote reference")
-        }
+    func footnoteDefinitionContent() {
+        #expect(TreeDump.dump("[^a]: x\u{0}\n\n[^a]", options: [.footnotes]) == """
+            document
+              paragraph
+                footnote_reference "1"
+              footnote_definition "a"
+                paragraph
+                  text "x\u{FFFD}"
+
+            """)
     }
 
     @Test("NUL in an ATX heading becomes U+FFFD")
     func atxHeading() {
-        let text = MarkdownDocument.withParsedDocument("# \u{0}") { doc -> String in
-            var out = ""
-            doc.root.children.forEach { if case .heading = $0.kind { out += self.allText($0) } }
-            return out
-        }
-        #expect(text.contains(Self.replacement))
-        #expect(!text.contains(Self.nul))
-        #expect(text == "\u{FFFD}")
+        #expect(TreeDump.dump("# \u{0}", options: []) == """
+            document
+              heading 1
+                text "\u{FFFD}"
+
+            """)
     }
 
     @Test("NUL in a setext heading becomes U+FFFD")
     func setextHeading() {
-        let text = MarkdownDocument.withParsedDocument("a\u{0}\n==") { doc -> String in
-            var out = ""
-            doc.root.children.forEach { if case .heading = $0.kind { out += self.allText($0) } }
-            return out
-        }
-        #expect(text.contains(Self.replacement))
-        #expect(!text.contains(Self.nul))
-        #expect(text == "a\u{FFFD}")
+        #expect(TreeDump.dump("a\u{0}\n==", options: []) == """
+            document
+              heading 1
+                text "a\u{FFFD}"
+
+            """)
     }
 
-    @Test("NUL in a non-contiguous (block-quote) paragraph becomes U+FFFD")
+    @Test("NUL in a paragraph continued across block quote lines becomes U+FFFD")
     func blockQuoteMultiline() {
-        let text = firstText("> a\u{0}\n> b")
-        #expect(text.contains(Self.replacement))
-        #expect(!text.contains(Self.nul))
-        #expect(text == "a\u{FFFD}b")
+        #expect(TreeDump.dump("> a\u{0}\n> b", options: []) == """
+            document
+              block_quote
+                paragraph
+                  text "a\u{FFFD}"
+                  softbreak
+                  text "b"
+
+            """)
     }
 
+    /// A URI autolink (Autolinks) excludes ASCII control characters; U+FFFD is not one.
     @Test("NUL inside an angle-bracket autolink body forms a link with a U+FFFD destination")
-    func angleAutolinkBody() throws {
-        // A URI autolink (Autolinks) excludes ASCII control characters; U+FFFD is not one.
-        try MarkdownDocument.withParsedDocument("<http://a\u{0}b>") { doc in
-            var link: String? = nil
-            doc.root.children.forEach { p in
-                p.children.forEach { inline in
-                    if case .link = inline.kind { link = inline.url() }
-                }
-            }
-            let url = try #require(link, "expected an autolink node")
-            #expect(url == "http://a\u{FFFD}b")
-        }
+    func angleAutolinkBody() {
+        #expect(TreeDump.dump("<http://a\u{0}b>", options: []) == """
+            document
+              paragraph
+                link "http://a\u{FFFD}b" ""
+                  text "http://a\u{FFFD}b"
+
+            """)
     }
 
     @Test("NUL in a GFM table cell becomes U+FFFD")
-    func tableCell() throws {
-        let cells = MarkdownDocument.withParsedDocument("h\u{0}\n|-", options: [.tables]) { doc -> [String] in
-            var out: [String] = []
-            func walk(_ n: borrowing MarkdownNode) {
-                if case .tableCell = n.kind {
-                    var t = ""
-                    n.children.forEach { if let l = $0.literal() { t += l } }
-                    out.append(t)
-                }
-                n.children.forEach { walk($0) }
-            }
-            walk(doc.root)
-            return out
-        }
-        try #require(!cells.isEmpty, "expected a table with at least one cell")
-        #expect(cells.contains("h\u{FFFD}"))
-        #expect(!cells.joined().contains(Self.nul))
+    func tableCell() {
+        #expect(TreeDump.dump("h\u{0}\n|-", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "h\u{FFFD}"
+
+            """)
     }
 
     @Test("NUL in inline-only mode becomes U+FFFD")
     func inlineOnly() {
-        let text = firstText("a\u{0}b", options: [.inlineOnly])
-        #expect(text.contains(Self.replacement))
-        #expect(!text.contains(Self.nul))
-        #expect(text == "a\u{FFFD}b")
-    }
+        #expect(TreeDump.dump("a\u{0}b", options: [.inlineOnly]) == """
+            document
+              paragraph
+                text "a\u{FFFD}b"
 
-    /// The first `.attribute` node's attributes string, or `nil`.
-    private func firstAttributes(_ source: String) -> String? {
-        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc -> String? in
-            var found: String? = nil
-            func walk(_ n: borrowing MarkdownNode) {
-                if found == nil, case .attribute = n.kind { found = n.attributes() }
-                n.children.forEach { walk($0) }
-            }
-            walk(doc.root)
-            return found
-        }
+            """)
     }
 
     @Test("NUL in an inline `^[..](..)` attribute becomes U+FFFD")
-    func inlineAttribute() throws {
-        let attrs = try #require(firstAttributes("^[x](a\u{0}b)"))
-        #expect(attrs == "a\u{FFFD}b")
-        #expect(!attrs.contains(Self.nul))
+    func inlineAttribute() {
+        #expect(TreeDump.dump("^[x](a\u{0}b)", options: [.attributes]) == """
+            document
+              paragraph
+                attribute "a\u{FFFD}b"
+                  text "x"
+
+            """)
     }
 
     @Test("NUL in a reference-form `^[label]: ..` attribute becomes U+FFFD")
-    func referenceAttribute() throws {
-        let attrs = try #require(firstAttributes("^[label]: a\u{0}b\n\n^[content][label]"))
-        #expect(attrs == "a\u{FFFD}b")
-        #expect(!attrs.contains(Self.nul))
+    func referenceAttribute() {
+        #expect(TreeDump.dump("^[label]: a\u{0}b\n\n^[content][label]", options: [.attributes]) == """
+            document
+              paragraph
+                attribute "a\u{FFFD}b"
+                  text "content"
+
+            """)
     }
 
-    @Test("other C0 control bytes are left literal (only NUL is replaced)")
-    func otherControlBytesUnchanged() {
-        for control in ["\u{1}", "\u{8}", "\u{1F}"] {
-            let text = firstText("a\(control)b")
-            #expect(text == "a\(control)b")
-            #expect(!text.contains(Self.replacement))
-        }
+    @Test("other C0 control bytes are left literal (only NUL is replaced)", arguments: [
+        ("a\u{1}b", """
+            document
+              paragraph
+                text "a\\u{1}b"
+
+            """),
+        ("a\u{8}b", """
+            document
+              paragraph
+                text "a\\u{8}b"
+
+            """),
+        ("a\u{1F}b", """
+            document
+              paragraph
+                text "a\\u{1F}b"
+
+            """),
+    ])
+    func otherControlBytesUnchanged(_ source: String, _ tree: String) {
+        #expect(TreeDump.dump(source, options: []) == tree)
     }
 }

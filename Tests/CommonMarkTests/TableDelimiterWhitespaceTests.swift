@@ -18,142 +18,98 @@ import CommonMark
 @Suite("Table delimiter-row FF/VT whitespace")
 struct TableDelimiterWhitespaceTests {
 
-    private struct Block {
-        enum Kind { case none, paragraph, heading, table, other }
-        var kind: Kind = .none
-        var alignments: [MarkdownNode.TableAlignment] = []
-        var headerCells: [String] = []
-    }
-
-    /// Extract a `.table` node's header-cell texts and per-column alignments.
-    private func tableBlock(from node: borrowing MarkdownNode) -> Block {
-        var block = Block()
-        block.kind = .table
-        node.children.forEach { row in
-            guard case .tableRow(let isHeader) = row.kind, isHeader else { return }
-            var cellTexts: [String] = []
-            var aligns: [MarkdownNode.TableAlignment] = []
-            row.children.forEach { cell in
-                guard case .tableCell(let alignment, _, _) = cell.kind else { return }
-                aligns.append(alignment)
-                var text = ""
-                cell.children.forEach { inline in
-                    if let lit = inline.literal() { text += lit }
-                }
-                cellTexts.append(text)
-            }
-            block.headerCells = cellTexts
-            block.alignments = aligns
-        }
-        return block
-    }
-
-    /// The first `.table` node anywhere in the tree (DFS), or `nil` (finds tables nested in a
-    /// block quote / list as well as top-level ones).
-    private func firstTableShape(in node: borrowing MarkdownNode) -> Block? {
-        if case .table = node.kind {
-            return tableBlock(from: node)
-        }
-        var result: Block? = nil
-        node.children.forEach { child in
-            if result == nil {
-                result = firstTableShape(in: child)
-            }
-        }
-        return result
-    }
-
-    /// The first top-level block of `source`, classified as paragraph / heading / table.
-    /// Parsed with `.tables`.
-    private func firstBlock(_ source: String) -> Block {
-        MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> Block in
-            var blocks: [Block] = []
-            doc.root.children.forEach { child in
-                var block = Block()
-                switch child.kind {
-                case .paragraph: block.kind = .paragraph
-                case .heading: block.kind = .heading
-                case .table: block = tableBlock(from: child)
-                default: block.kind = .other
-                }
-                blocks.append(block)
-            }
-            return blocks.first ?? Block()
-        }
-    }
-
-    /// The first `.table` anywhere in `source`, or `nil`.
-    private func firstTable(_ source: String) -> Block? {
-        MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> Block? in
-            firstTableShape(in: doc.root)
-        }
-    }
-
-    private static let ff = "\u{0C}"  // form feed
-    private static let vt = "\u{0B}"  // vertical tab
-    private static let cr = "\u{0D}"  // carriage return
-
     // MARK: - Form feed and line tabulation pad a delimiter cell
 
     @Test("a trailing form-feed in the delimiter cell forms a table")
-    func trailingFormFeed() throws {
-        let block = firstBlock("d\n-\(Self.ff)")
-        try #require(block.kind == .table, "expected a table, got \(block.kind)")
-        #expect(block.headerCells == ["d"])
-        #expect(block.alignments == [.none])
+    func trailingFormFeed() {
+        #expect(TreeDump.dump("d\n-\u{0C}", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "d"
+
+            """)
     }
 
     @Test("a trailing vertical-tab in the delimiter cell forms a table")
-    func trailingVerticalTab() throws {
-        let block = firstBlock("d\n-\(Self.vt)")
-        try #require(block.kind == .table, "expected a table, got \(block.kind)")
-        #expect(block.headerCells == ["d"])
-        #expect(block.alignments == [.none])
+    func trailingVerticalTab() {
+        #expect(TreeDump.dump("d\n-\u{0B}", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "d"
+
+            """)
     }
 
     @Test("a leading-pipe delimiter cell with a trailing form-feed forms a table")
-    func leadingPipeTrailingFormFeed() throws {
-        let block = firstBlock("d\n|-\(Self.ff)")
-        try #require(block.kind == .table, "expected a table, got \(block.kind)")
-        #expect(block.headerCells == ["d"])
-        #expect(block.alignments == [.none])
+    func leadingPipeTrailingFormFeed() {
+        #expect(TreeDump.dump("d\n|-\u{0C}", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "d"
+
+            """)
     }
 
     @Test("a leading form-feed in the delimiter cell forms a table")
-    func leadingFormFeed() throws {
-        let block = firstBlock("d\n\(Self.ff)-")
-        try #require(block.kind == .table, "expected a table, got \(block.kind)")
-        #expect(block.headerCells == ["d"])
-        #expect(block.alignments == [.none])
+    func leadingFormFeed() {
+        #expect(TreeDump.dump("d\n\u{0C}-", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "d"
+
+            """)
     }
 
     @Test("a form-feed delimiter cell forms a table when the delimiter row is indented")
-    func indentedDelimiterRowFormFeed() throws {
-        let block = firstBlock("d\n -\(Self.ff)")
-        try #require(block.kind == .table, "expected a table, got \(block.kind)")
-        #expect(block.headerCells == ["d"])
-        #expect(block.alignments == [.none])
+    func indentedDelimiterRowFormFeed() {
+        #expect(TreeDump.dump("d\n -\u{0C}", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "d"
+
+            """)
     }
 
     @Test("a form-feed delimiter cell forms a table nested in a block quote")
-    func nestedBlockQuoteFormFeed() throws {
-        let table = try #require(firstTable("> d\n> -\(Self.ff)"), "expected a nested table")
-        #expect(table.headerCells == ["d"])
-        #expect(table.alignments == [.none])
+    func nestedBlockQuoteFormFeed() {
+        #expect(TreeDump.dump("> d\n> -\u{0C}", options: [.tables]) == """
+            document
+              block_quote
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "d"
+
+            """)
     }
 
     // MARK: - Alignment
 
     @Test("a colon before a trailing form-feed sets right alignment")
-    func trailingFormFeedRightColon() throws {
-        let block = firstBlock("d\n-:\(Self.ff)")
-        try #require(block.kind == .table, "expected a table, got \(block.kind)")
-        #expect(block.alignments == [.right])
+    func trailingFormFeedRightColon() {
+        #expect(TreeDump.dump("d\n-:\u{0C}", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=right colspan=1 rowspan=1
+                    text "d"
+
+            """)
     }
 
     @Test("colons between line tabulations set center alignment")
     func verticalTabsAroundColons() {
-        #expect(TreeDump.dump("a\n|\(Self.vt):--:\(Self.vt)|\n", options: [.tables]) == """
+        #expect(TreeDump.dump("a\n|\u{0B}:--:\u{0B}|\n", options: [.tables]) == """
             document
               table
                 table_header
@@ -164,31 +120,60 @@ struct TableDelimiterWhitespaceTests {
     }
 
     @Test("a leading colon sets left alignment despite a trailing form-feed")
-    func leadingColonSetsLeftAlignment() throws {
-        let block = firstBlock("d\n:-\(Self.ff)")
-        try #require(block.kind == .table, "expected a table, got \(block.kind)")
-        #expect(block.alignments == [.left])
+    func leadingColonSetsLeftAlignment() {
+        #expect(TreeDump.dump("d\n:-\u{0C}", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=left colspan=1 rowspan=1
+                    text "d"
+
+            """)
     }
 
     // MARK: - Not tables
 
     @Test("a carriage return after the dash is a line ending, so the line is a setext heading underline")
     func trailingCarriageReturnStaysHeading() {
-        #expect(firstBlock("d\n-\(Self.cr)").kind == .heading)
+        #expect(TreeDump.dump("d\n-\r", options: [.tables]) == """
+            document
+              heading 2
+                text "d"
+
+            """)
     }
 
     @Test("an interior form-feed invalidates the delimiter cell")
     func interiorFormFeedStaysParagraph() {
-        #expect(firstBlock("d\n-\(Self.ff)-").kind == .paragraph)
+        #expect(TreeDump.dump("d\n-\u{0C}-", options: [.tables]) == """
+            document
+              paragraph
+                text "d"
+                softbreak
+                text "-\\u{C}-"
+
+            """)
     }
 
     @Test("a column-count mismatch with a form-feed delimiter stays a paragraph")
     func columnMismatchStaysParagraph() {
-        #expect(firstBlock("a|b\n-\(Self.ff)").kind == .paragraph)
+        #expect(TreeDump.dump("a|b\n-\u{0C}", options: [.tables]) == """
+            document
+              paragraph
+                text "a|b"
+                softbreak
+                text "-"
+
+            """)
     }
 
     @Test("a plain dash second line stays a setext heading")
     func plainDashStaysHeading() {
-        #expect(firstBlock("d\n-").kind == .heading)
+        #expect(TreeDump.dump("d\n-", options: [.tables]) == """
+            document
+              heading 2
+                text "d"
+
+            """)
     }
 }
