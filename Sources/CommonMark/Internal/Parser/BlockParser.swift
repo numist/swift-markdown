@@ -1854,7 +1854,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return storage.strings[Int(seg.offset) + local]
     }
 
-    /// Trims trailing spaces, tabs and line endings from the last segment, as `Chunk.trimming(using:)` does. The first segment starts at its first byte that is not a space or tab.
+    /// Trims trailing spaces, tabs and line endings from the last segment, as `Chunk.trimming(using:)` does. The first
+    /// segment starts at its first byte that is not a space or tab.
     private func trimSegments(_ segs: consuming UniqueArray<Segment>) -> UniqueArray<Segment> {
         var segs = segs
         precondition(segs.count > 0, "a paragraph's segment list starts with its opening line")
@@ -3251,7 +3252,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The lines are read in place, so content that isn't contiguous in the source is not copied.
     private mutating func rawContentStart(in segs: borrowing UniqueArray<Segment>, trimmed: Range<Int>, taskItemParagraph node: DocumentStorage.Index?) -> Int {
         precondition(!trimmed.isEmpty, "only non-blank content begins past definitions or a marker")
-        // A definition and a task list item marker each begin with `[` or `^`.
+        // A definition begins with `[` or `^`, and a task list item marker with `[`.
         var first = 0
         var offset = 0
         while offset + Int(segs[first].length) <= trimmed.lowerBound {
