@@ -54,9 +54,10 @@ struct EmptyTextBeforeHardBreakTests {
                 text "y" @2:1-2:2
 
             """)
-        #expect(MarkdownDocument.withParsedDocument("`c`  \ny", options: Self.options) { dfs($0).map { TreeDump.describe($0.kind) } } == [
-            "document", "paragraph", "code backticks=1", "linebreak", "text",
-        ])
+        let kinds = MarkdownDocument.withParsedDocument("`c`  \ny", options: Self.options) {
+            dfs($0).map { TreeDump.describe($0.kind) }
+        }
+        #expect(kinds == ["document", "paragraph", "code backticks=1", "linebreak", "text"])
     }
 
     @Test("link + trailing spaces + hard line break: no empty text node")

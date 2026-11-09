@@ -46,6 +46,9 @@ struct FailedImageMarkerRangeTests {
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test("the failed `![` image marker's text segments hold its full literal")
     func failedImageMarkerSegments() {
-        #expect(MarkdownDocument.withParsedDocument("![foo]", options: Self.options) { segmentTexts($0.root).joined() } == "![foo]")
+        let text = MarkdownDocument.withParsedDocument("![foo]", options: Self.options) {
+            segmentTexts($0.root).joined()
+        }
+        #expect(text == "![foo]")
     }
 }

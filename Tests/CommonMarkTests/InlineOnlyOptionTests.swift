@@ -44,9 +44,10 @@ struct InlineOnlyOptionTests {
                 code "code"
 
             """)
-        #expect(MarkdownDocument.withParsedDocument(source, options: options) { dfs($0).map { TreeDump.describe($0.kind) } } == [
-            "document", "paragraph", "text", "emph", "text", "text", "code backticks=1",
-        ])
+        let kinds = MarkdownDocument.withParsedDocument(source, options: options) {
+            dfs($0).map { TreeDump.describe($0.kind) }
+        }
+        #expect(kinds == ["document", "paragraph", "text", "emph", "text", "text", "code backticks=1"])
     }
 
     @Test("inline-only parsing parses links", arguments: inlineOnlyOptions)

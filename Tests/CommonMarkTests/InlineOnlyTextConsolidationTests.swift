@@ -120,7 +120,9 @@ struct InlineOnlyTextConsolidationTests {
 
             """),
     ])
-    func textMergesWithoutOtherOptions(options: MarkdownDocument.ParseOptions, example: (source: String, tree: String)) {
+    func textMergesWithoutOtherOptions(
+        options: MarkdownDocument.ParseOptions, example: (source: String, tree: String)
+    ) {
         #expect(TreeDump.dump(example.source, options: options) == example.tree)
     }
 
