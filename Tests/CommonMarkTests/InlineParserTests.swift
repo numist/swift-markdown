@@ -1274,13 +1274,13 @@ struct ExtendedAttributeTests {
     func crossLineReferenceDef() {
         // Matching normalizes the label's line ending to a space, as for a link label (Links), and the definition
         // produces no node.
-        let source = "^[la\nbel]: color: blue\n\n^[content][la bel]"
-        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
-        #expect(doc._storage.attributeReferenceMap["la bel"] != nil)
-        let info = Self.firstAttribute(doc)
-        #expect(info.attrs == "color: blue")
-        #expect(info.text == "content")
-        }
+        #expect(TreeDump.dump("^[la\nbel]: color: blue\n\n^[content][la bel]", options: .attributes) == """
+            document
+              paragraph
+                attribute "color: blue"
+                  text "content"
+
+            """)
     }
 
     @Test("attribute ref defs do not collide with link ref defs")
@@ -1435,75 +1435,84 @@ struct StrikethroughTests {
         }
     }
 
-    /// Count every `.strikethrough` node in the document (DFS).
-    private static func strikethroughCount(_ doc: borrowing MarkdownDocument) -> Int {
-        var count = 0
-        func walk(_ node: borrowing MarkdownNode) {
-            if node.kind == .strikethrough { count += 1 }
-            node.children.forEach { walk($0) }
-        }
-        doc.root.children.forEach { walk($0) }
-        return count
-    }
-
     /// The `~~` that starts line 2 follows a line ending, so it is left-flanking only and can open but not close
     /// (Emphasis and strong emphasis). It is the nearest opener to the closing `~`, and the two runs differ in length,
     /// so no strikethrough forms and the `~` on line 1 doesn't pair either.
     @Test("mismatched intervening run across a soft line break suppresses the far pairing")
     func mismatchedInterveningAcrossSoftbreak() {
-        let source = "~a\n~~b~"
-        MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
-            #expect(Self.strikethroughCount(doc) == 0)
-            #expect(Self.firstStrikethrough(doc) == nil)
-        }
+        #expect(TreeDump.dump("~a\n~~b~", options: .strikethrough) == """
+            document
+              paragraph
+                text "~a"
+                softbreak
+                text "~~b~"
+
+            """)
     }
 
     /// On one line the interior `~~` is both left- and right-flanking, so the outer tildes pair around it.
     @Test("on one line the outer tildes pair across an interior run")
-    func oneLineOuterTildesPair() throws {
-        let source = "~a~~b~"
-        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
-            let inner = Self.firstStrikethrough(doc)
-            let content = try #require(inner, "the outer tildes must form a strikethrough")
-            #expect(content == "a~~b")
-            #expect(Self.strikethroughCount(doc) == 1)
-        }
+    func oneLineOuterTildesPair() {
+        #expect(TreeDump.dump("~a~~b~", options: .strikethrough) == """
+            document
+              paragraph
+                strikethrough
+                  text "a~~b"
+
+            """)
     }
 
     @Test("matched-length pair forms across a soft line break")
     func matchedPairAcrossSoftbreak() {
-        let source = "~a\nb~"
-        MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
-            #expect(Self.strikethroughCount(doc) == 1)
-        }
+        #expect(TreeDump.dump("~a\nb~", options: .strikethrough) == """
+            document
+              paragraph
+                strikethrough
+                  text "a"
+                  softbreak
+                  text "b"
+
+            """)
     }
 
     @Test("line-2 local pairing leaves the line-1 opener orphaned")
-    func lineTwoLocalPairing() throws {
-        let source = "~a\n~b~"
-        try MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
-            let inner = Self.firstStrikethrough(doc)
-            let content = try #require(inner, "line-2 ~b~ must form a strikethrough")
-            #expect(content == "b")
-            #expect(Self.strikethroughCount(doc) == 1)
-        }
+    func lineTwoLocalPairing() {
+        #expect(TreeDump.dump("~a\n~b~", options: .strikethrough) == """
+            document
+              paragraph
+                text "~a"
+                softbreak
+                strikethrough
+                  text "b"
+
+            """)
     }
 
     /// The `~` ending line 1 can't pair with the longer `~~` opener, and the `~` on line 2 has no closer.
     @Test("mismatched run near the closer side forms nothing")
     func mismatchedRunNearCloser() {
-        let source = "~~b~\n~a"
-        MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
-            #expect(Self.strikethroughCount(doc) == 0)
-        }
+        #expect(TreeDump.dump("~~b~\n~a", options: .strikethrough) == """
+            document
+              paragraph
+                text "~~b~"
+                softbreak
+                text "~a"
+
+            """)
     }
 
     @Test("mismatched intervening run suppresses pairing across a three-line span")
     func mismatchedInterveningThreeLines() {
-        let source = "~a\nx\n~~b~"
-        MarkdownDocument.withParsedDocument(source, options: .strikethrough) { doc in
-            #expect(Self.strikethroughCount(doc) == 0)
-        }
+        #expect(TreeDump.dump("~a\nx\n~~b~", options: .strikethrough) == """
+            document
+              paragraph
+                text "~a"
+                softbreak
+                text "x"
+                softbreak
+                text "~~b~"
+
+            """)
     }
 
     @Test("strikethrough nested inside emphasis")
@@ -1528,81 +1537,83 @@ struct StrikethroughTests {
         }
     }
 
-    /// The first paragraph's direct inline children as `(kind, literal)` pairs. A container inline
-    /// (e.g. `.strikethrough`) reports a `nil` literal; read its inner text via `firstStrikethrough`.
-    private static func paragraphInlines(_ doc: borrowing MarkdownDocument) -> [(kind: MarkdownNode.Kind, literal: String?)] {
-        var inlines: [(kind: MarkdownNode.Kind, literal: String?)] = []
-        var seenParagraph = false
-        doc.root.children.forEach { block in
-            guard block.kind == .paragraph, !seenParagraph else { return }
-            seenParagraph = true
-            block.children.forEach { inline in
-                inlines.append((inline.kind, inline.literal()))
-            }
-        }
-        return inlines
-    }
-
     // VT (U+000B) is not a Unicode whitespace character (Characters and lines), so tildes around it are both left- and
     // right-flanking and pair.
     @Test("VT between tildes pairs into a strikethrough")
     func verticalTabPairs() {
-        MarkdownDocument.withParsedDocument("~\u{0B}~", options: .strikethrough) { doc in
-            #expect(Self.strikethroughCount(doc) == 1)
-            #expect(Self.firstStrikethrough(doc) == "\u{0B}")
-        }
+        #expect(TreeDump.dump("~\u{0B}~", options: .strikethrough) == """
+            document
+              paragraph
+                strikethrough
+                  text "\\u{B}"
+
+            """)
     }
 
     @Test("VT between tildes pairs with surrounding text")
-    func verticalTabPairsWithSurroundingText() throws {
-        try MarkdownDocument.withParsedDocument("a~\u{0B}~b", options: .strikethrough) { doc in
-            let inlines = Self.paragraphInlines(doc)
-            try #require(inlines.count == 3)
-            #expect(inlines[0].kind == .text)
-            #expect(inlines[0].literal == "a")
-            #expect(inlines[1].kind == .strikethrough)
-            #expect(inlines[2].kind == .text)
-            #expect(inlines[2].literal == "b")
-            #expect(Self.firstStrikethrough(doc) == "\u{0B}")
-        }
+    func verticalTabPairsWithSurroundingText() {
+        #expect(TreeDump.dump("a~\u{0B}~b", options: .strikethrough) == """
+            document
+              paragraph
+                text "a"
+                strikethrough
+                  text "\\u{B}"
+                text "b"
+
+            """)
     }
 
     @Test("VT between double tildes pairs into a strikethrough")
     func verticalTabDoubleTildePairs() {
-        MarkdownDocument.withParsedDocument("~~\u{0B}~~", options: .strikethrough) { doc in
-            #expect(Self.strikethroughCount(doc) == 1)
-            #expect(Self.firstStrikethrough(doc) == "\u{0B}")
-        }
+        #expect(TreeDump.dump("~~\u{0B}~~", options: .strikethrough) == """
+            document
+              paragraph
+                strikethrough
+                  text "\\u{B}"
+
+            """)
     }
 
     // FF, space and tab are Unicode whitespace characters, so tildes around them are not flanking.
     @Test("FF between tildes stays literal")
     func formFeedStaysLiteral() {
-        MarkdownDocument.withParsedDocument("~\u{0C}~", options: .strikethrough) { doc in
-            #expect(Self.strikethroughCount(doc) == 0)
-        }
+        #expect(TreeDump.dump("~\u{0C}~", options: .strikethrough) == """
+            document
+              paragraph
+                text "~\\u{C}~"
+
+            """)
     }
 
     @Test("space between tildes stays literal")
     func spaceStaysLiteral() {
-        MarkdownDocument.withParsedDocument("~ ~", options: .strikethrough) { doc in
-            #expect(Self.strikethroughCount(doc) == 0)
-        }
+        #expect(TreeDump.dump("~ ~", options: .strikethrough) == """
+            document
+              paragraph
+                text "~ ~"
+
+            """)
     }
 
     @Test("tab between tildes stays literal")
     func tabStaysLiteral() {
-        MarkdownDocument.withParsedDocument("~\t~", options: .strikethrough) { doc in
-            #expect(Self.strikethroughCount(doc) == 0)
-        }
+        #expect(TreeDump.dump("~\t~", options: .strikethrough) == """
+            document
+              paragraph
+                text "~\\t~"
+
+            """)
     }
 
     @Test("non-space content between tildes pairs")
     func contentBetweenTildesPairs() {
-        MarkdownDocument.withParsedDocument("~x~", options: .strikethrough) { doc in
-            #expect(Self.strikethroughCount(doc) == 1)
-            #expect(Self.firstStrikethrough(doc) == "x")
-        }
+        #expect(TreeDump.dump("~x~", options: .strikethrough) == """
+            document
+              paragraph
+                strikethrough
+                  text "x"
+
+            """)
     }
 }
 
@@ -1836,13 +1847,12 @@ struct FootnoteTests {
 
     @Test("unresolved reference becomes literal text")
     func unresolvedRef() {
-        let source = "see [^missing]"
-        MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
-        let info = Self.firstFootnotes(doc)
-        #expect(info.ref == nil)
-        let text = paragraphInlines(doc).compactMap { $0.literal }.joined()
-        #expect(text.contains("[^missing]"))
-        }
+        #expect(TreeDump.dump("see [^missing]", options: .footnotes) == """
+            document
+              paragraph
+                text "see [^missing]"
+
+            """)
     }
 
     @Test("definition produces a footnoteDefinition + paragraph child")
