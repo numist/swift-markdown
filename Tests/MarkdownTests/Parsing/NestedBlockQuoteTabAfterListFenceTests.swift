@@ -16,10 +16,12 @@ import XCTest
 /// a following `>` opens a further block quote and following text at four more columns is an indented
 /// code block.
 class NestedBlockQuoteTabAfterListFenceTests: XCTestCase {
-    private static let options = ParseOptions(rawValue: UInt(0x3e & 0b11011111))
-
     private func surface(_ markdown: String) -> String {
-        Document(parsing: markdown, options: Self.options).debugDescription(options: [])
+        Document(parsing: markdown, options: []).debugDescription(options: [])
+    }
+
+    func testTabAfterFirstMarkerOpensNestedBlockQuote() {
+        XCTAssertEqual("Document\n├─ UnorderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n└─ BlockQuote\n   └─ BlockQuote", surface("- ```\n>\t>"))
     }
 
     func testTabBeforeFourthMarker() {
