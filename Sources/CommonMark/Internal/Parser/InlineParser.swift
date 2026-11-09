@@ -655,7 +655,7 @@ extension BlockParser {
             return nil
         }
         return (
-            cleanURLChunk(materializedChunk(start: dest.destination.lowerBound, end: dest.destination.upperBound, content: content)),
+            unescapedChunk(start: dest.destination.lowerBound, end: dest.destination.upperBound, content: content),
             unescapedChunk(start: titleInterior.lowerBound, end: titleInterior.upperBound, content: content),
             close + 1
         )
@@ -2188,7 +2188,7 @@ extension BlockParser {
     }
 
     /// A chunk for `[start, end)` with backslash escapes and character references resolved, copied into the arena
-    /// once if the range spans segments or holds either, as a link title can.
+    /// once if the range holds either or, as a link title can, spans segments.
     private mutating func unescapedChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end),
            contiguous.length == end - start {

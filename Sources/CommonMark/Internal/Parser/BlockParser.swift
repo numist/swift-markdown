@@ -3535,7 +3535,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let destinationChunk = definitionChunk(destination.destination, in: content)
             let titleChunk = definitionChunk(title, in: content)
             storage.referenceMap[key] = ReferenceDefinition(
-                destination: replacingNUL(cleanURLChunk(destinationChunk)),
+                destination: replacingNUL(unescapeURLChunk(destinationChunk)),
                 title: replacingNUL(unescapeURLChunk(titleChunk))
             )
         }
@@ -3577,9 +3577,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         if storage.attributeReferenceMap[key] == nil {
-            // Trimmed and unescaped like a link destination, with NULs replaced as above.
+            // Trimmed, then unescaped like a link destination, with NULs replaced as above.
             let attributesChunk = definitionChunk(attributesStart..<attributesEnd, in: content)
-            storage.attributeReferenceMap[key] = replacingNUL(cleanURLChunk(attributesChunk))
+            storage.attributeReferenceMap[key] = replacingNUL(unescapeURLChunk(attributesChunk.trimming(using: self)))
         }
         return attributesEnd < end ? attributesEnd + 1 : attributesEnd
     }
@@ -3651,12 +3651,5 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The arena bytes from `offset` to the arena's end, as just appended.
     mutating func arenaChunk(from offset: Int) -> Chunk {
         Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
-    }
-
-    /// Trims a link destination's spaces, tabs and line endings, keeping line tabulation and form feed, then unescapes it.
-    /// A title is not trimmed, so it uses `unescapeURLChunk`.
-    mutating func cleanURLChunk(_ chunk: Chunk) -> Chunk {
-        let trimmed = chunk.trimming(using: self)
-        return unescapeURLChunk(trimmed)
     }
 }
