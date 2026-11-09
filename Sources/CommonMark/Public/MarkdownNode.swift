@@ -399,9 +399,11 @@ extension MarkdownNode {
 }
 
 extension MarkdownNode {
-    /// The node's source range, or `nil` without `MarkdownDocument.ParseOptions.sourcePosition` or for a node that has no source range.
+    /// The node's source range, or `nil` without `MarkdownDocument.ParseOptions.sourcePosition` or for a node that has no source range: a soft or hard line break, a cell that a body row with fewer cells than the header row lacks, and the document of empty input.
     ///
-    /// The range runs from the node's first byte in the source, such as a block quote's `>` or a code span's opening backtick, to just past its last. Whitespace and blank lines after a block's last content are outside it, so a container ends with its last child or marker.
+    /// The range runs from the first byte of the node's own content to just past its last content byte. The node's own syntax counts as content: a list item's marker and checkbox, a block quote's marker, a footnote definition's `[^label]:`, a code block's fences, an ATX heading's `#`s, a setext heading's underline, a code span's backticks, emphasis and strikethrough delimiters, a link's or image's brackets with its destination and title, an autolink's `<` and `>`, a table's delimiter row, and a table row's leading and closing pipes. Whitespace, line endings, blank lines, table cell padding and the pipes between cells are never inside a node's range unless they are part of its content, such as whitespace inside a code block's text or a code span. So a container ends at the end of its last child or of its own marker, whichever is later, and a node with no content bytes, such as an empty table cell or a paragraph of only line tabulations, has an empty range where it starts, which for a cell is just past its opening pipe. The line ending that ends a node's last line is outside it, even where the node's text holds it.
+    ///
+    /// The document's range covers the whole input after any byte order mark. For input that ends in a line ending, it ends at column 1 of the line after the last.
     public var sourceRange: Range<SourcePosition>? {
         _view.sourceRange(of: _index)
     }
