@@ -72,14 +72,6 @@ internal struct ContentImage {
         return Int(runs[i].sourceOffset) + (k - runStart(i))
     }
 
-    /// The runs imaging arena bytes `[offset, offset + length)`, rebased to start at 0. Only the overlapping runs are sliced, so slicing many windows of a large image stays linear in its size.
-    internal func runs(from offset: Int, length: Int) -> [ArenaRun] {
-        let k = offset - base
-        let first = firstRun(endingAfter: k)
-        let last = max(first, firstRun(endingAfter: k + length - 1) + 1)
-        return BlockParser.sliceRuns(Array(runs[first..<min(last, runs.count)]), from: k - runStart(first), length: length)
-    }
-
     /// The index of the first run ending past content-relative offset `k`, or `runs.count` when none does.
     private func firstRun(endingAfter k: Int) -> Int {
         var lo = 0

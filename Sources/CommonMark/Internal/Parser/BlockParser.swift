@@ -1198,7 +1198,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         assert(openParagraphTableState!.node == current, "the recorded state belongs to the open paragraph")
         // The first such line that opens a table sets `tablePending`, ending the search. `couldBeDelimiterRow` keeps
-        // prose from materializing.
+        // ordinary prose out of the table check.
         if !openParagraphTableState!.tablePending,
            line.indent < 4, line.allMatched,
            couldBeDelimiterRow(range: delimRange) {

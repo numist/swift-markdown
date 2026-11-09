@@ -35,24 +35,19 @@ internal struct Chunk: Equatable, Hashable {
 
     /// Drops leading and trailing spaces, tabs, and line endings.
     internal func trimming(using parser: borrowing BlockParser) -> Chunk {
-        trimming(using: parser, leading: true, where: \.isSpaceTabOrNewline)
-    }
-
-    /// Drops trailing spaces, tabs, and line endings.
-    internal func trimmingTrailing(using parser: borrowing BlockParser) -> Chunk {
-        trimming(using: parser, leading: false, where: \.isSpaceTabOrNewline)
+        trimming(using: parser, where: \.isSpaceTabOrNewline)
     }
 
     /// Drops leading and trailing whitespace characters (Characters and lines), as forms a paragraph's or setext heading's raw content.
     internal func trimmingWhitespace(using parser: borrowing BlockParser) -> Chunk {
-        trimming(using: parser, leading: true, where: \.isASCIISpace)
+        trimming(using: parser, where: \.isASCIISpace)
     }
 
     @inline(__always)
-    private func trimming(using parser: borrowing BlockParser, leading: Bool, where isTrimmed: (UInt8) -> Bool) -> Chunk {
+    private func trimming(using parser: borrowing BlockParser, where isTrimmed: (UInt8) -> Bool) -> Chunk {
         var lo = 0
         var hi = length
-        while leading, lo < hi, isTrimmed(parser.readByte(at: offset + lo, in: self)) {
+        while lo < hi, isTrimmed(parser.readByte(at: offset + lo, in: self)) {
             lo += 1
         }
         while hi > lo, isTrimmed(parser.readByte(at: offset + hi - 1, in: self)) {

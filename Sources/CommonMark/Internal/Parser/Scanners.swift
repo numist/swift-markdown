@@ -82,26 +82,8 @@ extension BlockParser {
 
     // MARK: - Link label
 
-    internal struct LinkLabelMatch {
-        var interior: Chunk
-        var afterEnd: Int
-    }
-
-    /// Matches a link label (Links), returning its interior and the offset past its `]`.
-    internal func matchLinkLabel(_ chunk: Chunk) -> LinkLabelMatch? {
-        precondition(!chunk.isEmpty, "a link label scan starts on a content byte")
-        let match = scanLinkLabel(from: chunk.offset, end: chunk.range.upperBound) { readByte(at: $0, in: chunk) }
-        return match.map { LinkLabelMatch(interior: subchunk(of: chunk, $0.interior), afterEnd: $0.afterEnd) }
-    }
-
-    /// The part of `chunk` at `range`.
-    private func subchunk(of chunk: Chunk, _ range: Range<Int>) -> Chunk {
-        Chunk(offset: range.lowerBound, length: range.count, inSource: chunk.inSource)
-    }
-
-    /// Scans a link label through `byte`, for both `matchLinkLabel` overloads. A full reference's label may span a
-    /// line ending. Returns the interior's range and the offset past `]`, or nil at an unescaped `[`, past
-    /// `maxLinkLabelLength`, or at the end.
+    /// Scans a link label through `byte`. A full reference's label may span a line ending. Returns the interior's range
+    /// and the offset past `]`, or nil at an unescaped `[`, past `maxLinkLabelLength`, or at the end.
     @inline(__always)
     private func scanLinkLabel(from start: Int, end: Int, byte: (Int) -> UInt8) -> (interior: Range<Int>, afterEnd: Int)? {
         if start >= end || byte(start) != UInt8(ascii: "[") {
@@ -137,7 +119,8 @@ extension BlockParser {
         return nil
     }
 
-    /// `matchLinkLabel(_:)` over virtual offsets of inline content.
+    /// Matches a link label (Links) at virtual offset `start` of `content`, returning its interior and the offset past
+    /// its `]`.
     internal func matchLinkLabel(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
         scanLinkLabel(from: start, end: end) { content[$0] }
     }
@@ -175,21 +158,8 @@ extension BlockParser {
 
     // MARK: - Link destination
 
-    internal struct LinkDestinationMatch {
-        var chunk: Chunk
-        var afterEnd: Int
-    }
-
-    /// Matches a link destination (Links).
-    internal func matchLinkDestination(_ chunk: Chunk) -> LinkDestinationMatch? {
-        // A definition's offsets address the source or the arena rather than inline content, so it shares no scan.
-        var parentheses = BalancedParenthesesScan()
-        let match = Self.scanLinkDestination(from: chunk.offset, end: chunk.range.upperBound, parentheses: &parentheses) { readByte(at: $0, in: chunk) }
-        return match.map { LinkDestinationMatch(chunk: subchunk(of: chunk, $0.destination), afterEnd: $0.afterEnd) }
-    }
-
-    /// Scans a link destination through `byte`, and a bare one's parentheses through `parentheses`, for both
-    /// `matchLinkDestination` overloads. Returns the destination's range, without any `<` `>`, and the offset past it.
+    /// Scans a link destination through `byte`, and a bare one's parentheses through `parentheses`. Returns the
+    /// destination's range, without any `<` `>`, and the offset past it.
     @inline(__always)
     private static func scanLinkDestination(from start: Int, end: Int, parentheses: inout BalancedParenthesesScan, byte: (Int) -> UInt8) -> (destination: Range<Int>, afterEnd: Int)? {
         if start >= end {
@@ -232,27 +202,15 @@ extension BlockParser {
         return (start..<destinationEnd, destinationEnd)
     }
 
-    /// `matchLinkDestination(_:)` over virtual offsets of inline content.
+    /// Matches a link destination (Links) at virtual offset `start` of `content`.
     internal mutating func matchLinkDestination(from start: Int, end: Int, in content: borrowing ContentSpan) -> (destination: Range<Int>, afterEnd: Int)? {
         Self.scanLinkDestination(from: start, end: end, parentheses: &destinationParentheses) { content[$0] }
     }
 
     // MARK: - Link title
 
-    internal struct LinkTitleMatch {
-        var chunk: Chunk
-        var afterEnd: Int
-    }
-
-    /// Matches a link title (Links).
-    internal func matchLinkTitle(_ chunk: Chunk) -> LinkTitleMatch? {
-        let match = scanLinkTitle(from: chunk.offset, end: chunk.range.upperBound) { readByte(at: $0, in: chunk) }
-        return match.map { LinkTitleMatch(chunk: subchunk(of: chunk, $0.interior), afterEnd: $0.afterEnd) }
-    }
-
-    /// Scans a link title through `byte`, for both `matchLinkTitle` overloads. A title may span a line ending, and
-    /// its furthest closer may lie past one that ends the first line (`'\'` LF `'`). Returns the interior's
-    /// range and the offset past the closer.
+    /// Scans a link title through `byte`. A title may span a line ending, and its furthest closer may lie past one that
+    /// ends the first line (`'\'` LF `'`). Returns the interior's range and the offset past the closer.
     @inline(__always)
     private func scanLinkTitle(from start: Int, end: Int, byte: (Int) -> UInt8) -> (interior: Range<Int>, afterEnd: Int)? {
         if start >= end {
@@ -306,7 +264,7 @@ extension BlockParser {
         return ((start + 1)..<(closeAfterEnd - 1), closeAfterEnd)
     }
 
-    /// `matchLinkTitle(_:)` over virtual offsets of inline content.
+    /// Matches a link title (Links) at virtual offset `start` of `content`.
     internal func matchLinkTitle(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
         scanLinkTitle(from: start, end: end) { content[$0] }
     }
@@ -402,54 +360,6 @@ extension BlockParser {
             return nil
         }
         return i + 1
-    }
-
-    // MARK: - Whitespace
-
-    // These are `mutating` though they only read: non-mutating, they measured 5% more instructions on a document of link reference definitions.
-
-    /// Skips spaces, tabs, line tabulations and form feeds.
-    internal mutating func skipLineWhitespace(from cursor: Int, in chunk: Chunk) -> Int {
-        let end = chunk.range.upperBound
-        var i = cursor
-        while i < end {
-            let c = readByte(at: i, in: chunk)
-            if !c.isLineWhitespace {
-                break
-            }
-            i += 1
-        }
-        return i
-    }
-
-    /// Skips line whitespace, at most one line ending, and more line whitespace.
-    internal mutating func skipSpacesAndOneLineEnd(from cursor: Int, in chunk: Chunk) -> Int {
-        let end = chunk.range.upperBound
-        var i = skipLineWhitespace(from: cursor, in: chunk)
-        if i >= end {
-            return i
-        }
-        let c = readByte(at: i, in: chunk)
-        precondition(c != UInt8(ascii: "\r"), "definition content holds no carriage return: lines split on CR and join with LF")
-        if c == UInt8(ascii: "\n") {
-            i += 1
-            i = skipLineWhitespace(from: i, in: chunk)
-        }
-        return i
-    }
-
-    /// The offset past a line ending at `cursor`, `cursor` at the end of `chunk`, or `nil`.
-    internal mutating func skipLineEndOrEOF(from cursor: Int, in chunk: Chunk) -> Int? {
-        let end = chunk.range.upperBound
-        if cursor >= end {
-            return cursor
-        }
-        let c = readByte(at: cursor, in: chunk)
-        precondition(c != UInt8(ascii: "\r"), "definition content holds no carriage return: lines split on CR and join with LF")
-        if c == UInt8(ascii: "\n") {
-            return cursor + 1
-        }
-        return nil
     }
 
     // MARK: - Label normalization
