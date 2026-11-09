@@ -37,11 +37,9 @@ extension UInt8 {
             || self == UInt8(ascii: "\n") || self == UInt8(ascii: "\r")
     }
 
-    /// A whitespace character other than a line ending, as may pad a delimiter row cell (Tables (extension)) or
-    /// follow a task list item's checkbox (Task list items (extension)). Trimming cell or task list item content
-    /// keeps line tabulation and form feed, so it does not use this.
+    /// A whitespace character (Characters and lines) other than a line ending.
     @inline(__always)
-    var isExtensionScannerSpace: Bool {
+    var isLineWhitespace: Bool {
         self == UInt8(ascii: " ") || self == UInt8(ascii: "\t")
             || self == 0x0B || self == 0x0C
     }

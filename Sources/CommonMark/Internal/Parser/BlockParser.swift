@@ -3313,7 +3313,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if between == UInt8(ascii: "x") || between == UInt8(ascii: "X") {
             return true
         }
-        return between.isExtensionScannerSpace ? false : nil
+        return between.isLineWhitespace ? false : nil
     }
 
     /// Matches a footnote definition opener `[^label]:`, whose label holds no whitespace or unescaped bracket, returning
@@ -3465,7 +3465,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     @inline(__always)
     private mutating func skipLineWhitespace(from cursor: Int, in content: borrowing ContentSpan) -> Int {
         var i = cursor
-        while i < content.endOffset, content[i].isExtensionScannerSpace {
+        while i < content.endOffset, content[i].isLineWhitespace {
             i += 1
         }
         return i

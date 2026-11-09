@@ -112,7 +112,7 @@ extension BlockParser {
         guard s < e && sourceBytes[s] == UInt8(ascii: "|") else { return false }
         s += 1
         // ... with nothing but padding after it: a second pipe or any content forms at least one cell.
-        for i in s..<e where !sourceBytes[i].isExtensionScannerSpace {
+        for i in s..<e where !sourceBytes[i].isLineWhitespace {
             return false
         }
         return true
@@ -310,7 +310,7 @@ extension BlockParser {
     /// tabulations or form feeds. Colons are read inside spaces and tabs only, so a colon behind a line tabulation or
     /// form feed sets no alignment.
     private func delimiterAlignment(of cell: Range<Int>) -> MarkdownNode.TableAlignment? {
-        let marker = trim(cell, leading: \.isExtensionScannerSpace, trailing: \.isExtensionScannerSpace)
+        let marker = trim(cell, leading: \.isLineWhitespace, trailing: \.isLineWhitespace)
         var s = marker.lowerBound
         var e = marker.upperBound
         if s < e && storage.strings[s] == UInt8(ascii: ":") {
@@ -366,7 +366,7 @@ extension BlockParser {
         // A closing pipe may be followed by line tabulations or form feeds; without one, they are the last
         // cell's content.
         var pipeEnd = e
-        while pipeEnd > s && storage.strings[pipeEnd - 1].isExtensionScannerSpace {
+        while pipeEnd > s && storage.strings[pipeEnd - 1].isLineWhitespace {
             pipeEnd -= 1
         }
         if pipeEnd > s && storage.strings[pipeEnd - 1] == UInt8(ascii: "|") {
@@ -393,7 +393,7 @@ extension BlockParser {
         // A lone leading pipe with only padding after it is zero cells, so `|\n-|` is a paragraph. `||` has
         // a closing pipe, so its one empty cell is kept.
         if cellCount == 0 && hadLeadingPipe && !hadClosingPipe
-            && (cellStart..<e).allSatisfy({ storage.strings[$0].isExtensionScannerSpace }) {
+            && (cellStart..<e).allSatisfy({ storage.strings[$0].isLineWhitespace }) {
             return (hadClosingPipe, hadLeadingPipe)
         }
         body(cellStart..<e)
@@ -416,6 +416,6 @@ extension BlockParser {
     /// pipe keeps a leading line tabulation or form feed. A trailing line tabulation or form feed is content.
     private func trimCellContent(range: Range<Int>, stripLeadingVTFF: Bool) -> Range<Int> {
         precondition(stripLeadingVTFF || range.isEmpty || !storage.strings[range.lowerBound].isSpaceOrTab, "a row's first cell starts past the row's leading spaces and tabs")
-        return trim(range, leading: { stripLeadingVTFF && $0.isExtensionScannerSpace }, trailing: \.isSpaceOrTab)
+        return trim(range, leading: { stripLeadingVTFF && $0.isLineWhitespace }, trailing: \.isSpaceOrTab)
     }
 }
