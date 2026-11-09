@@ -8,8 +8,8 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-// Auto-generated
-// Official source (via spec) is https://html.spec.whatwg.org/entities.json
+// The valid HTML5 entity names and the characters they stand for, from https://html.spec.whatwg.org/multipage/entities.json,
+// the source the spec's Entity and numeric character references section names.
 
 internal enum HTMLEntities {
 
