@@ -84,6 +84,26 @@ class EmphasisNestingTests: XCTestCase {
         let document = Document(parsing: text)
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
+
+    /// The last `*` can't open, so rule 9's multiple-of-3 test, which kept the interior `*` from matching the `**`,
+    /// doesn't apply to it, and it matches the `**`.
+    func testCloserThatCannotOpenMatchesOpenerSkippedByOneThatCan() {
+        let text = "**a*a*a*"
+
+        let expectedDump = """
+        Document @1:1-1:9
+        └─ Paragraph @1:1-1:9
+           ├─ Text @1:1-1:2 "*"
+           └─ Emphasis @1:2-1:9
+              ├─ Text @1:3-1:4 "a"
+              ├─ Emphasis @1:4-1:7
+              │  └─ Text @1:5-1:6 "a"
+              └─ Text @1:7-1:8 "a"
+        """
+
+        let document = Document(parsing: text)
+        XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
+    }
 }
 
 /// A `~` is a punctuation character (Characters and lines), so a delimiter run beside a `~` run is classified

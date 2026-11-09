@@ -10,14 +10,15 @@
 
 internal import BasicContainers
 
-/// The emphasis `openersBottom` table: rows by `length % 3`, columns by delimiter character (`*_~'"`).
+/// The emphasis `openersBottom` table: rows by whether the closer can open and its `length % 3`, columns by delimiter
+/// character (`*_~'"`).
 ///
-/// It wraps `SIMD16` because a nested `InlineArray` requires the anyAppleOS 26 runtime.
+/// It wraps `SIMD32` because a nested `InlineArray` requires the anyAppleOS 26 runtime.
 internal struct OpenersBottom {
-    private var storage: SIMD16<Int>
+    private var storage: SIMD32<Int>
 
     internal init(fill: Int) {
-        storage = SIMD16(repeating: fill)
+        storage = SIMD32(repeating: fill)
     }
 
     internal subscript(_ row: Int, _ col: Int) -> Int {
@@ -935,9 +936,9 @@ extension BlockParser {
 
     /// Resolves emphasis among the delimiters above `stackBottom` (`-1` for the whole stack), pairing each closer with the nearest compatible opener.
     ///
-    /// `openersBottom` records, per closer length mod 3 and character, where a failed opener search stopped, so no later closer searches below it.
+    /// `openersBottom` records, per closer character, length mod 3 and whether it can open, where a failed opener search
+    /// stopped, so no later closer searches below it. Those three decide which openers rules 9 and 10 admit.
     private mutating func processEmphasis(stackBottom: Int, content: borrowing ContentSpan) {
-        // openersBottom[length % 3, char-index]: 0=`*`, 1=`_`, 2=`~`, 3=`'`, 4=`"`.
         var openersBottom = OpenersBottom(fill: stackBottom)
         // The earliest delimiter above `stackBottom`.
         var closer: Int? = nil
@@ -953,11 +954,11 @@ extension BlockParser {
             }
             let closerChar = delimiters[c].character
             let charIdx = charIndex(for: closerChar)
-            let lenMod = delimiters[c].length % 3
+            let bottomRow = (delimiters[c].canOpen ? 3 : 0) + delimiters[c].length % 3
             var opener = delimiters[c].previous
             var openerFound = false
             while let o = opener, o > stackBottom,
-                  o >= openersBottom[lenMod, charIdx] {
+                  o >= openersBottom[bottomRow, charIdx] {
                 if delimiters[o].canOpen
                     && delimiters[o].character == closerChar {
                     let cl = delimiters[c]
@@ -998,7 +999,7 @@ extension BlockParser {
                 closer = delimiters[c].next
             }
             if !openerFound {
-                openersBottom[delimiters[oldCloser].length % 3, charIdx] = oldCloser
+                openersBottom[bottomRow, charIdx] = oldCloser
                 if !delimiters[oldCloser].canOpen {
                     removeDelim(oldCloser)
                 }
