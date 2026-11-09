@@ -45,9 +45,6 @@ struct NestedParenthesesTests {
 
     private static let options: MarkdownDocument.ParseOptions = [.attributes]
 
-    private static let open33 = "((((((((((((((((((((((((((((((((("
-    private static let close33 = ")))))))))))))))))))))))))))))))))"
-
     private func nodes(_ src: String) -> [String] {
         MarkdownDocument.withParsedDocument(src, options: Self.options) { doc -> [String] in
             var out: [String] = []
@@ -58,115 +55,120 @@ struct NestedParenthesesTests {
 
     // MARK: Depth
 
-    @Test("An inline link's destination holds 33 nested pairs")
+    @Test("an inline link's destination holds nested pairs")
     func inlineLink() {
-        #expect(nodes("[a](" + Self.open33 + "x" + Self.close33 + ")") == [
-            "link (((((((((((((((((((((((((((((((((x)))))))))))))))))))))))))))))))))",
-            "text a",
-        ])
+        #expect(nodes("[a]((((x))))") == ["link (((x)))", "text a"])
     }
 
-    @Test("An image's destination holds 33 nested pairs")
+    @Test("an image's destination holds nested pairs")
     func image() {
-        #expect(nodes("![a](" + Self.open33 + "x" + Self.close33 + ")") == [
-            "image (((((((((((((((((((((((((((((((((x)))))))))))))))))))))))))))))))))",
-            "text a",
-        ])
+        #expect(nodes("![a]((((x))))") == ["image (((x)))", "text a"])
     }
 
-    @Test("A link reference definition's destination holds 33 nested pairs")
+    @Test("a link reference definition's destination holds nested pairs")
     func referenceDefinition() {
-        #expect(nodes("[a]: " + Self.open33 + "x" + Self.close33 + "\n\n[a]") == [
-            "link (((((((((((((((((((((((((((((((((x)))))))))))))))))))))))))))))))))",
-            "text a",
-        ])
+        #expect(nodes("[a]: (((x)))\n\n[a]") == ["link (((x)))", "text a"])
     }
 
-    @Test("A link reference definition's destination on the line after its label holds 33 nested pairs")
+    @Test("a link reference definition's destination on the line after its label holds nested pairs")
     func referenceDefinitionDestinationOnNextLine() {
-        #expect(nodes("[a]:\n" + Self.open33 + "x" + Self.close33 + "\n\n[a]") == [
-            "link (((((((((((((((((((((((((((((((((x)))))))))))))))))))))))))))))))))",
-            "text a",
-        ])
+        #expect(nodes("[a]:\n(((x)))\n\n[a]") == ["link (((x)))", "text a"])
     }
 
-    @Test("An inline link's destination on the line after its `(` holds 33 nested pairs")
+    @Test("an inline link's destination on the line after its `(` holds nested pairs")
     func inlineLinkDestinationOnNextLine() {
-        #expect(nodes("[a](\n" + Self.open33 + "x" + Self.close33 + ")") == [
-            "link (((((((((((((((((((((((((((((((((x)))))))))))))))))))))))))))))))))",
-            "text a",
-        ])
+        #expect(nodes("[a](\n(((x))))") == ["link (((x)))", "text a"])
     }
 
-    @Test("An escaped `)` inside 33 nested pairs is not part of a pair")
+    @Test("an escaped `)` inside nested pairs is not part of a pair")
     func escapedCloser() {
-        #expect(nodes("[a](" + Self.open33 + "x\\)" + Self.close33 + ")") == [
-            "link (((((((((((((((((((((((((((((((((x))))))))))))))))))))))))))))))))))",
-            "text a",
-        ])
+        #expect(nodes("[a]((((x\\)))))") == ["link (((x))))", "text a"])
     }
 
-    @Test("An escaped `(` before 33 nested pairs is not part of a pair")
+    @Test("an escaped `(` before nested pairs is not part of a pair")
     func escapedOpener() {
-        #expect(nodes("[a](\\(" + Self.open33 + "x" + Self.close33 + ")") == [
-            "link ((((((((((((((((((((((((((((((((((x)))))))))))))))))))))))))))))))))",
-            "text a",
-        ])
+        #expect(nodes("[a](\\((((x))))") == ["link ((((x)))", "text a"])
     }
 
-    @Test("A destination of 34 nested pairs leaves no `)` to close the inline link")
+    @Test("a destination whose pairs take every `)` leaves none to close the inline link")
     func unclosedInlineLink() {
-        #expect(nodes("[a](" + Self.open33 + "(x" + Self.close33 + ")") == [
-            "text [a](((((((((((((((((((((((((((((((((((x))))))))))))))))))))))))))))))))))",
-        ])
+        #expect(nodes("[a](((((x))))") == ["text [a](((((x))))"])
     }
 
-    @Test("A link in a block quote has a destination of 33 nested pairs")
+    @Test("a link in a block quote has a destination of nested pairs")
     func inlineLinkInBlockQuote() {
-        #expect(nodes("> [a](" + Self.open33 + "x" + Self.close33 + ")") == [
-            "link (((((((((((((((((((((((((((((((((x)))))))))))))))))))))))))))))))))",
-            "text a",
-        ])
+        #expect(nodes("> [a]((((x))))") == ["link (((x)))", "text a"])
     }
 
-    @Test("An image in a list item has a destination of 33 nested pairs")
+    @Test("an image in a list item has a destination of nested pairs")
     func imageInListItem() {
-        #expect(nodes("- ![a](" + Self.open33 + "x" + Self.close33 + ")") == [
-            "image (((((((((((((((((((((((((((((((((x)))))))))))))))))))))))))))))))))",
-            "text a",
-        ])
+        #expect(nodes("- ![a]((((x))))") == ["image (((x)))", "text a"])
     }
 
-    @Test("An attribute form's `(…)` holds 33 nested pairs")
+    @Test("an attribute form's `(…)` holds nested pairs")
     func attribute() {
-        #expect(nodes("^[a](" + Self.open33 + "x" + Self.close33 + ")") == [
-            "attribute (((((((((((((((((((((((((((((((((x)))))))))))))))))))))))))))))))))",
-            "text a",
-        ])
+        #expect(nodes("^[a]((((x))))") == ["attribute (((x)))", "text a"])
     }
 
-    @Test("An attribute form's 33 nested pairs span a line ending")
+    @Test("an attribute form's nested pairs span a line ending")
     func attributeAcrossLineEnding() {
-        #expect(nodes("^[a](" + Self.open33 + "\nx" + Self.close33 + ")") == [
-            "attribute (((((((((((((((((((((((((((((((((\nx)))))))))))))))))))))))))))))))))",
-            "text a",
-        ])
+        #expect(nodes("^[a]((((\nx))))") == ["attribute (((\nx)))", "text a"])
     }
 
-    @Test("An escaped `)` inside an attribute form's 33 nested pairs is not part of a pair")
+    @Test("an escaped `)` inside an attribute form's nested pairs is not part of a pair")
     func attributeEscapedCloser() {
-        #expect(nodes("^[a](" + Self.open33 + "x\\)" + Self.close33 + ")") == [
-            "attribute (((((((((((((((((((((((((((((((((x\\))))))))))))))))))))))))))))))))))",
+        #expect(nodes("^[a]((((x\\)))))") == ["attribute (((x\\))))", "text a"])
+    }
+
+    @Test("an attribute in a block quote holds nested pairs")
+    func attributeInBlockQuote() {
+        #expect(nodes("> ^[a]((((x))))") == ["attribute (((x)))", "text a"])
+    }
+
+    // MARK: Deep nesting
+
+    // Matching each paragraph's parentheses costs time in proportion to its length, so these inputs of 250 KB to
+    // 500 KB parse well within the time limit.
+
+    private static let depth = 250_000
+    private static let openers = String(repeating: "(", count: depth)
+    private static let closers = String(repeating: ")", count: depth)
+
+    @Test(.timeLimit(.minutes(1)))
+    func deeplyNestedDestination() {
+        #expect(nodes("[a](" + Self.openers + "x" + Self.closers + ")") == [
+            "link \(Self.openers)x\(Self.closers)",
             "text a",
         ])
     }
 
-    @Test("An attribute in a block quote holds 33 nested pairs")
-    func attributeInBlockQuote() {
-        #expect(nodes("> ^[a](" + Self.open33 + "x" + Self.close33 + ")") == [
-            "attribute (((((((((((((((((((((((((((((((((x)))))))))))))))))))))))))))))))))",
+    @Test(.timeLimit(.minutes(1)))
+    func deeplyNestedAttribute() {
+        #expect(nodes("^[a](" + Self.openers + "x" + Self.closers + ")") == [
+            "attribute \(Self.openers)x\(Self.closers)",
             "text a",
         ])
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func deepUnclosedRunThenLink() {
+        #expect(nodes("[a](" + Self.openers + " [b](c)") == [
+            "text [a](\(Self.openers) ",
+            "link c",
+            "text b",
+        ])
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func manyUnclosedDestinations() {
+        let openers = String(repeating: "[](", count: 100_000)
+        #expect(nodes(openers + "x") == ["text \(openers)x"])
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func manyUnclosedAttributes() {
+        let openers = String(repeating: "^[](", count: 100_000)
+        #expect(nodes(openers + "x") == ["text \(openers)x"])
     }
 
     // MARK: Several destinations in one paragraph
@@ -205,19 +207,19 @@ struct NestedParenthesesTests {
         ])
     }
 
-    @Test("40 unclosed `(` end at a space, and `[b](c)` after it is a link")
+    @Test("unclosed `(`s end at a space, and `[b](c)` after it is a link")
     func unbalancedRunEndedBySpace() {
-        #expect(nodes("[a](" + Self.open33 + "((((((( [b](c)") == [
-            "text [a]((((((((((((((((((((((((((((((((((((((((( ",
+        #expect(nodes("[a](((((((((((( [b](c)") == [
+            "text [a](((((((((((( ",
             "link c",
             "text b",
         ])
     }
 
-    @Test("40 unclosed `(` end at a line ending, and `[b](c)` after it is a link")
+    @Test("unclosed `(`s end at a line ending, and `[b](c)` after it is a link")
     func unbalancedRunEndedByLineEnding() {
-        #expect(nodes("[a](" + Self.open33 + "(((((((\n[b](c)") == [
-            "text [a](((((((((((((((((((((((((((((((((((((((((",
+        #expect(nodes("[a](((((((((((\n[b](c)") == [
+            "text [a](((((((((((",
             "softbreak",
             "link c",
             "text b",

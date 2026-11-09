@@ -15,27 +15,27 @@ import Testing
 ///
 /// The list item's content starts at column 2, so the second tab of each `\t\tx` line contributes two columns of the
 /// four an indented code block strips and leaves two spaces of content (Tabs). Each such line costs time in proportion
-/// to its own length, so two million of them, about 8 MB of source, parse well within the time limit.
+/// to its own length, so 200,000 of them, about 800 KB of source, parse well within the time limit.
 @Suite("Runs of indented code lines whose indent splits a tab")
 struct SplitTabCodeLineRunTests {
 
-    // Takes about 15 seconds in a debug build, too long for every run; enable it when changing how code lines are
-    // copied into the arena.
-    @Test(.disabled("takes about 15 seconds"), .timeLimit(.minutes(1)))
-    func manySplitTabCodeLines() throws {
-        let markdown = "- a\n\n" + String(repeating: "\t\tx\n", count: 2_000_000)
-        let literal = try MarkdownDocument.withParsedDocument(markdown) { doc in
-            var literals: [String] = []
-            doc.root.children.forEach { list in
-                list.children.forEach { item in
-                    item.children.forEach { if case .codeBlock = $0.kind, let literal = $0.literal() { literals.append(literal) } }
-                }
-            }
-            try #require(literals.count == 1)
-            return literals[0]
-        }
-        #expect(literal.utf8.count == 8_000_000)
-        #expect(literal.hasPrefix("  x\n  x\n"))
-        #expect(literal.hasSuffix("  x\n  x\n"))
+    @Test
+    func splitTabCodeLines() {
+        #expect(TreeDump.dump("- a\n\n\t\tx\n\t\tx\n", options: []) == """
+            document
+              list bullet '-' loose
+                item
+                  paragraph
+                    text "a"
+                  code_block "" "  x\\n  x\\n"
+
+            """)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func manySplitTabCodeLines() {
+        let markdown = "- a\n\n" + String(repeating: "\t\tx\n", count: 200_000)
+        let literals = MarkdownDocument.withParsedDocument(markdown) { codeBlocks($0).map(\.literal) }
+        #expect(literals == [String(repeating: "  x\n", count: 200_000)])
     }
 }
