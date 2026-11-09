@@ -11,14 +11,11 @@
 import Testing
 import CommonMark
 
-/// Storage growth for a paragraph whose single text run starts with content rewritten after its neighbours were
-/// parsed, followed by many separate text pieces.
-///
-/// A resolved smart quote pair takes its final glyphs only once the paragraph's inlines are parsed. It precedes text
-/// pieces that merge into one run - unmatched brackets, image openers, emphasis delimiters, apostrophes, link openers,
-/// unresolved footnote references. Merging that run must store content in proportion to the input.
-@Suite("Text runs merged after rewritten content store linear content")
-struct RelocatedTextRunSegmentGrowthTests {
+/// Storage growth for a paragraph whose text is one run made of many separate pieces - unmatched brackets, image
+/// openers, emphasis delimiters, apostrophes, link openers, unresolved footnote references - most of them after a
+/// pair of smart quotes. The run's content is stored in proportion to the input.
+@Suite("Text runs merged from many pieces store linear content")
+struct MergedTextRunStorageGrowthTests {
 
     /// A source of `prefix` followed by `count` copies of `unit`.
     struct RepeatedSource: Sendable, CustomTestStringConvertible {

@@ -15,11 +15,7 @@ import CommonMark
 ///
 /// An HTML block of types 1 to 5 continues until a line that meets its end condition, and that line is the last line
 /// of the block (HTML blocks), so the block ends at the end of that line, including text after the end condition and
-/// trailing spaces. Each type is tried at the top level, with the end condition on the next line, after a blank line
-/// and after other lines, and the block is tried in a block quote, after a tab split by a block quote marker, in a
-/// bullet and an ordered list item, in a footnote definition, in a block quote in a list item and in a list item in a
-/// block quote. A block whose end condition is on its first line, one of type 6 that a blank line ends, one that a
-/// line not continuing its container ends, and one open at the end of the document end on their last line.
+/// trailing spaces. A block that ends otherwise ends at the end of its last line.
 @Suite("An HTML block ends on the line that meets its end condition")
 struct HTMLBlockEndConditionLineRangeTests {
 

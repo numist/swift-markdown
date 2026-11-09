@@ -13,10 +13,9 @@ import Testing
 
 /// Lazy continuation lines of a paragraph nested in many block quotes.
 ///
-/// A line without a `>` fails the outermost open block quote's continuation, so it continues the paragraph as a lazy
-/// continuation line (Block quotes) without being matched against the inner quotes. Each such line costs time in
-/// proportion to its own length, so 40,000 nested quotes followed by 40,000 lazy lines, about 240 KB of source, parse
-/// well within the time limit.
+/// A line without a `>` continues the innermost paragraph as a lazy continuation line (Block quotes), however many
+/// block quotes hold it, so 40,000 nested quotes followed by 40,000 lazy lines, about 240 KB of source, parse within
+/// the time limit.
 @Suite("Lazy continuation under deep block-quote nesting")
 struct DeepBlockQuoteLazyContinuationTests {
 

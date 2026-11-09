@@ -14,12 +14,7 @@ import CommonMark
 /// Indented code blocks followed by blank lines.
 ///
 /// Blank lines following an indented code block are not included in it (Indented code blocks), so the block ends at the
-/// end of its last line that is not blank. Blank lines between its lines are part of it. The blank lines are empty,
-/// hold fewer than four columns of whitespace, more than four columns, or a tab, and the block closes at a line that
-/// is not indented, at a line that does not continue its container, or at the end of the document. Each is tried at
-/// the top level, in a block quote, in a bullet and an ordered list item, in a footnote definition and in a block
-/// quote in a list item. A block closed by the line right after its last line, and one whose last line ends with
-/// spaces, end at the end of their last line.
+/// end of its last line that is not blank. Blank lines between its lines are part of it.
 @Suite("An indented code block ends at its last line that is not blank")
 struct IndentedCodeTrailingBlankRangeTests {
 

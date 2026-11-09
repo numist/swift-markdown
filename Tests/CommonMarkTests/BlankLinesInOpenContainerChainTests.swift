@@ -15,9 +15,7 @@ import CommonMark
 ///
 /// A blank line continues a footnote definition and a list item that holds a block, and closes a list item without a
 /// block (List items) and a block quote (Block quotes), so a run of blank lines keeps the chain open down to the first
-/// block it closes. The chains end in a block quote, an empty list item, a list item holding a paragraph and a
-/// paragraph. The blank lines are empty, hold spaces, or hold tabs that continue some of the footnote definitions, and
-/// several follow each other, so later ones meet the same open blocks.
+/// block it closes.
 @Suite("Blank lines in a long chain of open containers")
 struct BlankLinesInOpenContainerChainTests {
 

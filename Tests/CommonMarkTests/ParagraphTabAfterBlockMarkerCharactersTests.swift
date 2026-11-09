@@ -11,11 +11,11 @@
 import Testing
 import CommonMark
 
-/// A paragraph line that begins with block-marker characters (`*`, `-`, `+`, `>`, digits, `.`, `)`) followed by a
-/// tab. The parser expands that tab into spaces in a copy of the line so container markers can consume part of it,
-/// but the paragraph's text keeps the tab as written, whether or not source positions are tracked.
-@Suite("Paragraph content on a tab-expanded line")
-struct TabExpandedParagraphContentTests {
+/// A paragraph line that begins with characters that can start a block (`*`, `-`, `+`, `>`, digits, `.`, `)`)
+/// followed by a tab. Tabs in lines are not expanded to spaces (Tabs), so the paragraph's text keeps the tab as
+/// written, whether or not source positions are tracked.
+@Suite("Paragraph text keeps a tab after block marker characters")
+struct ParagraphTabAfterBlockMarkerCharactersTests {
 
     private static let positionModes: [MarkdownDocument.ParseOptions] = [[], [.sourcePosition]]
 
@@ -61,8 +61,8 @@ struct TabExpandedParagraphContentTests {
             """)
     }
 
-    @Test("consecutive tab-expanded lines keep their tabs", arguments: positionModes)
-    func consecutiveTabExpandedLines(mode: MarkdownDocument.ParseOptions) {
+    @Test("consecutive such lines keep their tabs", arguments: positionModes)
+    func consecutiveLines(mode: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("**\tx\n**\ty", options: mode) == """
             document
               paragraph
@@ -85,7 +85,7 @@ struct TabExpandedParagraphContentTests {
     }
 
     /// The `=` line follows only a link reference definition, so it is paragraph text rather than a setext heading underline.
-    @Test("a tab-expanded line after an `=` line that is paragraph text keeps its tab", arguments: positionModes)
+    @Test("a line after an `=` line that is paragraph text keeps its tab", arguments: positionModes)
     func afterUnderlineLeftAsText(mode: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("[a\n ]:b\n=\n**\tx", options: mode) == """
             document

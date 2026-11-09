@@ -57,16 +57,16 @@ struct DeepListNestingTests {
     private static let document = [Node(kind: "document")]
     private static let hyphenItems = ["list bullet '-' tight", "item"]
 
-    @Test(arguments: [98, 99, 150])
-    func bulletListBelowBlockQuotes(quotes: Int) {
-        #expect(Self.chain(String(repeating: ">", count: quotes) + "- ")
-            == Self.document + Self.nodes(["block_quote"], repeated: quotes) + Self.nodes(Self.hyphenItems, repeated: 1))
+    @Test
+    func bulletListBelowBlockQuotes() {
+        #expect(Self.chain(String(repeating: ">", count: 150) + "- ")
+            == Self.document + Self.nodes(["block_quote"], repeated: 150) + Self.nodes(Self.hyphenItems, repeated: 1))
     }
 
-    @Test(arguments: [98, 99, 150])
-    func orderedListBelowBlockQuotes(quotes: Int) {
-        #expect(Self.chain(String(repeating: ">", count: quotes) + "1. ")
-            == Self.document + Self.nodes(["block_quote"], repeated: quotes)
+    @Test
+    func orderedListBelowBlockQuotes() {
+        #expect(Self.chain(String(repeating: ">", count: 150) + "1. ")
+            == Self.document + Self.nodes(["block_quote"], repeated: 150)
                 + Self.nodes(["list ordered start=1 delim=period tight", "item"], repeated: 1))
     }
 

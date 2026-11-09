@@ -22,23 +22,23 @@ struct HTMLBlockType7ExcludedTagNameTests {
         TreeDump.dump(markdown, options: Self.options, sourceRanges: true)
     }
 
-    @Test func testSelfClosingScriptIsParagraph() {
+    @Test func selfClosingScriptIsParagraph() {
         #expect(surface("<script/>") == "document @1:1-1:10\n  paragraph @1:1-1:10\n    html_inline \"<script/>\" @1:1-1:10\n")
     }
 
-    @Test func testSelfClosingUppercasePreIsParagraph() {
+    @Test func selfClosingUppercasePreIsParagraph() {
         #expect(surface("<PRE/>") == "document @1:1-1:7\n  paragraph @1:1-1:7\n    html_inline \"<PRE/>\" @1:1-1:7\n")
     }
 
-    @Test func testSelfClosingMixedCaseStyleIsParagraph() {
+    @Test func selfClosingMixedCaseStyleIsParagraph() {
         #expect(surface("<Style/>") == "document @1:1-1:9\n  paragraph @1:1-1:9\n    html_inline \"<Style/>\" @1:1-1:9\n")
     }
 
-    @Test func testClosingScriptTagStartsHTMLBlock() {
+    @Test func closingScriptTagStartsHTMLBlock() {
         #expect(surface("</script>") == "document @1:1-1:10\n  html_block \"</script>\\n\" @1:1-1:10\n")
     }
 
-    @Test func testSelfClosingScriptingStartsHTMLBlock() {
+    @Test func selfClosingScriptingStartsHTMLBlock() {
         #expect(surface("<scripting/>") == "document @1:1-1:13\n  html_block \"<scripting/>\\n\" @1:1-1:13\n")
     }
 }

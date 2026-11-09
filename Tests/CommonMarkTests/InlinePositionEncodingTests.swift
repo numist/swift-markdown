@@ -57,7 +57,7 @@ struct InlinePositionEncodingTests {
         try #require(n[2].literal == "e\u{301}x")
         #expect(n[2].range == range(1, 1, 1, 5))
 
-        // U+FFFD replacement char, 3 bytes (also the invalid-UTF-8 repair byte accounting).
+        // U+FFFD, 3 bytes.
         n = nodes("\u{FFFD}")
         try #require(n.map(\.kind) == [.document, .paragraph, .text])
         try #require(n[2].literal == "\u{FFFD}")

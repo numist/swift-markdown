@@ -124,8 +124,34 @@ struct BasicTests {
         - Third item
         """
 
-        MarkdownDocument.withParsedDocument(sample) { document in
-        #expect(document.root.kind == .document)
-        }
+        #expect(TreeDump.dump(sample, options: []) == """
+            document
+              heading 1
+                text "Hello, World"
+              paragraph
+                text "This is a "
+                emph
+                  text "simple"
+                text " markdown document with some "
+                strong
+                  text "bold"
+                text " text, a "
+                link "https://example.com" ""
+                  text "link"
+                text ", and a code span: "
+                code "let x = 1"
+                text "."
+              list bullet '-' tight
+                item
+                  paragraph
+                    text "First item"
+                item
+                  paragraph
+                    text "Second item"
+                item
+                  paragraph
+                    text "Third item"
+
+            """)
     }
 }

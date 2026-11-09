@@ -15,10 +15,10 @@ import Testing
 /// escapes and entity references are decoded.
 @Suite("Attribute definition value trimming")
 struct AttributeDefinitionTrailingWhitespaceTests {
-    private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink]
+    private static let options: MarkdownDocument.ParseOptions = [.attributes, .sourcePosition]
 
     @Test
-    func testTopLevelAfterBlankThenNULLine() {
+    func topLevelAfterBlankThenNULLine() {
         #expect(TreeDump.dump("^[][$]\n\n^[$]:l \n\u{0}", options: Self.options) == """
             document
               paragraph
@@ -30,7 +30,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     }
 
     @Test
-    func testTrailingTab() {
+    func trailingTab() {
         #expect(TreeDump.dump("^[][$]\n- ^[$]:l\t\n\u{0}", options: Self.options) == """
             document
               paragraph
@@ -44,7 +44,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     }
 
     @Test
-    func testBlockQuote() {
+    func blockQuote() {
         #expect(TreeDump.dump("^[][$]\n> ^[$]:l \n\u{0}", options: Self.options) == """
             document
               paragraph
@@ -57,7 +57,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     }
 
     @Test
-    func testTwoTrailingSpaces() {
+    func twoTrailingSpaces() {
         #expect(TreeDump.dump("^[][$]\n- ^[$]:l  \n\u{0}", options: Self.options) == """
             document
               paragraph
@@ -71,7 +71,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     }
 
     @Test
-    func testInteriorSpacesKept() {
+    func interiorSpacesKept() {
         #expect(TreeDump.dump("^[][$]\n\n^[$]:a b \nx", options: Self.options) == """
             document
               paragraph
@@ -83,7 +83,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     }
 
     @Test
-    func testFollowedByAnotherDefinition() {
+    func followedByAnotherDefinition() {
         #expect(TreeDump.dump("^[][$]^[][y]\n\n^[$]:l \n^[y]:m \nx", options: Self.options) == """
             document
               paragraph
@@ -96,7 +96,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     }
 
     @Test
-    func testCRLF() {
+    func crlf() {
         #expect(TreeDump.dump("^[][$]\n\n^[$]:l \r\nx", options: Self.options) == """
             document
               paragraph
@@ -110,7 +110,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     /// The whitespace after the `:` may include one line ending, so a whitespace-only value line takes its value
     /// from the next line.
     @Test
-    func testWhitespaceOnlyValueLineTakesNextLine() {
+    func whitespaceOnlyValueLineTakesNextLine() {
         #expect(TreeDump.dump("^[][$]\n\n^[$]: \t \nx \nz", options: Self.options) == """
             document
               paragraph
@@ -122,7 +122,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     }
 
     @Test
-    func testLeadingSpaceAfterColon() {
+    func leadingSpaceAfterColon() {
         #expect(TreeDump.dump("^[][$]\n\n^[$]: l \nx", options: Self.options) == """
             document
               paragraph
@@ -134,7 +134,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     }
 
     @Test
-    func testEscapesAndEntitiesDecoded() {
+    func escapesAndEntitiesDecoded() {
         #expect(TreeDump.dump("^[][$]\n\n^[$]:a\\*&amp;b\nx", options: Self.options) == """
             document
               paragraph
@@ -147,7 +147,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
 
     /// `\&` escapes the `&`, so `amp;` is literal.
     @Test
-    func testEscapeBeforeEntity() {
+    func escapeBeforeEntity() {
         #expect(TreeDump.dump("^[][$]\n\n^[$]:\\&amp; \nx", options: Self.options) == """
             document
               paragraph
@@ -159,7 +159,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
     }
 
     @Test
-    func testTrimmedBeforeLazyContinuationLine() {
+    func trimmedBeforeLazyContinuationLine() {
         #expect(TreeDump.dump("^[][$]\n- ^[$]:l \nx", options: Self.options) == """
             document
               paragraph
@@ -174,7 +174,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
 
     /// A definition that doesn't start a paragraph is paragraph text.
     @Test
-    func testDefinitionAfterParagraphTextIsLiteral() {
+    func definitionAfterParagraphTextIsLiteral() {
         #expect(TreeDump.dump("^[][$]\n^[$]:l \n", options: Self.options) == """
             document
               paragraph

@@ -53,28 +53,27 @@ struct TextMergeSegmentCountTests {
     }
 
     @Test(arguments: [
-        "a &amp; b &lt; c",
-        "a\\*b\\*c",
-        "a&amp;b&amp;c&amp;d",
-        "[a] [b] [c] it's",
-        "*a **b *c",
-        "a _b *c_ d* e",
+        ("a &amp; b &lt; c", [4, 4, 4, 4]),
+        ("a\\*b\\*c", [4, 4, 4, 4]),
+        ("a&amp;b&amp;c&amp;d", [6, 6, 6, 6]),
+        ("[a] [b] [c] it's", [12, 12, 12, 12]),
+        ("*a **b *c", [6, 6, 6, 6]),
+        ("a _b *c_ d* e", [8, 8, 8, 8]),
     ])
-    func segmentsGrowByTheSameCountPerCopy(_ source: String) {
-        let added = Self.segmentsAddedPerCopy(source, options: [])
-        #expect(added == Array(repeating: added[0], count: 4))
+    func segmentsGrowByTheSameCountPerCopy(_ source: String, _ added: [Int]) {
+        #expect(Self.segmentsAddedPerCopy(source, options: []) == added)
     }
 
     @Test(arguments: [
-        "x ... y ... z",
-        "*a* it's b",
+        ("x ... y ... z", [4, 4, 4, 4]),
+        ("*a* it's b", [6, 6, 6, 6]),
     ])
-    func smartSegmentsGrowByTheSameCountPerCopy(_ source: String) {
-        let added = Self.segmentsAddedPerCopy(source, options: [.smart])
-        #expect(added == Array(repeating: added[0], count: 4))
+    func smartSegmentsGrowByTheSameCountPerCopy(_ source: String, _ added: [Int]) {
+        #expect(Self.segmentsAddedPerCopy(source, options: [.smart]) == added)
     }
 
     /// Copies that merge into one text node add segments only to that node.
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test(arguments: [
         ("a &amp; b &lt; c", []),
         ("a\\*b\\*c", []),
@@ -84,9 +83,8 @@ struct TextMergeSegmentCountTests {
         ("x ... y ... z", [.smart]),
     ] as [(String, MarkdownDocument.ParseOptions)])
     func mergedCopiesAddSegmentsOnlyToTheirTextNode(_ source: String, _ options: MarkdownDocument.ParseOptions) {
-        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let (textNodes, unheld) = Self.textNodesAndUnheldSegments(source, options: options)
         #expect(textNodes == [1, 1, 1, 1, 1])
-        #expect(unheld == Array(repeating: unheld[0], count: 5))
+        #expect(unheld == [1, 1, 1, 1, 1])
     }
 }
