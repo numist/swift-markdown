@@ -13,14 +13,20 @@ import Testing
 
 /// Storage for paragraphs and setext headings whose lines are not contiguous in the source.
 ///
-/// Such content is a list of its source lines joined by line endings. It is copied into the materialized string buffer
-/// only where a block structure needs contiguous bytes, and then once. The empty document's buffer holds one byte, the
-/// line ending that joins lines.
-@Suite("Content of non-contiguous lines is copied at most once")
+/// Such content is read in place as its source lines joined by line endings, including where leading definitions and
+/// a task list item marker are matched, so only a link title spanning lines is copied into the materialized string
+/// buffer. The empty document's buffer holds one byte, the line ending that joins lines.
+@Suite("Content of non-contiguous lines stays in the source")
 struct NoncontiguousLeafStorageTests {
 
-    private func materializedSize(_ source: String, options: MarkdownDocument.ParseOptions = []) -> Int {
-        MarkdownDocument.withParsedDocument(source, options: options) { $0._materializedStringSize }
+    private static let options: MarkdownDocument.ParseOptions = [.tasklist, .attributes, .sourcePosition]
+
+    private func materializedSize(_ source: String) -> Int {
+        MarkdownDocument.withParsedDocument(source, options: Self.options) { $0._materializedStringSize }
+    }
+
+    private func tree(_ source: String) -> String {
+        TreeDump.dump(source, options: Self.options, sourceRanges: true)
     }
 
     @Test("the empty document holds the line ending")
@@ -28,16 +34,120 @@ struct NoncontiguousLeafStorageTests {
         #expect(materializedSize("") == 1)
     }
 
-    @Test("a setext heading in a block quote copies its text once")
-    func setextHeadingInBlockQuote() {
-        // "abc\ndef"
-        #expect(materializedSize("> abc\n> def\n> ===\n") == 1 + 7)
-        #expect(materializedSize("> abc\n> def\n> ===\n", options: .sourcePosition) == 1 + 7)
+    @Test("a setext heading")
+    func setextHeading() {
+        let source = "> abc\n> def\n> ===\n"
+        #expect(materializedSize(source) == 1)
+        #expect(tree(source) == """
+            document @1:1-3:6
+              block_quote @1:1-3:6
+                heading 1 @1:3-3:6
+                  text "abc" @1:3-1:6
+                  softbreak @-
+                  text "def" @2:3-2:6
+
+            """)
     }
 
-    @Test("a setext heading after a definition in a block quote copies its lines once")
-    func setextHeadingAfterDefinitionInBlockQuote() {
-        // "[x]: /u\nabc"
-        #expect(materializedSize("> [x]: /u\n> abc\n> ===\n") == 1 + 11)
+    @Test("a setext heading after a definition")
+    func setextHeadingAfterDefinition() {
+        let source = "> [x]: /u\n> abc\n> ===\n"
+        #expect(materializedSize(source) == 1)
+        #expect(tree(source) == """
+            document @1:1-3:6
+              block_quote @1:1-3:6
+                heading 1 @2:3-3:6
+                  text "abc" @2:3-2:6
+
+            """)
+    }
+
+    @Test("a paragraph beginning with a bracket that begins no definition")
+    func bracketWithoutDefinition() {
+        let source = "> [abc\n> def\n"
+        #expect(materializedSize(source) == 1)
+        #expect(tree(source) == """
+            document @1:1-2:6
+              block_quote @1:1-2:6
+                paragraph @1:3-2:6
+                  text "[abc" @1:3-1:7
+                  softbreak @-
+                  text "def" @2:3-2:6
+
+            """)
+    }
+
+    @Test("a paragraph after a definition")
+    func paragraphAfterDefinition() {
+        let source = "> [a]: /u\n> abc\n> [a]\n"
+        #expect(materializedSize(source) == 1)
+        #expect(tree(source) == """
+            document @1:1-3:6
+              block_quote @1:1-3:6
+                paragraph @2:3-3:6
+                  text "abc" @2:3-2:6
+                  softbreak @-
+                  link "/u" "" @3:3-3:6
+                    text "a" @3:4-3:5
+
+            """)
+    }
+
+    @Test("a paragraph after an attribute definition")
+    func paragraphAfterAttributeDefinition() {
+        let source = "> ^[a]: b\n> ^[c][a]\n"
+        #expect(materializedSize(source) == 1)
+        #expect(tree(source) == """
+            document @1:1-2:10
+              block_quote @1:1-2:10
+                paragraph @2:3-2:10
+                  attribute "b" @2:3-2:10
+                    text "c" @2:5-2:6
+
+            """)
+    }
+
+    @Test("a definition whose title spans lines copies the title")
+    func titleSpanningLines() {
+        let source = "> [a]: /u \"t\n> u\"\n> [a]\n"
+        // "t\nu"
+        #expect(materializedSize(source) == 1 + 3)
+        #expect(tree(source) == """
+            document @1:1-3:6
+              block_quote @1:1-3:6
+                paragraph @3:3-3:6
+                  link "/u" "t\\nu" @3:3-3:6
+                    text "a" @3:4-3:5
+
+            """)
+    }
+
+    @Test("a task list item marker")
+    func taskListItemMarker() {
+        let source = "- [x] a\n  b\n"
+        #expect(materializedSize(source) == 1)
+        #expect(tree(source) == """
+            document @1:1-2:4
+              list bullet '-' tight @1:1-2:4
+                tasklist checked @1:1-2:4
+                  paragraph @1:7-2:4
+                    text "a" @1:7-1:8
+                    softbreak @-
+                    text "b" @2:3-2:4
+
+            """)
+    }
+
+    @Test("line tabulations around a definition")
+    func lineTabulationsAroundDefinition() {
+        let source = "> \u{0B}[a]: /u\n> b\u{0B}\n"
+        #expect(materializedSize(source) == 1)
+        #expect(tree(source) == """
+            document @1:1-2:5
+              block_quote @1:1-2:5
+                paragraph @2:3-2:4
+                  text "b" @2:3-2:4
+
+            """)
     }
 }

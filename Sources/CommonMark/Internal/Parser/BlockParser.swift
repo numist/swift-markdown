@@ -76,12 +76,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case segments(UniqueArray<Segment>)
     }
 
-    /// Result of `materializePendingContent`. `map` is the content's run map when it is flattened from a segment list.
-    struct LeafMaterialization {
-        var chunk: Chunk
-        var map: [ArenaRun] = []
-    }
-
     /// Result of the code/HTML block continuation handlers: whether the block stays open plus the updated leaf.
     struct LeafContinuation : ~Copyable {
         var stillOpen: Bool
@@ -503,25 +497,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         fatalError("pending content for node \(leaf.node) must drain before node \(node) accumulates content")
     }
 
-    /// Re-seeds `node`'s content as the segments that `map` images for arena `chunk`, so later lines append as to any segment-list paragraph.
-    ///
-    /// Used when a setext heading's content loses leading link reference definitions, or a paragraph left holding only definitions continues.
-    private mutating func reseedSegments(_ chunk: Chunk, map: [ArenaRun], for node: DocumentStorage.Index) -> PendingLeaf {
-        precondition(!chunk.inSource, "source-backed content re-seeds as a `.lazy` range, not as segments")
-        precondition(map.reduce(0) { $0 + Int($1.length) } == chunk.length, "a run map tiles its content")
-        var segments = UniqueArray<Segment>()
-        for run in map {
-            if run.sourceOffset < 0 {
-                for _ in 0..<run.length {
-                    segments.append(storage.newlineSegment)
-                }
-            } else {
-                segments.append(Segment(offset: run.sourceOffset, length: run.length, inSource: true))
-            }
-        }
-        return PendingLeaf(node: node, content: .segments(segments))
-    }
-
     /// Appends `sourceBytes[range]` to `node`'s pending content.
     private mutating func addLine(range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         // Code and HTML block bodies, which are never inline-parsed, accumulate as segments.
@@ -770,22 +745,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // Only code/HTML blocks drain here, and they only ever accumulate segments.
                 fatalError("drainSegments called on non-segment content")
             }
-        }
-    }
-
-    /// Materializes the open paragraph's pending content as a chunk: a `.lazy` range in place, or a segment list flattened into the arena with its run map.
-    private mutating func materializePendingContent(_ node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> LeafMaterialization {
-        precondition(pending != nil, "an open paragraph always holds its accumulated content")
-        let leaf = pending!
-        precondition(leaf.node == node, "the pending leaf is the open paragraph's")
-        switch consume leaf.content {
-        case .lazy(let range, let joinPending):
-            precondition(!joinPending, "a deferred line join is always consumed by the next line")
-            return LeafMaterialization(chunk: Chunk(offset: range.lowerBound, length: range.count, inSource: true))
-        case .segments(let segs):
-            var map: [ArenaRun] = []
-            let chunk = flattenSegments(segs, map: &map)
-            return LeafMaterialization(chunk: chunk, map: map)
         }
     }
 
@@ -1116,17 +1075,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
               let underline = matchSetextUnderline(range: line.cursor..<lineRange.upperBound, firstNonSpace: line.firstNonSpace) else {
             return false
         }
-        // Leading link reference definitions come out first; if they are the whole paragraph, no heading forms.
         let para = current
-        let materialized = materializePendingContent(para, pending: consume pending)
-        let raw = materialized.chunk
-        // Empty unless the content was flattened from segments.
-        let flatMap = materialized.map
-        pending = nil
-        let trimmedHead = raw.trimmingWhitespace(using: self)
-        let stripped = parseDefinitions(in: trimmedHead)
-        if !self.isBlank(chunk: stripped) {
-            makeHeading(para, level: underline.level, raw: raw, stripped: stripped, flatMap: flatMap, underlineEnd: underline.end)
+        precondition(pending != nil, "an open paragraph always holds its accumulated content")
+        // Leading link reference definitions come out first; if they are the whole paragraph, no heading forms.
+        let content = headingContentRange(of: pending!)
+        if !content.isEmpty {
+            makeHeading(para, level: underline.level, content: narrowedContent(pending.take()!, to: content), underlineEnd: underline.end)
             return true
         }
         // A paragraph of only definitions forms no heading (Setext headings), but it is open while this line is
@@ -1141,16 +1095,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             interruptsParagraph: true
         )
         if continuesParagraph {
-            // These leading definitions are registered already; restoring them below lets the
-            // paragraph's finalize, or the split of a table that forms first, remove them again.
-            pending = raw.inSource
-                ? PendingLeaf(node: para, content: .lazy(range: raw.range))
-                : reseedSegments(raw, map: flatMap, for: para)
+            // The leading definitions are registered already, and the paragraph's finalize, or the split of a table
+            // that forms first, removes them again.
             pending = appendNewline(to: para, pending: consume pending)
             pending = addLine(range: line.firstNonSpace..<lineRange.upperBound, to: para, pending: consume pending)
             return true
         }
         // Only definitions: drop the paragraph and dispatch the line as a new block.
+        pending = nil
         removeEmptiedParagraph(para)
         openParagraphTableState = nil
         guard let parent = storage[para].parent else {
@@ -1161,23 +1113,45 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return false
     }
 
-    /// Turns the open paragraph into a `level` heading holding `stripped`, `raw` without its leading definitions, and
-    /// closes it, since no line continues a heading. `flatMap` is `raw`'s run map, and the heading ends at `underlineEnd`,
-    /// past its underline's last marker character.
-    private mutating func makeHeading(_ para: DocumentStorage.Index, level: UInt8, raw: Chunk, stripped: Chunk, flatMap: [ArenaRun], underlineEnd: Int) {
+    /// Where a setext heading's raw content (Setext headings) lies in the open paragraph's pending `leaf`: past its
+    /// leading definitions and the whitespace after them, up to its trailing whitespace. The offsets are source offsets
+    /// for a `.lazy` range and virtual offsets for a segment list.
+    private mutating func headingContentRange(of leaf: borrowing PendingLeaf) -> Range<Int> {
+        switch leaf.content {
+        case .lazy(let range, let joinPending):
+            precondition(!joinPending, "a deferred line join is always consumed by the next line")
+            let trimmed = Chunk(offset: range.lowerBound, length: range.count, inSource: true).trimmingWhitespace(using: self)
+            return parseDefinitions(in: trimmed).trimmingWhitespace(using: self).range
+        case .segments(let segs):
+            let trimmed = trimmedRange(of: segs)
+            return trimmed.isEmpty ? trimmed : rawContentStart(in: segs, trimmed: trimmed, taskItemParagraph: nil)..<trimmed.upperBound
+        }
+    }
+
+    /// `leaf`'s content narrowed to `range`, in the offsets `headingContentRange` returns.
+    private func narrowedContent(_ leaf: consuming PendingLeaf, to range: Range<Int>) -> PendingContent {
+        switch consume leaf.content {
+        case .lazy:
+            return .lazy(range: range)
+        case .segments(let segs):
+            return .segments(segments(segs, in: range))
+        }
+    }
+
+    /// Turns the open paragraph into a `level` heading holding `content` and closes it, since no line continues a
+    /// heading. The heading ends at `underlineEnd`, past its underline's last marker character.
+    private mutating func makeHeading(_ para: DocumentStorage.Index, level: UInt8, content: consuming PendingContent, underlineEnd: Int) {
         storage[para].kind = .heading(level: Int(level))
         openParagraphTableState = nil
-        let content = stripped.trimmingWhitespace(using: self)
-        var map = flatMap.isEmpty ? [] : sliceRuns(flatMap, from: content.offset - raw.offset, length: content.length)
         if positionsEnabled {
-            storage.setSourceStart(para, sourceExtent(of: content, in: raw, map: flatMap).start)
+            switch content {
+            case .lazy(let range, _):
+                storage.setSourceStart(para, range.lowerBound)
+            case .segments(let segs):
+                storage.setSourceStart(para, segmentsSourceSpan(segs).start)
+            }
         }
-        let nulReplaced = replacingNUL(content, map: &map)
-        if positionsEnabled, !map.isEmpty {
-            arenaSourceMaps[para] = map
-        }
-        pendingInlines.append((para, storage.intern(nulReplaced)))
-        _ = finalize(node: para, pending: nil, endsOnCurrentLine: true)
+        _ = finalize(node: para, pending: PendingLeaf(node: para, content: content), endsOnCurrentLine: true)
         if positionsEnabled {
             storage.setSourceEnd(para, underlineEnd)
         }
@@ -1890,6 +1864,81 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return segs
     }
 
+    /// The virtual range of a leaf's lines `segs` without leading and trailing whitespace (Paragraphs, Setext headings).
+    private func trimmedRange(of segs: borrowing UniqueArray<Segment>) -> Range<Int> {
+        var total = 0
+        for i in 0..<segs.count {
+            total += Int(segs[i].length)
+        }
+        var lower = 0
+        leading: for i in 0..<segs.count {
+            let seg = segs[i]
+            for j in 0..<Int(seg.length) {
+                if !segmentByte(seg, j).isASCIISpace {
+                    break leading
+                }
+                lower += 1
+            }
+        }
+        var upper = total
+        trailing: for i in stride(from: segs.count - 1, through: 0, by: -1) {
+            let seg = segs[i]
+            for j in stride(from: Int(seg.length) - 1, through: 0, by: -1) {
+                if upper == lower || !segmentByte(seg, j).isASCIISpace {
+                    break trailing
+                }
+                upper -= 1
+            }
+        }
+        return lower..<upper
+    }
+
+    /// `segs` narrowed to the virtual `range`, whose bounds lie on source bytes.
+    private func segments(_ segs: consuming UniqueArray<Segment>, in range: Range<Int>) -> UniqueArray<Segment> {
+        precondition(!range.isEmpty, "a leaf's narrowed content is not empty")
+        var segs = segs
+        var first = 0
+        var firstStart = 0
+        while firstStart + Int(segs[first].length) <= range.lowerBound {
+            firstStart += Int(segs[first].length)
+            first += 1
+        }
+        var last = first
+        var lastStart = firstStart
+        while lastStart + Int(segs[last].length) < range.upperBound {
+            lastStart += Int(segs[last].length)
+            last += 1
+        }
+        segs[last].length = Int32(range.upperBound - lastStart)
+        segs[first].offset += Int32(range.lowerBound - firstStart)
+        segs[first].length -= Int32(range.lowerBound - firstStart)
+        segs.removeSubrange((last + 1)..<segs.count)
+        segs.removeSubrange(0..<first)
+        return segs
+    }
+
+    /// Queues the raw content of the paragraph `node` whose lines are `segs` for inline parsing, as segments of the
+    /// source, or removes the paragraph when its definitions or task list item marker leave nothing.
+    private mutating func finishParagraph(_ node: DocumentStorage.Index, segments segs: consuming UniqueArray<Segment>) {
+        let trimmed = trimmedRange(of: segs)
+        if trimmed.isEmpty {
+            // Lines holding only line tabulations and form feeds leave the paragraph no raw content (Paragraphs).
+            return
+        }
+        let start = rawContentStart(in: segs, trimmed: trimmed, taskItemParagraph: node)
+        if start == trimmed.upperBound {
+            removeEmptiedParagraph(node)
+            return
+        }
+        let content = segments(segs, in: start..<trimmed.upperBound)
+        if positionsEnabled {
+            let span = segmentsSourceSpan(content)
+            storage.setSourceStart(node, span.start)
+            storage.setSourceEnd(node, span.end)
+        }
+        pendingInlines.append((node, storage.intern(content)))
+    }
+
     /// Whether a paragraph's segment list begins or ends with a line tabulation or form feed, whitespace that
     /// `trimSegments` leaves for the flat content's trim to remove.
     private func segmentsEndInControlWhitespace(_ segs: borrowing UniqueArray<Segment>) -> Bool {
@@ -2126,22 +2175,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             case .chunk(let raw):
                 runParagraphMatchers(node: node, raw: raw, map: map)
             case .segments(let segs):
-                // Prose stays segments; only content a matcher might match is flattened.
-                let trimmed = trimSegments(segs)
-                if segmentsCouldMatchMatcher(trimmed) || segmentsEndInControlWhitespace(trimmed) {
+                if openParagraphTableState?.tablePending == true {
+                    // The table parser reads its rows flat.
                     var map: [ArenaRun] = []
-                    let raw = flattenSegments(trimmed, map: &map)
+                    let raw = flattenSegments(trimSegments(segs), map: &map)
                     runParagraphMatchers(node: node, raw: raw, map: map)
                 } else {
-                    if positionsEnabled {
-                        storage.setSourceEnd(node, segmentsSourceSpan(trimmed).end)
-                    }
-                    pendingInlines.append((node, storage.intern(trimmed)))
+                    finishParagraph(node, segments: segs)
                 }
             }
         case .heading:
-            // An ATX heading's content is a source range on its line that excludes the surrounding spaces and tabs.
-            // A setext heading queues its content as it forms, so none is pending.
+            // The content is already trimmed: an ATX heading's to its line's content, a setext heading's to its raw
+            // content.
             let drained = drainLeaf(node, pending: pending)
             pending = nil
             let map = drained.map
@@ -2153,8 +2198,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     }
                     pendingInlines.append((node, storage.intern(content)))
                 }
-            case .segments:
-                preconditionFailure("a heading's pending content is a source range on one line")
+            case .segments(let segs):
+                pendingInlines.append((node, storage.intern(segs)))
             }
         case .codeBlock(let info):
             var segs = drainSegments(node, pending: pending)
@@ -3195,33 +3240,80 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         guard afterDefinitions.offset == trimmed.offset else {
             return afterDefinitions.trimmingWhitespace(using: self)
         }
-        return taskItemContent(of: node, content: trimmed)
+        guard let item = taskListItem(firstBlock: node),
+              let checked = Self.taskItemMarker(length: trimmed.length, byte: { readByte(at: trimmed.offset + $0, in: trimmed) }) else {
+            return trimmed
+        }
+        storage[item].kind = .item(checked: checked)
+        return trimmed.extracting(3..<trimmed.length).trimmingWhitespace(using: self)
     }
 
-    /// The paragraph `node`'s `content` less any task list item marker (Task list items (extension)), which makes its
-    /// item a task list item when `node` is the item's first block.
-    private mutating func taskItemContent(of node: DocumentStorage.Index, content: Chunk) -> Chunk {
+    /// Where the raw content of the paragraph `node` whose lines are `segs` begins (see `paragraphContent(of:trimmed:)`),
+    /// as a virtual offset in `trimmed`, the lines' virtual range without leading and trailing whitespace. With `node`
+    /// nil, a setext heading's content, which has no task list item marker.
+    ///
+    /// The lines are read in place, so content that isn't contiguous in the source is not copied.
+    private mutating func rawContentStart(in segs: borrowing UniqueArray<Segment>, trimmed: Range<Int>, taskItemParagraph node: DocumentStorage.Index?) -> Int {
+        precondition(!trimmed.isEmpty, "only non-blank content begins past definitions or a marker")
+        // A definition and a task list item marker each begin with `[` or `^`.
+        var first = 0
+        var offset = 0
+        while offset + Int(segs[first].length) <= trimmed.lowerBound {
+            offset += Int(segs[first].length)
+            first += 1
+        }
+        guard Self.mayBeginDefinition(segmentByte(segs[first], trimmed.lowerBound - offset)) else {
+            return trimmed.lowerBound
+        }
+        var segmentEnds = UniqueArray<Int>(minimumCapacity: segs.count)
+        var end = 0
+        for i in 0..<segs.count {
+            end += Int(segs[i].length)
+            segmentEnds.append(end)
+        }
+        let content = ContentSpan(source: sourceBytes, segments: segs.span, segmentEnds: segmentEnds.span, virtualLength: trimmed.upperBound)
+        let afterDefinitions = definitionsEnd(in: content, from: trimmed.lowerBound)
+        // As in `paragraphContent(of:trimmed:)`, a marker after a definition doesn't begin the item's first block.
+        if afterDefinitions != trimmed.lowerBound {
+            return skipWhitespace(from: afterDefinitions, in: content)
+        }
+        guard let node,
+              let item = taskListItem(firstBlock: node),
+              let checked = Self.taskItemMarker(length: trimmed.count, byte: { content[trimmed.lowerBound + $0] }) else {
+            return trimmed.lowerBound
+        }
+        storage[item].kind = .item(checked: checked)
+        return skipWhitespace(from: trimmed.lowerBound + 3, in: content)
+    }
+
+    /// The list item whose first block is the paragraph `node`, which may make it a task list item (Task list items
+    /// (extension)).
+    private func taskListItem(firstBlock node: DocumentStorage.Index) -> DocumentStorage.Index? {
         guard storage.options.contains(.tasklist),
               let item = storage[node].parent,
               case .item = storage[item].kind,
               storage[item].firstChild == node,
-              !itemsWithRemovedFirstParagraph.contains(item),
-              content.length >= 3,
-              readByte(at: content.offset, in: content) == UInt8(ascii: "["),
-              readByte(at: content.offset + 2, in: content) == UInt8(ascii: "]"),
-              // A marker that ends the content is followed by a line ending or the end of input.
-              content.length == 3 || readByte(at: content.offset + 3, in: content).isASCIISpace else {
-            return content
+              !itemsWithRemovedFirstParagraph.contains(item) else {
+            return nil
         }
-        let between = readByte(at: content.offset + 1, in: content)
+        return item
+    }
+
+    /// The checked state of a task list item marker (Task list items (extension)) beginning `length` content bytes read
+    /// through `byte`, or `nil` when they don't begin with one followed by whitespace.
+    private static func taskItemMarker(length: Int, byte: (Int) -> UInt8) -> Bool? {
+        // A marker that ends the content is followed by a line ending or the end of input.
+        guard length >= 3,
+              byte(0) == UInt8(ascii: "["),
+              byte(2) == UInt8(ascii: "]"),
+              length == 3 || byte(3).isASCIISpace else {
+            return nil
+        }
+        let between = byte(1)
         if between == UInt8(ascii: "x") || between == UInt8(ascii: "X") {
-            storage[item].kind = .item(checked: true)
-        } else if between.isExtensionScannerSpace {
-            storage[item].kind = .item(checked: false)
-        } else {
-            return content
+            return true
         }
-        return content.extracting(min(4, content.length)..<content.length).trimmingWhitespace(using: self)
+        return between.isExtensionScannerSpace ? false : nil
     }
 
     /// Matches a footnote definition opener `[^label]:`, whose label holds no whitespace or unescaped bracket, returning
@@ -3299,146 +3391,190 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     
     /// Consumes link reference definitions, and with `.attributes` `^[label]: attrs` definitions, from the start of `chunk`, returning the rest. The first definition of a label wins (Link reference definitions).
     private mutating func parseDefinitions(in chunk: Chunk) -> Chunk {
-        let endOffset = chunk.offset + chunk.length
-        var i = chunk.offset
-        while i < endOffset {
-            let b = readByte(at: i, in: chunk)
-            if b == UInt8(ascii: "[") {
-                guard let after = parseOneLinkDefinition(
-                    Chunk(offset: i, length: endOffset - i, inSource: chunk.inSource)
-                ) else {
-                    break
-                }
-                i = after
-            } else if b == UInt8(ascii: "^"),
-                      storage.options.contains(.attributes),
-                      i + 1 < endOffset,
-                      readByte(at: i + 1, in: chunk) == UInt8(ascii: "[") {
-                guard let after = parseOneAttributeDefinition(
-                    Chunk(offset: i, length: endOffset - i, inSource: chunk.inSource)
-                ) else {
-                    break
-                }
-                i = after
-            } else {
-                break
-            }
+        let end = chunk.offset + chunk.length
+        let rest: Int
+        if chunk.inSource {
+            rest = definitionsEnd(in: ContentSpan(span: sourceBytes.extracting(chunk.range), base: chunk.offset, inSource: true), from: chunk.offset)
+        } else if !chunk.isEmpty && Self.mayBeginDefinition(readByte(at: chunk.offset, in: chunk)) {
+            // Arena content is read from a copy, since registering a definition can grow the arena.
+            var bytes = UniqueArray<UInt8>()
+            bytes.append(copying: storage.strings.span.extracting(chunk.range))
+            rest = definitionsEnd(in: ContentSpan(span: bytes.span, base: chunk.offset, inSource: false), from: chunk.offset)
+        } else {
+            rest = chunk.offset
         }
-        return Chunk(offset: i, length: endOffset - i, inSource: chunk.inSource)
+        return Chunk(offset: rest, length: end - rest, inSource: chunk.inSource)
     }
 
-    private func isBlank(chunk: Chunk) -> Bool {
-        chunk.trimmingWhitespace(using: self).isEmpty
+    /// Whether a definition can begin with `byte`: `[`, or `^` for an attribute definition.
+    private static func mayBeginDefinition(_ byte: UInt8) -> Bool {
+        byte == UInt8(ascii: "[") || byte == UInt8(ascii: "^")
+    }
+
+    /// The offset past the link reference definitions, and with `.attributes` `^[label]: attrs` definitions, that
+    /// `content` holds from `start`, each registered unless its label already has a definition (Link reference
+    /// definitions).
+    private mutating func definitionsEnd(in content: borrowing ContentSpan, from start: Int) -> Int {
+        // Every bare destination scanned below is read from this content up to its end.
+        destinationParentheses.reset()
+        let end = content.endOffset
+        var i = start
+        while i < end {
+            let after: Int?
+            if content[i] == UInt8(ascii: "[") {
+                after = parseOneLinkDefinition(from: i, in: content)
+            } else if content[i] == UInt8(ascii: "^"),
+                      storage.options.contains(.attributes),
+                      i + 1 < end,
+                      content[i + 1] == UInt8(ascii: "[") {
+                after = parseOneAttributeDefinition(from: i, in: content)
+            } else {
+                after = nil
+            }
+            guard let after else {
+                break
+            }
+            i = after
+        }
+        return i
+    }
+
+    /// `content`'s bytes at `range` as a chunk, copied into the arena only when `range` spans a line join.
+    private mutating func definitionChunk(_ range: Range<Int>, in content: borrowing ContentSpan) -> Chunk {
+        if range.isEmpty {
+            return .empty
+        }
+        if let contiguous = content.contiguousChunk(fromVirtual: range.lowerBound, limit: range.upperBound),
+           contiguous.length == range.count {
+            return contiguous
+        }
+        let offset = storage.strings.count
+        for i in range {
+            storage.strings.append(content[i])
+        }
+        return arenaChunk(from: offset)
+    }
+
+    // These are `mutating` though they only read: as non-mutating methods of the large `BlockParser` they measured
+    // about 2.6% more instructions on a document of definitions.
+
+    /// Skips spaces, tabs, line tabulations and form feeds.
+    private mutating func skipLineWhitespace(from cursor: Int, in content: borrowing ContentSpan) -> Int {
+        var i = cursor
+        while i < content.endOffset, content[i].isExtensionScannerSpace {
+            i += 1
+        }
+        return i
+    }
+
+    /// Skips line whitespace, at most one line ending, and more line whitespace.
+    private mutating func skipSpacesAndOneLineEnd(from cursor: Int, in content: borrowing ContentSpan) -> Int {
+        let i = skipLineWhitespace(from: cursor, in: content)
+        guard i < content.endOffset, content[i] == UInt8(ascii: "\n") else {
+            return i
+        }
+        return skipLineWhitespace(from: i + 1, in: content)
+    }
+
+    /// The offset past a line ending at `cursor`, `cursor` at the end of `content`, or `nil`.
+    private mutating func skipLineEndOrEOF(from cursor: Int, in content: borrowing ContentSpan) -> Int? {
+        if cursor >= content.endOffset {
+            return cursor
+        }
+        return content[cursor] == UInt8(ascii: "\n") ? cursor + 1 : nil
+    }
+
+    /// Skips whitespace characters (Characters and lines).
+    private mutating func skipWhitespace(from cursor: Int, in content: borrowing ContentSpan) -> Int {
+        var i = cursor
+        while i < content.endOffset, content[i].isASCIISpace {
+            i += 1
+        }
+        return i
     }
 
     // MARK: - Link definition
 
-    /// Parses one link reference definition, returning the offset past it and its line ending.
-    private mutating func parseOneLinkDefinition(_ chunk: Chunk) -> Int? {
-        let end = chunk.range.upperBound
-        let inSource = chunk.inSource
-        guard let (label, i) = matchDefinitionLabel(chunk) else {
-            return nil
-        }
-        guard let dest = matchLinkDestination(
-            Chunk(offset: i, length: end - i, inSource: inSource)
-        ) else {
+    /// Parses one link reference definition at `start`, returning the offset past it and its line ending.
+    private mutating func parseOneLinkDefinition(from start: Int, in content: borrowing ContentSpan) -> Int? {
+        let end = content.endOffset
+        guard let (label, destinationStart) = matchDefinitionLabel(from: start, in: content),
+              let destination = matchLinkDestination(from: destinationStart, end: end, in: content) else {
             return nil
         }
         // When the line doesn't end after a title, the definition ends at the destination instead.
-        let beforeTitle = dest.afterEnd
-        let afterTitleSpnl = skipSpacesAndOneLineEnd(from: beforeTitle, in: chunk)
-        var titleChunk: Chunk = .empty
-        var afterAll = -1
-        if afterTitleSpnl > beforeTitle,
-           let title = matchLinkTitle(
-               Chunk(offset: afterTitleSpnl, length: end - afterTitleSpnl, inSource: inSource)
-           ) {
-            let afterSpaces = skipLineWhitespace(from: title.afterEnd, in: chunk)
-            if let lineEnd = skipLineEndOrEOF(from: afterSpaces, in: chunk) {
-                titleChunk = title.chunk
-                afterAll = lineEnd
-            }
-        }
-        if afterAll < 0 {
-            let afterSpaces = skipLineWhitespace(from: dest.afterEnd, in: chunk)
-            guard let lineEnd = skipLineEndOrEOF(from: afterSpaces, in: chunk) else {
-                return nil
-            }
+        var title: Range<Int> = destination.afterEnd..<destination.afterEnd
+        var afterAll: Int? = nil
+        let titleStart = skipSpacesAndOneLineEnd(from: destination.afterEnd, in: content)
+        if titleStart > destination.afterEnd,
+           let match = matchLinkTitle(from: titleStart, end: end, in: content),
+           let lineEnd = skipLineEndOrEOF(from: skipLineWhitespace(from: match.afterEnd, in: content), in: content) {
+            title = match.interior
             afterAll = lineEnd
+        }
+        if afterAll == nil {
+            afterAll = skipLineEndOrEOF(from: skipLineWhitespace(from: destination.afterEnd, in: content), in: content)
+        }
+        guard let afterAll else {
+            return nil
         }
         // `normalizeLabel` replaces a NUL itself (Insecure characters), so the key matches a reference's even
         // in content `drainLeaf` hasn't NUL-replaced yet (the setext underline path).
-        let key = normalizeLabel(chunk: label)
+        let key = normalizeLabel(virtualRange: label, in: content)
         if key.isEmpty {
             return nil
         }
         if storage.referenceMap[key] == nil {
             // A NUL becomes U+FFFD (Insecure characters). The content may not be NUL-replaced yet, so it is done
             // here, where every stored definition passes.
-            let destination = replacingNUL(cleanURLChunk(dest.chunk))
-            let title = replacingNUL(unescapeURLChunk(titleChunk))
+            let destinationChunk = definitionChunk(destination.destination, in: content)
+            let titleChunk = definitionChunk(title, in: content)
             storage.referenceMap[key] = ReferenceDefinition(
-                destination: destination,
-                title: title
+                destination: replacingNUL(cleanURLChunk(destinationChunk)),
+                title: replacingNUL(unescapeURLChunk(titleChunk))
             )
         }
         return afterAll
     }
 
-    /// Matches a definition's label and `:` at the start of `chunk`, returning the label's interior and where the
-    /// definition's content begins, past whitespace including at most one line ending.
-    private mutating func matchDefinitionLabel(_ chunk: Chunk) -> (label: Chunk, contentStart: Int)? {
-        guard let label = matchLinkLabel(chunk) else {
+    /// Matches a definition's label and `:` at `start`, returning the label's interior and where the definition's
+    /// content begins, past whitespace including at most one line ending.
+    private mutating func matchDefinitionLabel(from start: Int, in content: borrowing ContentSpan) -> (label: Range<Int>, contentStart: Int)? {
+        guard let label = matchLinkLabel(from: start, end: content.endOffset, in: content),
+              label.afterEnd < content.endOffset,
+              content[label.afterEnd] == UInt8(ascii: ":") else {
             return nil
         }
-        let colon = label.afterEnd
-        guard colon < chunk.range.upperBound, readByte(at: colon, in: chunk) == UInt8(ascii: ":") else {
-            return nil
-        }
-        return (label.interior, skipSpacesAndOneLineEnd(from: colon + 1, in: chunk))
+        return (label.interior, skipSpacesAndOneLineEnd(from: label.afterEnd + 1, in: content))
     }
 
     // MARK: - Attribute definition
 
-    /// Parses one `^[label]: attrs` definition, returning the offset past it and its line ending.
-    private mutating func parseOneAttributeDefinition(_ chunk: Chunk) -> Int? {
-        let start = chunk.offset
-        let end = chunk.range.upperBound
-        let inSource = chunk.inSource
-        precondition(start < end && readByte(at: start, in: chunk) == UInt8(ascii: "^"), "an attribute definition is parsed only from a `^`")
-        guard let (label, attrsStart) = matchDefinitionLabel(chunk.extracting(1..<chunk.length)) else {
+    /// Parses one `^[label]: attrs` definition at `start`, returning the offset past it and its line ending.
+    private mutating func parseOneAttributeDefinition(from start: Int, in content: borrowing ContentSpan) -> Int? {
+        let end = content.endOffset
+        precondition(start < end && content[start] == UInt8(ascii: "^"), "an attribute definition is parsed only from a `^`")
+        guard let (label, attributesStart) = matchDefinitionLabel(from: start + 1, in: content) else {
             return nil
         }
-        var i = attrsStart
-        while i < end {
-            let b = readByte(at: i, in: chunk)
-            if b == UInt8(ascii: "\n") {
-                break
-            }
-            i += 1
+        // The attributes run to a line ending or the content's end.
+        var attributesEnd = attributesStart
+        while attributesEnd < end, content[attributesEnd] != UInt8(ascii: "\n") {
+            attributesEnd += 1
         }
-        let attrsLen = i - attrsStart
-        if attrsLen == 0 {
+        if attributesEnd == attributesStart {
             return nil
         }
-        let lineEnd = skipLineEndOrEOF(from: i, in: chunk)
-        precondition(lineEnd != nil, "an attribute definition's attributes run to a line end or the content end")
-        let afterAll = lineEnd!
-        let key = normalizeLabel(chunk: label)
+        let key = normalizeLabel(virtualRange: label, in: content)
         if key.isEmpty {
             return nil
         }
         if storage.attributeReferenceMap[key] == nil {
             // Trimmed and unescaped like a link destination, with NULs replaced as above.
-            let attrs = replacingNUL(cleanURLChunk(Chunk(
-                offset: attrsStart,
-                length: attrsLen,
-                inSource: inSource
-            )))
-            storage.attributeReferenceMap[key] = attrs
+            let attributesChunk = definitionChunk(attributesStart..<attributesEnd, in: content)
+            storage.attributeReferenceMap[key] = replacingNUL(cleanURLChunk(attributesChunk))
         }
-        return afterAll
+        return attributesEnd < end ? attributesEnd + 1 : attributesEnd
     }
 
     /// `chunk` with backslash escapes removed and character references decoded, copied to the arena only if it holds either.
