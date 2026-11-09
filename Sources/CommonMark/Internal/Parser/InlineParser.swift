@@ -1315,9 +1315,9 @@ extension BlockParser {
             }
             i += 1
         }
-        // Runs are recorded in a second walk, taken at most once per paragraph, so scans that find a closer skip
-        // the bookkeeping.
-        backtickRunsSeen.scannedToEndFrom = min(backtickRunsSeen.scannedToEndFrom ?? openEnd, openEnd)
+        // Runs are recorded in a second walk, taken at most once per pass, so scans that find a closer skip the
+        // bookkeeping.
+        backtickRunsSeen.scannedToEndFrom = openEnd
         var k = openEnd
         while k < end {
             guard content[k] == UInt8(ascii: "`") else {
@@ -1486,9 +1486,7 @@ extension BlockParser {
                     isEmail: false
                 )
             }
-            if b == UInt8(ascii: "<") || b == UInt8(ascii: " ") || b == UInt8(ascii: "\t")
-                || b == UInt8(ascii: "\n") || b == UInt8(ascii: "\r") || b < 0x20
-                || b == 0x7F {
+            if b == UInt8(ascii: "<") || b == UInt8(ascii: " ") || b < 0x20 || b == 0x7F {
                 return nil
             }
             i += 1
@@ -1625,7 +1623,7 @@ extension BlockParser {
         return htmlTagEnd(afterName: nameEnd, isClosing: isClosing, end: end) { content[$0] }
     }
 
-    /// Dispatch `<!`-prefixed HTML forms: comment, CDATA, declaration.
+    /// Matches a `<!`-prefixed form (Raw HTML): a comment, CDATA section or declaration.
     private mutating func matchHTMLBangForm(start: Int, content: borrowing ContentSpan) -> Int? {
         let end = content.endOffset
         let i = start + 2
@@ -1717,7 +1715,6 @@ extension BlockParser {
         let width = closer.utf8.count
         var i = start
         while i + width <= end {
-            assert(content[i] != 0, "inline content holds no NUL: the block parser replaces it with U+FFFD")
             var matched = 0
             for closerByte in closer.utf8 {
                 if content[i + matched] != closerByte {
@@ -2125,7 +2122,7 @@ extension BlockParser {
         }
     }
 
-    /// Whether `target` is at `start`. `ignoringASCIICase` folds only the comparison; the text keeps its case.
+    /// Whether `target` is at `start`, ignoring ASCII case if `ignoringASCIICase`.
     private func bytesEqual(at start: Int, target: String, content: borrowing ContentSpan, ignoringASCIICase: Bool = false) -> Bool {
         let mask: UInt8 = ignoringASCIICase ? 0x20 : 0
         for (k, targetByte) in target.utf8.enumerated() {
@@ -2152,8 +2149,10 @@ extension BlockParser {
         if end <= start {
             return
         }
-        precondition(content.contiguousChunk(fromVirtual: start, limit: end)?.length == end - start, "a text run lies within one segment")
-        appendInline(.text, .literal(storage.intern(content.chunk(offset: start, length: end - start))), to: parent, start: start, end: end, content: content)
+        guard let chunk = content.contiguousChunk(fromVirtual: start, limit: end), chunk.length == end - start else {
+            preconditionFailure("a text run lies within one segment")
+        }
+        appendInline(.text, .literal(storage.intern(chunk)), to: parent, start: start, end: end, content: content)
     }
 
     /// Append an inline node to `parent`, stamped with the source range of the virtual range `start..<end`.
@@ -2173,8 +2172,8 @@ extension BlockParser {
         return appendInline(kind, .literal(storage.intern(chunk)), to: parent, start: start, end: end, content: content)
     }
 
-    /// A chunk for `[start, end)`, copied into the arena only when the range spans segments, as a code span or
-    /// link destination or title can.
+    /// A chunk for `[start, end)`, copied into the arena only when the range spans segments, as raw HTML or an
+    /// attribute list can.
     private mutating func materializedChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end),
            contiguous.length == end - start {
@@ -2524,8 +2523,8 @@ extension BlockParser {
     }
 
     /// The source bytes that byte `local` of an address's segment `seg` stands for: a source byte, an arena byte
-    /// imaged by `image`, or the character reference it was decoded from. Other arena text is punctuation, which no
-    /// address holds.
+    /// imaged by `image`, or the character reference it was decoded from. Other arena text is smart punctuation, which
+    /// no address holds.
     private func sourceRange(of seg: Segment, local: Int, image: ContentImage?) -> Range<Int> {
         if seg.inSource {
             let offset = Int(seg.offset) + local
