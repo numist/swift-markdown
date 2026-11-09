@@ -388,7 +388,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         } else {
             // Copy the content to the arena with line endings normalized to `\n` and NULs to U+FFFD. With positions on, record
             // its run map: a CRLF's `\n` images its LF, so a node ending at the break covers the CRLF, as for LF input (a node
-            // starting there starts after the CR), and each of a U+FFFD's three bytes images its NUL.
+            // starting there is moved to the CR when stamped), and each of a U+FFFD's three bytes images its NUL.
             let arenaStart = storage.strings.count
             var runs: [ArenaRun] = []
             var j = start

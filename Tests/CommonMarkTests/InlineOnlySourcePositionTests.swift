@@ -57,7 +57,7 @@ struct InlineOnlySourcePositionTests {
                   text "c" @2:4-2:5
 
             """)
-        // The `\n` stands for the LF, so text ending at a CRLF covers both bytes and ends at the next line's start...
+        // The `\n` stands for the CRLF, so text ending at a CRLF covers both bytes and ends at the next line's start...
         #expect(TreeDump.dump("a\r\n*b*", options: options, sourceRanges: true) == """
             document @1:1-2:4
               paragraph @1:1-2:4
@@ -66,13 +66,23 @@ struct InlineOnlySourcePositionTests {
                   text "b" @2:2-2:3
 
             """)
-        // ...while text starting at a CRLF starts at its LF, one byte past the CR.
+        // ...and text starting at a CRLF starts at its CR.
         #expect(TreeDump.dump("*a*\r\nb", options: options, sourceRanges: true) == """
             document @1:1-2:2
               paragraph @1:1-2:2
                 emph @1:1-1:4
                   text "a" @1:2-1:3
-                text "\\nb" @1:5-2:2
+                text "\\nb" @1:4-2:2
+
+            """)
+    }
+
+    @Test(arguments: [inlineOnly, preserveWhitespace])
+    func leadingCRLF(options: MarkdownDocument.ParseOptions) {
+        #expect(TreeDump.dump("\r\na", options: options, sourceRanges: true) == """
+            document @1:1-2:2
+              paragraph @1:1-2:2
+                text "\\na" @1:1-2:2
 
             """)
     }
@@ -180,7 +190,7 @@ struct InlineOnlySourcePositionTests {
         #expect(TreeDump.dump("[a]: /u\r\n\r\n[a]", options: options, sourceRanges: true) == """
             document @1:1-3:4
               paragraph @1:1-3:4
-                text "\\n" @2:2-3:1
+                text "\\n" @2:1-3:1
                 link "/u" "" @3:1-3:4
                   text "a" @3:2-3:3
 
