@@ -933,8 +933,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The source extent imaged by the run map of trimmed paragraph content: from its first run's byte to just past
     /// its last run's.
     private func sourceSpan(of map: [ArenaRun]) -> (start: Int, end: Int) {
-        precondition(!map.isEmpty && map.first!.sourceOffset >= 0 && map.last!.sourceOffset >= 0, "trimmed paragraph content starts and ends on source bytes")
-        return (Int(map.first!.sourceOffset), Int(map.last!.sourceOffset) + Int(map.last!.length))
+        guard let first = map.first, let last = map.last, first.sourceOffset >= 0, last.sourceOffset >= 0 else {
+            preconditionFailure("trimmed paragraph content starts and ends on source bytes")
+        }
+        return (Int(first.sourceOffset), Int(last.sourceOffset) + Int(last.length))
     }
 
     // MARK: - Per-line dispatcher
@@ -1070,7 +1072,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Whether a line of the open paragraph and the line after it form a table's header and delimiter rows.
     private var openParagraphIsTablePending: Bool {
-        assert(openParagraphTableState == nil || openParagraphTableState!.node == current, "the recorded table state belongs to the open leaf")
+        assert(openParagraphTableState.map { $0.node == current } ?? true, "the recorded table state belongs to the open leaf")
         return openParagraphTableState?.tablePending == true
     }
 
@@ -2170,7 +2172,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         switch kind {
         case .paragraph:
-            assert(openParagraphTableState == nil || openParagraphTableState!.node == node, "the recorded table state belongs to the paragraph being closed")
+            assert(openParagraphTableState.map { $0.node == node } ?? true, "the recorded table state belongs to the paragraph being closed")
             defer { openParagraphTableState = nil }
             let drained = drainLeaf(node, pending: pending)
             pending = nil
@@ -2967,8 +2969,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Whether the line closes a fence of `expectedChar` at least `minimumLength` long (Fenced code blocks). The indent is
     /// in columns, so a tab-led line is content.
     private func matchClosingFence(range: Range<Int>, firstNonSpace: Int, indentColumns: Int, expectedChar: MarkdownNode.CodeBlockInfo.FenceCharacter?, minimumLength: Int) -> Bool {
-        precondition(expectedChar != nil, "a fenced code block always records its fence character")
-        let fenceByte = expectedChar!.character
+        guard let fenceByte = expectedChar?.character else {
+            preconditionFailure("a fenced code block always records its fence character")
+        }
         if indentColumns > 3 {
             return false
         }
