@@ -164,6 +164,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The links and autolinks formed in this `parseInline` pass. Reset per pass.
     var linksFormed = 0
 
+    /// The `ContentSpan.pieceHint` of every content this parse reads through a segment list or run map.
+    let pieceHint = PieceHint()
+
     // MARK: - Init
     
     @_lifetime(copy source)
@@ -232,7 +235,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     scratch.append(piece: storage.segments[Int(ref.first) + i])
                 }
                 parseInline(
-                    content: ContentSpan(source: sourceBytes, segments: scratch.pieces.span, segmentEnds: scratch.pieceEnds.span, virtualLength: Int(ref.totalLength)),
+                    content: ContentSpan(source: sourceBytes, segments: scratch.pieces.span, segmentEnds: scratch.pieceEnds.span, virtualLength: Int(ref.totalLength), hint: pieceHint),
                     into: node
                 )
             }
@@ -331,7 +334,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             scratch.append(piece: Segment(offset: run.sourceOffset, length: run.length, inSource: run.sourceOffset >= 0))
         }
         parseInline(
-            content: ContentSpan(span: scratch.bytes.span, base: chunk.offset, runs: scratch.pieces.span, runEnds: scratch.pieceEnds.span),
+            content: ContentSpan(span: scratch.bytes.span, base: chunk.offset, runs: scratch.pieces.span, runEnds: scratch.pieceEnds.span, hint: pieceHint),
             into: node,
             preserveWhitespace: preserveWhitespace
         )
@@ -3270,7 +3273,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             end += Int(segs[i].length)
             segmentEnds.append(end)
         }
-        let content = ContentSpan(source: sourceBytes, segments: segs.span, segmentEnds: segmentEnds.span, virtualLength: trimmed.upperBound)
+        let content = ContentSpan(source: sourceBytes, segments: segs.span, segmentEnds: segmentEnds.span, virtualLength: trimmed.upperBound, hint: pieceHint)
         let afterDefinitions = definitionsEnd(in: content, from: trimmed.lowerBound)
         // As in `paragraphContent(of:trimmed:)`, a marker after a definition doesn't begin the item's first block.
         if afterDefinitions != trimmed.lowerBound {

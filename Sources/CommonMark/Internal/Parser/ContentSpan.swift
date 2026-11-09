@@ -26,8 +26,13 @@ internal struct ContentSpan: ~Escapable {
     /// Held apart from `storage.segments`, which grows during inline parsing.
     let pieces: Span<Segment>
 
-    /// `pieceEnds[i]` is the content-relative offset just past piece `i`. An offset's piece is found by binary search, because content has a piece per line and the inline pass resolves multi-segment offsets once per byte.
+    /// `pieceEnds[i]` is the content-relative offset just past piece `i`.
     let pieceEnds: Span<Int>
+
+    /// The piece that an offset lookup last found, or `nil` where `pieces` is empty.
+    ///
+    /// Content has a piece per line and is scanned a byte at a time, so most lookups land in this piece or one a few pieces away, where `pieceIndex(covering:)` searches first.
+    let pieceHint: PieceHint?
 
     let isMultiSegment: Bool
 
@@ -41,30 +46,33 @@ internal struct ContentSpan: ~Escapable {
         self.inSource = inSource
         self.pieces = Span<Segment>()
         self.pieceEnds = Span<Int>()
+        self.pieceHint = nil
         self.isMultiSegment = false
         self.multiVirtualLength = 0
     }
 
     /// Single-segment arena content with its run map (see `pieces`).
     @_lifetime(copy span, copy runs, copy runEnds)
-    init(span: Span<UInt8>, base: Int, runs: Span<Segment>, runEnds: Span<Int>) {
+    init(span: Span<UInt8>, base: Int, runs: Span<Segment>, runEnds: Span<Int>, hint: PieceHint) {
         self.span = span
         self.base = base
         self.inSource = false
         self.pieces = runs
         self.pieceEnds = runEnds
+        self.pieceHint = hint
         self.isMultiSegment = false
         self.multiVirtualLength = 0
     }
 
     /// Multi-segment content: `segmentEnds` holds the running ends of `segments`, and `virtualLength` their total.
     @_lifetime(copy source, copy segments, copy segmentEnds)
-    init(source: Span<UInt8>, segments: Span<Segment>, segmentEnds: Span<Int>, virtualLength: Int) {
+    init(source: Span<UInt8>, segments: Span<Segment>, segmentEnds: Span<Int>, virtualLength: Int, hint: PieceHint) {
         self.span = source
         self.base = 0
         self.inSource = false
         self.pieces = segments
         self.pieceEnds = segmentEnds
+        self.pieceHint = hint
         self.isMultiSegment = true
         self.multiVirtualLength = virtualLength
     }
@@ -72,10 +80,10 @@ internal struct ContentSpan: ~Escapable {
     var endOffset: Int { isMultiSegment ? multiVirtualLength : base + span.count }
     var isEmpty: Bool { isMultiSegment ? multiVirtualLength == 0 : span.count == 0 }
 
-    /// The index of the first entry of non-decreasing `ends` past `offset`: the piece covering `offset`, never a zero-length one, or `ends.count` past the end.
-    static func firstIndex(endingAfter offset: Int, in ends: Span<Int>) -> Int {
-        var lo = 0
-        var hi = ends.count
+    /// The index of the first entry of non-decreasing `ends[lo..<hi]` past `offset`, or `hi` if none is: the piece covering `offset`, never a zero-length one, when it lies in that range.
+    static func firstIndex(endingAfter offset: Int, in ends: Span<Int>, from lo: Int, to hi: Int) -> Int {
+        var lo = lo
+        var hi = hi
         while lo < hi {
             let mid = (lo + hi) / 2
             if ends[mid] > offset {
@@ -88,8 +96,42 @@ internal struct ContentSpan: ~Escapable {
     }
 
     /// The index of the piece covering content-relative `offset`, or `pieces.count` when `offset` is at or past the end.
+    ///
+    /// The search widens from `pieceHint`, doubling its step, so a piece `d` pieces away costs O(log d) and a scan costs O(1) per byte.
     func pieceIndex(covering offset: Int) -> Int {
-        Self.firstIndex(endingAfter: offset, in: pieceEnds)
+        var lo = 0
+        var hi = pieceEnds.count
+        if let hint = pieceHint?.index, pieceEnds.indices.contains(hint) {
+            var step = 1
+            if pieceEnds[hint] <= offset {
+                lo = hint + 1
+                while lo + step <= hi {
+                    if pieceEnds[lo + step - 1] > offset {
+                        hi = lo + step - 1
+                        break
+                    }
+                    lo += step
+                    step *= 2
+                }
+            } else if offset >= pieceStart(hint) {
+                return hint
+            } else {
+                hi = hint
+                while hi - step >= 0 {
+                    if pieceEnds[hi - step] <= offset {
+                        lo = hi - step + 1
+                        break
+                    }
+                    hi -= step
+                    step *= 2
+                }
+            }
+        }
+        let found = Self.firstIndex(endingAfter: offset, in: pieceEnds, from: lo, to: hi)
+        if found < pieceEnds.count {
+            pieceHint?.index = found
+        }
+        return found
     }
 
     /// The content-relative offset of piece `i`'s first byte.
@@ -262,4 +304,11 @@ internal struct ContentSpan: ~Escapable {
         }
         return hi
     }
+}
+
+/// The index of the piece a `ContentSpan` offset lookup last found, held by reference so that lookups through a borrowed `ContentSpan` update it.
+///
+/// One is shared by every `ContentSpan` of a parse. An index left by another content is still a valid hint, since a lookup bounds-checks it and only starts its search there.
+internal final class PieceHint {
+    var index = 0
 }
