@@ -24,70 +24,411 @@ struct ExtendedAutolinkDomainTests {
         TreeDump.dump(markdown, options: autolinkOptions, sourceRanges: true)
     }
 
-    private func text(_ literal: String) -> String {
-        let end = literal.utf8.count + 1
-        return """
-            document @1:1-1:\(end)
-              paragraph @1:1-1:\(end)
-                text "\(literal)" @1:1-1:\(end)
-
-            """
-    }
-
-    private func link(_ url: String, _ literal: String) -> String {
-        let end = literal.utf8.count + 1
-        return """
-            document @1:1-1:\(end)
-              paragraph @1:1-1:\(end)
-                link "\(url)" "" @1:1-1:\(end)
-                  text "\(literal)" @1:1-1:\(end)
-
-            """
-    }
+    // MARK: - Extended url autolink domains
 
     @Test func urlHostWithoutPeriodIsLink() {
-        #expect(tree("http://e") == link("http://e", "http://e"))
-        #expect(tree("http://localhost") == link("http://localhost", "http://localhost"))
+        #expect(tree("http://e") == """
+            document @1:1-1:9
+              paragraph @1:1-1:9
+                link "http://e" "" @1:1-1:9
+                  text "http://e" @1:1-1:9
+
+            """)
+        #expect(tree("http://localhost") == """
+            document @1:1-1:17
+              paragraph @1:1-1:17
+                link "http://localhost" "" @1:1-1:17
+                  text "http://localhost" @1:1-1:17
+
+            """)
     }
 
     @Test func urlHostWithEmptySegmentIsLink() {
-        #expect(tree("http://a..b") == link("http://a..b", "http://a..b"))
+        #expect(tree("http://a..b") == """
+            document @1:1-1:12
+              paragraph @1:1-1:12
+                link "http://a..b" "" @1:1-1:12
+                  text "http://a..b" @1:1-1:12
+
+            """)
     }
 
     @Test func urlHostWithPeriodIsLink() {
-        #expect(tree("http://e.f") == link("http://e.f", "http://e.f"))
+        #expect(tree("http://e.f") == """
+            document @1:1-1:11
+              paragraph @1:1-1:11
+                link "http://e.f" "" @1:1-1:11
+                  text "http://e.f" @1:1-1:11
+
+            """)
     }
 
-    @Test func wwwDomainWithoutSecondPeriodIsLink() {
-        #expect(tree("www.foo") == link("http://www.foo", "www.foo"))
+    @Test("scheme with nothing after `://` is text")
+    func schemeURLEmptyDomainIsText() {
+        #expect(tree("http://") == """
+            document @1:1-1:8
+              paragraph @1:1-1:8
+                text "http://" @1:1-1:8
+
+            """)
     }
 
-    @Test func wwwDomainWithPeriodIsLink() {
-        #expect(tree("www.foo.bar") == link("http://www.foo.bar", "www.foo.bar"))
+    @Test("scheme URL whose dotless domain starts with a hyphen is text")
+    func schemeURLHyphenFirstDotlessDomainIsText() {
+        #expect(tree("http://-x") == """
+            document @1:1-1:10
+              paragraph @1:1-1:10
+                text "http://-x" @1:1-1:10
+
+            """)
+    }
+
+    @Test("scheme URL ending in an underscore links without it")
+    func schemeURLTrailingUnderscoreTrims() {
+        #expect(tree("http://a_") == """
+            document @1:1-1:10
+              paragraph @1:1-1:10
+                link "http://a" "" @1:1-1:9
+                  text "http://a" @1:1-1:9
+                text "_" @1:9-1:10
+
+            """)
     }
 
     @Test func nonASCIILetterIsDomainCharacter() {
-        #expect(tree("http://\u{4E2D}a.b") == link("http://\u{4E2D}a.b", "http://\u{4E2D}a.b"))
+        #expect(tree("http://\u{4E2D}a.b") == """
+            document @1:1-1:14
+              paragraph @1:1-1:14
+                link "http://中a.b" "" @1:1-1:14
+                  text "http://中a.b" @1:1-1:14
+
+            """)
     }
 
-    /// The www domain scan stops at the first character outside a domain, which leaves the period it already holds.
-    @Test(arguments: ["\u{00D7}", "\u{00AB}", "\u{0301}", "\u{1F600}", "\u{00E9}"])
-    func wwwDomainEndingInNonASCIICharacterIsLink(_ scalar: String) {
-        #expect(tree("www.\(scalar)") == link("http://www.\(scalar)", "www.\(scalar)"))
-        #expect(tree("http://a.\(scalar)") == link("http://a.\(scalar)", "http://a.\(scalar)"))
-    }
+    @Test(arguments: [
+        ("http://\u{00D7}", """
+            document @1:1-1:10
+              paragraph @1:1-1:10
+                link "http://×" "" @1:1-1:10
+                  text "http://×" @1:1-1:10
 
-    @Test(arguments: ["\u{00D7}", "\u{0301}", "\u{1F600}", "\u{00E9}"])
-    func urlHostStartingWithNonASCIICharacterIsLink(_ scalar: String) {
-        #expect(tree("http://\(scalar)") == link("http://\(scalar)", "http://\(scalar)"))
+            """),
+        ("http://\u{0301}", """
+            document @1:1-1:10
+              paragraph @1:1-1:10
+                link "http://́" "" @1:1-1:10
+                  text "http://́" @1:1-1:10
+
+            """),
+        ("http://\u{1F600}", """
+            document @1:1-1:12
+              paragraph @1:1-1:12
+                link "http://😀" "" @1:1-1:12
+                  text "http://😀" @1:1-1:12
+
+            """),
+        ("http://\u{00E9}", """
+            document @1:1-1:10
+              paragraph @1:1-1:10
+                link "http://é" "" @1:1-1:10
+                  text "http://é" @1:1-1:10
+
+            """),
+    ])
+    func urlHostStartingWithNonASCIICharacterIsLink(markdown: String, expected: String) {
+        #expect(tree(markdown) == expected)
     }
 
     @Test func urlHostStartingWithPunctuationIsText() {
-        #expect(tree("http://\u{00AB}") == text("http://\u{00AB}"))
+        #expect(tree("http://\u{00AB}") == """
+            document @1:1-1:10
+              paragraph @1:1-1:10
+                text "http://«" @1:1-1:10
+
+            """)
+    }
+
+    @Test("scheme URL whose domain holds a U+FFFD before an underscore")
+    func schemeURLReplacementCharacterInDomainAutolinks() {
+        // U+FFFD is not a domain character, so the domain ends before it and the underscore is outside its last two
+        // segments.
+        #expect(tree("http://a\u{FFFD}_b") == """
+            document @1:1-1:14
+              paragraph @1:1-1:14
+                link "http://a\u{FFFD}_b" "" @1:1-1:14
+                  text "http://a\u{FFFD}_b" @1:1-1:14
+
+            """)
+    }
+
+    // MARK: - Extended www autolink domains
+
+    @Test func wwwDomainWithoutSecondPeriodIsLink() {
+        #expect(tree("www.foo") == """
+            document @1:1-1:8
+              paragraph @1:1-1:8
+                link "http://www.foo" "" @1:1-1:8
+                  text "www.foo" @1:1-1:8
+
+            """)
+    }
+
+    @Test func wwwDomainWithPeriodIsLink() {
+        #expect(tree("www.foo.bar") == """
+            document @1:1-1:12
+              paragraph @1:1-1:12
+                link "http://www.foo.bar" "" @1:1-1:12
+                  text "www.foo.bar" @1:1-1:12
+
+            """)
+    }
+
+    /// The www domain scan stops at the first character outside a domain, which leaves the period it already holds.
+    @Test(arguments: [
+        ("www.\u{00D7}", """
+            document @1:1-1:7
+              paragraph @1:1-1:7
+                link "http://www.×" "" @1:1-1:7
+                  text "www.×" @1:1-1:7
+
+            """),
+        ("http://a.\u{00D7}", """
+            document @1:1-1:12
+              paragraph @1:1-1:12
+                link "http://a.×" "" @1:1-1:12
+                  text "http://a.×" @1:1-1:12
+
+            """),
+        ("www.\u{00AB}", """
+            document @1:1-1:7
+              paragraph @1:1-1:7
+                link "http://www.«" "" @1:1-1:7
+                  text "www.«" @1:1-1:7
+
+            """),
+        ("http://a.\u{00AB}", """
+            document @1:1-1:12
+              paragraph @1:1-1:12
+                link "http://a.«" "" @1:1-1:12
+                  text "http://a.«" @1:1-1:12
+
+            """),
+        ("www.\u{0301}", """
+            document @1:1-1:7
+              paragraph @1:1-1:7
+                link "http://www.́" "" @1:1-1:7
+                  text "www.́" @1:1-1:7
+
+            """),
+        ("http://a.\u{0301}", """
+            document @1:1-1:12
+              paragraph @1:1-1:12
+                link "http://a.́" "" @1:1-1:12
+                  text "http://a.́" @1:1-1:12
+
+            """),
+        ("www.\u{1F600}", """
+            document @1:1-1:9
+              paragraph @1:1-1:9
+                link "http://www.😀" "" @1:1-1:9
+                  text "www.😀" @1:1-1:9
+
+            """),
+        ("http://a.\u{1F600}", """
+            document @1:1-1:14
+              paragraph @1:1-1:14
+                link "http://a.😀" "" @1:1-1:14
+                  text "http://a.😀" @1:1-1:14
+
+            """),
+        ("www.\u{00E9}", """
+            document @1:1-1:7
+              paragraph @1:1-1:7
+                link "http://www.é" "" @1:1-1:7
+                  text "www.é" @1:1-1:7
+
+            """),
+        ("http://a.\u{00E9}", """
+            document @1:1-1:12
+              paragraph @1:1-1:12
+                link "http://a.é" "" @1:1-1:12
+                  text "http://a.é" @1:1-1:12
+
+            """),
+    ])
+    func wwwDomainEndingInNonASCIICharacterIsLink(markdown: String, expected: String) {
+        #expect(tree(markdown) == expected)
+    }
+
+    @Test("www domain with a non-ASCII letter")
+    func wwwNonASCIILetterDomainAutolinks() {
+        #expect(tree("www.\u{E9}x y") == """
+            document @1:1-1:10
+              paragraph @1:1-1:10
+                link "http://www.éx" "" @1:1-1:8
+                  text "www.éx" @1:1-1:8
+                text " y" @1:8-1:10
+
+            """)
+        #expect(tree("www.\u{E9}x.y z") == """
+            document @1:1-1:12
+              paragraph @1:1-1:12
+                link "http://www.éx.y" "" @1:1-1:10
+                  text "www.éx.y" @1:1-1:10
+                text " z" @1:10-1:12
+
+            """)
+    }
+
+    @Test("www domain beginning with U+FFFD")
+    func wwwReplacementCharacterDomainAutolinks() {
+        // U+FFFD is not a domain character, so the domain ends before it and the underscores are outside its last two
+        // segments. As trailing punctuation, they are not part of the autolink.
+        #expect(tree("www.\u{FFFD}__") == """
+            document @1:1-1:10
+              paragraph @1:1-1:10
+                link "http://www.\u{FFFD}" "" @1:1-1:8
+                  text "www.\u{FFFD}" @1:1-1:8
+                text "__" @1:8-1:10
+
+            """)
+    }
+
+    // MARK: - Underscores in domains
+
+    // An extended www or url autolink's domain may not hold an underscore in its last two segments. An extended
+    // email autolink's domain may hold one anywhere but its last character.
+
+    @Test("scheme URL with underscores in its last two domain segments is text")
+    func schemeURLUnderscoreLastTwoLabelsIsText() {
+        #expect(tree("http://a_b.c_d") == """
+            document @1:1-1:15
+              paragraph @1:1-1:15
+                text "http://a_b.c_d" @1:1-1:15
+
+            """)
+    }
+
+    @Test("www domain with an underscore in its last segment is text")
+    func wwwUnderscoreLastLabelNoAutolink() {
+        #expect(tree("www.a_b x") == """
+            document @1:1-1:10
+              paragraph @1:1-1:10
+                text "www.a_b x" @1:1-1:10
+
+            """)
+    }
+
+    @Test("www domain with an underscore outside its last two segments autolinks")
+    func wwwUnderscoreOutsideLastTwoLabelsAutolinks() {
+        #expect(tree("www.a_b.c.d x") == """
+            document @1:1-1:14
+              paragraph @1:1-1:14
+                link "http://www.a_b.c.d" "" @1:1-1:12
+                  text "www.a_b.c.d" @1:1-1:12
+                text " x" @1:12-1:14
+
+            """)
+    }
+
+    @Test("email with an underscore in its first domain segment autolinks")
+    func emailUnderscoreLabelAutolinks() {
+        #expect(tree("o@b_c.d") == """
+            document @1:1-1:8
+              paragraph @1:1-1:8
+                link "mailto:o@b_c.d" "" @1:1-1:8
+                  text "o@b_c.d" @1:1-1:8
+
+            """)
+    }
+
+    @Test("email whose last domain segment contains an underscore autolinks")
+    func emailLastLabelUnderscoreAutolinks() {
+        #expect(tree("a@b.c_d") == """
+            document @1:1-1:8
+              paragraph @1:1-1:8
+                link "mailto:a@b.c_d" "" @1:1-1:8
+                  text "a@b.c_d" @1:1-1:8
+
+            """)
+    }
+
+    @Test("email with an empty first domain segment autolinks")
+    func emailEmptyFirstLabelAutolinks() {
+        #expect(tree("a@.b_o") == """
+            document @1:1-1:7
+              paragraph @1:1-1:7
+                link "mailto:a@.b_o" "" @1:1-1:7
+                  text "a@.b_o" @1:1-1:7
+
+            """)
+    }
+
+    @Test("email with a hyphen local part and an empty first domain segment autolinks")
+    func emailHyphenLocalEmptyFirstLabelAutolinks() {
+        #expect(tree("-@.b_o") == """
+            document @1:1-1:7
+              paragraph @1:1-1:7
+                link "mailto:-@.b_o" "" @1:1-1:7
+                  text "-@.b_o" @1:1-1:7
+
+            """)
+    }
+
+    // MARK: - Extended email autolink domains
+
+    @Test("email with a non-empty last segment autolinks")
+    func emailWithLastLabelAutolinks() {
+        #expect(tree("o@b.c") == """
+            document @1:1-1:6
+              paragraph @1:1-1:6
+                link "mailto:o@b.c" "" @1:1-1:6
+                  text "o@b.c" @1:1-1:6
+
+            """)
+    }
+
+    @Test("email with three domain segments autolinks")
+    func emailMultiDotDomainAutolinks() {
+        #expect(tree("a@b.c.d") == """
+            document @1:1-1:8
+              paragraph @1:1-1:8
+                link "mailto:a@b.c.d" "" @1:1-1:8
+                  text "a@b.c.d" @1:1-1:8
+
+            """)
+    }
+
+    @Test("email with a digit inside its domain autolinks")
+    func emailInteriorDigitLetterLastAutolinks() {
+        #expect(tree("o@b2.co") == """
+            document @1:1-1:8
+              paragraph @1:1-1:8
+                link "mailto:o@b2.co" "" @1:1-1:8
+                  text "o@b2.co" @1:1-1:8
+
+            """)
+    }
+
+    @Test("email with a hyphen local part and a plain domain autolinks")
+    func emailHyphenLocalPlainDomainAutolinks() {
+        #expect(tree("-@b.c") == """
+            document @1:1-1:6
+              paragraph @1:1-1:6
+                link "mailto:-@b.c" "" @1:1-1:6
+                  text "-@b.c" @1:1-1:6
+
+            """)
     }
 
     @Test func emailDomainStartingWithPeriodIsLink() {
-        #expect(tree("o@.x") == link("mailto:o@.x", "o@.x"))
+        #expect(tree("o@.x") == """
+            document @1:1-1:5
+              paragraph @1:1-1:5
+                link "mailto:o@.x" "" @1:1-1:5
+                  text "o@.x" @1:1-1:5
+
+            """)
     }
 
     /// A second `@` in the domain restarts the address there; the periods the first domain held still count.
@@ -102,13 +443,82 @@ struct ExtendedAutolinkDomainTests {
             """)
     }
 
+    @Test("email with a trailing-dot domain does not autolink")
+    func emailTrailingDotNoAutolink() {
+        // A final period is not part of the address, which leaves the domain `b` with no period.
+        #expect(tree("o@b.") == """
+            document @1:1-1:5
+              paragraph @1:1-1:5
+                text "o@b." @1:1-1:5
+
+            """)
+    }
+
     @Test func emailDomainEndingInDigitIsText() {
-        #expect(tree("a@b.c9") == text("a@b.c9"))
-        #expect(tree("a@1.2") == text("a@1.2"))
+        #expect(tree("a@b.c9") == """
+            document @1:1-1:7
+              paragraph @1:1-1:7
+                text "a@b.c9" @1:1-1:7
+
+            """)
+        #expect(tree("a@1.2") == """
+            document @1:1-1:6
+              paragraph @1:1-1:6
+                text "a@1.2" @1:1-1:6
+
+            """)
+    }
+
+    @Test("email whose domain has an empty first segment and ends in a digit is text")
+    func emailEmptyFirstSegmentDigitDomainIsText() {
+        #expect(tree("f@.0") == """
+            document @1:1-1:5
+              paragraph @1:1-1:5
+                text "f@.0" @1:1-1:5
+
+            """)
+    }
+
+    @Test("email whose domain has an empty first segment and a final period is text")
+    func emailDomainDotBoundaryDigitLastNoAutolink() {
+        // A final period is not part of the address, and `.0` has an empty first segment.
+        #expect(tree("a@.0.") == """
+            document @1:1-1:6
+              paragraph @1:1-1:6
+                text "a@.0." @1:1-1:6
+
+            """)
+    }
+
+    @Test("email whose domain ends in a digit before a final period is text")
+    func emailDomainDotBoundaryDigitLabelIsText() {
+        #expect(tree("a@b.c9.") == """
+            document @1:1-1:8
+              paragraph @1:1-1:8
+                text "a@b.c9." @1:1-1:8
+
+            """)
     }
 
     @Test func emailDomainEndingInHyphenIsText() {
-        #expect(tree("a@b.c-") == text("a@b.c-"))
+        #expect(tree("a@b.c-") == """
+            document @1:1-1:7
+              paragraph @1:1-1:7
+                text "a@b.c-" @1:1-1:7
+
+            """)
+    }
+
+    @Test("email domain ends before a period that no alphanumeric follows")
+    func emailDomainEndsBeforeHyphenSegment() {
+        #expect(tree("a@x.y.-5") == """
+            document @1:1-1:9
+              paragraph @1:1-1:9
+                link "mailto:a@x.y" "" @1:1-1:6
+                  text "a@x.y" @1:1-1:6
+                text ".-5" @1:6-1:9
+
+            """)
     }
 }
 
@@ -120,10 +530,6 @@ struct ExtendedAutolinkDomainTests {
 struct ExtendedAutolinkDomainScanTests {
     private func surface(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: autolinkOptions)
-    }
-
-    private func text(_ literal: String) -> String {
-        "document\n  paragraph\n    text \"\(literal)\"\n"
     }
 
     @Test func wwwDomainTrimmedToPeriodIsLink() {
@@ -168,9 +574,24 @@ struct ExtendedAutolinkDomainScanTests {
     }
 
     @Test func trailingUnderscoreBeforeMoreContentRejectsDomain() {
-        #expect(surface("www.a.b_ c") == text("www.a.b_ c"))
-        #expect(surface("http://a.b_ x") == text("http://a.b_ x"))
-        #expect(surface("x www.a.b__ y") == text("x www.a.b__ y"))
+        #expect(surface("www.a.b_ c") == """
+            document
+              paragraph
+                text "www.a.b_ c"
+
+            """)
+        #expect(surface("http://a.b_ x") == """
+            document
+              paragraph
+                text "http://a.b_ x"
+
+            """)
+        #expect(surface("x www.a.b__ y") == """
+            document
+              paragraph
+                text "x www.a.b__ y"
+
+            """)
         #expect(surface("__www.a.b__") == """
             document
               paragraph
@@ -181,8 +602,18 @@ struct ExtendedAutolinkDomainScanTests {
     }
 
     @Test func escapedUnderscoreRejectsDomain() {
-        #expect(surface("www.a.b\\_c d") == text("www.a.b_c d"))
-        #expect(surface("http://a\\_b.c x") == text("http://a_b.c x"))
+        #expect(surface("www.a.b\\_c d") == """
+            document
+              paragraph
+                text "www.a.b_c d"
+
+            """)
+        #expect(surface("http://a\\_b.c x") == """
+            document
+              paragraph
+                text "http://a_b.c x"
+
+            """)
     }
 
     @Test func backslashInDomainIsLink() {
@@ -196,9 +627,24 @@ struct ExtendedAutolinkDomainScanTests {
     }
 
     @Test func underscoreInLastTwoSegmentsRejectsDomain() {
-        #expect(surface("www.a_b.c") == text("www.a_b.c"))
-        #expect(surface("www.a.b_c") == text("www.a.b_c"))
-        #expect(surface("www.a.b.c.d.e.f.g.h.i.l_m") == text("www.a.b.c.d.e.f.g.h.i.l_m"))
+        #expect(surface("www.a_b.c") == """
+            document
+              paragraph
+                text "www.a_b.c"
+
+            """)
+        #expect(surface("www.a.b_c") == """
+            document
+              paragraph
+                text "www.a.b_c"
+
+            """)
+        #expect(surface("www.a.b.c.d.e.f.g.h.i.l_m") == """
+            document
+              paragraph
+                text "www.a.b.c.d.e.f.g.h.i.l_m"
+
+            """)
     }
 
     /// The final candidate's domain is `a`, since trailing punctuation leaves the link.
@@ -226,16 +672,45 @@ struct ExtendedAutolinkDomainScanTests {
             """)
     }
 
-    @Test func urlWithPortPathAndUserIsLink() {
-        for url in ["http://a:80/x", "http://user@a.b", "http://a/b", "http://a?b", "http://a#b"] {
-            #expect(surface(url) == """
-                document
-                  paragraph
-                    link "\(url)" ""
-                      text "\(url)"
+    @Test(arguments: [
+        ("http://a:80/x", """
+            document
+              paragraph
+                link "http://a:80/x" ""
+                  text "http://a:80/x"
 
-                """)
-        }
+            """),
+        ("http://user@a.b", """
+            document
+              paragraph
+                link "http://user@a.b" ""
+                  text "http://user@a.b"
+
+            """),
+        ("http://a/b", """
+            document
+              paragraph
+                link "http://a/b" ""
+                  text "http://a/b"
+
+            """),
+        ("http://a?b", """
+            document
+              paragraph
+                link "http://a?b" ""
+                  text "http://a?b"
+
+            """),
+        ("http://a#b", """
+            document
+              paragraph
+                link "http://a#b" ""
+                  text "http://a#b"
+
+            """),
+    ])
+    func urlWithPortPathAndUserIsLink(markdown: String, tree: String) {
+        #expect(surface(markdown) == tree)
     }
 
     /// Line tabulation is not whitespace that ends an extended autolink.
