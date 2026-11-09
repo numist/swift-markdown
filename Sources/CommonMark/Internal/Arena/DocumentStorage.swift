@@ -63,7 +63,7 @@ internal struct DocumentStorage: ~Copyable {
         strings = UniqueArray(repeating: UInt8(ascii: "\n"), count: 1)
     }
 
-    internal static let newlineOffset: Int32 = 0
+    internal static let newlineOffset = 0
 
     internal var newlineSegment: Segment {
         Segment(offset: Self.newlineOffset, length: 1, inSource: false)
@@ -97,20 +97,20 @@ internal struct DocumentStorage: ~Copyable {
         if chunk.isEmpty {
             return .empty
         }
-        let first = Int32(segments.count)
+        let first = segments.count
         segments.append(Segment(chunk))
-        return ContentRef(first: first, count: 1, totalLength: Int32(chunk.length))
+        return ContentRef(first: first, count: 1, totalLength: chunk.length)
     }
 
     internal mutating func intern(_ pieces: consuming UniqueArray<Segment>) -> ContentRef {
-        let first = Int32(segments.count)
-        var total: Int32 = 0
+        let first = segments.count
+        var total = 0
         for i in 0..<pieces.count {
             let piece = pieces[i]
             segments.append(piece)
             total += piece.length
         }
-        let count = Int32(segments.count) - first
+        let count = segments.count - first
         if count == 0 {
             return .empty
         }
@@ -120,7 +120,7 @@ internal struct DocumentStorage: ~Copyable {
     /// The chunk of a footnote label, which is always one non-empty segment.
     internal func chunk(of ref: ContentRef) -> Chunk {
         precondition(ref.count == 1, "a footnote label is a single non-empty segment")
-        return segments[Int(ref.first)].chunk
+        return segments[ref.first].chunk
     }
 
     /// Trims a single-segment literal in place, dropping `trimStart` bytes and keeping `newLength`. Each leaf owns its segment, so no other node changes.
@@ -128,10 +128,10 @@ internal struct DocumentStorage: ~Copyable {
         guard case .literal(let ref) = nodes[node].data, ref.count == 1 else {
             preconditionFailure("a delimiter run's or an image opener's text node is a single-segment literal")
         }
-        let i = Int(ref.first)
-        segments[i].offset += Int32(trimStart)
-        segments[i].length = Int32(newLength)
-        nodes[node].data = .literal(ContentRef(first: ref.first, count: 1, totalLength: Int32(newLength)))
+        let i = ref.first
+        segments[i].offset += trimStart
+        segments[i].length = newLength
+        nodes[node].data = .literal(ContentRef(first: ref.first, count: 1, totalLength: newLength))
     }
 
     internal subscript(index: Index) -> NodeRecord {

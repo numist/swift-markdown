@@ -83,14 +83,14 @@ internal struct StorageView: ~Escapable, Copyable {
             return ""
         }
         if ref.count == 1, #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
-            return String(copying: utf8Span(of: segments[Int(ref.first)]))
+            return String(copying: utf8Span(of: segments[ref.first]))
         }
-        return String(unsafeUninitializedCapacity: Int(ref.totalLength)) { buffer in
+        return String(unsafeUninitializedCapacity: ref.totalLength) { buffer in
             // SAFETY: The `OutputSpan` starts with none of `buffer` initialized, every append is capacity-checked against `ref.totalLength` (the sum of the segment lengths), `finalize(for:)` verifies `buffer` before reporting the initialized count, and the initializer repairs invalid UTF-8.
             //         No String initializer fills its UTF-8 storage through an `OutputSpan`. Building the bytes with `Array(capacity:initializingWith:)` and copying them with `String(decoding:as:)` measured 4.8% more instructions to parse spec.txt and read every node's `stringContent`. Building them in `withTemporaryAllocation(of:capacity:_:)` and copying them with `String(copying:)` after `UTF8Span(validating:)` exists only on anyAppleOS 26 and measured 0.7% more.
             var output = unsafe OutputSpan(buffer: buffer, initializedCount: 0)
-            for i in 0..<Int(ref.count) {
-                let span = bytes(of: segments[Int(ref.first) + i].chunk)
+            for i in 0..<ref.count {
+                let span = bytes(of: segments[ref.first + i].chunk)
                 for b in 0..<span.count {
                     output.append(span[b])
                 }
@@ -116,7 +116,7 @@ internal struct StorageView: ~Escapable, Copyable {
         if ref.count == 0 {
             return utf8Span(of: Chunk(offset: 0, length: 0, inSource: false))
         }
-        return utf8Span(of: segments[Int(ref.first)])
+        return utf8Span(of: segments[ref.first])
     }
 
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)

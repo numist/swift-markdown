@@ -10,24 +10,24 @@
 
 /// One piece of a node's content: a byte range in the source (`inSource`) or the string arena.
 ///
-/// A run of segments (`ContentRef`) represents content that spans several source ranges or mixes in synthetic bytes, without copying the source. `Int32` fields keep the segment pool compact.
+/// A run of segments (`ContentRef`) represents content that spans several source ranges or mixes in synthetic bytes, without copying the source.
 internal struct Segment: Equatable {
-    internal var offset: Int32
-    internal var length: Int32
+    internal var offset: Int
+    internal var length: Int
     internal var inSource: Bool
 
-    internal init(offset: Int32, length: Int32, inSource: Bool) {
+    internal init(offset: Int, length: Int, inSource: Bool) {
         self.offset = offset
         self.length = length
         self.inSource = inSource
     }
 
     internal init(_ chunk: Chunk) {
-        self.init(offset: Int32(chunk.offset), length: Int32(chunk.length), inSource: chunk.inSource)
+        self.init(offset: chunk.offset, length: chunk.length, inSource: chunk.inSource)
     }
 
     internal var chunk: Chunk {
-        Chunk(offset: Int(offset), length: Int(length), inSource: inSource)
+        Chunk(offset: offset, length: length, inSource: inSource)
     }
 }
 
@@ -35,10 +35,10 @@ internal struct Segment: Equatable {
 ///
 /// A negative `sourceOffset` marks a `"\n"` line join, which has no source position. Runs tile the content in order, so inline positions resolve through arena content such as a non-contiguous setext heading or a `\|`-unescaped table cell.
 internal struct ArenaRun: Equatable {
-    internal var length: Int32
-    internal var sourceOffset: Int32
+    internal var length: Int
+    internal var sourceOffset: Int
 
-    internal init(length: Int32, sourceOffset: Int32) {
+    internal init(length: Int, sourceOffset: Int) {
         self.length = length
         self.sourceOffset = sourceOffset
     }
@@ -56,7 +56,7 @@ internal struct ContentImage {
         self.runs = runs
         var end = 0
         runEnds = runs.map { run in
-            end += Int(run.length)
+            end += run.length
             return end
         }
     }
@@ -69,7 +69,7 @@ internal struct ContentImage {
         }
         let i = firstRun(endingAfter: k)
         precondition(runs[i].sourceOffset >= 0, "a resolved byte is not a line join")
-        return Int(runs[i].sourceOffset) + (k - runStart(i))
+        return runs[i].sourceOffset + (k - runStart(i))
     }
 
     /// The index of the first run ending past content-relative offset `k`, or `runs.count` when none does.
@@ -95,11 +95,11 @@ internal struct ContentImage {
 
 /// A node's content: the slice `[first, first + count)` of `DocumentStorage.segments`. `totalLength` is the byte length summed over the segments.
 internal struct ContentRef: Equatable {
-    internal var first: Int32
-    internal var count: Int32
-    internal var totalLength: Int32
+    internal var first: Int
+    internal var count: Int
+    internal var totalLength: Int
 
-    internal init(first: Int32, count: Int32, totalLength: Int32) {
+    internal init(first: Int, count: Int, totalLength: Int) {
         self.first = first
         self.count = count
         self.totalLength = totalLength

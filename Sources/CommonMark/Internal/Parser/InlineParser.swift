@@ -1127,7 +1127,7 @@ extension BlockParser {
         guard case .literal(let ref) = storage[nodeIdx].data else {
             preconditionFailure("a delimiter run's text node holds a literal")
         }
-        return Int(ref.totalLength)
+        return ref.totalLength
     }
 
     // MARK: - Smart punctuation
@@ -2172,8 +2172,8 @@ extension BlockParser {
 
     /// Appends copies of `ref`'s segments to the pool.
     private mutating func appendSegments(of ref: ContentRef) {
-        for i in 0..<Int(ref.count) {
-            let seg = storage.segments[Int(ref.first) + i]
+        for i in 0..<ref.count {
+            let seg = storage.segments[ref.first + i]
             storage.segments.append(seg)
         }
     }
@@ -2187,8 +2187,8 @@ extension BlockParser {
         // Pool-contiguous runs widen in place. A destination ending the pool grows by copies of the source's segments
         // alone, since re-copying it per sibling would make a long run quadratic. Otherwise both are copied to the pool end.
         let isContiguous = destRef.first + destRef.count == srcRef.first
-        let endsPool = Int(destRef.first + destRef.count) == storage.segments.count
-        let first = isContiguous || endsPool ? destRef.first : Int32(storage.segments.count)
+        let endsPool = destRef.first + destRef.count == storage.segments.count
+        let first = isContiguous || endsPool ? destRef.first : storage.segments.count
         if !isContiguous {
             if !endsPool {
                 appendSegments(of: destRef)
@@ -2351,8 +2351,8 @@ extension BlockParser {
 
     /// Whether any content byte of `ref` is `target`.
     private func contentRefContains(_ ref: ContentRef, byte target: UInt8) -> Bool {
-        for s in 0..<Int(ref.count) {
-            let chunk = storage.segments[Int(ref.first) + s].chunk
+        for s in 0..<ref.count {
+            let chunk = storage.segments[ref.first + s].chunk
             // Every text node is scanned, so the bytes are chosen once per segment rather than per byte.
             let bytes = chunk.inSource ? sourceBytes : storage.strings.span
             for k in chunk.range where bytes[k] == target { return true }
@@ -2362,8 +2362,8 @@ extension BlockParser {
 
     /// Copies `ref`'s content bytes into `out`.
     private func materialize(_ ref: ContentRef, into out: inout UniqueArray<UInt8>) {
-        for s in 0..<Int(ref.count) {
-            let chunk = storage.segments[Int(ref.first) + s].chunk
+        for s in 0..<ref.count {
+            let chunk = storage.segments[ref.first + s].chunk
             for k in chunk.range { out.append(readByte(at: k, in: chunk)) }
         }
     }
@@ -2384,15 +2384,15 @@ extension BlockParser {
             return .empty
         }
         precondition(position.start <= lo, "a carve starts at or after the segment it resumes from")
-        let refFirst = Int(ref.first)
-        let refCount = Int(ref.count)
-        let newFirst = Int32(storage.segments.count)
-        var count: Int32 = 0
-        var total: Int32 = 0
+        let refFirst = ref.first
+        let refCount = ref.count
+        let newFirst = storage.segments.count
+        var count = 0
+        var total = 0
         var v = position.start
         for s in position.segment..<refCount {
             let seg = storage.segments[refFirst + s]
-            let segLen = Int(seg.length)
+            let segLen = seg.length
             let segStart = v
             if segStart >= hi {
                 break
@@ -2404,8 +2404,8 @@ extension BlockParser {
             if pieceHi <= pieceLo {
                 continue
             }
-            let localOffset = Int32(pieceLo - segStart)
-            let pieceLen = Int32(pieceHi - pieceLo)
+            let localOffset = pieceLo - segStart
+            let pieceLen = pieceHi - pieceLo
             storage.segments.append(Segment(
                 offset: seg.offset + localOffset,
                 length: pieceLen,
@@ -2436,10 +2436,10 @@ extension BlockParser {
     /// The source extent of non-empty `ref`, from what its first byte stands for to what its last does.
     private func sourceSpan(of ref: ContentRef, image: ContentImage?) -> (start: Int, end: Int) {
         precondition(ref.count > 0 && ref.totalLength > 0, "an email address holds at least one byte")
-        let firstSeg = storage.segments[Int(ref.first)]
-        let lastSeg = storage.segments[Int(ref.first) + Int(ref.count) - 1]
+        let firstSeg = storage.segments[ref.first]
+        let lastSeg = storage.segments[ref.first + ref.count - 1]
         let first = sourceRange(of: firstSeg, local: 0, image: image)
-        let last = sourceRange(of: lastSeg, local: Int(lastSeg.length) - 1, image: image)
+        let last = sourceRange(of: lastSeg, local: lastSeg.length - 1, image: image)
         return (first.lowerBound, last.upperBound)
     }
 
@@ -2448,10 +2448,10 @@ extension BlockParser {
     /// no address holds.
     private func sourceRange(of seg: Segment, local: Int, image: ContentImage?) -> Range<Int> {
         if seg.inSource {
-            let offset = Int(seg.offset) + local
+            let offset = seg.offset + local
             return offset..<(offset + 1)
         }
-        let arena = Int(seg.offset) + local
+        let arena = seg.offset + local
         if let offset = image?.sourceOffset(ofArenaByte: arena) {
             return offset..<(offset + 1)
         }

@@ -26,7 +26,7 @@ private struct InlineScratch: ~Copyable {
     mutating func append(piece: Segment) {
         let start = pieceEnds.count == 0 ? 0 : pieceEnds[pieceEnds.count - 1]
         pieces.append(piece)
-        pieceEnds.append(start + Int(piece.length))
+        pieceEnds.append(start + piece.length)
     }
 }
 
@@ -227,21 +227,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         for (node, ref) in pending {
             precondition(ref.totalLength > 0, "only non-empty content is queued for inline parsing")
             if ref.count == 1 {
-                parseInline(chunk: storage.segments[Int(ref.first)].chunk, scratch: &scratch, into: node)
+                parseInline(chunk: storage.segments[ref.first].chunk, scratch: &scratch, into: node)
             } else {
                 // Multi-segment content is parsed from the source through a copy of its segment list.
                 scratch.removeAllPieces()
-                for i in 0..<Int(ref.count) {
-                    scratch.append(piece: storage.segments[Int(ref.first) + i])
+                for i in 0..<ref.count {
+                    scratch.append(piece: storage.segments[ref.first + i])
                 }
                 parseInline(
-                    content: ContentSpan(source: sourceBytes, segments: scratch.pieces.span, segmentEnds: scratch.pieceEnds.span, virtualLength: Int(ref.totalLength), hint: pieceHint),
+                    content: ContentSpan(source: sourceBytes, segments: scratch.pieces.span, segmentEnds: scratch.pieceEnds.span, virtualLength: ref.totalLength, hint: pieceHint),
                     into: node
                 )
             }
 
             let image: ContentImage?
-            if positionsEnabled, ref.count == 1, case let chunk = storage.segments[Int(ref.first)].chunk, !chunk.inSource, let map = arenaSourceMaps[node] {
+            if positionsEnabled, ref.count == 1, case let chunk = storage.segments[ref.first].chunk, !chunk.inSource, let map = arenaSourceMaps[node] {
                 image = ContentImage(base: chunk.offset, runs: map)
             } else {
                 image = nil
@@ -467,16 +467,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     @inline(__always)
     fileprivate static func appendContentByte(imaging sourceOffset: Int, to runs: inout [ArenaRun]) {
         if let last = runs.last {
-            let length = Int(last.length)
+            let length = last.length
             let continuesGap = sourceOffset < 0 && last.sourceOffset < 0
             let continuesRun = sourceOffset >= 0 && last.sourceOffset >= 0
-                && Int(last.sourceOffset) + length == sourceOffset
+                && last.sourceOffset + length == sourceOffset
             if continuesGap || continuesRun {
                 runs[runs.count - 1].length += 1
                 return
             }
         }
-        runs.append(ArenaRun(length: 1, sourceOffset: Int32(sourceOffset)))
+        runs.append(ArenaRun(length: 1, sourceOffset: sourceOffset))
     }
 
     /// Merges a leaf's adjacent text nodes, then finds extended email autolinks. `image` maps the leaf's content to the source when it is one arena chunk.
@@ -538,7 +538,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             case .lazy(let prev, joinPending: true):
                 // The previous range becomes a source segment, joined to this line by `newlineSegment`.
                 var segs = UniqueArray<Segment>()
-                segs.append(Segment(offset: Int32(prev.lowerBound), length: Int32(prev.count), inSource: true))
+                segs.append(Segment(offset: prev.lowerBound, length: prev.count, inSource: true))
                 segs.append(storage.newlineSegment)
                 return addLineSegment(range: range, to: node, pending: PendingLeaf(node: node, content: .segments(segs)))
             case .segments(let segs):
@@ -570,7 +570,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Appends a line of a segment-list leaf as a source segment. An empty line appends nothing, since the joins around it carry it.
     private mutating func addLineSegment(range: Range<Int>, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         guard !range.isEmpty else { return pending }
-        return appendSegment(Segment(offset: Int32(range.lowerBound), length: Int32(range.upperBound - range.lowerBound), inSource: true), to: node, pending: pending)
+        return appendSegment(Segment(offset: range.lowerBound, length: range.upperBound - range.lowerBound, inSource: true), to: node, pending: pending)
     }
 
     /// Appends the rest of a code or HTML block line from `bodyStart`, after `leadingSpaces` spaces from a split tab.
@@ -612,7 +612,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         appendReplacingNUL(sourceBytes.extracting(sourceStart..<lineEnd))
         return appendSegment(
-            Segment(offset: Int32(offset), length: Int32(storage.strings.count - offset), inSource: false),
+            Segment(offset: offset, length: storage.strings.count - offset, inSource: false),
             to: node, pending: pending)
     }
 
@@ -707,12 +707,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `chunk`'s run map `map` after a rewrite that turns `chunk`'s byte at each offset into `copies(offset)` bytes,
     /// each imaging what that byte images. An empty `map` stays empty.
     func rewrittenMap(_ map: [ArenaRun], of chunk: Chunk, copies: (Int) -> Int) -> [ArenaRun] {
-        assert(map.isEmpty || map.reduce(0) { $0 + Int($1.length) } == chunk.length, "a run map must tile its chunk")
+        assert(map.isEmpty || map.reduce(0) { $0 + $1.length } == chunk.length, "a run map must tile its chunk")
         var rewritten: [ArenaRun] = []
         var i = chunk.offset
         for run in map {
-            for local in 0..<Int(run.length) {
-                let sourceOffset = run.sourceOffset < 0 ? -1 : Int(run.sourceOffset) + local
+            for local in 0..<run.length {
+                let sourceOffset = run.sourceOffset < 0 ? -1 : run.sourceOffset + local
                 for _ in 0..<copies(i) {
                     Self.appendContentByte(imaging: sourceOffset, to: &rewritten)
                 }
@@ -725,7 +725,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `chunk`'s run map: `map`, or for source content with an empty `map`, the one run imaging its own range.
     func sourceImage(of chunk: Chunk, map: [ArenaRun]) -> [ArenaRun] {
         if map.isEmpty, chunk.inSource, chunk.length > 0 {
-            return [ArenaRun(length: Int32(chunk.length), sourceOffset: Int32(chunk.offset))]
+            return [ArenaRun(length: chunk.length, sourceOffset: chunk.offset)]
         }
         return map
     }
@@ -927,7 +927,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let first = segs[0]
         let last = segs[segs.count - 1]
         precondition(first.inSource && last.inSource, "a paragraph's lines start and end on a source byte")
-        return (Int(first.offset), Int(last.offset) + Int(last.length))
+        return (first.offset, last.offset + last.length)
     }
 
     /// The source offset just past virtual offset `end - 1` of a paragraph's segments, a byte that is not whitespace.
@@ -935,12 +935,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         precondition(end > 0, "a paragraph's content that is not whitespace is not empty")
         var i = 0
         var segmentStart = 0
-        while segmentStart + Int(segs[i].length) < end {
-            segmentStart += Int(segs[i].length)
+        while segmentStart + segs[i].length < end {
+            segmentStart += segs[i].length
             i += 1
         }
         precondition(segs[i].inSource, "a paragraph's lines start and end on a source byte")
-        return Int(segs[i].offset) + end - segmentStart
+        return segs[i].offset + end - segmentStart
     }
 
     /// The source extent imaged by the run map of trimmed paragraph content: from its first run's byte to just past
@@ -949,7 +949,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         guard let first = map.first, let last = map.last, first.sourceOffset >= 0, last.sourceOffset >= 0 else {
             preconditionFailure("trimmed paragraph content starts and ends on source bytes")
         }
-        return (Int(first.sourceOffset), Int(last.sourceOffset) + Int(last.length))
+        return (first.sourceOffset, last.sourceOffset + last.length)
     }
 
     // MARK: - Per-line dispatcher
@@ -1871,9 +1871,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Byte `local` of `seg`.
     private func segmentByte(_ seg: Segment, _ local: Int) -> UInt8 {
         if seg.inSource {
-            return sourceBytes[Int(seg.offset) + local]
+            return sourceBytes[seg.offset + local]
         }
-        return storage.strings[Int(seg.offset) + local]
+        return storage.strings[seg.offset + local]
     }
 
     /// Trims trailing spaces, tabs and line endings from the last segment, as `Chunk.trimming(using:)` does. The first
@@ -1884,9 +1884,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         precondition(!segmentByte(segs[0], 0).isSpaceTabOrNewline, "a paragraph's opening line starts at its first non-space byte")
         let li = segs.count - 1
         var last = segs[li]
-        var len = Int(last.length)
+        var len = last.length
         while len > 0 && segmentByte(last, len - 1).isSpaceTabOrNewline { len -= 1 }
-        last.length = Int32(len)
+        last.length = len
         segs[li] = last
         return segs
     }
@@ -1895,12 +1895,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private func trimmedRange(of segs: borrowing UniqueArray<Segment>) -> Range<Int> {
         var total = 0
         for i in 0..<segs.count {
-            total += Int(segs[i].length)
+            total += segs[i].length
         }
         var lower = 0
         leading: for i in 0..<segs.count {
             let seg = segs[i]
-            for j in 0..<Int(seg.length) {
+            for j in 0..<seg.length {
                 if !segmentByte(seg, j).isASCIISpace {
                     break leading
                 }
@@ -1910,7 +1910,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var upper = total
         trailing: for i in stride(from: segs.count - 1, through: 0, by: -1) {
             let seg = segs[i]
-            for j in stride(from: Int(seg.length) - 1, through: 0, by: -1) {
+            for j in stride(from: seg.length - 1, through: 0, by: -1) {
                 if upper == lower || !segmentByte(seg, j).isASCIISpace {
                     break trailing
                 }
@@ -1926,19 +1926,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var segs = segs
         var first = 0
         var firstStart = 0
-        while firstStart + Int(segs[first].length) <= range.lowerBound {
-            firstStart += Int(segs[first].length)
+        while firstStart + segs[first].length <= range.lowerBound {
+            firstStart += segs[first].length
             first += 1
         }
         var last = first
         var lastStart = firstStart
-        while lastStart + Int(segs[last].length) < range.upperBound {
-            lastStart += Int(segs[last].length)
+        while lastStart + segs[last].length < range.upperBound {
+            lastStart += segs[last].length
             last += 1
         }
-        segs[last].length = Int32(range.upperBound - lastStart)
-        segs[first].offset += Int32(range.lowerBound - firstStart)
-        segs[first].length -= Int32(range.lowerBound - firstStart)
+        segs[last].length = range.upperBound - lastStart
+        segs[first].offset += range.lowerBound - firstStart
+        segs[first].length -= range.lowerBound - firstStart
         segs.removeSubrange((last + 1)..<segs.count)
         segs.removeSubrange(0..<first)
         return segs
@@ -1974,7 +1974,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let last = segs[segs.count - 1]
         let isControlWhitespace = { (b: UInt8) in b == 0x0B || b == 0x0C }
         return (first.length > 0 && isControlWhitespace(segmentByte(first, 0)))
-            || (last.length > 0 && isControlWhitespace(segmentByte(last, Int(last.length) - 1)))
+            || (last.length > 0 && isControlWhitespace(segmentByte(last, last.length - 1)))
     }
 
     /// Whether the content could match a finalize-time matcher: a link reference definition or task list item marker (`[`), or an attribute definition (`^[`).
@@ -1985,13 +1985,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let attributesEnabled = storage.options.contains(.attributes)
         outer: for i in 0..<segs.count {
             let seg = segs[i]
-            for j in 0..<Int(seg.length) {
+            for j in 0..<seg.length {
                 let b = segmentByte(seg, j)
                 if b.isASCIISpace { continue }
                 if b == UInt8(ascii: "[") { return true }
                 // An attribute definition opens with a `^` immediately followed by `[`, so a `^` split
                 // from its `[` by a line join is not admitted (the `[` would fall in the next segment).
-                if b == UInt8(ascii: "^"), attributesEnabled, j + 1 < Int(seg.length),
+                if b == UInt8(ascii: "^"), attributesEnabled, j + 1 < seg.length,
                    segmentByte(seg, j + 1) == UInt8(ascii: "[") {
                     return true
                 }
@@ -2004,14 +2004,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Flattens a segment list into one arena chunk, recording its run map in `map`: a source segment images its range, and a line join is a gap. The map tiles the content from its first byte, so it survives a later copy of the content.
     private mutating func flattenSegments(_ segs: borrowing UniqueArray<Segment>, map: inout [ArenaRun]) -> Chunk {
         var total = 0
-        for i in 0..<segs.count { total += Int(segs[i].length) }
+        for i in 0..<segs.count { total += segs[i].length }
         // Arena segments are read through a span of the arena, which can't be borrowed while the arena grows, so the
         // content is assembled apart and then appended.
         var buf = UniqueArray<UInt8>(minimumCapacity: total)
         let offset = storage.strings.count
         for i in 0..<segs.count {
             let seg = segs[i]
-            let len = Int(seg.length)
+            let len = seg.length
             if seg.inSource {
                 buf.append(copying: sourceBytes.extracting(seg.chunk.range))
             } else {
@@ -2019,9 +2019,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             if len > 0 {
                 if seg.inSource {
-                    map.append(ArenaRun(length: Int32(len), sourceOffset: seg.offset))
+                    map.append(ArenaRun(length: len, sourceOffset: seg.offset))
                 } else {
-                    map.append(ArenaRun(length: Int32(len), sourceOffset: -1))
+                    map.append(ArenaRun(length: len, sourceOffset: -1))
                 }
             }
         }
@@ -2036,13 +2036,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var v = 0
         for run in runs {
             let runStart = v
-            let runEnd = v + Int(run.length)
+            let runEnd = v + run.length
             v = runEnd
             let lo = max(runStart, start)
             let hi = min(runEnd, end)
             if lo >= hi { continue }
-            let sourceOffset: Int32 = run.sourceOffset < 0 ? -1 : run.sourceOffset + Int32(lo - runStart)
-            result.append(ArenaRun(length: Int32(hi - lo), sourceOffset: sourceOffset))
+            let sourceOffset = run.sourceOffset < 0 ? -1 : run.sourceOffset + (lo - runStart)
+            result.append(ArenaRun(length: hi - lo, sourceOffset: sourceOffset))
         }
         return result
     }
@@ -2150,7 +2150,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         if positionsEnabled {
             let startByte = storage.sourceRanges[node].start
-            let startedThisLine = startByte >= Int32(currentLineSourceRange.lowerBound)
+            let startedThisLine = startByte >= currentLineSourceRange.lowerBound
             let end: Int
             if let lineContentEnd {
                 // An ATX heading, a thematic break or a closing fence ends at its trimmed content extent, not the raw
@@ -3260,8 +3260,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // A definition begins with `[` or `^`, and a task list item marker with `[`.
         var first = 0
         var offset = 0
-        while offset + Int(segs[first].length) <= trimmed.lowerBound {
-            offset += Int(segs[first].length)
+        while offset + segs[first].length <= trimmed.lowerBound {
+            offset += segs[first].length
             first += 1
         }
         guard Self.mayBeginDefinition(segmentByte(segs[first], trimmed.lowerBound - offset)) else {
@@ -3270,7 +3270,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var segmentEnds = UniqueArray<Int>(minimumCapacity: segs.count)
         var end = 0
         for i in 0..<segs.count {
-            end += Int(segs[i].length)
+            end += segs[i].length
             segmentEnds.append(end)
         }
         let content = ContentSpan(source: sourceBytes, segments: segs.span, segmentEnds: segmentEnds.span, virtualLength: trimmed.upperBound, hint: pieceHint)

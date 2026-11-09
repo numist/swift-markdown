@@ -146,7 +146,7 @@ extension MarkdownNode {
 
         /// The number of segments.
         public var count: Int {
-            Int(_ref.count)
+            _ref.count
         }
 
         /// A Boolean value that indicates whether there is no content.
@@ -156,7 +156,7 @@ extension MarkdownNode {
 
         /// The total byte length across all segments.
         public var byteCount: Int {
-            Int(_ref.totalLength)
+            _ref.totalLength
         }
 
         /// Calls `body` with each segment, in order.
@@ -166,8 +166,8 @@ extension MarkdownNode {
         /// - Parameter body: A closure that receives each segment.
         @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
         public borrowing func forEach<E: Swift.Error>(_ body: (borrowing UTF8Span) throws(E) -> Void) throws(E) {
-            for i in 0..<Int(_ref.count) {
-                let segment = _view.segments[Int(_ref.first) + i]
+            for i in 0..<_ref.count {
+                let segment = _view.segments[_ref.first + i]
                 try body(_view.utf8Span(of: segment))
             }
         }

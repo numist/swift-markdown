@@ -151,7 +151,7 @@ internal struct ContentSpan: ~Escapable {
         let seg = pieces[i]
         let local = offset - pieceStart(i)
         if seg.inSource {
-            return span[Int(seg.offset) + local]
+            return span[seg.offset + local]
         }
         // The only non-source segment is the shared interned `"\n"`.
         return UInt8(ascii: "\n")
@@ -168,7 +168,7 @@ internal struct ContentSpan: ~Escapable {
         precondition(i < pieces.count, "an inline node's source range lies inside its content's pieces")
         let piece = pieces[i]
         precondition(piece.inSource, "an inline node's first and last bytes image source bytes")
-        return Int(piece.offset) + (k - pieceStart(i))
+        return piece.offset + (k - pieceStart(i))
     }
 
     /// A `Chunk` for a sub-range, which in multi-segment content must lie within one segment. A caller whose range can cross a line join copies it into the arena instead, as `materializedChunk` does.
@@ -180,7 +180,7 @@ internal struct ContentSpan: ~Escapable {
         precondition(i < pieces.count, "a content chunk starts on a content byte")
         let seg = pieces[i]
         let local = offset - pieceStart(i)
-        return Chunk(offset: Int(seg.offset) + local, length: length, inSource: seg.inSource)
+        return Chunk(offset: seg.offset + local, length: length, inSource: seg.inSource)
     }
 
     /// A `Chunk` for scanning forward from `offset`, bounded by `limit` and, in multi-segment content, by the end of the segment containing `offset`.
@@ -201,7 +201,7 @@ internal struct ContentSpan: ~Escapable {
         }
         let local = offset - pieceStart(i)
         let regionEnd = min(limit, pieceEnds[i])
-        return Chunk(offset: Int(seg.offset) + local, length: regionEnd - offset, inSource: true)
+        return Chunk(offset: seg.offset + local, length: regionEnd - offset, inSource: true)
     }
 
     /// The offset of the next byte at or after `globalCursor` that the inline dispatch acts on, or `endOffset`, so the dispatch skips plain text 16 bytes at a time.
@@ -227,14 +227,14 @@ internal struct ContentSpan: ~Escapable {
         var cursor = globalCursor
         while i < count {
             let seg = pieces[i]
-            let len = Int(seg.length)
+            let len = seg.length
             if seg.inSource {
                 let local = cursor - vStart                 // 0 past the entry segment
-                let absLo = Int(seg.offset) + local
-                let absHi = Int(seg.offset) + len
+                let absLo = seg.offset + local
+                let absHi = seg.offset + len
                 let foundAbs = Self.scanSignificant(span, from: absLo, to: absHi, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
                 if foundAbs < absHi {
-                    return vStart + (foundAbs - Int(seg.offset))
+                    return vStart + (foundAbs - seg.offset)
                 }
             } else {
                 // A line join is always significant: it becomes a soft or hard line break.

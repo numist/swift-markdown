@@ -32,6 +32,13 @@ internal enum TreeDump {
         }
     }
 
+    /// The subtree rooted at `node` as `dump` renders a document, with `node` at depth 0.
+    internal static func dump(_ node: borrowing MarkdownNode, sourceRanges: Bool) -> String {
+        var out = ""
+        dump(node, depth: 0, sourceRanges: sourceRanges, segments: false, into: &out)
+        return out
+    }
+
     /// The tree as `dump` renders it, with each line of a node whose `content` is text, a code block or an HTML block
     /// followed by the text of every segment of that content, in order, as a bracketed list of quoted values.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
