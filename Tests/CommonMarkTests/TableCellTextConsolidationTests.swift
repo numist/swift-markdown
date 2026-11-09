@@ -17,161 +17,129 @@ import CommonMark
 @Suite("Table cell text consolidation")
 struct TableCellTextConsolidationTests {
 
-    /// A single inline child of a cell, projected to copyable values (nodes are borrowing).
-    private struct Child {
-        let kind: MarkdownNode.Kind
-        let literal: String?
-        /// (startLine, startColumn, endLine, endColumn) or `nil` when the node carries no source range.
-        let range: (Int, Int, Int, Int)?
-        /// Kinds of this child's own children (e.g. the `.text` inside an `.emphasis`).
-        let grandchildKinds: [MarkdownNode.Kind]
-        /// Literals of this child's own children, concatenated.
-        let grandchildLiterals: String
-    }
-
-    /// Rows of cells of direct inline children for the first table in `source`.
-    private func tableCellChildren(
-        _ source: String, options: MarkdownDocument.ParseOptions
-    ) -> [[[Child]]] {
-        MarkdownDocument.withParsedDocument(source, options: options) { doc -> [[[Child]]] in
-            var rows: [[[Child]]] = []
-            var found = false
-            doc.root.children.forEach { block in
-                if found || block.kind != .table { return }
-                found = true
-                block.children.forEach { row in
-                    guard case .tableRow = row.kind else { return }
-                    var cells: [[Child]] = []
-                    row.children.forEach { cell in
-                        guard case .tableCell = cell.kind else { return }
-                        var children: [Child] = []
-                        cell.children.forEach { inline in
-                            let range: (Int, Int, Int, Int)? = inline.sourceRange.map {
-                                ($0.lowerBound.line, $0.lowerBound.column, $0.upperBound.line, $0.upperBound.column)
-                            }
-                            var gkinds: [MarkdownNode.Kind] = []
-                            var gliterals = ""
-                            inline.children.forEach { grand in
-                                gkinds.append(grand.kind)
-                                if let l = grand.literal() { gliterals += l }
-                            }
-                            children.append(Child(
-                                kind: inline.kind,
-                                literal: inline.literal(),
-                                range: range,
-                                grandchildKinds: gkinds,
-                                grandchildLiterals: gliterals
-                            ))
-                        }
-                        cells.append(children)
-                    }
-                    rows.append(cells)
-                }
-            }
-            return rows
-        }
-    }
-
-    private static let posOpts: MarkdownDocument.ParseOptions = [.tables, .sourcePosition]
-
     // MARK: - Merged runs
 
     @Test("a bracket literal merges with adjacent text in a cell")
-    func bracketMergesWithText() throws {
-        let rows = tableCellChildren("[t\n|-", options: Self.posOpts)
-        try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
-        let cell = rows[0][0]
-        try #require(cell.count == 1, "fixture: cell must have exactly one inline child, got \(cell.map(\.kind))")
-        #expect(cell[0].kind == .text)
-        #expect(cell[0].literal == "[t")
-        #expect(cell[0].range.map { $0 == (1, 1, 1, 3) } == true)
+    func bracketMergesWithText() {
+        #expect(TreeDump.dump("[t\n|-", options: [.tables, .sourcePosition], sourceRanges: true) == """
+            document @1:1-2:3
+              table @1:1-2:3
+                table_header @1:1-1:3
+                  table_cell align=none colspan=1 rowspan=1 @1:1-1:3
+                    text "[t" @1:1-1:3
+
+            """)
     }
 
     /// The source range covers the entity reference's five source bytes, not its one-byte decoded form.
     @Test("a decoded entity merges with surrounding text in a cell")
-    func entityMergesWithText() throws {
-        let rows = tableCellChildren("a&amp;t\n|-", options: Self.posOpts)
-        try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
-        let cell = rows[0][0]
-        try #require(cell.count == 1, "fixture: cell must have exactly one inline child, got \(cell.map(\.kind))")
-        #expect(cell[0].kind == .text)
-        #expect(cell[0].literal == "a&t")
-        #expect(cell[0].range.map { $0 == (1, 1, 1, 8) } == true)
+    func entityMergesWithText() {
+        #expect(TreeDump.dump("a&amp;t\n|-", options: [.tables, .sourcePosition], sourceRanges: true) == """
+            document @1:1-2:3
+              table @1:1-2:3
+                table_header @1:1-1:8
+                  table_cell align=none colspan=1 rowspan=1 @1:1-1:8
+                    text "a&t" @1:1-1:8
+
+            """)
     }
 
     @Test("entity + bracket + smart quote form one text node in a cell")
-    func entityBracketSmartQuoteMerge() throws {
-        let rows = tableCellChildren("[\"&amp;\n|-", options: [.tables, .sourcePosition, .smart])
-        try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
-        let cell = rows[0][0]
-        try #require(cell.count == 1, "fixture: cell must coalesce to one inline child, got \(cell.map(\.kind))")
-        #expect(cell[0].kind == .text)
-        let literal = try #require(cell[0].literal, "fixture: merged node must be text")
-        // Checks the ends rather than transcribing the curly quote.
-        #expect(literal.hasPrefix("["))
-        #expect(literal.hasSuffix("&"))
-        #expect(cell[0].range.map { $0 == (1, 1, 1, 8) } == true)
+    func entityBracketSmartQuoteMerge() {
+        #expect(TreeDump.dump("[\"&amp;\n|-", options: [.tables, .sourcePosition, .smart], sourceRanges: true) == """
+            document @1:1-2:3
+              table @1:1-2:3
+                table_header @1:1-1:8
+                  table_cell align=none colspan=1 rowspan=1 @1:1-1:8
+                    text "[”&" @1:1-1:8
+
+            """)
     }
 
     // MARK: - Boundaries
 
     @Test("plain cell text is a single node")
-    func plainCellTextSingleNode() throws {
-        let rows = tableCellChildren("ab\n|-", options: Self.posOpts)
-        try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
-        let cell = rows[0][0]
-        #expect(cell.count == 1)
-        #expect(cell[0].literal == "ab")
+    func plainCellTextSingleNode() {
+        #expect(TreeDump.dump("ab\n|-", options: [.tables, .sourcePosition], sourceRanges: true) == """
+            document @1:1-2:3
+              table @1:1-2:3
+                table_header @1:1-1:3
+                  table_cell align=none colspan=1 rowspan=1 @1:1-1:3
+                    text "ab" @1:1-1:3
+
+            """)
     }
 
     @Test("emphasis is not merged into adjacent cell text")
-    func emphasisBoundaryNotMerged() throws {
-        let rows = tableCellChildren("a*b*c\n|-", options: Self.posOpts)
-        try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
-        let cell = rows[0][0]
-        try #require(cell.map(\.kind).contains(.emphasis), "fixture: the `*b*` run must parse as emphasis")
-        #expect(cell.map(\.kind) == [.text, .emphasis, .text])
-        #expect(cell[0].literal == "a")
-        #expect(cell[2].literal == "c")
-        #expect(cell[1].grandchildKinds == [.text])
-        #expect(cell[1].grandchildLiterals == "b")
+    func emphasisBoundaryNotMerged() {
+        #expect(TreeDump.dump("a*b*c\n|-", options: [.tables, .sourcePosition], sourceRanges: true) == """
+            document @1:1-2:3
+              table @1:1-2:3
+                table_header @1:1-1:6
+                  table_cell align=none colspan=1 rowspan=1 @1:1-1:6
+                    text "a" @1:1-1:2
+                    emph @1:2-1:5
+                      text "b" @1:3-1:4
+                    text "c" @1:5-1:6
+
+            """)
     }
 
     // MARK: - Rows and escaped pipes
 
     @Test("each row's cells consolidate independently")
-    func multiRowConsolidation() throws {
-        let rows = tableCellChildren("a|b\n-|-\n[x|]y\nm[|n]", options: Self.posOpts)
-        try #require(rows.count == 3, "fixture: expected a header row and two body rows, got \(rows.count)")
-        try #require(rows[1].count == 2 && rows[2].count == 2, "fixture: two cells per body row")
-        #expect(rows[1][0].count == 1 && rows[1][0][0].literal == "[x")
-        #expect(rows[1][1].count == 1 && rows[1][1][0].literal == "]y")
-        #expect(rows[2][0].count == 1 && rows[2][0][0].literal == "m[")
-        #expect(rows[2][1].count == 1 && rows[2][1][0].literal == "n]")
+    func multiRowConsolidation() {
+        #expect(TreeDump.dump("a|b\n-|-\n[x|]y\nm[|n]", options: [.tables, .sourcePosition], sourceRanges: true) == """
+            document @1:1-4:6
+              table @1:1-4:6
+                table_header @1:1-1:4
+                  table_cell align=none colspan=1 rowspan=1 @1:1-1:2
+                    text "a" @1:1-1:2
+                  table_cell align=none colspan=1 rowspan=1 @1:3-1:4
+                    text "b" @1:3-1:4
+                table_row @3:1-3:6
+                  table_cell align=none colspan=1 rowspan=1 @3:1-3:3
+                    text "[x" @3:1-3:3
+                  table_cell align=none colspan=1 rowspan=1 @3:4-3:6
+                    text "]y" @3:4-3:6
+                table_row @4:1-4:6
+                  table_cell align=none colspan=1 rowspan=1 @4:1-4:3
+                    text "m[" @4:1-4:3
+                  table_cell align=none colspan=1 rowspan=1 @4:4-4:6
+                    text "n]" @4:4-4:6
+
+            """)
     }
 
     @Test("a cell with an escaped pipe merges the pipe with its neighbouring text")
-    func escapedPipeCellConsolidates() throws {
-        let rows = tableCellChildren("x\\|[y\n|-", options: Self.posOpts)
-        try #require(rows.first?.first != nil, "fixture: expected a header row with one cell")
-        let cell = rows[0][0]
-        try #require(cell.count == 1, "fixture: escaped-pipe cell must coalesce to one node, got \(cell.map(\.kind))")
-        #expect(cell[0].kind == .text)
-        #expect(cell[0].literal == "x|[y")
-        let range = try #require(cell[0].range, "fixture: merged node must be positioned")
-        #expect(range.0 == 1 && range.1 == 1)
+    func escapedPipeCellConsolidates() {
+        #expect(TreeDump.dump("x\\|[y\n|-", options: [.tables, .sourcePosition], sourceRanges: true) == """
+            document @1:1-2:3
+              table @1:1-2:3
+                table_header @1:1-1:6
+                  table_cell align=none colspan=1 rowspan=1 @1:1-1:6
+                    text "x|[y" @1:1-1:6
+
+            """)
     }
 
     /// Leading whitespace is trimmed from the cell, so the merged node starts at column 2.
     @Test("a cell with leading whitespace merges its text runs")
-    func leadingWhitespaceCellConsolidates() throws {
-        let rows = tableCellChildren("a|b\n-|-\n [x|y", options: Self.posOpts)
-        try #require(rows.count == 2, "fixture: expected a header row and a body row, got \(rows.count)")
-        try #require(rows[1].count == 2, "fixture: expected two body cells, got \(rows[1].count)")
-        let cell = rows[1][0]
-        try #require(cell.count == 1, "fixture: cell must coalesce to one node, got \(cell.map(\.kind))")
-        #expect(cell[0].kind == .text)
-        #expect(cell[0].literal == "[x")
-        #expect(cell[0].range.map { $0 == (3, 2, 3, 4) } == true)
+    func leadingWhitespaceCellConsolidates() {
+        #expect(TreeDump.dump("a|b\n-|-\n [x|y", options: [.tables, .sourcePosition], sourceRanges: true) == """
+            document @1:1-3:6
+              table @1:1-3:6
+                table_header @1:1-1:4
+                  table_cell align=none colspan=1 rowspan=1 @1:1-1:2
+                    text "a" @1:1-1:2
+                  table_cell align=none colspan=1 rowspan=1 @1:3-1:4
+                    text "b" @1:3-1:4
+                table_row @3:2-3:6
+                  table_cell align=none colspan=1 rowspan=1 @3:2-3:4
+                    text "[x" @3:2-3:4
+                  table_cell align=none colspan=1 rowspan=1 @3:5-3:6
+                    text "y" @3:5-3:6
+
+            """)
     }
 }

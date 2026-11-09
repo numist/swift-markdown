@@ -9,39 +9,24 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 @Suite("Footnote Definition Tests")
 struct FootnoteDefinitionTests {
 
-    /// A footnote definition whose content is copied into the arena, rather than borrowed from the source, registers
-    /// its label and resolves a reference.
-    @Test("footnote definition with materialized (CRLF) content registers and resolves")
-    func materializedFootnoteDefinitionResolves() {
-        // Joining lines across a CRLF line ending copies the content into the arena.
-        let source = "[^a]: first line\r\nsecond line\n\nsee [^a]\n"
-        MarkdownDocument.withParsedDocument(source, options: [.footnotes]) { doc in
+    @Test("footnote definition whose lines end in CRLF registers and resolves")
+    func crlfFootnoteDefinitionResolves() {
+        #expect(TreeDump.dump("[^a]: first line\r\nsecond line\n\nsee [^a]\n", options: .footnotes) == """
+            document
+              paragraph
+                text "see "
+                footnote_reference "1"
+              footnote_definition "a"
+                paragraph
+                  text "first line"
+                  softbreak
+                  text "second line"
 
-        var defLabel: String? = nil
-        var refLabel: String? = nil
-        var refIndex: Int? = nil
-
-        let root = doc.root
-        root.children.forEach { block in
-            if block.kind == .footnoteDefinition {
-                defLabel = block.footnoteLabel()
-            }
-            block.children.forEach { inline in
-                if case .footnoteReference(let index) = inline.kind {
-                    refLabel = inline.footnoteLabel()
-                    refIndex = index
-                }
-            }
-        }
-
-        #expect(defLabel == "a")
-        #expect(refLabel == "a")
-        #expect(refIndex == 1)
-        }
+            """)
     }
 }

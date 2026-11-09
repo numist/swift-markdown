@@ -16,64 +16,76 @@ import CommonMark
 @Suite("Table followed by a setext heading underline")
 struct TableVsSetextTests {
 
-    private func kinds(_ source: String) -> (hasTable: Bool, hasHeading: Bool, hasList: Bool, bodyCellTexts: [String]) {
-        MarkdownDocument.withParsedDocument(source, options: [.tables]) { doc -> (Bool, Bool, Bool, [String]) in
-            var hasTable = false, hasHeading = false, hasList = false
-            var bodyCells: [String] = []
-            func walk(_ n: borrowing MarkdownNode) {
-                switch n.kind {
-                case .table: hasTable = true
-                case .heading: hasHeading = true
-                case .list: hasList = true
-                case .tableRow(let isHeader) where !isHeader:
-                    n.children.forEach { cell in
-                        guard case .tableCell = cell.kind else { return }
-                        var t = ""
-                        cell.children.forEach { if let lit = $0.literal() { t += lit } }
-                        bodyCells.append(t)
-                    }
-                default: break
-                }
-                n.children.forEach { walk($0) }
-            }
-            walk(doc.root)
-            return (hasTable, hasHeading, hasList, bodyCells)
-        }
-    }
-
     // MARK: - After a table
 
     @Test("dash underline after a table delimiter forms a table + a bullet list, not a heading")
     func dashAfterDelimiter() {
-        let k = kinds("r\n|-\n-")
-        #expect(k.hasTable && k.hasList && !k.hasHeading)
+        #expect(TreeDump.dump("r\n|-\n-", options: .tables) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "r"
+              list bullet '-' tight
+                item
+
+            """)
     }
 
     @Test("equals line after a table delimiter is a table body row, not a heading")
     func equalsAfterDelimiter() {
-        let k = kinds("r\n|-\n=")
-        #expect(k.hasTable && !k.hasHeading)
-        #expect(k.bodyCellTexts == ["="])
+        #expect(TreeDump.dump("r\n|-\n=", options: .tables) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "r"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "="
+
+            """)
     }
 
     @Test("multi-column table then an equals line keeps a table (body row), not a heading")
     func multiColumnEquals() {
-        let k = kinds("a|b\n-|-\n=")
-        #expect(k.hasTable && !k.hasHeading)
-        #expect(k.bodyCellTexts.first == "=")
+        #expect(TreeDump.dump("a|b\n-|-\n=", options: .tables) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "a"
+                  table_cell align=none colspan=1 rowspan=1
+                    text "b"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "="
+                  table_cell align=none colspan=1 rowspan=1
+
+            """)
     }
 
     // MARK: - Without a table
 
     @Test("a dash underline with no delimiter row is a setext heading")
     func plainSetextHeading() {
-        let k = kinds("r\n-")
-        #expect(k.hasHeading && !k.hasTable)
+        #expect(TreeDump.dump("r\n-", options: .tables) == """
+            document
+              heading 2
+                text "r"
+
+            """)
     }
 
     @Test("a header + delimiter with no third line is a table")
     func bareTable() {
-        let k = kinds("r\n|-")
-        #expect(k.hasTable && !k.hasHeading)
+        #expect(TreeDump.dump("r\n|-", options: .tables) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "r"
+
+            """)
     }
 }
