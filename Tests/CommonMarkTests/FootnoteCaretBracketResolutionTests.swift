@@ -15,26 +15,8 @@ import Testing
 /// (`[^[…]`).
 @Suite("Footnote caret-bracket resolution")
 struct FootnoteCaretBracketResolutionTests {
-    private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes]
-
     private static func surface(_ markdown: String) -> String {
-        TreeDump.dump(markdown, options: Self.options)
-    }
-
-    @Test
-    func bracketStaysLiteral() {
-        #expect(Self.surface("[^[]]\n\n[^\\[]: n") == """
-            document
-              paragraph
-                text "[^[]]"
-
-            """)
-        #expect(Self.surface("[^[]:[^[]]") == """
-            document
-              paragraph
-                text "[^[]:[^[]]"
-
-            """)
+        TreeDump.dump(markdown, options: [.sourcePosition, .footnotes])
     }
 
     /// A footnote-shaped bracket whose caret is followed by `[` is no footnote reference, so it stays literal text,
@@ -123,7 +105,8 @@ struct FootnoteCaretBracketResolutionTests {
                   paragraph
                     text "[^[]]"
 
-                """),    ] as [(String, String)])
+                """),
+        ] as [(String, String)])
     func everyBracketStaysLiteral(_ markdown: String, _ expected: String) {
         #expect(Self.surface(markdown) == expected)
     }

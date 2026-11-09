@@ -11,52 +11,124 @@
 import Testing
 import CommonMark
 
-/// Appends every node's kind and literal text to `out`, in depth-first order.
-private func dfsKindText(
-    _ node: borrowing MarkdownNode,
-    into out: inout [(kind: MarkdownNode.Kind, text: String?)]
-) {
-    out.append((node.kind, node.literal()))
-    node.children.forEach { child in
-        dfsKindText(child, into: &out)
-    }
-}
-
 /// Code spans and raw HTML bind more tightly than the brackets in link text (Links), and likewise than a
-/// footnote-shaped bracket: one enclosing a code span or raw HTML that spans a line ending is literal text
-/// around it.
-@Suite("Footnote-shaped bracket around a code span or raw HTML spanning a line ending")
+/// footnote-shaped bracket: with no footnote definition, one enclosing a code span, raw HTML or image that spans a
+/// line ending is literal text around it. A backslash before the line ending there is literal, not a hard line break
+/// (Hard line breaks).
+@Suite("Footnote-shaped bracket around a code span, raw HTML or image spanning a line ending")
 struct FootnoteRawInlineCrossLineTests {
 
-    private func nodes(
-        in src: String, options: MarkdownDocument.ParseOptions
-    ) -> [(kind: MarkdownNode.Kind, text: String?)] {
-        MarkdownDocument.withParsedDocument(src, options: options) {
-            doc -> [(kind: MarkdownNode.Kind, text: String?)] in
-            var out: [(kind: MarkdownNode.Kind, text: String?)] = []
-            dfsKindText(doc.root, into: &out)
-            return out
-        }
-    }
+    static let cases: [(markdown: String, expected: String)] = [
+        ("[^`\\\n`]", """
+            document
+              paragraph
+                text "[^"
+                code "\\\\ "
+                text "]"
 
-    @Test("code span interior parses as a code span")
-    func codeSpanInteriorParsesAsCodeSpan() {
-        let ns = nodes(in: "[^`\n`]", options: [.sourcePosition, .footnotes])
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .codeInline(backtickCount: 1), .text])
-        #expect(ns.compactMap(\.text) == ["[^", " ", "]"])
-    }
+            """),
+        ("[^`a\\\nb`]", """
+            document
+              paragraph
+                text "[^"
+                code "a\\\\ b"
+                text "]"
 
-    @Test("raw HTML interior parses as an HTML comment")
-    func rawHTMLInteriorParsesAsRawHTML() {
-        let ns = nodes(in: "[^<!--\n-->]", options: [.sourcePosition, .footnotes])
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .htmlInline, .text])
-        #expect(ns.compactMap(\.text) == ["[^", "<!--\n-->", "]"])
-    }
+            """),
+        ("[^a`\\\n`]", """
+            document
+              paragraph
+                text "[^a"
+                code "\\\\ "
+                text "]"
 
-    @Test("a soft line break before a code span spanning a line ending keeps both")
-    func softBreakBeforeCrossLineCodeSpan() {
-        let ns = nodes(in: "[^x\n`y\nz`]", options: [.sourcePosition, .footnotes])
-        #expect(ns.map(\.kind) == [.document, .paragraph, .text, .softBreak, .codeInline(backtickCount: 1), .text])
-        #expect(ns.compactMap(\.text) == ["[^x", "y z", "]"])
+            """),
+        ("[^`\\\n`] x", """
+            document
+              paragraph
+                text "[^"
+                code "\\\\ "
+                text "] x"
+
+            """),
+        ("[^`\\\r\n`]", """
+            document
+              paragraph
+                text "[^"
+                code "\\\\ "
+                text "]"
+
+            """),
+        ("[^`\\\r`]", """
+            document
+              paragraph
+                text "[^"
+                code "\\\\ "
+                text "]"
+
+            """),
+        ("[^`\n`]", """
+            document
+              paragraph
+                text "[^"
+                code " "
+                text "]"
+
+            """),
+        ("[^``\\\n``]", """
+            document
+              paragraph
+                text "[^"
+                code "\\\\ "
+                text "]"
+
+            """),
+        ("[^`a  \n`]", """
+            document
+              paragraph
+                text "[^"
+                code "a   "
+                text "]"
+
+            """),
+        ("[^<a b=\"\\\n\">]", """
+            document
+              paragraph
+                text "[^"
+                html_inline "<a b=\\"\\\\\\n\\">"
+                text "]"
+
+            """),
+        ("[^![x](/u \"a\\\nb\")]", """
+            document
+              paragraph
+                text "[^"
+                image "/u" "a\\\\\\nb"
+                  text "x"
+                text "]"
+
+            """),
+        ("[^<!--\n-->]", """
+            document
+              paragraph
+                text "[^"
+                html_inline "<!--\\n-->"
+                text "]"
+
+            """),
+        ("[^x\n`y\nz`]", """
+            document
+              paragraph
+                text "[^x"
+                softbreak
+                code "y z"
+                text "]"
+
+            """),
+    ]
+
+    @Test(arguments: cases)
+    func bracketStaysLiteral(_ markdown: String, _ expected: String) {
+        #expect(TreeDump.dump(markdown, options: [.sourcePosition, .footnotes]) == expected)
     }
 }

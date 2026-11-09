@@ -16,118 +16,132 @@ import Testing
 /// first line does not match.
 @Suite("Footnote-shaped bracket across a line ending")
 struct EscapedCaretMultilineFootnoteResolutionTests {
-    private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink, .footnotes]
+    private static let long = String(repeating: "a", count: 1000)
 
-    @Test func testBracketStaysLiteral() {
-        let atCap = String(repeating: "a", count: 1000)
-        let overCap = String(repeating: "a", count: 1001)
-        let cases: [(markdown: String, expected: String)] = [
-            ("[\\^abcdef\nxxxxx]\n\n[^abc]: note", """
-                document
-                  paragraph
-                    text "[^abcdef"
-                    softbreak
-                    text "xxxxx]"
+    static let cases: [(markdown: String, expected: String)] = [
+        ("[\\^abcdef\nxxxxx]\n\n[^abc]: note", """
+            document
+              paragraph
+                text "[^abcdef"
+                softbreak
+                text "xxxxx]"
 
-                """),
-            ("[\\^abc\nxxxxx]\n\n[^abc]: note", """
-                document
-                  paragraph
-                    text "[^abc"
-                    softbreak
-                    text "xxxxx]"
+            """),
+        ("[\\^abc\nxxxxx]\n\n[^abc]: note", """
+            document
+              paragraph
+                text "[^abc"
+                softbreak
+                text "xxxxx]"
 
-                """),
-            ("![\\^abcdef\nxxxxx]\n\n[^abc]: note", """
-                document
-                  paragraph
-                    text "![^abcdef"
-                    softbreak
-                    text "xxxxx]"
+            """),
+        ("![\\^abcdef\nxxxxx]\n\n[^abc]: note", """
+            document
+              paragraph
+                text "![^abcdef"
+                softbreak
+                text "xxxxx]"
 
-                """),
-            ("[\\^ABCdef\nxxxxx]\n\n[^abc]: note", """
-                document
-                  paragraph
-                    text "[^ABCdef"
-                    softbreak
-                    text "xxxxx]"
+            """),
+        ("[\\^ABCdef\nxxxxx]\n\n[^abc]: note", """
+            document
+              paragraph
+                text "[^ABCdef"
+                softbreak
+                text "xxxxx]"
 
-                """),
-            ("[\\^\(atCap)bbb\n\(String(repeating: "x", count: 1002))]\n\n[^\(atCap)]: note", "document\n  paragraph\n    text \"[^\(atCap)bbb\"\n    softbreak\n    text \"\(String(repeating: "x", count: 1002))]\"\n"),
-            ("[\\^\(overCap)bbb\n\(String(repeating: "x", count: 1003))]\n\n[^\(overCap)]: note", "document\n  paragraph\n    text \"[^\(overCap)bbb\"\n    softbreak\n    text \"\(String(repeating: "x", count: 1003))]\"\n"),
-            ("[\\^a\u{0}bcdef\nxxxxxxx]\n\n[^a\u{0}b]: note", """
-                document
-                  paragraph
-                    text "[^a\u{FFFD}bcdef"
-                    softbreak
-                    text "xxxxxxx]"
+            """),
+        ("[\\^\(Self.long)bbb\n\(String(repeating: "x", count: 1002))]\n\n[^\(Self.long)]: note", "document\n  paragraph\n    text \"[^\(Self.long)bbb\"\n    softbreak\n    text \"\(String(repeating: "x", count: 1002))]\"\n"),
+        ("[\\^\(Self.long)abbb\n\(String(repeating: "x", count: 1003))]\n\n[^\(Self.long)a]: note", "document\n  paragraph\n    text \"[^\(Self.long)abbb\"\n    softbreak\n    text \"\(String(repeating: "x", count: 1003))]\"\n"),
+        ("[\\^a\u{0}bcdef\nxxxxxxx]\n\n[^a\u{0}b]: note", """
+            document
+              paragraph
+                text "[^a\u{FFFD}bcdef"
+                softbreak
+                text "xxxxxxx]"
 
-                """),
-            ("[\\^abcdef\nxxxxx]\n[\\^abcdef\nxxxxx]\n\n[^abc]: note", """
-                document
-                  paragraph
-                    text "[^abcdef"
-                    softbreak
-                    text "xxxxx]"
-                    softbreak
-                    text "[^abcdef"
-                    softbreak
-                    text "xxxxx]"
+            """),
+        ("[\\^abcdef\nxxxxx]\n[\\^abcdef\nxxxxx]\n\n[^abc]: note", """
+            document
+              paragraph
+                text "[^abcdef"
+                softbreak
+                text "xxxxx]"
+                softbreak
+                text "[^abcdef"
+                softbreak
+                text "xxxxx]"
 
-                """),
-            ("[\\^abcdef\nxxxxx] [^abc]\n\n[^abc]: note", """
-                document
-                  paragraph
-                    text "[^abcdef"
-                    softbreak
-                    text "xxxxx] "
-                    footnote_reference "1"
-                  footnote_definition "abc"
-                    paragraph
-                      text "note"
+            """),
+        ("[\\^abcdef\nxxxxx] [^abc]\n\n[^abc]: note", """
+            document
+              paragraph
+                text "[^abcdef"
+                softbreak
+                text "xxxxx] "
+                footnote_reference "1"
+              footnote_definition "abc"
+                paragraph
+                  text "note"
 
-                """),
-            ("[^zzz]\n[\\^abcdef\nxxxxx]\n\n[^abc]: a\n\n[^zzz]: z", """
-                document
-                  paragraph
-                    footnote_reference "1"
-                    softbreak
-                    text "[^abcdef"
-                    softbreak
-                    text "xxxxx]"
-                  footnote_definition "zzz"
-                    paragraph
-                      text "z"
+            """),
+        ("[^zzz]\n[\\^abcdef\nxxxxx]\n\n[^abc]: a\n\n[^zzz]: z", """
+            document
+              paragraph
+                footnote_reference "1"
+                softbreak
+                text "[^abcdef"
+                softbreak
+                text "xxxxx]"
+              footnote_definition "zzz"
+                paragraph
+                  text "z"
 
-                """),
-            ("[\\^ab\nxxxxx]\n\n[^ab]: note", """
-                document
-                  paragraph
-                    text "[^ab"
-                    softbreak
-                    text "xxxxx]"
+            """),
+        ("[\\^ab\nxxxxx]\n\n[^ab]: note", """
+            document
+              paragraph
+                text "[^ab"
+                softbreak
+                text "xxxxx]"
 
-                """),
-            ("[\\^ab\u{E9}\nxxxxx]\n\n[^ab\u{FFFD}]: note", """
-                document
-                  paragraph
-                    text "[^abé"
-                    softbreak
-                    text "xxxxx]"
+            """),
+        ("[\\^ab\u{E9}\nxxxxx]\n\n[^ab\u{FFFD}]: note", """
+            document
+              paragraph
+                text "[^abé"
+                softbreak
+                text "xxxxx]"
 
-                """),
-            ("[^a\nx]\n\n[^a]: note", """
-                document
-                  paragraph
-                    text "[^a"
-                    softbreak
-                    text "x]"
+            """),
+        ("[^a\nx]\n\n[^a]: note", """
+            document
+              paragraph
+                text "[^a"
+                softbreak
+                text "x]"
 
-                """),
-        ]
-        for (markdown, expected) in cases {
-            #expect(TreeDump.dump(markdown, options: Self.options) == expected, "\(markdown.debugDescription)")
-        }
+            """),
+        ("![\\^\u{07F9}\n\u{FFFD}]", """
+            document
+              paragraph
+                text "![^\u{07F9}"
+                softbreak
+                text "\u{FFFD}]"
+
+            """),
+        ("[\\^\u{1F600}\n\u{FFFD}]", """
+            document
+              paragraph
+                text "[^\u{1F600}"
+                softbreak
+                text "\u{FFFD}]"
+
+            """),
+    ]
+
+    @Test(arguments: cases)
+    func bracketStaysLiteral(_ markdown: String, _ expected: String) {
+        #expect(TreeDump.dump(markdown, options: [.sourcePosition, .footnotes]) == expected)
     }
 }

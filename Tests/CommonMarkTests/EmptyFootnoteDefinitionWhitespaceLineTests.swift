@@ -14,13 +14,13 @@ import Testing
 /// A whitespace-only line is a blank line (Characters and lines), so it keeps an open footnote definition open.
 @Suite("Footnote definition across a whitespace-only line")
 struct EmptyFootnoteDefinitionWhitespaceLineTests {
-    private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink, .footnotes]
+    private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .footnotes]
 
     private func surface(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: Self.options)
     }
 
-    @Test func testEmptyLineKeepsDefinitionOpen() {
+    @Test func emptyLineKeepsDefinitionOpen() {
         #expect(surface("- [^a]:\n\n\t\t\"") == """
             document
               list bullet '-' tight
@@ -29,7 +29,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
             """)
     }
 
-    @Test func testTopLevelSpaceOnlyLines() {
+    @Test func topLevelSpaceOnlyLines() {
         #expect(surface("[^a]:\n    \n    x\n\n[^a]") == """
             document
               paragraph
@@ -41,7 +41,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
             """)
     }
 
-    @Test func testUnderindentedLineAfterWhitespaceLineClosesDefinition() {
+    @Test func underindentedLineAfterWhitespaceLineClosesDefinition() {
         #expect(surface("- [^a]: x\n \n  y") == """
             document
               list bullet '-' loose
@@ -52,7 +52,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
             """)
     }
 
-    @Test func testCRLFEmptyLineKeepsDefinitionOpen() {
+    @Test func crlfEmptyLineKeepsDefinitionOpen() {
         #expect(surface("- [^a]:\r\n\r\n\t\t\"") == """
             document
               list bullet '-' tight
@@ -61,7 +61,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
             """)
     }
 
-    @Test func testDefinitionContinuesPastWhitespaceLine() {
+    @Test func definitionContinuesPastWhitespaceLine() {
         #expect(surface("- [^a]:\n \n      x\n\n[^a]") == """
             document
               list bullet '-' tight
@@ -77,16 +77,32 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
 
     /// Indented content after a whitespace-only line belongs to the definition, and is dropped with it when the
     /// definition is unreferenced.
-    @Test func testDefinitionHoldsContentAfterWhitespaceLine() {
-        let emptyItem = """
+    @Test(arguments: ["- [^a]:\n\t\n\t\t\"", "- [^a]:\n \n\t\t\"", "- [^a]:\r\t\n\t\t\"", "- [^\u{0}]:\r\t\n\t\t\"", "- [^a]:\n\t\n      x", "- [^a]:\r\n \r\n\t\t\""])
+    func listItemDefinitionHoldsContentAfterWhitespaceLine(_ markdown: String) {
+        #expect(surface(markdown) == """
             document
               list bullet '-' tight
                 item
 
-            """
-        for markdown in ["- [^a]:\n\t\n\t\t\"", "- [^a]:\n \n\t\t\"", "- [^a]:\r\t\n\t\t\"", "- [^\u{0}]:\r\t\n\t\t\"", "- [^a]:\n\t\n      x", "- [^a]:\r\n \r\n\t\t\""] {
-            #expect(surface(markdown) == emptyItem, "\(markdown.debugDescription)")
-        }
+            """)
+    }
+
+    @Test(arguments: 1...3)
+    func topLevelDefinitionHoldsContentAfterSpacesLine(spaces: Int) {
+        #expect(surface("[^a]:\n" + String(repeating: " ", count: spaces) + "\n    x\n\n[^a]") == """
+            document
+              paragraph
+                footnote_reference "1"
+              footnote_definition "a"
+                paragraph
+                  text "x"
+
+            """)
+    }
+
+    /// Indented content after a whitespace-only line belongs to the definition, and is dropped with it when the
+    /// definition is unreferenced.
+    @Test func definitionHoldsContentAfterWhitespaceLine() {
         #expect(surface("> [^a]:\n>\t\n>\t\tx") == """
             document
               block_quote
@@ -124,17 +140,6 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
                   text "x"
 
             """)
-        for spaces in 1...3 {
-            #expect(surface("[^a]:\n" + String(repeating: " ", count: spaces) + "\n    x\n\n[^a]") == """
-                document
-                  paragraph
-                    footnote_reference "1"
-                  footnote_definition "a"
-                    paragraph
-                      text "x"
-
-                """, "\(spaces) spaces")
-        }
         #expect(surface("- [^a]: x\n \n\t\ty\n\n[^a]") == """
             document
               list bullet '-' tight

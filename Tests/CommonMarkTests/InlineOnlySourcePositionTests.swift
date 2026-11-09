@@ -13,18 +13,14 @@ import Testing
 
 /// Inline-only parsing reports line-aware source positions, like block parsing does.
 ///
-/// In `a` LF `b *c*` the text on the second line starts at line 2, column 1 (UTF-8 byte columns), and the document and
-/// its single paragraph span the whole input.
+/// In `a` LF `b *c*` the emphasis on the second line starts at line 2, column 3 (UTF-8 byte columns), and the document
+/// and its single paragraph span the whole input.
 @Suite("Inline-only source positions")
 struct InlineOnlySourcePositionTests {
 
-    private static let inlineOnly: MarkdownDocument.ParseOptions = [
-        .tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .inlineOnly,
-    ]
+    private static let inlineOnly: MarkdownDocument.ParseOptions = [.sourcePosition, .inlineOnly]
 
-    private static let preserveWhitespace: MarkdownDocument.ParseOptions = [
-        .tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .preserveWhitespace,
-    ]
+    private static let preserveWhitespace: MarkdownDocument.ParseOptions = [.sourcePosition, .preserveWhitespace]
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func secondLineTextIsOnLineTwo(options: MarkdownDocument.ParseOptions) {
