@@ -72,7 +72,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `joinPending` defers a line's `\n`, so that if the next line is contiguous in the source the run stays one zero-copy source range. Only `appendNewline` sets it and the next `addLine` clears it, so it is never set between lines.
     enum PendingContent : ~Copyable {
         case lazy(range: Range<Int>, joinPending: Bool = false)
-        /// Each line is a source segment, or an arena copy for a code or HTML block line that splits a tab, and each line join is `newlineSegment`. Used for code and HTML block bodies and for paragraph lines not contiguous in the source.
+        /// Each line is a source segment, or an arena copy for a code or HTML block line that splits a tab or holds a NUL, and each line join is `newlineSegment`. Used for code and HTML block bodies and for paragraph lines not contiguous in the source.
         case segments(UniqueArray<Segment>)
     }
 
@@ -166,8 +166,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         self.sourceBytes = source
         self.positionsEnabled = self.storage.options.contains(.sourcePosition)
 
-        // Size the append-only arenas from the input so they don't grow geometrically during the parse. The ratios are
-        // generous: over-reserving costs one larger allocation, while under-reserving brings back the realloc chain.
+        // Reserve the append-only arenas in proportion to the input, so they regrow only for dense input.
         let byteCount = self.sourceBytes.count
         self.storage.nodes.reserveCapacity(byteCount / 16)
         self.storage.segments.reserveCapacity(byteCount / 16)
@@ -335,13 +334,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Any non-empty input, even a lone BOM, becomes one paragraph holding the source after any BOM, with line endings normalized to `\n` and every other byte kept. Only inline syntax is parsed, and line endings stay literal text.
     private mutating func parseInlineOnly() {
         let count = sourceBytes.count
-
-        // Empty input has no lines, so it yields an empty document with no paragraph.
         guard count > 0 else {
             return
         }
 
-        // Skip a leading UTF-8 BOM.
         var start = 0
         if count >= 3, sourceBytes[0] == 0xEF, sourceBytes[1] == 0xBB, sourceBytes[2] == 0xBF {
             start = 3
@@ -1205,7 +1201,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Notes whether a continuation line may open a table with the paragraph's last line as its header.
     ///
-    /// Inlined because it runs on every paragraph continuation line.
+    /// Inlined because it runs on every paragraph continuation line: out of line, it costs about 0.2% of the spec
+    /// text's parse instructions with tables enabled.
     @inline(__always)
     private mutating func recordTableDelimiterCandidate(line: LineContext, pending: inout PendingLeaf?) {
         let delimRange = line.firstNonSpace..<line.lineRange.upperBound
