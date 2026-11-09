@@ -69,12 +69,6 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func literalDefinitionControls(options: MarkdownDocument.ParseOptions) {
-        #expect(TreeDump.dump("[a]: /u", options: options) == """
-            document
-              paragraph
-                text "[a]: /u"
-
-            """)
         #expect(TreeDump.dump(" [a]: /u\n\n[a]", options: options) == """
             document
               paragraph
@@ -172,13 +166,16 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
             """)
     }
 
-    /// A definition whose bare destination reaches the end of the input is text.
     @Test(arguments: [inlineOnly, preserveWhitespace])
-    func definitionDestinationAtEndOfInputStaysLiteral(options: MarkdownDocument.ParseOptions) {
+    func definitionDestinationAtEndOfInput(options: MarkdownDocument.ParseOptions) {
+        #expect(TreeDump.dump("[a]: /u", options: options) == """
+            document
+              paragraph
+
+            """)
         #expect(TreeDump.dump("[a]: /u\n[b]: /v", options: options) == """
             document
               paragraph
-                text "[b]: /v"
 
             """)
     }
@@ -238,11 +235,9 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func definitionEdgeForms(options: MarkdownDocument.ParseOptions) {
-        // A pointy destination reaching the end of input is rejected like a bare one.
         #expect(TreeDump.dump("[a]: <>", options: options) == """
             document
               paragraph
-                text "[a]: <>"
 
             """)
         #expect(TreeDump.dump("[a]: <u> \"t\"\n[a]", options: options) == """
@@ -252,13 +247,12 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
                   text "a"
 
             """)
-        // Trailing space after the destination keeps it off the end of input, so the definition is consumed.
         #expect(TreeDump.dump("[a]: /u ", options: options) == """
             document
               paragraph
 
             """)
-        // Attribute definitions are consumed too; they have no destination, so one ending the input is accepted.
+        // Attribute definitions are consumed too.
         #expect(TreeDump.dump("^[x]: a\ny", options: options) == """
             document
               paragraph

@@ -3341,11 +3341,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         ) else {
             return nil
         }
-        // In inline-only mode a destination that runs to the end of the content forms no definition, so a
-        // lone `[a]: /u` stays literal text while `[a]: /u "t"` is consumed.
-        if storage.options.contains(.inlineOnly), dest.afterEnd >= end {
-            return nil
-        }
         // When the line doesn't end after a title, the definition ends at the destination instead.
         let beforeTitle = dest.afterEnd
         let afterTitleSpnl = skipSpacesAndOneLineEnd(from: beforeTitle, in: chunk)
