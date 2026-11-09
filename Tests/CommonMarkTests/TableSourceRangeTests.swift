@@ -108,6 +108,21 @@ struct TableSourceRangeTests {
             """)
     }
 
+    /// A form feed is whitespace but not a blank line, so a line holding only one is a body row with one empty cell.
+    @Test
+    func whitespaceOnlyLastRow() {
+        #expect(tree("| a |\n|---|\n\u{0C}\n") == """
+            document @1:1-4:1
+              table @1:1-3:1
+                table_header @1:1-1:6
+                  table_cell align=none colspan=1 rowspan=1 @1:3-1:4
+                    text "a" @1:3-1:4
+                table_row @3:1-3:1
+                  table_cell align=none colspan=0 rowspan=1 @3:1-3:1
+
+            """)
+    }
+
     @Test
     func rowspanMarkerCell() {
         #expect(tree("| a |\n|---|\n| ^ |\n") == """

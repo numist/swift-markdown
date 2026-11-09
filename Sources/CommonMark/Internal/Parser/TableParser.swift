@@ -58,7 +58,7 @@ extension BlockParser {
             )
         }
         // The table ends with its last line, the delimiter row when it has no body, before any trailing whitespace.
-        storage.setSourceEnd(node, trimmingPadding(lines[lines.count - 1]).upperBound)
+        storage.setSourceEnd(node, endTrimmingPadding(lines[lines.count - 1]))
     }
 
     /// Whether source lines `header` and `delimiter` open a table: `delimiter` is a delimiter row and `header` has as
@@ -141,7 +141,7 @@ extension BlockParser {
         storage.appendChild(rowIdx, to: parent)
         // A row runs from its first byte to its closing pipe or last cell's content, before any trailing whitespace.
         storage.setSourceStart(rowIdx, line.lowerBound)
-        storage.setSourceEnd(rowIdx, trimmingPadding(line).upperBound)
+        storage.setSourceEnd(rowIdx, endTrimmingPadding(line))
         let cells = splitCells(line: line)
         let columnCount = alignments.count
 
@@ -338,17 +338,22 @@ extension BlockParser {
         body(cellStart..<e)
     }
 
+    /// Where `range` ends without its trailing padding, which is its start when it holds only padding.
+    private func endTrimmingPadding(_ range: Range<Int>) -> Int {
+        var e = range.upperBound
+        while e > range.lowerBound && sourceBytes[e - 1].isLineWhitespace {
+            e -= 1
+        }
+        return e
+    }
+
     /// `range` without its leading and trailing padding: every whitespace character other than a line ending, as
     /// the spec trims spaces between pipes and cell content (Tables (extension)).
     private func trimmingPadding(_ range: Range<Int>) -> Range<Int> {
         var s = range.lowerBound
-        var e = range.upperBound
-        while s < e && sourceBytes[s].isLineWhitespace {
+        while s < range.upperBound && sourceBytes[s].isLineWhitespace {
             s += 1
         }
-        while e > s && sourceBytes[e - 1].isLineWhitespace {
-            e -= 1
-        }
-        return s..<e
+        return s..<endTrimmingPadding(s..<range.upperBound)
     }
 }
