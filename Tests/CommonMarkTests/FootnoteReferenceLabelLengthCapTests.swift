@@ -12,13 +12,12 @@ import CommonMark
 import Testing
 
 /// A footnote reference label holds at most 999 characters, as a link label does (Links); a longer one stays
-/// literal text.
+/// literal text. A multibyte character counts as one character, and so does a NUL, which is replaced by U+FFFD
+/// (Insecure characters).
 @Suite("Footnote reference label length cap")
 struct FootnoteReferenceLabelLengthCapTests {
-    private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink, .footnotes]
-
     private func surface(_ markdown: String) -> String {
-        TreeDump.dump(markdown, options: Self.options)
+        TreeDump.dump(markdown, options: [.sourcePosition, .footnotes])
     }
 
     /// `x[^label]` followed by the definition `[^label]: note`.
@@ -30,101 +29,98 @@ struct FootnoteReferenceLabelLengthCapTests {
         "document\n  paragraph\n    text \"\(text)\"\n"
     }
 
-    /// The surface of `referenceAndDefinition(label)` when the reference resolves.
+    /// The surface of `referenceAndDefinition` when the reference resolves to the definition labelled `label`.
     private func resolvedReference(_ label: String) -> String {
         "document\n  paragraph\n    text \"x\"\n    footnote_reference \"1\"\n  footnote_definition \"\(label)\"\n    paragraph\n      text \"note\"\n"
     }
 
-    @Test func testCapAt999Characters() {
-        let resolves = { (label: String) in
-            self.surface(self.referenceAndDefinition(label)).contains("footnote_reference")
-        }
-        #expect(resolves(String(repeating: "a", count: 999)))
-        #expect(!resolves(String(repeating: "a", count: 1000)))
-        #expect(resolves(String(repeating: "\u{E9}", count: 999)))
-        #expect(!resolves(String(repeating: "\u{E9}", count: 1000)))
-        #expect(resolves(String(repeating: "a", count: 998) + "\u{0}"))
-        #expect(!resolves(String(repeating: "a", count: 999) + "\u{0}"))
+    @Test(arguments: [
+        (String(repeating: "a", count: 999), String(repeating: "a", count: 999)),
+        (String(repeating: "\u{E9}", count: 999), String(repeating: "\u{E9}", count: 999)),
+        (String(repeating: "a", count: 998) + "\u{0}", String(repeating: "a", count: 998) + "\u{FFFD}"),
+    ])
+    func labelOf999CharactersResolves(_ label: String, _ replaced: String) {
+        #expect(surface(referenceAndDefinition(label)) == resolvedReference(replaced))
     }
 
-    @Test func testOverCapStaysLiteral() {
-        let label = String(repeating: "a", count: 1000)
-        #expect(surface(referenceAndDefinition(label)) == literalParagraph("x[^\(label)]"))
-    }
-
-    @Test func testAtCap() {
-        let label999 = String(repeating: "a", count: 999)
-        #expect(surface(referenceAndDefinition(label999)) == resolvedReference(label999))
-        let label1000 = String(repeating: "a", count: 1000)
-        #expect(surface(referenceAndDefinition(label1000)) == literalParagraph("x[^\(label1000)]"))
-    }
-
-    @Test func test1001CharacterLabelStaysLiteral() {
-        let label = String(repeating: "a", count: 1001)
-        #expect(surface(referenceAndDefinition(label)) == literalParagraph("x[^\(label)]"))
-    }
-
-    /// The cap counts characters, so 500 `é` plus `a` (1001 bytes) resolve.
-    @Test func testMultibyteCountsCharacters() {
-        let atCap = String(repeating: "\u{E9}", count: 500)
-        #expect(surface(referenceAndDefinition(atCap)) == resolvedReference(atCap))
-        let overCap = atCap + "a"
-        #expect(surface(referenceAndDefinition(overCap)) == resolvedReference(overCap))
-    }
-
-    /// A NUL is one character, the U+FFFD that replaces it (Insecure characters), so a 999-character label
-    /// ending in one resolves.
-    @Test func testNULCountsOneCharacter() {
-        let prefix997 = String(repeating: "a", count: 997)
-        #expect(surface(referenceAndDefinition(prefix997 + "\u{0}")) == resolvedReference(prefix997 + "\u{FFFD}"))
-        let prefix998 = String(repeating: "a", count: 998)
-        #expect(surface(referenceAndDefinition(prefix998 + "\u{0}")) == resolvedReference(prefix998 + "\u{FFFD}"))
+    @Test(arguments: [
+        (String(repeating: "a", count: 1000), String(repeating: "a", count: 1000)),
+        (String(repeating: "\u{E9}", count: 1000), String(repeating: "\u{E9}", count: 1000)),
+        (String(repeating: "a", count: 999) + "\u{0}", String(repeating: "a", count: 999) + "\u{FFFD}"),
+        (String(repeating: "a", count: 1001), String(repeating: "a", count: 1001)),
+    ])
+    func labelOverCapStaysLiteral(_ label: String, _ replaced: String) {
+        #expect(surface(referenceAndDefinition(label)) == literalParagraph("x[^\(replaced)]"))
     }
 
     /// An over-cap reference is ordinary paragraph text, so its entity reference decodes.
-    @Test func testOverCapDecodesEntity() {
+    @Test func overCapDecodesEntity() {
         let label = String(repeating: "a", count: 996) + "&amp;"
         #expect(surface(referenceAndDefinition(label)) == literalParagraph("x[^\(String(repeating: "a", count: 996))&]"))
     }
 
-    @Test func testImageShapedOpener() {
-        let atCap = String(repeating: "a", count: 1000)
-        #expect(surface("x![^\(atCap)]\n\n[^\(atCap)]: note") == literalParagraph("x![^\(atCap)]"))
-        let label = String(repeating: "a", count: 1001)
-        #expect(surface("x![^\(label)]\n\n[^\(label)]: note") == literalParagraph("x![^\(label)]"))
+    @Test func imageShapedOpener() {
+        let atCap = String(repeating: "a", count: 999)
+        #expect(surface("x![^\(atCap)]\n\n[^\(atCap)]: note")
+            == "document\n  paragraph\n    text \"x!\"\n    footnote_reference \"1\"\n  footnote_definition \"\(atCap)\"\n    paragraph\n      text \"note\"\n")
+        let overCap = String(repeating: "a", count: 1000)
+        #expect(surface("x![^\(overCap)]\n\n[^\(overCap)]: note") == literalParagraph("x![^\(overCap)]"))
     }
 
-    @Test func testReferenceInBlockQuote() {
-        let atCap = String(repeating: "a", count: 1000)
-        #expect(surface("> x[^\(atCap)]\n\n[^\(atCap)]: note") == "document\n  block_quote\n    paragraph\n      text \"x[^\(atCap)]\"\n")
-        let label = String(repeating: "a", count: 1001)
-        #expect(surface("> x[^\(label)]\n\n[^\(label)]: note") == "document\n  block_quote\n    paragraph\n      text \"x[^\(label)]\"\n")
+    @Test func referenceInBlockQuote() {
+        let atCap = String(repeating: "a", count: 999)
+        #expect(surface("> x[^\(atCap)]\n\n[^\(atCap)]: note")
+            == "document\n  block_quote\n    paragraph\n      text \"x\"\n      footnote_reference \"1\"\n  footnote_definition \"\(atCap)\"\n    paragraph\n      text \"note\"\n")
+        let overCap = String(repeating: "a", count: 1000)
+        #expect(surface("> x[^\(overCap)]\n\n[^\(overCap)]: note") == "document\n  block_quote\n    paragraph\n      text \"x[^\(overCap)]\"\n")
     }
 
-    @Test func testRepeatedReferenceOverCapStaysLiteral() {
-        let label = String(repeating: "a", count: 1001)
+    @Test func repeatedReferenceOverCapStaysLiteral() {
+        let label = String(repeating: "a", count: 1000)
         #expect(surface("x[^\(label)] y[^\(label)]\n\n[^\(label)]: note") == literalParagraph("x[^\(label)] y[^\(label)]"))
     }
 
-    /// The first line alone exceeds the cap, so the bracket stays literal text around the soft line break.
-    @Test(arguments: [1000, 1001])
-    func testCrossLineLabelStaysLiteral(length: Int) {
-        let label = String(repeating: "a", count: length)
-        let second = String(repeating: "b", count: length + 2)
-        #expect(surface("[^\(label)\n\(second)]\n\n[^\(label)]: note")
-            == "document\n  paragraph\n    text \"[^\(label)\"\n    softbreak\n    text \"\(second)]\"\n")
+    /// A footnote definition's label holds no whitespace, so a footnote-shaped bracket that spans a line ending is
+    /// a link label, and the cap counts its characters before whitespace is collapsed for matching: `^`, 499 `a`, a
+    /// line ending and 498 `b` are 999 characters, and a space before the line ending makes 1000.
+    @Test func crossLineLabelIsLinkLabelUpToCap() {
+        let first = String(repeating: "a", count: 499)
+        let second = String(repeating: "b", count: 498)
+        #expect(surface("x[^\(first) \n\(second)]\ny[^\(first)\n\(second)]\n\n[^\(first) \(second)]: /u") == """
+            document
+              paragraph
+                text "x[^\(first)"
+                softbreak
+                text "\(second)]"
+                softbreak
+                text "y"
+                link "/u" ""
+                  text "^\(first)"
+                  softbreak
+                  text "\(second)"
+
+            """)
     }
 
-    /// The first line alone holds 1000 characters, the last an `é`, so the bracket stays literal.
-    @Test func testCrossLineLabelEndingInMultibyteStaysLiteral() {
-        let label = String(repeating: "a", count: 999)
-        let second = String(repeating: "b", count: 1002)
-        #expect(surface("[^\(label)\u{E9}\n\(second)]\n\n[^\(label)\u{FFFD}]: note")
-            == "document\n  paragraph\n    text \"[^\(label)\u{E9}\"\n    softbreak\n    text \"\(second)]\"\n")
+    /// `^`, 497 `a` and `é` are 499 characters but 500 bytes, so with a line ending and 498 `b` the label holds 999
+    /// characters.
+    @Test func crossLineLabelCountsMultibyteCharacterOnce() {
+        let first = String(repeating: "a", count: 497) + "\u{E9}"
+        let second = String(repeating: "b", count: 498)
+        #expect(surface("x[^\(first)\n\(second)]\n\n[^\(first) \(second)]: /u") == """
+            document
+              paragraph
+                text "x"
+                link "/u" ""
+                  text "^\(first)"
+                  softbreak
+                  text "\(second)"
+
+            """)
     }
 
     /// A footnote reference label cannot hold an unescaped `[` (Links), so the whole `[^[…]]` run stays literal text.
-    @Test func testCaretBracketStaysLiteral() {
+    @Test func caretBracketStaysLiteral() {
         let label = String(repeating: "a", count: 1001)
         #expect(surface("x[^[\(label)]]\n\n[^\(label)]: note") == literalParagraph("x[^[\(label)]]"))
     }
