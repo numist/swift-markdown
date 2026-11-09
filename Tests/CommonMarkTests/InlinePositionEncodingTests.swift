@@ -19,8 +19,7 @@ struct InlinePositionEncodingTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    private static let opts: MarkdownDocument.ParseOptions =
-        [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]
+    private static let opts: MarkdownDocument.ParseOptions = [.sourcePosition]
 
     private func nodes(_ src: String) -> [InlineNodeInfo] {
         var out: [InlineNodeInfo] = []

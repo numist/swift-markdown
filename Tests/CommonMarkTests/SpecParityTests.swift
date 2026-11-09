@@ -109,7 +109,7 @@ struct SpecParityTests {
     }
 
     @Test("every spec example renders its expected HTML")
-    func testAll() throws {
+    func allExamples() throws {
         let examples = try Self.loadSpec()
         // Fixture sanity: the spec loaded.
         #expect(examples.count > 600)

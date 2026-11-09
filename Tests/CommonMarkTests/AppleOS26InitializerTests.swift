@@ -11,38 +11,34 @@
 import Testing
 @testable import CommonMark
 
-/// The `init(parsing:)` initializers and the `source` accessor, which exist only where `UTF8Span` does. Each test
-/// returns early on older OSes.
+/// The `init(parsing:)` initializers and the `source` accessor, which exist only where `UTF8Span` does.
 @Suite("anyAppleOS 26 initializers")
 struct AppleOS26InitializerTests {
 
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test("returning String initializer parses the expected tree")
     func stringInitializer() {
-        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "# Title\n\nA paragraph with *emphasis*."
         let doc = MarkdownDocument(parsing: source)
-        let kinds = dfs(doc).map { $0.kind }
-        #expect(kinds.first == .document)
-        #expect(kinds.contains(.heading(level: 1)))
-        #expect(kinds.contains(.paragraph))
-        #expect(kinds.contains(.emphasis))
+        #expect(dfs(doc).map { TreeDump.describe($0.kind) } == ["document", "heading 1", "text", "paragraph", "text", "emph", "text", "text"])
+        #expect(dfs(doc).map(\.literal) == [nil, nil, "Title", nil, "A paragraph with ", nil, "emphasis", "."])
     }
 
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test("UTF8Span initializer parses the same tree as the String initializer")
     func utf8SpanInitializer() {
-        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "one `code` two"
         let viaString = MarkdownDocument(parsing: source)
-        let stringKinds = dfs(viaString).map { $0.kind }
+        let stringKinds = dfs(viaString).map { TreeDump.describe($0.kind) }
         let viaSpan = MarkdownDocument(parsing: source.utf8Span)
-        let spanKinds = dfs(viaSpan).map { $0.kind }
+        let spanKinds = dfs(viaSpan).map { TreeDump.describe($0.kind) }
+        #expect(stringKinds == ["document", "paragraph", "text", "code backticks=1", "text"])
         #expect(spanKinds == stringKinds)
-        #expect(spanKinds.contains(where: { if case .codeInline = $0 { true } else { false } }))
     }
 
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test("source accessor round-trips the original bytes (incl. multi-byte scalars)")
     func sourceAccessorRoundTrips() {
-        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         let source = "l\u{ED}ne one\nline two"   // `í` is a 2-byte scalar
         let doc = MarkdownDocument(parsing: source)
         #expect(String(copying: doc.source) == source)

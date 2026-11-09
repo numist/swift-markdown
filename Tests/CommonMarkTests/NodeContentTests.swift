@@ -14,77 +14,74 @@ import Testing
 @Suite("Node content projection")
 struct NodeContentTests {
 
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test("link content in one switch - single-segment spans")
     func linkContent() {
-        if #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
-            let source = "[text](/url \"title\")"
-            MarkdownDocument.withParsedDocument(source) { doc in
-            var url: String?
-            var title: String?
-            func walk(_ node: borrowing MarkdownNode) {
-                switch node.content {
-                case .link(let u, let t):
-                    url = String(copying: u)
-                    title = String(copying: t)
-                default:
-                    break
-                }
-                node.children.forEach { walk($0) }
+        let source = "[text](/url \"title\")"
+        MarkdownDocument.withParsedDocument(source) { doc in
+        var url: String?
+        var title: String?
+        func walk(_ node: borrowing MarkdownNode) {
+            switch node.content {
+            case .link(let u, let t):
+                url = String(copying: u)
+                title = String(copying: t)
+            default:
+                break
             }
-            walk(doc.root)
-            #expect(url == "/url")
-            #expect(title == "title")
-            }
+            node.children.forEach { walk($0) }
+        }
+        walk(doc.root)
+        #expect(url == "/url")
+        #expect(title == "title")
         }
     }
 
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test("code block body is vended as multi-segment, not a materialized span")
     func codeBlockContent() {
-        if #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
-            let source = "```swift\na\nb\n```\n"
-            MarkdownDocument.withParsedDocument(source) { doc in
-            var info: String?
-            var bodyJoined = ""
-            var segmentCount = 0
-            func walk(_ node: borrowing MarkdownNode) {
-                switch node.content {
-                case .codeBlock(let i, let body):
-                    info = String(copying: i)
-                    segmentCount = body.count
-                    body.forEach { span in bodyJoined += String(copying: span) }
-                default:
-                    break
-                }
-                node.children.forEach { walk($0) }
+        let source = "```swift\na\nb\n```\n"
+        MarkdownDocument.withParsedDocument(source) { doc in
+        var info: String?
+        var bodyJoined = ""
+        var segmentCount = 0
+        func walk(_ node: borrowing MarkdownNode) {
+            switch node.content {
+            case .codeBlock(let i, let body):
+                info = String(copying: i)
+                segmentCount = body.count
+                body.forEach { span in bodyJoined += String(copying: span) }
+            default:
+                break
             }
-            walk(doc.root)
-            #expect(info == "swift")
-            #expect(bodyJoined == "a\nb\n")
-            #expect(segmentCount == 4)   // the body borrows each source line rather than copying them into one span
-            }
+            node.children.forEach { walk($0) }
+        }
+        walk(doc.root)
+        #expect(info == "swift")
+        #expect(bodyJoined == "a\nb\n")
+        #expect(segmentCount == 4)   // the body borrows each source line rather than copying them into one span
         }
     }
 
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test("inline text content via content")
     func textContent() {
-        if #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
-            let source = "hello"
-            MarkdownDocument.withParsedDocument(source) { doc in
-            var text: String?
-            func walk(_ node: borrowing MarkdownNode) {
-                switch node.content {
-                case .text(let segments):
-                    var joined = ""
-                    segments.forEach { span in joined += String(copying: span) }
-                    text = joined
-                default:
-                    break
-                }
-                node.children.forEach { walk($0) }
+        let source = "hello"
+        MarkdownDocument.withParsedDocument(source) { doc in
+        var text: String?
+        func walk(_ node: borrowing MarkdownNode) {
+            switch node.content {
+            case .text(let segments):
+                var joined = ""
+                segments.forEach { span in joined += String(copying: span) }
+                text = joined
+            default:
+                break
             }
-            walk(doc.root)
-            #expect(text == "hello")
-            }
+            node.children.forEach { walk($0) }
+        }
+        walk(doc.root)
+        #expect(text == "hello")
         }
     }
 }
