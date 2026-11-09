@@ -249,6 +249,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Numbers the footnote references, drops the definitions no reference resolves to, and moves the referenced
     /// ones, out of any container, to the end of the document in index order.
+    ///
+    /// A reference inside a dropped definition counts, so the definition it resolves to is kept, though the reference
+    /// is dropped with the definition holding it.
     private mutating func processFootnotes() {
         guard storage.options.contains(.footnotes) else { return }
         // A footnote reference exists only where its label resolves to a footnote definition.
@@ -331,7 +334,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// The `.inlineOnly` and `.preserveWhitespace` parse.
     ///
-    /// Any non-empty input, even a lone BOM, becomes one paragraph holding the source after any BOM, with line endings normalized to `\n` and every other byte kept. Only inline syntax is parsed, and line endings stay literal text.
+    /// Any non-empty input, even a lone BOM, becomes one paragraph holding the source after any BOM and any leading
+    /// definitions, with line endings normalized to `\n` and each NUL replaced with U+FFFD (Insecure characters). Only
+    /// inline syntax is parsed: a line ending is text, except after a backslash, where it is a hard line break.
     private mutating func parseInlineOnly() {
         let count = sourceBytes.count
         guard count > 0 else {
