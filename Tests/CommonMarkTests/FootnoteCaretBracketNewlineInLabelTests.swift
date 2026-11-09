@@ -19,89 +19,87 @@ struct FootnoteCaretBracketNewlineInLabelTests {
     /// `[^[` opens no footnote reference, because a label may not contain an unescaped `[` (Links). The bracket pair after
     /// `^[…]`, a link label or a blank one, names no attribute definition, so it is dropped and `^[…]` stays literal text.
     /// A bracket pair after another opener can still form a link or image.
-    @Test func testBracketStaysLiteral() {
-        let cases: [(markdown: String, expected: String)] = [
-            ("[^[][\n]]", """
-                document
-                  paragraph
-                    text "[^[]]"
+    @Test(arguments: [
+        ("[^[][\n]]", """
+            document
+              paragraph
+                text "[^[]]"
 
-                """),
-            ("[^[][\nx]]", """
-                document
-                  paragraph
-                    text "[^[]]"
+            """),
+        ("[^[][\nx]]", """
+            document
+              paragraph
+                text "[^[]]"
 
-                """),
-            ("[^[][\r\n]]", """
-                document
-                  paragraph
-                    text "[^[]]"
+            """),
+        ("[^[][\r\n]]", """
+            document
+              paragraph
+                text "[^[]]"
 
-                """),
-            ("[^[x][\n]]", """
-                document
-                  paragraph
-                    text "[^[x]]"
+            """),
+        ("[^[x][\n]]", """
+            document
+              paragraph
+                text "[^[x]]"
 
-                """),
-            ("a [^[][\n]] b", """
-                document
-                  paragraph
-                    text "a [^[]] b"
+            """),
+        ("a [^[][\n]] b", """
+            document
+              paragraph
+                text "a [^[]] b"
 
-                """),
-            ("[^[][ ]]", """
-                document
-                  paragraph
-                    text "[^[]]"
+            """),
+        ("[^[][ ]]", """
+            document
+              paragraph
+                text "[^[]]"
 
-                """),
-            ("[^a ^[][\n]]", """
-                document
-                  paragraph
-                    text "[^a ^[]]"
+            """),
+        ("[^a ^[][\n]]", """
+            document
+              paragraph
+                text "[^a ^[]]"
 
-                """),
-            ("[^[][\n]()]", """
-                document
-                  paragraph
-                    text "[^[]()]"
+            """),
+        ("[^[][\n]()]", """
+            document
+              paragraph
+                text "[^[]()]"
 
-                """),
-            ("[^[][a\nb\nc]]", """
-                document
-                  paragraph
-                    text "[^[]]"
+            """),
+        ("[^[][a\nb\nc]]", """
+            document
+              paragraph
+                text "[^[]]"
 
-                """),
-            ("[^[][\n]\n]", """
-                document
-                  paragraph
-                    text "[^[]"
-                    softbreak
-                    text "]"
+            """),
+        ("[^[][\n]\n]", """
+            document
+              paragraph
+                text "[^[]"
+                softbreak
+                text "]"
 
-                """),
-            ("> [^[][\n> ]]", """
-                document
-                  block_quote
-                    paragraph
-                      text "[^[]]"
+            """),
+        ("> [^[][\n> ]]", """
+            document
+              block_quote
+                paragraph
+                  text "[^[]]"
 
-                """),
-            ("[^x ![a][b\nc]]\n\n[b c]: /u", """
-                document
-                  paragraph
-                    text "[^x "
-                    image "/u" ""
-                      text "a"
-                    text "]"
+            """),
+        ("[^x ![a][b\nc]]\n\n[b c]: /u", """
+            document
+              paragraph
+                text "[^x "
+                image "/u" ""
+                  text "a"
+                text "]"
 
-                """),
-        ]
-        for (markdown, expected) in cases {
-            #expect(TreeDump.dump(markdown, options: Self.options) == expected, "\(markdown.debugDescription)")
-        }
+            """),
+    ])
+    func bracketStaysLiteral(markdown: String, expected: String) {
+        #expect(TreeDump.dump(markdown, options: Self.options) == expected)
     }
 }
