@@ -52,13 +52,14 @@ struct TableSplitParagraphDefinitionTests {
             """)
     }
 
-    @Test func taskMarkerAfterDefinitionBeforeTable() {
+    /// A definition counts as a block of its list item, so a marker after one doesn't begin the item's first block.
+    @Test func taskMarkerAfterDefinitionBeforeTableIsText() {
         #expect(tree("- [a]: /u\n  [ ] foo\n  x|y\n  -|-") == """
             Document
             └─ UnorderedList
-               └─ ListItem checkbox: [ ]
+               └─ ListItem
                   ├─ Paragraph
-                  │  └─ Text "foo"
+                  │  └─ Text "[ ] foo"
                   └─ Table alignments: |-|-|
                      ├─ Head
                      │  ├─ Cell

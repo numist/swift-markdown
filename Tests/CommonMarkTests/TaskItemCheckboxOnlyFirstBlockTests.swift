@@ -210,6 +210,18 @@ struct TaskItemCheckboxOnlyFirstBlockTests {
             """)
     }
 
+    @Test("a checkbox beginning a later paragraph is text")
+    func checkboxBeginningLaterParagraph() {
+        #expect(TreeDump.dump("- [ ]\n\n  [x] b\n", options: Self.options) == """
+            document
+              list bullet '-' loose
+                tasklist unchecked
+                  paragraph
+                    text "[x] b"
+
+            """)
+    }
+
     @Test(
         "a following item after blank lines loosens the list",
         arguments: ["- [ ] \n\n- b\n", "- [ ] \n\n\n- b\n"]

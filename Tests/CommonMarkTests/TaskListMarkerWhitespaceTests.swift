@@ -83,6 +83,68 @@ struct TaskListMarkerWhitespaceTests {
         #expect(text == "[x]a")
     }
 
+    // MARK: - A line ending or the end of input after the checkbox
+
+    // A line ending is a whitespace character (Characters and lines), and so is the end of the paragraph's content
+    // for a checkbox that fills it.
+
+    @Test("a checkbox at the end of input")
+    func checkboxAtEndOfInput() {
+        #expect(TreeDump.dump("- [x]", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
+            document @1:1-1:6
+              list bullet '-' tight @1:1-1:6
+                tasklist checked @1:1-1:6
+
+            """)
+    }
+
+    @Test("a checkbox before a line ending")
+    func checkboxBeforeLineEnding() {
+        #expect(TreeDump.dump("- [ ]\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
+            document @1:1-1:6
+              list bullet '-' tight @1:1-1:6
+                tasklist unchecked @1:1-1:6
+
+            """)
+    }
+
+    @Test("a checkbox before an indented continuation line")
+    func checkboxBeforeContinuationLine() {
+        #expect(TreeDump.dump("- [x]\n  foo\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
+            document @1:1-2:6
+              list bullet '-' tight @1:1-2:6
+                tasklist checked @1:1-2:6
+                  paragraph @2:3-2:6
+                    text "foo" @2:3-2:6
+
+            """)
+    }
+
+    @Test("a checkbox before a lazy continuation line")
+    func checkboxBeforeLazyContinuationLine() {
+        #expect(TreeDump.dump("- [x]\nfoo\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
+            document @1:1-2:4
+              list bullet '-' tight @1:1-2:4
+                tasklist checked @1:1-2:4
+                  paragraph @2:1-2:4
+                    text "foo" @2:1-2:4
+
+            """)
+    }
+
+    @Test("a checkbox in a block quote before a continuation line")
+    func checkboxInBlockQuoteBeforeContinuationLine() {
+        #expect(TreeDump.dump("> - [x]\n>   foo\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
+            document @1:1-2:8
+              block_quote @1:1-2:8
+                list bullet '-' tight @1:3-2:8
+                  tasklist checked @1:3-2:8
+                    paragraph @2:5-2:8
+                      text "foo" @2:5-2:8
+
+            """)
+    }
+
     @Test("a multi-line multi-space task list item strips only the first line's marker whitespace")
     func multiLineContinuation() {
         let texts = MarkdownDocument.withParsedDocument("- [x]  a\n     b", options: Self.opts) { doc -> [String] in

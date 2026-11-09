@@ -93,15 +93,14 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    /// Without whitespace after the marker on its line, the paragraph is ordinary text.
-    @Test func markerWithoutWhitespaceIsText() {
+    /// A line ending is a whitespace character, so it follows the marker, and the lazy continuation line is the
+    /// paragraph's content.
+    @Test func markerBeforeLineEnding() {
         #expect(tree("- [ ]\nx") == """
             Document @1:1-2:2
             └─ UnorderedList @1:1-2:2
-               └─ ListItem @1:1-2:2
-                  └─ Paragraph @1:3-2:2
-                     ├─ Text @1:3-1:6 "[ ]"
-                     ├─ SoftBreak
+               └─ ListItem @1:1-2:2 checkbox: [ ]
+                  └─ Paragraph @2:1-2:2
                      └─ Text @2:1-2:2 "x"
             """)
     }
@@ -140,13 +139,14 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    @Test func markerAfterDefinition() {
+    /// A definition counts as a block of its list item, so a marker after one doesn't begin the item's first block.
+    @Test func markerAfterDefinitionIsText() {
         #expect(tree("- [a]: /u\n  [x] foo") == """
             Document @1:1-2:10
             └─ UnorderedList @1:1-2:10
-               └─ ListItem @1:1-2:10 checkbox: [x]
-                  └─ Paragraph @2:7-2:10
-                     └─ Text @2:7-2:10 "foo"
+               └─ ListItem @1:1-2:10
+                  └─ Paragraph @2:3-2:10
+                     └─ Text @2:3-2:10 "[x] foo"
             """)
     }
 

@@ -139,6 +139,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// and another block with a blank line between them, which makes their list loose (Lists). Consulted by `detectLooseList`.
     var itemsWithBlankLineAroundRemovedParagraph: Set<DocumentStorage.Index> = []
 
+    /// List items whose first block is a removed paragraph that held only definitions or a task list item marker, so
+    /// no later paragraph is their first block (Task list items (extension)).
+    var itemsWithRemovedFirstParagraph: Set<DocumentStorage.Index> = []
+
     /// Reset per `parseInline` pass.
     var htmlCloserMisses = HTMLCloserMisses()
 
@@ -869,7 +873,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // paragraph); they trim to empty only when they hold nothing but line tabulations and form feeds.
         let precedingLines = Chunk(offset: range.lowerBound, length: lastNewline - range.lowerBound, inSource: true)
         // The split-off lines are a paragraph that bypasses finalize, so its raw content is formed here.
-        if let precedingChunk = tableSplitParagraphContent(precedingLines.trimmingWhitespace(using: self), in: precedingLines, node: node) {
+        if let precedingChunk = tableSplitParagraphContent(precedingLines.trimmingWhitespace(using: self), node: node) {
             let preceding = insertTablePrecedingParagraph(before: node)
             let span = precedingChunk.isEmpty ? precedingLines : precedingChunk
             storage.setSourceStart(preceding, span.offset)
@@ -912,13 +916,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             header.append(segs[i])
         }
         segs.removeSubrange(lineJoin..<segs.count)
-        let untrimmedLastLine = segs[segs.count - 1]
-        segs = trimSegments(segs)
-        let trimmedLastLength = Int(segs[segs.count - 1].length)
-        let preceding = segs
-        let trailingSeparator = trimmedLastLength < Int(untrimmedLastLine.length)
-            ? segmentByte(untrimmedLastLine, trimmedLastLength)
-            : nil
+        let preceding = trimSegments(segs)
         let precedingNode = insertTablePrecedingParagraph(before: node)
         // Read through a borrow, so `preceding` can then be consumed by `intern`.
         if positionsEnabled {
@@ -934,7 +932,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if substitutes || trimsControlWhitespace || mayHoldMatcher {
             var map: [ArenaRun] = []
             let flat = flattenSegments(preceding, map: &map)
-            if let content = tableSplitParagraphContent(flat.trimmingWhitespace(using: self), in: flat, node: precedingNode, fallbackSeparator: trailingSeparator) {
+            if let content = tableSplitParagraphContent(flat.trimmingWhitespace(using: self), node: precedingNode) {
                 if positionsEnabled, !content.isEmpty {
                     let span = sourceSpan(of: sliceRuns(map, from: content.offset - flat.offset, length: content.length))
                     storage.setSourceStart(precedingNode, span.start)
@@ -2002,18 +2000,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// The raw content (`paragraphContent`) of the paragraph a table's header row splits off, whose trimmed lines are
-    /// `trimmed`, a window of `lines`, or `nil` when its definitions or task list item marker leave nothing.
-    /// `node` is that paragraph, or the paragraph it splits from. `fallbackSeparator` is the first byte trimmed off
-    /// the lines before `lines` is formed, if any.
-    private mutating func tableSplitParagraphContent(_ trimmed: Chunk, in lines: Chunk, node: DocumentStorage.Index, fallbackSeparator: UInt8? = nil) -> Chunk? {
-        let content = paragraphContent(of: node, trimmed: trimmed, trailingSeparator: byte(after: trimmed, in: lines) ?? fallbackSeparator)
+    /// `trimmed`, or `nil` when its definitions or task list item marker leave nothing. `node` is that paragraph, or
+    /// the paragraph it splits from.
+    private mutating func tableSplitParagraphContent(_ trimmed: Chunk, node: DocumentStorage.Index) -> Chunk? {
+        let content = paragraphContent(of: node, trimmed: trimmed)
         return content.isEmpty && content.offset != trimmed.offset ? nil : content
-    }
-
-    /// The byte of `outer` just past `content`, a window of it in the same buffer, or `nil` at `outer`'s end.
-    private func byte(after content: Chunk, in outer: Chunk) -> UInt8? {
-        let end = content.offset + content.length
-        return end < outer.offset + outer.length ? readByte(at: end, in: outer) : nil
     }
 
     /// Where `content`, a window of leaf content `raw` with run map `map` (empty for source content), begins in the
@@ -2038,8 +2029,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// In a list item it still counts for looseness as a block of the item (Lists).
     private mutating func removeEmptiedParagraph(_ paragraph: DocumentStorage.Index) {
         if let item = storage[paragraph].parent, case .item = storage[item].kind {
-            if let preceding = storage[paragraph].previous, endsWithBlankLine(preceding) {
-                itemsWithBlankLineAroundRemovedParagraph.insert(item)
+            if let preceding = storage[paragraph].previous {
+                if endsWithBlankLine(preceding) {
+                    itemsWithBlankLineAroundRemovedParagraph.insert(item)
+                }
+            } else {
+                itemsWithRemovedFirstParagraph.insert(item)
             }
             itemsEndingInRemovedParagraph[item] = false
         }
@@ -2072,12 +2067,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             parseTable(node: node, chunk: tableContent, sourceMap: tableMap)
             return
         }
-        let afterDefinitions = parseDefinitions(in: trimmed).trimmingWhitespace(using: self)
-        if afterDefinitions.isEmpty {
-            removeEmptiedParagraph(node)
-            return
-        }
-        let contentChunk = taskItemContent(of: node, content: afterDefinitions, trailingSeparator: byte(after: trimmed, in: raw))
+        let contentChunk = paragraphContent(of: node, trimmed: trimmed)
         if contentChunk.isEmpty {
             removeEmptiedParagraph(node)
             return
@@ -3201,34 +3191,39 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// The raw content of the paragraph `node` whose trimmed lines are `trimmed`: what follows its leading link
-    /// reference definitions, from its first non-whitespace byte, less any task list item marker. `trailingSeparator` is
-    /// the byte after `trimmed` on its line.
-    private mutating func paragraphContent(of node: DocumentStorage.Index, trimmed: Chunk, trailingSeparator: UInt8?) -> Chunk {
-        taskItemContent(of: node, content: parseDefinitions(in: trimmed).trimmingWhitespace(using: self), trailingSeparator: trailingSeparator)
+    /// reference definitions, from its first non-whitespace byte, or without definitions, `trimmed` less any task
+    /// list item marker.
+    private mutating func paragraphContent(of node: DocumentStorage.Index, trimmed: Chunk) -> Chunk {
+        let afterDefinitions = parseDefinitions(in: trimmed)
+        // A definition counts as a block of its list item (Lists), so a marker after one doesn't begin the item's
+        // first block.
+        guard afterDefinitions.offset == trimmed.offset else {
+            return afterDefinitions.trimmingWhitespace(using: self)
+        }
+        return taskItemContent(of: node, content: trimmed)
     }
 
     /// The paragraph `node`'s `content` less any task list item marker (Task list items (extension)), which makes its
     /// item a task list item when `node` is the item's first block.
-    ///
-    /// `trailingSeparator` is the byte after `content` on its line, which follows a marker that fills the content.
-    private mutating func taskItemContent(of node: DocumentStorage.Index, content: Chunk, trailingSeparator: UInt8?) -> Chunk {
+    private mutating func taskItemContent(of node: DocumentStorage.Index, content: Chunk) -> Chunk {
         guard storage.options.contains(.tasklist),
               let item = storage[node].parent,
               case .item = storage[item].kind,
               storage[item].firstChild == node,
+              !itemsWithRemovedFirstParagraph.contains(item),
               content.length >= 3,
               readByte(at: content.offset, in: content) == UInt8(ascii: "["),
               readByte(at: content.offset + 2, in: content) == UInt8(ascii: "]"),
-              let separator = content.length > 3 ? readByte(at: content.offset + 3, in: content) : trailingSeparator,
-              separator.isExtensionScannerSpace else {
+              // A marker that ends the content is followed by a line ending or the end of input.
+              content.length == 3 || readByte(at: content.offset + 3, in: content).isASCIISpace else {
             return content
         }
-        switch readByte(at: content.offset + 1, in: content) {
-        case UInt8(ascii: " "):
-            storage[item].kind = .item(checked: false)
-        case UInt8(ascii: "x"), UInt8(ascii: "X"):
+        let between = readByte(at: content.offset + 1, in: content)
+        if between == UInt8(ascii: "x") || between == UInt8(ascii: "X") {
             storage[item].kind = .item(checked: true)
-        default:
+        } else if between.isExtensionScannerSpace {
+            storage[item].kind = .item(checked: false)
+        } else {
             return content
         }
         return content.extracting(min(4, content.length)..<content.length).trimmingWhitespace(using: self)

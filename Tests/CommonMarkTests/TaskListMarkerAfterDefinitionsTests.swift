@@ -11,37 +11,62 @@
 import Testing
 import CommonMark
 
-/// A paragraph's leading link reference definitions are not part of its content, so the task list item
-/// marker check applies to what follows them, once its initial whitespace is removed (Paragraphs).
-@Suite("Task list item marker after a paragraph's definitions")
+/// A link reference definition counts as a block of its list item, as it does for list looseness (Lists), so a task
+/// list item marker after an item's leading definitions doesn't begin the item's first block, and the item is no
+/// task list item (Task list items (extension)).
+@Suite("Task list item marker after a list item's definitions")
 struct TaskListMarkerAfterDefinitionsTests {
 
-    @Test("a marker after a line tabulation makes a task list item")
-    func markerAfterLineTabulation() {
-        #expect(TreeDump.dump("- [a]: /u\n  \u{0B}[ ] b\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
-            document @1:1-2:9
-              list bullet '-' tight @1:1-2:9
-                tasklist unchecked @1:1-2:9
-                  paragraph @2:8-2:9
-                    text "b" @2:8-2:9
+    @Test("a marker on the definition's paragraph's next line is text")
+    func markerOnNextLine() {
+        #expect(TreeDump.dump("- [a]: /u\n  [ ] foo\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
+            document @1:1-2:10
+              list bullet '-' tight @1:1-2:10
+                item @1:1-2:10
+                  paragraph @2:3-2:10
+                    text "[ ] foo" @2:3-2:10
 
             """)
     }
 
-    @Test("a marker after a form feed makes a task list item before a table")
+    @Test("a marker after a line tabulation is text")
+    func markerAfterLineTabulation() {
+        #expect(TreeDump.dump("- [a]: /u\n  \u{0B}[ ] b\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
+            document @1:1-2:9
+              list bullet '-' tight @1:1-2:9
+                item @1:1-2:9
+                  paragraph @2:4-2:9
+                    text "[ ] b" @2:4-2:9
+
+            """)
+    }
+
+    @Test("a marker after a form feed before a table is text")
     func markerAfterFormFeedBeforeTable() {
         #expect(TreeDump.dump("- [a]: /u\n  \u{0C}[x] b\n  h|i\n  -|-\n", options: [.tasklist, .tables, .sourcePosition], sourceRanges: true) == """
             document @1:1-4:6
               list bullet '-' tight @1:1-4:6
-                tasklist checked @1:1-4:6
-                  paragraph @2:8-2:9
-                    text "b" @2:8-2:9
+                item @1:1-4:6
+                  paragraph @2:4-2:9
+                    text "[x] b" @2:4-2:9
                   table @3:3-4:6
                     table_header @3:3-3:6
                       table_cell align=none colspan=1 rowspan=1 @3:3-3:4
                         text "h" @3:3-3:4
                       table_cell align=none colspan=1 rowspan=1 @3:5-3:6
                         text "i" @3:5-3:6
+
+            """)
+    }
+
+    @Test("a marker beginning a paragraph after the definitions and a blank line is text")
+    func markerAfterBlankLine() {
+        #expect(TreeDump.dump("- [a]: /u\n\n  [ ] foo\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
+            document @1:1-3:10
+              list bullet '-' loose @1:1-3:10
+                item @1:1-3:10
+                  paragraph @3:3-3:10
+                    text "[ ] foo" @3:3-3:10
 
             """)
     }
