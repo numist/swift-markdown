@@ -3427,10 +3427,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// `content`'s bytes at `range` as a chunk with backslash escapes and character references resolved, copied into
-    /// the arena once if `range` holds either or, as a title can, spans a line join.
-    // Inlined like `definitionChunk`, which it stands in for on a link reference definition's destination and title.
+    /// the arena once if `range` holds either or, as a link title can, spans a line join.
+    // Inlined for the reason given before `skipLineWhitespace`.
     @inline(__always)
-    private mutating func unescapedDefinitionChunk(_ range: Range<Int>, in content: borrowing ContentSpan) -> Chunk {
+    mutating func unescapedChunk(_ range: Range<Int>, in content: borrowing ContentSpan) -> Chunk {
         if range.isEmpty {
             return .empty
         }
@@ -3453,9 +3453,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return arenaChunk(from: offset)
     }
 
-    // These scanners are `@inline(__always)`, as are `parseOneLinkDefinition`, `matchDefinitionLabel` and
-    // `definitionChunk`, and `mutating` though they only read: out of line, or as non-mutating methods of the large
-    // `BlockParser`, they measured about 1.5% and 2.6% more instructions on a document of definitions.
+    // These scanners are `@inline(__always)`, as are `parseOneLinkDefinition`, `matchDefinitionLabel`,
+    // `definitionChunk` and `unescapedChunk`, and `mutating` though they only read: out of line, or as non-mutating
+    // methods of the large `BlockParser`, they measured about 1.5% and 2.6% more instructions on a document of
+    // definitions.
 
     /// Skips spaces, tabs, line tabulations and form feeds.
     @inline(__always)
@@ -3532,8 +3533,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // A NUL becomes U+FFFD (Insecure characters). The content may not be NUL-replaced yet, so it is done
             // here, where every stored definition passes.
             storage.referenceMap[key] = ReferenceDefinition(
-                destination: replacingNUL(unescapedDefinitionChunk(destination.destination, in: content)),
-                title: replacingNUL(unescapedDefinitionChunk(title, in: content))
+                destination: replacingNUL(unescapedChunk(destination.destination, in: content)),
+                title: replacingNUL(unescapedChunk(title, in: content))
             )
         }
         return afterAll

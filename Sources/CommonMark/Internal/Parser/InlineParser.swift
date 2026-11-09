@@ -636,8 +636,8 @@ extension BlockParser {
             return nil
         }
         return (
-            unescapedChunk(start: dest.destination.lowerBound, end: dest.destination.upperBound, content: content),
-            unescapedChunk(start: titleInterior.lowerBound, end: titleInterior.upperBound, content: content),
+            unescapedChunk(dest.destination, in: content),
+            unescapedChunk(titleInterior, in: content),
             close + 1
         )
     }
@@ -2125,28 +2125,6 @@ extension BlockParser {
         let outOffset = storage.strings.count
         for k in start..<end {
             storage.strings.append(content[k])
-        }
-        return arenaChunk(from: outOffset)
-    }
-
-    /// A chunk for `[start, end)` with backslash escapes and character references resolved, copied into the arena
-    /// once if the range holds either or, as a link title can, spans segments.
-    private mutating func unescapedChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
-        if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end),
-           contiguous.length == end - start {
-            return unescapeURLChunk(contiguous)
-        }
-        // A backslash escape or character reference never continues past a line ending, so each line resolves alone.
-        let outOffset = storage.strings.count
-        var k = start
-        while k < end {
-            if let line = content.contiguousChunk(fromVirtual: k, limit: end) {
-                appendUnescaped(line)
-                k += line.length
-            } else {
-                storage.strings.append(UInt8(ascii: "\n"))
-                k += 1
-            }
         }
         return arenaChunk(from: outOffset)
     }

@@ -401,7 +401,7 @@ extension MarkdownNode {
 extension MarkdownNode {
     /// The node's source range, or `nil` without `MarkdownDocument.ParseOptions.sourcePosition` or for a node that has no source range.
     ///
-    /// The range runs from the node's first byte in the source, such as a block quote's `>` or a code span's opening backtick, to just past its last.
+    /// The range runs from the node's first byte in the source, such as a block quote's `>` or a code span's opening backtick, to just past its last. Whitespace and blank lines after a block's last content are outside it, so a container ends with its last child or marker.
     public var sourceRange: Range<SourcePosition>? {
         _view.sourceRange(of: _index)
     }
