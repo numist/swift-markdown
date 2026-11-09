@@ -252,7 +252,7 @@ struct MarkupTreeDumper: MarkupWalker {
     }
 
     mutating func visitCustomInline(_ customInline: CustomInline) {
-        dump(customInline, customDescription: "customInline.text")
+        dump(customInline, customDescription: "\(customInline.text)")
     }
 
     mutating func visitListItem(_ listItem: ListItem) {
