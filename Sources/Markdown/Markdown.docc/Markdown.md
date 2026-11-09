@@ -4,7 +4,7 @@ Swift `Markdown` is a Swift package for parsing, building, editing, and analyzin
 
 ## Overview
 
-The parser follows the [GitHub Flavored Markdown spec](https://github.github.com/gfm/): CommonMark plus the tables, strikethrough, and task list item extensions. As the needs of the community change, the effective dialect implemented by this library may change.
+The parser follows the [GitHub Flavored Markdown spec](https://github.github.com/gfm/) (version 0.29-gfm): CommonMark plus the tables, strikethrough, and task list item extensions, without the autolink and disallowed raw HTML extensions. Beyond the spec, it converts straight quotes, `--`, `---`, and `...` to typographic punctuation unless parsing with `disableSmartOpts`, lets table cells span columns and rows, and parses inline attributes, written as `^[text](key: value)`. As the needs of the community change, the effective dialect implemented by this library may change.
 
 The markup tree provided by this package is comprised of immutable/persistent, thread-safe, copy-on-write value types that only copy substructure that has changed. Other examples of the main strategy behind this library can be seen in [SwiftSyntax](https://github.com/swiftlang/swift-syntax).
 
