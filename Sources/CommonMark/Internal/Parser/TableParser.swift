@@ -205,16 +205,12 @@ extension BlockParser {
                 rowspanOwners[col] = cellIdx
             }
             guard col < cells.count else { continue }
-            // A cell covers its untrimmed span between pipes. A cell whose content trims to empty also covers its closing pipe, which it always has, because `splitCells` drops a trailing empty cell.
+            // A cell covers its untrimmed span between pipes; with no closing pipe, the rightmost cell runs to the
+            // row's end.
             let span = cells[col]
-            let content = trimmingPadding(span)
             storage.setSourceStart(cellIdx, span.lowerBound)
-            if col == cells.count - 1 && !hadClosingPipe {
-                // With no closing pipe, the rightmost cell runs to the row's untrimmed end.
-                storage.setSourceEnd(cellIdx, rowEnd)
-            } else {
-                storage.setSourceEnd(cellIdx, content.isEmpty ? span.upperBound + 1 : span.upperBound)
-            }
+            storage.setSourceEnd(cellIdx, col == cells.count - 1 && !hadClosingPipe ? rowEnd : span.upperBound)
+            let content = trimmingPadding(span)
             if content.isEmpty || (spansEnabled && skipContent[col]) { continue }
             queueInlines(of: cellIdx, content: content)
         }

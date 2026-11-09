@@ -230,12 +230,12 @@ class TableTests: XCTestCase {
               ├─ Row @3:1-3:22
               │  ├─ Cell @3:2-3:12 colspan: 2 rowspan: 2
               │  │  └─ Text @3:3-3:6 "big"
-              │  ├─ Cell @3:13-3:14 colspan: 0
+              │  ├─ Cell @3:13 colspan: 0
               │  └─ Cell @3:14-3:21
               │     └─ Text @3:15-3:20 "small"
               └─ Row @4:1-4:22
                  ├─ Cell @4:2-4:12 colspan: 2 rowspan: 0
-                 ├─ Cell @4:13-4:14 colspan: 0
+                 ├─ Cell @4:13 colspan: 0
                  └─ Cell @4:14-4:21
                     └─ Text @4:15-4:20 "small"
         """

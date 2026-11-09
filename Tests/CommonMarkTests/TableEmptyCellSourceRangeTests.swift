@@ -11,10 +11,10 @@
 import Testing
 import CommonMark
 
-/// Source ranges of table cells (Tables (extension)) cover the untrimmed text between the pipes. A cell
-/// with content ends at its closing pipe; an empty or whitespace-only cell also covers its closing pipe;
-/// a zero-width `||` cell has colspan 0. A rightmost cell with no closing pipe runs to the end of the
-/// line, including trailing whitespace. A row covers its whole line, including trailing whitespace.
+/// Source ranges of table cells (Tables (extension)) cover the untrimmed text between the pipes, so every
+/// cell ends at its closing pipe; a zero-width `||` cell has colspan 0. A rightmost cell with no closing
+/// pipe runs to the end of the line, including trailing whitespace. A row covers its whole line, including
+/// trailing whitespace.
 @Suite("Table empty-cell source ranges")
 struct TableEmptyCellSourceRangeTests {
 
@@ -113,7 +113,7 @@ struct TableEmptyCellSourceRangeTests {
         #expect((hdr[1].cells[1].startColumn, hdr[1].cells[1].endColumn, hdr[1].cells[1].text) == (3, 4, "y"))
     }
 
-    @Test("a whitespace-only cell ends one column past its closing pipe")
+    @Test("a whitespace-only cell ends at its closing pipe")
     func whitespaceCellEndColumn() throws {
         // `|x| |y`: x at col 2, empty cell is the space at col 4 with its closing pipe at col 5.
         let rows = tableRows("a|b|c\n-|-|-\n|x| |y")
@@ -123,18 +123,18 @@ struct TableEmptyCellSourceRangeTests {
         #expect(body.cells[0].text == "x")
         #expect(body.cells[1].text == "")
         #expect(body.cells[1].colspan == 1)
-        #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (4, 6))
+        #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (4, 5))
         #expect((body.cells[2].startColumn, body.cells[2].endColumn) == (6, 7))
         #expect(body.cells[2].text == "y")
     }
 
-    @Test("a multi-space empty cell spans its whole untrimmed width plus the closing pipe")
+    @Test("a multi-space empty cell spans its whole untrimmed width")
     func multiSpaceEmptyCellEndColumn() throws {
         let rows = tableRows("a|b\n-|-\n|   |c")
         let body = try #require(rows.last, "expected a body row")
         try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
         #expect(body.cells[0].text == "")
-        #expect((body.cells[0].startColumn, body.cells[0].endColumn) == (2, 6))
+        #expect((body.cells[0].startColumn, body.cells[0].endColumn) == (2, 5))
         #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (6, 7))
     }
 
@@ -145,13 +145,13 @@ struct TableEmptyCellSourceRangeTests {
         try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
         #expect(body.cells[0].colspan == 0)
         #expect(body.cells[0].text == "")
-        #expect((body.cells[0].startColumn, body.cells[0].endColumn) == (2, 3))
+        #expect((body.cells[0].startColumn, body.cells[0].endColumn) == (2, 2))
 
         let headerRows = tableRows("||b\n-|-\nx|y")
         let header = try #require(headerRows.first, "expected a header row")
         try #require(header.cells.count == 2, "expected two header cells, got \(header.cells.count)")
         #expect(header.cells[0].colspan == 0)
-        #expect((header.cells[0].startColumn, header.cells[0].endColumn) == (2, 3))
+        #expect((header.cells[0].startColumn, header.cells[0].endColumn) == (2, 2))
     }
 
     @Test("the last row's end column includes trailing whitespace")
