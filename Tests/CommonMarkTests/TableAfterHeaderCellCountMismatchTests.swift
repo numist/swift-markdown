@@ -16,10 +16,7 @@ import CommonMark
 /// The header row must match the delimiter row in the number of cells, or a table is not recognized there (Tables
 /// (extension)), and both lines continue the paragraph. A later line pair that is a valid header row and delimiter row
 /// still opens a table, taking the line before the delimiter row as its header row, and the lines before it stay a
-/// paragraph. A later pair whose cell counts also differ, a later line that is not a delimiter row, and a delimiter row
-/// that is a lazy continuation line or is indented four or more columns open no table, and a setext heading underline
-/// still makes the whole paragraph a heading. The cases are tried at the top level, in a block quote, in a list item,
-/// with CRLF line endings and after a tab that follows a block quote marker, wherever the construct can occur there.
+/// paragraph. A setext heading underline still makes the whole paragraph a heading.
 @Suite("A table after a header row and delimiter row that differ in cell count")
 struct TableAfterHeaderCellCountMismatchTests {
 
