@@ -554,9 +554,6 @@ extension BlockParser {
         } else if let inline = matchInlineLinkForm(cursor: cursor, content: content) {
             formed = inline
             literalEnd = afterBracket
-        } else if openerKind == .image, emitFootnoteReferenceIfDefined(openerIdx: openerIdx, bracketStart: openerStart + 1, closeBracket: cursor, content: content) {
-            // An image's `[^label]` naming a footnote definition is a footnote reference ahead of a reference image.
-            return afterBracket
         } else {
             formed = matchReferenceLinkForm(shortcutLabelStart: brackets[openerIdx].bracketAfter ? nil : openerStart + (openerKind == .image ? 2 : 1), cursor: cursor, content: content)
             literalEnd = afterBracket
@@ -569,8 +566,8 @@ extension BlockParser {
             }
             return formed.end
         }
-        // Failing a link form, a `[^label]` naming a footnote definition is a footnote reference.
-        if openerKind == .link, emitFootnoteReferenceIfDefined(openerIdx: openerIdx, bracketStart: openerStart, closeBracket: cursor, content: content) {
+        // Failing a link or image form, a `[^label]` naming a footnote definition is a footnote reference.
+        if openerKind != .attribute, emitFootnoteReferenceIfDefined(openerIdx: openerIdx, bracketStart: openerKind == .image ? openerStart + 1 : openerStart, closeBracket: cursor, content: content) {
             return afterBracket
         }
         popBracket()

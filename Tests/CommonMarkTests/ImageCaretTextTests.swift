@@ -11,8 +11,9 @@
 import Testing
 import CommonMark
 
-/// An image is `!` followed by a link (Images), whatever its text begins with. With footnotes, `![^label]` not
-/// followed by an inline link is `!` and a footnote reference when the label names a footnote definition.
+/// An image is `!` followed by a link (Images), whatever its text begins with. With footnotes, a bracket whose
+/// `[^label]` names a footnote definition is a footnote reference only when it forms neither an inline nor a
+/// reference link or image; an image's `!` then stays text.
 @Suite("Images whose text begins with a caret")
 struct ImageCaretTextTests {
 
@@ -60,18 +61,82 @@ struct ImageCaretTextTests {
             """)
     }
 
-    @Test("with footnotes, a caret label naming a footnote definition is a footnote reference after the `!`")
+    @Test("with footnotes, a shortcut image's caret label naming only a footnote definition is a footnote reference after the `!`")
     func footnoteReferenceAfterExclamationMark() {
-        #expect(TreeDump.dump("![^a][c]\n\n[^a]: z\n\n[c]: /u", options: [.footnotes]) == """
+        #expect(TreeDump.dump("![^a]\n\n[^a]: z", options: [.footnotes]) == """
             document
               paragraph
                 text "!"
                 footnote_reference "1"
-                link "/u" ""
-                  text "c"
               footnote_definition "a"
                 paragraph
                   text "z"
+
+            """)
+    }
+
+    @Test("with footnotes, a full reference link's caret text naming a footnote definition is link text")
+    func fullReferenceLinkOverFootnote() {
+        #expect(TreeDump.dump("[^a][c]\n\n[^a]: z\n\n[c]: /u", options: [.footnotes]) == """
+            document
+              paragraph
+                link "/u" ""
+                  text "^a"
+
+            """)
+    }
+
+    @Test("with footnotes, a full reference image's caret text naming a footnote definition is image text")
+    func fullReferenceImageOverFootnote() {
+        #expect(TreeDump.dump("![^a][c]\n\n[^a]: z\n\n[c]: /u", options: [.footnotes]) == """
+            document
+              paragraph
+                image "/u" ""
+                  text "^a"
+
+            """)
+    }
+
+    @Test("with footnotes, a collapsed reference link's caret label naming both definitions is a link")
+    func collapsedReferenceLinkOverFootnote() {
+        #expect(TreeDump.dump("[^a][]\n\n[^a]: z\n\n[ ^a]: /u", options: [.footnotes]) == """
+            document
+              paragraph
+                link "/u" ""
+                  text "^a"
+
+            """)
+    }
+
+    @Test("with footnotes, a collapsed reference image's caret label naming both definitions is an image")
+    func collapsedReferenceImageOverFootnote() {
+        #expect(TreeDump.dump("![^a][]\n\n[^a]: z\n\n[ ^a]: /u", options: [.footnotes]) == """
+            document
+              paragraph
+                image "/u" ""
+                  text "^a"
+
+            """)
+    }
+
+    @Test("with footnotes, a shortcut reference link's caret label naming both definitions is a link")
+    func shortcutReferenceLinkOverFootnote() {
+        #expect(TreeDump.dump("[^a]\n\n[^a]: z\n\n[ ^a]: /u", options: [.footnotes]) == """
+            document
+              paragraph
+                link "/u" ""
+                  text "^a"
+
+            """)
+    }
+
+    @Test("with footnotes, a shortcut reference image's caret label naming both definitions is an image")
+    func shortcutReferenceImageOverFootnote() {
+        #expect(TreeDump.dump("![^a]\n\n[^a]: z\n\n[ ^a]: /u", options: [.footnotes]) == """
+            document
+              paragraph
+                image "/u" ""
+                  text "^a"
 
             """)
     }
