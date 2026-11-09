@@ -108,9 +108,7 @@ struct MarkupParser {
             // No more descent: build this node, then advance to a sibling or close ancestors.
             while true {
                 let children = accStack.removeLast()
-                let raw = isTable(node.kind)
-                    ? convertTable(node, parsedRange: range(node, source: source), source: source, options: options)
-                    : build(node, children: children, source: source, options: options)
+                let raw = build(node, children: children, source: source, options: options)
 
                 if accStack.isEmpty {
                     return raw   // closed the root
@@ -212,7 +210,7 @@ struct MarkupParser {
         case .attribute:
             return .inlineAttributes(attributes: attributeString(node), parsedRange: parsedRange, children)
         case .footnoteReference, .footnoteDefinition:
-            preconditionFailure("the parse options never enable footnotes, so no footnote node is produced")
+            fatalError("the parse options never enable footnotes, so no footnote node is produced")
         @unknown default:
             fatalError("unhandled CommonMark node kind")
         }
