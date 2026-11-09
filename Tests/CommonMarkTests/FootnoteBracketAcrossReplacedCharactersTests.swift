@@ -12,14 +12,18 @@ import Testing
 import CommonMark
 
 /// A footnote-shaped bracket that crosses a line ending, beside a NUL (replaced by U+FFFD) and a checkbox that does not
-/// begin its list item's first paragraph. The item is not a task list item (Task list items), and with no matching
-/// definition the bracket is literal text.
+/// begin its list item's first paragraph. The item is not a task list item (Task list items (extension)), and with no
+/// matching definition the bracket is literal text.
 @Suite("Cross-line footnote-shaped bracket beside replaced characters")
 struct FootnoteBracketAcrossReplacedCharactersTests {
 
-    @Test("a bracket continuing onto a line of replaced characters")
+    private static let options: MarkdownDocument.ParseOptions = [
+        .tables, .strikethrough, .tasklist, .tableSpans, .attributes, .smart, .footnotes, .sourcePosition,
+    ]
+
+    @Test("a bracket continuing onto a line of NULs and a replacement character")
     func bracketBeforeReplacedCharacters() {
-        #expect(TreeDump.dump("-\n  2\u{0} [x] [^\r\u{0}\u{0}\u{FFFD}]", options: [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .smart, .footnotes, .sourcePosition], sourceRanges: true) == """
+        #expect(TreeDump.dump("-\n  2\u{0} [x] [^\r\u{0}\u{0}\u{FFFD}]", options: Self.options, sourceRanges: true) == """
             document @1:1-3:7
               list bullet '-' tight @1:1-3:7
                 item @1:1-3:7
@@ -33,7 +37,7 @@ struct FootnoteBracketAcrossReplacedCharactersTests {
 
     @Test("a bracket after a NUL, continued on the next line")
     func bracketAfterNULOnFirstLine() {
-        #expect(TreeDump.dump("-\n  2\u{0} [x] [^\nabcdefghijkl]", options: [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .smart, .footnotes, .sourcePosition], sourceRanges: true) == """
+        #expect(TreeDump.dump("-\n  2\u{0} [x] [^\nabcdefghijkl]", options: Self.options, sourceRanges: true) == """
             document @1:1-3:14
               list bullet '-' tight @1:1-3:14
                 item @1:1-3:14
@@ -47,7 +51,7 @@ struct FootnoteBracketAcrossReplacedCharactersTests {
 
     @Test("a bracket after a multibyte character, continued on the next line")
     func bracketAfterMultibyteCharacter() {
-        #expect(TreeDump.dump("-\n  22\u{E9} [x] [^\nabcdefghijkl]", options: [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .smart, .footnotes, .sourcePosition], sourceRanges: true) == """
+        #expect(TreeDump.dump("-\n  22\u{E9} [x] [^\nabcdefghijkl]", options: Self.options, sourceRanges: true) == """
             document @1:1-3:14
               list bullet '-' tight @1:1-3:14
                 item @1:1-3:14
@@ -61,7 +65,7 @@ struct FootnoteBracketAcrossReplacedCharactersTests {
 
     @Test("a lazy continuation line holding a NUL and a checkbox after an opened bracket")
     func lazyLineAfterBracket() {
-        #expect(TreeDump.dump("- > [^abcdefgh\n  2\u{0} [x] b]", options: [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .smart, .footnotes, .sourcePosition], sourceRanges: true) == """
+        #expect(TreeDump.dump("- > [^abcdefgh\n  2\u{0} [x] b]", options: Self.options, sourceRanges: true) == """
             document @1:1-2:12
               list bullet '-' tight @1:1-2:12
                 item @1:1-2:12
@@ -74,9 +78,9 @@ struct FootnoteBracketAcrossReplacedCharactersTests {
             """)
     }
 
-    @Test("the same with an escaped caret")
+    @Test("a lazy continuation line holding a NUL and a checkbox after an opened bracket with an escaped caret")
     func lazyLineAfterEscapedCaretBracket() {
-        #expect(TreeDump.dump("- > [\\^abcdefgh\n  2\u{0} [x] b]", options: [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .smart, .footnotes, .sourcePosition], sourceRanges: true) == """
+        #expect(TreeDump.dump("- > [\\^abcdefgh\n  2\u{0} [x] b]", options: Self.options, sourceRanges: true) == """
             document @1:1-2:12
               list bullet '-' tight @1:1-2:12
                 item @1:1-2:12
@@ -91,7 +95,7 @@ struct FootnoteBracketAcrossReplacedCharactersTests {
 
     @Test("a lazy continuation line after a short opened bracket")
     func lazyLineAfterShortBracket() {
-        #expect(TreeDump.dump("- > [^a\n  2\u{0} [x] b]", options: [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .smart, .footnotes, .sourcePosition], sourceRanges: true) == """
+        #expect(TreeDump.dump("- > [^a\n  2\u{0} [x] b]", options: Self.options, sourceRanges: true) == """
             document @1:1-2:12
               list bullet '-' tight @1:1-2:12
                 item @1:1-2:12

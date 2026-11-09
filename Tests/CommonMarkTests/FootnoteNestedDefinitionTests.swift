@@ -21,7 +21,7 @@ struct FootnoteNestedDefinitionTests {
 
     /// The winning definition supplies the reference's displayed label.
     @Test
-    func testOuterDuplicateDefinitionSuppliesLabel() {
+    func outerDuplicateDefinitionSuppliesLabel() {
         #expect(TreeDump.dump("[^b]\n[^b]:[^B]:A", options: Self.options) == """
             document
               paragraph
@@ -32,7 +32,7 @@ struct FootnoteNestedDefinitionTests {
     }
 
     @Test
-    func testThreeLevelDuplicateOutermostWins() {
+    func threeLevelDuplicateOutermostWins() {
         #expect(TreeDump.dump("[^b]\n[^b]:[^b]:[^b]:A", options: Self.options) == """
             document
               paragraph
@@ -44,7 +44,7 @@ struct FootnoteNestedDefinitionTests {
 
     /// A differently labeled inner definition moves out of the outer one when referenced.
     @Test
-    func testDifferentInnerLabelBothReferenced() {
+    func differentInnerLabelBothReferenced() {
         #expect(TreeDump.dump("[^a][^b]\n[^a]:[^b]:A", options: Self.options) == """
             document
               paragraph
@@ -60,7 +60,7 @@ struct FootnoteNestedDefinitionTests {
 
     /// An unreferenced inner definition is dropped from inside the referenced outer one.
     @Test
-    func testDifferentInnerLabelOnlyOuterReferenced() {
+    func differentInnerLabelOnlyOuterReferenced() {
         #expect(TreeDump.dump("[^a]\n[^a]:[^b]:A", options: Self.options) == """
             document
               paragraph
@@ -73,7 +73,7 @@ struct FootnoteNestedDefinitionTests {
     /// The indented line continues only the outer definition, so its paragraph stays with the
     /// winning outer duplicate.
     @Test
-    func testOuterDuplicateKeepsContentAfterBlankLine() {
+    func outerDuplicateKeepsContentAfterBlankLine() {
         #expect(TreeDump.dump("[^b]\n[^b]:[^b]:A\n\n    C\n", options: Self.options) == """
             document
               paragraph
@@ -88,7 +88,7 @@ struct FootnoteNestedDefinitionTests {
     /// A lazy continuation line extends the inner definition's paragraph, which is dropped with
     /// the losing inner duplicate.
     @Test
-    func testInnerDuplicateLazyContinuationIsDropped() {
+    func innerDuplicateLazyContinuationIsDropped() {
         #expect(TreeDump.dump("[^b]\n[^b]:[^b]:A\nB\n", options: Self.options) == """
             document
               paragraph
@@ -99,7 +99,7 @@ struct FootnoteNestedDefinitionTests {
     }
 
     @Test
-    func testOuterDuplicateInsideListItem() {
+    func outerDuplicateInsideListItem() {
         #expect(TreeDump.dump("[^b]\n- [^b]:[^b]:A\n", options: Self.options) == """
             document
               paragraph
@@ -114,7 +114,7 @@ struct FootnoteNestedDefinitionTests {
     /// A same-label definition nested through a block quote loses to the outer definition, which
     /// keeps the emptied block quote.
     @Test
-    func testOuterDuplicateThroughBlockQuote() {
+    func outerDuplicateThroughBlockQuote() {
         #expect(TreeDump.dump("[^b]\n[^b]:> [^b]:A\n", options: Self.options) == """
             document
               paragraph

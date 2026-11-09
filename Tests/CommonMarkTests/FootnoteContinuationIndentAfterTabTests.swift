@@ -18,7 +18,7 @@ struct FootnoteContinuationIndentAfterTabTests {
     /// A footnote definition's continuation lines need four columns of indentation, counted from the column the
     /// enclosing block quote marker or list item indent reaches. A tab partly consumed there extends only to its tab
     /// stop (Tabs), so ` x` after it is three columns in and the definition closes.
-    @Test func testFootnoteContinuationIndentAfterPartiallyConsumedTab() {
+    @Test func footnoteContinuationIndentAfterPartiallyConsumedTab() {
         #expect(TreeDump.dump("[^a]\n\n> [^a]: ```\n>\t x", options: Self.options) == """
             document
               paragraph

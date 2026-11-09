@@ -18,112 +18,119 @@ struct ThematicBreakSourceRangeTests {
 
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition]
 
-    private func ranges(in markdown: String) -> [String] {
-        MarkdownDocument.withParsedDocument(markdown, options: Self.options) { document in
-            var out: [String] = []
-            collectRanges(document.root, into: &out)
-            return out
-        }
+    @Test
+    func singleBreak() {
+        #expect(TreeDump.dump("***", options: Self.options, sourceRanges: true) == """
+            document @1:1-1:4
+              thematic_break @1:1-1:4
+
+            """)
     }
 
-    @Test func testBreak() {
-        #expect(ranges(in: "***") == ["document 1:1-1:4", "thematicBreak 1:1-1:4"])
+    @Test
+    func breakWithInteriorSpaces() {
+        #expect(TreeDump.dump("- - -", options: Self.options, sourceRanges: true) == """
+            document @1:1-1:6
+              thematic_break @1:1-1:6
+
+            """)
     }
 
-    @Test func testBreakWithInteriorSpaces() {
-        #expect(ranges(in: "- - -") == ["document 1:1-1:6", "thematicBreak 1:1-1:6"])
+    @Test
+    func breakWithTrailingSpaces() {
+        #expect(TreeDump.dump("***   \nx", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:2
+              thematic_break @1:1-1:4
+              paragraph @2:1-2:2
+                text "x" @2:1-2:2
+
+            """)
     }
 
-    @Test func testBreakWithTrailingSpaces() {
-        #expect(ranges(in: "***   \nx") == [
-            "document 1:1-2:2",
-            "thematicBreak 1:1-1:4",
-            "paragraph 2:1-2:2",
-            "text 2:1-2:2",
-        ])
+    @Test
+    func breakWithTrailingTab() {
+        #expect(TreeDump.dump("***\t\nx", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:2
+              thematic_break @1:1-1:4
+              paragraph @2:1-2:2
+                text "x" @2:1-2:2
+
+            """)
     }
 
-    @Test func testBreakWithTrailingTab() {
-        #expect(ranges(in: "***\t\nx") == [
-            "document 1:1-2:2",
-            "thematicBreak 1:1-1:4",
-            "paragraph 2:1-2:2",
-            "text 2:1-2:2",
-        ])
+    @Test
+    func indentedBreak() {
+        #expect(TreeDump.dump("  ***", options: Self.options, sourceRanges: true) == """
+            document @1:1-1:6
+              thematic_break @1:3-1:6
+
+            """)
     }
 
-    @Test func testIndentedBreak() {
-        #expect(ranges(in: "  ***") == ["document 1:1-1:6", "thematicBreak 1:3-1:6"])
+    @Test
+    func breakThenBlankLineAndParagraph() {
+        #expect(TreeDump.dump("***\n\nx", options: Self.options, sourceRanges: true) == """
+            document @1:1-3:2
+              thematic_break @1:1-1:4
+              paragraph @3:1-3:2
+                text "x" @3:1-3:2
+
+            """)
     }
 
-    @Test func testBreakThenBlankLineAndParagraph() {
-        #expect(ranges(in: "***\n\nx") == [
-            "document 1:1-3:2",
-            "thematicBreak 1:1-1:4",
-            "paragraph 3:1-3:2",
-            "text 3:1-3:2",
-        ])
+    @Test
+    func breakThenBlankLines() {
+        #expect(TreeDump.dump("***\n\n\n", options: Self.options, sourceRanges: true) == """
+            document @1:1-3:1
+              thematic_break @1:1-1:4
+
+            """)
     }
 
-    @Test func testBreakThenBlankLines() {
-        #expect(ranges(in: "***\n\n\n") == ["document 1:1-3:1", "thematicBreak 1:1-1:4"])
+    @Test
+    func breakThenCRLFBlankLineAndParagraph() {
+        #expect(TreeDump.dump("***\r\n\r\nx", options: Self.options, sourceRanges: true) == """
+            document @1:1-3:2
+              thematic_break @1:1-1:4
+              paragraph @3:1-3:2
+                text "x" @3:1-3:2
+
+            """)
     }
 
-    @Test func testBreakThenCRLFBlankLineAndParagraph() {
-        #expect(ranges(in: "***\r\n\r\nx") == [
-            "document 1:1-3:2",
-            "thematicBreak 1:1-1:4",
-            "paragraph 3:1-3:2",
-            "text 3:1-3:2",
-        ])
+    @Test
+    func breakInBlockQuoteThenBlankLine() {
+        #expect(TreeDump.dump("> ***\n>\nx", options: Self.options, sourceRanges: true) == """
+            document @1:1-3:2
+              block_quote @1:1-2:2
+                thematic_break @1:3-1:6
+              paragraph @3:1-3:2
+                text "x" @3:1-3:2
+
+            """)
     }
 
-    @Test func testBreakInBlockQuoteThenBlankLine() {
-        #expect(ranges(in: "> ***\n>\nx") == [
-            "document 1:1-3:2",
-            "blockQuote 1:1-2:2",
-            "thematicBreak 1:3-1:6",
-            "paragraph 3:1-3:2",
-            "text 3:1-3:2",
-        ])
+    @Test
+    func breakWithTrailingSpacesInListItem() {
+        #expect(TreeDump.dump("- ***  \n- b", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:4
+              list bullet '-' tight @1:1-2:4
+                item @1:1-1:6
+                  thematic_break @1:3-1:6
+                item @2:1-2:4
+                  paragraph @2:3-2:4
+                    text "b" @2:3-2:4
+
+            """)
     }
 
-    @Test func testBreakWithTrailingSpacesInListItem() {
-        #expect(ranges(in: "- ***  \n- b") == [
-            "document 1:1-2:4",
-            "list 1:1-2:4",
-            "item 1:1-1:6",
-            "thematicBreak 1:3-1:6",
-            "item 2:1-2:4",
-            "paragraph 2:3-2:4",
-            "text 2:3-2:4",
-        ])
-    }
+    @Test
+    func consecutiveBreaks() {
+        #expect(TreeDump.dump("***\n---", options: Self.options, sourceRanges: true) == """
+            document @1:1-2:4
+              thematic_break @1:1-1:4
+              thematic_break @2:1-2:4
 
-    @Test func testConsecutiveBreaks() {
-        #expect(ranges(in: "***\n---") == [
-            "document 1:1-2:4",
-            "thematicBreak 1:1-1:4",
-            "thematicBreak 2:1-2:4",
-        ])
+            """)
     }
-}
-
-// File scope because a `MarkdownNode` is `~Escapable`, so an instance-method closure can't capture it.
-private func collectRanges(_ node: borrowing MarkdownNode, into out: inout [String]) {
-    let name = switch node.kind {
-    case .document: "document"
-    case .blockQuote: "blockQuote"
-    case .list: "list"
-    case .item: "item"
-    case .paragraph: "paragraph"
-    case .thematicBreak: "thematicBreak"
-    case .text: "text"
-    default: "\(node.kind)"
-    }
-    let range = node.sourceRange.map {
-        "\($0.lowerBound.line):\($0.lowerBound.column)-\($0.upperBound.line):\($0.upperBound.column)"
-    } ?? "nil"
-    out.append("\(name) \(range)")
-    node.children.forEach { collectRanges($0, into: &out) }
 }

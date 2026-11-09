@@ -11,7 +11,7 @@
 import Testing
 import CommonMark
 
-/// Backtick openers after a backslash-escaped backtick (CommonMark §6.1, §6.3).
+/// Backtick openers after a backslash-escaped backtick (Backslash escapes, Code spans).
 ///
 /// An escaped backtick is literal, and the backticks after it in the same run form an opener of their own, shorter
 /// than the run a closer search from an earlier opener passed.

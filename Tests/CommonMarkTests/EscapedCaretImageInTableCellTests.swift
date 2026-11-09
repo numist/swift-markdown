@@ -14,129 +14,201 @@ import Testing
 /// An escaped-caret image `![\^…]` in or next to a table (Tables (extension)).
 @Suite("Escaped-caret image in a table cell")
 struct EscapedCaretImageInTableCellTests {
-    private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink, .footnotes]
-
-    private static func singleColumn(_ cellText: String) -> String {
-        """
-        document
-          table
-            table_header
-              table_cell align=none colspan=1 rowspan=1
-                text "o"
-            table_row
-              table_cell align=none colspan=1 rowspan=1
-                text "\(cellText)"
-
-        """
-    }
-
-    private static let paragraphBeforeTable = """
-        document
-          paragraph
-            text "x ![^a]"
-          table
-            table_header
-              table_cell align=none colspan=1 rowspan=1
-                text "o"
-
-        """
+    private static let options: MarkdownDocument.ParseOptions = [
+        .tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink, .footnotes,
+    ]
 
     /// With no matching link reference definition, `![\^…]` is literal text, `!` included, and the cell ends at its
     /// own `|` or line ending.
-    @Test func testEscapedCaretStaysLiteral() {
-        let cases: [(markdown: String, expected: String)] = [
-            ("o\n|-\n![\\^\u{14}]", Self.singleColumn("![^\\u{14}]")),
-            ("o\n|-\n![\\^a]", Self.singleColumn("![^a]")),
-            ("o\n|-\n|![\\^a]|", Self.singleColumn("![^a]")),
-            ("o\n|-\nx ![\\^ab]", Self.singleColumn("x ![^ab]")),
-            ("o|p\n-|-\n![\\^a]|b", """
-                document
-                  table
-                    table_header
-                      table_cell align=none colspan=1 rowspan=1
-                        text "o"
-                      table_cell align=none colspan=1 rowspan=1
-                        text "p"
-                    table_row
-                      table_cell align=none colspan=1 rowspan=1
-                        text "![^a]"
-                      table_cell align=none colspan=1 rowspan=1
-                        text "b"
+    @Test("an escaped-caret image without a matching definition is literal text", arguments: [
+        ("o\n|-\n![\\^\u{14}]", """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "![^\\u{14}]"
 
-                """),
-            ("o\n|-\n![\\^\u{14}]\nq", """
-                document
-                  table
-                    table_header
-                      table_cell align=none colspan=1 rowspan=1
-                        text "o"
-                    table_row
-                      table_cell align=none colspan=1 rowspan=1
-                        text "![^\\u{14}]"
-                    table_row
-                      table_cell align=none colspan=1 rowspan=1
-                        text "q"
-
-                """),
-            ("o\n|-\n[\\^a]", Self.singleColumn("[^a]")),
-            ("![\\^a]\n|-", """
-                document
-                  table
-                    table_header
-                      table_cell align=none colspan=1 rowspan=1
-                        text "![^a]"
-
-                """),
-            ("![\\^a]|p\n-|-", """
-                document
-                  table
-                    table_header
-                      table_cell align=none colspan=1 rowspan=1
-                        text "![^a]"
-                      table_cell align=none colspan=1 rowspan=1
-                        text "p"
-
-                """),
-            ("o|p\n-|-\nb|![\\^a]", """
-                document
-                  table
-                    table_header
-                      table_cell align=none colspan=1 rowspan=1
-                        text "o"
-                      table_cell align=none colspan=1 rowspan=1
-                        text "p"
-                    table_row
-                      table_cell align=none colspan=1 rowspan=1
-                        text "b"
-                      table_cell align=none colspan=1 rowspan=1
-                        text "![^a]"
-
-                """),
-            ("o\n|-\n![\\^\u{0}]", Self.singleColumn("![^\u{FFFD}]")),
-            ("o\n|-\n![\\^a\\|]", Self.singleColumn("![^a|]")),
-            ("x ![\\^a]\no\n|-", Self.paragraphBeforeTable),
-            ("![\\^a]\n===", """
-                document
-                  heading 1
+            """),
+        ("o\n|-\n![\\^a]", """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
                     text "![^a]"
 
-                """),
-            ("> x ![\\^a]\n> o\n> |-", """
-                document
-                  block_quote
-                    paragraph
-                      text "x ![^a]"
-                    table
-                      table_header
-                        table_cell align=none colspan=1 rowspan=1
-                          text "o"
+            """),
+        ("o\n|-\n|![\\^a]|", """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "![^a]"
 
-                """),
-            ("x ![\\^a]\r\no\r\n|-", Self.paragraphBeforeTable),
-            ("x ![\\^a]\t\no\n|-", Self.paragraphBeforeTable),
-        ]
-        for (markdown, expected) in cases {
-            #expect(TreeDump.dump(markdown, options: Self.options) == expected, "\(markdown.debugDescription)")
-        }
+            """),
+        ("o\n|-\nx ![\\^ab]", """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "x ![^ab]"
+
+            """),
+        ("o|p\n-|-\n![\\^a]|b", """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+                  table_cell align=none colspan=1 rowspan=1
+                    text "p"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "![^a]"
+                  table_cell align=none colspan=1 rowspan=1
+                    text "b"
+
+            """),
+        ("o\n|-\n![\\^\u{14}]\nq", """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "![^\\u{14}]"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "q"
+
+            """),
+        ("o\n|-\n[\\^a]", """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "[^a]"
+
+            """),
+        ("![\\^a]\n|-", """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "![^a]"
+
+            """),
+        ("![\\^a]|p\n-|-", """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "![^a]"
+                  table_cell align=none colspan=1 rowspan=1
+                    text "p"
+
+            """),
+        ("o|p\n-|-\nb|![\\^a]", """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+                  table_cell align=none colspan=1 rowspan=1
+                    text "p"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "b"
+                  table_cell align=none colspan=1 rowspan=1
+                    text "![^a]"
+
+            """),
+        ("o\n|-\n![\\^\u{0}]", """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "![^\u{FFFD}]"
+
+            """),
+        ("o\n|-\n![\\^a\\|]", """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+                table_row
+                  table_cell align=none colspan=1 rowspan=1
+                    text "![^a|]"
+
+            """),
+        ("x ![\\^a]\no\n|-", """
+            document
+              paragraph
+                text "x ![^a]"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+
+            """),
+        ("![\\^a]\n===", """
+            document
+              heading 1
+                text "![^a]"
+
+            """),
+        ("> x ![\\^a]\n> o\n> |-", """
+            document
+              block_quote
+                paragraph
+                  text "x ![^a]"
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "o"
+
+            """),
+        ("x ![\\^a]\r\no\r\n|-", """
+            document
+              paragraph
+                text "x ![^a]"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+
+            """),
+        ("x ![\\^a]\t\no\n|-", """
+            document
+              paragraph
+                text "x ![^a]"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "o"
+
+            """),
+    ])
+    func escapedCaretStaysLiteral(_ source: String, _ tree: String) {
+        #expect(TreeDump.dump(source, options: Self.options) == tree)
     }
 }

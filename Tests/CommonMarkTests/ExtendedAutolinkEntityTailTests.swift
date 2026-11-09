@@ -21,7 +21,7 @@ struct ExtendedAutolinkEntityTailTests {
         TreeDump.dump(markdown, options: Self.options, sourceRanges: true)
     }
 
-    @Test func testLetterTailIsExcluded() {
+    @Test func letterTailIsExcluded() {
         #expect(surface("www.a.b/x&ab;") == """
             document @1:1-1:14
               paragraph @1:1-1:14
@@ -32,7 +32,7 @@ struct ExtendedAutolinkEntityTailTests {
             """)
     }
 
-    @Test func testLetterThenDigitTailExcludesOnlySemicolon() {
+    @Test func letterThenDigitTailExcludesOnlySemicolon() {
         #expect(surface("www.a.b/x&a1;") == """
             document @1:1-1:14
               paragraph @1:1-1:14
@@ -43,7 +43,7 @@ struct ExtendedAutolinkEntityTailTests {
             """)
     }
 
-    @Test func testDigitOnlyTailExcludesOnlySemicolon() {
+    @Test func digitOnlyTailExcludesOnlySemicolon() {
         #expect(surface("https://a.b/?q=1&2;") == """
             document @1:1-1:20
               paragraph @1:1-1:20
@@ -54,7 +54,7 @@ struct ExtendedAutolinkEntityTailTests {
             """)
     }
 
-    @Test func testNumberSignTailExcludesOnlySemicolon() {
+    @Test func numberSignTailExcludesOnlySemicolon() {
         #expect(surface("www.a.b/x&#1;") == """
             document @1:1-1:14
               paragraph @1:1-1:14
