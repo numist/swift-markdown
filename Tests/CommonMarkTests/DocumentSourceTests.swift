@@ -14,6 +14,7 @@ import CommonMark
 @Suite("Document source text")
 struct DocumentSourceTests {
 
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test("source is the parsed text from both initializers and from withParsedDocument", arguments: [
         "",
         "plain",
@@ -22,7 +23,6 @@ struct DocumentSourceTests {
         "a\0b\r\nc",
     ])
     func sourceFromEveryEntryPoint(text: String) {
-        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         #expect(String(copying: MarkdownDocument(parsing: text).source) == text)
         #expect(String(copying: MarkdownDocument(parsing: text.utf8Span).source) == text)
         let viaClosure = MarkdownDocument.withParsedDocument(text) { String(copying: $0.source) }

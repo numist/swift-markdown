@@ -43,48 +43,52 @@ struct DeepNestingStackTests {
         "emphasis around a footnote-shaped bracket across a line", "emphasis around caret brackets",
     ]
 
+    @available(macOS 15, iOS 18, tvOS 18, watchOS 11, visionOS 2, *)
     @Test("deep inline nesting parses without exhausting a 512 KB stack", arguments: inlineShapes, [
         MarkdownDocument.ParseOptions([.attributes, .strikethrough, .smart, .gfmAutolink, .footnotes, .sourcePosition]),
         [.attributes, .strikethrough, .smart, .gfmAutolink, .footnotes],
         [.attributes, .strikethrough, .smart, .gfmAutolink, .inlineOnly],
     ])
-    func inlineNesting(_ shape: String, options: MarkdownDocument.ParseOptions) {
+    func inlineNesting(_ shape: String, options: MarkdownDocument.ParseOptions) throws {
         let source = Self.inlineSource(shape)
-        guard let blocks = Self.topLevelBlocksOnSmallStack(source, options: options) else { return }
+        let blocks = try #require(Self.topLevelBlocksOnSmallStack(source, options: options))
         #expect(blocks == 1, "\(shape)")
     }
 
     /// The reference sits at the bottom of the quotes; its definition, at the top level, follows them.
+    @available(macOS 15, iOS 18, tvOS 18, watchOS 11, visionOS 2, *)
     @Test("a footnote reference in deeply nested block quotes parses without exhausting a 512 KB stack", arguments: [
         MarkdownDocument.ParseOptions.footnotes,
         [.footnotes, .sourcePosition],
     ])
-    func blockQuoteNesting(_ options: MarkdownDocument.ParseOptions) {
+    func blockQuoteNesting(_ options: MarkdownDocument.ParseOptions) throws {
         let source = String(repeating: ">", count: Self.depth) + " x[^a]\n\n[^a]: y\n"
-        guard let blocks = Self.topLevelBlocksOnSmallStack(source, options: options) else { return }
+        let blocks = try #require(Self.topLevelBlocksOnSmallStack(source, options: options))
         #expect(blocks == 2)
     }
 
     /// The reference sits in the innermost item; its definition, at the top level, follows the lists.
+    @available(macOS 15, iOS 18, tvOS 18, watchOS 11, visionOS 2, *)
     @Test("a footnote reference in deeply nested lists parses without exhausting a 512 KB stack", arguments: [
         MarkdownDocument.ParseOptions.footnotes,
         [.footnotes, .sourcePosition],
     ])
-    func listNesting(_ options: MarkdownDocument.ParseOptions) {
+    func listNesting(_ options: MarkdownDocument.ParseOptions) throws {
         let source = String(repeating: "- ", count: Self.depth) + "x[^a]\n\n[^a]: y\n"
-        guard let nesting = Self.listNestingOnSmallStack(source, options: options) else { return }
+        let nesting = try #require(Self.listNestingOnSmallStack(source, options: options))
         #expect(nesting.blocks == 2)
         #expect(nesting.lists == Self.depth)
     }
 
     /// Each definition opens inside the one before it; the outermost is referenced, and moves to the document's end.
+    @available(macOS 15, iOS 18, tvOS 18, watchOS 11, visionOS 2, *)
     @Test("deeply nested footnote definitions parse without exhausting a 512 KB stack", arguments: [
         MarkdownDocument.ParseOptions.footnotes,
         [.footnotes, .sourcePosition],
     ])
-    func footnoteDefinitionNesting(_ options: MarkdownDocument.ParseOptions) {
+    func footnoteDefinitionNesting(_ options: MarkdownDocument.ParseOptions) throws {
         let source = "x[^a]\n\n" + String(repeating: "[^a]: ", count: Self.depth) + "y\n"
-        guard let blocks = Self.topLevelBlocksOnSmallStack(source, options: options) else { return }
+        let blocks = try #require(Self.topLevelBlocksOnSmallStack(source, options: options))
         #expect(blocks == 2)
     }
 

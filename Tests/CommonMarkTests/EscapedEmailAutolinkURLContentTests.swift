@@ -27,9 +27,9 @@ struct EscapedEmailAutolinkURLContentTests {
             """)
     }
 
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test("a scheme-prefixed address around an escaped period has one whole URL span")
     func schemeAroundEscapedPeriodContent() {
-        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         #expect(linkURLSpans("xmpp:@\\.c") == ["xmpp:@.c"])
     }
 
@@ -44,9 +44,9 @@ struct EscapedEmailAutolinkURLContentTests {
             """)
     }
 
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test("a mailto address with an escaped local-part byte has one whole URL span")
     func mailtoAroundEscapedUnderscoreContent() {
-        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         #expect(linkURLSpans("mailto:a\\_b@c.d") == ["mailto:a_b@c.d"])
     }
 
@@ -61,9 +61,9 @@ struct EscapedEmailAutolinkURLContentTests {
             """)
     }
 
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test("a bare address with an escaped local-part byte has one whole mailto URL span")
     func bareAroundEscapedPeriodContent() {
-        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         #expect(linkURLSpans("a\\.b@c.d") == ["mailto:a.b@c.d"])
     }
 

@@ -16,6 +16,7 @@ import Testing
 @Suite("Multi-line container paragraphs keep source content")
 struct ContainerParagraphSourceContentTests {
 
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test(arguments: [
         ("> a\n> b\n> c\n", """
             "a" source
@@ -39,7 +40,6 @@ struct ContainerParagraphSourceContentTests {
             """),
     ])
     func linesStayInSource(_ source: String, _ text: String) {
-        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         #expect(SourceBackedText.describe(source, options: []) == text)
         #expect(SourceBackedText.describe(source, options: [.tables, .tasklist, .footnotes, .attributes]) == text)
     }

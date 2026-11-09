@@ -35,6 +35,7 @@ struct TableCellStorageTests {
         #expect(MarkdownDocument.withParsedDocument(source, options: Self.options) { $0._materializedStringSize } == storedSize)
     }
 
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test(arguments: [
         ("| a | b |\n|---|---|\n| c | d |\n", """
             "a" source
@@ -59,7 +60,6 @@ struct TableCellStorageTests {
             """),
     ])
     func cellTextOwnership(_ source: String, _ text: String) {
-        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         #expect(SourceBackedText.describe(source, options: Self.options) == text)
     }
 }
