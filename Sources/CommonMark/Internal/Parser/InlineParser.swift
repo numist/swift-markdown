@@ -122,7 +122,7 @@ extension BlockParser {
                 )
 
             case UInt8(ascii: "~"):
-                if storage.options.contains(.strikethrough) {
+                if strikethroughEnabled {
                     cursor = handleDelimRun(
                         char: byte,
                         start: cursor,
@@ -282,9 +282,9 @@ extension BlockParser {
     /// An entity or numeric character reference (Entity and numeric character references).
     private mutating func handleCharacterReference(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         // Entity matching reads one buffer, so it scans `&`'s segment; a line join ends any reference anyway.
-        let contiguous = content.contiguousChunk(fromVirtual: cursor, limit: content.endOffset)
-        precondition(contiguous != nil, "an `&` lies in a source segment: the only synthetic segment is the line join")
-        let window = contiguous!
+        guard let window = content.contiguousChunk(fromVirtual: cursor, limit: content.endOffset) else {
+            preconditionFailure("an `&` lies in a source segment: the only synthetic segment is the line join")
+        }
         // A separate expression keeps the borrowed `source` span scoped to the call.
         let entity: EntityParser.EntityMatch? = if window.inSource {
             EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: sourceBytes)
@@ -753,10 +753,8 @@ extension BlockParser {
         let end = content.endOffset
         let pos = cursor + 1
         if pos < end, content[pos] == UInt8(ascii: "("),
-           let scanned = matchAttributeAttributes(start: pos + 1, content: content),
-           scanned.afterEnd < end,
-           content[scanned.afterEnd] == UInt8(ascii: ")") {
-            return (.attribute(storage.intern(scanned.chunk)), scanned.afterEnd + 1)
+           let scanned = matchAttributeAttributes(start: pos + 1, content: content) {
+            return (.attribute(storage.intern(scanned.chunk)), scanned.afterEnd)
         }
         // Without an attribute definition the label names none, but still belongs to the form.
         if storage.attributeReferenceMap.isEmpty {
@@ -776,7 +774,8 @@ extension BlockParser {
         var afterEnd: Int
     }
 
-    /// Scans an attribute form's `(…)` interior, which may hold whitespace, balanced parentheses, and backslash escapes.
+    /// Scans an attribute form's `(…)` interior, which may hold whitespace, balanced parentheses, and backslash escapes,
+    /// returning it and the offset past the closing `)`.
     private mutating func matchAttributeAttributes(start: Int, content: borrowing ContentSpan) -> AttributeAttributesMatch? {
         let end = content.endOffset
         // No byte ends the run, so a scan that stops before the end stops at the `)` closing the form.
@@ -784,7 +783,7 @@ extension BlockParser {
               close < end else {
             return nil
         }
-        return AttributeAttributesMatch(chunk: materializedChunk(start: start, end: close, content: content), afterEnd: close)
+        return AttributeAttributesMatch(chunk: materializedChunk(start: start, end: close, content: content), afterEnd: close + 1)
     }
 
     // MARK: - Emphasis / strong (delimiter stack)
