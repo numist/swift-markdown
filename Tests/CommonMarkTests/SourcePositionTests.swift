@@ -102,16 +102,16 @@ struct SourcePositionTests {
         }
     }
 
-    @Test("empty list item extends into a trailing tab continuation line")
-    func emptyItemTabContinuation() throws {
-        // A whitespace-only line that reaches the empty item's content column (2) extends the item. A
-        // tab is 4 columns but one byte, so the item ends at column 2.
+    @Test("empty list item ends before a trailing whitespace-only line")
+    func emptyItemWhitespaceLine() throws {
+        // A whitespace-only line is a blank line, and a list item can begin with at most one blank line, so the
+        // item ends on line 1 however far the line is indented.
         try MarkdownDocument.withParsedDocument("-\n\t", options: .sourcePosition) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         dfsRanges(doc.root, into: &ranges)
         let item = try #require(range(in: ranges) { if case .item = $0 { return true } else { return false } })
         #expect(item.lowerBound == Pos(line: 1, column: 1))
-        #expect(item.upperBound == Pos(line: 2, column: 2))
+        #expect(item.upperBound == Pos(line: 1, column: 2))
         }
 
         try MarkdownDocument.withParsedDocument("-\n\t\t", options: .sourcePosition) { doc in
@@ -119,10 +119,9 @@ struct SourcePositionTests {
         dfsRanges(doc.root, into: &ranges)
         let item = try #require(range(in: ranges) { if case .item = $0 { return true } else { return false } })
         #expect(item.lowerBound == Pos(line: 1, column: 1))
-        #expect(item.upperBound == Pos(line: 2, column: 3))
+        #expect(item.upperBound == Pos(line: 1, column: 2))
         }
 
-        // One space falls short of the content column, so the item ends on line 1.
         try MarkdownDocument.withParsedDocument("-\n ", options: .sourcePosition) { doc in
         var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
         dfsRanges(doc.root, into: &ranges)
@@ -132,7 +131,7 @@ struct SourcePositionTests {
         }
     }
 
-    @Test("a nested empty list item extends onto a blank line only when the blank reaches its OWN content column")
+    @Test("a nested empty list item never extends onto a blank line, while an item holding a block does")
     func nestedEmptyItemBlankLineExtent() throws {
         // `- -` is an outer item (content column 3) holding an empty inner item (content column 5).
         // Two spaces reach only the outer item's content column.
@@ -147,7 +146,7 @@ struct SourcePositionTests {
             #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // inner does NOT extend
         }
 
-        // Four spaces reach the inner item's content column.
+        // Four spaces reach the inner item's content column, but the inner item is empty.
         try MarkdownDocument.withParsedDocument("- -\n    \n", options: .sourcePosition) { doc in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)
@@ -156,7 +155,7 @@ struct SourcePositionTests {
             let outer = try #require(items[0])
             let inner = try #require(items[1])
             #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 2, column: 5))
-            #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 2, column: 5))   // inner extends
+            #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // inner does NOT extend
         }
 
         // Distinct bullets nest three items rather than form a thematic break. Five spaces reach the

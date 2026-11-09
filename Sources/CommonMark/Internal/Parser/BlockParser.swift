@@ -1303,13 +1303,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let firstNonSpace = firstNonSpaceAhead
                 let isBlank = firstNonSpace == lineRange.upperBound
                 let isItem = if case .item = kind { true } else { false }
+                // A list item can begin with at most one blank line (List items), so a blank line closes an item
+                // whose first line was empty, however far it is indented. An item whose first paragraph held only
+                // definitions or a task list item marker is not empty.
+                if isBlank, isItem, storage[node].firstChild == nil, itemsEndingInRemovedParagraph[node] == nil {
+                    return (deepestMatched, cursor, prefixColumns, false)
+                }
                 let padding = isItem ? itemPadding(of: node) : 4
                 // Columns, not bytes, measured from `prefixColumns`, since a tab's width depends on the column it
                 // starts at (Tabs). Each whitespace byte spans at least one column, so `padding` bytes decide.
                 let availCols = indentColumns(from: cursor, to: min(firstNonSpace, cursor + padding), baseColumn: prefixColumns)
                 if availCols >= padding {
-                    // This precedes the empty-item check, so a whitespace-only line whose indent covers the content
-                    // column extends even an empty item (a tab after a bare `-`).
                     cursor = advanceColumns(
                         from: cursor,
                         to: lineRange.upperBound,
@@ -1319,10 +1323,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     // Record the intended column even when a straddling tab kept `cursor` from passing it (Tabs).
                     prefixColumns += padding
                     deepestMatched = node
-                } else if isBlank, !isItem || storage[node].firstChild != nil || itemsEndingInRemovedParagraph[node] != nil {
-                    // A deeper item measures from the line end. An empty item closes, since a list item can begin with
-                    // at most one blank line (List items); one whose first paragraph held only definitions or a task
-                    // list item marker is not empty.
+                } else if isBlank {
+                    // A deeper item measures from the line end.
                     cursor = firstNonSpace
                     prefixColumns = lineColumns.column(at: cursor, in: sourceBytes)
                     deepestMatched = node
