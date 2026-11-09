@@ -2247,7 +2247,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var lo = 0
         var hi = segs.count
 
-        // Fenced code emits a separator before its first line; indented code doesn't.
+        // A fenced block's first line follows a separator, so the separator is there exactly when the block has a
+        // line; an indented block's first line follows none.
         var strippedLeading = false
         if lo < hi && segs[lo] == nl {
             lo += 1
@@ -2262,7 +2263,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     hi -= 1                       // trailing empty line + its separator
                     continue
                 }
-                if isAllWhitespace(last) {
+                if isSpaceOrTabOnly(last) {
                     hi -= 1                       // blank content line
                     if hi > lo && segs[hi - 1] == nl { hi -= 1 }   // and its preceding separator
                     continue
@@ -2281,16 +2282,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         segs.removeSubrange(hi..<segs.count)
         segs.removeSubrange(0..<lo)
-        // End with one line ending. A fenced block ending on a blank line keeps it, using the separator dropped in front.
-        if segs[segs.count - 1] != nl {
-            segs.append(nl)
-        } else if isFenced && strippedLeading {
-            segs.append(nl)
-        }
+        // The separators end every line but the last, which is a content line or a fenced block's final blank line.
+        segs.append(nl)
     }
 
-    /// Whether `segment` holds only spaces and tabs. Code block content holds no `\n`.
-    private func isAllWhitespace(_ segment: Segment) -> Bool {
+    /// Whether `segment`, a code block line, holds only spaces and tabs.
+    private func isSpaceOrTabOnly(_ segment: Segment) -> Bool {
         segment.chunk.range.allSatisfy { readByte(at: $0, in: segment.chunk).isSpaceOrTab }
     }
 
