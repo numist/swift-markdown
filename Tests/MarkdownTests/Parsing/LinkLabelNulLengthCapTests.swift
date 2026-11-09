@@ -11,29 +11,22 @@
 import Markdown
 import XCTest
 
-/// Each NUL in a link label is replaced by U+FFFD (Insecure characters) and counts as one character toward
-/// the label's limit of 999 characters (Links), so these labels are valid, the link reference definition
-/// forms, and `=` is a paragraph rather than a setext heading underline.
+/// Each NUL in a link label is replaced by U+FFFD (Insecure characters) and counts as one character toward the
+/// label's limit of 999 characters (Links). With 999 NULs the label is valid, the link reference definition forms,
+/// and `=` is a paragraph rather than a setext heading underline; with 1000 the line is paragraph text, which `=`
+/// underlines.
 class LinkLabelNulLengthCapTests: XCTestCase {
-    private func surface(_ bytes: [UInt8]) -> String {
-        let options = ParseOptions(rawValue: 0)
-        return Document(parsing: String(decoding: bytes, as: UTF8.self), options: options)
-            .debugDescription(options: [])
+    private func surface(nulCount: Int) -> String {
+        Document(parsing: "[" + String(repeating: "\u{0}", count: nulCount) + "]:/l\n=").debugDescription(options: [])
     }
 
-    /// `[` + NUL×count + `]:/l` LF `=`
-    private func input(nulCount: Int) -> [UInt8] {
-        [0x5b] + Array(repeating: 0x00, count: nulCount) + [0x5d, 0x3a, 0x2f, 0x6c, 0x0a, 0x3d]
+    func testLabelOf999NulsIsValid() {
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"=\"", surface(nulCount: 999))
     }
 
-    func testLabelOf334NulsIsValid() {
+    func testLabelOf1000NulsIsParagraphText() {
         XCTAssertEqual(
-            "Document\n└─ Paragraph\n   └─ Text \"=\"",
-            surface(input(nulCount: 334)))
-    }
-
-    func testLabelOf333NulsIsValid() {
-        let expected = "Document\n└─ Paragraph\n   └─ Text \"=\""
-        XCTAssertEqual(expected, surface(input(nulCount: 333)))
+            "Document\n└─ Heading level: 1\n   └─ Text \"[" + String(repeating: "\u{FFFD}", count: 1000) + "]:/l\"",
+            surface(nulCount: 1000))
     }
 }

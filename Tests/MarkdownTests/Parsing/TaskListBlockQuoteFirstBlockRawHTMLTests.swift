@@ -11,9 +11,9 @@
 import Markdown
 import XCTest
 
-/// A list item whose first block is a block quote is not a task list item (Task list items (extension)), so
-/// `[x]` on a later line of the item is not a checkbox.
-/// Raw HTML opened on an earlier line may close on that line (Raw HTML).
+/// A lazy continuation line of a block quote in a list item holds a NUL, which is replaced by U+FFFD (Insecure
+/// characters), or a multibyte character, and a `[x]` that does not begin a paragraph and so is text (Task list items
+/// (extension)). Raw HTML opened on an earlier line may close on that line (Raw HTML).
 class TaskListBlockQuoteFirstBlockRawHTMLTests: XCTestCase {
     private func surface(_ markdown: String) -> String {
         Document(parsing: markdown, options: [.disableSmartOpts]).debugDescription(options: [])

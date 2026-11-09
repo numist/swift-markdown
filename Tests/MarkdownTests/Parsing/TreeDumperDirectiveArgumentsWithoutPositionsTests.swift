@@ -15,7 +15,8 @@ import XCTest
 /// `.printSourceLocations` is off.
 class TreeDumperDirectiveArgumentsWithoutPositionsTests: XCTestCase {
     func testDirectiveArgumentsPrintedWithoutPositions() {
-        let (markdown, options) = DocumentRegressionTests.splitInput([64, 107, 40, 80, 10, 106, 9])!
-        XCTAssertEqual("Document\n└─ BlockDirective name: \"k\"\n   ├─ Argument text segments:\n   |    \"P\"\n   |    \"j\"", Document(parsing: markdown, options: options).debugDescription(options: []))
+        XCTAssertEqual(
+            "Document\n└─ BlockDirective name: \"k\"\n   ├─ Argument text segments:\n   |    \"P\"\n   |    \"j\"",
+            Document(parsing: "@k(P\nj", options: [.parseBlockDirectives]).debugDescription(options: []))
     }
 }

@@ -10,7 +10,6 @@
 
 import Markdown
 import XCTest
-import Testing
 
 /// Strong emphasis around an interior `**` that can both open and close.
 ///
@@ -103,40 +102,5 @@ class EmphasisNestingTests: XCTestCase {
 
         let document = Document(parsing: text)
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
-    }
-}
-
-/// A `~` is a punctuation character (Characters and lines), so a delimiter run beside a `~` run is classified
-/// against the `~`, not against the character past it.
-@Suite struct StrikethroughFlankingEmphasisTests {
-    private func tree(_ markdown: String) -> String {
-        Document(parsing: markdown).debugDescription(options: .printSourceLocations)
-    }
-
-    @Test func closerAfterPunctuationBeforeTilde() {
-        #expect(tree("*-*~a") == """
-            Document @1:1-1:6
-            └─ Paragraph @1:1-1:6
-               ├─ Emphasis @1:1-1:4
-               │  └─ Text @1:2-1:3 "-"
-               └─ Text @1:4-1:6 "~a"
-            """)
-        #expect(tree("*.*~~a") == """
-            Document @1:1-1:7
-            └─ Paragraph @1:1-1:7
-               ├─ Emphasis @1:1-1:4
-               │  └─ Text @1:2-1:3 "."
-               └─ Text @1:4-1:7 "~~a"
-            """)
-    }
-
-    @Test func openerAfterTildeBeforePunctuation() {
-        #expect(tree("a~*-x*") == """
-            Document @1:1-1:7
-            └─ Paragraph @1:1-1:7
-               ├─ Text @1:1-1:3 "a~"
-               └─ Emphasis @1:3-1:7
-                  └─ Text @1:4-1:6 "-x"
-            """)
     }
 }

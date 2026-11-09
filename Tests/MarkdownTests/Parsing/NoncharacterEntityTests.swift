@@ -14,11 +14,8 @@ import XCTest
 /// Numeric character references to noncharacters decode to the noncharacter itself, since each is a valid
 /// code point (Entity and numeric character references).
 class NoncharacterEntityTests: XCTestCase {
-    // Swift string literals reject noncharacter escapes such as `\u{FDD0}`, so these are built from scalars.
-    private static let uFFFE = String(Unicode.Scalar(0xFFFE as UInt32)!)
-    private static let uFFFF = String(Unicode.Scalar(0xFFFF as UInt32)!)
+    // Swift string literals reject the escape `\u{FDD0}`, so it is built from its scalar.
     private static let uFDD0 = String(Unicode.Scalar(0xFDD0 as UInt32)!)
-    private static let u1FFFE = String(Unicode.Scalar(0x1FFFE as UInt32)!)
 
     private func surface(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: [])
@@ -39,23 +36,23 @@ class NoncharacterEntityTests: XCTestCase {
 
     func testOtherNoncharactersAndReplacementCharacterDecode() {
         XCTAssertEqual(Self.text(Self.uFDD0), surface("&#xFDD0;"))
-        XCTAssertEqual(Self.text(Self.u1FFFE), surface("&#x1FFFE;"))
+        XCTAssertEqual(Self.text("\u{1FFFE}"), surface("&#x1FFFE;"))
         XCTAssertEqual(Self.text("\u{10FFFF}"), surface("&#x10FFFF;"))
         XCTAssertEqual(Self.text("\u{FFFD}"), surface("&#xFFFD;"))
-        XCTAssertEqual(Self.image(source: "/" + Self.uFDD0, title: Self.u1FFFE), surface("![a](/&#xFDD0; \"&#x1FFFE;\")"))
+        XCTAssertEqual(Self.image(source: "/" + Self.uFDD0, title: "\u{1FFFE}"), surface("![a](/&#xFDD0; \"&#x1FFFE;\")"))
         XCTAssertEqual(Self.image(source: "/\u{10FFFF}", title: "\u{FFFD}"), surface("![a](/&#x10FFFF; \"&#xFFFD;\")"))
-        XCTAssertEqual(Self.autolink("op:" + Self.uFDD0 + Self.u1FFFE + "\u{10FFFF}\u{FFFD}"), surface("<op:&#xFDD0;&#x1FFFE;&#x10FFFF;&#xFFFD;>"))
+        XCTAssertEqual(Self.autolink("op:" + Self.uFDD0 + "\u{1FFFE}\u{10FFFF}\u{FFFD}"), surface("<op:&#xFDD0;&#x1FFFE;&#x10FFFF;&#xFFFD;>"))
     }
 
     func testUFFFEAndUFFFFDecode() {
-        XCTAssertEqual(Self.text(Self.uFFFE + Self.uFFFF), surface("&#xFFFE;&#65535;"))
-        XCTAssertEqual(Self.text(Self.uFFFE), surface("&#xFFFE;"))
-        XCTAssertEqual(Self.text(Self.uFFFF), surface("&#xFFFF;"))
-        XCTAssertEqual(Self.text(Self.uFFFF), surface("&#65535;"))
-        XCTAssertEqual(Self.image(source: "/" + Self.uFFFF, title: Self.uFFFE), surface("![a](/&#xFFFF; \"&#xFFFE;\")"))
-        XCTAssertEqual(Self.image(source: "/" + Self.uFFFE, title: Self.uFFFF), surface("![a]\n\n[a]: /&#xFFFE; \"&#65535;\""))
-        XCTAssertEqual(Self.autolink("op:" + Self.uFFFF), surface("<op:&#xFFFF;>"))
+        XCTAssertEqual(Self.text("\u{FFFE}\u{FFFF}"), surface("&#xFFFE;&#65535;"))
+        XCTAssertEqual(Self.text("\u{FFFE}"), surface("&#xFFFE;"))
+        XCTAssertEqual(Self.text("\u{FFFF}"), surface("&#xFFFF;"))
+        XCTAssertEqual(Self.text("\u{FFFF}"), surface("&#65535;"))
+        XCTAssertEqual(Self.image(source: "/\u{FFFF}", title: "\u{FFFE}"), surface("![a](/&#xFFFF; \"&#xFFFE;\")"))
+        XCTAssertEqual(Self.image(source: "/\u{FFFE}", title: "\u{FFFF}"), surface("![a]\n\n[a]: /&#xFFFE; \"&#65535;\""))
+        XCTAssertEqual(Self.autolink("op:\u{FFFF}"), surface("<op:&#xFFFF;>"))
         let document = Document(parsing: "```&#xFFFE;\n```", options: [])
-        XCTAssertEqual(Self.uFFFE, (document.child(at: 0) as? CodeBlock)?.language)
+        XCTAssertEqual("\u{FFFE}", (document.child(at: 0) as? CodeBlock)?.language)
     }
 }

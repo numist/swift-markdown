@@ -13,13 +13,9 @@ import XCTest
 
 /// A setext heading whose lines begin with a link reference definition and continue on an indented line.
 /// As with a paragraph, the heading's content has its initial whitespace removed (Paragraphs, Setext headings).
-class SetextRefdefLazyResidualTests: XCTestCase {
-    /// Parses `markdown` with `[.parseSymbolLinks, .parseMinimalDoxygen]`.
+class SetextHeadingContinuationIndentTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
-        var bytes = Array(markdown.utf8)
-        bytes.append(0x0a)
-        let (text, options) = DocumentRegressionTests.splitInput(bytes)!
-        return Document(parsing: text, options: options).debugDescription(options: [])
+        Document(parsing: markdown).debugDescription(options: [])
     }
 
     private static func quotedHeading(level: Int = 1, _ children: String) -> String {

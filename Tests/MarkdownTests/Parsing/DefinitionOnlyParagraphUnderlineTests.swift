@@ -87,4 +87,49 @@ struct DefinitionOnlyParagraphUnderlineTests {
                └─ Body
             """)
     }
+
+    /// Once the definitions are removed there is no content to underline, so no setext heading forms (Setext
+    /// headings). Each block starts at its first content byte.
+    @Test func equalsUnderlineAfterDefinitionIsParagraphText() {
+        #expect(tree("[a]: /u\n===\nx") == """
+            Document @1:1-3:2
+            └─ Paragraph @2:1-3:2
+               ├─ Text @2:1-2:4 "==="
+               ├─ SoftBreak
+               └─ Text @3:1-3:2 "x"
+            """)
+    }
+
+    /// The removed link reference definition is defined, so a later `[foo]` resolves against it.
+    @Test func definitionBeforeEqualsUnderlineIsDefined() {
+        #expect(tree("[foo]: /url\n===\n[foo]") == """
+            Document @1:1-3:6
+            └─ Paragraph @2:1-3:6
+               ├─ Text @2:1-2:4 "==="
+               ├─ SoftBreak
+               └─ Link @3:1-3:6 destination: "/url"
+                  └─ Text @3:2-3:5 "foo"
+            """)
+    }
+
+    @Test func dashUnderlineAfterDefinitionIsThematicBreak() {
+        #expect(tree("[a]: /u\n---\nx") == """
+            Document @1:1-3:2
+            ├─ ThematicBreak @2:1-2:4
+            └─ Paragraph @3:1-3:2
+               └─ Text @3:1-3:2 "x"
+            """)
+    }
+
+    /// Content before the underline forms a setext heading, and the link reference definition after it is
+    /// removed from the next paragraph.
+    @Test func contentBeforeUnderlineIsSetextHeading() {
+        #expect(tree("z\n===\n[a]: /u\nx") == """
+            Document @1:1-4:2
+            ├─ Heading @1:1-2:4 level: 1
+            │  └─ Text @1:1-1:2 "z"
+            └─ Paragraph @4:1-4:2
+               └─ Text @4:1-4:2 "x"
+            """)
+    }
 }
