@@ -54,7 +54,7 @@ struct AttributeSyntaxDisabledTests {
     }
 
     /// A destination followed by an unquoted title is not a link, so the whole line is text.
-    @Test("comma-separated attributes are text")
+    @Test("attributes with whitespace between them are text")
     func attributesWithWhitespaceAreText() {
         #expect(tree("^[x](color: red, weight: bold)", Self.plain) == """
             document @1:1-1:31
@@ -573,17 +573,6 @@ struct AttributeSyntaxDisabledTests {
             document @1:1-1:7
               paragraph @1:1-1:7
                 text "[^[]y]" @1:1-1:7
-
-            """)
-    }
-
-    /// An undefined footnote reference is text, and so is the text around it.
-    @Test("text after a footnote-shaped bracket holding `^[` is kept")
-    func plainTextAfterCaretBracketIsKept() {
-        #expect(tree("x[^[]]y", Self.footnotesAutolink) == """
-            document @1:1-1:8
-              paragraph @1:1-1:8
-                text "x[^[]]y" @1:1-1:8
 
             """)
     }

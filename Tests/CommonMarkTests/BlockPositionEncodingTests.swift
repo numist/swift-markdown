@@ -83,7 +83,7 @@ struct BlockPositionEncodingTests {
             #expect(out[1].range == r(1, 1, 2, 4))   // paragraph
             #expect(out[2].range == r(1, 1, 1, 3))   // "é" on line 1
             #expect(out[2].literal == "\u{E9}")
-            #expect(out[3].range == nil)             // soft break carries no range (both sides)
+            #expect(out[3].range == nil)             // soft break carries no range
             #expect(out[4].range == r(2, 1, 2, 4))   // "€" resets to line-2 column 1
             #expect(out[4].literal == "\u{20AC}")
         }
@@ -480,7 +480,7 @@ struct BlockPositionEncodingTests {
             #expect(out[1].info == "\u{E9}")
             #expect(out[1].literal == "code\n")
         }
-        // Multibyte body with a combining sequence: empty info, body "e␁ code\n".
+        // Multibyte body with a combining sequence: empty info, body `e` U+0301 ` code` and a line feed.
         do {
             let out = parse("```\ne\u{301} code\n```")
             try #require(shape(out) == ["document", "codeBlock"])

@@ -11,39 +11,25 @@
 import CommonMark
 import Testing
 
-/// A footnote-shaped bracket whose `]` is on a later line resolves only against a definition matching its whole label.
-/// A definition whose label holds U+FFFD in place of the bracket's first-line characters does not match, so the
-/// bracket stays literal text around the soft line break.
+/// The label of a footnote-shaped bracket whose `]` is on a later line spans the line ending, so it matches only a
+/// definition with that whole label. With no such definition, the bracket stays literal text around the soft line
+/// break.
 @Suite("Footnote-shaped bracket across a line ending: definition lookup")
 struct FootnoteCrossLineBracketLookupTests {
-    private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes]
-
     private static func surface(_ markdown: String) -> String {
-        TreeDump.dump(markdown, options: Self.options)
-    }
-
-    @Test
-    func bracketStaysLiteral() {
-        #expect(Self.surface("[^\u{2003}\nxxxx]\n\n[^\u{FFFD}\u{FFFD}]: n") == """
-            document
-              paragraph
-                text "[^\u{2003}"
-                softbreak
-                text "xxxx]"
-
-            """)
-        #expect(Self.surface("[^\u{2003}\nxxxx]\n\n[^\u{FFFD}]: n") == """
-            document
-              paragraph
-                text "[^\u{2003}"
-                softbreak
-                text "xxxx]"
-
-            """)
+        TreeDump.dump(markdown, options: .footnotes)
     }
 
     @Test(arguments: [
             ("[^\u{2003}\nxxxx]\n\n[^\u{FFFD}\u{FFFD}]: n", """
+                document
+                  paragraph
+                    text "[^\u{2003}"
+                    softbreak
+                    text "xxxx]"
+
+                """),
+            ("[^\u{2003}\nxxxx]\n\n[^\u{FFFD}]: n", """
                 document
                   paragraph
                     text "[^\u{2003}"

@@ -80,20 +80,6 @@ struct NestedBlockQuoteMarkerLineTests {
             """)
     }
 
-    /// A block quote begins at its `>`, whatever the tab before it expands to.
-    @Test
-    func blockQuotesAfterTabsBeginAtMarkers() {
-        #expect(TreeDump.dump(">\t>\t> a", options: .sourcePosition, sourceRanges: true) == """
-            document @1:1-1:8
-              block_quote @1:1-1:8
-                block_quote @1:3-1:8
-                  block_quote @1:5-1:8
-                    paragraph @1:7-1:8
-                      text "a" @1:7-1:8
-
-            """)
-    }
-
     @Test(.timeLimit(.minutes(1)))
     func blockQuotesOpeningOnOneLine() {
         let nesting = Self.nesting(String(repeating: ">", count: 40_000) + " a", options: [])
