@@ -17,8 +17,8 @@ import CommonMark
 /// the node's defining values: the literal of text-like nodes, the info string and body of a code block, the URL and
 /// title of a link or image, the heading level, a list's marker, start, delimiter and tightness, the checkbox state of
 /// a task list item, the alignment and span of a table cell, and the label of a footnote definition or the number of a
-/// footnote reference. Quoted values escape `\`, `"`, line feed and tab, and write any other control character or DEL
-/// as `\u{…}` in uppercase hexadecimal.
+/// footnote reference. Quoted values escape `\`, `"`, line feed and tab, and write any other C0 control character or
+/// DEL as `\u{…}` in uppercase hexadecimal.
 ///
 /// With `sourceRanges`, each line ends with the node's source range as `@line:column-line:column` (the end is
 /// half-open), or `@-` for a node without one.
@@ -27,13 +27,33 @@ internal enum TreeDump {
     internal static func dump(_ source: String, options: MarkdownDocument.ParseOptions, sourceRanges: Bool = false) -> String {
         MarkdownDocument.withParsedDocument(source, options: options) { doc in
             var out = ""
-            dump(doc.root, depth: 0, sourceRanges: sourceRanges, into: &out)
+            dump(doc.root, depth: 0, sourceRanges: sourceRanges, segments: false, into: &out)
             return out
         }
     }
 
-    private static func dump(_ node: borrowing MarkdownNode, depth: Int, sourceRanges: Bool, into out: inout String) {
+    /// The tree as `dump` renders it, with each line of a node whose `content` is text, a code block or an HTML block
+    /// followed by the text of every segment of that content, in order, as a bracketed list of quoted values.
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
+    internal static func dumpSegments(_ source: String, options: MarkdownDocument.ParseOptions = []) -> String {
+        MarkdownDocument.withParsedDocument(source, options: options) { doc in
+            var out = ""
+            dump(doc.root, depth: 0, sourceRanges: false, segments: true, into: &out)
+            return out
+        }
+    }
+
+    private static func dump(
+        _ node: borrowing MarkdownNode,
+        depth: Int,
+        sourceRanges: Bool,
+        segments: Bool,
+        into out: inout String
+    ) {
         out += String(repeating: "  ", count: depth) + line(node)
+        if segments, #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *), let texts = segmentTexts(node) {
+            out += " [" + texts.map(quoted).joined(separator: ", ") + "]"
+        }
         if sourceRanges {
             if let range = node.sourceRange {
                 out += " @\(range.lowerBound.line):\(range.lowerBound.column)-\(range.upperBound.line):\(range.upperBound.column)"
@@ -42,7 +62,19 @@ internal enum TreeDump {
             }
         }
         out += "\n"
-        node.children.forEach { dump($0, depth: depth + 1, sourceRanges: sourceRanges, into: &out) }
+        node.children.forEach { dump($0, depth: depth + 1, sourceRanges: sourceRanges, segments: segments, into: &out) }
+    }
+
+    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
+    private static func segmentTexts(_ node: borrowing MarkdownNode) -> [String]? {
+        var texts: [String] = []
+        switch node.content {
+        case .text(let segments): segments.forEach { texts.append(String(copying: $0)) }
+        case .codeBlock(_, let body): body.forEach { texts.append(String(copying: $0)) }
+        case .htmlBlock(let body): body.forEach { texts.append(String(copying: $0)) }
+        default: return nil
+        }
+        return texts
     }
 
     /// The snake_case name of `kind` followed by every value that applies to it, so a test can compare a node's kind

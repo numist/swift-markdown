@@ -9,133 +9,59 @@
 */
 
 import Testing
-@testable import CommonMark
-
-extension MarkdownNode {
-
-    /// The borrowed `Segments` of a node's literal, code-block body or HTML-block body, or empty segments for any other kind.
-    @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
-    @_lifetime(borrow self)
-    borrowing func literalSegments() -> Segments {
-        // `content`'s payload is `~Copyable` and can only be borrowed in place, so the `Segments` are derived from the record data the same way `content` derives them.
-        switch _view.record(at: _index).data {
-        case .literal(let ref): return Segments(view: _view, ref: ref)
-        case .codeBlock(_, let body): return Segments(view: _view, ref: body)
-        case .htmlBlock(_, let body): return Segments(view: _view, ref: body)
-        default: return Segments(view: _view, ref: .empty)
-        }
-    }
-}
+import CommonMark
 
 @Suite("Segment Sequence Tests")
 struct SegmentsTests {
 
-    @Test("literalSegments concatenation equals literal() for inline text and code")
+    @Test("the segments of inline text and code concatenate to the literal")
     func inlineTextMatches() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        let source = "hello *world* and `code`"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        var literals: [String] = []
-        var joined: [String] = []
-        let root = doc.root
-        root.children.forEach { paragraph in
-            paragraph.children.forEach { inline in
-                if let lit = inline.literal() {
-                    literals.append(lit)
-                    var bytes: [UInt8] = []
-                    inline.literalSegments().forEach { span in
-                        let raw = span.span
-                        for i in 0..<raw.count {
-                            bytes.append(raw[i])
-                        }
-                    }
-                    joined.append(String(decoding: bytes, as: UTF8.self))
-                }
-                // One level into the emphasis node.
-                inline.children.forEach { nested in
-                    if let lit = nested.literal() {
-                        literals.append(lit)
-                        var bytes: [UInt8] = []
-                        nested.literalSegments().forEach { span in
-                            let raw = span.span
-                            for i in 0..<raw.count {
-                                bytes.append(raw[i])
-                            }
-                        }
-                        joined.append(String(decoding: bytes, as: UTF8.self))
-                    }
-                }
-            }
-        }
-        #expect(!literals.isEmpty)
-        #expect(joined == literals)
-        #expect(literals.contains("world"))
-        #expect(literals.contains("code"))
-        }
+        #expect(TreeDump.dumpSegments("hello *world* and `code`") == """
+            document
+              paragraph
+                text "hello " ["hello "]
+                emph
+                  text "world" ["world"]
+                text " and " [" and "]
+                code "code" ["code"]
+
+            """)
     }
 
-    @Test("literalSegments equals literal() across a multi-line paragraph")
+    @Test("the segments of each line's text in a multi-line paragraph concatenate to its literal")
     func multiLineParagraph() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        let source = "first line\nsecond line\nthird line"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        var pieces: [String] = []
-        let root = doc.root
-        root.children.forEach { paragraph in
-            paragraph.children.forEach { inline in
-                if inline.kind == .text {
-                    var bytes: [UInt8] = []
-                    inline.literalSegments().forEach { span in
-                        let raw = span.span
-                        for i in 0..<raw.count {
-                            bytes.append(raw[i])
-                        }
-                    }
-                    let joined = String(decoding: bytes, as: UTF8.self)
-                    pieces.append(joined)
-                    #expect(joined == (inline.literal() ?? "<nil>"))
-                }
-            }
-        }
-        #expect(pieces == ["first line", "second line", "third line"])
-        }
+        #expect(TreeDump.dumpSegments("first line\nsecond line\nthird line") == """
+            document
+              paragraph
+                text "first line" ["first line"]
+                softbreak
+                text "second line" ["second line"]
+                softbreak
+                text "third line" ["third line"]
+
+            """)
     }
 
-    @Test("literalSegments equals literal() for a fenced code block body")
+    @Test("the segments of a fenced code block body concatenate to the body")
     func codeBlockBody() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        let source = "```\nline one\nline two\n```"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        var bodies: [String] = []
-        let root = doc.root
-        root.children.forEach { block in
-            if block.kind.isCodeBlock {
-                var bytes: [UInt8] = []
-                block.literalSegments().forEach { span in
-                    let raw = span.span
-                    for i in 0..<raw.count {
-                        bytes.append(raw[i])
-                    }
-                }
-                let joined = String(decoding: bytes, as: UTF8.self)
-                bodies.append(joined)
-                #expect(joined == (block.literal() ?? "<nil>"))
-            }
-        }
-        #expect(bodies == ["line one\nline two\n"])
-        }
+        #expect(TreeDump.dumpSegments("```\nline one\nline two\n```") == """
+            document
+              code_block "" "line one\\nline two\\n" ["line one", "\\n", "line two", "\\n"]
+
+            """)
     }
 
-    @Test("literalSegments is empty for non-literal kinds")
+    @Test("a document and a paragraph have no textual content")
     func emptyForNonLiteral() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        let source = "text"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        let root = doc.root
-        root.children.forEach { paragraph in
-            let isEmpty = paragraph.literalSegments().isEmpty
-            #expect(isEmpty)
-        }
-        }
+        #expect(TreeDump.dumpSegments("text") == """
+            document
+              paragraph
+                text "text" ["text"]
+
+            """)
     }
 }
