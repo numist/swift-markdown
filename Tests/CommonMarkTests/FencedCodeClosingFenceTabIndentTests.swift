@@ -18,52 +18,68 @@ struct FencedCodeClosingFenceTabIndentTests {
 
     // The opening fence is unindented, so no indentation is removed from content lines and the tab is kept.
     @Test("tab-led fence line is code content, not a closing fence")
-    func tabLedLineIsContent() throws {
-        try MarkdownDocument.withParsedDocument("```\n\t```") { doc in
-            let kinds = dfs(doc).map(\.kind)
-            #expect(kinds.map(TreeDump.describe) == ["document", "code_block fenced fence='`' length=3 offset=0"])
-            try #require(codeBlocks(doc).count == 1)
-            #expect(codeBlocks(doc).map(\.literal) == ["\t```\n"])
-        }
+    func tabLedLineIsContent() {
+        #expect(TreeDump.dump("```\n\t```", options: []) == """
+            document
+              code_block "" "\\t```\\n"
+
+            """)
+        #expect(codeBlockKinds("```\n\t```") == ["code_block fenced fence='`' length=3 offset=0"])
     }
 
     @Test("tab-led fence line after content stays content")
-    func tabLedLineAfterContent() throws {
-        try MarkdownDocument.withParsedDocument("```\nx\n\t```") { doc in
-            let kinds = dfs(doc).map(\.kind)
-            #expect(kinds.map(TreeDump.describe) == ["document", "code_block fenced fence='`' length=3 offset=0"])
-            try #require(codeBlocks(doc).count == 1)
-            #expect(codeBlocks(doc).map(\.literal) == ["x\n\t```\n"])
-        }
+    func tabLedLineAfterContent() {
+        #expect(TreeDump.dump("```\nx\n\t```", options: []) == """
+            document
+              code_block "" "x\\n\\t```\\n"
+
+            """)
+        #expect(codeBlockKinds("```\nx\n\t```") == ["code_block fenced fence='`' length=3 offset=0"])
     }
 
     @Test("unindented fence line closes the block")
-    func unindentedLineCloses() throws {
-        try MarkdownDocument.withParsedDocument("```\n```") { doc in
-            let kinds = dfs(doc).map(\.kind)
-            #expect(kinds.map(TreeDump.describe) == ["document", "code_block fenced fence='`' length=3 offset=0"])
-            try #require(codeBlocks(doc).count == 1)
-            #expect(codeBlocks(doc).map(\.literal) == [""])
-        }
+    func unindentedLineCloses() {
+        #expect(TreeDump.dump("```\n```", options: []) == """
+            document
+              code_block "" ""
+
+            """)
+        #expect(codeBlockKinds("```\n```") == ["code_block fenced fence='`' length=3 offset=0"])
     }
 
     @Test("three-space-indented fence line closes the block")
-    func threeSpaceIndentCloses() throws {
-        try MarkdownDocument.withParsedDocument("```\n   ```") { doc in
-            let kinds = dfs(doc).map(\.kind)
-            #expect(kinds.map(TreeDump.describe) == ["document", "code_block fenced fence='`' length=3 offset=0"])
-            try #require(codeBlocks(doc).count == 1)
-            #expect(codeBlocks(doc).map(\.literal) == [""])
-        }
+    func threeSpaceIndentCloses() {
+        #expect(TreeDump.dump("```\n   ```", options: []) == """
+            document
+              code_block "" ""
+
+            """)
+        #expect(codeBlockKinds("```\n   ```") == ["code_block fenced fence='`' length=3 offset=0"])
     }
 
     @Test("four-space-indented fence line is code content")
-    func fourSpaceIndentIsContent() throws {
-        try MarkdownDocument.withParsedDocument("```\n    ```") { doc in
-            let kinds = dfs(doc).map(\.kind)
-            #expect(kinds.map(TreeDump.describe) == ["document", "code_block fenced fence='`' length=3 offset=0"])
-            try #require(codeBlocks(doc).count == 1)
-            #expect(codeBlocks(doc).map(\.literal) == ["    ```\n"])
+    func fourSpaceIndentIsContent() {
+        #expect(TreeDump.dump("```\n    ```", options: []) == """
+            document
+              code_block "" "    ```\\n"
+
+            """)
+        #expect(codeBlockKinds("```\n    ```") == ["code_block fenced fence='`' length=3 offset=0"])
+    }
+}
+
+/// The kind of every code block in `markdown`, depth-first, as `TreeDump.describe` gives it, which tells a fenced code
+/// block from an indented one.
+private func codeBlockKinds(_ markdown: String, options: MarkdownDocument.ParseOptions = []) -> [String] {
+    MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
+        var kinds: [String] = []
+        func visit(_ node: borrowing MarkdownNode) {
+            if case .codeBlock = node.kind {
+                kinds.append(TreeDump.describe(node.kind))
+            }
+            node.children.forEach { visit($0) }
         }
+        visit(doc.root)
+        return kinds
     }
 }

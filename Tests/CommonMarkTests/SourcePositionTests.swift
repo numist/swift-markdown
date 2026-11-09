@@ -27,17 +27,6 @@ struct SourcePositionTests {
         return nil
     }
 
-    /// Every `.item` node's range, in document (DFS) order. For nested lists this is
-    /// outermost-first, so `[0]` is the outer item, `[1]` the next level in, and so on.
-    private func itemRanges(
-        in ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)]
-    ) -> [Range<Pos>?] {
-        ranges.compactMap { entry in
-            if case .item = entry.kind { return entry.range }
-            return nil
-        }
-    }
-
     @Test("off by default - sourceRange is nil without .sourcePosition")
     func offByDefault() {
         let src = "# Hi\n\nHello\n"
@@ -103,75 +92,64 @@ struct SourcePositionTests {
     }
 
     @Test("empty list item ends before a trailing whitespace-only line")
-    func emptyItemWhitespaceLine() throws {
+    func emptyItemWhitespaceLine() {
         // A whitespace-only line is a blank line, and a list item can begin with at most one blank line, so the
         // item ends on line 1 however far the line is indented.
-        try MarkdownDocument.withParsedDocument("-\n\t", options: .sourcePosition) { doc in
-        var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-        dfsRanges(doc.root, into: &ranges)
-        let item = try #require(range(in: ranges) { if case .item = $0 { return true } else { return false } })
-        #expect(item.lowerBound == Pos(line: 1, column: 1))
-        #expect(item.upperBound == Pos(line: 1, column: 2))
-        }
+        #expect(TreeDump.dump("-\n\t", options: .sourcePosition, sourceRanges: true) == """
+            document @1:1-2:2
+              list bullet '-' tight @1:1-1:2
+                item @1:1-1:2
 
-        try MarkdownDocument.withParsedDocument("-\n\t\t", options: .sourcePosition) { doc in
-        var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-        dfsRanges(doc.root, into: &ranges)
-        let item = try #require(range(in: ranges) { if case .item = $0 { return true } else { return false } })
-        #expect(item.lowerBound == Pos(line: 1, column: 1))
-        #expect(item.upperBound == Pos(line: 1, column: 2))
-        }
+            """)
+        #expect(TreeDump.dump("-\n\t\t", options: .sourcePosition, sourceRanges: true) == """
+            document @1:1-2:3
+              list bullet '-' tight @1:1-1:2
+                item @1:1-1:2
 
-        try MarkdownDocument.withParsedDocument("-\n ", options: .sourcePosition) { doc in
-        var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-        dfsRanges(doc.root, into: &ranges)
-        let item = try #require(range(in: ranges) { if case .item = $0 { return true } else { return false } })
-        #expect(item.lowerBound == Pos(line: 1, column: 1))
-        #expect(item.upperBound == Pos(line: 1, column: 2))
-        }
+            """)
+        #expect(TreeDump.dump("-\n ", options: .sourcePosition, sourceRanges: true) == """
+            document @1:1-2:2
+              list bullet '-' tight @1:1-1:2
+                item @1:1-1:2
+
+            """)
     }
 
     @Test("nested list items end at their last content byte, before a following blank line")
-    func nestedEmptyItemBlankLineExtent() throws {
+    func nestedEmptyItemBlankLineExtent() {
         // `- -` is an outer item (content column 3) holding an empty inner item (content column 5).
         // Two spaces reach only the outer item's content column.
-        try MarkdownDocument.withParsedDocument("- -\n  \n", options: .sourcePosition) { doc in
-            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-            dfsRanges(doc.root, into: &ranges)
-            let items = itemRanges(in: ranges)
-            try #require(items.count == 2, "expected an outer + a nested inner item; got \(items.count)")
-            let outer = try #require(items[0])
-            let inner = try #require(items[1])
-            #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 1, column: 4))
-            #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))
-        }
+        #expect(TreeDump.dump("- -\n  \n", options: .sourcePosition, sourceRanges: true) == """
+            document @1:1-2:3
+              list bullet '-' tight @1:1-1:4
+                item @1:1-1:4
+                  list bullet '-' tight @1:3-1:4
+                    item @1:3-1:4
+
+            """)
 
         // Four spaces reach the inner item's content column, but the inner item is empty.
-        try MarkdownDocument.withParsedDocument("- -\n    \n", options: .sourcePosition) { doc in
-            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-            dfsRanges(doc.root, into: &ranges)
-            let items = itemRanges(in: ranges)
-            try #require(items.count == 2, "expected an outer + a nested inner item; got \(items.count)")
-            let outer = try #require(items[0])
-            let inner = try #require(items[1])
-            #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 1, column: 4))
-            #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))
-        }
+        #expect(TreeDump.dump("- -\n    \n", options: .sourcePosition, sourceRanges: true) == """
+            document @1:1-2:5
+              list bullet '-' tight @1:1-1:4
+                item @1:1-1:4
+                  list bullet '-' tight @1:3-1:4
+                    item @1:3-1:4
+
+            """)
 
         // Distinct bullets nest three items rather than form a thematic break. Five spaces reach the
         // middle item's content column but not the empty innermost item's (7).
-        try MarkdownDocument.withParsedDocument("- + *\n     \n", options: .sourcePosition) { doc in
-            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-            dfsRanges(doc.root, into: &ranges)
-            let items = itemRanges(in: ranges)
-            try #require(items.count == 3, "expected three nested items; got \(items.count)")
-            let outer = try #require(items[0])
-            let middle = try #require(items[1])
-            let inner = try #require(items[2])
-            #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 1, column: 6))
-            #expect(middle == Pos(line: 1, column: 3)..<Pos(line: 1, column: 6))
-            #expect(inner == Pos(line: 1, column: 5)..<Pos(line: 1, column: 6))
-        }
+        #expect(TreeDump.dump("- + *\n     \n", options: .sourcePosition, sourceRanges: true) == """
+            document @1:1-2:6
+              list bullet '-' tight @1:1-1:6
+                item @1:1-1:6
+                  list bullet '+' tight @1:3-1:6
+                    item @1:3-1:6
+                      list bullet '*' tight @1:5-1:6
+                        item @1:5-1:6
+
+            """)
     }
 
     @Test("columns are 1-based UTF-8 byte offsets (non-ASCII)")

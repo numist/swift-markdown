@@ -11,104 +11,178 @@
 import Testing
 import CommonMark
 
-// Depth-first: the checked state of the first list item, or nil if there is none. File-scope because a
-// recursive walk over `borrowing MarkdownNode` can't capture the borrow in a closure.
-private func firstItemChecked(_ node: borrowing MarkdownNode) -> Bool?? {
-    if case .item(let checked) = node.kind {
-        return .some(checked)
-    }
-    var found: Bool?? = nil
-    node.children.forEach { child in
-        if found == nil {
-            found = firstItemChecked(child)
-        }
-    }
-    return found
-}
-
 /// A task list item's checked state comes from its leading checkbox alone (Task list items (extension)); a
 /// later `[x]` on the same line is paragraph text.
 @Suite("Task list item checked state")
 struct TaskListCheckedStateTests {
 
-    private static let tasklist: MarkdownDocument.ParseOptions = [.tasklist]
-
-    private func checkedState(
-        _ src: String, options: MarkdownDocument.ParseOptions
-    ) throws -> Bool? {
-        let state: Bool?? = MarkdownDocument.withParsedDocument(src, options: options) { doc -> Bool?? in
-            firstItemChecked(doc.root)
-        }
-        return try #require(state, "no list item parsed")
-    }
-
     @Test("`- [ ] [x]` is unchecked")
-    func laterCheckedBoxIgnored() throws {
-        #expect(try checkedState("- [ ] [x]", options: Self.tasklist) == false)
+    func laterCheckedBoxIgnored() {
+        #expect(TreeDump.dump("- [ ] [x]", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "[x]"
+
+            """)
     }
 
     @Test("`- [ ] x [x] y` is unchecked")
-    func midLineCheckedBoxIgnored() throws {
-        #expect(try checkedState("- [ ] x [x] y", options: Self.tasklist) == false)
+    func midLineCheckedBoxIgnored() {
+        #expect(TreeDump.dump("- [ ] x [x] y", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "x [x] y"
+
+            """)
     }
 
     @Test("`- [ ] [X]` is unchecked")
-    func laterUppercaseCheckedBoxIgnored() throws {
-        #expect(try checkedState("- [ ] [X]", options: Self.tasklist) == false)
+    func laterUppercaseCheckedBoxIgnored() {
+        #expect(TreeDump.dump("- [ ] [X]", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "[X]"
+
+            """)
     }
 
     @Test("`- [x] [ ]` is checked")
-    func leadingCheckedBoxBeforeUncheckedBox() throws {
-        #expect(try checkedState("- [x] [ ]", options: Self.tasklist) == true)
+    func leadingCheckedBoxBeforeUncheckedBox() {
+        #expect(TreeDump.dump("- [x] [ ]", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist checked
+                  paragraph
+                    text "[ ]"
+
+            """)
     }
 
     @Test("`- [x] foo` is checked")
-    func checkedWithContent() throws {
-        #expect(try checkedState("- [x] foo", options: Self.tasklist) == true)
+    func checkedWithContent() {
+        #expect(TreeDump.dump("- [x] foo", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist checked
+                  paragraph
+                    text "foo"
+
+            """)
     }
 
     @Test("`- [ ]   foo [x]` is unchecked with several spaces after the checkbox")
-    func multiSpaceAfterCheckbox() throws {
-        #expect(try checkedState("- [ ]   foo [x]", options: Self.tasklist) == false)
+    func multiSpaceAfterCheckbox() {
+        #expect(TreeDump.dump("- [ ]   foo [x]", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "foo [x]"
+
+            """)
     }
 
     @Test("`- [ ] a [X] b` is unchecked")
-    func uppercaseMidLineIgnored() throws {
-        #expect(try checkedState("- [ ] a [X] b", options: Self.tasklist) == false)
+    func uppercaseMidLineIgnored() {
+        #expect(TreeDump.dump("- [ ] a [X] b", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "a [X] b"
+
+            """)
     }
 
     @Test("`- [ ] [x` is unchecked")
-    func noClosingBracket() throws {
-        #expect(try checkedState("- [ ] [x", options: Self.tasklist) == false)
+    func noClosingBracket() {
+        #expect(TreeDump.dump("- [ ] [x", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "[x"
+
+            """)
     }
 
     @Test("`- [ ] (x)` is unchecked")
-    func parens() throws {
-        #expect(try checkedState("- [ ] (x)", options: Self.tasklist) == false)
+    func parens() {
+        #expect(TreeDump.dump("- [ ] (x)", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "(x)"
+
+            """)
     }
 
     @Test("`- [ ] ]x[` is unchecked")
-    func reversedBrackets() throws {
-        #expect(try checkedState("- [ ] ]x[", options: Self.tasklist) == false)
+    func reversedBrackets() {
+        #expect(TreeDump.dump("- [ ] ]x[", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "]x["
+
+            """)
     }
 
     @Test("continuation-line `[x]` does not check the item")
-    func continuationLineCheckedBoxIgnored() throws {
-        #expect(try checkedState("- [ ] a\n  [x]", options: Self.tasklist) == false)
+    func continuationLineCheckedBoxIgnored() {
+        #expect(TreeDump.dump("- [ ] a\n  [x]", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "a"
+                    softbreak
+                    text "[x]"
+
+            """)
     }
 
     @Test("`- [ ] [ ]` is unchecked")
-    func bothUnchecked() throws {
-        #expect(try checkedState("- [ ] [ ]", options: Self.tasklist) == false)
+    func bothUnchecked() {
+        #expect(TreeDump.dump("- [ ] [ ]", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "[ ]"
+
+            """)
     }
 
     @Test("`- [x] [x]` is checked")
-    func bothChecked() throws {
-        #expect(try checkedState("- [x] [x]", options: Self.tasklist) == true)
+    func bothChecked() {
+        #expect(TreeDump.dump("- [x] [x]", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist checked
+                  paragraph
+                    text "[x]"
+
+            """)
     }
 
     @Test("`- [ ] x` is unchecked")
-    func plainContent() throws {
-        #expect(try checkedState("- [ ] x", options: Self.tasklist) == false)
+    func plainContent() {
+        #expect(TreeDump.dump("- [ ] x", options: [.tasklist]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "x"
+
+            """)
     }
 }

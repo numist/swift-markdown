@@ -17,62 +17,45 @@ import CommonMark
 @Suite("Setext heading multi-line wrapper source ranges")
 struct SetextWrapperEndRangeTests {
 
-    private typealias Pos = MarkdownNode.SourcePosition
-
-    private static let specOptions: MarkdownDocument.ParseOptions =
-        [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
-
-    private func ranges(in src: String) -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] {
-        MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
-            doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
-            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-            dfsRanges(doc.root, into: &ranges)
-            return ranges
-        }
-    }
-
-    private func firstRange(
-        _ kind: MarkdownNode.Kind,
-        in ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)]
-    ) -> Range<Pos>? {
-        ranges.first { $0.kind == kind }?.range
-    }
-
     @Test("emphasis spanning lines ends on the closer's line, not the underline line")
-    func emphasisWrapperEnd() throws {
-        let ranges = ranges(in: "  Foo *bar\nbaz*\n====")
-        let texts = ranges.filter { $0.kind == .text }.map { $0.range }
-        try #require(texts.count == 3, "expected Foo / bar / baz text nodes")
+    func emphasisWrapperEnd() {
+        #expect(TreeDump.dump("  Foo *bar\nbaz*\n====", options: [.sourcePosition], sourceRanges: true) == """
+            document @1:1-3:5
+              heading 1 @1:3-3:5
+                text "Foo " @1:3-1:7
+                emph @1:7-2:5
+                  text "bar" @1:8-1:11
+                  softbreak @-
+                  text "baz" @2:1-2:4
 
-        try #require(firstRange(.heading(level: 1), in: ranges) != nil)
-        #expect(firstRange(.heading(level: 1), in: ranges)?.lowerBound == Pos(line: 1, column: 3))
-
-        let emph = try #require(firstRange(.emphasis, in: ranges))
-        #expect(emph.lowerBound == Pos(line: 1, column: 7))    // opening `*`
-        #expect(emph.upperBound == Pos(line: 2, column: 5))    // past the closing `*`
-
-        #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "Foo "
-        #expect(texts[2]?.lowerBound == Pos(line: 2, column: 1))   // "baz"
-        #expect(texts[2]?.upperBound == Pos(line: 2, column: 4))
+            """)
     }
 
     @Test("strong emphasis spanning lines ends on the closer's line, not the underline line")
-    func strongWrapperEnd() throws {
-        let ranges = ranges(in: "  Foo **bar\nbaz**\n====")
-        try #require(ranges.contains { $0.kind == .strong })
+    func strongWrapperEnd() {
+        #expect(TreeDump.dump("  Foo **bar\nbaz**\n====", options: [.sourcePosition], sourceRanges: true) == """
+            document @1:1-3:5
+              heading 1 @1:3-3:5
+                text "Foo " @1:3-1:7
+                strong @1:7-2:6
+                  text "bar" @1:9-1:12
+                  softbreak @-
+                  text "baz" @2:1-2:4
 
-        let strong = try #require(firstRange(.strong, in: ranges))
-        #expect(strong.lowerBound == Pos(line: 1, column: 7))
-        #expect(strong.upperBound == Pos(line: 2, column: 6))
+            """)
     }
 
     @Test("link spanning lines ends on the closer's line, not the underline line")
-    func linkWrapperEnd() throws {
-        let ranges = ranges(in: "  Foo [bar\nbaz](/u)\n====")
-        try #require(ranges.contains { $0.kind == .link })
+    func linkWrapperEnd() {
+        #expect(TreeDump.dump("  Foo [bar\nbaz](/u)\n====", options: [.sourcePosition], sourceRanges: true) == """
+            document @1:1-3:5
+              heading 1 @1:3-3:5
+                text "Foo " @1:3-1:7
+                link "/u" "" @1:7-2:9
+                  text "bar" @1:8-1:11
+                  softbreak @-
+                  text "baz" @2:1-2:4
 
-        let link = try #require(firstRange(.link, in: ranges))
-        #expect(link.lowerBound == Pos(line: 1, column: 7))
-        #expect(link.upperBound == Pos(line: 2, column: 9))
+            """)
     }
 }

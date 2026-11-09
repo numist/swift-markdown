@@ -11,28 +11,6 @@
 import Testing
 import CommonMark
 
-
-/// The checked state of every `.item` node, in document (DFS) order. `.some(false)` = unchecked task
-/// item, `.some(true)` = checked, `nil` = an ordinary (non-task) list item.
-private func itemCheckStates(_ node: borrowing MarkdownNode, into out: inout [Bool?]) {
-    if case .item(let checked) = node.kind {
-        out.append(checked)
-    }
-    node.children.forEach { child in
-        itemCheckStates(child, into: &out)
-    }
-}
-
-/// Every text node's literal, in document (DFS) order.
-private func textLiterals(_ node: borrowing MarkdownNode, into out: inout [String?]) {
-    if node.kind == .text {
-        out.append(node.literal())
-    }
-    node.children.forEach { child in
-        textLiterals(child, into: &out)
-    }
-}
-
 /// Recognition of a task list item with content after its checkbox, at the top level and nested.
 ///
 /// A task list item is a list item whose first block is a paragraph beginning with a task list item
@@ -42,108 +20,146 @@ private func textLiterals(_ node: borrowing MarkdownNode, into out: inout [Strin
 @Suite("Task list items with content")
 struct ContentTaskItemStructureTests {
 
-    private static let options: MarkdownDocument.ParseOptions =
-        [.tasklist, .sourcePosition]
-
-    private func analyze(
-        _ src: String, options: MarkdownDocument.ParseOptions
-    ) -> (checks: [Bool?], texts: [String?]) {
-        MarkdownDocument.withParsedDocument(src, options: options) {
-            doc -> (checks: [Bool?], texts: [String?]) in
-            var checks: [Bool?] = []
-            var texts: [String?] = []
-            itemCheckStates(doc.root, into: &checks)
-            textLiterals(doc.root, into: &texts)
-            return (checks, texts)
-        }
-    }
-
     // MARK: - Top-level items
 
     @Test("a top-level task list item is recognized and its checkbox is not text")
-    func topLevelContentTaskRecognized() throws {
-        let (checks, texts) = analyze("- [ ] x", options: Self.options)
-        try #require(checks.count == 1, "expected exactly one list item, got \(checks)")
-        #expect(checks[0] == .some(false))
-        #expect(texts.contains("x"))
-        #expect(!texts.contains { $0?.contains("[ ]") == true })
+    func topLevelContentTaskRecognized() {
+        #expect(TreeDump.dump("- [ ] x", options: [.tasklist, .sourcePosition]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "x"
+
+            """)
     }
 
     @Test("indented top-level content task item is recognized")
-    func indentedTopLevelContentTaskRecognized() throws {
+    func indentedTopLevelContentTaskRecognized() {
         // Three spaces is the most indentation a list item may have without becoming indented code (List items).
-        let (checks, texts) = analyze("   - [ ] x", options: Self.options)
-        try #require(checks.count == 1, "expected exactly one list item, got \(checks)")
-        #expect(checks[0] == .some(false))
-        #expect(texts.contains("x"))
-        #expect(!texts.contains { $0?.contains("[ ]") == true })
+        #expect(TreeDump.dump("   - [ ] x", options: [.tasklist, .sourcePosition]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "x"
+
+            """)
     }
 
     @Test("top-level checked content task item is recognized")
-    func topLevelCheckedContentTaskRecognized() throws {
-        let (checks, texts) = analyze("- [x] x", options: Self.options)
-        try #require(checks.count == 1, "expected exactly one list item, got \(checks)")
-        #expect(checks[0] == .some(true))
-        #expect(texts.contains("x"))
+    func topLevelCheckedContentTaskRecognized() {
+        #expect(TreeDump.dump("- [x] x", options: [.tasklist, .sourcePosition]) == """
+            document
+              list bullet '-' tight
+                tasklist checked
+                  paragraph
+                    text "x"
+
+            """)
     }
 
     @Test("a top-level task list item whose checkbox is followed by a tab is recognized")
-    func topLevelTabSeparatorContentTaskRecognized() throws {
-        let (checks, _) = analyze("- [ ]\tx", options: Self.options)
-        try #require(checks.count == 1, "expected exactly one list item, got \(checks)")
-        #expect(checks[0] == .some(false))
+    func topLevelTabSeparatorContentTaskRecognized() {
+        #expect(TreeDump.dump("- [ ]\tx", options: [.tasklist, .sourcePosition]) == """
+            document
+              list bullet '-' tight
+                tasklist unchecked
+                  paragraph
+                    text "x"
+
+            """)
     }
 
     // MARK: - Nested / block-quoted items
 
     @Test("task list item in a block quote is recognized")
-    func blockQuotedContentTaskRecognized() throws {
-        let (checks, texts) = analyze("> - [ ] x", options: Self.options)
-        try #require(checks.count == 1, "expected exactly one list item, got \(checks)")
-        #expect(checks[0] == .some(false))
-        #expect(texts == ["x"])
+    func blockQuotedContentTaskRecognized() {
+        #expect(TreeDump.dump("> - [ ] x", options: [.tasklist, .sourcePosition]) == """
+            document
+              block_quote
+                list bullet '-' tight
+                  tasklist unchecked
+                    paragraph
+                      text "x"
+
+            """)
     }
 
     @Test("task list item sharing its line with an outer list marker is recognized")
-    func nestedContentTaskRecognized() throws {
-        let (checks, texts) = analyze("- - [ ] x", options: Self.options)
-        try #require(checks.count == 2, "expected outer + inner items, got \(checks)")
-        #expect(checks == [nil, .some(false)])
-        #expect(texts == ["x"])
+    func nestedContentTaskRecognized() {
+        #expect(TreeDump.dump("- - [ ] x", options: [.tasklist, .sourcePosition]) == """
+            document
+              list bullet '-' tight
+                item
+                  list bullet '-' tight
+                    tasklist unchecked
+                      paragraph
+                        text "x"
+
+            """)
     }
 
     @Test("task list item nested three deep is recognized")
-    func threeDeepNestedContentTaskRecognized() throws {
-        let (checks, texts) = analyze("- - - [ ] x", options: Self.options)
-        try #require(checks.count == 3, "expected three nested items, got \(checks)")
-        #expect(checks == [nil, nil, .some(false)])
-        #expect(texts == ["x"])
+    func threeDeepNestedContentTaskRecognized() {
+        #expect(TreeDump.dump("- - - [ ] x", options: [.tasklist, .sourcePosition]) == """
+            document
+              list bullet '-' tight
+                item
+                  list bullet '-' tight
+                    item
+                      list bullet '-' tight
+                        tasklist unchecked
+                          paragraph
+                            text "x"
+
+            """)
     }
 
     @Test("task list item in a block quote in a list item is recognized")
-    func taskInBlockQuoteInListRecognized() throws {
-        let (checks, texts) = analyze("- > - [ ] x", options: Self.options)
-        try #require(checks.count == 2, "expected outer + inner items, got \(checks)")
-        #expect(checks == [nil, .some(false)])
-        #expect(texts == ["x"])
+    func taskInBlockQuoteInListRecognized() {
+        #expect(TreeDump.dump("- > - [ ] x", options: [.tasklist, .sourcePosition]) == """
+            document
+              list bullet '-' tight
+                item
+                  block_quote
+                    list bullet '-' tight
+                      tasklist unchecked
+                        paragraph
+                          text "x"
+
+            """)
     }
 
     @Test("task list item nested in an ordered list item is recognized")
-    func orderedNestedContentTaskRecognized() throws {
-        let (checks, texts) = analyze("1. - [ ] x", options: Self.options)
-        try #require(checks.count == 2, "expected outer ordered + inner bullet items, got \(checks)")
-        #expect(checks == [nil, .some(false)])
-        #expect(texts == ["x"])
+    func orderedNestedContentTaskRecognized() {
+        #expect(TreeDump.dump("1. - [ ] x", options: [.tasklist, .sourcePosition]) == """
+            document
+              list ordered start=1 delim=period tight
+                item
+                  list bullet '-' tight
+                    tasklist unchecked
+                      paragraph
+                        text "x"
+
+            """)
     }
 
     // MARK: - Nested on its own line
 
     @Test("task list item in a sublist on its own line is recognized")
-    func sublistItemOnOwnLineIsRecognized() throws {
-        let (checks, texts) = analyze("- a\n  - [ ] b", options: Self.options)
-        try #require(checks.count == 2, "expected outer `a` + nested `b` items, got \(checks)")
-        #expect(checks == [nil, false])
-        #expect(texts.contains("b"))
-        #expect(!texts.contains { $0?.contains("[ ]") == true })
+    func sublistItemOnOwnLineIsRecognized() {
+        #expect(TreeDump.dump("- a\n  - [ ] b", options: [.tasklist, .sourcePosition]) == """
+            document
+              list bullet '-' tight
+                item
+                  paragraph
+                    text "a"
+                  list bullet '-' tight
+                    tasklist unchecked
+                      paragraph
+                        text "b"
+
+            """)
     }
 }

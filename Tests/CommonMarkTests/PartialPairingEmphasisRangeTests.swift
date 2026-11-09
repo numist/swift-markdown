@@ -17,38 +17,32 @@ import CommonMark
 @Suite("Emphasis source ranges - partial pairing")
 struct PartialPairingEmphasisRangeTests {
 
-    private typealias Pos = MarkdownNode.SourcePosition
-
-    private static let specOptions: MarkdownDocument.ParseOptions =
-        [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
-
-    /// The source range of the first node of `kind`, in DFS order.
-    private func firstRange(of kind: MarkdownNode.Kind, in src: String) -> Range<Pos>? {
-        let ranges = MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
-            doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
-            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-            dfsRanges(doc.root, into: &ranges)
-            return ranges
-        }
-        return ranges.first { $0.kind == kind }?.range
-    }
-
     @Test("partial pairing emphasis range excludes unused delimiters")
     func partialPairingExcludesUnusedDelimiters() {
-        let leadingLeftover = firstRange(of: .emphasis, in: "**o*")
-        #expect(leadingLeftover?.lowerBound == Pos(line: 1, column: 2))
-        #expect(leadingLeftover?.upperBound == Pos(line: 1, column: 5))
+        #expect(TreeDump.dump("**o*", options: [.sourcePosition], sourceRanges: true) == """
+            document @1:1-1:5
+              paragraph @1:1-1:5
+                text "*" @1:1-1:2
+                emph @1:2-1:5
+                  text "o" @1:3-1:4
 
-        let trailingLeftover = firstRange(of: .emphasis, in: "*o**")
-        #expect(trailingLeftover?.lowerBound == Pos(line: 1, column: 1))
-        #expect(trailingLeftover?.upperBound == Pos(line: 1, column: 4))
+            """)
+        #expect(TreeDump.dump("*o**", options: [.sourcePosition], sourceRanges: true) == """
+            document @1:1-1:5
+              paragraph @1:1-1:5
+                emph @1:1-1:4
+                  text "o" @1:2-1:3
+                text "*" @1:4-1:5
 
+            """)
         // The strong emphasis uses the inner two delimiters of each run, the emphasis the outer one.
-        let outer = firstRange(of: .emphasis, in: "***o***")
-        #expect(outer?.lowerBound == Pos(line: 1, column: 1))
-        #expect(outer?.upperBound == Pos(line: 1, column: 8))
-        let inner = firstRange(of: .strong, in: "***o***")
-        #expect(inner?.lowerBound == Pos(line: 1, column: 2))
-        #expect(inner?.upperBound == Pos(line: 1, column: 7))
+        #expect(TreeDump.dump("***o***", options: [.sourcePosition], sourceRanges: true) == """
+            document @1:1-1:8
+              paragraph @1:1-1:8
+                emph @1:1-1:8
+                  strong @1:2-1:7
+                    text "o" @1:4-1:5
+
+            """)
     }
 }

@@ -20,87 +20,117 @@ struct OrderedMarkerTabExpansionTests {
     // The tab after `1.` spans two columns; the three spaces bring the indentation to five.
     @Test("period marker: tab then spaces reaching the code threshold is a code block")
     func periodMarkerTabIsCodeBlock() {
-        MarkdownDocument.withParsedDocument("1.\t   z") { doc in
-            let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds.map(TreeDump.describe) == ["document", "list ordered start=1 delim=period tight", "item", "code_block indented fence=none length=0 offset=0"])
-            #expect(codeBlocks(doc).map(\.literal) == ["z\n"])
-        }
+        #expect(TreeDump.dump("1.\t   z", options: []) == """
+            document
+              list ordered start=1 delim=period tight
+                item
+                  code_block "" "z\\n"
+
+            """)
+        #expect(codeBlockKinds("1.\t   z") == ["code_block indented fence=none length=0 offset=0"])
     }
 
     @Test("paren marker: tab then spaces reaching the code threshold is a code block")
     func parenMarkerTabIsCodeBlock() {
-        MarkdownDocument.withParsedDocument("1)\t   z") { doc in
-            let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds.map(TreeDump.describe) == ["document", "list ordered start=1 delim=paren tight", "item", "code_block indented fence=none length=0 offset=0"])
-            #expect(codeBlocks(doc).map(\.literal) == ["z\n"])
-        }
+        #expect(TreeDump.dump("1)\t   z", options: []) == """
+            document
+              list ordered start=1 delim=paren tight
+                item
+                  code_block "" "z\\n"
+
+            """)
+        #expect(codeBlockKinds("1)\t   z") == ["code_block indented fence=none length=0 offset=0"])
     }
 
     @Test("period marker: five literal spaces is a code block")
     func periodMarkerLiteralSpacesIsCodeBlock() {
-        MarkdownDocument.withParsedDocument("1.     z") { doc in
-            let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds.map(TreeDump.describe) == ["document", "list ordered start=1 delim=period tight", "item", "code_block indented fence=none length=0 offset=0"])
-            #expect(codeBlocks(doc).map(\.literal) == ["z\n"])
-        }
+        #expect(TreeDump.dump("1.     z", options: []) == """
+            document
+              list ordered start=1 delim=period tight
+                item
+                  code_block "" "z\\n"
+
+            """)
+        #expect(codeBlockKinds("1.     z") == ["code_block indented fence=none length=0 offset=0"])
     }
 
     @Test("period marker: tab-only gap stays a paragraph")
     func periodMarkerTabOnlyIsParagraph() {
-        MarkdownDocument.withParsedDocument("1.\tz") { doc in
-            let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds.map(TreeDump.describe) == ["document", "list ordered start=1 delim=period tight", "item", "paragraph", "text"])
-        }
+        #expect(TreeDump.dump("1.\tz", options: []) == """
+            document
+              list ordered start=1 delim=period tight
+                item
+                  paragraph
+                    text "z"
+
+            """)
     }
 
     // The tab after `12.` spans one column, so the indentation is three columns.
     @Test("wide marker: tab plus two spaces stays a paragraph")
     func wideMarkerTabStaysParagraph() {
-        MarkdownDocument.withParsedDocument("12.\t  z") { doc in
-            let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds.map(TreeDump.describe) == ["document", "list ordered start=12 delim=period tight", "item", "paragraph", "text"])
-        }
+        #expect(TreeDump.dump("12.\t  z", options: []) == """
+            document
+              list ordered start=12 delim=period tight
+                item
+                  paragraph
+                    text "z"
+
+            """)
     }
 
     @Test("bullet marker: tab then spaces is a code block")
     func bulletMarkerTabIsCodeBlock() {
-        MarkdownDocument.withParsedDocument("-\t   z") { doc in
-            let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds.map(TreeDump.describe) == ["document", "list bullet '-' tight", "item", "code_block indented fence=none length=0 offset=0"])
-        }
+        #expect(TreeDump.dump("-\t   z", options: []) == """
+            document
+              list bullet '-' tight
+                item
+                  code_block "" " z\\n"
+
+            """)
+        #expect(codeBlockKinds("-\t   z") == ["code_block indented fence=none length=0 offset=0"])
     }
 
     @Test("ordered marker, tab, then nested bullet marker opens a nested list")
     func orderedMarkerTabThenNestedBullet() {
-        MarkdownDocument.withParsedDocument("1.\t- x") { doc in
-            let kinds = dfs(doc).map { $0.kind }
-            #expect(kinds.map(TreeDump.describe) == [
-                "document",
-                "list ordered start=1 delim=period tight",
-                "item",
-                "list bullet '-' tight",
-                "item",
-                "paragraph",
-                "text",
-            ])
-        }
+        #expect(TreeDump.dump("1.\t- x", options: []) == """
+            document
+              list ordered start=1 delim=period tight
+                item
+                  list bullet '-' tight
+                    item
+                      paragraph
+                        text "x"
+
+            """)
     }
 
     // Columns count source bytes, so the tab occupies column 3 alone and `z` is at column 7.
-    @Test("positions: tab-expanded ordered item maps content back to source bytes")
+    @Test("positions: an ordered item after a tab maps content back to source bytes")
     func positionsMapBackToSource() {
-        typealias Pos = MarkdownNode.SourcePosition
-        MarkdownDocument.withParsedDocument("1.\t   z", options: .sourcePosition) { doc in
-            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-            dfsRanges(doc.root, into: &ranges)
-            let kinds = ranges.map { $0.kind }
-            #expect(kinds.map(TreeDump.describe) == ["document", "list ordered start=1 delim=period tight", "item", "code_block indented fence=none length=0 offset=0"])
-            let list = ranges.first { if case .list = $0.kind { return true } else { return false } }?.range
-            #expect(list?.lowerBound == Pos(line: 1, column: 1))
-            #expect(list?.upperBound == Pos(line: 1, column: 8))
-            let code = ranges.first { if case .codeBlock = $0.kind { return true } else { return false } }?.range
-            #expect(code?.lowerBound == Pos(line: 1, column: 7))
-            #expect(code?.upperBound == Pos(line: 1, column: 8))
+        #expect(TreeDump.dump("1.\t   z", options: [.sourcePosition], sourceRanges: true) == """
+            document @1:1-1:8
+              list ordered start=1 delim=period tight @1:1-1:8
+                item @1:1-1:8
+                  code_block "" "z\\n" @1:7-1:8
+
+            """)
+        #expect(codeBlockKinds("1.\t   z", options: [.sourcePosition]) == ["code_block indented fence=none length=0 offset=0"])
+    }
+}
+
+/// The kind of every code block in `markdown`, depth-first, as `TreeDump.describe` gives it, which tells a fenced code
+/// block from an indented one.
+private func codeBlockKinds(_ markdown: String, options: MarkdownDocument.ParseOptions = []) -> [String] {
+    MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
+        var kinds: [String] = []
+        func visit(_ node: borrowing MarkdownNode) {
+            if case .codeBlock = node.kind {
+                kinds.append(TreeDump.describe(node.kind))
+            }
+            node.children.forEach { visit($0) }
         }
+        visit(doc.root)
+        return kinds
     }
 }

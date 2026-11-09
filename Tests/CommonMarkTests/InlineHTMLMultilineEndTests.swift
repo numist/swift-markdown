@@ -16,41 +16,37 @@ import CommonMark
 @Suite("Multi-line inline HTML source ranges")
 struct InlineHTMLMultilineEndTests {
 
-    private typealias Pos = MarkdownNode.SourcePosition
-
-    private static let options: MarkdownDocument.ParseOptions = [.sourcePosition]
-
-    /// The source range of the first raw HTML node in `src`.
-    private func inlineHTMLRange(in src: String) -> Range<Pos>? {
-        MarkdownDocument.withParsedDocument(src, options: Self.options) {
-            doc -> Range<Pos>? in
-            var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
-            dfsRanges(doc.root, into: &ranges)
-            for entry in ranges where entry.kind == .htmlInline {
-                return entry.range
-            }
-            return nil
-        }
-    }
-
     @Test("a two-line inline HTML span keeps the half-open end")
-    func twoLineSpanHalfOpen() throws {
-        let range = try #require(inlineHTMLRange(in: "<foo\nbar>"))
-        #expect(range.lowerBound == Pos(line: 1, column: 1))
-        #expect(range.upperBound == Pos(line: 2, column: 5))
+    func twoLineSpanHalfOpen() {
+        #expect(TreeDump.dump("<foo\nbar>", options: [.sourcePosition], sourceRanges: true) == """
+            document @1:1-2:5
+              paragraph @1:1-2:5
+                html_inline "<foo\\nbar>" @1:1-2:5
+
+            """)
     }
 
     @Test("a mid-text two-line inline HTML span keeps the half-open end")
-    func midTextTwoLineSpanHalfOpen() throws {
-        let range = try #require(inlineHTMLRange(in: "x<a\nb>y"))
-        #expect(range.lowerBound == Pos(line: 1, column: 2))
-        #expect(range.upperBound == Pos(line: 2, column: 3))
+    func midTextTwoLineSpanHalfOpen() {
+        #expect(TreeDump.dump("x<a\nb>y", options: [.sourcePosition], sourceRanges: true) == """
+            document @1:1-2:4
+              paragraph @1:1-2:4
+                text "x" @1:1-1:2
+                html_inline "<a\\nb>" @1:2-2:3
+                text "y" @2:3-2:4
+
+            """)
     }
 
     @Test("a single-line inline HTML span keeps the half-open end")
-    func singleLineSpanHalfOpen() throws {
-        let range = try #require(inlineHTMLRange(in: "a <foo> b"))
-        #expect(range.lowerBound == Pos(line: 1, column: 3))
-        #expect(range.upperBound == Pos(line: 1, column: 8))
+    func singleLineSpanHalfOpen() {
+        #expect(TreeDump.dump("a <foo> b", options: [.sourcePosition], sourceRanges: true) == """
+            document @1:1-1:10
+              paragraph @1:1-1:10
+                text "a " @1:1-1:3
+                html_inline "<foo>" @1:3-1:8
+                text " b" @1:8-1:10
+
+            """)
     }
 }
