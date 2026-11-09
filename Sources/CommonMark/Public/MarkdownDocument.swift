@@ -65,20 +65,14 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
             let document = MarkdownDocument(parsing: utf8, options: options)
             return try body(document)
         }
-        // `makeContiguousUTF8` copies only a non-contiguous string.
+        // `withUTF8` copies the bytes only of a small or non-contiguous string.
         var contiguous = copy source
-        contiguous.makeContiguousUTF8()
-        if let result = try contiguous.utf8.withContiguousStorageIfAvailable({ (buffer: UnsafeBufferPointer<UInt8>) throws -> R in
+        return try contiguous.withUTF8 { buffer in
             // SAFETY: `buffer` is valid for this closure, and the span over it backs a document that `body` borrows and can't escape, so no access outlives it.
             //         Before anyAppleOS 26 no API vends a `Span` over a `String`'s UTF-8 (`String.UTF8View.span` and `String.utf8Span` are anyAppleOS 26). The safe spans available there, such as `ContiguousArray.span`, cover only storage the caller owns, so they require copying the whole source, which defeats parsing the source in place.
             let document = MarkdownDocument(parsing: unsafe Span(_unsafeElements: buffer), options: options)
             return try body(document)
-        }) {
-            return result
         }
-        // Empty input has no contiguous storage; parse an empty document.
-        let document = MarkdownDocument(parsing: Span(), options: options)
-        return try body(document)
     }
 
     /// The root node of the document's syntax tree, whose kind is always `.document`.
