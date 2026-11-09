@@ -158,6 +158,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     var brackets = UniqueArray<BracketRecord>()
     var lastBracket: Int? = nil
 
+    /// The links and autolinks formed in this `parseInline` pass. Reset per pass.
+    var linksFormed = 0
+
     // MARK: - Init
     
     @_lifetime(copy source)

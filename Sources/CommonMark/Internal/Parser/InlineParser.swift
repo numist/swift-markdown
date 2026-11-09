@@ -81,6 +81,7 @@ extension BlockParser {
         var pendingTextStart = cursor
         lastDelim = nil
         lastBracket = nil
+        linksFormed = 0
 
         let strikethroughEnabled = storage.options.contains(.strikethrough)
         let gfmAutolinkEnabled = storage.options.contains(.gfmAutolink)
@@ -331,9 +332,7 @@ extension BlockParser {
                 into: parent,
                 content: content
             )
-            // Links may not contain other links (Links), and an autolink binds more tightly
-            // than link text brackets, so the link openers before it cannot form links.
-            markLinkOpenersInactive()
+            linksFormed += 1
             pendingTextStart = auto.afterClose
             return auto.afterClose
         }
@@ -493,21 +492,10 @@ extension BlockParser {
         var bracketAfter: Bool = false
         /// Whether this bracket or one enclosing it is a link or image opener, which suppresses `://` and `www.` extended autolinks.
         var insideLinkOrImage: Bool
-        /// Whether a link or autolink formed after this opener, which then can't form a link: links may not contain
-        /// other links (Links).
-        var linkFormedAfter: Bool = false
+        /// `linksFormed` at push. A link opener can't form a link once a link or autolink formed after it, because links
+        /// may not contain other links (Links).
+        var linksFormedBefore: Int
         var previous: Int?
-    }
-
-    /// Marks every open link opener as unable to form a link, because a link or autolink formed after it.
-    private mutating func markLinkOpenersInactive() {
-        var idx = lastBracket
-        while let i = idx {
-            if brackets[i].kind == .link {
-                brackets[i].linkFormedAfter = true
-            }
-            idx = brackets[i].previous
-        }
     }
 
     /// Pushes a `kind` opener, the `length` bytes at `cursor`, and returns the offset past it. An unresolved opener stays literal text with its own source range.
@@ -531,6 +519,7 @@ extension BlockParser {
             virtualStart: virtualStart,
             delimPosition: delimPosition,
             insideLinkOrImage: insideLinkOrImage,
+            linksFormedBefore: linksFormed,
             previous: prev
         ))
         lastBracket = newIdx
@@ -553,8 +542,8 @@ extension BlockParser {
         let openerInl = brackets[openerIdx].inlText
         let openerDelimPos = brackets[openerIdx].delimPosition
         let openerStart = brackets[openerIdx].virtualStart
-        // A link opener cannot form a link inside another link, or after a link formed at its level.
-        if openerKind == .link, brackets[openerIdx].linkFormedAfter {
+        // A link or autolink formed after a link opener would lie inside its link text.
+        if openerKind == .link, brackets[openerIdx].linksFormedBefore < linksFormed {
             popBracket()
             emitBracketLiteral(at: cursor, end: afterBracket, content: content, parent: parent)
             return afterBracket
@@ -573,7 +562,7 @@ extension BlockParser {
             wrapBracketContent(openerKind.nodeKind, formed.data, openerInl: openerInl, delimPosition: openerDelimPos, start: openerStart, end: formed.end, content: content)
             popBracket()
             if openerKind == .link {
-                markLinkOpenersInactive()
+                linksFormed += 1
             }
             return formed.end
         }
