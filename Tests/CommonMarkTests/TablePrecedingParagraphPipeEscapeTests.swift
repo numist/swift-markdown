@@ -28,7 +28,7 @@ struct TablePrecedingParagraphPipeEscapeTests {
                 code "a\\\\|b" @1:1-1:7
               table @2:1-3:4
                 table_header @2:1-2:6
-                  table_cell align=none colspan=1 rowspan=1 @2:2-2:5
+                  table_cell align=none colspan=1 rowspan=1 @2:3-2:4
                     text "a" @2:3-2:4
 
             """)
@@ -41,7 +41,7 @@ struct TablePrecedingParagraphPipeEscapeTests {
                 text "x\\\\|y" @1:1-1:6
               table @2:1-3:4
                 table_header @2:1-2:6
-                  table_cell align=none colspan=1 rowspan=1 @2:2-2:5
+                  table_cell align=none colspan=1 rowspan=1 @2:3-2:4
                     text "a" @2:3-2:4
 
             """)
@@ -57,7 +57,7 @@ struct TablePrecedingParagraphPipeEscapeTests {
                   text "c" @2:3-2:4
                 table @3:3-4:6
                   table_header @3:3-3:8
-                    table_cell align=none colspan=1 rowspan=1 @3:4-3:7
+                    table_cell align=none colspan=1 rowspan=1 @3:5-3:6
                       text "x" @3:5-3:6
 
             """)
@@ -70,7 +70,7 @@ struct TablePrecedingParagraphPipeEscapeTests {
                 text "x|y" @1:1-1:5
               table @2:1-3:4
                 table_header @2:1-2:6
-                  table_cell align=none colspan=1 rowspan=1 @2:2-2:5
+                  table_cell align=none colspan=1 rowspan=1 @2:3-2:4
                     text "a" @2:3-2:4
 
             """)

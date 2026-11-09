@@ -11,8 +11,8 @@
 import CommonMark
 import Testing
 
-/// A cell's content may include a pipe escaped as `\|` (Tables (extension)). The backslash is not part of the
-/// content, and every other byte keeps its own source column.
+/// A cell's content may include a pipe escaped as `\|` (Tables (extension)). The backslash is part of the cell but not
+/// of its text, and every other byte keeps its own source column.
 @Suite("Source ranges around an escaped pipe in a table")
 struct TablePipeEscapeSourceRangeTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .sourcePosition]
@@ -26,7 +26,7 @@ struct TablePipeEscapeSourceRangeTests {
             document @1:1-2:4
               table @1:1-2:4
                 table_header @1:1-1:9
-                  table_cell align=none colspan=1 rowspan=1 @1:2-1:8
+                  table_cell align=none colspan=1 rowspan=1 @1:3-1:7
                     text "f|a" @1:3-1:7
 
             """)
@@ -37,7 +37,7 @@ struct TablePipeEscapeSourceRangeTests {
             document @1:1-2:4
               table @1:1-2:4
                 table_header @1:1-1:12
-                  table_cell align=none colspan=1 rowspan=1 @1:2-1:11
+                  table_cell align=none colspan=1 rowspan=1 @1:3-1:10
                     text "a|b|c" @1:3-1:10
 
             """)
@@ -48,7 +48,7 @@ struct TablePipeEscapeSourceRangeTests {
             document @1:1-2:4
               table @1:1-2:4
                 table_header @1:1-1:8
-                  table_cell align=none colspan=1 rowspan=1 @1:2-1:7
+                  table_cell align=none colspan=1 rowspan=1 @1:3-1:6
                     text "a|" @1:3-1:6
 
             """)
@@ -59,7 +59,7 @@ struct TablePipeEscapeSourceRangeTests {
             document @1:1-2:4
               table @1:1-2:4
                 table_header @1:1-1:10
-                  table_cell align=none colspan=1 rowspan=1 @1:2-1:9
+                  table_cell align=none colspan=1 rowspan=1 @1:3-1:8
                     text "|" @1:4-1:5
                     emph @1:5-1:8
                       text "a" @1:6-1:7

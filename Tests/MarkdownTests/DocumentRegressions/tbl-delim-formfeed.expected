@@ -1,5 +1,5 @@
 Document @1:1-2:3
-└─ Table @1:1-2:3 alignments: |-|
+└─ Table @1:1-2:2 alignments: |-|
    ├─ Head @1:1-1:2
    │  └─ Cell @1:1-1:2
    │     └─ Text @1:1-1:2 "a"

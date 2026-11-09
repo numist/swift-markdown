@@ -142,14 +142,14 @@ struct TableCellPipeWhitespaceTests {
             document @1:1-4:1
               table @1:1-3:11
                 table_header @1:1-1:10
-                  table_cell align=none colspan=1 rowspan=1 @1:2-1:5
+                  table_cell align=none colspan=1 rowspan=1 @1:3-1:4
                     text "a" @1:3-1:4
-                  table_cell align=none colspan=1 rowspan=1 @1:6-1:9
+                  table_cell align=none colspan=1 rowspan=1 @1:7-1:8
                     text "b" @1:7-1:8
                 table_row @3:1-3:11
-                  table_cell align=none colspan=1 rowspan=1 @3:3-3:6
+                  table_cell align=none colspan=1 rowspan=1 @3:4-3:5
                     text "x" @3:4-3:5
-                  table_cell align=none colspan=1 rowspan=1 @3:7-3:10
+                  table_cell align=none colspan=1 rowspan=1 @3:8-3:9
                     text "y" @3:8-3:9
 
             """)

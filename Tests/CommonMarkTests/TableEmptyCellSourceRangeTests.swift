@@ -11,11 +11,11 @@
 import Testing
 import CommonMark
 
-/// Source ranges of table cells (Tables (extension)) cover the untrimmed text between the pipes, so every
-/// cell ends at its closing pipe; a zero-width `||` cell has colspan 0. A rightmost cell with no closing
-/// pipe runs to the end of the line, including trailing whitespace. A row covers its whole line, including
-/// trailing whitespace.
-@Suite("Table empty-cell source ranges")
+/// The spaces between pipes and cell content are not part of the cell (Tables (extension)), so a cell's source range
+/// covers just its content, and a cell with no content, empty or holding only whitespace, has an empty range just past
+/// its opening pipe; a zero-width `||` cell has colspan 0. A row runs from its first byte to its closing pipe, or to its
+/// last cell's content when it has none, so trailing whitespace is outside it.
+@Suite("Table cell and row source ranges")
 struct TableEmptyCellSourceRangeTests {
 
     private struct Cell {
@@ -113,9 +113,9 @@ struct TableEmptyCellSourceRangeTests {
         #expect((hdr[1].cells[1].startColumn, hdr[1].cells[1].endColumn, hdr[1].cells[1].text) == (3, 4, "y"))
     }
 
-    @Test("a whitespace-only cell ends at its closing pipe")
+    @Test("a whitespace-only cell has an empty range just past its opening pipe")
     func whitespaceCellEndColumn() throws {
-        // `|x| |y`: x at col 2, empty cell is the space at col 4 with its closing pipe at col 5.
+        // `|x| |y`: x at col 2, the whitespace-only cell's opening pipe at col 3.
         let rows = tableRows("a|b|c\n-|-|-\n|x| |y")
         let body = try #require(rows.last, "expected a body row")
         try #require(body.cells.count == 3, "expected three body cells, got \(body.cells.count)")
@@ -123,18 +123,18 @@ struct TableEmptyCellSourceRangeTests {
         #expect(body.cells[0].text == "x")
         #expect(body.cells[1].text == "")
         #expect(body.cells[1].colspan == 1)
-        #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (4, 5))
+        #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (4, 4))
         #expect((body.cells[2].startColumn, body.cells[2].endColumn) == (6, 7))
         #expect(body.cells[2].text == "y")
     }
 
-    @Test("a multi-space empty cell spans its whole untrimmed width")
+    @Test("a cell of several spaces has an empty range just past its opening pipe")
     func multiSpaceEmptyCellEndColumn() throws {
         let rows = tableRows("a|b\n-|-\n|   |c")
         let body = try #require(rows.last, "expected a body row")
         try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
         #expect(body.cells[0].text == "")
-        #expect((body.cells[0].startColumn, body.cells[0].endColumn) == (2, 5))
+        #expect((body.cells[0].startColumn, body.cells[0].endColumn) == (2, 2))
         #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (6, 7))
     }
 
@@ -154,51 +154,51 @@ struct TableEmptyCellSourceRangeTests {
         #expect((header.cells[0].startColumn, header.cells[0].endColumn) == (2, 2))
     }
 
-    @Test("the last row's end column includes trailing whitespace")
-    func lastRowEndIncludesTrailingWhitespace() throws {
+    @Test("the last row ends at its closing pipe, before trailing whitespace")
+    func lastRowEndExcludesTrailingWhitespace() throws {
         let rows = tableRows("a|b\n-|-\n|c| ")
         let body = try #require(rows.last, "expected a body row")
         #expect(body.line == 3)
         #expect(body.startColumn == 1)
-        #expect(body.endColumn == 5)
+        #expect(body.endColumn == 4)
     }
 
-    @Test("a content cell with surrounding whitespace ends at its closing pipe")
-    func contentCellWithSpacesEndsAtPipe() throws {
+    @Test("a content cell with surrounding whitespace covers just its content")
+    func contentCellWithSpacesCoversContent() throws {
         let rows = tableRows("a|b\n-|-\n| x |c")
         let body = try #require(rows.last, "expected a body row")
         try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
         #expect(body.cells[0].text == "x")
-        #expect((body.cells[0].startColumn, body.cells[0].endColumn) == (2, 5))
+        #expect((body.cells[0].startColumn, body.cells[0].endColumn) == (3, 4))
     }
 
-    @Test("a rightmost body cell with trailing whitespace and no closing pipe extends to the line end")
-    func rightmostBodyCellTrailingWhitespaceExtends() throws {
+    @Test("a rightmost body cell with trailing whitespace and no closing pipe ends with its content")
+    func rightmostBodyCellTrailingWhitespace() throws {
         let rows = tableRows("a|b\n-|-\nx|y ")
         let body = try #require(rows.last, "expected a body row")
         try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
         #expect(body.cells[1].text == "y")
-        #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (3, 5))
-        #expect(body.endColumn == 5)
+        #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (3, 4))
+        #expect(body.endColumn == 4)
     }
 
-    @Test("a rightmost header cell with trailing whitespace and no closing pipe extends to the line end")
-    func rightmostHeaderCellTrailingWhitespaceExtends() throws {
+    @Test("a rightmost header cell with trailing whitespace and no closing pipe ends with its content")
+    func rightmostHeaderCellTrailingWhitespace() throws {
         let rows = tableRows("a|b  \n-|-\nx|y")
         let header = try #require(rows.first, "expected a header row")
         try #require(header.cells.count == 2, "expected two header cells, got \(header.cells.count)")
         #expect(header.cells[1].text == "b")
-        #expect((header.cells[1].startColumn, header.cells[1].endColumn) == (3, 6))
-        #expect(header.endColumn == 6)
+        #expect((header.cells[1].startColumn, header.cells[1].endColumn) == (3, 4))
+        #expect(header.endColumn == 4)
     }
 
-    @Test("a rightmost cell with a closing pipe ends at the pipe")
-    func rightmostCellClosingPipeNotExtended() throws {
+    @Test("a rightmost cell with a closing pipe ends with its content, and the row at the pipe")
+    func rightmostCellClosingPipe() throws {
         let rows = tableRows("a|b\n-|-\nx|y |")
         let body = try #require(rows.last, "expected a body row")
         try #require(body.cells.count == 2, "expected two body cells, got \(body.cells.count)")
         #expect(body.cells[1].text == "y")
-        #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (3, 5))
+        #expect((body.cells[1].startColumn, body.cells[1].endColumn) == (3, 4))
         #expect(body.endColumn == 6)
     }
 

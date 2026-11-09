@@ -41,7 +41,7 @@ extension BlockParser {
         }
         precondition(lines.count >= 2, "a table-pending paragraph holds its header and delimiter lines")
         let alignments = parseDelimRow(line: lines[1])
-        precondition(splitCells(line: lines[0]).cells.count == alignments.count, "a table-pending paragraph's header has the delimiter row's column count")
+        precondition(splitCells(line: lines[0]).count == alignments.count, "a table-pending paragraph's header has the delimiter row's column count")
         let columnCount = alignments.count
         storage[node].kind = .table
         storage[node].data = .table(columnCount: columnCount)
@@ -54,10 +54,11 @@ extension BlockParser {
                 line: lines[k],
                 alignments: alignments,
                 isHeader: k == 0,
-                isLastLine: k == lines.count - 1,
                 rowspanOwners: &rowspanOwners
             )
         }
+        // The table ends with its last line, the delimiter row when it has no body, before any trailing whitespace.
+        storage.setSourceEnd(node, trimmingPadding(lines[lines.count - 1]).upperBound)
     }
 
     /// Whether source lines `header` and `delimiter` open a table: `delimiter` is a delimiter row and `header` has as
@@ -130,7 +131,6 @@ extension BlockParser {
         line: Range<Int>,
         alignments: [MarkdownNode.TableAlignment],
         isHeader: Bool,
-        isLastLine: Bool,
         rowspanOwners: inout [DocumentStorage.Index?]
     ) {
         let rowIdx = storage.appendNode(NodeRecord(
@@ -139,12 +139,10 @@ extension BlockParser {
             data: nil
         ))
         storage.appendChild(rowIdx, to: parent)
-        // A row covers its whole source line, trailing whitespace included. The last row ends where the table node,
-        // already stamped with the paragraph's extent, ends. So does the rightmost cell of a row with no closing pipe.
-        let rowEnd = isLastLine && positionsEnabled ? Int(storage.sourceRanges[parent].end) : line.upperBound
+        // A row runs from its first byte to its closing pipe or last cell's content, before any trailing whitespace.
         storage.setSourceStart(rowIdx, line.lowerBound)
-        storage.setSourceEnd(rowIdx, rowEnd)
-        let (cells, hadClosingPipe) = splitCells(line: line)
+        storage.setSourceEnd(rowIdx, trimmingPadding(line).upperBound)
+        let cells = splitCells(line: line)
         let columnCount = alignments.count
 
         // Empty without `.tableSpans`, so the common path does not allocate.
@@ -205,12 +203,11 @@ extension BlockParser {
                 rowspanOwners[col] = cellIdx
             }
             guard col < cells.count else { continue }
-            // A cell covers its untrimmed span between pipes; with no closing pipe, the rightmost cell runs to the
-            // row's end.
-            let span = cells[col]
-            storage.setSourceStart(cellIdx, span.lowerBound)
-            storage.setSourceEnd(cellIdx, col == cells.count - 1 && !hadClosingPipe ? rowEnd : span.upperBound)
-            let content = trimmingPadding(span)
+            // A cell covers its content, without the padding between it and the pipes; a cell with no content has an
+            // empty range just past its opening pipe.
+            let content = trimmingPadding(cells[col])
+            storage.setSourceStart(cellIdx, content.isEmpty ? cells[col].lowerBound : content.lowerBound)
+            storage.setSourceEnd(cellIdx, content.isEmpty ? cells[col].lowerBound : content.upperBound)
             if content.isEmpty || (spansEnabled && skipContent[col]) { continue }
             queueInlines(of: cellIdx, content: content)
         }
@@ -264,7 +261,7 @@ extension BlockParser {
 
     /// Delimiter row `line`'s column alignments.
     private func parseDelimRow(line: Range<Int>) -> [MarkdownNode.TableAlignment] {
-        let cells = splitCells(line: line).cells
+        let cells = splitCells(line: line)
         precondition(!cells.isEmpty, "a delimiter-candidate line holds a `-`, so it splits into at least one cell")
         return cells.map { cell in
             guard let alignment = delimiterAlignment(of: cell) else {
@@ -298,18 +295,17 @@ extension BlockParser {
     }
 
     /// `forEachCell`'s cells of `line`, collected.
-    private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool) {
+    private func splitCells(line: Range<Int>) -> [Range<Int>] {
         var cells: [Range<Int>] = []
-        let hadClosingPipe = forEachCell(in: line) { cells.append($0) }
-        return (cells, hadClosingPipe)
+        forEachCell(in: line) { cells.append($0) }
+        return cells
     }
 
-    /// Calls `body` with each cell of source line `line`, in order, and returns whether the row has a closing `|`.
-    /// Cells split on unescaped `|`. Padding may precede a leading `|` and follow a closing one; both pipes and that
-    /// padding are stripped.
+    /// Calls `body` with each cell of source line `line`, in order. Cells split on unescaped `|`. Padding may precede a
+    /// leading `|` and follow a closing one; both pipes and that padding are stripped.
     // Out of line, a table-heavy parse costs 0.7% more.
-    @discardableResult @inline(__always)
-    private func forEachCell(in line: Range<Int>, _ body: (Range<Int>) -> Void) -> Bool {
+    @inline(__always)
+    private func forEachCell(in line: Range<Int>, _ body: (Range<Int>) -> Void) {
         var s = line.lowerBound
         var e = line.upperBound
         while e > s && sourceBytes[e - 1].isLineWhitespace {
@@ -332,7 +328,7 @@ extension BlockParser {
         // A leading pipe with only padding after it is zero cells, so `|\n-|` is a paragraph. `||` has a closing
         // pipe, so its one empty cell is kept.
         if hadLeadingPipe && !hadClosingPipe && s == e {
-            return false
+            return
         }
         var cellStart = s
         for i in s..<e where sourceBytes[i] == UInt8(ascii: "|") && !isEscapedPipe(at: i, from: line.lowerBound) {
@@ -340,7 +336,6 @@ extension BlockParser {
             cellStart = i + 1
         }
         body(cellStart..<e)
-        return hadClosingPipe
     }
 
     /// `range` without its leading and trailing padding: every whitespace character other than a line ending, as

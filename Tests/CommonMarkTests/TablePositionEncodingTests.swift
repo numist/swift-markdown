@@ -103,6 +103,21 @@ struct TablePositionEncodingTests {
         #expect(body.cells[1].textRange == r(3, 5, 3, 6))
     }
 
+    /// Padded multibyte cells cover just their content, and a row ends at its closing pipe.
+    @Test("multi-column: a padded multibyte cell covers just its content bytes")
+    func paddedMultibyteCells() throws {
+        // Body line 3 `| é | 😀 |  `: é@bytes2-3 (cols3-4), 😀@bytes7-10 (cols8-11), closing |@byte12 (col13).
+        let rows = tableRows("a|b\n-|-\n| \u{E9} | \u{1F600} |  ")
+        try #require(rows.count == 2, "fixture: header + body row")
+        let body = rows[1]
+        try #require(body.cells.count == 2 && body.cells[0].text == "\u{E9}" && body.cells[1].text == "\u{1F600}", "fixture: cell literals")
+        #expect(body.cells[0].range == r(3, 3, 3, 5))
+        #expect(body.cells[0].textRange == r(3, 3, 3, 5))
+        #expect(body.cells[1].range == r(3, 8, 3, 12))
+        #expect(body.cells[1].textRange == r(3, 8, 3, 12))
+        #expect(body.range == r(3, 1, 3, 14))
+    }
+
     /// `€` (3 bytes) as the whole second body cell: its Text run spans three byte-columns.
     @Test("multi-column: a 3-byte cell spans three byte-columns")
     func bodyCellThreeByte() throws {

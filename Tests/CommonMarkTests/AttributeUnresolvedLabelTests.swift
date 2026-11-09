@@ -484,10 +484,10 @@ struct AttributeUnresolvedLabelTests {
             document @1:1-3:12
               table @1:1-3:12
                 table_header @1:1-1:6
-                  table_cell align=none colspan=1 rowspan=1 @1:2-1:5
+                  table_cell align=none colspan=1 rowspan=1 @1:3-1:4
                     text "a" @1:3-1:4
                 table_row @3:1-3:12
-                  table_cell align=none colspan=1 rowspan=1 @3:2-3:11
+                  table_cell align=none colspan=1 rowspan=1 @3:3-3:10
                     text "^[x]" @3:3-3:10
 
             """)
@@ -499,10 +499,10 @@ struct AttributeUnresolvedLabelTests {
             document @1:1-5:12
               table @3:1-5:12
                 table_header @3:1-3:6
-                  table_cell align=none colspan=1 rowspan=1 @3:2-3:5
+                  table_cell align=none colspan=1 rowspan=1 @3:3-3:4
                     text "a" @3:3-3:4
                 table_row @5:1-5:12
-                  table_cell align=none colspan=1 rowspan=1 @5:2-5:11
+                  table_cell align=none colspan=1 rowspan=1 @5:3-5:10
                     attribute "d" @5:3-5:10
                       text "x" @5:5-5:6
 
