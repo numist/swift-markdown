@@ -25,7 +25,7 @@ struct EmptyListItemBlankLineTests {
     func emptyLine() {
         #expect(tree("-\n\n  foo\n") == """
             document @1:1-3:6
-              list bullet '-' tight @1:1-2:1
+              list bullet '-' tight @1:1-1:2
                 item @1:1-1:2
               paragraph @3:3-3:6
                 text "foo" @3:3-3:6
@@ -37,7 +37,7 @@ struct EmptyListItemBlankLineTests {
     func spacesLine() {
         #expect(tree("-\n  \n  foo\n") == """
             document @1:1-3:6
-              list bullet '-' tight @1:1-2:3
+              list bullet '-' tight @1:1-1:2
                 item @1:1-1:2
               paragraph @3:3-3:6
                 text "foo" @3:3-3:6
@@ -49,7 +49,7 @@ struct EmptyListItemBlankLineTests {
     func tabLine() {
         #expect(tree("-\n\t\n  foo\n") == """
             document @1:1-3:6
-              list bullet '-' tight @1:1-2:2
+              list bullet '-' tight @1:1-1:2
                 item @1:1-1:2
               paragraph @3:3-3:6
                 text "foo" @3:3-3:6
@@ -63,7 +63,7 @@ struct EmptyListItemBlankLineTests {
             document @1:1-3:8
               list bullet '-' loose @1:1-3:8
                 item @1:1-3:8
-                  list bullet '-' tight @1:3-2:5
+                  list bullet '-' tight @1:3-1:4
                     item @1:3-1:4
                   paragraph @3:5-3:8
                     text "foo" @3:5-3:8

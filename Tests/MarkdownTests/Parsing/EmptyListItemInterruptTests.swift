@@ -87,8 +87,8 @@ class EmptyListItemInterruptTests: XCTestCase {
 
         let expectedDump = """
         Document @1:1-1:4
-        └─ UnorderedList @1:1-1:4
-           └─ ListItem @1:1-1:4
+        └─ UnorderedList @1:1-1:2
+           └─ ListItem @1:1-1:2
         """
 
         let document = Document(parsing: text)

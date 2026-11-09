@@ -24,7 +24,7 @@ struct FootnoteLabelTests {
             document @1:1-3:6
               paragraph @3:1-3:6
                 footnote_reference "1" @3:1-3:6
-              footnote_definition "\\\\]" @1:1-2:1
+              footnote_definition "\\\\]" @1:1-1:9
                 paragraph @1:8-1:9
                   text "x" @1:8-1:9
 

@@ -32,7 +32,7 @@ final class MarkupTreeDumperTests: XCTestCase {
         │  ├─ Image @3:51-3:64 #15 source: "foo"
         │  │  └─ Text @3:53-3:58 #16 "image"
         │  └─ Text @3:64-3:65 #17 "."
-        ├─ UnorderedList @5:1-9:1 #18
+        ├─ UnorderedList @5:1-8:7 #18
         │  ├─ ListItem @5:1-5:7 #19
         │  │  └─ Paragraph @5:3-5:7 #20
         │  │     └─ Text @5:3-5:7 #21 "this"
@@ -42,31 +42,31 @@ final class MarkupTreeDumperTests: XCTestCase {
         │  ├─ ListItem @7:1-7:4 #25
         │  │  └─ Paragraph @7:3-7:4 #26
         │  │     └─ Text @7:3-7:4 #27 "a"
-        │  └─ ListItem @8:1-9:1 #28
+        │  └─ ListItem @8:1-8:7 #28
         │     └─ Paragraph @8:3-8:7 #29
         │        └─ Text @8:3-8:7 #30 "list"
-        ├─ OrderedList @10:1-12:1 #31
+        ├─ OrderedList @10:1-11:8 #31
         │  ├─ ListItem @10:1-10:8 #32
         │  │  └─ Paragraph @10:4-10:8 #33
         │  │     └─ Text @10:4-10:8 #34 "eggs"
-        │  └─ ListItem @11:1-12:1 #35
+        │  └─ ListItem @11:1-11:8 #35
         │     └─ Paragraph @11:4-11:8 #36
         │        └─ Text @11:4-11:8 #37 "milk"
         ├─ BlockQuote @13:1-13:13 #38
         │  └─ Paragraph @13:3-13:13 #39
         │     └─ Text @13:3-13:13 #40 "BlockQuote"
-        ├─ OrderedList @15:1-17:1 #41 startIndex: 2
+        ├─ OrderedList @15:1-16:9 #41 startIndex: 2
         │  ├─ ListItem @15:1-15:9 #42
         │  │  └─ Paragraph @15:4-15:9 #43
         │  │     └─ Text @15:4-15:9 #44 "flour"
-        │  └─ ListItem @16:1-17:1 #45
+        │  └─ ListItem @16:1-16:9 #45
         │     └─ Paragraph @16:4-16:9 #46
         │        └─ Text @16:4-16:9 #47 "sugar"
-        ├─ UnorderedList @18:1-20:1 #48
+        ├─ UnorderedList @18:1-19:30 #48
         │  ├─ ListItem @18:1-18:37 #49 checkbox: [x]
         │  │  └─ Paragraph @18:7-18:37 #50
         │  │     └─ Text @18:7-18:37 #51 "Combine flour and baking soda."
-        │  └─ ListItem @19:1-20:1 #52 checkbox: [ ]
+        │  └─ ListItem @19:1-19:30 #52 checkbox: [ ]
         │     └─ Paragraph @19:7-19:30 #53
         │        └─ Text @19:7-19:30 #54 "Combine sugar and eggs."
         ├─ CodeBlock @21:1-25:4 #55 language: swift

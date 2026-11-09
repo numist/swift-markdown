@@ -146,7 +146,7 @@ struct IndentedCodeTrailingBlankRangeTests {
             ">     a\n>     \n",
             """
             document @1:1-2:7
-              block_quote @1:1-2:7
+              block_quote @1:1-2:2
                 code_block "" "a\\n" @1:7-1:8
 
             """
@@ -156,8 +156,8 @@ struct IndentedCodeTrailingBlankRangeTests {
             "-     a\n\nb\n",
             """
             document @1:1-3:2
-              list bullet '-' tight @1:1-2:1
-                item @1:1-2:1
+              list bullet '-' tight @1:1-1:8
+                item @1:1-1:8
                   code_block "" "a\\n" @1:7-1:8
               paragraph @3:1-3:2
                 text "b" @3:1-3:2
@@ -169,8 +169,8 @@ struct IndentedCodeTrailingBlankRangeTests {
             "+ \t\tB\r\t\t  ",
             """
             document @1:1-2:5
-              list bullet '+' tight @1:1-2:5
-                item @1:1-2:5
+              list bullet '+' tight @1:1-1:6
+                item @1:1-1:6
                   code_block "" "  B\\n" @1:4-1:6
 
             """
@@ -180,8 +180,8 @@ struct IndentedCodeTrailingBlankRangeTests {
             "1.     a\n   \n",
             """
             document @1:1-2:4
-              list ordered start=1 delim=period tight @1:1-2:4
-                item @1:1-2:4
+              list ordered start=1 delim=period tight @1:1-1:9
+                item @1:1-1:9
                   code_block "" "a\\n" @1:8-1:9
 
             """
@@ -195,7 +195,7 @@ struct IndentedCodeTrailingBlankRangeTests {
                 footnote_reference "1" @1:1-1:5
               paragraph @7:1-7:2
                 text "b" @7:1-7:2
-              footnote_definition "a" @3:1-6:1
+              footnote_definition "a" @3:1-5:10
                 paragraph @3:7-3:8
                   text "x" @3:7-3:8
                 code_block "" "a\\n" @5:9-5:10

@@ -144,7 +144,7 @@ struct NoncontiguousLeafStorageTests {
         #expect(materializedSize(source) == 1)
         #expect(tree(source) == """
             document @1:1-2:5
-              block_quote @1:1-2:5
+              block_quote @1:1-2:4
                 paragraph @2:3-2:4
                   text "b" @2:3-2:4
 

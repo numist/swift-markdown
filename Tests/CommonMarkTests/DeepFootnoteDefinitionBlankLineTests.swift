@@ -33,7 +33,7 @@ struct DeepFootnoteDefinitionBlankLineTests {
                 document @1:1-40003:1
                   paragraph @1:1-1:5
                     footnote_reference "1" @1:1-1:5
-                  footnote_definition "a" @3:199996-40003:1
+                  footnote_definition "a" @3:199996-3:200002
                     paragraph @3:200001-3:200002
                       text "x" @3:200001-3:200002
 

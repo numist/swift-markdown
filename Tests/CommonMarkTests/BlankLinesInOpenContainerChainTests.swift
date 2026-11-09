@@ -45,7 +45,7 @@ struct BlankLinesInOpenContainerChainTests {
                 footnote_reference "1" @1:1-1:5
               paragraph @6:1-6:2
                 text "y" @6:1-6:2
-              footnote_definition "a" @3:46-5:1
+              footnote_definition "a" @3:46-3:53
                 block_quote @3:51-3:53
                   paragraph @3:52-3:53
                     text "x" @3:52-3:53
@@ -61,8 +61,8 @@ struct BlankLinesInOpenContainerChainTests {
                 footnote_reference "1" @1:1-1:5
               paragraph @6:1-6:2
                 text "x" @6:1-6:2
-              footnote_definition "a" @3:46-5:1
-                list bullet '-' tight @3:51-5:1
+              footnote_definition "a" @3:46-3:52
+                list bullet '-' tight @3:51-3:52
                   item @3:51-3:52
 
             """
@@ -74,9 +74,9 @@ struct BlankLinesInOpenContainerChainTests {
             document @1:1-5:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
-              footnote_definition "a" @3:46-5:1
-                list bullet '-' tight @3:51-5:1
-                  item @3:51-5:1
+              footnote_definition "a" @3:46-3:54
+                list bullet '-' tight @3:51-3:54
+                  item @3:51-3:54
                     paragraph @3:53-3:54
                       text "a" @3:53-3:54
 
@@ -89,7 +89,7 @@ struct BlankLinesInOpenContainerChainTests {
             document @1:1-7:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
-              footnote_definition "a" @3:56-7:1
+              footnote_definition "a" @3:56-3:62
                 paragraph @3:61-3:62
                   text "x" @3:61-3:62
 
@@ -102,7 +102,7 @@ struct BlankLinesInOpenContainerChainTests {
             document @1:1-6:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
-              footnote_definition "a" @3:56-6:1
+              footnote_definition "a" @3:56-3:62
                 paragraph @3:61-3:62
                   text "x" @3:61-3:62
 
@@ -115,7 +115,7 @@ struct BlankLinesInOpenContainerChainTests {
             document @1:1-7:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
-              footnote_definition "a" @3:56-7:1
+              footnote_definition "a" @3:56-3:62
                 paragraph @3:61-3:62
                   text "x" @3:61-3:62
 
@@ -126,26 +126,26 @@ struct BlankLinesInOpenContainerChainTests {
             "- - - - - - - - - - x\n\n\ny\n",
             """
             document @1:1-4:2
-              list bullet '-' tight @1:1-3:1
-                item @1:1-3:1
-                  list bullet '-' tight @1:3-3:1
-                    item @1:3-3:1
-                      list bullet '-' tight @1:5-3:1
-                        item @1:5-3:1
-                          list bullet '-' tight @1:7-3:1
-                            item @1:7-3:1
-                              list bullet '-' tight @1:9-3:1
-                                item @1:9-3:1
-                                  list bullet '-' tight @1:11-3:1
-                                    item @1:11-3:1
-                                      list bullet '-' tight @1:13-3:1
-                                        item @1:13-3:1
-                                          list bullet '-' tight @1:15-3:1
-                                            item @1:15-3:1
-                                              list bullet '-' tight @1:17-3:1
-                                                item @1:17-3:1
-                                                  list bullet '-' tight @1:19-3:1
-                                                    item @1:19-3:1
+              list bullet '-' tight @1:1-1:22
+                item @1:1-1:22
+                  list bullet '-' tight @1:3-1:22
+                    item @1:3-1:22
+                      list bullet '-' tight @1:5-1:22
+                        item @1:5-1:22
+                          list bullet '-' tight @1:7-1:22
+                            item @1:7-1:22
+                              list bullet '-' tight @1:9-1:22
+                                item @1:9-1:22
+                                  list bullet '-' tight @1:11-1:22
+                                    item @1:11-1:22
+                                      list bullet '-' tight @1:13-1:22
+                                        item @1:13-1:22
+                                          list bullet '-' tight @1:15-1:22
+                                            item @1:15-1:22
+                                              list bullet '-' tight @1:17-1:22
+                                                item @1:17-1:22
+                                                  list bullet '-' tight @1:19-1:22
+                                                    item @1:19-1:22
                                                       paragraph @1:21-1:22
                                                         text "x" @1:21-1:22
               paragraph @4:1-4:2
@@ -158,27 +158,27 @@ struct BlankLinesInOpenContainerChainTests {
             "- + - + - + - + - + -\n\n\nx\n",
             """
             document @1:1-4:2
-              list bullet '-' tight @1:1-3:1
-                item @1:1-3:1
-                  list bullet '+' tight @1:3-3:1
-                    item @1:3-3:1
-                      list bullet '-' tight @1:5-3:1
-                        item @1:5-3:1
-                          list bullet '+' tight @1:7-3:1
-                            item @1:7-3:1
-                              list bullet '-' tight @1:9-3:1
-                                item @1:9-3:1
-                                  list bullet '+' tight @1:11-3:1
-                                    item @1:11-3:1
-                                      list bullet '-' tight @1:13-3:1
-                                        item @1:13-3:1
-                                          list bullet '+' tight @1:15-3:1
-                                            item @1:15-3:1
-                                              list bullet '-' tight @1:17-3:1
-                                                item @1:17-3:1
-                                                  list bullet '+' tight @1:19-3:1
-                                                    item @1:19-3:1
-                                                      list bullet '-' tight @1:21-3:1
+              list bullet '-' tight @1:1-1:22
+                item @1:1-1:22
+                  list bullet '+' tight @1:3-1:22
+                    item @1:3-1:22
+                      list bullet '-' tight @1:5-1:22
+                        item @1:5-1:22
+                          list bullet '+' tight @1:7-1:22
+                            item @1:7-1:22
+                              list bullet '-' tight @1:9-1:22
+                                item @1:9-1:22
+                                  list bullet '+' tight @1:11-1:22
+                                    item @1:11-1:22
+                                      list bullet '-' tight @1:13-1:22
+                                        item @1:13-1:22
+                                          list bullet '+' tight @1:15-1:22
+                                            item @1:15-1:22
+                                              list bullet '-' tight @1:17-1:22
+                                                item @1:17-1:22
+                                                  list bullet '+' tight @1:19-1:22
+                                                    item @1:19-1:22
+                                                      list bullet '-' tight @1:21-1:22
                                                         item @1:21-1:22
               paragraph @4:1-4:2
                 text "x" @4:1-4:2
@@ -190,27 +190,27 @@ struct BlankLinesInOpenContainerChainTests {
             "- + - + - + - + - + -\n  \n\nx\n",
             """
             document @1:1-4:2
-              list bullet '-' tight @1:1-3:1
-                item @1:1-3:1
-                  list bullet '+' tight @1:3-3:1
-                    item @1:3-3:1
-                      list bullet '-' tight @1:5-3:1
-                        item @1:5-3:1
-                          list bullet '+' tight @1:7-3:1
-                            item @1:7-3:1
-                              list bullet '-' tight @1:9-3:1
-                                item @1:9-3:1
-                                  list bullet '+' tight @1:11-3:1
-                                    item @1:11-3:1
-                                      list bullet '-' tight @1:13-3:1
-                                        item @1:13-3:1
-                                          list bullet '+' tight @1:15-3:1
-                                            item @1:15-3:1
-                                              list bullet '-' tight @1:17-3:1
-                                                item @1:17-3:1
-                                                  list bullet '+' tight @1:19-3:1
-                                                    item @1:19-3:1
-                                                      list bullet '-' tight @1:21-3:1
+              list bullet '-' tight @1:1-1:22
+                item @1:1-1:22
+                  list bullet '+' tight @1:3-1:22
+                    item @1:3-1:22
+                      list bullet '-' tight @1:5-1:22
+                        item @1:5-1:22
+                          list bullet '+' tight @1:7-1:22
+                            item @1:7-1:22
+                              list bullet '-' tight @1:9-1:22
+                                item @1:9-1:22
+                                  list bullet '+' tight @1:11-1:22
+                                    item @1:11-1:22
+                                      list bullet '-' tight @1:13-1:22
+                                        item @1:13-1:22
+                                          list bullet '+' tight @1:15-1:22
+                                            item @1:15-1:22
+                                              list bullet '-' tight @1:17-1:22
+                                                item @1:17-1:22
+                                                  list bullet '+' tight @1:19-1:22
+                                                    item @1:19-1:22
+                                                      list bullet '-' tight @1:21-1:22
                                                         item @1:21-1:22
               paragraph @4:1-4:2
                 text "x" @4:1-4:2

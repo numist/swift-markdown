@@ -55,7 +55,7 @@ struct LeafContentControlWhitespaceTests {
     @Test func blockQuoteParagraphTrimsVerticalTabs() {
         #expect(tree("> \u{0B}foo\n> bar\u{0B}") == """
             Document @1:1-2:7
-            └─ BlockQuote @1:1-2:7
+            └─ BlockQuote @1:1-2:6
                └─ Paragraph @1:4-2:6
                   ├─ Text @1:4-1:7 "foo"
                   ├─ SoftBreak

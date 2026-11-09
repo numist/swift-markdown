@@ -88,8 +88,8 @@ struct TaskListFirstParagraphTests {
     @Test func markerOnlyItemHasNoParagraph() {
         #expect(tree("- [ ] ") == """
             Document @1:1-1:7
-            └─ UnorderedList @1:1-1:7
-               └─ ListItem @1:1-1:7 checkbox: [ ]
+            └─ UnorderedList @1:1-1:6
+               └─ ListItem @1:1-1:6 checkbox: [ ]
             """)
     }
 

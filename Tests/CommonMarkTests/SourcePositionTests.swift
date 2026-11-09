@@ -131,7 +131,7 @@ struct SourcePositionTests {
         }
     }
 
-    @Test("a nested empty list item never extends onto a blank line, while an item holding a block does")
+    @Test("nested list items end at their last content byte, before a following blank line")
     func nestedEmptyItemBlankLineExtent() throws {
         // `- -` is an outer item (content column 3) holding an empty inner item (content column 5).
         // Two spaces reach only the outer item's content column.
@@ -142,8 +142,8 @@ struct SourcePositionTests {
             try #require(items.count == 2, "expected an outer + a nested inner item; got \(items.count)")
             let outer = try #require(items[0])
             let inner = try #require(items[1])
-            #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 2, column: 3))   // outer extends onto the blank
-            #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // inner does NOT extend
+            #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 1, column: 4))
+            #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))
         }
 
         // Four spaces reach the inner item's content column, but the inner item is empty.
@@ -154,8 +154,8 @@ struct SourcePositionTests {
             try #require(items.count == 2, "expected an outer + a nested inner item; got \(items.count)")
             let outer = try #require(items[0])
             let inner = try #require(items[1])
-            #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 2, column: 5))
-            #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))   // inner does NOT extend
+            #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 1, column: 4))
+            #expect(inner == Pos(line: 1, column: 3)..<Pos(line: 1, column: 4))
         }
 
         // Distinct bullets nest three items rather than form a thematic break. Five spaces reach the
@@ -168,9 +168,9 @@ struct SourcePositionTests {
             let outer = try #require(items[0])
             let middle = try #require(items[1])
             let inner = try #require(items[2])
-            #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 2, column: 6))
-            #expect(middle == Pos(line: 1, column: 3)..<Pos(line: 2, column: 6))  // stays open: has a child
-            #expect(inner == Pos(line: 1, column: 5)..<Pos(line: 1, column: 6))   // childless, does NOT extend
+            #expect(outer == Pos(line: 1, column: 1)..<Pos(line: 1, column: 6))
+            #expect(middle == Pos(line: 1, column: 3)..<Pos(line: 1, column: 6))
+            #expect(inner == Pos(line: 1, column: 5)..<Pos(line: 1, column: 6))
         }
     }
 

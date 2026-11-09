@@ -910,6 +910,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return (Int(first.offset), Int(last.offset) + Int(last.length))
     }
 
+    /// The source offset just past virtual offset `end - 1` of a paragraph's segments, a byte that is not whitespace.
+    private func sourceEnd(ofVirtual end: Int, in segs: borrowing UniqueArray<Segment>) -> Int {
+        precondition(end > 0, "a paragraph's content that is not whitespace is not empty")
+        var i = 0
+        var segmentStart = 0
+        while segmentStart + Int(segs[i].length) < end {
+            segmentStart += Int(segs[i].length)
+            i += 1
+        }
+        precondition(segs[i].inSource, "a paragraph's lines start and end on a source byte")
+        return Int(segs[i].offset) + end - segmentStart
+    }
+
     /// The source extent imaged by the run map of trimmed paragraph content: from its first run's byte to just past
     /// its last run's.
     private func sourceSpan(of map: [ArenaRun]) -> (start: Int, end: Int) {
@@ -1090,9 +1103,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             pending = addLine(range: line.firstNonSpace..<lineRange.upperBound, to: para, pending: consume pending)
             return true
         }
-        // Only definitions: drop the paragraph and dispatch the line as a new block.
+        // Only definitions: drop the paragraph and dispatch the line as a new block. That block opens in the same
+        // container, past the definitions, so they need not extend the container's range.
         pending = nil
-        removeEmptiedParagraph(para)
+        removeEmptiedParagraph(para, contentEnd: nil)
         openParagraphTableState = nil
         guard let parent = storage[para].parent else {
             fatalError("Invalid internal state - missing parent")
@@ -1247,6 +1261,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                         markerEnd: firstNonSpace + 1,
                         advanced: advanced
                     )
+                    storage.setSourceEnd(node, firstNonSpace + 1)
                     deepestMatched = node
                 } else {
                     // Without `>`, the block quote's paragraph may continue lazily.
@@ -1526,6 +1541,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             data: .item(padding: marker.contentColumn),
             start: start
         )
+        storage.setSourceEnd(itemIdx, marker.markerEnd)
         current = itemIdx
         return pending
     }
@@ -1577,6 +1593,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     parent: current,
                     start: firstNonSpace
                 )
+                storage.setSourceEnd(quoteIdx, firstNonSpace + 1)
                 current = quoteIdx
                 // As in `walkOpenContainers`, a tab under the marker's optional space stays at `cursor` for a later
                 // leaf to split, and `column` records the column (Tabs).
@@ -1912,7 +1929,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         let start = rawContentStart(in: segs, trimmed: trimmed, taskItemParagraph: node)
         if start == trimmed.upperBound {
-            removeEmptiedParagraph(node)
+            removeEmptiedParagraph(node, contentEnd: positionsEnabled ? sourceEnd(ofVirtual: trimmed.upperBound, in: segs) : nil)
             return
         }
         let content = segments(segs, in: start..<trimmed.upperBound)
@@ -2031,8 +2048,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Removes `paragraph`, its container's last block, which holds only definitions or a task list item marker.
     ///
-    /// In a list item it still counts for looseness as a block of the item (Lists).
-    private mutating func removeEmptiedParagraph(_ paragraph: DocumentStorage.Index) {
+    /// In a list item it still counts for looseness as a block of the item (Lists). Its content still counts for its
+    /// container's range, which ends no earlier than `contentEnd`, just past the paragraph's last content byte, if given.
+    private mutating func removeEmptiedParagraph(_ paragraph: DocumentStorage.Index, contentEnd: Int?) {
+        if let contentEnd, let container = storage[paragraph].parent {
+            storage.sourceRanges[container].end = max(storage.sourceRanges[container].end, contentEnd)
+        }
         if let item = storage[paragraph].parent, case .item = storage[item].kind {
             if let preceding = storage[paragraph].previous {
                 if endsWithBlankLine(preceding) {
@@ -2059,7 +2080,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         let contentChunk = paragraphContent(of: node, trimmed: trimmed)
         if contentChunk.isEmpty {
-            removeEmptiedParagraph(node)
+            removeEmptiedParagraph(node, contentEnd: positionsEnabled ? sourceExtent(of: trimmed, in: raw, map: map).end : nil)
             return
         }
         if positionsEnabled {
@@ -2077,9 +2098,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         pendingInlines.append((node, storage.intern(contentChunk)))
     }
 
+    /// Whether `kind` is a container block, one that holds other blocks (Container blocks).
+    private static func isContainer(_ kind: MarkdownNode.Kind) -> Bool {
+        switch kind {
+        case .blockQuote, .list, .item, .footnoteDefinition: true
+        default: false
+        }
+    }
+
     /// Closes `node`, materializes its content, and makes its parent `current`.
     ///
-    /// A block ends on the current line when `endsOnCurrentLine` (the document ends, a closing fence, an HTML block's end condition, a setext heading's underline) or it opened on that line; otherwise it ends on the previous line, which the current line didn't continue. An indented code block ends at its last line that is not blank. `lineContentEnd` is where a one-line ATX heading's or thematic break's content ends.
+    /// A block ends on the current line when `endsOnCurrentLine` (the document ends, a closing fence, an HTML block's end condition, a setext heading's underline) or it opened on that line; otherwise it ends on the previous line, which the current line didn't continue. An indented code block ends at its last line that is not blank. A container block ends just past its last content byte: where its last child ends, or where its own marker does if that is later (a block quote's `>` on the last line that has one, a list item's list marker, a footnote definition's `[^label]:`), so blank lines and trailing whitespace after its content are not part of it. A paragraph that held only link reference definitions or a task list item marker leaves no child but still counts as content, while a fenced code block's or HTML block's blank lines are its content, so a container ending in one ends on its last line. `lineContentEnd` is where a one-line ATX heading's or thematic break's content ends.
     private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, endsOnCurrentLine: Bool = false, lineContentEnd: Int? = nil) -> PendingLeaf? {
         var pending = pending
         let kind = storage[node].kind
@@ -2096,6 +2125,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 currentLineSourceRange = currentLineSourceRange.lowerBound..<end
             } else if case .codeBlock(let info) = kind, !info.isFenced {
                 end = indentedCodeContentEnd
+            } else if Self.isContainer(kind) {
+                // The end of the container's own marker, or of a removed paragraph's content, if that was later.
+                let ownEnd = storage.sourceRanges[node].end
+                end = storage[node].lastChild.map { max(ownEnd, storage.sourceRanges[$0].end) } ?? ownEnd
             } else {
                 end = (endsOnCurrentLine || startedThisLine || kind == .document)
                     ? currentLineSourceRange.upperBound
@@ -2354,6 +2387,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // The content's absolute column, past `consumedTo`'s when the padding consumed part of a tab, which stays at
         // `consumedTo`.
         var contentStartColumn: Int
+        var markerEnd: Int        // source offset just past the marker
         var consumedTo: Int       // source offset of first byte of item content
         var isEmpty: Bool         // marker opens an empty item (only whitespace to the line end)
     }
@@ -2485,6 +2519,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             start: startNumber,
             contentColumn: markerOffset + markerWidth + padding,
             contentStartColumn: contentColumnAfterMarker + padding,
+            markerEnd: afterMarker,
             consumedTo: contentStart,
             isEmpty: isEmpty
         )
@@ -3311,6 +3346,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             data: .footnoteDefinition(label: labelRef),
             start: firstNonSpace
         )
+        // Past the label's `]:`.
+        storage.setSourceEnd(fnIdx, rawLabel.offset + rawLabel.length + 2)
         storage.footnoteDefinitionOrder.append(fnIdx)
         let key = normalizeLabel(chunk: label)
         if !key.isEmpty && storage.footnoteMap[key] == nil {

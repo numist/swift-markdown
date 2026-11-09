@@ -58,7 +58,7 @@ struct LeafTrailingWhitespaceRangeTests {
     func inBlockQuote() {
         #expect(tree("> a\n> b  \n") == """
             document @1:1-2:6
-              block_quote @1:1-2:6
+              block_quote @1:1-2:4
                 paragraph @1:3-2:4
                   text "a" @1:3-1:4
                   softbreak @-
@@ -71,7 +71,7 @@ struct LeafTrailingWhitespaceRangeTests {
     func inBlockQuoteTrailingControlWhitespace() {
         #expect(tree("> a\n> b\u{0B}\n") == """
             document @1:1-2:5
-              block_quote @1:1-2:5
+              block_quote @1:1-2:4
                 paragraph @1:3-2:4
                   text "a" @1:3-1:4
                   softbreak @-
@@ -84,7 +84,7 @@ struct LeafTrailingWhitespaceRangeTests {
     func lazyLine() {
         #expect(tree("> a\nb  \n") == """
             document @1:1-2:4
-              block_quote @1:1-2:4
+              block_quote @1:1-2:2
                 paragraph @1:3-2:2
                   text "a" @1:3-1:4
                   softbreak @-
@@ -107,8 +107,8 @@ struct LeafTrailingWhitespaceRangeTests {
     func taskListItem() {
         #expect(tree("- [x] a  \n", options: .tasklist) == """
             document @1:1-1:10
-              list bullet '-' tight @1:1-1:10
-                tasklist checked @1:1-1:10
+              list bullet '-' tight @1:1-1:8
+                tasklist checked @1:1-1:8
                   paragraph @1:7-1:8
                     text "a" @1:7-1:8
 
@@ -139,7 +139,7 @@ struct LeafTrailingWhitespaceRangeTests {
     func setextHeadingInBlockQuote() {
         #expect(tree("> a\n> b  \n> ---  \n") == """
             document @1:1-3:8
-              block_quote @1:1-3:8
+              block_quote @1:1-3:6
                 heading 2 @1:3-3:6
                   text "a" @1:3-1:4
                   softbreak @-

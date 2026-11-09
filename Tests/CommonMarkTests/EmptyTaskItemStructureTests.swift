@@ -93,7 +93,7 @@ struct EmptyTaskItemStructureTests {
         let firstItem = try #require(item)
         try #require(firstItem.checked == .some(false))
         #expect(firstItem.childCount == 0)
-        #expect(itemRange(in: nodes) == Pos(line: 1, column: 1)..<Pos(line: 2, column: 1))
+        #expect(itemRange(in: nodes) == Pos(line: 1, column: 1)..<Pos(line: 1, column: 6))
         let paras = paragraphs(in: nodes)
         try #require(paras.count == 1)
         #expect(paras[0]?.lowerBound == Pos(line: 3, column: 1))
@@ -106,7 +106,7 @@ struct EmptyTaskItemStructureTests {
         let firstItem = try #require(item)
         try #require(firstItem.checked == .some(false))
         #expect(firstItem.childCount == 0)
-        #expect(itemRange(in: nodes) == Pos(line: 1, column: 1)..<Pos(line: 1, column: 7))
+        #expect(itemRange(in: nodes) == Pos(line: 1, column: 1)..<Pos(line: 1, column: 6))
         #expect(paragraphs(in: nodes).isEmpty)
     }
 
@@ -142,7 +142,7 @@ struct EmptyTaskItemStructureTests {
         let firstItem = try #require(item, "no list item parsed")
         #expect(firstItem.checked == .some(false))
         #expect(firstItem.childCount == 0)
-        #expect(itemRange(in: nodes) == Pos(line: 1, column: 3)..<Pos(line: 1, column: 9))
+        #expect(itemRange(in: nodes) == Pos(line: 1, column: 3)..<Pos(line: 1, column: 8))
         #expect(paragraphs(in: nodes).isEmpty)
     }
 

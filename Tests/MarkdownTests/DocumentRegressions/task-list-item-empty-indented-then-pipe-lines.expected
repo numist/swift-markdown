@@ -5,8 +5,8 @@ Document @1:1-9:20
 │  └─ Text @2:1-2:20 "| —0— |foo <![-"
 ├─ Paragraph @4:1-4:11
 │  └─ Text @4:1-4:11 "_*-*CD_foo"
-└─ UnorderedList @5:3-9:20
-   └─ ListItem @5:3-9:20 checkbox: [ ]
+└─ UnorderedList @5:3-9:18
+   └─ ListItem @5:3-9:18 checkbox: [ ]
       └─ Paragraph @6:1-9:18
          ├─ Text @6:1-6:8 "| bar |"
          ├─ SoftBreak

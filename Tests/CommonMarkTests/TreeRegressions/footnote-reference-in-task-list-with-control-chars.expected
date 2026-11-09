@@ -3,8 +3,8 @@ document @1:1-18:20
     text "\u{1}��������" @1:1-1:18
     softbreak @-
     text "l2 -^^^^^^^^^^ [x]  /b.m$baz" @2:10-2:38
-  list bullet '-' tight @3:1-3:135
-    item @3:1-3:135
+  list bullet '-' tight @3:1-3:134
+    item @3:1-3:134
   paragraph @4:1-7:13
     text "r[b" @4:1-4:4
     softbreak @-
@@ -13,7 +13,7 @@ document @1:1-18:20
     text "]" @6:1-6:2
     softbreak @-
     text "x]  /b.m$baz" @7:1-7:13
-  list bullet '-' tight @8:1-13:1
+  list bullet '-' tight @8:1-12:2
     item @8:1-9:26
       paragraph @8:3-9:26
         footnote_reference "1" @8:3-8:133
@@ -23,7 +23,7 @@ document @1:1-18:20
     tasklist unchecked @10:2-10:10
       paragraph @10:8-10:10
         text "bz" @10:8-10:10
-    tasklist unchecked @11:1-13:1
+    tasklist unchecked @11:1-12:2
       paragraph @11:7-12:2
         text "/bar" @11:7-11:11
         softbreak @-
@@ -38,4 +38,4 @@ document @1:1-18:20
         text "o [   [foo][bz" @17:3-17:17
         softbreak @-
         text "\u{17}���������a<�" @18:1-18:20
-  footnote_definition "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^���������������������������������������������������������������������������������������r" @3:3-3:135
+  footnote_definition "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^���������������������������������������������������������������������������������������r" @3:3-3:134

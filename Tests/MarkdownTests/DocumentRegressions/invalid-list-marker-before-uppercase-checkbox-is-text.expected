@@ -1,5 +1,5 @@
 Document @1:1-2:10
-└─ UnorderedList @1:1-2:10
-   └─ ListItem @1:1-2:10
+└─ UnorderedList @1:1-2:9
+   └─ ListItem @1:1-2:9
       └─ Paragraph @2:3-2:9
          └─ Text @2:3-2:9 "2- [X]"

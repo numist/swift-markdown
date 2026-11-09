@@ -82,8 +82,8 @@ struct WhitespaceOnlySecondLabelAcrossLinesTests {
     @Test func linkInListItem() {
         #expect(tree("- [foo\n  bar][ ]\n\n[foo bar]: /url") == """
             Document @1:1-4:16
-            └─ UnorderedList @1:1-3:1
-               └─ ListItem @1:1-3:1
+            └─ UnorderedList @1:1-2:10
+               └─ ListItem @1:1-2:10
                   └─ Paragraph @1:3-2:10
                      ├─ Link @1:3-2:7 destination: "/url"
                      │  ├─ Text @1:4-1:7 "foo"
@@ -96,8 +96,8 @@ struct WhitespaceOnlySecondLabelAcrossLinesTests {
     @Test func imageInListItem() {
         #expect(tree("- ![foo\n  bar][ ]\n\n[foo bar]: /url") == """
             Document @1:1-4:16
-            └─ UnorderedList @1:1-3:1
-               └─ ListItem @1:1-3:1
+            └─ UnorderedList @1:1-2:10
+               └─ ListItem @1:1-2:10
                   └─ Paragraph @1:3-2:10
                      ├─ Image @1:3-2:7 source: "/url"
                      │  ├─ Text @1:5-1:8 "foo"
