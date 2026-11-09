@@ -3437,6 +3437,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// `content`'s bytes at `range` as a chunk, copied into the arena only when `range` spans a line join.
+    // Inlined for the reason given before `skipLineWhitespace`.
+    @inline(__always)
     private mutating func definitionChunk(_ range: Range<Int>, in content: borrowing ContentSpan) -> Chunk {
         if range.isEmpty {
             return .empty
@@ -3452,10 +3454,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return arenaChunk(from: offset)
     }
 
-    // These are `mutating` though they only read: as non-mutating methods of the large `BlockParser` they measured
-    // about 2.6% more instructions on a document of definitions.
+    // These scanners are `@inline(__always)`, as are `parseOneLinkDefinition`, `matchDefinitionLabel` and
+    // `definitionChunk`, and `mutating` though they only read: out of line, or as non-mutating methods of the large
+    // `BlockParser`, they measured about 1.5% and 2.6% more instructions on a document of definitions.
 
     /// Skips spaces, tabs, line tabulations and form feeds.
+    @inline(__always)
     private mutating func skipLineWhitespace(from cursor: Int, in content: borrowing ContentSpan) -> Int {
         var i = cursor
         while i < content.endOffset, content[i].isExtensionScannerSpace {
@@ -3465,6 +3469,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Skips line whitespace, at most one line ending, and more line whitespace.
+    @inline(__always)
     private mutating func skipSpacesAndOneLineEnd(from cursor: Int, in content: borrowing ContentSpan) -> Int {
         let i = skipLineWhitespace(from: cursor, in: content)
         guard i < content.endOffset, content[i] == UInt8(ascii: "\n") else {
@@ -3474,6 +3479,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// The offset past a line ending at `cursor`, `cursor` at the end of `content`, or `nil`.
+    @inline(__always)
     private mutating func skipLineEndOrEOF(from cursor: Int, in content: borrowing ContentSpan) -> Int? {
         if cursor >= content.endOffset {
             return cursor
@@ -3493,6 +3499,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     // MARK: - Link definition
 
     /// Parses one link reference definition at `start`, returning the offset past it and its line ending.
+    // Inlined for the reason given before `skipLineWhitespace`.
+    @inline(__always)
     private mutating func parseOneLinkDefinition(from start: Int, in content: borrowing ContentSpan) -> Int? {
         let end = content.endOffset
         guard let (label, destinationStart) = matchDefinitionLabel(from: start, in: content),
@@ -3536,6 +3544,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Matches a definition's label and `:` at `start`, returning the label's interior and where the definition's
     /// content begins, past whitespace including at most one line ending.
+    // Inlined for the reason given before `skipLineWhitespace`.
+    @inline(__always)
     private mutating func matchDefinitionLabel(from start: Int, in content: borrowing ContentSpan) -> (label: Range<Int>, contentStart: Int)? {
         guard let label = matchLinkLabel(from: start, end: content.endOffset, in: content),
               label.afterEnd < content.endOffset,
