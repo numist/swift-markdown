@@ -772,18 +772,30 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return i
     }
 
-    /// Whether the open paragraph's last line and the delimiter-candidate line `sourceBytes[delimRange]` open a table
-    /// (Tables (extension)). The two lines are copied to a scratch region of the arena for `opensTable`, then truncated.
-    private mutating func lastLineOpensTable(delimRange: Range<Int>, pending: borrowing PendingLeaf) -> Bool {
-        let scratchStart = storage.strings.count
-        switch pending.content {
+    /// Where the open paragraph's last line begins in its pending `leaf`: the source offset in a `.lazy` range, or the
+    /// index of the line's first segment in a segment list.
+    private func lastLineStart(of leaf: borrowing PendingLeaf) -> Int {
+        switch leaf.content {
         case .lazy(let range, let joinPending):
             precondition(!joinPending, "a deferred line join is always consumed by the next line")
-            for i in (lastNewline(in: range).map { $0 + 1 } ?? range.lowerBound)..<range.upperBound {
+            return lastNewline(in: range).map { $0 + 1 } ?? range.lowerBound
+        case .segments(let segs):
+            return lastLineJoin(in: segs) + 1
+        }
+    }
+
+    /// Whether the open paragraph's last line, from `lastLineStart` (see `lastLineStart(of:)`), and the
+    /// delimiter-candidate line `sourceBytes[delimRange]` open a table (Tables (extension)). The two lines are copied to
+    /// a scratch region of the arena for `opensTable`, then truncated.
+    private mutating func lastLineOpensTable(delimRange: Range<Int>, pending: borrowing PendingLeaf, lastLineStart: Int) -> Bool {
+        let scratchStart = storage.strings.count
+        switch pending.content {
+        case .lazy(let range, _):
+            for i in lastLineStart..<range.upperBound {
                 storage.strings.append(sourceBytes[i])
             }
         case .segments(let segs):
-            for i in (lastLineJoin(in: segs) + 1)..<segs.count {
+            for i in lastLineStart..<segs.count {
                 let seg = segs[i]
                 for j in 0..<Int(seg.length) {
                     storage.strings.append(segmentByte(seg, j))
@@ -807,20 +819,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Earlier lines are split off into a paragraph before `node`, which is re-seeded with the header line alone.
     private mutating func detectPendingTable(_ node: DocumentStorage.Index, delimRange: Range<Int>, pending: consuming PendingLeaf?) -> PendingLeaf? {
         precondition(pending != nil, "an open paragraph always holds its accumulated content")
-        guard lastLineOpensTable(delimRange: delimRange, pending: pending!) else {
+        let headerStart = lastLineStart(of: pending!)
+        guard lastLineOpensTable(delimRange: delimRange, pending: pending!, lastLineStart: headerStart) else {
             return pending
         }
         openParagraphTableState!.tablePending = true
         let leaf = pending!
         switch consume leaf.content {
         case .lazy(let range, _):
-            guard let lastNewline = lastNewline(in: range) else {
+            guard headerStart > range.lowerBound else {
                 return PendingLeaf(node: node, content: .lazy(range: range))
             }
-            return splitContiguousHeader(node, range: range, lastNewline: lastNewline)
+            return splitContiguousHeader(node, range: range, lastNewline: headerStart - 1)
         case .segments(let segs):
-            let lineJoin = lastLineJoin(in: segs)
-            return splitSegmentHeader(node, segments: segs, lineJoin: lineJoin)
+            return splitSegmentHeader(node, segments: segs, lineJoin: headerStart - 1)
         }
     }
 
