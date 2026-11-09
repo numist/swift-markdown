@@ -15,9 +15,9 @@ import CommonMark
 ///
 /// A fenced code block ends with its closing fence, at the end of the document, or at the end of the containing block
 /// (Fenced code blocks). When a line fails a container's continuation, the code block closes with that container, so
-/// it ends at the end of its last content line, the opening fence line when it has no content, and never extends past
-/// its container. A code block closed by its closing fence includes the fence's line, and one open at the end of the
-/// document ends on the last line.
+/// it ends at the end of its last content line, or past its opening fence's info string or fence when it has no
+/// content, and never extends past its container. A code block closed by its closing fence ends past that fence, and
+/// one open at the end of the document ends on the last line.
 @Suite("A fenced code block ends on its last line when its container closes")
 struct FencedCodeEscapedContainerRangeTests {
 

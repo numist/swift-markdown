@@ -1474,14 +1474,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // A closing fence's indent is in columns past the container prefixes, so a tab counts to its tab stop (Tabs).
             let closingFenceIndent =
                 columnWidth(from: lineRange.lowerBound, to: firstNonSpace) - prefixColumns
-            if matchClosingFence(
+            if let fenceEnd = matchClosingFence(
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
                 indentColumns: closingFenceIndent,
                 expectedChar: info.fenceCharacter,
                 minimumLength: info.fenceLength
             ) {
-                pending = finalize(node: current, pending: pending, endsOnCurrentLine: true)
+                pending = finalize(node: current, pending: pending, lineContentEnd: fenceEnd)
                 return LeafContinuation(consumedLine: true, pending: pending)
             }
             // Strip `prefixColumns` plus `fenceOffset` columns, less the `startColumn` the bytes before `cursor` cover.
@@ -1750,6 +1750,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             data: .codeBlock(info: infoRef, literal: .empty),
             start: firstNonSpace
         )
+        // Where the opening line's content ends, for a block whose last line it is.
+        storage.setSourceEnd(codeIdx, fence.infoChunk.length > 0 ? fence.infoChunk.offset + fence.infoChunk.length : firstNonSpace + fence.length)
         current = codeIdx
     }
 
@@ -2119,7 +2121,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Closes `node`, materializes its content, and makes its parent `current`.
     ///
-    /// A block ends on the current line when `endsOnCurrentLine` (the document ends, a closing fence, an HTML block's end condition, a setext heading's underline) or it opened on that line; otherwise it ends on the previous line, which the current line didn't continue. An indented code block ends at its last line that is not blank. A container block ends just past its last content byte: where its last child ends, or where its own marker does if that is later (a block quote's `>` on the last line that has one, a list item's list marker, a footnote definition's `[^label]:`), so blank lines and trailing whitespace after its content are not part of it. A paragraph that held only link reference definitions or a task list item marker leaves no child but still counts as content, while a fenced code block's or HTML block's blank lines are its content, so a container ending in one ends on its last line. `lineContentEnd` is where a one-line ATX heading's or thematic break's content ends.
+    /// A block ends on the current line when `endsOnCurrentLine` (the document ends, an HTML block's end condition, a setext heading's underline) or it opened on that line; otherwise it ends on the previous line, which the current line didn't continue. A fenced code block whose last line is its opening line ends past its info string, or past its opening fence when it has none. An indented code block ends at its last line that is not blank. A container block ends just past its last content byte: where its last child ends, or where its own marker does if that is later (a block quote's `>` on the last line that has one, a list item's list marker, a footnote definition's `[^label]:`), so blank lines and trailing whitespace after its content are not part of it. A paragraph that held only link reference definitions or a task list item marker leaves no child but still counts as content, while a fenced code block's or HTML block's blank lines are its content, so a container ending in one ends on its last line. `lineContentEnd` is where a one-line ATX heading's or thematic break's content ends, or a closing fence's last fence character.
     private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, endsOnCurrentLine: Bool = false, lineContentEnd: Int? = nil) -> PendingLeaf? {
         var pending = pending
         let kind = storage[node].kind
@@ -2130,7 +2132,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let startedThisLine = startByte >= Int32(currentLineSourceRange.lowerBound)
             let end: Int
             if let lineContentEnd {
-                // An ATX heading or a thematic break ends at its trimmed content extent, not the raw line.
+                // An ATX heading, a thematic break or a closing fence ends at its trimmed content extent, not the raw
+                // line.
                 end = lineContentEnd
             } else if case .codeBlock(let info) = kind, !info.isFenced {
                 end = indentedCodeContentEnd
@@ -2139,9 +2142,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let ownEnd = storage.sourceRanges[node].end
                 end = storage[node].lastChild.map { max(ownEnd, storage.sourceRanges[$0].end) } ?? ownEnd
             } else {
-                end = (endsOnCurrentLine || startedThisLine || kind == .document)
+                let lineEnd = (endsOnCurrentLine || startedThisLine || kind == .document)
                     ? currentLineSourceRange.upperBound
                     : lastLineSourceEnd
+                let openingEnd = Int(storage.sourceRanges[node].end)
+                if kind.isCodeBlock, !(openingEnd..<lineEnd).contains(where: { sourceBytes[$0] == UInt8(ascii: "\n") || sourceBytes[$0] == UInt8(ascii: "\r") }) {
+                    // A fenced code block whose last line is its opening line ends past its info string or fence.
+                    end = openingEnd
+                } else {
+                    end = lineEnd
+                }
             }
             storage.setSourceEnd(node, end)
         }
@@ -2947,26 +2957,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         )
     }
 
-    /// Whether the line closes a fence of `expectedChar` at least `minimumLength` long (Fenced code blocks). The indent is
-    /// in columns, so a tab-led line is content.
-    private func matchClosingFence(range: Range<Int>, firstNonSpace: Int, indentColumns: Int, expectedChar: MarkdownNode.CodeBlockInfo.FenceCharacter?, minimumLength: Int) -> Bool {
+    /// Where the line's closing fence ends, if the line closes a fence of `expectedChar` at least `minimumLength` long
+    /// (Fenced code blocks). The indent is in columns, so a tab-led line is content.
+    private func matchClosingFence(range: Range<Int>, firstNonSpace: Int, indentColumns: Int, expectedChar: MarkdownNode.CodeBlockInfo.FenceCharacter?, minimumLength: Int) -> Int? {
         guard let fenceByte = expectedChar?.character else {
             preconditionFailure("a fenced code block always records its fence character")
         }
         if indentColumns > 3 {
-            return false
+            return nil
         }
         guard firstNonSpace < range.upperBound else {
-            return false
+            return nil
         }
         if sourceBytes[firstNonSpace] != fenceByte {
-            return false
+            return nil
         }
         var i = firstNonSpace
         while i < range.upperBound && sourceBytes[i] == fenceByte {
             i += 1
         }
-        return i - firstNonSpace >= minimumLength && isSpaceOrTabOnly(i..<range.upperBound)
+        return i - firstNonSpace >= minimumLength && isSpaceOrTabOnly(i..<range.upperBound) ? i : nil
     }
 
     /// Whether `sourceBytes[range]` holds only spaces and tabs.
