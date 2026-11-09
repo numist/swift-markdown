@@ -13,7 +13,7 @@ import CommonMark
 
 /// A container block's source range ends just past its last content byte: the end of its last child, or of its own
 /// marker (a block quote's last `>`, a list item's marker, a footnote definition's `[^label]:`) where that is later.
-/// Blank lines and trailing whitespace after them are not part of it. A link reference definition or a task list item
+/// Whitespace and blank lines after its content are not part of it. A link reference definition or a task list item
 /// marker is content even though it leaves no child, and a fenced code block's or HTML block's blank lines are its
 /// content, while an indented code block's trailing blank lines are not (Indented code blocks).
 @Suite("Container source range ends")
