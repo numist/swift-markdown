@@ -191,9 +191,9 @@ struct SmartPunctuationSourceRangeTests {
             """)
     }
 
-    /// A NUL makes the paragraph's content an arena copy, read back to the source through its run map.
+    /// The NUL is replaced by U+FFFD (Insecure characters), and ranges count its one source byte.
     @Test("an ellipsis in content holding a NUL spans its three dots")
-    func ellipsisInArenaContent() {
+    func ellipsisAfterNUL() {
         #expect(tree("\u{0} *...*") == """
             document @1:1-1:8
               paragraph @1:1-1:8

@@ -18,12 +18,12 @@ struct BackslashHardBreakRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    private static let specOptions: MarkdownDocument.ParseOptions =
+    private static let options: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
     /// The source ranges of every text node in `src`, in DFS order.
     private func textRanges(in src: String) -> [Range<Pos>?] {
-        let ranges = MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
+        let ranges = MarkdownDocument.withParsedDocument(src, options: Self.options) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)

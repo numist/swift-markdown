@@ -27,12 +27,12 @@ internal func dfsKindsAndText(
 @Suite("Trailing space before a soft line break")
 struct EmptyTextBeforeSoftBreakTests {
 
-    private static let specOptions: MarkdownDocument.ParseOptions =
+    private static let options: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
     /// The `(kind, text)` of every node, in depth-first order.
     private func nodes(in src: String) -> [(kind: MarkdownNode.Kind, text: String?)] {
-        MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
+        MarkdownDocument.withParsedDocument(src, options: Self.options) {
             doc -> [(kind: MarkdownNode.Kind, text: String?)] in
             var out: [(kind: MarkdownNode.Kind, text: String?)] = []
             dfsKindsAndText(doc.root, into: &out)

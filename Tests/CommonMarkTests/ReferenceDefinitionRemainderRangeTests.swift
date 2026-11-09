@@ -18,12 +18,12 @@ struct ReferenceDefinitionRemainderRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    private static let specOptions: MarkdownDocument.ParseOptions =
+    private static let options: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
     /// DFS-collect every node's kind and source range.
     private func ranges(in src: String) -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] {
-        MarkdownDocument.withParsedDocument(src, options: Self.specOptions) {
+        MarkdownDocument.withParsedDocument(src, options: Self.options) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)

@@ -66,9 +66,9 @@ class AutolinkEntityDecodingTests: XCTestCase {
         )
     }
 
-    /// Autolinks inside content the parser materializes into the arena: a `\\|`-unescaped table cell, a
-    /// flattened setext heading inside a block quote, and a paragraph holding a NUL.
-    func testReferenceDecodesInArenaBackedContent() {
+    /// Autolinks in a table cell holding an escaped pipe, in a setext heading inside a block quote, and in a paragraph
+    /// holding a NUL.
+    func testReferenceDecodesInEscapedPipeCellQuotedHeadingAndNULParagraph() {
         XCTAssertEqual(
             """
             Document
