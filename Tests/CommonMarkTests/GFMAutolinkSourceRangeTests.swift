@@ -58,8 +58,8 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// The text before the address spans the NUL, whose U+FFFD replacement (Insecure characters) images it, and the
-    /// space. The address spans its own bytes.
+    /// The text before the address spans the NUL, which is replaced by U+FFFD (Insecure characters), and the space.
+    /// The address spans its own bytes.
     @Test("an email autolink after a NUL spans the address")
     func emailAfterNUL() {
         #expect(tree("\u{0} a@b.co") == """
@@ -72,7 +72,7 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// The text before the address spans the `'`, whose curly quote replacement images it, and the space.
+    /// The text before the address spans the `'`, which is replaced by a curly quote, and the space.
     @Test("the text before an email autolink spans a smart quote")
     func smartQuoteBeforeEmail() {
         #expect(tree("' a@b.co", options: Self.opts.union(.smart)) == """

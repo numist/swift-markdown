@@ -11,85 +11,73 @@
 import Testing
 import CommonMark
 
-/// Depth-first: the destination URL of the first `.link` node, or nil if the tree has none.
-private func firstLinkURL(_ node: borrowing MarkdownNode) -> String?? {
-    if case .link = node.kind, case .link(let url, _) = node.stringContent {
-        return .some(url)
-    }
-    var found: String?? = nil
-    node.children.forEach { child in
-        if found == nil {
-            found = firstLinkURL(child)
-        }
-    }
-    return found
-}
-
-/// Depth-first: all `.text` literal content concatenated.
-private func collectText(_ node: borrowing MarkdownNode) -> String {
-    var result = ""
-    if case .text = node.kind, case .text(let s) = node.stringContent {
-        result += s
-    }
-    node.children.forEach { child in
-        result += collectText(child)
-    }
-    return result
-}
-
 /// An absolute URI excludes ASCII control characters (Autolinks), including DEL (U+007F), so a `<…>` containing
 /// one is literal text.
 @Suite("URI autolink control characters")
 struct URIAutolinkControlCharacterTests {
 
-    private static let options: MarkdownDocument.ParseOptions = []
-
-    private func linkURL(
-        _ src: String, options: MarkdownDocument.ParseOptions
-    ) -> String? {
-        MarkdownDocument.withParsedDocument(src, options: options) { doc -> String? in
-            firstLinkURL(doc.root) ?? nil
-        }
-    }
-
-    private func text(
-        _ src: String, options: MarkdownDocument.ParseOptions
-    ) -> String {
-        MarkdownDocument.withParsedDocument(src, options: options) { doc -> String in
-            collectText(doc.root)
-        }
+    private func tree(_ markdown: String) -> String {
+        TreeDump.dump(markdown, options: [])
     }
 
     @Test("`<tp:\\u{7F}>` is literal text")
     func delNotLink() {
-        #expect(linkURL("<tp:\u{7F}>", options: Self.options) == nil)
-        #expect(text("<tp:\u{7F}>", options: Self.options) == "<tp:\u{7F}>")
+        #expect(tree("<tp:\u{7F}>") == """
+            document
+              paragraph
+                text "<tp:\\u{7F}>"
+
+            """)
     }
 
     @Test("`<http://a\\u{7F}>` is literal text")
     func delInHttpNotLink() {
-        #expect(linkURL("<http://a\u{7F}>", options: Self.options) == nil)
-        #expect(text("<http://a\u{7F}>", options: Self.options) == "<http://a\u{7F}>")
+        #expect(tree("<http://a\u{7F}>") == """
+            document
+              paragraph
+                text "<http://a\\u{7F}>"
+
+            """)
     }
 
     @Test("`<tp:a\\u{7F}b>` is literal text")
     func delMidBodyNotLink() {
-        #expect(linkURL("<tp:a\u{7F}b>", options: Self.options) == nil)
-        #expect(text("<tp:a\u{7F}b>", options: Self.options) == "<tp:a\u{7F}b>")
+        #expect(tree("<tp:a\u{7F}b>") == """
+            document
+              paragraph
+                text "<tp:a\\u{7F}b>"
+
+            """)
     }
 
     @Test("`<tp:x>` is a link")
     func plainURILinks() {
-        #expect(linkURL("<tp:x>", options: Self.options) == "tp:x")
+        #expect(tree("<tp:x>") == """
+            document
+              paragraph
+                link "tp:x" ""
+                  text "tp:x"
+
+            """)
     }
 
-    @Test("`<tp:\\u{1F}>` is not a link")
+    @Test("`<tp:\\u{1F}>` is literal text")
     func c0ControlNotLink() {
-        #expect(linkURL("<tp:\u{1F}>", options: Self.options) == nil)
+        #expect(tree("<tp:\u{1F}>") == """
+            document
+              paragraph
+                text "<tp:\\u{1F}>"
+
+            """)
     }
 
-    @Test("`<tp:\\u{0B}>` is not a link")
+    @Test("`<tp:\\u{0B}>` is literal text")
     func vtControlNotLink() {
-        #expect(linkURL("<tp:\u{0B}>", options: Self.options) == nil)
+        #expect(tree("<tp:\u{0B}>") == """
+            document
+              paragraph
+                text "<tp:\\u{B}>"
+
+            """)
     }
 }

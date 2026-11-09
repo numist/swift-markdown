@@ -15,7 +15,7 @@ import Testing
 /// that begins with a non-ASCII punctuation or space character is not an extended autolink.
 @Suite("Extended autolink host beginning with punctuation")
 struct AutolinkHostLeadingPunctuationTests {
-    private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink]
+    private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .gfmAutolink]
 
     private func surface(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: Self.options)
@@ -25,35 +25,35 @@ struct AutolinkHostLeadingPunctuationTests {
         "document\n  paragraph\n    text \"\(literal)\"\n"
     }
 
-    @Test func testGuillemetHostIsText() {
+    @Test func guillemetHostIsText() {
         #expect(surface("https://\u{AB}") == text("https://\u{AB}"))
     }
 
-    @Test func testGuillemetHostBeforeParenthesisIsText() {
+    @Test func guillemetHostBeforeParenthesisIsText() {
         #expect(surface("ftp://\u{AB})") == text("ftp://\u{AB})"))
     }
 
-    @Test func testGuillemetHostBeforePeriodIsText() {
+    @Test func guillemetHostBeforePeriodIsText() {
         #expect(surface("x http://\u{AB}.") == text("x http://\u{AB}."))
     }
 
-    @Test func testUppercaseSchemeGuillemetHostIsText() {
+    @Test func uppercaseSchemeGuillemetHostIsText() {
         #expect(surface("HTTP://\u{AB}*") == text("HTTP://\u{AB}*"))
     }
 
-    @Test func testGuillemetBeforeDottedHostIsText() {
+    @Test func guillemetBeforeDottedHostIsText() {
         #expect(surface("http://\u{AB}a.b") == text("http://\u{AB}a.b"))
     }
 
-    @Test func testInvertedExclamationHostIsText() {
+    @Test func invertedExclamationHostIsText() {
         #expect(surface("http://\u{A1}x") == text("http://\u{A1}x"))
     }
 
-    @Test func testEmDashHostIsText() {
+    @Test func emDashHostIsText() {
         #expect(surface("http://\u{2014}x") == text("http://\u{2014}x"))
     }
 
-    @Test func testLeftQuotationMarkHostIsText() {
+    @Test func leftQuotationMarkHostIsText() {
         #expect(surface("http://\u{201C}x") == text("http://\u{201C}x"))
     }
 
@@ -63,20 +63,16 @@ struct AutolinkHostLeadingPunctuationTests {
         ("Pd hyphen", "\u{2010}"), ("Pd em dash", "\u{2014}"),
         ("Ps fullwidth paren", "\u{FF08}"), ("Pe fullwidth paren", "\u{FF09}"), ("Ps corner bracket", "\u{300C}"),
         ("Pi left quote", "\u{201C}"), ("Pf right quote", "\u{201D}"), ("Pi single guillemet", "\u{2039}"), ("Pf guillemet", "\u{00BB}"),
-        ("Po inverted question", "\u{00BF}"), ("Po ideographic full stop", "\u{3002}"), ("Po double exclamation", "\u{203C}"),
+        ("Po inverted exclamation", "\u{00A1}"), ("Po inverted question", "\u{00BF}"), ("Po ideographic full stop", "\u{3002}"),
+        ("Po double exclamation", "\u{203C}"),
         ("Pc undertie", "\u{203F}"), ("Po Aegean word separator (4-byte)", "\u{10100}"),
         ("Zs no-break space", "\u{00A0}"), ("Zs ideographic space", "\u{3000}"),
     ] as [(String, String)])
-    func testHostStartPunctuationOrSpaceIsNotALink(category: String, scalar: String) {
+    func hostStartPunctuationOrSpaceIsNotALink(category: String, scalar: String) {
         #expect(surface("http://\(scalar)a.b") == text("http://\(scalar)a.b"), "\(category)")
     }
 
-    @Test(arguments: ["\u{2014}", "\u{00AB}", "\u{00A1}", "\u{00A0}"])
-    func testHostStartPunctuationIsNotALink(scalar: String) {
-        #expect(surface("http://\(scalar)a.b") == text("http://\(scalar)a.b"))
-    }
-
-    @Test func testLetterInHostIsALink() {
+    @Test func letterInHostIsALink() {
         #expect(surface("http://\u{4E2D}a.b") == """
             document
               paragraph
