@@ -2353,9 +2353,10 @@ extension BlockParser {
     private func contentRefContains(_ ref: ContentRef, byte target: UInt8) -> Bool {
         for s in 0..<ref.count {
             let chunk = storage.segments[ref.first + s].chunk
-            // Every text node is scanned, so the bytes are chosen once per segment rather than per byte.
-            let bytes = chunk.inSource ? sourceBytes : storage.strings.span
-            for k in chunk.range where bytes[k] == target { return true }
+            // Every text node is scanned, so the bytes are chosen once per segment rather than per byte, and indexed from
+            // zero, which keeps the per-byte loop free of overflow checks.
+            let bytes = (chunk.inSource ? sourceBytes : storage.strings.span).extracting(chunk.range)
+            for k in 0..<bytes.count where bytes[k] == target { return true }
         }
         return false
     }
