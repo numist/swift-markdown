@@ -1098,7 +1098,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             firstNonSpace: line.firstNonSpace,
             indent: line.indent,
             baseColumn: line.prefixColumns,
-            currentKind: .paragraph,
             interruptsParagraph: true
         )
         if continuesParagraph {
@@ -1164,7 +1163,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Whether the open paragraph absorbs the line as a continuation; otherwise the line starts a block that closes it. Only here does the interrupt decision matter, so only here does the matcher ladder run.
+    /// Whether the open paragraph absorbs the line as a continuation; otherwise the line starts a block that closes it.
     ///
     /// A table-pending paragraph is a table, so a line that can't be a row closes it and its container: a lazy continuation
     /// line, a lone `|`, which has no cells, or a line indented four or more columns, which starts an indented code block
@@ -1190,7 +1189,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 firstNonSpace: line.firstNonSpace,
                 indent: line.indent,
                 baseColumn: line.prefixColumns,
-                currentKind: line.openKind,
                 interruptsParagraph: interruptsParagraph
             )
         if canInterrupt {
@@ -1387,7 +1385,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Whether the line starts a block that ends the open paragraph.
     ///
     /// `interruptsParagraph` is `false` when only a container shallower than the paragraph's matched, so a list marker starts a sibling item.
-    private func lineStartsNewBlock(range: Range<Int>, firstNonSpace: Int, indent: Int, baseColumn: Int, currentKind: MarkdownNode.Kind, interruptsParagraph: Bool) -> Bool {
+    private func lineStartsNewBlock(range: Range<Int>, firstNonSpace: Int, indent: Int, baseColumn: Int, interruptsParagraph: Bool) -> Bool {
         // A line indented four or more columns starts no block that interrupts a paragraph.
         if indent >= 4 {
             return false
@@ -1414,7 +1412,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // A footnote definition opener `[^label]:` interrupts a paragraph, so `[^a]: A\n[^b]: B` opens two
         // definitions rather than folding the second into the first definition's paragraph.
         if storage.options.contains(.footnotes),
-           indent < 4,
            matchFootnoteDefinition(range: range, firstNonSpace: firstNonSpace) != nil {
             return true
         }
@@ -1431,7 +1428,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             return true
         }
-        // An indented code block cannot interrupt a paragraph (Indented code blocks).
         return false
     }
 
