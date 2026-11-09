@@ -13,8 +13,9 @@ import CommonMark
 
 /// A paragraph's raw content has its final whitespace removed (Paragraphs), as does a setext heading's (Setext
 /// headings), so a paragraph ends just past its last content byte and a setext heading just past its underline's last
-/// `=` or `-`, before any trailing whitespace.
-@Suite("Paragraph and setext heading ranges before trailing whitespace")
+/// `=` or `-`, before any trailing whitespace. An ATX heading's content excludes trailing spaces and tabs (ATX
+/// headings), so it ends just past its content, or past its opening sequence when it has none.
+@Suite("Paragraph and heading ranges before trailing whitespace")
 struct LeafTrailingWhitespaceRangeTests {
 
     private func tree(_ source: String, options: MarkdownDocument.ParseOptions = []) -> String {
@@ -143,6 +144,37 @@ struct LeafTrailingWhitespaceRangeTests {
                   text "a" @1:3-1:4
                   softbreak @-
                   text "b" @2:3-2:4
+
+            """)
+    }
+
+    @Test("an ATX heading with content")
+    func atxHeading() {
+        #expect(tree("## a  \n") == """
+            document @1:1-1:5
+              heading 2 @1:1-1:5
+                text "a" @1:4-1:5
+
+            """)
+    }
+
+    @Test("an empty ATX heading followed by spaces and tabs", arguments: ["## \n", "##\t \n"])
+    func emptyATXHeading(_ source: String) {
+        #expect(tree(source) == """
+            document @1:1-1:3
+              heading 2 @1:1-1:3
+
+            """)
+    }
+
+    @Test("an empty ATX heading in a block quote")
+    func emptyATXHeadingInBlockQuote() {
+        #expect(tree("> ## \n> a\n") == """
+            document @1:1-2:4
+              block_quote @1:1-2:4
+                heading 2 @1:3-1:5
+                paragraph @2:3-2:4
+                  text "a" @2:3-2:4
 
             """)
     }
