@@ -14,15 +14,11 @@ import XCTest
 /// A tab before a line ending makes a soft line break: a hard line break needs two or more spaces or a
 /// backslash before the line ending (Hard line breaks).
 class TabBeforeLineEndingSoftBreakTests: XCTestCase {
-    // "[" 0xC0 CR " ]:" 0xFF LF "=" LF "*" TAB CR "*"
-    private static let bytes: [UInt8] = [
-        0x5b, 0xc0, 0x0d, 0x20, 0x5d, 0x3a, 0xff, 0x0a, 0x3d, 0x0a, 0x2a, 0x09, 0x0d, 0x2a,
-    ]
-    private static let options = ParseOptions(rawValue: UInt(0x09 & 0b11011111))
+    private static let source = "[\u{FFFD}\r ]:\u{FFFD}\n=\n*\t\r*"
+    private static let options: ParseOptions = [.parseBlockDirectives, .parseMinimalDoxygen]
 
     private func surface() -> String {
-        Document(parsing: String(decoding: Self.bytes, as: UTF8.self), options: Self.options)
-            .debugDescription(options: [])
+        Document(parsing: Self.source, options: Self.options).debugDescription(options: [])
     }
 
     func testTrailingTabIsSoftBreak() {

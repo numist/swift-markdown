@@ -11,12 +11,17 @@
 import Markdown
 import XCTest
 
-/// A list item whose first block is a block quote is not a task list item (Task list items (extension)), so
-/// `[x]` on a later line of the item is not a checkbox.
+/// A list item whose first block is a block quote is not a task list item, so `[x]` beginning a later paragraph of the
+/// item is text (Task list items (extension)). Without a blank line, a later line of the item that starts no other block
+/// is a lazy continuation line of the block quote's paragraph (Block quotes).
 class TaskListBlockQuoteFirstBlockLazyLineTests: XCTestCase {
     private func surface(_ markdown: String) -> String {
-        let options = ParseOptions(rawValue: UInt(0x0a & 0b11011111))
+        let options: ParseOptions = [.parseSymbolLinks, .parseMinimalDoxygen]
         return Document(parsing: markdown, options: options).debugDescription(options: [])
+    }
+
+    func testCheckboxAfterBlockQuoteAndBlankLine() {
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      ├─ BlockQuote\n      │  └─ Paragraph\n      │     └─ Text \"a\"\n      └─ Paragraph\n         └─ Text \"[x] a\"", surface("- > a\n\n  [x] a"))
     }
 
     func testLazyBlockQuoteParagraph() {

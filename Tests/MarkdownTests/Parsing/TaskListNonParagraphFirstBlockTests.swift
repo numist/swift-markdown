@@ -11,12 +11,21 @@
 import Markdown
 import XCTest
 
-/// A list item whose first block is a list or thematic break is not a task list item (Task list items
-/// (extension)), so `[x]` on a later line of the item is not a checkbox.
+/// A list item whose first block is a list or thematic break is not a task list item, so `[x]` beginning a later
+/// paragraph of the item is text (Task list items (extension)). A later line beginning with `2-` or `22` starts no list
+/// item, so it is paragraph text too.
 class TaskListNonParagraphFirstBlockTests: XCTestCase {
     private func surface(_ markdown: String) -> String {
-        let options = ParseOptions(rawValue: UInt(0x0a & 0b11011111))
+        let options: ParseOptions = [.parseSymbolLinks, .parseMinimalDoxygen]
         return Document(parsing: markdown, options: options).debugDescription(options: [])
+    }
+
+    func testCheckboxAfterThematicBreak() {
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      ├─ ThematicBreak\n      └─ Paragraph\n         └─ Text \"[x] a\"", surface("- ***\n  [x] a"))
+    }
+
+    func testCheckboxAfterEmptyNestedItem() {
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      ├─ UnorderedList\n      │  └─ ListItem\n      └─ Paragraph\n         └─ Text \"[x] a\"", surface("- -\n  [x] a"))
     }
 
     func testEmptyNestedItemThenTab() {

@@ -15,12 +15,8 @@ import XCTest
 /// line loses its initial whitespace like any paragraph line (Paragraphs), so the header row is a lone `|`
 /// and no table forms (Tables (extension)).
 class TableLazyWhitespaceHeaderCellTests: XCTestCase {
-    /// Parses `markdown` with `[.parseSymbolLinks, .parseMinimalDoxygen]`.
     private func tree(_ markdown: String) -> String {
-        var bytes = Array(markdown.utf8)
-        bytes.append(0x0a)
-        let (text, options) = DocumentRegressionTests.splitInput(bytes)!
-        return Document(parsing: text, options: options).debugDescription(options: [])
+        Document(parsing: markdown, options: [.parseSymbolLinks, .parseMinimalDoxygen]).debugDescription(options: [])
     }
 
     func testLazyOneSpace() {

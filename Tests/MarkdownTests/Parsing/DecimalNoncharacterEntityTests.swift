@@ -15,8 +15,6 @@ class DecimalNoncharacterEntityTests: XCTestCase {
     /// `&#65534;` is a valid code point (Entity and numeric character references), so it decodes to the
     /// noncharacter U+FFFE.
     func testDecimalEntityDecodesToNoncharacter() {
-        let (markdown, options) = DocumentRegressionTests.splitInput([38, 35, 54, 53, 53, 51, 52, 59, 0])!
-        let uFFFE = String(Unicode.Scalar(0xFFFE as UInt32)!)
-        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"\(uFFFE)\"", Document(parsing: markdown, options: options).debugDescription(options: []))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"\u{FFFE}\"", Document(parsing: "&#65534;").debugDescription(options: []))
     }
 }

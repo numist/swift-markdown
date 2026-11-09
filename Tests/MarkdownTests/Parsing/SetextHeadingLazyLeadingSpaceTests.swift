@@ -15,7 +15,7 @@ class SetextHeadingLazyLeadingSpaceTests: XCTestCase {
     /// Leading whitespace is stripped from a setext heading's content (Setext headings), including content
     /// from a lazy continuation line that follows a link reference definition.
     func testLazyContinuationLeadingSpaceIsStripped() {
-        let (markdown, options) = DocumentRegressionTests.splitInput([62, 91, 97, 93, 58, 117, 10, 32, 255, 10, 62, 61, 10])!
-        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Heading level: 1\n      └─ Text \"\u{fffd}\"", Document(parsing: markdown, options: options).debugDescription(options: []))
+        let document = Document(parsing: ">[a]:u\n \u{FFFD}\n>=", options: [.parseSymbolLinks, .parseMinimalDoxygen])
+        XCTAssertEqual("Document\n└─ BlockQuote\n   └─ Heading level: 1\n      └─ Text \"\u{FFFD}\"", document.debugDescription(options: []))
     }
 }

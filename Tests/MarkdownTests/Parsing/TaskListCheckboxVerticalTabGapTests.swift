@@ -15,13 +15,10 @@ import XCTest
 /// item's paragraph, which is removed (Paragraphs), so the paragraph begins with the task list item marker
 /// (Task list items (extension)).
 class TaskListCheckboxVerticalTabGapTests: XCTestCase {
-    // "- " VT "[x] " LF "`"
-    private static let bytes: [UInt8] = [0x2d, 0x20, 0x0b, 0x5b, 0x78, 0x5d, 0x20, 0x0a, 0x60]
-    private static let options = ParseOptions(rawValue: UInt(0x3c & 0b11011111))
+    private static let options: ParseOptions = [.disableSmartOpts, .parseMinimalDoxygen, .disableSourcePosOpts]
 
     private func surface() -> String {
-        Document(parsing: String(decoding: Self.bytes, as: UTF8.self), options: Self.options)
-            .debugDescription(options: [])
+        Document(parsing: "- \u{B}[x] \n`", options: Self.options).debugDescription(options: [])
     }
 
     func testCheckboxRecognizedPastVerticalTabGap() {
