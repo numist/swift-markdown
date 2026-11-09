@@ -103,21 +103,21 @@ extension BlockParser {
         return sawDash
     }
 
-    /// Whether body-row `sourceBytes[range]`, from its first non-space byte, is a lone `|` with only padding
-    /// after it. Such a row has no cells (`splitCells`), so it closes the table.
+    /// Whether body-row candidate `sourceBytes[range]` is a lone `|` amid padding. Such a row has no cells
+    /// (`forEachCell`), so it closes the table.
     internal func isLonePipeRow(range: Range<Int>) -> Bool {
-        var s = range.lowerBound
-        var e = range.upperBound
-        precondition(s == e || !sourceBytes[s].isSpaceOrTab, "a body-row candidate starts at the line's first non-space byte")
-        while e > s && sourceBytes[e - 1].isSpaceOrTab { e -= 1 }
-        // Must lead with a pipe, ...
-        guard s < e && sourceBytes[s] == UInt8(ascii: "|") else { return false }
-        s += 1
-        // ... with nothing but padding after it: a second pipe or any content forms at least one cell.
-        for i in s..<e where !sourceBytes[i].isLineWhitespace {
+        var i = range.lowerBound
+        while i < range.upperBound && sourceBytes[i].isLineWhitespace {
+            i += 1
+        }
+        guard i < range.upperBound && sourceBytes[i] == UInt8(ascii: "|") else {
             return false
         }
-        return true
+        i += 1
+        while i < range.upperBound && sourceBytes[i].isLineWhitespace {
+            i += 1
+        }
+        return i == range.upperBound
     }
 
     // MARK: - Row construction
@@ -144,12 +144,8 @@ extension BlockParser {
         let rowEnd = isLastLine && positionsEnabled ? Int(storage.sourceRanges[parent].end) : line.upperBound
         storage.setSourceStart(rowIdx, line.lowerBound)
         storage.setSourceEnd(rowIdx, rowEnd)
-        let (cells, hadClosingPipe, hadLeadingPipe) = splitCells(line: line)
+        let (cells, hadClosingPipe) = splitCells(line: line)
         let columnCount = alignments.count
-        // The content that is inline-parsed and tested for the rowspan marker: a cell's range trimmed of padding.
-        func content(_ col: Int) -> Range<Int> {
-            trimCellContent(range: cells[col], stripLeadingVTFF: col > 0 || hadLeadingPipe)
-        }
 
         // Empty without `.tableSpans`, so the common path does not allocate.
         let spansEnabled = storage.options.contains(.tableSpans)
@@ -177,8 +173,8 @@ extension BlockParser {
                 }
                 // A cell whose content is exactly the marker byte is a rowspan marker.
                 if col < columnCount {
-                    let trimmed = content(col)
-                    if trimmed.count == 1 && sourceBytes[trimmed.lowerBound] == markerByte {
+                    let content = trimmingPadding(cells[col])
+                    if content.count == 1 && sourceBytes[content.lowerBound] == markerByte {
                         rowspans[col] = 0
                     }
                 }
@@ -210,17 +206,17 @@ extension BlockParser {
             }
             guard col < cells.count else { continue }
             // A cell covers its untrimmed span between pipes. A cell whose content trims to empty also covers its closing pipe, which it always has, because `splitCells` drops a trailing empty cell.
-            let cr = cells[col]
-            let cellRange = content(col)
-            storage.setSourceStart(cellIdx, cr.lowerBound)
+            let span = cells[col]
+            let content = trimmingPadding(span)
+            storage.setSourceStart(cellIdx, span.lowerBound)
             if col == cells.count - 1 && !hadClosingPipe {
                 // With no closing pipe, the rightmost cell runs to the row's untrimmed end.
                 storage.setSourceEnd(cellIdx, rowEnd)
             } else {
-                storage.setSourceEnd(cellIdx, cellRange.isEmpty ? cr.upperBound + 1 : cr.upperBound)
+                storage.setSourceEnd(cellIdx, content.isEmpty ? span.upperBound + 1 : span.upperBound)
             }
-            if cellRange.isEmpty || (spansEnabled && skipContent[col]) { continue }
-            queueInlines(of: cellIdx, content: cellRange)
+            if content.isEmpty || (spansEnabled && skipContent[col]) { continue }
+            queueInlines(of: cellIdx, content: content)
         }
     }
 
@@ -282,10 +278,9 @@ extension BlockParser {
         }
     }
 
-    /// A delimiter-row cell's alignment, or nil if `cell` isn't one: `:?-+:?` amid padding (spaces, tabs, line
-    /// tabulations or form feeds).
+    /// A delimiter-row cell's alignment, or nil if `cell` isn't one: `:?-+:?` amid padding.
     private func delimiterAlignment(of cell: Range<Int>) -> MarkdownNode.TableAlignment? {
-        let marker = trim(cell, leading: \.isLineWhitespace, trailing: \.isLineWhitespace)
+        let marker = trimmingPadding(cell)
         guard !marker.isEmpty else {
             return nil
         }
@@ -307,72 +302,62 @@ extension BlockParser {
     }
 
     /// `forEachCell`'s cells of `line`, collected.
-    private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool, hadLeadingPipe: Bool) {
+    private func splitCells(line: Range<Int>) -> (cells: [Range<Int>], hadClosingPipe: Bool) {
         var cells: [Range<Int>] = []
-        let pipes = forEachCell(in: line) { cells.append($0) }
-        return (cells, pipes.hadClosingPipe, pipes.hadLeadingPipe)
+        let hadClosingPipe = forEachCell(in: line) { cells.append($0) }
+        return (cells, hadClosingPipe)
     }
 
-    /// Calls `body` with each cell of source line `line`, in order. Cells split on unescaped `|`, stripping a closing
-    /// `|` and the padding after it, and a leading `|` only as the row's first byte.
+    /// Calls `body` with each cell of source line `line`, in order, and returns whether the row has a closing `|`.
+    /// Cells split on unescaped `|`. Padding may precede a leading `|` and follow a closing one; both pipes and that
+    /// padding are stripped.
     // Out of line, a table-heavy parse costs 0.7% more.
     @discardableResult @inline(__always)
-    private func forEachCell(in line: Range<Int>, _ body: (Range<Int>) -> Void) -> (hadClosingPipe: Bool, hadLeadingPipe: Bool) {
+    private func forEachCell(in line: Range<Int>, _ body: (Range<Int>) -> Void) -> Bool {
         var s = line.lowerBound
         var e = line.upperBound
-        while e > s && sourceBytes[e - 1].isSpaceOrTab {
+        while e > s && sourceBytes[e - 1].isLineWhitespace {
             e -= 1
         }
-        // A pipe after leading whitespace closes an empty first cell: ` |` is one empty cell, not a lone-pipe row.
+        var pipe = s
+        while pipe < e && sourceBytes[pipe].isLineWhitespace {
+            pipe += 1
+        }
         var hadLeadingPipe = false
-        if s < e && sourceBytes[s] == UInt8(ascii: "|") {
-            s += 1
+        if pipe < e && sourceBytes[pipe] == UInt8(ascii: "|") {
+            s = pipe + 1
             hadLeadingPipe = true
         }
         var hadClosingPipe = false
-        // A closing pipe may be followed by line tabulations or form feeds; without one, they are the last
-        // cell's content.
-        var pipeEnd = e
-        while pipeEnd > s && sourceBytes[pipeEnd - 1].isLineWhitespace {
-            pipeEnd -= 1
-        }
-        if pipeEnd > s && sourceBytes[pipeEnd - 1] == UInt8(ascii: "|") && !isEscapedPipe(at: pipeEnd - 1, from: line.lowerBound) {
-            e = pipeEnd - 1
+        if e > s && sourceBytes[e - 1] == UInt8(ascii: "|") && !isEscapedPipe(at: e - 1, from: line.lowerBound) {
+            e -= 1
             hadClosingPipe = true
         }
-        var cellCount = 0
+        // A leading pipe with only padding after it is zero cells, so `|\n-|` is a paragraph. `||` has a closing
+        // pipe, so its one empty cell is kept.
+        if hadLeadingPipe && !hadClosingPipe && s == e {
+            return false
+        }
         var cellStart = s
         for i in s..<e where sourceBytes[i] == UInt8(ascii: "|") && !isEscapedPipe(at: i, from: line.lowerBound) {
             body(cellStart..<i)
-            cellCount += 1
             cellStart = i + 1
         }
-        // A lone leading pipe with only padding after it is zero cells, so `|\n-|` is a paragraph. `||` has
-        // a closing pipe, so its one empty cell is kept.
-        if cellCount == 0 && hadLeadingPipe && !hadClosingPipe
-            && (cellStart..<e).allSatisfy({ sourceBytes[$0].isLineWhitespace }) {
-            return (hadClosingPipe, hadLeadingPipe)
-        }
         body(cellStart..<e)
-        return (hadClosingPipe, hadLeadingPipe)
+        return hadClosingPipe
     }
 
-    private func trim(_ range: Range<Int>, leading: (UInt8) -> Bool, trailing: (UInt8) -> Bool) -> Range<Int> {
+    /// `range` without its leading and trailing padding: every whitespace character other than a line ending, as
+    /// the spec trims spaces between pipes and cell content (Tables (extension)).
+    private func trimmingPadding(_ range: Range<Int>) -> Range<Int> {
         var s = range.lowerBound
         var e = range.upperBound
-        while s < e && leading(sourceBytes[s]) {
+        while s < e && sourceBytes[s].isLineWhitespace {
             s += 1
         }
-        while e > s && trailing(sourceBytes[e - 1]) {
+        while e > s && sourceBytes[e - 1].isLineWhitespace {
             e -= 1
         }
         return s..<e
-    }
-
-    /// A cell's content. A pipe-preceded cell drops all leading padding; a row's first cell without a leading
-    /// pipe keeps a leading line tabulation or form feed. A trailing line tabulation or form feed is content.
-    private func trimCellContent(range: Range<Int>, stripLeadingVTFF: Bool) -> Range<Int> {
-        precondition(stripLeadingVTFF || range.isEmpty || !sourceBytes[range.lowerBound].isSpaceOrTab, "a row's first cell starts past the row's leading spaces and tabs")
-        return trim(range, leading: { stripLeadingVTFF && $0.isLineWhitespace }, trailing: \.isSpaceOrTab)
     }
 }

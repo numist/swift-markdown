@@ -11,10 +11,9 @@
 import Testing
 import CommonMark
 
-/// Under Tables (extension), spaces between pipes and cell content are trimmed. Directly after a pipe, the parser
-/// also skips tabs, line tabulations (U+000B) and form feeds (U+000C), which are whitespace characters, so a trailing
-/// pipe followed only by them closes its row. Elsewhere, only spaces and tabs are trimmed from a cell's edges, and a
-/// line tabulation or form feed is cell content.
+/// Under Tables (extension), spaces between pipes and cell content are trimmed. Every whitespace character other than
+/// a line ending (Characters and lines), line tabulation (U+000B) and form feed (U+000C) included, is such padding:
+/// it is trimmed from both edges of a cell, and may precede a row's leading pipe or follow its closing pipe.
 @Suite("Table cell pipe-boundary whitespace")
 struct TableCellPipeWhitespaceTests {
 
@@ -98,22 +97,67 @@ struct TableCellPipeWhitespaceTests {
 
     // MARK: - Other cell edges
 
-    @Test("a form feed before a pipe is cell content")
-    func formFeedBeforePipeIsContent() throws {
+    @Test("a form feed before a pipe is padding")
+    func formFeedBeforePipe() throws {
         let rows = try #require(tableRows("a\(Self.ff)|b\n-|-"))
-        #expect(rows.first == ["a\(Self.ff)", "b"])
+        #expect(rows.first == ["a", "b"])
     }
 
-    @Test("a form feed starting a first cell with no leading pipe is cell content")
+    @Test("a form feed starting a first cell with no leading pipe is padding")
     func leadingFormFeedFirstCellNoPipe() throws {
         let rows = try #require(tableRows("\(Self.ff)a|b\n-|-"))
-        #expect(rows.first == ["\(Self.ff)a", "b"])
+        #expect(rows.first == ["a", "b"])
     }
 
-    @Test("a line tabulation starting a first cell with no leading pipe is cell content")
+    @Test("a line tabulation starting a first cell with no leading pipe is padding")
     func leadingVerticalTabFirstCellNoPipe() throws {
         let rows = try #require(tableRows("\(Self.vt)a|b\n-|-"))
-        #expect(rows.first == ["\(Self.vt)a", "b"])
+        #expect(rows.first == ["a", "b"])
+    }
+
+    @Test("a line tabulation before a row's leading pipe is padding")
+    func verticalTabBeforeLeadingPipe() {
+        #expect(TreeDump.dump("| a | b |\n|-|-|\n\(Self.vt)| x | y |\n", options: [.tables, .sourcePosition], sourceRanges: true) == """
+            document @1:1-3:11
+              table @1:1-3:11
+                table_header @1:1-1:10
+                  table_cell align=none colspan=1 rowspan=1 @1:2-1:5
+                    text "a" @1:3-1:4
+                  table_cell align=none colspan=1 rowspan=1 @1:6-1:9
+                    text "b" @1:7-1:8
+                table_row @3:1-3:11
+                  table_cell align=none colspan=1 rowspan=1 @3:3-3:6
+                    text "x" @3:4-3:5
+                  table_cell align=none colspan=1 rowspan=1 @3:7-3:10
+                    text "y" @3:8-3:9
+
+            """)
+    }
+
+    @Test("a line tabulation before a header row's leading pipe is padding")
+    func verticalTabBeforeHeaderLeadingPipe() throws {
+        let rows = try #require(tableRows("\(Self.vt)| a | b |\n|-|-|"))
+        #expect(rows == [["a", "b"]])
+    }
+
+    @Test("a line tabulation before a closing pipe is padding")
+    func verticalTabBeforeClosingPipe() throws {
+        let rows = try #require(tableRows("a|b\n-|-\n| x\(Self.vt)| y\(Self.ff)|"))
+        #expect(rows == [["a", "b"], ["x", "y"]])
+    }
+
+    @Test("a lone pipe after a line tabulation is a row with no cells, which ends the table")
+    func verticalTabBeforeLonePipe() {
+        #expect(TreeDump.dump("a\n|-\n\(Self.vt)|\n", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "a"
+              paragraph
+                text "|"
+
+            """)
     }
 
     @Test("a form feed after a leading pipe is skipped")

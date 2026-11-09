@@ -11,7 +11,7 @@
 import CommonMark
 import Testing
 
-/// A `^` row-span cell preceded by a vertical tab or form feed is a row-span marker.
+/// A `^` row-span cell padded by a line tabulation or form feed is a row-span marker.
 @Suite("Row-span marker after vertical whitespace")
 struct TableRowspanCaretAfterVerticalWhitespaceTests {
 
@@ -117,36 +117,32 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
             """)
     }
 
-    /// Without a leading pipe, a leading VT in the row's first cell is content, not padding.
-    @Test func verticalTabBeforeCaretWithoutLeadingPipeStaysLiteral() {
+    @Test func verticalTabBeforeCaretWithoutLeadingPipe() {
         #expect(TreeDump.dump("a|b\n-|-\n\u{B}^|x", options: Self.options) == """
             document
               table
                 table_header
-                  table_cell align=none colspan=1 rowspan=1
+                  table_cell align=none colspan=1 rowspan=2
                     text "a"
                   table_cell align=none colspan=1 rowspan=1
                     text "b"
                 table_row
-                  table_cell align=none colspan=1 rowspan=1
-                    text "\\u{B}^"
+                  table_cell align=none colspan=1 rowspan=0
                   table_cell align=none colspan=1 rowspan=1
                     text "x"
 
             """)
     }
 
-    /// A trailing VT is content (only a pipe's leading padding absorbs VT/FF), so `^<VT>` is not a marker.
-    @Test func verticalTabAfterCaretStaysLiteral() {
+    @Test func verticalTabAfterCaret() {
         #expect(TreeDump.dump("a\n|-\n|^\u{B}", options: Self.options) == """
             document
               table
                 table_header
-                  table_cell align=none colspan=1 rowspan=1
+                  table_cell align=none colspan=1 rowspan=2
                     text "a"
                 table_row
-                  table_cell align=none colspan=1 rowspan=1
-                    text "^\\u{B}"
+                  table_cell align=none colspan=1 rowspan=0
 
             """)
     }
