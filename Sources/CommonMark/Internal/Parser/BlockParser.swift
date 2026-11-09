@@ -1113,7 +1113,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func underlineParagraph(line: inout LineContext, pending: inout PendingLeaf?) -> Bool {
         let lineRange = line.lineRange
         guard line.openKind == .paragraph && line.allMatched && !openParagraphIsTablePending && line.indent < 4,
-              let level = matchSetextUnderline(range: line.cursor..<lineRange.upperBound, firstNonSpace: line.firstNonSpace) else {
+              let underline = matchSetextUnderline(range: line.cursor..<lineRange.upperBound, firstNonSpace: line.firstNonSpace) else {
             return false
         }
         // Leading link reference definitions come out first; if they are the whole paragraph, no heading forms.
@@ -1126,7 +1126,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let trimmedHead = raw.trimmingWhitespace(using: self)
         let stripped = parseDefinitions(in: trimmedHead)
         if !self.isBlank(chunk: stripped) {
-            pending = makeHeading(para, level: level, raw: raw, stripped: stripped, flatMap: flatMap)
+            makeHeading(para, level: underline.level, raw: raw, stripped: stripped, flatMap: flatMap, underlineEnd: underline.end)
             return true
         }
         // A paragraph of only definitions forms no heading (Setext headings), but it is open while this line is
@@ -1161,25 +1161,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return false
     }
 
-    /// Turns the open paragraph into a `level` heading holding `stripped`, `raw` without its leading definitions. `flatMap` is `raw`'s run map.
-    private mutating func makeHeading(_ para: DocumentStorage.Index, level: UInt8, raw: Chunk, stripped: Chunk, flatMap: [ArenaRun]) -> PendingLeaf {
-        // A source range stays `.lazy`; arena content becomes the source segments its run map images, so the heading's inlines keep source positions.
-        let pending: PendingLeaf
-        if stripped.inSource {
-            pending = PendingLeaf(node: para, content: .lazy(range: stripped.range))
-        } else {
-            pending = reseedSegments(stripped, map: sliceRuns(flatMap, from: stripped.offset - raw.offset, length: stripped.length), for: para)
-        }
-        let headingContent = stripped.trimmingWhitespace(using: self)
-        if positionsEnabled, !headingContent.isEmpty,
-           let start = sourceStart(of: headingContent, in: raw, map: flatMap) {
-            storage.setSourceStart(para, start)
-        }
+    /// Turns the open paragraph into a `level` heading holding `stripped`, `raw` without its leading definitions, and
+    /// closes it, since no line continues a heading. `flatMap` is `raw`'s run map, and the heading ends at `underlineEnd`,
+    /// past its underline's last marker character.
+    private mutating func makeHeading(_ para: DocumentStorage.Index, level: UInt8, raw: Chunk, stripped: Chunk, flatMap: [ArenaRun], underlineEnd: Int) {
         storage[para].kind = .heading(level: Int(level))
         openParagraphTableState = nil
-        // The heading stays open with its content pending, so the usual close path finalizes it. No line continues a
-        // heading.
-        return pending
+        let content = stripped.trimmingWhitespace(using: self)
+        var map = flatMap.isEmpty ? [] : sliceRuns(flatMap, from: content.offset - raw.offset, length: content.length)
+        if positionsEnabled {
+            storage.setSourceStart(para, sourceExtent(of: content, in: raw, map: flatMap).start)
+        }
+        let nulReplaced = replacingNUL(content, map: &map)
+        if positionsEnabled, !map.isEmpty {
+            arenaSourceMaps[para] = map
+        }
+        pendingInlines.append((para, storage.intern(nulReplaced)))
+        _ = finalize(node: para, pending: nil, endsOnCurrentLine: true)
+        if positionsEnabled {
+            storage.setSourceEnd(para, underlineEnd)
+        }
     }
 
     /// Whether the open paragraph absorbs the line as a continuation; otherwise the line starts a block that closes it. Only here does the interrupt decision matter, so only here does the matcher ladder run.
@@ -2007,21 +2008,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return content.isEmpty && content.offset != trimmed.offset ? nil : content
     }
 
-    /// Where `content`, a window of leaf content `raw` with run map `map` (empty for source content), begins in the
-    /// source, or `nil` when it begins on a line join.
-    private func sourceStart(of content: Chunk, in raw: Chunk, map: [ArenaRun]) -> Int? {
+    /// The source extent of `content`, a non-empty window of leaf content `raw` with run map `map` (empty for source
+    /// content) that begins and ends on a content byte: from the source byte its first byte images to just past the
+    /// one its last byte images.
+    private func sourceExtent(of content: Chunk, in raw: Chunk, map: [ArenaRun]) -> (start: Int, end: Int) {
+        precondition(!content.isEmpty, "only non-empty content has a source extent")
         if map.isEmpty {
             precondition(content.inSource, "with positions tracked, arena-backed leaf content carries a run map")
-            return content.offset
+            return (content.offset, content.offset + content.length)
         }
-        var remaining = content.offset - raw.offset
-        for run in map {
-            if remaining < Int(run.length) {
-                return run.sourceOffset < 0 ? nil : Int(run.sourceOffset) + remaining
-            }
-            remaining -= Int(run.length)
+        let image = ContentImage(base: raw.offset, runs: map)
+        guard let start = image.sourceOffset(ofArenaByte: content.offset),
+              let last = image.sourceOffset(ofArenaByte: content.offset + content.length - 1) else {
+            preconditionFailure("leaf content lies within its run map")
         }
-        preconditionFailure("leaf content lies within its run map")
+        return (start, last + 1)
     }
 
     /// Removes `paragraph`, its container's last block, which holds only definitions or a task list item marker.
@@ -2072,8 +2073,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             removeEmptiedParagraph(node)
             return
         }
-        if positionsEnabled, let start = sourceStart(of: contentChunk, in: raw, map: map) {
-            storage.setSourceStart(node, start)
+        if positionsEnabled {
+            let extent = sourceExtent(of: contentChunk, in: raw, map: map)
+            storage.setSourceStart(node, extent.start)
+            storage.setSourceEnd(node, extent.end)
         }
         // Narrow the run map to the content that reaches inline parsing.
         if positionsEnabled, !map.isEmpty {
@@ -2087,7 +2090,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Closes `node`, materializes its content, and makes its parent `current`.
     ///
-    /// A block ends on the current line when `endsOnCurrentLine` (the document ends, a closing fence, an HTML block's end condition) or it opened on that line; otherwise it ends on the previous line, which the current line didn't continue. An indented code block ends at its last line that is not blank. `lineContentEnd` is where a one-line ATX heading's or thematic break's content ends.
+    /// A block ends on the current line when `endsOnCurrentLine` (the document ends, a closing fence, an HTML block's end condition, a setext heading's underline) or it opened on that line; otherwise it ends on the previous line, which the current line didn't continue. An indented code block ends at its last line that is not blank. `lineContentEnd` is where a one-line ATX heading's or thematic break's content ends.
     private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, endsOnCurrentLine: Bool = false, lineContentEnd: Int? = nil) -> PendingLeaf? {
         var pending = pending
         let kind = storage[node].kind
@@ -2130,28 +2133,28 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     let raw = flattenSegments(trimmed, map: &map)
                     runParagraphMatchers(node: node, raw: raw, map: map)
                 } else {
+                    if positionsEnabled {
+                        storage.setSourceEnd(node, segmentsSourceSpan(trimmed).end)
+                    }
                     pendingInlines.append((node, storage.intern(trimmed)))
                 }
             }
         case .heading:
+            // An ATX heading's content is a source range on its line that excludes the surrounding spaces and tabs.
+            // A setext heading queues its content as it forms, so none is pending.
             let drained = drainLeaf(node, pending: pending)
             pending = nil
-            var map = drained.map
-            let raw: Chunk
+            let map = drained.map
             switch consume drained.content {
-            case .chunk(let chunk):
-                raw = chunk
-            case .segments(let segs):
-                // A re-seeded setext heading's content is a segment list.
-                raw = flattenSegments(segs, map: &map)
-            }
-            // An ATX heading's content range already excludes its surrounding spaces and tabs, and holds no line ending.
-            let trimmed = lineContentEnd == nil ? raw.trimmingWhitespace(using: self) : raw
-            if !trimmed.isEmpty {
-                if positionsEnabled, !map.isEmpty {
-                    arenaSourceMaps[node] = sliceRuns(map, from: trimmed.offset - raw.offset, length: trimmed.length)
+            case .chunk(let content):
+                if !content.isEmpty {
+                    if positionsEnabled, !map.isEmpty {
+                        arenaSourceMaps[node] = map
+                    }
+                    pendingInlines.append((node, storage.intern(content)))
                 }
-                pendingInlines.append((node, storage.intern(trimmed)))
+            case .segments:
+                preconditionFailure("a heading's pending content is a source range on one line")
             }
         case .codeBlock(let info):
             var segs = drainSegments(node, pending: pending)
@@ -3005,8 +3008,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Matches a setext heading underline (Setext headings).
-    private func matchSetextUnderline(range: Range<Int>, firstNonSpace: Int) -> UInt8? {
+    /// Matches a setext heading underline (Setext headings), returning the heading level and the offset past the
+    /// underline's last `=` or `-`.
+    private func matchSetextUnderline(range: Range<Int>, firstNonSpace: Int) -> (level: UInt8, end: Int)? {
         assert(firstNonSpace - range.lowerBound <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         let marker = sourceBytes[firstNonSpace]
@@ -3023,7 +3027,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         while i < range.upperBound && sourceBytes[i] == marker {
             i += 1
         }
-        return isSpaceOrTabOnly(i..<range.upperBound) ? level : nil
+        return isSpaceOrTabOnly(i..<range.upperBound) ? (level, i) : nil
     }
 
     /// Matches a thematic break (Thematic breaks), returning the offset past its last marker character.

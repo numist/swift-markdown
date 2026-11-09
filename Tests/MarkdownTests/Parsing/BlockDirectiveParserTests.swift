@@ -995,7 +995,7 @@ class BlockDirectiveArgumentParserTests: XCTestCase {
         let expectedDump = #"""
         Document @1:1-4:2
         ├─ BlockDirective @1:1-1:19 name: "blah"
-        │  └─ Paragraph @1:9-1:17
+        │  └─ Paragraph @1:9-1:16
         │     └─ Text @1:9-1:16 "content"
         └─ BlockDirective @2:1-4:2 name: "blah"
            └─ Paragraph @3:5-3:12

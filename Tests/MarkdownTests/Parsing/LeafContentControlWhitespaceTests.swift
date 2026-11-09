@@ -22,7 +22,7 @@ struct LeafContentControlWhitespaceTests {
     @Test func finalVerticalTabIsRemoved() {
         #expect(tree("foo\u{0B}") == """
             Document @1:1-1:5
-            └─ Paragraph @1:1-1:5
+            └─ Paragraph @1:1-1:4
                └─ Text @1:1-1:4 "foo"
             """)
     }
@@ -38,7 +38,7 @@ struct LeafContentControlWhitespaceTests {
     @Test func rejectedDefinitionKeepsNoFinalVerticalTab() {
         #expect(tree("[?]:\u{0B}") == """
             Document @1:1-1:6
-            └─ Paragraph @1:1-1:6
+            └─ Paragraph @1:1-1:5
                └─ Text @1:1-1:5 "[?]:"
             """)
     }
@@ -56,7 +56,7 @@ struct LeafContentControlWhitespaceTests {
         #expect(tree("> \u{0B}foo\n> bar\u{0B}") == """
             Document @1:1-2:7
             └─ BlockQuote @1:1-2:7
-               └─ Paragraph @1:4-2:7
+               └─ Paragraph @1:4-2:6
                   ├─ Text @1:4-1:7 "foo"
                   ├─ SoftBreak
                   └─ Text @2:3-2:6 "bar"

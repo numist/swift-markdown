@@ -19,7 +19,7 @@ class EmptyListItemInterruptTests: XCTestCase {
 
         let expectedDump = """
         Document @1:1-2:4
-        └─ Paragraph @1:1-2:4
+        └─ Paragraph @1:1-2:2
            ├─ Text @1:1-1:2 "a"
            ├─ SoftBreak
            └─ Text @2:1-2:2 "*"
@@ -53,7 +53,7 @@ class EmptyListItemInterruptTests: XCTestCase {
 
         let expectedDump = """
         Document @1:1-2:8
-        └─ Paragraph @1:1-2:8
+        └─ Paragraph @1:1-2:2
            ├─ Text @1:1-1:2 "a"
            ├─ SoftBreak
            └─ Text @2:1-2:2 "*"
