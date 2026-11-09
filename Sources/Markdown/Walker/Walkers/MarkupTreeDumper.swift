@@ -112,8 +112,6 @@ struct MarkupTreeDumper: MarkupWalker {
     private var lineIndentPrefix: String {
         var prefix = ""
         for (depth, element) in path.enumerated().reversed() {
-            // Compares against `childCount - 1` rather than `children.reversed().first`, which resolves to
-            // the copying `Sequence.reversed()`.
             guard let parent = element.parent,
                 parent.childCount - 1 != element.indexInParent else {
                     if depth > 0 {
