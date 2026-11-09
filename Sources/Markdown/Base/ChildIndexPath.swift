@@ -24,11 +24,11 @@ public struct TypedChildIndexPath: RandomAccessCollection, ExpressibleByArrayLit
         var index: Int
 
         /**
-         The expected type of the child at ``index``.
+         The identity of the expected type of the child at ``index``.
 
          Use this to restrict the type of node to enter at this point in the traversal. If the child doesn't match this type, the traversal will fail. To allow any type of child markup type, set this to `nil`.
          */
-        var expectedType: Markup.Type?
+        var expectedType: ObjectIdentifier?
     }
 
     /// The elements of the path.
@@ -46,7 +46,7 @@ public struct TypedChildIndexPath: RandomAccessCollection, ExpressibleByArrayLit
 
     /// Create a path from a sequence of index-type pairs.
     public init(arrayLiteral elements: ArrayLiteralElement...) {
-        self.elements = elements.map { Element(index: $0.0, expectedType: $0.1) }
+        self.elements = elements.map { Element(index: $0.0, expectedType: $0.1.map(ObjectIdentifier.init)) }
     }
 
     public var startIndex: Int {
