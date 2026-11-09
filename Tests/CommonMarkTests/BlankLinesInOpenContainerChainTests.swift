@@ -38,7 +38,7 @@ struct BlankLinesInOpenContainerChainTests {
     static let cases: [Case] = [
         Case(
             "block quote in the innermost of ten footnote definitions",
-            "[^a]\n\n[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:>x\n\n\ny\n",
+            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:>x\n\n\ny\n",
             """
             document @1:1-6:2
               paragraph @1:1-1:5
@@ -54,7 +54,7 @@ struct BlankLinesInOpenContainerChainTests {
         ),
         Case(
             "empty list item in the innermost of ten footnote definitions",
-            "[^a]\n\n[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:-\n\n\nx\n",
+            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:-\n\n\nx\n",
             """
             document @1:1-6:2
               paragraph @1:1-1:5
@@ -69,7 +69,7 @@ struct BlankLinesInOpenContainerChainTests {
         ),
         Case(
             "list item holding a paragraph in the innermost of ten footnote definitions",
-            "[^a]\n\n[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:- a\n\n\n",
+            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:- a\n\n\n",
             """
             document @1:1-5:1
               paragraph @1:1-1:5
@@ -84,7 +84,7 @@ struct BlankLinesInOpenContainerChainTests {
         ),
         Case(
             "twelve footnote definitions, blank lines of tabs that continue some of them",
-            "[^a]\n\n[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:x\n\n\t\n\t\t\n\n",
+            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\t\n\t\t\n\n",
             """
             document @1:1-7:1
               paragraph @1:1-1:5
@@ -97,7 +97,7 @@ struct BlankLinesInOpenContainerChainTests {
         ),
         Case(
             "twelve footnote definitions, three empty lines",
-            "[^a]\n\n[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:x\n\n\n\n",
+            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\n\n",
             """
             document @1:1-6:1
               paragraph @1:1-1:5
@@ -110,7 +110,7 @@ struct BlankLinesInOpenContainerChainTests {
         ),
         Case(
             "twelve footnote definitions, empty lines around a line of spaces that continues the outermost",
-            "[^a]\n\n[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:[^a]:x\n\n\n    \n\n",
+            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\n    \n\n",
             """
             document @1:1-7:1
               paragraph @1:1-1:5

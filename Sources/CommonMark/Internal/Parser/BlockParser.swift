@@ -2171,15 +2171,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
         case .list:
             detectLooseList(node)
-        case .footnoteDefinition:
-            // A label's first definition to close wins, so one nested in a same-label definition (`[^b]:[^b]:A`) wins
-            // over its encloser.
-            if case .footnoteDefinition(let labelRef) = storage[node].data {
-                let key = normalizeLabel(chunk: storage.chunk(of: labelRef))
-                if !key.isEmpty && storage.footnoteMap[key] == nil {
-                    storage.footnoteMap[key] = node
-                }
-            }
         default:
             break
         }
@@ -3280,7 +3271,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         )
     }
 
-    /// Opens a footnote definition under `current`; `finalize` registers it when it closes.
+    /// Opens a footnote definition under `current`, registering it unless its label already has a definition: as for
+    /// link reference definitions, the first in the document wins.
     private mutating func openFootnoteDefinition(label rawLabel: Chunk, firstNonSpace: Int) -> DocumentStorage.Index {
         // A NUL becomes U+FFFD (Insecure characters), as in a reference's paragraph, so the keys match.
         let label = replacingNUL(rawLabel)
@@ -3292,6 +3284,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             start: firstNonSpace
         )
         storage.footnoteDefinitionOrder.append(fnIdx)
+        let key = normalizeLabel(chunk: label)
+        if !key.isEmpty && storage.footnoteMap[key] == nil {
+            storage.footnoteMap[key] = fnIdx
+        }
         return fnIdx
     }
 

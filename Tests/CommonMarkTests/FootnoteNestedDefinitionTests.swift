@@ -12,8 +12,8 @@ import CommonMark
 import Testing
 
 /// A footnote definition opener followed on the same line by another opener nests the second
-/// definition inside the first. An inner definition registers before the one enclosing it, and the
-/// first definition registered for a label wins. A referenced definition moves to the document root
+/// definition inside the first. The first definition of a label in the document wins, so an enclosing
+/// definition wins over a same-label one nested in it. A referenced definition moves to the document root
 /// out of whatever encloses it; every other definition is dropped with its remaining content.
 @Suite("Nested footnote definitions")
 struct FootnoteNestedDefinitionTests {
@@ -21,27 +21,23 @@ struct FootnoteNestedDefinitionTests {
 
     /// The winning definition supplies the reference's displayed label.
     @Test
-    func testInnerDuplicateDefinitionSuppliesLabel() {
+    func testOuterDuplicateDefinitionSuppliesLabel() {
         #expect(TreeDump.dump("[^b]\n[^b]:[^B]:A", options: Self.options) == """
             document
               paragraph
                 footnote_reference "1"
-              footnote_definition "B"
-                paragraph
-                  text "A"
+              footnote_definition "b"
 
             """)
     }
 
     @Test
-    func testThreeLevelDuplicateInnermostWins() {
+    func testThreeLevelDuplicateOutermostWins() {
         #expect(TreeDump.dump("[^b]\n[^b]:[^b]:[^b]:A", options: Self.options) == """
             document
               paragraph
                 footnote_reference "1"
               footnote_definition "b"
-                paragraph
-                  text "A"
 
             """)
     }
@@ -74,39 +70,36 @@ struct FootnoteNestedDefinitionTests {
             """)
     }
 
-    /// The indented line continues only the outer definition, so its paragraph is lost with the
-    /// losing outer duplicate.
+    /// The indented line continues only the outer definition, so its paragraph stays with the
+    /// winning outer duplicate.
     @Test
-    func testOuterDuplicateContentAfterBlankLineIsDropped() {
+    func testOuterDuplicateKeepsContentAfterBlankLine() {
         #expect(TreeDump.dump("[^b]\n[^b]:[^b]:A\n\n    C\n", options: Self.options) == """
             document
               paragraph
                 footnote_reference "1"
               footnote_definition "b"
                 paragraph
-                  text "A"
+                  text "C"
 
             """)
     }
 
-    /// A lazy continuation line extends the inner definition's paragraph.
+    /// A lazy continuation line extends the inner definition's paragraph, which is dropped with
+    /// the losing inner duplicate.
     @Test
-    func testInnerDuplicateLazyContinuation() {
+    func testInnerDuplicateLazyContinuationIsDropped() {
         #expect(TreeDump.dump("[^b]\n[^b]:[^b]:A\nB\n", options: Self.options) == """
             document
               paragraph
                 footnote_reference "1"
               footnote_definition "b"
-                paragraph
-                  text "A"
-                  softbreak
-                  text "B"
 
             """)
     }
 
     @Test
-    func testInnerDuplicateInsideListItem() {
+    func testOuterDuplicateInsideListItem() {
         #expect(TreeDump.dump("[^b]\n- [^b]:[^b]:A\n", options: Self.options) == """
             document
               paragraph
@@ -114,23 +107,20 @@ struct FootnoteNestedDefinitionTests {
               list bullet '-' tight
                 item
               footnote_definition "b"
-                paragraph
-                  text "A"
 
             """)
     }
 
-    /// A same-label definition nested through a block quote closes first and wins; the losing
-    /// outer definition is dropped with its emptied block quote.
+    /// A same-label definition nested through a block quote loses to the outer definition, which
+    /// keeps the emptied block quote.
     @Test
-    func testInnerDuplicateThroughBlockQuote() {
+    func testOuterDuplicateThroughBlockQuote() {
         #expect(TreeDump.dump("[^b]\n[^b]:> [^b]:A\n", options: Self.options) == """
             document
               paragraph
                 footnote_reference "1"
               footnote_definition "b"
-                paragraph
-                  text "A"
+                block_quote
 
             """)
     }
