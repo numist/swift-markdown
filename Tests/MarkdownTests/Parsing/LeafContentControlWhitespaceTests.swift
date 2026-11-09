@@ -114,7 +114,7 @@ struct LeafContentControlWhitespaceTests {
     @Test func verticalTabOnlyLineBeforeTableIsEmptyParagraph() {
         #expect(tree("\u{0B}\nh|i\n-|-") == """
             Document @1:1-3:4
-            ├─ Paragraph @1:1-1:2
+            ├─ Paragraph @1:1
             └─ Table @2:1-3:4 alignments: |-|-|
                ├─ Head @2:1-2:4
                │  ├─ Cell @2:1-2:2

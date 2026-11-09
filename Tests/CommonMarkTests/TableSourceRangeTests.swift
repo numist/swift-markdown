@@ -123,6 +123,38 @@ struct TableSourceRangeTests {
             """)
     }
 
+    /// A line before the header holding only a line tabulation stays a paragraph, with no raw content.
+    @Test
+    func controlWhitespaceOnlyLineBeforeHeader() {
+        #expect(tree("\u{0B}\na|b\n-|-\n") == """
+            document @1:1-4:1
+              paragraph @1:1-1:1
+              table @2:1-3:4
+                table_header @2:1-2:4
+                  table_cell align=none colspan=1 rowspan=1 @2:1-2:2
+                    text "a" @2:1-2:2
+                  table_cell align=none colspan=1 rowspan=1 @2:3-2:4
+                    text "b" @2:3-2:4
+
+            """)
+    }
+
+    @Test
+    func controlWhitespaceOnlyLineBeforeHeaderInBlockQuote() {
+        #expect(tree("> \u{0B}\n> a|b\n> -|-\n") == """
+            document @1:1-4:1
+              block_quote @1:1-3:6
+                paragraph @1:3-1:3
+                table @2:3-3:6
+                  table_header @2:3-2:6
+                    table_cell align=none colspan=1 rowspan=1 @2:3-2:4
+                      text "a" @2:3-2:4
+                    table_cell align=none colspan=1 rowspan=1 @2:5-2:6
+                      text "b" @2:5-2:6
+
+            """)
+    }
+
     @Test
     func rowspanMarkerCell() {
         #expect(tree("| a |\n|---|\n| ^ |\n") == """

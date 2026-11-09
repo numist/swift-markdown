@@ -837,7 +837,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // The split-off lines are a paragraph that bypasses finalize, so its raw content is formed here.
         if let precedingChunk = tableSplitParagraphContent(precedingLines.trimmingWhitespace(using: self), node: node) {
             let preceding = insertTablePrecedingParagraph(before: node)
-            let span = precedingChunk.isEmpty ? precedingLines : precedingChunk
+            // With no raw content, the paragraph's range is empty at its start.
+            let span = precedingChunk.isEmpty ? Chunk(offset: precedingLines.offset, length: 0, inSource: true) : precedingChunk
             storage.setSourceStart(preceding, span.offset)
             storage.setSourceEnd(preceding, span.offset + span.length)
             enqueueTablePrecedingContent(precedingChunk, map: [], of: preceding)
@@ -900,6 +901,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     let span = sourceSpan(of: contentMap)
                     storage.setSourceStart(precedingNode, span.start)
                     storage.setSourceEnd(precedingNode, span.end)
+                } else {
+                    emptySourceRangeAtStart(precedingNode)
                 }
                 enqueueTablePrecedingContent(content, map: contentMap, of: precedingNode)
             } else {
