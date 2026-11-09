@@ -3575,7 +3575,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// The character reference at the `&` at `offset` in `chunk`, or `nil` if none starts there.
-    private func characterReference(at offset: Int, in chunk: Chunk) -> EntityParser.EntityMatch? {
+    func characterReference(at offset: Int, in chunk: Chunk) -> EntityParser.EntityMatch? {
         if chunk.inSource {
             EntityParser.matchEntity(start: offset, end: chunk.range.upperBound, source: sourceBytes)
         } else {

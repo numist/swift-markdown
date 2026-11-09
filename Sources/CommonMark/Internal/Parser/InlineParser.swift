@@ -285,13 +285,7 @@ extension BlockParser {
         guard let window = content.contiguousChunk(fromVirtual: cursor, limit: content.endOffset) else {
             preconditionFailure("an `&` lies in a source segment: the only synthetic segment is the line join")
         }
-        // A separate expression keeps the borrowed `source` span scoped to the call.
-        let entity: EntityParser.EntityMatch? = if window.inSource {
-            EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: sourceBytes)
-        } else {
-            EntityParser.matchEntity(start: window.offset, end: window.offset + window.length, source: storage.strings.span)
-        }
-        guard let entity else {
+        guard let entity = characterReference(at: window.offset, in: window) else {
             return cursor + 1
         }
         let decoded = Self.appendUTF8Bytes(
