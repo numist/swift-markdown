@@ -80,7 +80,6 @@ internal enum TreeDump {
             let style = info.isFenced ? "fenced" : "indented"
             return "code_block \(style) fence=\(fence) length=\(info.fenceLength) offset=\(info.fenceOffset)"
         case .htmlBlock: return "html_block"
-        case .customBlock: return "custom_block"
         case .paragraph: return "paragraph"
         case .heading(let level): return "heading \(level)"
         case .thematicBreak: return "thematic_break"
@@ -94,7 +93,6 @@ internal enum TreeDump {
         case .lineBreak: return "linebreak"
         case .codeInline(let backtickCount): return "code backticks=\(backtickCount)"
         case .htmlInline: return "html_inline"
-        case .customInline: return "custom_inline"
         case .emphasis: return "emph"
         case .strong: return "strong"
         case .link: return "link"
@@ -124,8 +122,8 @@ internal enum TreeDump {
         case .attribute:
             guard case .attribute(let raw) = content else { return "attribute <no content>" }
             return "attribute " + quoted(raw)
-        case .document, .blockQuote, .list, .item, .customBlock, .paragraph, .heading, .thematicBreak, .table,
-             .tableRow, .tableCell, .softBreak, .lineBreak, .customInline, .emphasis, .strong, .strikethrough:
+        case .document, .blockQuote, .list, .item, .paragraph, .heading, .thematicBreak, .table,
+             .tableRow, .tableCell, .softBreak, .lineBreak, .emphasis, .strong, .strikethrough:
             return describe(node.kind)
         }
     }

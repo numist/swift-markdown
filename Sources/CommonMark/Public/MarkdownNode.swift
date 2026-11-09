@@ -193,8 +193,6 @@ extension MarkdownNode {
         case codeBlock(CodeBlockInfo)
         /// A block of raw HTML.
         case htmlBlock
-        /// A custom block. Reserved; not produced by the parser.
-        case customBlock
         /// A paragraph of inline content.
         case paragraph
         /// A heading. `level` is the heading level, `1` through `6`.
@@ -226,8 +224,6 @@ extension MarkdownNode {
         case codeInline(backtickCount: Int)
         /// An inline span of raw HTML.
         case htmlInline
-        /// A custom inline element. Reserved; not produced by the parser.
-        case customInline
         /// Emphasized text (`*text*` or `_text_`), typically rendered italic.
         case emphasis
         /// Strongly emphasized text (`**text**` or `__text__`), typically rendered bold.
@@ -247,7 +243,7 @@ extension MarkdownNode {
         public var isBlock: Bool {
             switch self {
             case .document, .blockQuote, .list, .item, .codeBlock, .htmlBlock,
-                 .customBlock, .paragraph, .heading, .thematicBreak,
+                 .paragraph, .heading, .thematicBreak,
                  .footnoteDefinition, .table, .tableRow, .tableCell:
                 return true
             default:

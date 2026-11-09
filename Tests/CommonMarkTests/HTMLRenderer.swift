@@ -157,8 +157,6 @@ internal enum HTMLRenderer {
         case .attribute:
             // An inline attribute renders as its content alone.
             renderChildren(node, into: &out, tight: false, tagfilter: tagfilter)
-        case .customBlock, .customInline:
-            renderChildren(node, into: &out, tight: false, tagfilter: tagfilter)
         }
     }
 

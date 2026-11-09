@@ -167,8 +167,6 @@ struct MarkupParser {
             return .codeBlock(parsedRange: parsedRange, code: literal(node), language: codeBlockLanguage(node))
         case .htmlBlock:
             return .htmlBlock(parsedRange: parsedRange, html: literal(node))
-        case .customBlock:
-            return .customBlock(parsedRange: parsedRange, children)
         case .paragraph:
             return .paragraph(parsedRange: parsedRange, children)
         case .heading(let level):
@@ -199,8 +197,6 @@ struct MarkupParser {
             return .inlineCode(parsedRange: parsedRange, code: code)
         case .htmlInline:
             return .inlineHTML(parsedRange: parsedRange, html: literal(node))
-        case .customInline:
-            return .customInline(parsedRange: parsedRange, text: literal(node))
         case .emphasis:
             return .emphasis(parsedRange: parsedRange, children)
         case .strong:
