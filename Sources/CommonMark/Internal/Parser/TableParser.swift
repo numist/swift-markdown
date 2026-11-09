@@ -282,31 +282,22 @@ extension BlockParser {
         }
     }
 
-    /// A delimiter-row cell's alignment, or nil if `cell` isn't one. A cell is `:?-+:?` padded by spaces, tabs, line
-    /// tabulations or form feeds. Colons are read inside spaces and tabs only, so a colon behind a line tabulation or
-    /// form feed sets no alignment.
+    /// A delimiter-row cell's alignment, or nil if `cell` isn't one: `:?-+:?` amid padding (spaces, tabs, line
+    /// tabulations or form feeds).
     private func delimiterAlignment(of cell: Range<Int>) -> MarkdownNode.TableAlignment? {
         let marker = trim(cell, leading: \.isLineWhitespace, trailing: \.isLineWhitespace)
-        var s = marker.lowerBound
-        var e = marker.upperBound
-        if s < e && sourceBytes[s] == UInt8(ascii: ":") {
-            s += 1
-        }
-        if e > s && sourceBytes[e - 1] == UInt8(ascii: ":") {
-            e -= 1
-        }
-        if s >= e {
+        guard !marker.isEmpty else {
             return nil
         }
-        for j in s..<e {
-            if sourceBytes[j] != UInt8(ascii: "-") {
-                return nil
-            }
+        let leftColon = sourceBytes[marker.lowerBound] == UInt8(ascii: ":")
+        let rightColon = marker.count > 1 && sourceBytes[marker.upperBound - 1] == UInt8(ascii: ":")
+        let dashes = (marker.lowerBound + (leftColon ? 1 : 0))..<(marker.upperBound - (rightColon ? 1 : 0))
+        if dashes.isEmpty {
+            return nil
         }
-        // `aligned` contains the non-empty `marker`, so it is non-empty.
-        let aligned = trim(cell, leading: \.isSpaceOrTab, trailing: \.isSpaceOrTab)
-        let leftColon = sourceBytes[aligned.lowerBound] == UInt8(ascii: ":")
-        let rightColon = sourceBytes[aligned.upperBound - 1] == UInt8(ascii: ":")
+        for i in dashes where sourceBytes[i] != UInt8(ascii: "-") {
+            return nil
+        }
         switch (leftColon, rightColon) {
         case (true, true): return .center
         case (true, false): return .left

@@ -14,8 +14,7 @@ import CommonMark
 /// A delimiter row cell may be padded with any whitespace character other than a line ending (Characters
 /// and lines), including form feed (U+000C) and line tabulation (U+000B) (Tables (extension)).
 ///
-/// Alignment comes from colons at the ends of the cell after trimming only spaces and tabs, so a colon
-/// followed by a form feed sets no alignment.
+/// Alignment comes from colons at the ends of the cell after trimming that padding.
 @Suite("Table delimiter-row FF/VT whitespace")
 struct TableDelimiterWhitespaceTests {
 
@@ -145,11 +144,23 @@ struct TableDelimiterWhitespaceTests {
 
     // MARK: - Alignment
 
-    @Test("a trailing form-feed hides the right-alignment colon")
-    func trailingFormFeedHidesRightColon() throws {
+    @Test("a colon before a trailing form-feed sets right alignment")
+    func trailingFormFeedRightColon() throws {
         let block = firstBlock("d\n-:\(Self.ff)")
         try #require(block.kind == .table, "expected a table, got \(block.kind)")
-        #expect(block.alignments == [.none])
+        #expect(block.alignments == [.right])
+    }
+
+    @Test("colons between line tabulations set center alignment")
+    func verticalTabsAroundColons() {
+        #expect(TreeDump.dump("a\n|\(Self.vt):--:\(Self.vt)|\n", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=center colspan=1 rowspan=1
+                    text "a"
+
+            """)
     }
 
     @Test("a leading colon sets left alignment despite a trailing form-feed")
