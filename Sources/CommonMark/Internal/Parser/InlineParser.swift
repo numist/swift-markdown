@@ -1037,8 +1037,8 @@ extension BlockParser {
         openerNumChars -= useDelims
         closerNumChars -= useDelims
         // A record's `length` stays the original run length, which rules 9 and 10 sum and `openersBottom`
-        // is indexed by: a closer reduced from 4 to 2 keeps its slot, or `****a**o****` would not nest as
-        // Strong>Strong. The count still available is the text literal's length.
+        // is indexed by: `***a****a` nests as Emphasis>Strong because its second pairing sums the runs' lengths
+        // 3 and 4, not the 1 and 2 delimiters left. The count still available is the text literal's length.
         storage.trimLiteral(of: openerInl, trimStart: 0, newLength: openerNumChars)
         storage.trimLiteral(of: closerInl, trimStart: useDelims, newLength: closerNumChars)
         // Intervening delimiters go; their text nodes become children of the new node.
