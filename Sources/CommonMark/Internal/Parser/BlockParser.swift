@@ -646,7 +646,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     private func segmentsContainNUL(_ segs: borrowing UniqueArray<Segment>) -> Bool {
-        for i in 0..<segs.count where containsNUL(segs[i].chunk) {
+        // A line join is the interned `"\n"`, so only lines are scanned.
+        let lineJoin = storage.newlineSegment
+        for i in 0..<segs.count where segs[i] != lineJoin && containsNUL(segs[i].chunk) {
             return true
         }
         return false
