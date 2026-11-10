@@ -109,16 +109,15 @@ struct DeepListNestingTests {
     /// Each list and item starts at its marker's byte, however many columns the tabs before it span.
     @Test
     func markersSeparatedByTabsBeginAtTheirBytes() {
-        let chain = Self.chain(String(repeating: "-\t", count: 150) + "x", options: .sourcePosition)
-        #expect(chain?.count == 303)
-        #expect(chain?.first == Node(kind: "document", range: "1:1-1:302"))
-        #expect(chain?.dropFirst().first == Node(kind: "list bullet '-' tight", range: "1:1-1:302"))
-        #expect(chain?.suffix(4) == [
-            Node(kind: "list bullet '-' tight", range: "1:299-1:302"),
-            Node(kind: "item", range: "1:299-1:302"),
-            Node(kind: "paragraph", range: "1:301-1:302"),
-            Node(kind: "text", literal: "x", range: "1:301-1:302"),
-        ])
+        #expect(Self.chain(String(repeating: "-\t", count: 150) + "x", options: .sourcePosition)
+            == [Node(kind: "document", range: "1:1-1:302")]
+                + (0..<150).flatMap { marker in
+                    Self.hyphenItems.map { Node(kind: $0, range: "1:\(2 * marker + 1)-1:302") }
+                }
+                + [
+                    Node(kind: "paragraph", range: "1:301-1:302"),
+                    Node(kind: "text", literal: "x", range: "1:301-1:302"),
+                ])
     }
 
     /// After 150 two-column markers, `12.` ends at column 303 and the tab after it spans one column, so with two spaces
