@@ -12,9 +12,6 @@ import CommonMark
 import Testing
 
 /// Inline-only parsing reports line-aware source positions, like block parsing does.
-///
-/// In `a` LF `b *c*` the emphasis on the second line starts at line 2, column 3 (UTF-8 byte columns), and the document
-/// and its single paragraph span the whole input.
 @Suite("Inline-only source positions")
 struct InlineOnlySourcePositionTests {
 
