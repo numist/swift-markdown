@@ -1210,7 +1210,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Whether a `\n` in `bytes`, the next bytes of a paragraph's lines, ends a line of only whitespace characters.
-    /// `lineHoldsNonWhitespace` is whether the line being read holds another character, from one call to the next.
+    /// `lineHoldsNonWhitespace` carries whether the line being read holds a non-whitespace character from one call to
+    /// the next.
     private static func endsWhitespaceOnlyLine(_ bytes: Span<UInt8>, lineHoldsNonWhitespace: inout Bool) -> Bool {
         for i in bytes.indices {
             let b = bytes[i]
