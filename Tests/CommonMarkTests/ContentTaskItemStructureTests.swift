@@ -14,7 +14,7 @@ import CommonMark
 /// Recognition of a task list item with content after its checkbox, at the top level and nested.
 ///
 /// A task list item is a list item whose first block is a paragraph beginning with a task list item
-/// marker (spec "Task list items (extension)"). That depends only on the item's own first paragraph, so
+/// marker (Task list items (extension)). That depends only on the item's own first paragraph, so
 /// an item is recognized however deeply it is nested and whatever container markers precede it on its
 /// line.
 @Suite("Task list items with content")
@@ -34,7 +34,7 @@ struct ContentTaskItemStructureTests {
             """)
     }
 
-    @Test("indented top-level content task item is recognized")
+    @Test("an indented top-level task list item is recognized")
     func indentedTopLevelContentTaskRecognized() {
         // Three spaces is the most indentation a list item may have without becoming indented code (List items).
         #expect(TreeDump.dump("   - [ ] x", options: [.tasklist, .sourcePosition]) == """
@@ -47,7 +47,7 @@ struct ContentTaskItemStructureTests {
             """)
     }
 
-    @Test("top-level checked content task item is recognized")
+    @Test("a checked top-level task list item is recognized")
     func topLevelCheckedContentTaskRecognized() {
         #expect(TreeDump.dump("- [x] x", options: [.tasklist, .sourcePosition]) == """
             document

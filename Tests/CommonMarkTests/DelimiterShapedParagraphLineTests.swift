@@ -14,8 +14,8 @@ import Testing
 /// Paragraphs whose continuation lines all look like table delimiter rows but are not (Tables (extension)).
 ///
 /// `-:-` is not a delimiter row, since a colon may only begin or end a cell's dashes, so each such line continues the
-/// paragraph, while `:-` would open a table under the paragraph's last line. A paragraph of 40,000 lines of `-:-`, in a
-/// block quote, after a tab-indented or long line, or with CRLF line endings, parses well within the time limit.
+/// paragraph, while `:-` would open a table under the paragraph's last line. A paragraph of 40,000 lines of `-:-`
+/// parses well within the time limit.
 @Suite("Paragraph lines shaped like delimiter rows")
 struct DelimiterShapedParagraphLineTests {
     struct Shape: Sendable, CustomTestStringConvertible {

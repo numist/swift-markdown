@@ -28,7 +28,7 @@ struct TaskListSetextHeadingRecognitionTests {
             """)
     }
 
-    // MARK: - Without a checkbox or an underline
+    // MARK: - Without an underline, or without a checkbox
 
     @Test("`- [ ] v` (no underline) is an unchecked task list item with a paragraph `v`")
     func openingLineOnlyIsTaskListItem() {

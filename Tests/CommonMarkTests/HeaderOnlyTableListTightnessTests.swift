@@ -11,9 +11,9 @@
 import Testing
 import CommonMark
 
-/// A table whose delimiter row is its last row ends no differently from any other table, so with no blank line
-/// separating a list's items or blocks the list stays tight (Lists). A line holding only a pipe is not a table row; it
-/// ends the table and starts a paragraph.
+/// A list with no blank line between its items, or between the blocks of an item, is tight (Lists), including when an
+/// item holds a table with no body rows. A line holding only a pipe and whitespace is not a table row; it ends the
+/// table and starts a paragraph.
 @Suite("List tightness around a header-only table")
 struct HeaderOnlyTableListTightnessTests {
 

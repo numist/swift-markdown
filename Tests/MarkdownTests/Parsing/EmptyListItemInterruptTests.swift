@@ -46,8 +46,6 @@ class EmptyListItemInterruptTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// Six spaces after the marker, enough to start indented code, leave the item empty when no content
-    /// follows them.
     func testManyTrailingSpacesLeaveItemEmptyAndDoNotInterruptParagraph() {
         let text = "a\n*      "
 
