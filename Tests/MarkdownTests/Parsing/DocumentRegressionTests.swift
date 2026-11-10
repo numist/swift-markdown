@@ -52,10 +52,11 @@ struct DocumentRegressionTests {
         return Document(parsing: markdown, options: options).debugDescription(options: .printSourceLocations)
     }
 
-    // A parameterized test over an empty collection runs no cases and passes.
+    /// A `@Test(arguments:)` over an empty collection runs zero cases and reports success, so this pins the number of
+    /// pairs.
     @Test
-    func corpusIsNonEmpty() {
-        #expect(!Self.corpus.isEmpty, "no document regression pairs found in \(Self.corpusDir.path)")
+    func corpusHasEveryPair() {
+        #expect(Self.corpus.count == 548, "unexpected pair count in \(Self.corpusDir.path)")
     }
 
     @Test(arguments: corpus)

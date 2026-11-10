@@ -36,8 +36,8 @@ struct TreeRegressionTests {
 
     /// Splits an input file into its markdown (invalid UTF-8 becomes U+FFFD) and parse options.
     ///
-    /// Every case parses with tables, strikethrough, task lists, table spans, inline attributes and source positions.
-    /// The final byte adds to those: bit 2 turns smart punctuation off, bit 5 selects `inlineOnly` (or
+    /// Every case parses with tables, strikethrough, task lists, table spans, inline attributes and source positions,
+    /// and with smart punctuation unless bit 2 of the final byte is set. Bit 5 of that byte selects `inlineOnly` (or
     /// `preserveWhitespace` when bit 4 is also set), bit 6 enables `gfmAutolink` and bit 7 enables `footnotes`.
     static func splitInput(_ bytes: [UInt8]) -> (markdown: String, options: MarkdownDocument.ParseOptions)? {
         guard let optionBits = bytes.last else { return nil }
@@ -60,8 +60,8 @@ struct TreeRegressionTests {
         return (markdown, options)
     }
 
-    /// A `@Test(arguments:)` over an empty collection runs zero cases and reports success, so an empty or missing
-    /// fixture directory fails here instead.
+    /// A `@Test(arguments:)` over an empty collection runs zero cases and reports success, so this pins the number of
+    /// pairs.
     @Test
     func corpusHasEveryPair() {
         #expect(Self.corpus.count == 117, "unexpected pair count in \(Self.corpusDir.path)")
