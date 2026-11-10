@@ -38,6 +38,26 @@ struct AutolinkBracketOpenerTests {
             """)
     }
 
+    @Test("unclosed `[` before a www autolink leaves it as text")
+    func openBracketSuppressesWWWAutolink() {
+        #expect(TreeDump.dump("[ www.t.t", options: Self.options) == """
+            document
+              paragraph
+                text "[ www.t.t"
+
+            """)
+    }
+
+    @Test("unclosed `![` before a www autolink leaves it as text")
+    func openImageBracketSuppressesWWWAutolink() {
+        #expect(TreeDump.dump("![ www.t.t", options: Self.options) == """
+            document
+              paragraph
+                text "![ www.t.t"
+
+            """)
+    }
+
     @Test("a URL with no leading `[` autolinks")
     func bareURLAutolinks() {
         #expect(TreeDump.dump("http://t.t", options: Self.options) == """
