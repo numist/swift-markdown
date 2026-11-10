@@ -606,7 +606,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `cursor` is mid-tab when a block quote marker's optional space or a list item's indent consumed part of a tab;
     /// the tab's leftover columns become spaces (Tabs).
     private func htmlLineBody(lineRange: Range<Int>, cursor: Int, column: Int) -> (bodyStart: Int, leadingSpaces: Int) {
-        let priorColumn = columnWidth(from: lineRange.lowerBound, to: cursor)
+        var lineColumns = LineColumns(lineStart: lineRange.lowerBound)
+        let priorColumn = lineColumns.column(at: cursor, in: sourceBytes)
         return stripIndent(
             range: cursor..<lineRange.upperBound,
             maxColumns: column - priorColumn,
@@ -1552,9 +1553,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let isBlank = firstNonSpace == lineRange.upperBound
 
         if case .codeBlock(let info) = storage[current].kind, info.isFenced {
+            var lineColumns = LineColumns(lineStart: lineRange.lowerBound)
+            let startColumn = lineColumns.column(at: cursor, in: sourceBytes)
             // A closing fence's indent is in columns past the container prefixes, so a tab counts to its tab stop (Tabs).
-            let closingFenceIndent =
-                columnWidth(from: lineRange.lowerBound, to: firstNonSpace) - prefixColumns
+            let closingFenceIndent = lineColumns.column(at: firstNonSpace, in: sourceBytes) - prefixColumns
             if let fenceEnd = matchClosingFence(
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
@@ -1567,7 +1569,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             // A tab a container consumed only partly is split here, its leftover columns becoming spaces (Tabs).
             pending = appendNewline(to: current, pending: pending)
-            let startColumn = columnWidth(from: lineRange.lowerBound, to: cursor)
             let (bodyStart, leadingSpaces) = stripIndent(
                 range: cursor..<lineRange.upperBound,
                 maxColumns: prefixColumns + info.fenceOffset - startColumn,
@@ -2934,17 +2935,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return (i, 0)
     }
 
-    /// The column reached after `sourceBytes[from..<to]` (Tabs). Unlike `indentColumns`, it counts every byte, container
-    /// markers included.
-    private func columnWidth(from: Int, to: Int) -> Int {
-        var column = 0
-        for i in from..<to {
-            column += sourceBytes[i] == UInt8(ascii: "\t") ? 4 - (column & 3) : 1
-        }
-        return column
-    }
-
-    /// `columnWidth` from a line's start, advancing from the previous answer; queries never move back.
+    /// The columns a line's bytes reach (Tabs), counting every byte, container markers included, and advancing from the
+    /// previous answer; queries never move back.
     ///
     /// The prefix walk and block dispatch place each container marker by its column, and measuring each from the line
     /// start would make a line of `n` nested markers cost `n` squared.
