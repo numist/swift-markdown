@@ -1020,11 +1020,11 @@ extension BlockParser {
         let useDelims: Int
         let kind: MarkdownNode.Kind
         if openerChar == UInt8(ascii: "~") {
-            // Strikethrough forms only between runs of equal length. On a mismatch both stay literal, and
-            // every delimiter from the closer back through the opener goes, so no farther opener pairs with it.
+            // Strikethrough forms only between runs of equal length. On a mismatch both stay literal and leave
+            // the stack, so no farther opener pairs with the closer.
             if openerNumChars != closerNumChars {
                 let next = delimiters[closer].next
-                removeDelims(after: opener, through: closer)
+                removeDelim(closer)
                 removeDelim(opener)
                 return next
             }
