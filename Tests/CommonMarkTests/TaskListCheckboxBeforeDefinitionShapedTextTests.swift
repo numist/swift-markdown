@@ -13,7 +13,7 @@ import CommonMark
 
 /// Without `.tasklist`, `[ ] [a]: /u` does not begin with a link reference definition (Link reference
 /// definitions), so it is the item's first paragraph and a later `[x]` is text.
-@Suite("List item whose opening line is a checkbox before a definition")
+@Suite("List item whose opening line is a checkbox before definition-shaped text")
 struct TaskListCheckboxBeforeDefinitionShapedTextTests {
 
     @Test("without tasklist, both paragraphs are text")
