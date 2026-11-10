@@ -29,9 +29,9 @@ internal struct ContentSpan: ~Escapable {
     /// `pieceEnds[i]` is the content-relative offset just past piece `i`.
     let pieceEnds: Span<Int>
 
-    /// The piece that an offset lookup last found, shared by every content of a parse made with `pieces`, or `nil` for content made without them.
+    /// The parse's shared lookup state (see `PieceHint`), `nil` only where `pieces` is empty.
     ///
-    /// Content has a piece per line and is scanned a byte at a time, so most lookups land in this piece or one a few pieces away, where `pieceIndex(covering:)` searches first. Multi-segment content also keeps there the source piece it last read (`sourcePiece(covering:)`).
+    /// Content has a piece per line and is scanned a byte at a time, so most lookups land in the piece the last lookup found or one a few pieces away, where `pieceIndex(covering:)` searches first. Multi-segment content also keeps there the source piece it last read (`sourcePiece(covering:)`).
     let pieceHint: PieceHint?
 
     let isMultiSegment: Bool
@@ -156,7 +156,7 @@ internal struct ContentSpan: ~Escapable {
 
     /// Calls `body` with a reader of the content byte at any offset from `offset` on.
     ///
-    /// In multi-segment content the reader takes the bytes of the piece covering `offset` straight from the source, and later pieces through the subscript, so a scan that ends on the line it starts on finds its piece once rather than once per byte.
+    /// In multi-segment content the reader takes the bytes of the piece covering `offset` straight from the source, without the checks the subscript makes on every byte to find its source piece, and later pieces through the subscript.
     @inline(__always)
     func withForwardReader<Result>(from offset: Int, _ body: ((Int) -> UInt8) -> Result) -> Result {
         guard isMultiSegment else {
@@ -179,8 +179,8 @@ internal struct ContentSpan: ~Escapable {
 
     /// The virtual range of the multi-segment content's source piece covering `offset`, and the distance from its offsets to their source offsets, or `nil` where a line join covers `offset`.
     ///
-    /// The piece is cached in `pieceHint`, since a scan reads a line's bytes one after another, with the content it
-    /// belongs to, so a content never takes another's piece for its own.
+    /// The piece is cached in `pieceHint` with the identity of the content it belongs to, since a scan reads a piece's
+    /// bytes one after another; a piece another content cached is never used.
     private func sourcePiece(covering offset: Int) -> (range: Range<Int>, shift: Int)? {
         if let hint = pieceHint, hint.sourcePieceOwner == multiIdentity, hint.sourcePiece.contains(offset) {
             return (hint.sourcePiece, hint.sourcePieceShift)
