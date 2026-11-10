@@ -601,7 +601,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// the tab's leftover columns become spaces (Tabs).
     private func htmlLineBody(lineRange: Range<Int>, cursor: Int, column: Int) -> (bodyStart: Int, leadingSpaces: Int) {
         let priorColumn = columnWidth(from: lineRange.lowerBound, to: cursor)
-        return stripFenceIndent(
+        return stripIndent(
             range: cursor..<lineRange.upperBound,
             maxColumns: column - priorColumn,
             startColumn: priorColumn
@@ -1515,7 +1515,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // A tab a container consumed only partly is split here, its leftover columns becoming spaces (Tabs).
             pending = appendNewline(to: current, pending: pending)
             let startColumn = columnWidth(from: lineRange.lowerBound, to: cursor)
-            let (bodyStart, leadingSpaces) = stripFenceIndent(
+            let (bodyStart, leadingSpaces) = stripIndent(
                 range: cursor..<lineRange.upperBound,
                 maxColumns: prefixColumns + info.fenceOffset - startColumn,
                 startColumn: startColumn
@@ -1536,7 +1536,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             if indent > 4 || !isBlank {
                 // A tab straddling the fourth column is split: its leftover columns become leading spaces (Tabs).
-                let (bodyStart, leadingSpaces) = stripFenceIndent(
+                let (bodyStart, leadingSpaces) = stripIndent(
                     range: cursor..<lineRange.upperBound,
                     maxColumns: 4,
                     startColumn: prefixColumns
@@ -1807,7 +1807,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func openIndentedCode(lineRange: Range<Int>, cursor: Int, column: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         // The block starts after the four-column indent; further indentation is content (Indented code blocks). A tab
         // straddling the fourth column is split, its leftover columns becoming spaces (Tabs), and the block starts at it.
-        let (bodyStart, leadingSpaces) = stripFenceIndent(
+        let (bodyStart, leadingSpaces) = stripIndent(
             range: cursor..<lineRange.upperBound,
             maxColumns: 4,
             startColumn: column
@@ -2050,7 +2050,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The source extent of `content`, a non-empty window of leaf content `raw` with run map `map` (empty for source
     /// content) that begins and ends on a content byte: from the source byte its first byte images to just past the
     /// one its last byte images.
-    private func sourceExtent(of content: Chunk, in raw: Chunk, map: [ArenaRun]) -> (start: Int, end: Int) {
+    private func sourceSpan(of content: Chunk, in raw: Chunk, map: [ArenaRun]) -> (start: Int, end: Int) {
         precondition(!content.isEmpty, "only non-empty content has a source extent")
         if map.isEmpty {
             precondition(content.inSource, "with positions tracked, arena-backed leaf content carries a run map")
@@ -2096,7 +2096,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Runs the paragraph matchers on flat content: definition and task list item marker extraction. What remains is queued for inline parsing, or the node is dropped.
     ///
     /// `map` is `raw`'s run map, empty for source content.
-    private mutating func runParagraphMatchers(node: DocumentStorage.Index, raw: Chunk, map: [ArenaRun]) {
+    private mutating func finishParagraph(_ node: DocumentStorage.Index, chunk raw: Chunk, map: [ArenaRun]) {
         let trimmed = raw.trimmingWhitespace(using: self)
         if trimmed.isEmpty {
             // A non-blank line can hold only line tabulations and form feeds, which leave the
@@ -2106,13 +2106,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         let contentChunk = paragraphContent(of: node, trimmed: trimmed)
         if contentChunk.isEmpty {
-            removeEmptiedParagraph(node, contentEnd: positionsEnabled ? sourceExtent(of: trimmed, in: raw, map: map).end : nil)
+            removeEmptiedParagraph(node, contentEnd: positionsEnabled ? sourceSpan(of: trimmed, in: raw, map: map).end : nil)
             return
         }
         if positionsEnabled {
-            let extent = sourceExtent(of: contentChunk, in: raw, map: map)
-            storage.setSourceStart(node, extent.start)
-            storage.setSourceEnd(node, extent.end)
+            let span = sourceSpan(of: contentChunk, in: raw, map: map)
+            storage.setSourceStart(node, span.start)
+            storage.setSourceEnd(node, span.end)
         }
         // Narrow the run map to the content that reaches inline parsing.
         if positionsEnabled, !map.isEmpty {
@@ -2172,7 +2172,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let map = drained.map
             switch consume drained.content {
             case .chunk(let raw):
-                runParagraphMatchers(node: node, raw: raw, map: map)
+                finishParagraph(node, chunk: raw, map: map)
             case .segments(let segs):
                 finishParagraph(node, segments: segs)
             }
@@ -2483,7 +2483,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         let afterMarker = firstNonSpace + markerWidth
         // The padding after the marker is measured in columns from the marker's own, so a tab counts to its stop.
-        let contentColumnAfterMarker = markerColumn + markerWidth
+        let columnAfterMarker = markerColumn + markerWidth
         // Marker must be followed by a space, tab, or end of line.
         var contentStart: Int
         // The columns from the marker's end to the content.
@@ -2501,7 +2501,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // The padding is measured in columns (List items): 1–4 are all padding, while 5 or more, or a blank
             // rest, consume one column and leave the rest as content. A tab wider than that column is consumed
             // only in part and stays at the content start (Tabs).
-            var col = contentColumnAfterMarker
+            var col = columnAfterMarker
             var k = afterMarker
             while k < range.upperBound {
                 let b = sourceBytes[k]
@@ -2514,11 +2514,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 }
                 k += 1
             }
-            let runColumns = col - contentColumnAfterMarker
+            let runColumns = col - columnAfterMarker
             let blankAfter = k >= range.upperBound
             isEmpty = blankAfter
             if blankAfter || runColumns >= 5 {
-                if next == UInt8(ascii: "\t") && (4 - (contentColumnAfterMarker & 3)) > 1 {
+                if next == UInt8(ascii: "\t") && (4 - (columnAfterMarker & 3)) > 1 {
                     contentStart = afterMarker
                 } else {
                     contentStart = afterMarker + 1
@@ -2536,7 +2536,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             orderedDelimiter: orderedDelimiter,
             start: startNumber,
             contentColumn: markerOffset + markerWidth + padding,
-            contentStartColumn: contentColumnAfterMarker + padding,
+            contentStartColumn: columnAfterMarker + padding,
             markerEnd: afterMarker,
             consumedTo: contentStart,
             isEmpty: isEmpty
@@ -2887,7 +2887,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Strips up to `maxColumns` columns of leading whitespace from a code or HTML block line at column `startColumn`.
     ///
     /// A tab straddling the boundary is dropped and its leftover columns returned as `leadingSpaces` (Tabs).
-    private func stripFenceIndent(range: Range<Int>, maxColumns: Int, startColumn: Int) -> (bodyStart: Int, leadingSpaces: Int) {
+    private func stripIndent(range: Range<Int>, maxColumns: Int, startColumn: Int) -> (bodyStart: Int, leadingSpaces: Int) {
         var i = range.lowerBound
         var column = startColumn
         var consumed = 0
