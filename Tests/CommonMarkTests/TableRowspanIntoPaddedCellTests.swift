@@ -119,7 +119,6 @@ struct TableRowspanIntoPaddedCellTests {
             """)
     }
 
-    /// A parsed cell that is empty (here whitespace-only, in the header) is a real cell, so it does grow.
     @Test func parsedEmptyHeaderCellAboveCaretGrows() {
         #expect(TreeDump.dump("| |b\n-|-\n^|x", options: Self.options) == """
             document
