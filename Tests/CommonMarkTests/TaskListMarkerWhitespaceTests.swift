@@ -145,7 +145,7 @@ struct TaskListMarkerWhitespaceTests {
             """)
     }
 
-    @Test("a multi-line multi-space task list item strips only the first line's marker whitespace")
+    @Test("a continuation line after a multi-space checkbox gap keeps its text")
     func multiLineContinuation() {
         let texts = MarkdownDocument.withParsedDocument("- [x]  a\n     b", options: Self.opts) { doc -> [String] in
             var out: [String] = []
