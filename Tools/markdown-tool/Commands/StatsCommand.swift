@@ -25,8 +25,8 @@ extension MarkdownCommand {
             without printing or rendering the whole thing.
 
             Given several files, reports the combined totals and the per-file averages \
-            instead of the detailed per-node breakdown. Files that cannot be read or \
-            parsed are skipped and listed at the end.
+            instead of the detailed per-node breakdown. Files that cannot be read are \
+            skipped and listed at the end.
             """
         )
 
@@ -384,7 +384,7 @@ private func printFailures(_ failures: [(name: String, message: String)]) {
     print("")
     print("Skipped \(failures.count.formatted()) file(s):")
     for failure in failures {
-        let detail = failure.message.isEmpty ? "could not be parsed" : failure.message
+        let detail = failure.message.isEmpty ? "could not be read" : failure.message
         print("  \(failure.name): \(detail)")
     }
 }
