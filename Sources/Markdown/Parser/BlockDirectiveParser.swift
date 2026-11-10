@@ -699,9 +699,6 @@ private enum ParseContainer: CustomStringConvertible {
 
             // Now, we'll adjust the columns of all of the source positions as
             // needed to offset that indentation trimming we did above.
-            // Note that the child identifiers under this document will start at
-            // 0, so we will need to adjust those as well, because child identifiers
-            // start at 0 from the `root`.
 
             var columnAdjuster = RangeAdjuster(startLine: lines.first?.lineNumber ?? 1,
                                                ranges: ranges,
