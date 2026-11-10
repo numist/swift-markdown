@@ -665,7 +665,7 @@ extension BlockParser {
 
     /// The definition the footnote-shaped bracket from `open` to `closeBracket` references, or `nil`. Its label,
     /// everything after the `^`, is normalized as a link label (Links), so it may span a line ending.
-    private func footnoteDefinition(referencedFrom open: Int, closeBracket: Int, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
+    private mutating func footnoteDefinition(referencedFrom open: Int, closeBracket: Int, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
         let labelStart = open + 2
         guard !storage.footnoteMap.isEmpty, labelStart < closeBracket, content[open + 1] == UInt8(ascii: "^"),
               linkLabelFitsLengthCap(virtualRange: labelStart..<closeBracket, in: content) else {
@@ -1677,7 +1677,7 @@ extension BlockParser {
     }
 
     /// Matches a `://` or `www.` extended autolink at `cursor`. Emails are matched by `gfmEmailAutolinkPass`.
-    private func matchGFMAutolink(trigger: UInt8, cursor: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
+    private mutating func matchGFMAutolink(trigger: UInt8, cursor: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         if trigger == UInt8(ascii: ":") {
             return matchGFMSchemeAutolink(
                 colon: cursor, content: content
@@ -1690,7 +1690,7 @@ extension BlockParser {
     }
 
     /// Matches an `http://`, `https://` or `ftp://` extended autolink whose `:` is at `colon`.
-    private func matchGFMSchemeAutolink(colon: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
+    private mutating func matchGFMSchemeAutolink(colon: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         let end = content.endOffset
         let contentStart = content.startOffset
         if colon + 3 >= end {
@@ -1720,7 +1720,7 @@ extension BlockParser {
     }
 
     /// The start of a case-insensitive `http`, `https` or `ftp` ending just before `colon`.
-    private func matchSchemeBackward(colon: Int, content: borrowing ContentSpan) -> Int? {
+    private mutating func matchSchemeBackward(colon: Int, content: borrowing ContentSpan) -> Int? {
         let contentStart = content.startOffset
         if colon - 5 >= contentStart,
            bytesEqual(at: colon - 5, target: "https", content: content, ignoringASCIICase: true) {
@@ -1738,7 +1738,7 @@ extension BlockParser {
     }
 
     /// `w`-triggered: matches `www.` followed by a URL body.
-    private func matchGFMWWWAutolink(start: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
+    private mutating func matchGFMWWWAutolink(start: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         let end = content.endOffset
         let contentStart = content.startOffset
         if start > contentStart {
@@ -1791,7 +1791,7 @@ extension BlockParser {
     ///
     /// On failure `resumeAt` is past everything scanned, and every `@` before it is settled, so the pass stays
     /// linear on `@`-dense input.
-    private func matchGFMEmailAutolink(at: Int, localBound: Int, content: borrowing ContentSpan, resumeAt: inout Int) -> GFMAutolinkMatch? {
+    private mutating func matchGFMEmailAutolink(at: Int, localBound: Int, content: borrowing ContentSpan, resumeAt: inout Int) -> GFMAutolinkMatch? {
         let end = content.endOffset
         // A second `@` in the domain restarts the trial there, the run between becoming the local part. The
         // scheme state and the period flag carry across the restart.
@@ -1956,7 +1956,7 @@ extension BlockParser {
     /// never examines. A backslash makes it examine the next character instead. An underscore in either of the
     /// last two period-separated segments rejects the domain unless the scan passed more than ten periods.
     /// `requirePeriod` also demands a period.
-    private func domainAccepted(base: Int, requirePeriod: Bool, content: borrowing ContentSpan) -> Bool {
+    private mutating func domainAccepted(base: Int, requirePeriod: Bool, content: borrowing ContentSpan) -> Bool {
         let end = content.endOffset
         let size = end - base
         var periods = 0
@@ -1988,7 +1988,7 @@ extension BlockParser {
     /// Whether a url extended autolink's domain at `afterSlashes` is accepted: its first character is a host
     /// character or a non-ASCII character that is neither whitespace nor punctuation, and `domainAccepted`
     /// accepts the rest.
-    private func schemeURLDomainAccepted(afterSlashes: Int, content: borrowing ContentSpan) -> Bool {
+    private mutating func schemeURLDomainAccepted(afterSlashes: Int, content: borrowing ContentSpan) -> Bool {
         let first = content[afterSlashes]
         if first < 0x80 {
             if !isHostByte(first) {
@@ -2386,7 +2386,7 @@ extension BlockParser {
     }
 
     /// The source extent of non-empty `ref`, from what its first byte stands for to what its last does.
-    private func sourceSpan(of ref: ContentRef, image: ContentImage?) -> (start: Int, end: Int) {
+    private mutating func sourceSpan(of ref: ContentRef, image: ContentImage?) -> (start: Int, end: Int) {
         precondition(ref.count > 0 && ref.totalLength > 0, "an email address holds at least one byte")
         let firstSeg = storage.segments[ref.first]
         let lastSeg = storage.segments[ref.first + ref.count - 1]
