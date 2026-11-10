@@ -13,8 +13,9 @@ import CommonMark
 
 /// A lazy continuation line of a nested block quote whose outer `>` and its optional following space consume only part
 /// of a tab (Tabs; Block quotes). The tab's remaining columns are leading whitespace of the paragraph line, which the
-/// paragraph's raw content drops (Paragraphs), so a code span crossing onto the line holds none of it.
-@Suite("Partially consumed tab on a lazy continuation line in code spans")
+/// paragraph's raw content drops (Paragraphs), so neither the line's text nor a code span crossing onto it holds any of
+/// it.
+@Suite("Partially consumed tab on a lazy continuation line")
 struct NestedBlockQuoteLazyLineSplitTabTests {
 
     // MARK: - Partially consumed tab
