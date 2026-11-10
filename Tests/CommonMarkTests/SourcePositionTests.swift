@@ -161,8 +161,7 @@ struct SourcePositionTests {
         dfsRanges(doc.root, into: &ranges)
         let para = range(in: ranges) { $0 == .paragraph }
         #expect(para?.lowerBound == Pos(line: 1, column: 1))
-        // End column counts bytes, not characters: utf8.count (5) + 1 for the half-open upper bound.
-        #expect(para?.upperBound == Pos(line: 1, column: "aé b".utf8.count + 1))
+        #expect(para?.upperBound == Pos(line: 1, column: 6))
         }
     }
 
