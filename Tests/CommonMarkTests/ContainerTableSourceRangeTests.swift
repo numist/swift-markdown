@@ -11,8 +11,7 @@
 import Testing
 import CommonMark
 
-/// Source ranges of a GFM table nested in a container: a block quote, a list item, both, a container whose prefix is
-/// a tab, and a table whose header is a lazy continuation line.
+/// Source ranges of a GFM table nested in a block quote or list item.
 ///
 /// A nested table's lines aren't contiguous in the source (each carries its container's prefix), yet every row, cell
 /// and cell inline has the source range of its own bytes. A short row's filler cell has no source text, so it has no
