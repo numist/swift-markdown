@@ -1758,7 +1758,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Opens a fenced code block, which stays open.
     private mutating func openFencedCode(_ fence: FenceMatch, cursor: Int, firstNonSpace: Int) {
         // The info string's backslash escapes and character references are decoded (Fenced code blocks).
-        let cleanInfo = unescapeURLChunk(fence.infoChunk)
+        let cleanInfo = unescapedChunk(fence.infoChunk)
         let infoRef = storage.intern(replacingNUL(cleanInfo))
         // Each content line loses up to the fence's indent in columns (Fenced code blocks): after a partly consumed
         // tab (`>\t```), the tab's remaining two.
@@ -3325,7 +3325,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         if let contiguous = content.contiguousChunk(fromVirtual: range.lowerBound, limit: range.upperBound),
            contiguous.length == range.count {
-            return unescapeURLChunk(contiguous)
+            return unescapedChunk(contiguous)
         }
         // A backslash escape or character reference never continues past a line ending, so each line resolves alone.
         let offset = storage.strings.count
@@ -3462,7 +3462,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         if storage.attributeReferenceMap[key] == nil {
             let attributesChunk = materializedChunk(start: attributesStart, end: attributesEnd, content: content)
-            storage.attributeReferenceMap[key] = replacingNUL(unescapeURLChunk(attributesChunk.trimming(using: self)))
+            storage.attributeReferenceMap[key] = replacingNUL(unescapedChunk(attributesChunk.trimming(using: self)))
         }
         return attributesEnd < end ? attributesEnd + 1 : attributesEnd
     }
@@ -3470,7 +3470,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `chunk` with backslash escapes removed and character references decoded, copied to the arena only if it holds either.
     ///
     /// With `backslashEscapes: false` backslashes stay literal, as in autolinks (Autolinks).
-    mutating func unescapeURLChunk(_ chunk: Chunk, backslashEscapes: Bool = true) -> Chunk {
+    mutating func unescapedChunk(_ chunk: Chunk, backslashEscapes: Bool = true) -> Chunk {
         guard holdsEscapeOrReference(chunk, backslashEscapes: backslashEscapes) else {
             return chunk
         }

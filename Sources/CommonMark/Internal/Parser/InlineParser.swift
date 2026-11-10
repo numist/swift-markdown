@@ -1521,7 +1521,7 @@ extension BlockParser {
     ///
     /// The text has character references decoded, but not backslash escapes (Backslash escapes). An email's URL gets a `mailto:` prefix; an email admits no `;`, so it holds no reference.
     private mutating func emitAutolink(auto: AutolinkMatch, into parent: DocumentStorage.Index, content: borrowing ContentSpan) {
-        let textChunk = unescapeURLChunk(
+        let textChunk = unescapedChunk(
             content.chunk(offset: auto.interior.lowerBound, length: auto.interior.count),
             backslashEscapes: false
         )
