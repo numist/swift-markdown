@@ -20,9 +20,9 @@ import CommonMark
 ///
 /// Case names label the split: `A`, the tab holding a block quote or list marker's optional space is partly consumed
 /// and the next tab split; `B`, a tab after the marker's space is split; `C`, a tab after spaces is split; `D`, the
-/// indentation ends on a tab stop and splits no tab. An indented code block cannot interrupt a paragraph, so after a
-/// paragraph in the same container the line continues it. Continuation lines of one block split their tabs by the same
-/// rule.
+/// indentation takes the rest of the marker's tab and ends among spaces, so no tab straddles its end. An indented code
+/// block cannot interrupt a paragraph, so after a paragraph in the same container the line continues it. Continuation
+/// lines of one block split their tabs by the same rule.
 ///
 /// A two-digit ordered list marker followed by five or more columns of whitespace has its content at column four, a tab
 /// stop, so a split arises only on its continuation lines, here an item with two spaces of padding. A footnote
@@ -95,7 +95,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "block quote, A, escaping an open fenced code block",
+            "block quote, A, ending an open fenced code block's container",
             "- ```\n>\t\tfoo\n",
             """
             document @1:1-3:1
@@ -178,7 +178,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "block quote, B, escaping an open fenced code block",
+            "block quote, B, ending an open fenced code block's container",
             "- ```\n> \t\tfoo\n",
             """
             document @1:1-3:1
@@ -261,7 +261,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "block quote, C, escaping an open fenced code block",
+            "block quote, C, ending an open fenced code block's container",
             "- ```\n>   \tfoo\n",
             """
             document @1:1-3:1
@@ -344,7 +344,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "block quote, D, escaping an open fenced code block",
+            "block quote, D, ending an open fenced code block's container",
             "- ```\n>\t  foo\n",
             """
             document @1:1-3:1
@@ -441,7 +441,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "bullet item, A, escaping an open fenced code block",
+            "bullet item, A, ending an open fenced code block's container",
             "- ```\n-\t\tfoo\n",
             """
             document @1:1-3:1
@@ -530,7 +530,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "bullet item, B, escaping an open fenced code block",
+            "bullet item, B, ending an open fenced code block's container",
             "- ```\n- \t\tfoo\n",
             """
             document @1:1-3:1
@@ -619,7 +619,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "bullet item, C, escaping an open fenced code block",
+            "bullet item, C, ending an open fenced code block's container",
             "- ```\n-    \tfoo\n",
             """
             document @1:1-3:1
@@ -708,7 +708,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "bullet item, D, escaping an open fenced code block",
+            "bullet item, D, ending an open fenced code block's container",
             "- ```\n-\t  foo\n",
             """
             document @1:1-3:1
@@ -808,7 +808,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "one-digit ordered item, A, escaping an open fenced code block",
+            "one-digit ordered item, A, ending an open fenced code block's container",
             "- ```\n1.\t\tfoo\n",
             """
             document @1:1-3:1
@@ -898,7 +898,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "one-digit ordered item, B, escaping an open fenced code block",
+            "one-digit ordered item, B, ending an open fenced code block's container",
             "- ```\n1. \t\tfoo\n",
             """
             document @1:1-3:1
@@ -988,7 +988,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "one-digit ordered item, C, escaping an open fenced code block",
+            "one-digit ordered item, C, ending an open fenced code block's container",
             "- ```\n1.    \tfoo\n",
             """
             document @1:1-3:1
@@ -1078,7 +1078,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "one-digit ordered item, D, escaping an open fenced code block",
+            "one-digit ordered item, D, ending an open fenced code block's container",
             "- ```\n1.\t   foo\n",
             """
             document @1:1-3:1
@@ -1183,7 +1183,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "block quote in item, A, escaping an open fenced code block",
+            "block quote in item, A, ending an open fenced code block's container",
             "- ```\n-  >\t\tfoo\n",
             """
             document @1:1-3:1
@@ -1279,7 +1279,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "block quote in item, B, escaping an open fenced code block",
+            "block quote in item, B, ending an open fenced code block's container",
             "- ```\n-  > \t\tfoo\n",
             """
             document @1:1-3:1
@@ -1375,7 +1375,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "block quote in item, C, escaping an open fenced code block",
+            "block quote in item, C, ending an open fenced code block's container",
             "- ```\n-  >    \tfoo\n",
             """
             document @1:1-3:1
@@ -1471,7 +1471,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "block quote in item, D, escaping an open fenced code block",
+            "block quote in item, D, ending an open fenced code block's container",
             "- ```\n-  >\t   foo\n",
             """
             document @1:1-3:1
@@ -1579,7 +1579,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "item in block quote, A, escaping an open fenced code block",
+            "item in block quote, A, ending an open fenced code block's container",
             "- ```\n>-\t\tfoo\n",
             """
             document @1:1-3:1
@@ -1676,7 +1676,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "item in block quote, B, escaping an open fenced code block",
+            "item in block quote, B, ending an open fenced code block's container",
             "- ```\n>- \t\tfoo\n",
             """
             document @1:1-3:1
@@ -1773,7 +1773,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "item in block quote, C, escaping an open fenced code block",
+            "item in block quote, C, ending an open fenced code block's container",
             "- ```\n>-    \tfoo\n",
             """
             document @1:1-3:1
@@ -1870,7 +1870,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "item in block quote, D, escaping an open fenced code block",
+            "item in block quote, D, ending an open fenced code block's container",
             "- ```\n>-\t   foo\n",
             """
             document @1:1-3:1
@@ -1977,7 +1977,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "block quote in block quote, A, escaping an open fenced code block",
+            "block quote in block quote, A, ending an open fenced code block's container",
             "- ```\n>>\t\tfoo\n",
             """
             document @1:1-3:1
@@ -2067,7 +2067,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "block quote in block quote, B, escaping an open fenced code block",
+            "block quote in block quote, B, ending an open fenced code block's container",
             "- ```\n>> \t\tfoo\n",
             """
             document @1:1-3:1
@@ -2157,7 +2157,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "block quote in block quote, C, escaping an open fenced code block",
+            "block quote in block quote, C, ending an open fenced code block's container",
             "- ```\n>>    \tfoo\n",
             """
             document @1:1-3:1
@@ -2247,7 +2247,7 @@ struct IndentedCodeSplitTabTests {
             """
         ),
         Case(
-            "block quote in block quote, D, escaping an open fenced code block",
+            "block quote in block quote, D, ending an open fenced code block's container",
             "- ```\n>>\t    foo\n",
             """
             document @1:1-3:1
