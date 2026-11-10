@@ -11,8 +11,8 @@
 import CommonMark
 import Testing
 
-/// Whitespace includes line tabulation and form feed (Characters and lines). It ends the tag name of HTML block start
-/// conditions 1 and 6, separates the parts of a type 7 start tag (Raw HTML), and may follow that tag on its line
+/// Whitespace includes line tabulation and form feed (Characters and lines). It ends the tag name that starts a type 1
+/// or type 6 HTML block, separates the parts of a type 7 start tag (Raw HTML), and may follow that tag on its line
 /// (HTML blocks).
 @Suite("Whitespace in and after an HTML block start tag")
 struct HTMLBlockStartTagWhitespaceTests {

@@ -11,10 +11,10 @@
 import Testing
 import CommonMark
 
-/// Start condition 6 (HTML blocks) needs only one of its listed tag names followed by whitespace, `>`, `/>` or the end
-/// of the line, and it may interrupt a paragraph. `source` and `search` are not on the list, so a complete tag with
-/// either name, such as `<source>`, meets only start condition 7, which can't interrupt a paragraph.
-@Suite("HTML block type-6 tag name list")
+/// A type 6 HTML block (HTML blocks) starts with `<` or `</` and one of its listed tag names, followed by whitespace,
+/// `>`, `/>` or the end of the line, and it may interrupt a paragraph. `source` and `search` are not on the list, so a
+/// complete tag with either name, such as `<source>`, can start only a type 7 block, which can't interrupt a paragraph.
+@Suite("HTML block type 6 tag name list")
 struct HTMLBlockType6TagNameListTests {
 
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition]
