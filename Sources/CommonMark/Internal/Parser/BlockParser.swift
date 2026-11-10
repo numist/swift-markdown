@@ -1929,8 +1929,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         precondition(!range.isEmpty, "a leaf's narrowed content is not empty")
         var segs = segs
         let (last, lastStart) = segment(endingAtOrAfter: range.upperBound, in: segs, total: total)
-        // The first segment is searched for from the nearer end, so the search passes no more lines than the leading
-        // definitions it skips or the content it keeps.
+        // The first segment is searched for from whichever is nearer in bytes, the lines' start or the last segment's,
+        // which takes fewer steps when leading definitions fill most of the lines.
         var first = last
         var firstStart = lastStart
         if range.lowerBound < lastStart - range.lowerBound {
