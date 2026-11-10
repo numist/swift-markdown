@@ -2644,13 +2644,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             isClosing = true
             nameStart = after + 1
         }
-        if nameStart >= range.upperBound || !sourceBytes[nameStart].isASCIILetter {
+        // The tag scanners read this copy, not `sourceBytes`: capturing the parser costs 2% to 3.5% of the instructions
+        // of a parse of `Benchmarks/100kb-test-content.md`.
+        let bytes = sourceBytes
+        guard let nameEnd = htmlTagNameEnd(from: nameStart, end: range.upperBound, byte: { bytes[$0] }) else {
             return nil
-        }
-        var nameEnd = nameStart + 1
-        while nameEnd < range.upperBound,
-              isHTMLTagNameChar(sourceBytes[nameEnd]) {
-            nameEnd += 1
         }
         let nameRange = nameStart..<nameEnd
 
@@ -2687,7 +2685,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
 
         // Type 7: a complete open or closing tag followed only by whitespace.
-        if allowType7, let tagEnd = matchType7Tag(range: range, nameEnd: nameEnd, isClosing: isClosing) {
+        if allowType7, let tagEnd = htmlTagEnd(afterName: nameEnd, isClosing: isClosing, end: range.upperBound, byte: { bytes[$0] }) {
             if isOnlyWhitespaceToEnd(from: tagEnd, end: range.upperBound) {
                 return 7
             }
@@ -2695,104 +2693,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return nil
     }
 
-    /// Matches the rest of a type 7 tag after its name (Raw HTML), returning the offset past its `>`.
-    private func matchType7Tag(range: Range<Int>, nameEnd: Int, isClosing: Bool) -> Int? {
-        var i = nameEnd
-        if isClosing {
-            i = skipSpacechars(from: i, to: range.upperBound)
-            if i >= range.upperBound || sourceBytes[i] != UInt8(ascii: ">") {
-                return nil
-            }
-            return i + 1
-        }
-        while i < range.upperBound {
-            let beforeAttr = i
-            i = skipSpacechars(from: i, to: range.upperBound)
-            if i == beforeAttr {
-                break
-            }
-            if i >= range.upperBound {
-                break
-            }
-            let first = sourceBytes[i]
-            let isFirstChar = first.isASCIILetter
-                || first == UInt8(ascii: "_")
-                || first == UInt8(ascii: ":")
-            if !isFirstChar {
-                i = beforeAttr
-                break
-            }
-            i += 1
-            while i < range.upperBound {
-                let b = sourceBytes[i]
-                let ok = b.isASCIILetter
-                    || b.isASCIIDigit
-                    || b == UInt8(ascii: ":") || b == UInt8(ascii: ".")
-                    || b == UInt8(ascii: "_") || b == UInt8(ascii: "-")
-                if !ok { break }
-                i += 1
-            }
-            let afterName = i
-            i = skipSpacechars(from: i, to: range.upperBound)
-            if i < range.upperBound && sourceBytes[i] == UInt8(ascii: "=") {
-                i += 1
-                i = skipSpacechars(from: i, to: range.upperBound)
-                if i >= range.upperBound {
-                    return nil
-                }
-                let opener = sourceBytes[i]
-                if opener == UInt8(ascii: "\"") || opener == UInt8(ascii: "'") {
-                    i += 1
-                    while i < range.upperBound, sourceBytes[i] != opener {
-                        i += 1
-                    }
-                    if i >= range.upperBound { return nil }
-                    i += 1
-                } else {
-                    let valueStart = i
-                    while i < range.upperBound {
-                        let b = sourceBytes[i]
-                        if b.isASCIISpace
-                            || b == UInt8(ascii: "\"") || b == UInt8(ascii: "'")
-                            || b == UInt8(ascii: "=") || b == UInt8(ascii: "<")
-                            || b == UInt8(ascii: ">") || b == UInt8(ascii: "`") {
-                            break
-                        }
-                        i += 1
-                    }
-                    // An unquoted value is nonempty, so `<a b=>` is no tag (Raw HTML).
-                    if i == valueStart {
-                        return nil
-                    }
-                }
-            } else {
-                i = afterName
-            }
-        }
-        i = skipSpacechars(from: i, to: range.upperBound)
-        if i < range.upperBound && sourceBytes[i] == UInt8(ascii: "/") {
-            i += 1
-        }
-        if i >= range.upperBound || sourceBytes[i] != UInt8(ascii: ">") {
-            return nil
-        }
-        return i + 1
-    }
-
-    /// Skips whitespace characters, as the inline HTML scanner does, so block and inline HTML agree on what separates tag parts.
-    private func skipSpacechars(from start: Int, to end: Int) -> Int {
-        var i = start
-        while i < end {
-            if !sourceBytes[i].isASCIISpace {
-                break
-            }
-            i += 1
-        }
-        return i
-    }
-
     private func isOnlyWhitespaceToEnd(from start: Int, end: Int) -> Bool {
-        skipSpacechars(from: start, to: end) == end
+        var i = start
+        while i < end, sourceBytes[i].isASCIISpace {
+            i += 1
+        }
+        return i == end
     }
 
     /// Whether the line meets the end condition of an HTML block of `type` anywhere (HTML blocks).
@@ -2877,12 +2783,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             i += 1
         }
         return false
-    }
-
-    private func isHTMLTagNameChar(_ b: UInt8) -> Bool {
-        b.isASCIILetter
-            || b.isASCIIDigit
-            || b == UInt8(ascii: "-")
     }
 
     /// Matches a block quote marker (Block quotes), returning the offset past it and its optional space or tab.
