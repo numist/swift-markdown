@@ -29,7 +29,7 @@ internal struct ContentSpan: ~Escapable {
     /// `pieceEnds[i]` is the content-relative offset just past piece `i`.
     let pieceEnds: Span<Int>
 
-    /// The piece that an offset lookup last found, or `nil` where `pieces` is empty.
+    /// The piece that an offset lookup last found, shared by every content of a parse made with `pieces`, or `nil` for content made without them.
     ///
     /// Content has a piece per line and is scanned a byte at a time, so most lookups land in this piece or one a few pieces away, where `pieceIndex(covering:)` searches first. Multi-segment content also keeps there the source piece it last read (`sourcePiece(covering:)`).
     let pieceHint: PieceHint?

@@ -43,7 +43,7 @@ internal struct HTMLCloserMisses {
 /// `scannedToEndFrom`, an opener ending at or past it has a closer exactly when a run of its length starts at or past its
 /// end. At most one scan per pass reaches the end.
 internal struct BacktickRunsSeen {
-    /// The earliest offset from which a scan has run to the content end without finding a closer, if any has.
+    /// The offset from which this pass's one scan to the content end began, or `nil` if no scan has reached the end.
     var scannedToEndFrom: Int?
     /// The latest start of a run of each length at or past `scannedToEndFrom`.
     var latestStart: [Int: Int] = [:]
@@ -283,7 +283,7 @@ extension BlockParser {
     private mutating func handleCharacterReference(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         // Entity matching reads one buffer, so it scans `&`'s segment; a line join ends any reference anyway.
         guard let window = content.contiguousChunk(fromVirtual: cursor, limit: content.endOffset) else {
-            preconditionFailure("an `&` lies in a source segment: the only synthetic segment is the line join")
+            preconditionFailure("an `&` is never a line join, the only byte without a contiguous chunk")
         }
         guard let entity = characterReference(at: window.offset, in: window) else {
             return cursor + 1
@@ -533,7 +533,6 @@ extension BlockParser {
         let openerInl = brackets[openerIdx].inlText
         let openerDelimPos = brackets[openerIdx].delimPosition
         let openerStart = brackets[openerIdx].virtualStart
-        // A link or autolink formed after a link opener would lie inside its link text.
         if openerKind == .link, brackets[openerIdx].linksFormedBefore < linksFormed {
             popBracket()
             emitBracketLiteral(at: cursor, end: afterBracket, content: content, parent: parent)

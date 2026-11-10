@@ -155,7 +155,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     var brackets = UniqueArray<BracketRecord>()
     var lastBracket: Int? = nil
 
-    /// The links and autolinks formed in this `parseInline` pass. Reset per pass.
+    /// The number of links and autolinks formed in this `parseInline` pass. Reset per pass.
     var linksFormed = 0
 
     /// The `ContentSpan.pieceHint` of every content this parse reads through a segment list or run map.

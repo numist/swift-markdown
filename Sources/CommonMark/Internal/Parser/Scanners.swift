@@ -77,7 +77,7 @@ internal struct BalancedParenthesesScan {
     }
 }
 
-/// Scanners for link labels, destinations, titles and the whitespace between them, shared by link reference definitions and inline links, and for raw HTML tags.
+/// Scanners for link labels, destinations and titles, shared by link reference definitions and inline links, and for raw HTML tags.
 extension BlockParser {
 
     // MARK: - Link label
