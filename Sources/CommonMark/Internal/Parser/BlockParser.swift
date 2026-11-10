@@ -193,12 +193,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         do {
             var pending: PendingLeaf? = nil
             while reader.next() != nil {
-                let lineRangeInOriginalSource = reader.lineRange
+                let lineRange = reader.lineRange
                 if positionsEnabled {
                     storage.lineStarts.append(reader.lineStart)
                 }
                 noteLineRead(reader)
-                pending = processLine(lineRange: lineRangeInOriginalSource, pending: pending)
+                pending = processLine(lineRange: lineRange, pending: pending)
             }
 
             // At the end of input, close every open block.
@@ -257,7 +257,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         guard storage.options.contains(.footnotes) else { return }
         // A footnote reference exists only where its label resolves to a footnote definition.
         guard !storage.footnoteDefinitionOrder.isEmpty else { return }
-        let referencedDefs = numberLiveFootnoteReferences()
+        let referencedDefs = numberFootnoteReferences()
         let keep = Set(referencedDefs)
         // Drop unreferenced definitions, including duplicate-label ones, whose references resolved to the label's
         // first definition.
@@ -275,7 +275,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// The walk covers footnote definitions too, whose content can reference other footnotes, and keeps an explicit
     /// stack so deep nesting can't overflow the call stack.
-    private mutating func numberLiveFootnoteReferences() -> [DocumentStorage.Index] {
+    private mutating func numberFootnoteReferences() -> [DocumentStorage.Index] {
         var referencedDefs: [DocumentStorage.Index] = []
         var indices: [DocumentStorage.Index: Int] = [:]
         var pending: [DocumentStorage.Index] = []
@@ -580,12 +580,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Appends the rest of a code or HTML block line from `bodyStart`, after `leadingSpaces` spaces from a split tab.
-    private mutating func appendCodeBodyLine(bodyStart: Int, leadingSpaces: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
+    private mutating func appendLiteralBodyLine(bodyStart: Int, leadingSpaces: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
         // The line reader has read the line, so a line not known to be free of NUL holds one.
         if leadingSpaces == 0 && isKnownFreeOfNUL(Chunk(offset: bodyStart, length: lineEnd - bodyStart, inSource: true)) {
             return addLine(range: bodyStart..<lineEnd, to: node, pending: pending)
         }
-        return appendCodeLineCopy(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineEnd, to: node, pending: pending)
+        return appendLiteralLineCopy(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineEnd, to: node, pending: pending)
     }
 
     /// Where a code or HTML block line's content ends: at the line's end, or at its start when stripping the container
@@ -611,7 +611,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Appends `spaces` spaces and the source bytes `[sourceStart, lineEnd)`, each NUL replaced with U+FFFD (Insecure
     /// characters), as one arena segment, for a code or HTML block line whose stripped indent split a tab (Tabs) or that
     /// holds a NUL. The finalize normalizers rely on one segment per line.
-    private mutating func appendCodeLineCopy(spaces: Int, sourceStart: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
+    private mutating func appendLiteralLineCopy(spaces: Int, sourceStart: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
         let offset = storage.strings.count
         for _ in 0..<spaces {
             storage.strings.append(UInt8(ascii: " "))
@@ -1486,7 +1486,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         pending = appendNewline(to: current, pending: pending)
         let (bodyStart, leadingSpaces) = htmlLineBody(lineRange: lineRange, cursor: cursor, column: prefixColumns)
         blockContentEnd = contentEnd(ofLine: lineRange, bodyStart: bodyStart, leadingSpaces: leadingSpaces)
-        pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
+        pending = appendLiteralBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
         if htmlBlockLineMatchesEndCondition(
             type: type,
             range: cursor..<lineRange.upperBound
@@ -1526,7 +1526,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 startColumn: startColumn
             )
             blockContentEnd = contentEnd(ofLine: lineRange, bodyStart: bodyStart, leadingSpaces: leadingSpaces)
-            pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
+            pending = appendLiteralBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
             return LeafContinuation(consumedLine: true, pending: pending)
         }
         // Measured from `prefixColumns`, so a tab the prefixes partly consumed counts only its remaining columns (Tabs).
@@ -1546,7 +1546,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     maxColumns: 4,
                     startColumn: prefixColumns
                 )
-                pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
+                pending = appendLiteralBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: current, pending: pending)
             }
             return LeafContinuation(consumedLine: true, pending: pending)
         }
@@ -1801,7 +1801,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         )
         current = htmlIdx
         blockContentEnd = lineRange.upperBound
-        pending = appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: htmlIdx, pending: pending)
+        pending = appendLiteralBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: htmlIdx, pending: pending)
         if htmlBlockLineMatchesEndCondition(
             type: htmlType,
             range: firstNonSpace..<lineRange.upperBound
@@ -1833,7 +1833,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         )
         current = codeIdx
         blockContentEnd = lineRange.upperBound
-        return appendCodeBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: codeIdx, pending: pending)
+        return appendLiteralBodyLine(bodyStart: bodyStart, leadingSpaces: leadingSpaces, lineEnd: lineRange.upperBound, to: codeIdx, pending: pending)
     }
 
     /// Opens a paragraph with the line's content.
