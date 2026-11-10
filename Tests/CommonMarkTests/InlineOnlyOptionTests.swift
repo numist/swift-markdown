@@ -14,8 +14,8 @@ import CommonMark
 /// The parse options `.inlineOnly` and `.preserveWhitespace`.
 ///
 /// Neither recognizes block structure: the whole input is one paragraph, so block markers such as `#`, `* `, `> `,
-/// `---`, ` ``` ` and a 4-space indent are text, and line endings, blank lines and leading and trailing whitespace stay
-/// in the paragraph's text. Inline syntax is parsed. The two options produce the same tree.
+/// `---` and a 4-space indent are text, and line endings, blank lines and leading and trailing whitespace stay in the
+/// paragraph's text. Inline syntax is parsed. The two options produce the same tree.
 @Suite("Parse options - inlineOnly / preserveWhitespace")
 struct InlineOnlyOptionTests {
 
