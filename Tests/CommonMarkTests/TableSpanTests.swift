@@ -70,8 +70,8 @@ struct TableSpanTests {
 
     // MARK: - colspan beyond the column count
 
-    // Excess cells are ignored (Tables (extension)), but `||` fillers beyond the column count
-    // add to the colspan of the last cell kept, which is not capped at the column count.
+    // Excess cells are ignored (Tables (extension)), but a `||` filler adds to the colspan of the nearest
+    // non-empty cell to its left, and when that cell is kept its colspan is not capped at the column count.
 
     @Test("one `||` filler grows a single-column cell's colspan past the column count")
     func colspanExceedsColumnCountByOne() {
