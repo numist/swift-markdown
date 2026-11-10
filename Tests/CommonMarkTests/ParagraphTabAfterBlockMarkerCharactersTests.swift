@@ -13,7 +13,7 @@ import CommonMark
 
 /// A paragraph line that begins with characters that can start a block (`*`, `-`, `+`, `>`, digits, `.`, `)`)
 /// followed by a tab. Tabs in lines are not expanded to spaces (Tabs), so the paragraph's text keeps the tab as
-/// written.
+/// written, except a tab that ends a line, which is dropped before the soft line break.
 @Suite("Paragraph text keeps a tab after block marker characters")
 struct ParagraphTabAfterBlockMarkerCharactersTests {
 
