@@ -9,7 +9,7 @@
 */
 
 /// A byte range in either the source (`inSource`) or `DocumentStorage`'s string arena, which holds bytes the parser materializes, such as decoded entities.
-internal struct Chunk: Equatable, Hashable {
+internal struct Chunk {
     internal var offset: Int
     internal var length: Int
     internal var inSource: Bool

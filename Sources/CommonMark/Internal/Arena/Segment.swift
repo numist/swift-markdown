@@ -45,7 +45,7 @@ internal struct Segment: Equatable {
 /// One run of an arena chunk's map to the source: `length` content bytes that image the source from `sourceOffset`.
 ///
 /// A negative `sourceOffset` marks a `"\n"` line join, which has no source position. Runs tile the content in order, so inline positions resolve through arena content such as text with a NUL replaced by U+FFFD or a `\|`-unescaped table cell.
-internal struct ArenaRun: Equatable {
+internal struct ArenaRun {
     internal var length: Int
     internal var sourceOffset: Int
 
@@ -105,7 +105,7 @@ internal struct ContentImage {
 }
 
 /// A node's content: the slice `[first, first + count)` of `DocumentStorage.segments`. `totalLength` is the byte length summed over the segments.
-internal struct ContentRef: Equatable {
+internal struct ContentRef {
     internal var first: Int
     internal var count: Int
     internal var totalLength: Int
