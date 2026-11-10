@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// Enumerate a UTF8-containing `Span` by lines.
+/// Reads the source line by line, past a leading byte order mark.
 internal struct LineReader: ~Escapable, ~Copyable {
     /// The unread rest of the source.
     internal var source: Span<UInt8>
@@ -71,7 +71,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
             let line = bytes.extracting(0..<i)
             lineRange = start..<(start + i)
 
-            // Consume the line ending. A `\r` immediately followed by `\n` is a single line ending.
+            // A `\r` immediately followed by `\n` is a single line ending.
             let b = bytes[i]
             var terminatorEnd = i + 1
             if b == UInt8(ascii: "\r"), terminatorEnd < count, bytes[terminatorEnd] == UInt8(ascii: "\n") {
@@ -86,7 +86,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
         lineRange = start..<(start + count)
         nextStart = lineRange.upperBound
         let result = source
-        source = bytes.extracting(count..<count) // Empty
+        source = bytes.extracting(count..<count)
         return result
     }
 

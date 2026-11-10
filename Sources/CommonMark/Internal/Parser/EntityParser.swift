@@ -21,8 +21,6 @@ internal struct Bytes8 {
 }
 
 internal enum EntityParser {
-    // MARK: - HTML entities
-
     internal struct EntityMatch {
         /// The decoded UTF-8, in the first `count` bytes. Entity values are at most 6 bytes and numeric references at most 4.
         var bytes: Bytes8
@@ -45,7 +43,7 @@ internal enum EntityParser {
 
     /// Matches `&#` and 1–7 decimal digits, or `&#x` or `&#X` and 1–6 hexadecimal digits, then `;`.
     private static func matchNumericEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
-        var i = start + 2 // past `&#`
+        var i = start + 2
         if i >= end {
             return nil
         }
@@ -114,7 +112,6 @@ internal enum EntityParser {
         let afterSemi = i + 1
         if let idx = lookupEntity(range: nameRange, source: source) {
             let off = HTMLEntities.entityValueOffsets[idx]
-            // Each value ends where the next begins; a sentinel offset ends the last.
             let len = HTMLEntities.entityValueOffsets[idx + 1] - off
             var bytes = Bytes8()
             for k in 0..<len {
