@@ -69,6 +69,22 @@ private func collectCodeBlocks(_ node: borrowing MarkdownNode, into out: inout [
     }
 }
 
+/// The kind of every code block in `markdown`, depth-first, as `TreeDump.describe` gives it, which tells a fenced code
+/// block from an indented one.
+internal func codeBlockKinds(_ markdown: String, options: MarkdownDocument.ParseOptions = []) -> [String] {
+    MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
+        var kinds: [String] = []
+        func visit(_ node: borrowing MarkdownNode) {
+            if case .codeBlock = node.kind {
+                kinds.append(TreeDump.describe(node.kind))
+            }
+            node.children.forEach { visit($0) }
+        }
+        visit(doc.root)
+        return kinds
+    }
+}
+
 /// Walks the inline children of every top-level paragraph and heading in the document, returning a compact `(kind, literal)` list.
 internal func paragraphInlines(_ doc: borrowing MarkdownDocument) -> [(kind: MarkdownNode.Kind, literal: String?)] {
     var out: [(MarkdownNode.Kind, String?)] = []
