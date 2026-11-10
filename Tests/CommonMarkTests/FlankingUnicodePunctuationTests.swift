@@ -83,9 +83,9 @@ struct FlankingUnicodePunctuationTests {
         #expect(render("''a", options: .smart) == "\u{2019}\u{2019}a")
     }
 
-    @Test("lone single quote before Unicode punctuation stays a right curly")
-    func loneQuoteBeforeUnicodePunct() {
-        #expect(render("'\u{055E}", options: .smart) == "\u{2019}\u{055E}")
+    @Test("single quote after Unicode punctuation opens")
+    func singleQuoteAfterUnicodePunct() {
+        #expect(render("\u{055E}'a'", options: .smart) == "\u{055E}\u{2018}a\u{2019}")
     }
 
     @Test("letter-preceded quote run before Unicode punctuation stays two right curlies")
@@ -108,14 +108,14 @@ struct FlankingUnicodePunctuationTests {
         #expect(render("a*\u{055E}*") == "a*\u{055E}*")
     }
 
-    @Test("emphasis forms when a Unicode punctuation char precedes the whole run")
-    func emphasisWithUnicodePunctBefore() {
-        #expect(render("\u{055E} *a*") == "\u{055E} <em>a</em>")
+    @Test("underscore emphasis opens after Unicode punctuation")
+    func underscoreEmphasisAfterUnicodePunct() {
+        #expect(render("\u{055E}_a_") == "\u{055E}<em>a</em>")
     }
 
-    @Test("underscore run around Unicode punctuation with an outer letter does not pair")
-    func underscoreAroundUnicodePunctNoPair() {
-        #expect(render("_\u{055E}_a") == "_\u{055E}_a")
+    @Test("underscore emphasis closes before Unicode punctuation")
+    func underscoreEmphasisBeforeUnicodePunct() {
+        #expect(render("_a_\u{055E}") == "<em>a</em>\u{055E}")
     }
 
     @Test("emphasis forms around an em dash followed by a space")
