@@ -11,8 +11,9 @@
 import Testing
 import CommonMark
 
-/// List tightness when a list item holds link reference, inline-attribute or footnote definitions, with or without a
-/// blank line before them, by the line that follows.
+/// List tightness when a line shaped like a link reference, inline-attribute or footnote definition follows a list
+/// item's paragraph, with or without a blank line before it, by the line that follows. Without a blank line, only a
+/// footnote definition interrupts the paragraph; the others continue it as text.
 ///
 /// A list is loose if its items, or two blocks of one item, are separated by a blank line (Lists). A following line
 /// that continues the definitions' paragraph leaves a paragraph after the blank line; a following item is separated
@@ -184,7 +185,7 @@ struct ListLoosenessAroundDefinitionsTests {
 
     /// A footnote definition is a container block, so a blank line after it separates it from the next item or the
     /// next block of its item.
-    @Test("tightness after a footnote definition and a blank line", arguments: casesAfterFootnoteDefinition)
+    @Test("tightness after a footnote definition", arguments: casesAfterFootnoteDefinition)
     func tightnessAfterFootnoteDefinition(_ testCase: (markdown: String, tight: [Bool])) {
         #expect(listTightness(testCase.markdown, options: Self.options) == testCase.tight, "\(testCase.markdown.debugDescription)")
     }
