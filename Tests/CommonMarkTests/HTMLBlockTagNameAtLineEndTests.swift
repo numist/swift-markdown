@@ -11,7 +11,7 @@
 import Testing
 import CommonMark
 
-/// Under HTML block start condition 6 (HTML blocks) the tag name may be followed by the end of the line, so `<div` alone
+/// Under the type 6 start condition (HTML blocks) the tag name may be followed by the end of the line, so `<div` alone
 /// on a line opens an HTML block.
 @Suite("HTML block tag name at the line end")
 struct HTMLBlockTagNameAtLineEndTests {

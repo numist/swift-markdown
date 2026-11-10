@@ -11,11 +11,11 @@
 import CommonMark
 import Testing
 
-/// Start condition 7 (HTML blocks) takes an open tag with any tag name other than `script`, `style` or `pre`, so a
-/// self-closing `<script/>`, which meets neither start condition 1 nor 7, is a paragraph. The exclusion applies to open
-/// tags only, so a closing `</script>` meets start condition 7.
-@Suite("Start condition 1 tag names in a start condition 7 HTML block start")
-struct HTMLBlockStartCondition7ExcludedTagNameTests {
+/// The type 7 start condition (HTML blocks) takes an open tag with any tag name other than `script`, `style` or `pre`,
+/// so a self-closing `<script/>`, which meets neither the type 1 nor the type 7 start condition, is a paragraph. The
+/// exclusion applies to open tags only, so a closing `</script>` meets the type 7 start condition.
+@Suite("Type 1 tag names in a type 7 HTML block start")
+struct HTMLBlockType7ExcludedTagNameTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition]
 
     private func surface(_ markdown: String) -> String {

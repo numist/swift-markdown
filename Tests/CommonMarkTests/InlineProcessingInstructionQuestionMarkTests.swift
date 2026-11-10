@@ -112,7 +112,7 @@ struct InlineProcessingInstructionQuestionMarkTests {
         #expect(inlineHTML("f<????>", options: Self.options) == "<????>")
     }
 
-    @Test("`<???>` alone on a line is an HTML block (start condition 3)")
+    @Test("`<???>` alone on a line is an HTML block (type 3)")
     func standaloneIsHTMLBlock() throws {
         #expect(inlineHTML("<???>", options: Self.options) == nil)
         let block = MarkdownDocument.withParsedDocument("<???>", options: Self.options) { doc -> String? in

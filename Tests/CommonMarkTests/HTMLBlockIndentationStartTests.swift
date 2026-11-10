@@ -18,8 +18,7 @@ import CommonMark
 /// block therefore starts at the first byte of that indentation. Indentation the container consumes, including the
 /// whitespace after a list marker or a footnote label on the container's first line, is not content, so with none left
 /// over the block starts at its `<`. Four columns of indentation make the line indented code instead. The block also
-/// starts at its indentation when it interrupts a paragraph, except a type 7 start condition, which cannot interrupt
-/// one.
+/// starts at its indentation when it interrupts a paragraph, except a type 7 HTML block, which cannot interrupt one.
 @Suite("An HTML block starts at the first byte of its indentation")
 struct HTMLBlockIndentationStartTests {
 
