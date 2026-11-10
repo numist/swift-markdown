@@ -18,7 +18,7 @@ import CommonMark
 /// a run growing with the input - merging text, splitting it into links, joining a construct across lines, projecting a
 /// table cell, expanding a tab, replacing a NUL - makes a document of repeated units store content with the square of
 /// its size and exhausts memory on inputs of a few tens of kilobytes. Each unit is repeated a thousand times, under the
-/// option sets that reach its step, and both stores must stay within sixteen entries per source byte.
+/// option sets that reach its step, and both stores must stay within sixteen entries per source byte, plus 256.
 @Suite("Repeated content stores linear content")
 struct RepeatedContentStorageGrowthTests {
 
