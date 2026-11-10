@@ -11,7 +11,7 @@
 extension MarkdownDocument {
     /// Options that control how a `MarkdownDocument` parses its source.
     ///
-    /// Options enable GitHub Flavored Markdown extensions, inline attributes, source positions, or inline-only parsing. The empty set parses CommonMark.
+    /// Options enable GitHub Flavored Markdown extensions, inline attributes, smart punctuation, source positions, or inline-only parsing. The empty set parses CommonMark.
     ///
     ///     let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .footnotes]
     ///     MarkdownDocument.withParsedDocument(source, options: options) { doc in

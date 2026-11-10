@@ -37,7 +37,7 @@ public struct MarkdownNode: ~Escapable {
         }
     }
 
-    /// A sequence over the node's children, in document order.
+    /// The node's children, in order.
     public var children: Children {
         @_lifetime(borrow self)
         borrowing get {
@@ -97,7 +97,7 @@ public struct MarkdownNode: ~Escapable {
 }
 
 extension MarkdownNode {
-    /// A sequence of a node's children, returned by `MarkdownNode.children`.
+    /// A node's children, returned by `MarkdownNode.children`.
     ///
     /// Iterate the children with `forEach(_:)`, which doesn't allocate.
     public struct Children: ~Copyable, ~Escapable {
@@ -112,7 +112,7 @@ extension MarkdownNode {
             self._first = first
         }
 
-        /// Calls `body` with each child node, in document order.
+        /// Calls `body` with each child node, in order.
         ///
         /// A `MarkdownNode` is nonescapable, so iteration takes a closure rather than using `for`-`in`.
         ///
@@ -218,11 +218,11 @@ extension MarkdownNode {
 
         /// A run of literal text.
         case text
-        /// A soft line break (a line ending within a paragraph that renders as a space).
+        /// A soft line break (a line ending in inline content, outside a code span or raw HTML, that isn't a hard line break).
         case softBreak
         /// A hard line break (a line ending with two or more spaces or a backslash).
         case lineBreak
-        /// An inline code span. `backtickCount` is the length of each delimiter run.
+        /// An inline code span. `backtickCount` is the length of its opening and closing backtick strings.
         case codeInline(backtickCount: Int)
         /// An inline span of raw HTML.
         case htmlInline
@@ -238,7 +238,7 @@ extension MarkdownNode {
         case footnoteReference(index: Int)
         /// Struck-through text (`~text~` or `~~text~~`), produced when parsing with `MarkdownDocument.ParseOptions.strikethrough`.
         case strikethrough
-        /// An inline attribute (`^[…]`), produced when parsing with `MarkdownDocument.ParseOptions.attributes`. The raw attribute string is available through the node's content.
+        /// An inline attribute (`^[…]`), produced when parsing with `MarkdownDocument.ParseOptions.attributes`. Its attribute string is available through the node's content.
         case attribute
         
         /// A Boolean value that indicates whether this is a block-level kind.
@@ -258,7 +258,7 @@ extension MarkdownNode {
             !isBlock
         }
 
-        /// The leaf blocks that accumulate text lines.
+        /// Whether this kind is a leaf block that accumulates text lines.
         internal var canAccumulateText: Bool {
             switch self {
             case .paragraph, .heading:
@@ -401,7 +401,7 @@ extension MarkdownNode {
 extension MarkdownNode {
     /// The node's source range, or `nil` without `MarkdownDocument.ParseOptions.sourcePosition` or for a node that has no source range: a soft or hard line break, a cell inserted into a body row that has fewer cells than the header row, and the document of empty input.
     ///
-    /// The range runs from the first byte of the node's own content to just past its last content byte. The node's own syntax counts as content: a list item's marker and checkbox, a block quote's marker, a footnote definition's `[^label]:`, a code block's fences, an ATX heading's `#`s, a setext heading's underline, a code span's backticks, emphasis and strikethrough delimiters, a link's or image's brackets with its destination and title, an autolink's `<` and `>`, a table's delimiter row, and a table row's leading and closing pipes. Whitespace, line endings, blank lines, table cell padding and the pipes between cells are never inside a node's range unless they are part of its content, such as whitespace inside a code block's text or a code span. So a container ends where its last child or its own marker ends, whichever is later, and a node with no content bytes, such as an empty table cell or a paragraph of only line tabulations, has an empty range at its start, which for a cell is just past its opening pipe. The line ending that ends a node's last line is outside it, even where the node's text holds it.
+    /// The range runs from the first byte of the node's own content to just past its last content byte. The node's own syntax counts as content: a list item's marker and checkbox, a block quote's marker, a footnote definition's `[^label]:`, a code block's fences, an ATX heading's `#`s, a setext heading's underline, a code span's backticks, emphasis and strikethrough delimiters, a link's or image's brackets with its destination and title, an autolink's `<` and `>`, a table's delimiter row, and a table row's leading and closing pipes. Whitespace, line endings, blank lines, table cell padding and the pipes between cells never begin or end a node's range unless they are part of its content, such as whitespace in a code block's text. So a container ends where its last child, its own syntax, or a link reference, attribute or footnote definition it held ends, whichever is latest, the definition counting even after it leaves the container; and a node with no content bytes, such as an empty table cell or a paragraph of only line tabulations, has an empty range at its start, which for a cell is just past its opening pipe. The line ending that ends a node's last line is outside it, even where the node's text holds it.
     ///
     /// The document's range covers the whole input, any byte order mark included, whose three bytes count in line 1's columns. For input that ends in a line ending, it ends at column 1 of the line after the last.
     public var sourceRange: Range<SourcePosition>? {

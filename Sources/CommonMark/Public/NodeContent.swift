@@ -27,7 +27,7 @@ extension MarkdownNode {
         case htmlBlock(body: Segments)
         /// A link or image destination and title, either of which may be empty.
         case link(url: UTF8Span, title: UTF8Span)
-        /// The raw attribute string of an `^[…]` inline attribute.
+        /// The attribute string of an `^[…]` inline attribute: the text between its parentheses as written, or for `^[text][label]` the definition's attributes with backslash escapes and character references decoded.
         case attribute(UTF8Span)
         /// A footnote reference or definition label.
         case footnote(label: UTF8Span)
@@ -74,7 +74,7 @@ extension MarkdownNode {
         case htmlBlock(body: String)
         /// A link or image destination and title, either of which may be empty.
         case link(url: String, title: String)
-        /// The raw attribute string of an `^[…]` inline attribute.
+        /// The attribute string of an `^[…]` inline attribute: the text between its parentheses as written, or for `^[text][label]` the definition's attributes with backslash escapes and character references decoded.
         case attribute(String)
         /// A footnote reference or definition label.
         case footnote(label: String)
