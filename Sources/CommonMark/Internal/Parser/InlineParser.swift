@@ -400,7 +400,7 @@ extension BlockParser {
         return cursor + 1
     }
 
-    /// A `://` or `www.` extended autolink, triggered by `byte` (`:` or `w`).
+    /// An extended url or www autolink, triggered by `byte` (`:` or `w`).
     private mutating func handleGFMAutolinkTrigger(_ byte: UInt8, at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         // An open `[` or `![` suppresses the autolink even if it never closes, so `[a http://t.t` is text.
         let insideLinkOrImageBracket = lastBracket.map { brackets[$0].insideLinkOrImage } ?? false
@@ -473,7 +473,7 @@ extension BlockParser {
         var delimPosition: Int
         /// Whether a bracket was pushed after this one. Its text then holds an unescaped bracket, which no link label does, so it can't be the label of a collapsed or shortcut reference.
         var bracketAfter: Bool = false
-        /// Whether this bracket or one enclosing it is a link or image opener, which suppresses `://` and `www.` extended autolinks.
+        /// Whether this bracket or one enclosing it is a link or image opener, which suppresses extended url and www autolinks.
         var insideLinkOrImage: Bool
         /// `linksFormed` at push. A link opener can't form a link once a link or autolink formed after it, because links
         /// may not contain other links (Links).
@@ -1676,7 +1676,7 @@ extension BlockParser {
         var destinationPrefix: String
     }
 
-    /// Matches a `://` or `www.` extended autolink at `cursor`. Emails are matched by `gfmEmailAutolinkPass`.
+    /// Matches an extended url or www autolink at `cursor`. Emails are matched by `gfmEmailAutolinkPass`.
     private mutating func matchGFMAutolink(trigger: UInt8, cursor: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         if trigger == UInt8(ascii: ":") {
             return matchGFMSchemeAutolink(
@@ -1860,7 +1860,7 @@ extension BlockParser {
         }
     }
 
-    /// Emits a `.link` with one `.text` child for a `://` or `www.` autolink.
+    /// Emits a `.link` with one `.text` child for an extended url or www autolink.
     private mutating func emitGFMAutolink(auto: GFMAutolinkMatch, into parent: DocumentStorage.Index, content: borrowing ContentSpan) {
         let textChunk = content.chunk(
             offset: auto.urlStart,
@@ -1949,7 +1949,7 @@ extension BlockParser {
         return i
     }
 
-    /// Whether the domain of a www or url extended autolink at `base` is accepted.
+    /// Whether the domain of an extended www or url autolink at `base` is accepted.
     ///
     /// The scan runs from the domain's second character, the first being checked by the caller, over host
     /// characters, `-`, `_` and `.`, up to the first other character or the content's last character, which it
@@ -1985,7 +1985,7 @@ extension BlockParser {
         return !requirePeriod || periods > 0
     }
 
-    /// Whether a url extended autolink's domain at `afterSlashes` is accepted: its first character is a host
+    /// Whether an extended url autolink's domain at `afterSlashes` is accepted: its first character is a host
     /// character or a non-ASCII character that is neither whitespace nor punctuation, and `domainAccepted`
     /// accepts the rest.
     private mutating func schemeURLDomainAccepted(afterSlashes: Int, content: borrowing ContentSpan) -> Bool {
