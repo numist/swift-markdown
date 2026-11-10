@@ -44,7 +44,7 @@ struct TaskListDefinitionOnlyOpeningLineTests {
             """)
     }
 
-    @Test("without tasklist, a later short paragraph is kept whole")
+    @Test("without tasklist, a later short paragraph is text")
     func laterShortParagraphWithoutTasklist() {
         #expect(TreeDump.dump("- [ ] [a]: /u\n\n  ab\n", options: []) == """
             document
