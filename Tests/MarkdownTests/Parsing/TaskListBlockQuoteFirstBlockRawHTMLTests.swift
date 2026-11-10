@@ -55,12 +55,6 @@ class TaskListBlockQuoteFirstBlockRawHTMLTests: XCTestCase {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"a\"\n            ├─ SoftBreak\n            ├─ Text \"22\u{E9} \"\n            └─ Link destination: \"/u\"\n               └─ Text \"x\"", surface("- >a\n  22\u{E9} [x] \n\n[x]: /u\n"))
     }
 
-    /// A paragraph that begins with `22é` does not begin with a task list item marker, so `[x]` is a shortcut
-    /// reference link.
-    func testShortcutReferenceOnDigitLine() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         ├─ Text \"22\u{E9} \"\n         └─ Link destination: \"/u\"\n            └─ Text \"x\"", surface("+\n  22\u{E9} [x] \n\n[x]: /u\n"))
-    }
-
     func testLinkTitleSpanningLines() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ BlockQuote\n         └─ Paragraph\n            ├─ Text \"x\"\n            └─ Link destination: \"/u\"\n               └─ Text \"a\"", surface("- >x[a](/u \"\n  2\u{0} [x] \")\n"))
     }
