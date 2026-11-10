@@ -90,11 +90,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// No source byte from here up to `sourceReadEnd` is a NUL, so content there needs no NUL replacement.
     var nulFreeSourceStart: Int = 0
 
-    /// The source offset where the open code or HTML block's content ends, and so the block unless a closing fence
-    /// follows. For an indented code block it is just past its last line that is not blank, as blank lines following the
-    /// block are not part of it (Indented code blocks). For a fenced code block or an HTML block it is just past its last
-    /// line's content (see `contentEnd(ofLine:bodyStart:leadingSpaces:)`), or, when a fenced block's opening line is its
-    /// last, past the info string or the opening fence.
+    /// Where the open code or HTML block ends unless a closing fence follows: past its last line's content (see
+    /// `contentEnd(ofLine:bodyStart:leadingSpaces:)`), its last line that is not blank for an indented code block
+    /// (Indented code blocks), or its info string or opening fence for a fenced block with only that line.
     var blockContentEnd: Int = 0
 
     /// Inline parsing deferred until all blocks close, so a reference resolves against a definition later in the document.
@@ -171,7 +169,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         self.sourceBytes = source
         self.positionsEnabled = self.storage.options.contains(.sourcePosition)
 
-        // Reserve the append-only arenas in proportion to the input, so they regrow only for dense input.
+        // Reserve the append-only arenas in proportion to the input, so they regrow only for input with more nodes or
+        // segments than one per 16 bytes, or more copied bytes than one per 4.
         let byteCount = self.sourceBytes.count
         self.storage.nodes.reserveCapacity(byteCount / 16)
         self.storage.segments.reserveCapacity(byteCount / 16)
@@ -1039,7 +1038,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var openKind: MarkdownNode.Kind
     }
 
-    /// An open code block or HTML block consumes the line when the prefix walk reached it: as content, or as the closing fence or end condition that closes it. A line that the block can't take, or that the walk failed before reaching the block, closes it, and `consumedLine` is `false` so the line dispatches as a fresh block.
+    /// An open code block or HTML block consumes the line when the prefix walk reached it: as content, which closes an HTML block when it meets the block's end condition, or as a closing fence. A line that the block can't take, or that the walk failed before reaching the block, closes it, and `consumedLine` is `false` so the line dispatches as a fresh block.
     private mutating func continueOrCloseLeafBlock(lineRange: Range<Int>, cursor: Int, prefixColumns: Int, allMatched: Bool, pending: consuming PendingLeaf?) -> LeafContinuation {
         guard allMatched else {
             return LeafContinuation(consumedLine: false, pending: finalize(node: current, pending: pending))
@@ -3205,8 +3204,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Where the raw content of the paragraph `node` whose lines are `segs` begins (see `paragraphContent(of:trimmed:)`),
-    /// as a virtual offset in `trimmed`, the lines' virtual range without leading and trailing whitespace. With `node`
-    /// nil, a setext heading's content, which has no task list item marker.
+    /// as a virtual offset of the lines within `trimmed`, their virtual range without leading and trailing whitespace.
+    /// With `node` nil, a setext heading's content, which has no task list item marker.
     ///
     /// The lines are read in place, so content that isn't contiguous in the source is not copied.
     private mutating func rawContentStart(in segs: borrowing UniqueArray<Segment>, trimmed: Range<Int>, taskItemParagraph node: DocumentStorage.Index?) -> Int {
