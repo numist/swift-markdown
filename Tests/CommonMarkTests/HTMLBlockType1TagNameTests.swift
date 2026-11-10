@@ -13,7 +13,8 @@ import CommonMark
 
 /// The type 1 start condition (HTML blocks) takes `script`, `pre` and `style`, followed by whitespace, `>` or the end
 /// of the line, so a self-closing `<script/>` doesn't meet it. The type 7 start condition excludes those tag names
-/// from its open tags, so `<script/>` starts no HTML block. `textarea` is not a type 1 tag name, so `<textarea>` and
+/// from its open tags, so `<script/>` starts no HTML block. The exclusion applies to open tags only, so a closing
+/// `</script>` meets the type 7 start condition. `textarea` is not a type 1 tag name, so `<textarea>` and
 /// `<textarea/>` meet the type 7 start condition.
 @Suite("Self-closing type 1 tag names as HTML block starts")
 struct HTMLBlockType1TagNameTests {
@@ -87,6 +88,46 @@ struct HTMLBlockType1TagNameTests {
               html_block "<scripting>\\n"
 
             """)
+    }
+
+    @Test("self-closing `<script/>`, `<PRE/>` and `<Style/>` are paragraphs (type 7 excludes them)", arguments: [
+        ("<script/>", """
+            document @1:1-1:10
+              paragraph @1:1-1:10
+                html_inline "<script/>" @1:1-1:10
+
+            """),
+        ("<PRE/>", """
+            document @1:1-1:7
+              paragraph @1:1-1:7
+                html_inline "<PRE/>" @1:1-1:7
+
+            """),
+        ("<Style/>", """
+            document @1:1-1:9
+              paragraph @1:1-1:9
+                html_inline "<Style/>" @1:1-1:9
+
+            """),
+    ])
+    func type1TagNamesExcludedFromType7(_ source: String, _ tree: String) {
+        #expect(TreeDump.dump(source, options: .sourcePosition, sourceRanges: true) == tree)
+    }
+
+    @Test("`</script>` and `<scripting/>` open HTML blocks (type 7)", arguments: [
+        ("</script>", """
+            document @1:1-1:10
+              html_block "</script>\\n" @1:1-1:10
+
+            """),
+        ("<scripting/>", """
+            document @1:1-1:13
+              html_block "<scripting/>\\n" @1:1-1:13
+
+            """),
+    ])
+    func closingScriptAndScriptingMeetType7StartCondition(_ source: String, _ tree: String) {
+        #expect(TreeDump.dump(source, options: .sourcePosition, sourceRanges: true) == tree)
     }
 
     @Test("`<textarea>` and `<textarea/>` open HTML blocks (type 7)", arguments: [
