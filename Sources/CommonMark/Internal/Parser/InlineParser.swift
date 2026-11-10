@@ -2192,9 +2192,10 @@ extension BlockParser {
 
     /// Splits a text node into `[before, link, after]` at each extended email autolink.
     ///
-    /// The content is copied once to a scratch buffer and scanned left to right; the text runs are carved from the
-    /// node's segments. The link spans the address's source bytes, and each text run keeps the part of the node's
-    /// range on its side, so a run that isn't all source bytes, such as a smart quote, still has a range.
+    /// The content is scanned left to right, in place when it is one source segment and otherwise from a copy made
+    /// once; the text runs are carved from the node's segments. The link spans the address's source bytes, and each
+    /// text run keeps the part of the node's range on its side, so a run that isn't all source bytes, such as a smart
+    /// quote, still has a range.
     private mutating func splitEmailsInTextNode(_ node: DocumentStorage.Index, parent: DocumentStorage.Index, image: ContentImage?) {
         guard case .literal(let ref) = storage[node].data else {
             preconditionFailure("a text node holds a literal")
@@ -2203,25 +2204,35 @@ extension BlockParser {
         if !contentRefContains(ref, byte: UInt8(ascii: "@")) {
             return
         }
-        var scratch = UniqueArray<UInt8>()
-        materialize(ref, into: &scratch)
-        let total = scratch.count
-        // `content` borrows only `scratch`, so the storage mutations below don't affect it.
-        let content = ContentSpan(span: scratch.span, base: 0, inSource: false)
+        // `content` borrows the source or `scratch`, never the arena, which the storage mutations below grow.
+        // Content of several segments is joined in `scratch` too, so it is read as one span.
+        let firstChunk = storage.segments[ref.first].chunk
+        let inPlace = ref.count == 1 && firstChunk.inSource
+        var copy = UniqueArray<UInt8>()
+        if !inPlace {
+            materialize(ref, into: &copy)
+        }
+        let scratch = copy
+        let content = inPlace
+            ? ContentSpan(span: sourceBytes.extracting(firstChunk.range), base: firstChunk.offset, inSource: true)
+            : ContentSpan(span: scratch.span, base: 0, inSource: false)
+        // A content offset less `origin` is the offset into `ref`'s content.
+        let origin = content.startOffset
+        let total = content.endOffset
 
         // `current` is the running text node, starting at `segStart`. `localBound` keeps a later `@`'s local part
         // out of a prior email.
         var current = node
-        var segStart = 0
-        var localBound = 0
+        var segStart = origin
+        var localBound = origin
         var carve = ContentRefCarvePosition()
         var didSplit = false
-        var i = 0
-        var resumeAt = 0
+        var i = origin
+        var resumeAt = origin
         // The split node's end, which the last text run keeps.
         let nodeEnd = positionsEnabled ? storage.sourceRanges[node].end : -1
         while i < total {
-            guard scratch[i] == UInt8(ascii: "@") else {
+            guard content[i] == UInt8(ascii: "@") else {
                 i += 1
                 continue
             }
@@ -2235,9 +2246,9 @@ extension BlockParser {
                 continue
             }
             // `current` becomes the text run before this email.
-            let beforeRef = subContentRef(of: ref, from: segStart, to: auto.urlStart, resumingAt: &carve)
+            let beforeRef = subContentRef(of: ref, from: segStart - origin, to: auto.urlStart - origin, resumingAt: &carve)
             storage[current].data = .literal(beforeRef)
-            let emailRef = subContentRef(of: ref, from: auto.urlStart, to: auto.urlEnd, resumingAt: &carve)
+            let emailRef = subContentRef(of: ref, from: auto.urlStart - origin, to: auto.urlEnd - origin, resumingAt: &carve)
             let email = positionsEnabled ? sourceSpan(of: emailRef, image: image) : nil
             if let email {
                 let currentStart = storage.sourceRanges[current].start
@@ -2284,7 +2295,7 @@ extension BlockParser {
             didSplit = true
         }
         if didSplit {
-            let afterRef = subContentRef(of: ref, from: segStart, to: total, resumingAt: &carve)
+            let afterRef = subContentRef(of: ref, from: segStart - origin, to: total - origin, resumingAt: &carve)
             storage[current].data = .literal(afterRef)
             if afterRef.totalLength == 0 {
                 storage.unlinkChild(current)
