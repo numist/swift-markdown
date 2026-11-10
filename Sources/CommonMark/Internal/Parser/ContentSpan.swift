@@ -84,17 +84,18 @@ internal struct ContentSpan: ~Escapable {
         hint.line = 0..<0
         self.multiIdentity = hint.lineOwner
     }
+
     var startOffset: Int { isMultiSegment ? 0 : base }
     var endOffset: Int { isMultiSegment ? multiVirtualLength : base + span.count }
     var isEmpty: Bool { isMultiSegment ? multiVirtualLength == 0 : span.count == 0 }
 
-    /// The index of the first entry of non-decreasing `ends[lo..<hi]` past `offset`, or `hi` if none is: the piece covering `offset`, never a zero-length one, when it lies in that range.
-    static func firstIndex(endingAfter offset: Int, in ends: Span<Int>, from lo: Int, to hi: Int) -> Int {
+    /// The index of the first entry of `pieceEnds[lo..<hi]` past `offset`, or `hi` if none is: the piece covering `offset`, never a zero-length one, when it lies in that range.
+    private func firstIndex(endingAfter offset: Int, from lo: Int, to hi: Int) -> Int {
         var lo = lo
         var hi = hi
         while lo < hi {
             let mid = (lo + hi) / 2
-            if ends[mid] > offset {
+            if pieceEnds[mid] > offset {
                 hi = mid
             } else {
                 lo = mid + 1
@@ -106,7 +107,7 @@ internal struct ContentSpan: ~Escapable {
     /// The index of the piece covering content-relative `offset`, or `pieces.count` when `offset` is at or past the end.
     ///
     /// The search widens from `pieceHint`, doubling its step, so a piece `d` pieces away costs O(log d) and a scan costs O(1) per byte.
-    func pieceIndex(covering offset: Int) -> Int {
+    private func pieceIndex(covering offset: Int) -> Int {
         var lo = 0
         var hi = pieceEnds.count
         if let hint = pieceHint?.index, pieceEnds.indices.contains(hint) {
@@ -135,7 +136,7 @@ internal struct ContentSpan: ~Escapable {
                 }
             }
         }
-        let found = Self.firstIndex(endingAfter: offset, in: pieceEnds, from: lo, to: hi)
+        let found = firstIndex(endingAfter: offset, from: lo, to: hi)
         if found < pieceEnds.count {
             pieceHint?.index = found
         }
@@ -143,9 +144,10 @@ internal struct ContentSpan: ~Escapable {
     }
 
     /// The content-relative offset of piece `i`'s first byte.
-    func pieceStart(_ i: Int) -> Int {
+    private func pieceStart(_ i: Int) -> Int {
         i == 0 ? 0 : pieceEnds[i - 1]
     }
+
     subscript(_ offset: Int) -> UInt8 {
         if isMultiSegment {
             return multiByte(at: offset)
