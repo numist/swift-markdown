@@ -31,12 +31,15 @@ internal struct ContentSpan: ~Escapable {
 
     /// The piece that an offset lookup last found, or `nil` where `pieces` is empty.
     ///
-    /// Content has a piece per line and is scanned a byte at a time, so most lookups land in this piece or one a few pieces away, where `pieceIndex(covering:)` searches first.
+    /// Content has a piece per line and is scanned a byte at a time, so most lookups land in this piece or one a few pieces away, where `pieceIndex(covering:)` searches first. Multi-segment content also keeps there the source piece it last read (`sourcePiece(covering:)`).
     let pieceHint: PieceHint?
 
     let isMultiSegment: Bool
 
     let multiVirtualLength: Int
+
+    /// Multi-segment: which of the multi-segment contents made with `pieceHint` this is, counting from 1.
+    let multiIdentity: Int
 
     /// Single-segment content without a run map, so only source content resolves source offsets.
     @_lifetime(copy span)
@@ -49,6 +52,7 @@ internal struct ContentSpan: ~Escapable {
         self.pieceHint = nil
         self.isMultiSegment = false
         self.multiVirtualLength = 0
+        self.multiIdentity = 0
     }
 
     /// Single-segment arena content with its run map (see `pieces`).
@@ -62,6 +66,7 @@ internal struct ContentSpan: ~Escapable {
         self.pieceHint = hint
         self.isMultiSegment = false
         self.multiVirtualLength = 0
+        self.multiIdentity = 0
     }
 
     /// Multi-segment content: `segmentEnds` holds the running ends of `segments`, and `virtualLength` their total.
@@ -75,6 +80,9 @@ internal struct ContentSpan: ~Escapable {
         self.pieceHint = hint
         self.isMultiSegment = true
         self.multiVirtualLength = virtualLength
+        hint.lineOwner &+= 1
+        hint.line = 0..<0
+        self.multiIdentity = hint.lineOwner
     }
     var startOffset: Int { isMultiSegment ? 0 : base }
     var endOffset: Int { isMultiSegment ? multiVirtualLength : base + span.count }
@@ -153,25 +161,44 @@ internal struct ContentSpan: ~Escapable {
         guard isMultiSegment else {
             return body { span[$0 - base] }
         }
-        let i = pieceIndex(covering: offset)
-        guard i < pieces.count, pieces[i].inSource else {
+        // A scan from the end reads nothing.
+        guard offset < multiVirtualLength, let piece = sourcePiece(covering: offset) else {
             return body { multiByte(at: $0) }
         }
-        let pieceEnd = pieceEnds[i]
-        let shift = pieces[i].offset - pieceStart(i)
-        return body { $0 < pieceEnd ? span[$0 + shift] : multiByte(at: $0) }
+        return body { $0 < piece.range.upperBound ? span[$0 + piece.shift] : multiByte(at: $0) }
     }
 
     private func multiByte(at offset: Int) -> UInt8 {
-        let i = pieceIndex(covering: offset)
-        assert(i < pieces.count, "inline content is read only at offsets inside the content")
-        let seg = pieces[i]
-        let local = offset - pieceStart(i)
-        if seg.inSource {
-            return span[seg.offset + local]
+        guard let piece = sourcePiece(covering: offset) else {
+            // The only non-source segment is the shared interned `"\n"`.
+            return UInt8(ascii: "\n")
         }
-        // The only non-source segment is the shared interned `"\n"`.
-        return UInt8(ascii: "\n")
+        return span[offset + piece.shift]
+    }
+
+    /// The virtual range of the multi-segment content's source piece covering `offset`, and the distance from its offsets to their source offsets, or `nil` where a line join covers `offset`.
+    ///
+    /// The piece is cached in `pieceHint`, since a scan reads a line's bytes one after another.
+    private func sourcePiece(covering offset: Int) -> (range: Range<Int>, shift: Int)? {
+        if let hint = pieceHint {
+            assert(hint.lineOwner == multiIdentity, "a hint caches the line of the latest multi-segment content made with it, so only that content is read")
+            if hint.line.contains(offset) {
+                return (hint.line, hint.lineShift)
+            }
+        }
+        let i = pieceIndex(covering: offset)
+        precondition(i < pieces.count, "content is read only at offsets inside it")
+        let seg = pieces[i]
+        if !seg.inSource {
+            return nil
+        }
+        let range = pieceStart(i)..<pieceEnds[i]
+        let shift = seg.offset - range.lowerBound
+        if let hint = pieceHint {
+            hint.line = range
+            hint.lineShift = shift
+        }
+        return (range, shift)
     }
 
     /// The source offset of the content byte at `offset`, which must image a source byte. Callers resolve only an inline node's first and last bytes, which are never a line join.
@@ -210,15 +237,10 @@ internal struct ContentSpan: ~Escapable {
         if !isMultiSegment {
             return Chunk(offset: offset, length: limit - offset, inSource: inSource)
         }
-        let i = pieceIndex(covering: offset)
-        precondition(i < pieces.count, "a scan limit lies within the content, so a scan start below it lies on a content byte")
-        let seg = pieces[i]
-        if !seg.inSource {
+        guard let piece = sourcePiece(covering: offset) else {
             return nil
         }
-        let local = offset - pieceStart(i)
-        let regionEnd = min(limit, pieceEnds[i])
-        return Chunk(offset: seg.offset + local, length: regionEnd - offset, inSource: true)
+        return Chunk(offset: offset + piece.shift, length: min(limit, piece.range.upperBound) - offset, inSource: true)
     }
 
     /// The offset of the next byte at or after `globalCursor` that the inline dispatch acts on, or `endOffset`, so the dispatch skips plain text 16 bytes at a time.
@@ -328,4 +350,11 @@ internal struct ContentSpan: ~Escapable {
 /// One is shared by every `ContentSpan` of a parse. An index left by another content is still a valid hint, since a lookup bounds-checks it and only starts its search there.
 internal final class PieceHint {
     var index = 0
+
+    /// The `multiIdentity` of the latest multi-segment content made with this hint, the only one read through it.
+    var lineOwner = 0
+
+    /// That content's source piece that a lookup last found: its virtual range, and the distance from its offsets to their source offsets.
+    var line: Range<Int> = 0..<0
+    var lineShift = 0
 }
