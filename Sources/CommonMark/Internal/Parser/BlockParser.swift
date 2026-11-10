@@ -31,6 +31,9 @@ private struct InlineScratch: ~Copyable {
 }
 
 /// The Markdown parser: the block structure line by line, then each leaf's inline content.
+///
+/// A method that only reads the parser but calls its other methods is still `mutating`, since a non-mutating method
+/// copies the whole parser before each such call.
 internal struct BlockParser : ~Copyable, ~Escapable {
     internal var storage: DocumentStorage
     
@@ -1417,8 +1420,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// `interruptsParagraph` is `false` when the paragraph's own container failed to match or the paragraph is a table,
     /// so the limits on interrupting a paragraph don't apply.
-    // `mutating` though it only reads: a non-mutating method copies the whole parser before each matcher call,
-    // measured at 3% of a prose parse's instructions and 6% to 9% of a paragraph of link reference definitions'.
     private mutating func lineStartsNewBlock(range: Range<Int>, firstNonSpace: Int, indent: Int, baseColumn: Int, interruptsParagraph: Bool) -> Bool {
         // A line indented four or more columns starts no block that interrupts a paragraph.
         if indent >= 4 {

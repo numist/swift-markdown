@@ -67,7 +67,6 @@ extension BlockParser {
     /// paragraph, is the open block for the next line.
     ///
     /// Every delimiter-shaped paragraph line asks this, so it counts cells without building arrays.
-    // Non-mutating, it measured 8% slower on a paragraph of delimiter-shaped lines.
     internal mutating func opensTable(header: Range<Int>, delimiter: Range<Int>) -> Bool {
         var columns = 0
         var isDelimiterRow = true
