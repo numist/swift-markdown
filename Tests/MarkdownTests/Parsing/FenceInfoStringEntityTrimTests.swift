@@ -49,5 +49,7 @@ class FenceInfoStringEntityTrimTests: XCTestCase {
     func testBackslashEscapesReferenceAmpersand() {
         XCTAssertEqual("x&#32;", language("```x\\&#32;"))
         XCTAssertEqual("&#9;x", language("```\\&#9;x"))
+        XCTAssertEqual("&#3;", language("```\\&#3;"))
+        XCTAssertEqual("&amp;", language("```\\&amp;"))
     }
 }
