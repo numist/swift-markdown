@@ -169,8 +169,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         self.sourceBytes = source
         self.positionsEnabled = self.storage.options.contains(.sourcePosition)
 
-        // Reserve the append-only arenas in proportion to the input, so they regrow only for input with more nodes or
-        // segments than one per 16 bytes, or more copied bytes than one per 4.
+        // Reserve the append-only arenas in proportion to the input, so they regrow only for dense input.
         let byteCount = self.sourceBytes.count
         self.storage.nodes.reserveCapacity(byteCount / 16)
         self.storage.segments.reserveCapacity(byteCount / 16)
