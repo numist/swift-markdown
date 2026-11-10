@@ -42,7 +42,7 @@ struct TableLonePipeHeaderTests {
             """)
     }
 
-    @Test("a lone pipe followed by a form-feed has no cells")
+    @Test("a lone pipe followed by a form feed has no cells")
     func lonePipeFormFeed() {
         #expect(TreeDump.dump("|\u{C}\n-|", options: [.tables]) == """
             document
