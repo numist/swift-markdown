@@ -1226,7 +1226,8 @@ extension BlockParser {
 
     private struct CodeSpanMatch {
         var content: Chunk
-        var afterClose: Int     // offset just past the closing backtick run
+        /// The offset just past the closing backtick run.
+        var afterClose: Int
         var backtickCount: Int
     }
 
@@ -1366,8 +1367,10 @@ extension BlockParser {
     // MARK: - Autolinks
 
     private struct AutolinkMatch {
-        var interior: Range<Int>  // bytes between `<` and `>` (the visible text)
-        var afterClose: Int       // offset just past the closing `>`
+        /// The bytes between `<` and `>` (the visible text).
+        var interior: Range<Int>
+        /// The offset just past the closing `>`.
+        var afterClose: Int
         var isEmail: Bool
     }
 
@@ -1413,7 +1416,7 @@ extension BlockParser {
             return nil
         }
         i += 1
-        // Scan body until `>`. An absolute URI excludes ASCII control characters, DEL (0x7F) included.
+        // An absolute URI excludes ASCII control characters, DEL (0x7F) included.
         let bodyStart = start + 1
         while i < end {
             let b = content[i]
