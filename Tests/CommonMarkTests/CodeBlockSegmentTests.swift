@@ -12,7 +12,8 @@ import Testing
 import CommonMark
 
 /// A code or HTML block's body holds a segment for each nonempty line's content and a `\n` segment for each line
-/// ending, CRLF included.
+/// ending, CRLF included. A line whose stripped indentation splits a tab holds the tab's leftover columns as a segment
+/// of spaces before its content's segment.
 @Suite("Code/HTML block segment content")
 struct CodeBlockSegmentTests {
 
@@ -157,7 +158,7 @@ struct CodeBlockSegmentTests {
         #expect(TreeDump.dumpSegments(">\t\tfoo\n") == """
             document
               block_quote
-                code_block "" "  foo\\n" ["  foo", "\\n"]
+                code_block "" "  foo\\n" ["  ", "foo", "\\n"]
 
             """)
     }

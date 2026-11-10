@@ -592,7 +592,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if leadingSpaces == 0 && isKnownFreeOfNUL(Chunk(offset: bodyStart, length: lineEnd - bodyStart, inSource: true)) {
             return addLine(range: bodyStart..<lineEnd, to: node, pending: pending)
         }
-        return appendLiteralLineCopy(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineEnd, to: node, pending: pending)
+        return appendLiteralLinePieces(spaces: leadingSpaces, sourceStart: bodyStart, lineEnd: lineEnd, to: node, pending: pending)
     }
 
     /// Where a code or HTML block line's content ends: at the line's end, or at its start when stripping the container
@@ -616,18 +616,35 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         )
     }
 
-    /// Appends `spaces` spaces and the source bytes `[sourceStart, lineEnd)`, each NUL replaced with U+FFFD (Insecure
-    /// characters), as one arena segment, for a code or HTML block line whose stripped indent split a tab (Tabs) or that
-    /// holds a NUL. The finalize normalizers rely on one segment per line.
-    private mutating func appendLiteralLineCopy(spaces: Int, sourceStart: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf {
-        let offset = storage.strings.count
+    /// Appends a code or HTML block line whose stripped indent split a tab (Tabs) or that holds a NUL: `spaces` spaces,
+    /// then the source bytes `[sourceStart, lineEnd)` with each NUL replaced with U+FFFD (Insecure characters). The spaces
+    /// and each U+FFFD are arena segments, merged where adjacent, and the rest are source segments.
+    private mutating func appendLiteralLinePieces(spaces: Int, sourceStart: Int, lineEnd: Int, to node: DocumentStorage.Index, pending: consuming PendingLeaf?) -> PendingLeaf? {
+        var pending = pending
+        var arenaPieceStart = storage.strings.count
         for _ in 0..<spaces {
             storage.strings.append(UInt8(ascii: " "))
         }
-        appendReplacingNUL(sourceBytes.extracting(sourceStart..<lineEnd))
-        return appendSegment(
-            Segment(offset: offset, length: storage.strings.count - offset, inSource: false),
-            to: node, pending: pending)
+        var start = sourceStart
+        while true {
+            let nul = start + Self.firstNUL(in: sourceBytes.extracting(start..<lineEnd))
+            if nul > start {
+                if storage.strings.count > arenaPieceStart {
+                    pending = appendSegment(Segment(offset: arenaPieceStart, length: storage.strings.count - arenaPieceStart, inSource: false), to: node, pending: pending)
+                }
+                pending = appendSegment(Segment(offset: start, length: nul - start, inSource: true), to: node, pending: pending)
+                arenaPieceStart = storage.strings.count
+            }
+            guard nul < lineEnd else {
+                break
+            }
+            appendReplacementCharacter()
+            start = nul + 1
+        }
+        if storage.strings.count > arenaPieceStart {
+            pending = appendSegment(Segment(offset: arenaPieceStart, length: storage.strings.count - arenaPieceStart, inSource: false), to: node, pending: pending)
+        }
+        return pending
     }
 
     // MARK: - NUL -> U+FFFD replacement (Insecure characters)
@@ -2283,7 +2300,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Normalizes a code block's body segments (Indented code blocks, Fenced code blocks): drops the separator before a fenced block's first line, strips an indented block's trailing blank lines, and ends the last line with `\n`. A fenced block without lines stays empty.
     ///
-    /// Content segments hold no `\n`, so the list is lines separated by `newlineSegment`.
+    /// Content segments hold no `\n`, so the list is lines, each one or more segments, separated by `newlineSegment`.
     private func normalizeCodeBlockSegments(_ segs: inout UniqueArray<Segment>, isFenced: Bool) {
         let nl = storage.newlineSegment
         var lo = 0
@@ -2298,20 +2315,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
 
         if !isFenced {
-            // A trailing blank line is its separator, followed by its spaces and tabs past the four-column indent if it
-            // keeps any.
-            while lo < hi {
-                let last = segs[hi - 1]
-                if last == nl {
+            // A trailing blank line is its separator, followed by the segments of its spaces and tabs past the
+            // four-column indent if it keeps any.
+            trailing: while lo < hi {
+                if segs[hi - 1] == nl {
                     hi -= 1
                     continue
                 }
-                if isSpaceOrTabOnly(last) {
-                    hi -= 1
-                    if hi > lo && segs[hi - 1] == nl { hi -= 1 }
-                    continue
+                var lineStart = hi
+                while lineStart > lo && segs[lineStart - 1] != nl {
+                    lineStart -= 1
+                    if !isSpaceOrTabOnly(segs[lineStart]) {
+                        break trailing
+                    }
                 }
-                break
+                hi = lineStart
             }
         }
 
@@ -2329,7 +2347,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         segs.append(nl)
     }
 
-    /// Whether `segment`, a code block line, holds only spaces and tabs.
+    /// Whether `segment`, a piece of a code block line, holds only spaces and tabs.
     private func isSpaceOrTabOnly(_ segment: Segment) -> Bool {
         segment.chunk.range.allSatisfy { readByte(at: $0, in: segment.chunk).isSpaceOrTab }
     }
