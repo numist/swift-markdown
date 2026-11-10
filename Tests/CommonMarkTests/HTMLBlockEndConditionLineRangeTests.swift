@@ -11,7 +11,7 @@
 import Testing
 import CommonMark
 
-/// HTML blocks of types 1 to 5 whose end condition is on a later line than their start condition.
+/// Where an HTML block's source range ends.
 ///
 /// An HTML block of types 1 to 5 continues until a line that meets its end condition, and that line is the last line
 /// of the block (HTML blocks), so the block ends at the end of that line, including text after the end condition and
