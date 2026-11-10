@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-// Source columns are 1-based UTF-8 byte offsets into the source, and a node's
-// `sourceRange.upperBound` is the offset just past the node's last byte.
-
 @Suite("Adversarial Unicode encoding source positions")
 struct AdversarialEncodingPositionTests {
 
@@ -54,11 +51,8 @@ struct AdversarialEncodingPositionTests {
     private func isList(_ k: MarkdownNode.Kind) -> Bool { if case .list = k { return true } else { return false } }
     private func isItem(_ k: MarkdownNode.Kind) -> Bool { if case .item = k { return true } else { return false } }
 
-    // MARK: - A. Grapheme clusters (multi-codepoint glyphs)
+    // MARK: - A. Grapheme clusters
     //
-    // A grapheme cluster is one user-perceived glyph built from several code points; each code point
-    // is 1..4 UTF-8 bytes. The column must advance by the TOTAL byte count, not 1 per glyph or 1 per
-    // code point.
     //   ZWJ family "👨‍👩‍👧" = U+1F468(4) U+200D(3) U+1F469(4) U+200D(3) U+1F467(4) = 18 bytes
     //   flag       "🇺🇸"   = U+1F1FA(4) U+1F1F8(4)                                     = 8 bytes
     //   skin tone  "👍🏽"   = U+1F44D(4) U+1F3FD(4)                                     = 8 bytes
@@ -142,8 +136,7 @@ struct AdversarialEncodingPositionTests {
 
     // MARK: - B. Multibyte characters at line boundaries
     //
-    // A line ending resets the column to 1 on the next line; the byte count of a trailing multibyte
-    // character must not leak across the boundary. "€" = U+20AC = 3 bytes.
+    // "€" = U+20AC = 3 bytes.
 
     @Test("a multibyte char just before a line ending does not shift the next line's column 1")
     func multibyteBeforeLineEndingResetsColumn() throws {
@@ -155,9 +148,9 @@ struct AdversarialEncodingPositionTests {
         #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 3))
     }
 
-    @Test("CRLF after a multibyte char resets the next line's column and drops the CR")
+    @Test("a CRLF line ending after a multibyte char resets the next line's column")
     func crlfWithMultibyte() throws {
-        // "a€\r\nbb": the CR is consumed with the LF; line 2 starts at col 1, identical to the LF case.
+        // CR LF is one line ending (Characters and lines), so the ranges match the LF case.
         let ranges = collect("a\u{20AC}\r\nbb")
         let texts = textRanges(ranges)
         try #require(texts.count == 2)
@@ -165,7 +158,7 @@ struct AdversarialEncodingPositionTests {
         #expect(texts[1] == Pos(line: 2, column: 1)..<Pos(line: 2, column: 3))
     }
 
-    @Test("a multibyte char as the last char of a paragraph ends at the past-the-bytes column")
+    @Test("a paragraph ending in a multibyte char ends just past its last byte")
     func multibyteAsLastCharOfParagraph() throws {
         // "ab€" -> 'a'(1) 'b'(2) '€'(3..5), 5 bytes -> 1:1..1:6.
         let ranges = collect("ab\u{20AC}")
@@ -203,10 +196,9 @@ struct AdversarialEncodingPositionTests {
 
     @Test("'#' followed by a multibyte char (no space) is NOT a heading")
     func atxHashFollowedByMultibyteIsNotHeading() throws {
-        // An ATX opener requires a space/tab/EOL after the '#'. "#é" has 'é' after '#', so it stays a
-        // paragraph. 'é' = U+00E9 = 2 bytes; "#é" is 3 bytes -> text 1:1..1:4.
+        // 'é' = U+00E9 = 2 bytes, so "#é" is 3 bytes -> text 1:1..1:4.
         let ranges = collect("#\u{E9}")
-        #expect(!hasKind(ranges, isHeading), "‘#’ + non-space must not open a heading")
+        #expect(!hasKind(ranges, isHeading))
         let texts = textRanges(ranges)
         try #require(texts.count == 1)
         #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 4))
@@ -228,10 +220,9 @@ struct AdversarialEncodingPositionTests {
 
     @Test("'-' followed by a multibyte char (no space) is NOT a list")
     func bulletMarkerFollowedByMultibyteIsNotList() throws {
-        // A bullet marker must be followed by a space/tab/EOL. "-é" has 'é' after '-', so it stays a
-        // paragraph. "-é" is 3 bytes -> text 1:1..1:4.
+        // "-é" is 3 bytes -> text 1:1..1:4.
         let ranges = collect("-\u{E9}")
-        #expect(!hasKind(ranges, isList), "‘-’ + non-space must not open a list")
+        #expect(!hasKind(ranges, isList))
         let texts = textRanges(ranges)
         try #require(texts.count == 1)
         #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 4))

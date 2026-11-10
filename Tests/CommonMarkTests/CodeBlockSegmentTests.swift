@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// A code or HTML block's body is a sequence of segments, each line's content followed by its line ending, that
-/// concatenate to the body.
+/// A code or HTML block's body holds a segment for each nonempty line's content and a `\n` segment for each line
+/// ending, CRLF included.
 @Suite("Code/HTML block segment content")
 struct CodeBlockSegmentTests {
 
@@ -149,7 +149,7 @@ struct CodeBlockSegmentTests {
             """)
     }
 
-    @Test("a tab split by nested-container indentation becomes its remaining columns as spaces")
+    @Test("a tab split by a block quote marker becomes its remaining columns as spaces")
     func tabSplitByContainerIndent() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
         // The block quote marker takes `>` and one column of the first tab (Tabs). Of the six columns of indentation

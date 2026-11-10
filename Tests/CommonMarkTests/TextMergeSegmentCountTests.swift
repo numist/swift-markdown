@@ -13,7 +13,7 @@ import Testing
 
 /// Adjacent text produced by character escapes, entities and smart punctuation is merged into one text node whose
 /// content is a run of the stored segments, with no new segments when the pieces are already adjacent.
-@Suite("Merging adjacent text stores few segments")
+@Suite("Merging adjacent text adds a constant number of segments per copy")
 struct TextMergeSegmentCountTests {
 
     /// How many segments each further copy of `source` adds to a paragraph of one to five copies separated by spaces.

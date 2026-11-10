@@ -97,7 +97,7 @@ struct BackslashHardBreakRangeTests {
 
     @Test("text after a backslash break on a lazy continuation line keeps its source column")
     func textAfterBreakOnLazyListContinuation() throws {
-        // Lines 2 and 3 are lazy continuation lines (Block quotes) of the list item's paragraph.
+        // Lines 2 and 3 are lazy continuation lines (List items) of the list item's paragraph.
         let texts = textRanges(in: "- b\n \\\nc")
         try #require(texts.count == 2)
         #expect(texts[0]?.lowerBound == Pos(line: 1, column: 3))   // "b"

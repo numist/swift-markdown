@@ -11,8 +11,7 @@
 import Testing
 import CommonMark
 
-/// A lazy continuation line's text has the source range of its own bytes, which start at column 1 rather than at the
-/// list item's content column.
+/// A lazy continuation line's text starts at its first byte, column 1.
 @Suite("Lazy continuation line columns")
 struct LazyContinuationLineColumnTests {
 

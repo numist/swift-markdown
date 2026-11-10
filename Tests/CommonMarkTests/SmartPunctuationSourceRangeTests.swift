@@ -12,8 +12,7 @@ import Testing
 import CommonMark
 
 /// Source ranges of the text that `.smart` replaces: an ellipsis, en and em dashes, and curly quotes each span the
-/// source bytes they replace, so the text they merge into keeps those bytes' columns. Columns are 1-based UTF-8 byte
-/// offsets and each end is half-open.
+/// source bytes they replace, so the text they merge into keeps those bytes' columns.
 @Suite("Source ranges of smart punctuation")
 struct SmartPunctuationSourceRangeTests {
 

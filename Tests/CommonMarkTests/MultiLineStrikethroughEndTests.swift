@@ -12,7 +12,7 @@ import Testing
 import CommonMark
 
 /// Source ranges of a strikethrough (Strikethrough (extension)) whose opening and closing tildes may sit
-/// on different lines. The range ends just past the closing tildes, on their own line.
+/// on different lines.
 @Suite("Multi-line strikethrough source ranges")
 struct MultiLineStrikethroughEndTests {
 

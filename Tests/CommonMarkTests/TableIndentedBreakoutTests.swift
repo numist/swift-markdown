@@ -24,7 +24,7 @@ struct TableIndentedBreakoutTests {
         return out
     }
 
-    /// Header- and body-row counts of the first (and here only) table in the document.
+    /// Header- and body-row counts over every table in the document.
     private func tableRowCounts(_ doc: borrowing MarkdownDocument) -> (header: Int, body: Int) {
         let kinds = dfs(doc).map(\.kind)
         let header = kinds.filter { $0 == .tableRow(isHeader: true) }.count

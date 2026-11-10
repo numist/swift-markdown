@@ -11,11 +11,9 @@
 import Testing
 import CommonMark
 
-/// Source positions of every block construct across Unicode encodings. Source columns are 1-based UTF-8 byte
-/// offsets, so a multi-byte scalar before or inside a construct's content advances the column by its byte count
-/// (2 for `é`/`U+00E9`, 3 for `€`/`U+20AC`, 4 for `😀`/`U+1F600`, 3 for a combining sequence `e` + `U+0301`, 3 for
-/// `U+FFFD`), and a tab counts as one byte.
-@Suite("Block source positions — Unicode encodings")
+/// Source positions of block constructs holding multibyte UTF-8. A column counts bytes, so a scalar advances it by
+/// its UTF-8 length (2 for `é`, 3 for `€` and `U+FFFD`, 4 for `😀`), `e` + `U+0301` by 3, and a tab by 1.
+@Suite("Block source positions with multibyte UTF-8")
 struct BlockPositionEncodingTests {
 
     fileprivate typealias Pos = MarkdownNode.SourcePosition
@@ -23,12 +21,6 @@ struct BlockPositionEncodingTests {
     private static let opts: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]
 
-    /// One collected node: its kind (which carries heading level / list info / checkbox / code-fence
-    /// metadata as associated values), the literal it exposes (text run, code-block body, HTML-block
-    /// body), the code-block info string, and its source range.
-    ///
-    /// `fileprivate` (not `private`) so the file-scope `collect(_:into:)` — required because a
-    /// `~Escapable` `MarkdownNode` can't be captured by an instance-method closure — can name it.
     fileprivate struct Collected {
         let kind: MarkdownNode.Kind
         let literal: String?
@@ -66,8 +58,7 @@ struct BlockPositionEncodingTests {
         try oneLineParagraph("\u{1F600} x", endColumn: 7)
         // e + combining acute (U+0301): "e"(1) + combining(2) = 3 bytes, then " x": 5 bytes → col 6.
         try oneLineParagraph("e\u{301} x", endColumn: 6)
-        // U+FFFD replacement (3 bytes) then " x": 5 bytes → end column 6. Doubles as the invalid-repair
-        // byte-accounting case: a repaired sequence is the 3-byte U+FFFD, so it counts as 3 columns.
+        // U+FFFD (3 bytes) then " x": 5 bytes → end column 6.
         try oneLineParagraph("\u{FFFD} x", endColumn: 6)
         // TAB is a single byte, not expanded: "a\tb" = 3 bytes → end column 4.
         try oneLineParagraph("a\tb", endColumn: 4)
@@ -228,7 +219,7 @@ struct BlockPositionEncodingTests {
             #expect(out[3].range == r(1, 3, 1, 5))
             #expect(out[3].literal == "hi")
         }
-        // "> é x" (content 3 bytes + " x"): text @1:3-1:7.
+        // "> é x" (2 + 1 + 1 bytes of content): text @1:3-1:7.
         do {
             let out = parse("> \u{E9} x")
             try #require(shape(out) == ["document", "blockQuote", "paragraph", "text"])
@@ -260,7 +251,7 @@ struct BlockPositionEncodingTests {
             #expect(out[4].range == r(1, 5, 1, 7))
             #expect(out[4].literal == "\u{E9}")
         }
-        // Matched multi-line "> a\n> b": both continuation lines keep content column 3.
+        // Matched multi-line "> a\n> b": both lines' content starts at column 3.
         do {
             let out = parse("> a\n> b")
             try #require(shape(out) == ["document", "blockQuote", "paragraph", "text", "softBreak", "text"])
@@ -546,7 +537,7 @@ struct BlockPositionEncodingTests {
         Pos(line: l1, column: c1)..<Pos(line: l2, column: c2)
     }
 
-    /// The kind discriminators of a collected tree, in DFS order — the structural fixture-sanity key.
+    /// The kind names of a collected tree, in DFS order.
     private func shape(_ out: [Collected]) -> [String] {
         out.map { tag($0.kind) }
     }
@@ -592,7 +583,6 @@ struct BlockPositionEncodingTests {
     }
 }
 
-// File scope because a `MarkdownNode` is `~Escapable`, so an instance-method closure can't capture it.
 private func collect(
     _ node: borrowing MarkdownNode,
     into out: inout [BlockPositionEncodingTests.Collected]

@@ -53,7 +53,7 @@ struct ContainerParagraphSourceContentTests {
         "> a | b | c\n> --|--\n",
     ])
     func noMaterializedCopy(_ source: String) {
-        // The stored strings hold only the one shared line ending.
+        // The materialized string buffer holds only the shared newline.
         #expect(MarkdownDocument.withParsedDocument(source, options: []) { $0._materializedStringSize } == 1)
         #expect(MarkdownDocument.withParsedDocument(source, options: [.tables]) { $0._materializedStringSize } == 1)
     }

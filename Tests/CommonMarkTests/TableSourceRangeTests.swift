@@ -108,7 +108,8 @@ struct TableSourceRangeTests {
             """)
     }
 
-    /// A form feed is whitespace but not a blank line, so a line holding only one is a body row with one empty cell.
+    /// A form feed is whitespace but not a blank line, so a line holding only one is a body row. The form feed is
+    /// padding before the row's one cell, which holds nothing, as the cell in `||` does.
     @Test
     func whitespaceOnlyLastRow() {
         #expect(tree("| a |\n|---|\n\u{0C}\n") == """

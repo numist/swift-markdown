@@ -24,8 +24,8 @@ struct LargeDocumentTests {
 
     static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .tables]
 
-    /// Blocks whose content is materialized: a setext heading whose lines a block quote's markers separate, and a table
-    /// with an escaped pipe, an entity and a code span.
+    /// Blocks after the first: a setext heading whose lines a block quote's markers separate, read from the source in
+    /// pieces, and a table whose escaped pipe and entity are copied and whose code span is not.
     static let tail = "> c\n> d\n> ===\n\n| x | y\\|z |\n| - | - |\n| &amp; | `q` |\n"
 
     /// `prefix`, `count` copies of `byte`, and `suffix`.
@@ -111,7 +111,7 @@ struct LargeDocumentTests {
 
     @Test
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
-    func longParagraph() {
+    func paragraph() {
         let (first, rest) = Self.dumpBlocks(Self.document("", "a", count: 3, " *b*\n\n" + Self.tail))
         #expect(first == """
             paragraph @1:1-1:8
