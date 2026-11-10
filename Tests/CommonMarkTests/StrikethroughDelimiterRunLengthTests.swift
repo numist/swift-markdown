@@ -18,8 +18,7 @@ struct StrikethroughDelimiterRunLengthTests {
 
     private static let longRun = String(repeating: "~", count: 10_000)
 
-    // `**` puts punctuation before an opener so that it is left-flanking, and `)` gives a strikethrough content of
-    // its own.
+    // The opener is followed by the punctuation `)`, so the `**` before it, also punctuation, makes it left-flanking.
 
     @Test("one- and two-tilde runs pair with a run of the same length; three-tilde runs stay literal", arguments: [
         ("~x~", """
