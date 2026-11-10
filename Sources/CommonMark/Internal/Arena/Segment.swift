@@ -11,15 +11,26 @@
 /// One piece of a node's content: a byte range in the source (`inSource`) or the string arena.
 ///
 /// A run of segments (`ContentRef`) represents content that spans several source ranges or mixes in synthetic bytes, without copying the source.
+///
+/// `inSource` is stored in the top bit of the length word, which a byte length never reaches, so a segment is two words.
 internal struct Segment: Equatable {
     internal var offset: Int
-    internal var length: Int
-    internal var inSource: Bool
+    private var lengthAndInSource: UInt
+
+    private static let inSourceBit: UInt = 1 << (UInt.bitWidth - 1)
+
+    internal var length: Int {
+        get { Int(bitPattern: lengthAndInSource & ~Self.inSourceBit) }
+        set { lengthAndInSource = (lengthAndInSource & Self.inSourceBit) | UInt(newValue) }
+    }
+
+    internal var inSource: Bool {
+        lengthAndInSource & Self.inSourceBit != 0
+    }
 
     internal init(offset: Int, length: Int, inSource: Bool) {
         self.offset = offset
-        self.length = length
-        self.inSource = inSource
+        self.lengthAndInSource = UInt(length) | (inSource ? Self.inSourceBit : 0)
     }
 
     internal init(_ chunk: Chunk) {
