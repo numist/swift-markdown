@@ -13,8 +13,8 @@ import CommonMark
 
 /// Backtick openers after a backslash-escaped backtick (Backslash escapes, Code spans).
 ///
-/// An escaped backtick is literal, and the rest of its backtick string is a backtick string of its own, which may open a
-/// code span.
+/// An escaped backtick is literal, and the rest of its backtick string is a backtick string of its own, which may
+/// open a code span.
 @Suite("Code span openers around an escaped backtick")
 struct CodeSpanEscapedBacktickTests {
 
