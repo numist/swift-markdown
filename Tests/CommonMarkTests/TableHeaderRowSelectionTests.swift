@@ -902,7 +902,7 @@ struct TableHeaderRowSelectionTests {
             """)
     }
 
-    // MARK: - Only the delimiter row's own line decides whether a table opens
+    // MARK: - An indented or lazy header row line does not prevent the table
 
     /// An indented paragraph continuation line is paragraph text (Paragraphs) and becomes the header row;
     /// only an indented delimiter row would prevent the table.
