@@ -1766,32 +1766,31 @@ struct GFMAutolinkTests {
 @Suite("GFM extensions - footnotes")
 struct FootnoteTests {
 
-    /// Pull the first .footnoteReference (label, index) and the first .footnoteDefinition (label, refCount) anywhere in the doc.
+    /// Pull the first .footnoteReference (label, index) and the first .footnoteDefinition's label anywhere in the doc.
     private static func firstFootnotes(_ doc: borrowing MarkdownDocument) -> (
         ref: (label: String?, index: Int?)?,
-        def: (label: String?, refCount: Int?)?
+        defLabel: String?
     ) {
         var ref: (String?, Int?)? = nil
-        var def: (String?, Int?)? = nil
+        var defLabel: String? = nil
         let root = doc.root
-        visit(root, ref: &ref, def: &def)
-        return (ref, def)
+        visit(root, ref: &ref, defLabel: &defLabel)
+        return (ref, defLabel)
     }
 
     private static func visit(
         _ node: borrowing MarkdownNode,
         ref: inout (String?, Int?)?,
-        def: inout (String?, Int?)?
+        defLabel: inout String?
     ) {
         if case .footnoteReference(let index) = node.kind, ref == nil {
             ref = (node.footnoteLabel(), index)
         }
-        if node.kind == .footnoteDefinition, def == nil {
-            // A definition's reference count has no public accessor, so only its label is checked.
-            def = (node.footnoteLabel(), nil)
+        if node.kind == .footnoteDefinition, defLabel == nil {
+            defLabel = node.footnoteLabel()
         }
         node.children.forEach { child in
-            visit(child, ref: &ref, def: &def)
+            visit(child, ref: &ref, defLabel: &defLabel)
         }
     }
 
@@ -1809,7 +1808,7 @@ struct FootnoteTests {
         let source = "[^a]: footnote body\n\nref [^a]"
         MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         let info = Self.firstFootnotes(doc)
-        #expect(info.def?.label == "a")
+        #expect(info.defLabel == "a")
         #expect(info.ref?.label == "a")
         #expect(info.ref?.index == 1)
         }
@@ -1822,7 +1821,7 @@ struct FootnoteTests {
         let info = Self.firstFootnotes(doc)
         #expect(info.ref?.label == "a")
         #expect(info.ref?.index == 1)
-        #expect(info.def?.label == "a")
+        #expect(info.defLabel == "a")
         }
     }
 
@@ -1880,7 +1879,7 @@ struct FootnoteTests {
     }
 
     @Test("[^x] without `^` interior stays as link/text")
-    func noFootnoteWithoutCaret() throws {
+    func noFootnoteWithoutCaret() {
         // `[x]` is a shortcut reference link candidate with no definition, so it is text.
         let source = "[x]"
         MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
