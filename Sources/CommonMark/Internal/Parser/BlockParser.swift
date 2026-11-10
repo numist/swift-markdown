@@ -915,11 +915,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             } else {
                 storage.unlinkChild(precedingNode)
             }
-        } else if let content = rawContentRange(in: segs, taskItemParagraph: precedingNode) {
+        } else if case let total = totalLength(of: segs), let content = rawContentRange(in: segs, total: total, taskItemParagraph: precedingNode) {
             if content.isEmpty {
                 storage.unlinkChild(precedingNode)
             } else {
-                enqueueRawContent(of: precedingNode, self.segments(segs, in: content))
+                enqueueRawContent(of: precedingNode, self.segments(segs, in: content, total: total))
             }
         } else {
             emptySourceRangeAtStart(precedingNode)
@@ -939,17 +939,27 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return (first.offset, last.offset + last.length)
     }
 
-    /// The source offset just past virtual offset `end - 1` of a paragraph's segments, a byte that is not whitespace.
-    private func sourceEnd(ofVirtual end: Int, in segs: borrowing UniqueArray<Segment>) -> Int {
+    /// The source offset just past virtual offset `end - 1` of a paragraph's segments, `total` bytes long, a byte that
+    /// is not whitespace.
+    private func sourceEnd(ofVirtual end: Int, in segs: borrowing UniqueArray<Segment>, total: Int) -> Int {
         precondition(end > 0, "a paragraph's content that is not whitespace is not empty")
-        var i = 0
-        var segmentStart = 0
-        while segmentStart + segs[i].length < end {
-            segmentStart += segs[i].length
-            i += 1
-        }
+        let (i, segmentStart) = segment(endingAtOrAfter: end, in: segs, total: total)
         precondition(segs[i].inSource, "a paragraph's lines start and end on a source byte")
         return segs[i].offset + end - segmentStart
+    }
+
+    /// The last of the non-empty virtual range's segments `segs`, `total` bytes long, whose range ends at or past
+    /// `end`, and where it starts.
+    ///
+    /// It is searched for from the end, since a leaf's trailing whitespace lies within its last line or two.
+    private func segment(endingAtOrAfter end: Int, in segs: borrowing UniqueArray<Segment>, total: Int) -> (index: Int, start: Int) {
+        var i = segs.count - 1
+        var start = total - segs[i].length
+        while start >= end {
+            i -= 1
+            start -= segs[i].length
+        }
+        return (i, start)
     }
 
     /// The source extent imaged by the run map of trimmed paragraph content: from its first run's byte to just past
@@ -1155,7 +1165,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let trimmed = Chunk(offset: range.lowerBound, length: range.count, inSource: true).trimmingWhitespace(using: self)
             return parseDefinitions(in: trimmed).trimmingWhitespace(using: self).range
         case .segments(let segs):
-            return rawContentRange(in: segs, taskItemParagraph: nil) ?? 0..<0
+            return rawContentRange(in: segs, total: totalLength(of: segs), taskItemParagraph: nil) ?? 0..<0
         }
     }
 
@@ -1165,7 +1175,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .lazy:
             return .lazy(range: range)
         case .segments(let segs):
-            return .segments(segments(segs, in: range))
+            let total = totalLength(of: segs)
+            return .segments(segments(segs, in: range, total: total))
         }
     }
 
@@ -1886,12 +1897,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return storage.strings[seg.offset + local]
     }
 
-    /// The virtual range of a leaf's lines `segs` without leading and trailing whitespace (Paragraphs, Setext headings).
-    private func trimmedRange(of segs: borrowing UniqueArray<Segment>) -> Range<Int> {
+    /// The total length of a leaf's lines `segs`, line joins included.
+    private func totalLength(of segs: borrowing UniqueArray<Segment>) -> Int {
         var total = 0
         for i in 0..<segs.count {
             total += segs[i].length
         }
+        return total
+    }
+
+    /// The virtual range of a leaf's lines `segs`, `total` bytes long, without leading and trailing whitespace
+    /// (Paragraphs, Setext headings).
+    private func trimmedRange(of segs: borrowing UniqueArray<Segment>, total: Int) -> Range<Int> {
         var lower = 0
         leading: for i in 0..<segs.count {
             let seg = segs[i]
@@ -1915,21 +1932,27 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return lower..<upper
     }
 
-    /// `segs` narrowed to the virtual `range`, whose bounds lie on source bytes.
-    private func segments(_ segs: consuming UniqueArray<Segment>, in range: Range<Int>) -> UniqueArray<Segment> {
+    /// `segs`, `total` bytes long, narrowed to the virtual `range`, whose bounds lie on source bytes.
+    private func segments(_ segs: consuming UniqueArray<Segment>, in range: Range<Int>, total: Int) -> UniqueArray<Segment> {
         precondition(!range.isEmpty, "a leaf's narrowed content is not empty")
         var segs = segs
-        var first = 0
-        var firstStart = 0
-        while firstStart + segs[first].length <= range.lowerBound {
-            firstStart += segs[first].length
-            first += 1
-        }
-        var last = first
-        var lastStart = firstStart
-        while lastStart + segs[last].length < range.upperBound {
-            lastStart += segs[last].length
-            last += 1
+        let (last, lastStart) = segment(endingAtOrAfter: range.upperBound, in: segs, total: total)
+        // The first segment is searched for from the nearer end, so the search passes no more lines than the leading
+        // definitions it skips or the content it keeps.
+        var first = last
+        var firstStart = lastStart
+        if range.lowerBound < lastStart - range.lowerBound {
+            first = 0
+            firstStart = 0
+            while firstStart + segs[first].length <= range.lowerBound {
+                firstStart += segs[first].length
+                first += 1
+            }
+        } else {
+            while firstStart > range.lowerBound {
+                first -= 1
+                firstStart -= segs[first].length
+            }
         }
         segs[last].length = range.upperBound - lastStart
         segs[first].offset += range.lowerBound - firstStart
@@ -1942,24 +1965,25 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Queues the raw content of the paragraph `node` whose lines are `segs` for inline parsing, as segments of the
     /// source, or removes the paragraph when its definitions or task list item marker leave nothing.
     private mutating func finishParagraph(_ node: DocumentStorage.Index, segments segs: consuming UniqueArray<Segment>) {
-        guard let content = rawContentRange(in: segs, taskItemParagraph: node) else {
+        let total = totalLength(of: segs)
+        guard let content = rawContentRange(in: segs, total: total, taskItemParagraph: node) else {
             // Lines holding only line tabulations and form feeds leave the paragraph no raw content (Paragraphs).
             emptySourceRangeAtStart(node)
             return
         }
         if content.isEmpty {
-            removeEmptiedParagraph(node, contentEnd: positionsEnabled ? sourceEnd(ofVirtual: content.upperBound, in: segs) : nil)
+            removeEmptiedParagraph(node, contentEnd: positionsEnabled ? sourceEnd(ofVirtual: content.upperBound, in: segs, total: total) : nil)
             return
         }
-        enqueueRawContent(of: node, segments(segs, in: content))
+        enqueueRawContent(of: node, segments(segs, in: content, total: total))
     }
 
-    /// The virtual range of the raw content of the paragraph `node` whose lines are `segs` (see
+    /// The virtual range of the raw content of the paragraph `node` whose lines are `segs`, `total` bytes long (see
     /// `rawContentStart(in:trimmed:taskItemParagraph:)`), or `nil` when its lines are all whitespace. The range is
     /// empty, at the end of the lines' trimmed range, when the paragraph's definitions or task list item marker leave
     /// nothing.
-    private mutating func rawContentRange(in segs: borrowing UniqueArray<Segment>, taskItemParagraph node: DocumentStorage.Index?) -> Range<Int>? {
-        let trimmed = trimmedRange(of: segs)
+    private mutating func rawContentRange(in segs: borrowing UniqueArray<Segment>, total: Int, taskItemParagraph node: DocumentStorage.Index?) -> Range<Int>? {
+        let trimmed = trimmedRange(of: segs, total: total)
         if trimmed.isEmpty {
             return nil
         }
