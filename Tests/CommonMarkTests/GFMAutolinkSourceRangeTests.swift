@@ -137,8 +137,8 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// A backslash before a line ending is a hard line break (Hard line breaks), and `[^*b@b.B` matches no footnote
-    /// definition, so the bracket is text spanning its own bytes on either side of the email autolink.
+    /// A backslash before a line ending is a hard line break (Hard line breaks), and with no matching link reference
+    /// definition the bracket is no image, so it is text spanning its own bytes on either side of the email autolink.
     @Test("an email in an undefined footnote-shaped bracket across a hard line break spans the address")
     func emailInUndefinedFootnoteBracket() {
         #expect(tree("![^*b@b.B\\\n]", options: Self.opts.union(.footnotes)) == """

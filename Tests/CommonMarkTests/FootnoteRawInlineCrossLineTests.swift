@@ -12,9 +12,9 @@ import Testing
 import CommonMark
 
 /// Code spans and raw HTML bind more tightly than the brackets in link text (Links), and likewise than a
-/// footnote-shaped bracket: with no footnote definition, one enclosing a code span, raw HTML or image that spans a
-/// line ending is literal text around it. A backslash before the line ending there is literal, not a hard line break
-/// (Hard line breaks).
+/// footnote-shaped bracket: with no matching link reference definition, one enclosing a code span, raw HTML or image
+/// that spans a line ending is literal text around it. A backslash before the line ending there is literal, not a hard
+/// line break (Hard line breaks).
 @Suite("Footnote-shaped bracket around a code span, raw HTML or image spanning a line ending")
 struct FootnoteRawInlineCrossLineTests {
 
