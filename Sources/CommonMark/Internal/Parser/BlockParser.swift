@@ -617,7 +617,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     ///
     /// `cursor` is mid-tab when a block quote marker's optional space or a list item's indent consumed part of a tab;
     /// the tab's leftover columns become spaces (Tabs).
-    private func htmlLineBody(lineRange: Range<Int>, cursor: Int, column: Int) -> (bodyStart: Int, leadingSpaces: Int) {
+    private mutating func htmlLineBody(lineRange: Range<Int>, cursor: Int, column: Int) -> (bodyStart: Int, leadingSpaces: Int) {
         var lineColumns = LineColumns(lineStart: lineRange.lowerBound)
         let priorColumn = lineColumns.column(at: cursor, in: sourceBytes)
         return stripIndent(
@@ -2665,7 +2665,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// The HTML block start condition (1–7, HTML blocks) the line meets at `firstNonSpace`, if any. Type 7 needs `allowType7`, since it can't interrupt a paragraph.
-    private func matchHTMLBlockStart(range: Range<Int>, firstNonSpace: Int, allowType7: Bool) -> UInt8? {
+    private mutating func matchHTMLBlockStart(range: Range<Int>, firstNonSpace: Int, allowType7: Bool) -> UInt8? {
         assert(firstNonSpace - range.lowerBound <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         if sourceBytes[firstNonSpace] != UInt8(ascii: "<") {
@@ -2767,7 +2767,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Whether the line meets the end condition of an HTML block of `type` anywhere (HTML blocks).
-    private func htmlBlockLineMatchesEndCondition(type: UInt8, range: Range<Int>) -> Bool {
+    private mutating func htmlBlockLineMatchesEndCondition(type: UInt8, range: Range<Int>) -> Bool {
         switch type {
         case 1:
             for tag in Self.htmlBlockType1Tags {
