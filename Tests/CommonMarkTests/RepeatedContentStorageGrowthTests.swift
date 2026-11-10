@@ -11,14 +11,14 @@
 import Testing
 import CommonMark
 
-/// Storage growth for a repetition of each of many small units, one per way the parser copies, carves, merges, splits or
-/// materializes content.
+/// Storage growth for a repetition of each of many small units covering the ways the parser copies, carves, merges,
+/// splits or materializes content.
 ///
 /// Node content is stored as runs of segments over the source and a buffer of materialized bytes. A step that re-copies a
 /// run growing with the input - merging text, splitting it into links, joining a construct across lines, projecting a table cell,
 /// expanding a tab, replacing a NUL - makes a document of repeated units store content with the square of its size and
-/// exhausts memory on inputs of a few tens of kilobytes. Each unit is repeated a thousand times, under every option set
-/// that reaches its step, and both stores must stay within sixteen entries per source byte.
+/// exhausts memory on inputs of a few tens of kilobytes. Each unit is repeated a thousand times, under the option sets
+/// that reach its step, and both stores must stay within sixteen entries per source byte.
 @Suite("Repeated content stores linear content")
 struct RepeatedContentStorageGrowthTests {
 
