@@ -15,7 +15,7 @@ import Testing
 /// (`[^[…]`).
 @Suite("Footnote caret-bracket resolution")
 struct FootnoteCaretBracketResolutionTests {
-    private static func surface(_ markdown: String) -> String {
+    private static func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: [.sourcePosition, .footnotes])
     }
 
@@ -108,6 +108,6 @@ struct FootnoteCaretBracketResolutionTests {
                 """),
         ] as [(String, String)])
     func caretBracketStaysLiteral(_ markdown: String, _ expected: String) {
-        #expect(Self.surface(markdown) == expected)
+        #expect(Self.tree(markdown) == expected)
     }
 }

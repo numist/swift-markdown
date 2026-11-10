@@ -16,7 +16,7 @@ import Testing
 /// break.
 @Suite("Footnote-shaped bracket across a line ending: definition lookup")
 struct FootnoteCrossLineBracketLookupTests {
-    private static func surface(_ markdown: String) -> String {
+    private static func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: .footnotes)
     }
 
@@ -79,6 +79,6 @@ struct FootnoteCrossLineBracketLookupTests {
                 """),
     ])
     func everyBracketStaysLiteral(_ markdown: String, _ expected: String) {
-        #expect(Self.surface(markdown) == expected)
+        #expect(Self.tree(markdown) == expected)
     }
 }

@@ -16,12 +16,12 @@ import Testing
 struct EmptyFootnoteDefinitionWhitespaceLineTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .footnotes]
 
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: Self.options)
     }
 
     @Test func emptyLineKeepsDefinitionOpen() {
-        #expect(surface("- [^a]:\n\n\t\t\"") == """
+        #expect(tree("- [^a]:\n\n\t\t\"") == """
             document
               list bullet '-' tight
                 item
@@ -30,7 +30,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
     }
 
     @Test func topLevelSpaceOnlyLines() {
-        #expect(surface("[^a]:\n    \n    x\n\n[^a]") == """
+        #expect(tree("[^a]:\n    \n    x\n\n[^a]") == """
             document
               paragraph
                 footnote_reference "1"
@@ -42,7 +42,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
     }
 
     @Test func underindentedLineAfterWhitespaceLineClosesDefinition() {
-        #expect(surface("- [^a]: x\n \n  y") == """
+        #expect(tree("- [^a]: x\n \n  y") == """
             document
               list bullet '-' loose
                 item
@@ -53,7 +53,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
     }
 
     @Test func crlfEmptyLineKeepsDefinitionOpen() {
-        #expect(surface("- [^a]:\r\n\r\n\t\t\"") == """
+        #expect(tree("- [^a]:\r\n\r\n\t\t\"") == """
             document
               list bullet '-' tight
                 item
@@ -62,7 +62,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
     }
 
     @Test func definitionContinuesPastWhitespaceLine() {
-        #expect(surface("- [^a]:\n \n      x\n\n[^a]") == """
+        #expect(tree("- [^a]:\n \n      x\n\n[^a]") == """
             document
               list bullet '-' tight
                 item
@@ -79,7 +79,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
     /// definition is unreferenced.
     @Test(arguments: ["- [^a]:\n\t\n\t\t\"", "- [^a]:\n \n\t\t\"", "- [^a]:\r\t\n\t\t\"", "- [^\u{0}]:\r\t\n\t\t\"", "- [^a]:\n\t\n      x", "- [^a]:\r\n \r\n\t\t\""])
     func listItemDefinitionHoldsContentAfterWhitespaceLine(_ markdown: String) {
-        #expect(surface(markdown) == """
+        #expect(tree(markdown) == """
             document
               list bullet '-' tight
                 item
@@ -89,7 +89,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
 
     @Test(arguments: 1...3)
     func topLevelDefinitionHoldsContentAfterSpacesLine(spaces: Int) {
-        #expect(surface("[^a]:\n" + String(repeating: " ", count: spaces) + "\n    x\n\n[^a]") == """
+        #expect(tree("[^a]:\n" + String(repeating: " ", count: spaces) + "\n    x\n\n[^a]") == """
             document
               paragraph
                 footnote_reference "1"
@@ -101,18 +101,18 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
     }
 
     @Test func definitionHoldsContentAfterWhitespaceLine() {
-        #expect(surface("> [^a]:\n>\t\n>\t\tx") == """
+        #expect(tree("> [^a]:\n>\t\n>\t\tx") == """
             document
               block_quote
 
             """)
-        #expect(surface("1. [^a]:\n \n       x") == """
+        #expect(tree("1. [^a]:\n \n       x") == """
             document
               list ordered start=1 delim=period tight
                 item
 
             """)
-        #expect(surface("- - [^a]:\n \n        x") == """
+        #expect(tree("- - [^a]:\n \n        x") == """
             document
               list bullet '-' tight
                 item
@@ -120,14 +120,14 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
                     item
 
             """)
-        #expect(surface("- > [^a]:\n  >\n  >     x") == """
+        #expect(tree("- > [^a]:\n  >\n  >     x") == """
             document
               list bullet '-' tight
                 item
                   block_quote
 
             """)
-        #expect(surface("- [^a]:\n\t\n\t\tx\n\n[^a]") == """
+        #expect(tree("- [^a]:\n\t\n\t\tx\n\n[^a]") == """
             document
               list bullet '-' tight
                 item
@@ -138,7 +138,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
                   text "x"
 
             """)
-        #expect(surface("- [^a]: x\n \n\t\ty\n\n[^a]") == """
+        #expect(tree("- [^a]: x\n \n\t\ty\n\n[^a]") == """
             document
               list bullet '-' tight
                 item

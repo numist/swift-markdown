@@ -18,27 +18,27 @@ import Testing
 struct HTMLBlockType7ExcludedTagNameTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition]
 
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: Self.options, sourceRanges: true)
     }
 
     @Test func selfClosingScriptIsParagraph() {
-        #expect(surface("<script/>") == "document @1:1-1:10\n  paragraph @1:1-1:10\n    html_inline \"<script/>\" @1:1-1:10\n")
+        #expect(tree("<script/>") == "document @1:1-1:10\n  paragraph @1:1-1:10\n    html_inline \"<script/>\" @1:1-1:10\n")
     }
 
     @Test func selfClosingUppercasePreIsParagraph() {
-        #expect(surface("<PRE/>") == "document @1:1-1:7\n  paragraph @1:1-1:7\n    html_inline \"<PRE/>\" @1:1-1:7\n")
+        #expect(tree("<PRE/>") == "document @1:1-1:7\n  paragraph @1:1-1:7\n    html_inline \"<PRE/>\" @1:1-1:7\n")
     }
 
     @Test func selfClosingMixedCaseStyleIsParagraph() {
-        #expect(surface("<Style/>") == "document @1:1-1:9\n  paragraph @1:1-1:9\n    html_inline \"<Style/>\" @1:1-1:9\n")
+        #expect(tree("<Style/>") == "document @1:1-1:9\n  paragraph @1:1-1:9\n    html_inline \"<Style/>\" @1:1-1:9\n")
     }
 
     @Test func closingScriptTagStartsHTMLBlock() {
-        #expect(surface("</script>") == "document @1:1-1:10\n  html_block \"</script>\\n\" @1:1-1:10\n")
+        #expect(tree("</script>") == "document @1:1-1:10\n  html_block \"</script>\\n\" @1:1-1:10\n")
     }
 
     @Test func selfClosingScriptingStartsHTMLBlock() {
-        #expect(surface("<scripting/>") == "document @1:1-1:13\n  html_block \"<scripting/>\\n\" @1:1-1:13\n")
+        #expect(tree("<scripting/>") == "document @1:1-1:13\n  html_block \"<scripting/>\\n\" @1:1-1:13\n")
     }
 }

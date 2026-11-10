@@ -18,39 +18,39 @@ import Testing
 struct HTMLBlockStartTagWhitespaceTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition]
 
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: Self.options, sourceRanges: true)
     }
 
     @Test func formFeedAfterType1TagNameStartsHTMLBlock() {
-        #expect(surface("<pre\u{0C}>") == "document @1:1-1:7\n  html_block \"<pre\\u{C}>\\n\" @1:1-1:7\n")
+        #expect(tree("<pre\u{0C}>") == "document @1:1-1:7\n  html_block \"<pre\\u{C}>\\n\" @1:1-1:7\n")
     }
 
     @Test func formFeedAfterType6TagNameStartsHTMLBlock() {
-        #expect(surface("<div\u{0C}>") == "document @1:1-1:7\n  html_block \"<div\\u{C}>\\n\" @1:1-1:7\n")
+        #expect(tree("<div\u{0C}>") == "document @1:1-1:7\n  html_block \"<div\\u{C}>\\n\" @1:1-1:7\n")
     }
 
     @Test func lineTabulationAfterType6TagNameStartsHTMLBlock() {
-        #expect(surface("<div\u{0B}>") == "document @1:1-1:7\n  html_block \"<div\\u{B}>\\n\" @1:1-1:7\n")
+        #expect(tree("<div\u{0B}>") == "document @1:1-1:7\n  html_block \"<div\\u{B}>\\n\" @1:1-1:7\n")
     }
 
     @Test func formFeedBeforeType7AttributeStartsHTMLBlock() {
-        #expect(surface("<a\u{0C}ref=\"x\">") == "document @1:1-1:12\n  html_block \"<a\\u{C}ref=\\\"x\\\">\\n\" @1:1-1:12\n")
+        #expect(tree("<a\u{0C}ref=\"x\">") == "document @1:1-1:12\n  html_block \"<a\\u{C}ref=\\\"x\\\">\\n\" @1:1-1:12\n")
     }
 
     @Test func lineTabulationAfterOpenTagStartsHTMLBlock() {
-        #expect(surface("<a>\u{0B}") == "document @1:1-1:5\n  html_block \"<a>\\u{B}\\n\" @1:1-1:5\n")
+        #expect(tree("<a>\u{0B}") == "document @1:1-1:5\n  html_block \"<a>\\u{B}\\n\" @1:1-1:5\n")
     }
 
     @Test func formFeedAfterOpenTagStartsHTMLBlock() {
-        #expect(surface("<a>\u{0C}") == "document @1:1-1:5\n  html_block \"<a>\\u{C}\\n\" @1:1-1:5\n")
+        #expect(tree("<a>\u{0C}") == "document @1:1-1:5\n  html_block \"<a>\\u{C}\\n\" @1:1-1:5\n")
     }
 
     @Test func lineTabulationAfterClosingTagStartsHTMLBlock() {
-        #expect(surface("</a>\u{0B}\nx") == "document @1:1-2:2\n  html_block \"</a>\\u{B}\\nx\\n\" @1:1-2:2\n")
+        #expect(tree("</a>\u{0B}\nx") == "document @1:1-2:2\n  html_block \"</a>\\u{B}\\nx\\n\" @1:1-2:2\n")
     }
 
     @Test func textAfterLineTabulationIsParagraph() {
-        #expect(surface("<a>\u{0B}x") == "document @1:1-1:6\n  paragraph @1:1-1:6\n    html_inline \"<a>\" @1:1-1:4\n    text \"\\u{B}x\" @1:4-1:6\n")
+        #expect(tree("<a>\u{0B}x") == "document @1:1-1:6\n  paragraph @1:1-1:6\n    html_inline \"<a>\" @1:1-1:4\n    text \"\\u{B}x\" @1:4-1:6\n")
     }
 }

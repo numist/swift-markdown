@@ -18,7 +18,7 @@ import Testing
 struct AutolinkDomainLeadingPunctuationTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .gfmAutolink]
 
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: Self.options)
     }
 
@@ -27,35 +27,35 @@ struct AutolinkDomainLeadingPunctuationTests {
     }
 
     @Test func guillemetDomainIsText() {
-        #expect(surface("https://\u{AB}") == text("https://\u{AB}"))
+        #expect(tree("https://\u{AB}") == text("https://\u{AB}"))
     }
 
     @Test func guillemetDomainBeforeParenthesisIsText() {
-        #expect(surface("ftp://\u{AB})") == text("ftp://\u{AB})"))
+        #expect(tree("ftp://\u{AB})") == text("ftp://\u{AB})"))
     }
 
     @Test func guillemetDomainBeforePeriodIsText() {
-        #expect(surface("x http://\u{AB}.") == text("x http://\u{AB}."))
+        #expect(tree("x http://\u{AB}.") == text("x http://\u{AB}."))
     }
 
     @Test func uppercaseSchemeGuillemetDomainIsText() {
-        #expect(surface("HTTP://\u{AB}*") == text("HTTP://\u{AB}*"))
+        #expect(tree("HTTP://\u{AB}*") == text("HTTP://\u{AB}*"))
     }
 
     @Test func guillemetBeforeDottedDomainIsText() {
-        #expect(surface("http://\u{AB}a.b") == text("http://\u{AB}a.b"))
+        #expect(tree("http://\u{AB}a.b") == text("http://\u{AB}a.b"))
     }
 
     @Test func invertedExclamationDomainIsText() {
-        #expect(surface("http://\u{A1}x") == text("http://\u{A1}x"))
+        #expect(tree("http://\u{A1}x") == text("http://\u{A1}x"))
     }
 
     @Test func emDashDomainIsText() {
-        #expect(surface("http://\u{2014}x") == text("http://\u{2014}x"))
+        #expect(tree("http://\u{2014}x") == text("http://\u{2014}x"))
     }
 
     @Test func leftQuotationMarkDomainIsText() {
-        #expect(surface("http://\u{201C}x") == text("http://\u{201C}x"))
+        #expect(tree("http://\u{201C}x") == text("http://\u{201C}x"))
     }
 
     // MARK: - Unicode general categories
@@ -70,32 +70,32 @@ struct AutolinkDomainLeadingPunctuationTests {
         ("Zs no-break space", "\u{00A0}"), ("Zs ideographic space", "\u{3000}"),
     ] as [(String, String)])
     func domainStartPunctuationOrWhitespaceIsNotALink(category: String, scalar: String) {
-        #expect(surface("http://\(scalar)a.b") == text("http://\(scalar)a.b"), "\(category)")
+        #expect(tree("http://\(scalar)a.b") == text("http://\(scalar)a.b"), "\(category)")
     }
 
     @Test func letterInDomainIsALink() {
-        #expect(surface("http://\u{4E2D}a.b") == """
+        #expect(tree("http://\u{4E2D}a.b") == """
             document
               paragraph
                 link "http://\u{4E2D}a.b" ""
                   text "http://\u{4E2D}a.b"
 
             """)
-        #expect(surface("http://a.\u{4E2D}b") == """
+        #expect(tree("http://a.\u{4E2D}b") == """
             document
               paragraph
                 link "http://a.\u{4E2D}b" ""
                   text "http://a.\u{4E2D}b"
 
             """)
-        #expect(surface("http://a\u{4E2D}.b") == """
+        #expect(tree("http://a\u{4E2D}.b") == """
             document
               paragraph
                 link "http://a\u{4E2D}.b" ""
                   text "http://a\u{4E2D}.b"
 
             """)
-        #expect(surface("www.a\u{4E2D}.b") == """
+        #expect(tree("www.a\u{4E2D}.b") == """
             document
               paragraph
                 link "http://www.a\u{4E2D}.b" ""

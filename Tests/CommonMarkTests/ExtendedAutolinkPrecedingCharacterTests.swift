@@ -19,14 +19,14 @@ import Testing
 struct ExtendedAutolinkPrecedingCharacterTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .attributes, .gfmAutolink]
 
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: Self.options)
     }
 
     // MARK: - Extended url autolinks
 
     @Test func urlAfterQuotationMarkIsLink() {
-        #expect(surface("\"https://a.b\" in quotes;") == """
+        #expect(tree("\"https://a.b\" in quotes;") == """
             document
               paragraph
                 text "\\""
@@ -38,7 +38,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func urlAfterExclamationMarkIsLink() {
-        #expect(surface("!http://a.b") == """
+        #expect(tree("!http://a.b") == """
             document
               paragraph
                 text "!"
@@ -49,7 +49,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func urlAfterDigitIsLink() {
-        #expect(surface("1ftp://a.b") == """
+        #expect(tree("1ftp://a.b") == """
             document
               paragraph
                 text "1"
@@ -60,7 +60,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func urlAfterNonASCIILetterIsLink() {
-        #expect(surface("\u{E9}http://a.b") == """
+        #expect(tree("\u{E9}http://a.b") == """
             document
               paragraph
                 text "\u{E9}"
@@ -71,7 +71,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func urlAfterASCIILetterIsText() {
-        #expect(surface("xHTTP://a.b") == """
+        #expect(tree("xHTTP://a.b") == """
             document
               paragraph
                 text "xHTTP://a.b"
@@ -80,7 +80,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func urlInLinkTextBracketIsText() {
-        #expect(surface("[http://a.b];") == """
+        #expect(tree("[http://a.b];") == """
             document
               paragraph
                 text "[http://a.b];"
@@ -89,7 +89,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func urlAfterParenthesisIsLink() {
-        #expect(surface("(https://a.b") == """
+        #expect(tree("(https://a.b") == """
             document
               paragraph
                 text "("
@@ -149,13 +149,13 @@ struct ExtendedAutolinkPrecedingCharacterTests {
 
             """),
     ])
-    func urlAfterPunctuationIsLink(markdown: String, tree: String) {
-        #expect(surface(markdown) == tree)
+    func urlAfterPunctuationIsLink(markdown: String, expected: String) {
+        #expect(tree(markdown) == expected)
     }
 
     /// A NUL is replaced with U+FFFD (Insecure characters), which is not a letter.
     @Test func urlAfterNULIsLink() {
-        #expect(surface("\0http://e.e") == """
+        #expect(tree("\0http://e.e") == """
             document
               paragraph
                 text "\u{FFFD}"
@@ -167,7 +167,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
 
     /// The `x` is part of the scheme `xhttp`.
     @Test func urlAfterASCIILetterOfLowercaseSchemeIsText() {
-        #expect(surface("xhttp://e.e") == """
+        #expect(tree("xhttp://e.e") == """
             document
               paragraph
                 text "xhttp://e.e"
@@ -177,7 +177,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
 
     /// A paragraph's initial spaces are stripped (Paragraphs).
     @Test func urlStartingParagraphAfterLeadingSpaceIsLink() {
-        #expect(surface(" http://e.e") == """
+        #expect(tree(" http://e.e") == """
             document
               paragraph
                 link "http://e.e" ""
@@ -204,8 +204,8 @@ struct ExtendedAutolinkPrecedingCharacterTests {
 
             """),
     ])
-    func urlAfterLineTabulationOrFormFeedIsLink(markdown: String, tree: String) {
-        #expect(surface(markdown) == tree)
+    func urlAfterLineTabulationOrFormFeedIsLink(markdown: String, expected: String) {
+        #expect(tree(markdown) == expected)
     }
 
     // MARK: - Extended www autolinks
@@ -224,12 +224,12 @@ struct ExtendedAutolinkPrecedingCharacterTests {
 
             """),
     ])
-    func wwwAfterLineTabulationOrFormFeedIsText(markdown: String, tree: String) {
-        #expect(surface(markdown) == tree)
+    func wwwAfterLineTabulationOrFormFeedIsText(markdown: String, expected: String) {
+        #expect(tree(markdown) == expected)
     }
 
     @Test func wwwAfterTabIsLink() {
-        #expect(surface("x\twww.a.b") == """
+        #expect(tree("x\twww.a.b") == """
             document
               paragraph
                 text "x\\t"
@@ -240,7 +240,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func wwwAfterParenthesisIsLink() {
-        #expect(surface("(www.e.f") == """
+        #expect(tree("(www.e.f") == """
             document
               paragraph
                 text "("
@@ -276,8 +276,8 @@ struct ExtendedAutolinkPrecedingCharacterTests {
 
             """),
     ])
-    func wwwAfterOtherCharacterIsText(markdown: String, tree: String) {
-        #expect(surface(markdown) == tree)
+    func wwwAfterOtherCharacterIsText(markdown: String, expected: String) {
+        #expect(tree(markdown) == expected)
     }
 
     // MARK: - Extended email autolinks
@@ -300,12 +300,12 @@ struct ExtendedAutolinkPrecedingCharacterTests {
 
             """),
     ])
-    func emailAfterLineTabulationOrFormFeedIsLink(markdown: String, tree: String) {
-        #expect(surface(markdown) == tree)
+    func emailAfterLineTabulationOrFormFeedIsLink(markdown: String, expected: String) {
+        #expect(tree(markdown) == expected)
     }
 
     @Test func emailAfterLessThanSignIsLink() {
-        #expect(surface("<o@e.e;") == """
+        #expect(tree("<o@e.e;") == """
             document
               paragraph
                 text "<"
@@ -317,7 +317,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailAfterExclamationMarkIsLink() {
-        #expect(surface("!foo@b.cd;") == """
+        #expect(tree("!foo@b.cd;") == """
             document
               paragraph
                 text "!"
@@ -329,7 +329,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailAfterAtSignIsLink() {
-        #expect(surface("a@b@c.de") == """
+        #expect(tree("a@b@c.de") == """
             document
               paragraph
                 text "a@"
@@ -341,7 +341,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
 
     /// `MAILTO:` is not the lowercase `mailto:` scheme, so the `:` ends the local part.
     @Test func emailAfterUppercaseSchemeIsLink() {
-        #expect(surface("MAILTO:x@a.b.") == """
+        #expect(tree("MAILTO:x@a.b.") == """
             document
               paragraph
                 text "MAILTO:"
@@ -354,7 +354,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
 
     /// A `mailto:` scheme right after a letter is not a scheme, so the `:` ends the local part.
     @Test func emailAfterLetterAndSchemeIsLink() {
-        #expect(surface("amailto:foo@b.cd") == """
+        #expect(tree("amailto:foo@b.cd") == """
             document
               paragraph
                 text "amailto:"
@@ -365,7 +365,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailWithSchemeAfterSpaceIsLink() {
-        #expect(surface("x mailto:foo@b.cd") == """
+        #expect(tree("x mailto:foo@b.cd") == """
             document
               paragraph
                 text "x "
@@ -376,7 +376,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailAfterCodeSpanIsLink() {
-        #expect(surface("`x`foo@b.cd") == """
+        #expect(tree("`x`foo@b.cd") == """
             document
               paragraph
                 code "x"
@@ -387,7 +387,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailAfterLinkIsLink() {
-        #expect(surface("[x](u)foo@b.cd") == """
+        #expect(tree("[x](u)foo@b.cd") == """
             document
               paragraph
                 link "u" ""
@@ -399,7 +399,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailInUnresolvedBracketsIsLink() {
-        #expect(surface("[foo@b.cd]") == """
+        #expect(tree("[foo@b.cd]") == """
             document
               paragraph
                 text "["
@@ -411,7 +411,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailOpeningImageDescriptionIsLink() {
-        #expect(surface("![foo@b.cd](u)") == """
+        #expect(tree("![foo@b.cd](u)") == """
             document
               paragraph
                 image "u" ""
@@ -422,7 +422,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailOpeningAttributeTextIsLink() {
-        #expect(surface("^[foo@b.cd](k: 1)") == """
+        #expect(tree("^[foo@b.cd](k: 1)") == """
             document
               paragraph
                 attribute "k: 1"
@@ -433,7 +433,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailOpeningEmphasisIsLink() {
-        #expect(surface("*foo@b.cd*") == """
+        #expect(tree("*foo@b.cd*") == """
             document
               paragraph
                 emph
@@ -444,7 +444,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailOpeningStrikethroughIsLink() {
-        #expect(surface("~foo@b.cd~") == """
+        #expect(tree("~foo@b.cd~") == """
             document
               paragraph
                 strikethrough
@@ -455,7 +455,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailAfterEmphasisIsLink() {
-        #expect(surface("*x*foo@b.cd") == """
+        #expect(tree("*x*foo@b.cd") == """
             document
               paragraph
                 emph
@@ -467,7 +467,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailAfterStrongEmphasisIsLink() {
-        #expect(surface("**x**foo@b.cd") == """
+        #expect(tree("**x**foo@b.cd") == """
             document
               paragraph
                 strong
@@ -479,7 +479,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailOpeningStrongEmphasisIsLink() {
-        #expect(surface("**foo@b.cd**") == """
+        #expect(tree("**foo@b.cd**") == """
             document
               paragraph
                 strong
@@ -490,7 +490,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailAfterRawHTMLIsLink() {
-        #expect(surface("<b>foo@b.cd") == """
+        #expect(tree("<b>foo@b.cd") == """
             document
               paragraph
                 html_inline "<b>"
@@ -501,7 +501,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailOpeningTableCellIsLink() {
-        #expect(surface("|foo@b.cd|\n|-|") == """
+        #expect(tree("|foo@b.cd|\n|-|") == """
             document
               table
                 table_header
@@ -513,7 +513,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailAfterSoftBreakIsLink() {
-        #expect(surface("x\nfoo@b.cd") == """
+        #expect(tree("x\nfoo@b.cd") == """
             document
               paragraph
                 text "x"
@@ -525,7 +525,7 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     }
 
     @Test func emailAfterHardBreakIsLink() {
-        #expect(surface("x\\\nfoo@b.cd") == """
+        #expect(tree("x\\\nfoo@b.cd") == """
             document
               paragraph
                 text "x"

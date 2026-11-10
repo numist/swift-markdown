@@ -17,12 +17,12 @@ import Testing
 struct ExtendedAutolinkEntityTailTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .gfmAutolink]
 
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: Self.options, sourceRanges: true)
     }
 
     @Test func letterTailIsExcluded() {
-        #expect(surface("www.a.b/x&ab;") == """
+        #expect(tree("www.a.b/x&ab;") == """
             document @1:1-1:14
               paragraph @1:1-1:14
                 link "http://www.a.b/x" "" @1:1-1:10
@@ -33,7 +33,7 @@ struct ExtendedAutolinkEntityTailTests {
     }
 
     @Test func letterThenDigitTailExcludesOnlySemicolon() {
-        #expect(surface("www.a.b/x&a1;") == """
+        #expect(tree("www.a.b/x&a1;") == """
             document @1:1-1:14
               paragraph @1:1-1:14
                 link "http://www.a.b/x&a1" "" @1:1-1:13
@@ -44,7 +44,7 @@ struct ExtendedAutolinkEntityTailTests {
     }
 
     @Test func digitOnlyTailExcludesOnlySemicolon() {
-        #expect(surface("https://a.b/?q=1&2;") == """
+        #expect(tree("https://a.b/?q=1&2;") == """
             document @1:1-1:20
               paragraph @1:1-1:20
                 link "https://a.b/?q=1&2" "" @1:1-1:19
@@ -55,7 +55,7 @@ struct ExtendedAutolinkEntityTailTests {
     }
 
     @Test func numberSignTailExcludesOnlySemicolon() {
-        #expect(surface("www.a.b/x&#1;") == """
+        #expect(tree("www.a.b/x&#1;") == """
             document @1:1-1:14
               paragraph @1:1-1:14
                 link "http://www.a.b/x&#1" "" @1:1-1:13
