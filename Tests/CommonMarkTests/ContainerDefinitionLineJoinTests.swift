@@ -17,7 +17,7 @@ import CommonMark
 @Suite("Definitions across the lines of a container's paragraph")
 struct ContainerDefinitionLineJoinTests {
 
-    @Test("a label, a destination and a title each continue onto the next line")
+    @Test("a label, the whitespace before a destination, and a title each span a line ending")
     func constructsContinueOntoNextLine() {
         #expect(TreeDump.dump("> [a\n> b]: /u\n> [c]:\n> /v\n> 'T\n> t'\n> [a b] [c]", options: [.sourcePosition], sourceRanges: true) == """
             document @1:1-7:12
@@ -71,7 +71,7 @@ struct ContainerDefinitionLineJoinTests {
             """)
     }
 
-    @Test("the text after the definitions reads its own lines")
+    @Test("the paragraph after a definition has the source ranges of its own bytes")
     func textAfterDefinitions() {
         #expect(TreeDump.dump("> [a]: /uuuuuuuu\n> *b* [a]\n> c", options: [.sourcePosition], sourceRanges: true) == """
             document @1:1-3:4
