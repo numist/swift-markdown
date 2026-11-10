@@ -42,11 +42,11 @@ struct SourceRangeCompletenessTests {
     private static let options: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
-    /// Every node has a source range whose start is not after its end, except soft and hard line
-    /// breaks and the empty cells inserted into a body row with fewer cells than the header row
-    /// (Tables (extension)), none of which has a source range. This checks presence and order, not values.
-    @Test("every non-exempt node carries a valid source range")
-    func everyNonExemptNodeHasValidRange() throws {
+    /// Every node has a source range, except soft and hard line breaks and the empty cells inserted
+    /// into a body row with fewer cells than the header row (Tables (extension)), none of which has a
+    /// source range. This checks presence, not values.
+    @Test("every non-exempt node carries a source range")
+    func everyNonExemptNodeHasRange() throws {
         let audit = try Self.audit(options: Self.options)
 
         // Fixture sanity: an empty corpus or a walk that never descends into children fails loudly.
@@ -57,11 +57,10 @@ struct SourceRangeCompletenessTests {
         #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
     }
 
-    /// The same check with every `o` in every example replaced by a NUL, which becomes U+FFFD (Insecure characters) in
-    /// paragraphs, headings, table cells and the inlines within them. A letter is replaced rather than a NUL inserted,
-    /// so block markers and most inline syntax stay intact.
-    @Test("every non-exempt node carries a valid source range when content contains NULs")
-    func everyNonExemptNodeWithNULHasValidRange() throws {
+    /// The same check with every `o` in every example replaced by a NUL, which becomes U+FFFD (Insecure characters). A
+    /// letter is replaced rather than a NUL inserted, so block markers and most inline syntax stay intact.
+    @Test("every non-exempt node carries a source range when content contains NULs")
+    func everyNonExemptNodeWithNULHasRange() throws {
         let audit = try Self.audit(options: Self.options) { $0.replacingOccurrences(of: "o", with: "\u{0}") }
 
         #expect(audit.totalNodes > 3000)
@@ -72,7 +71,7 @@ struct SourceRangeCompletenessTests {
     /// A NUL is one source byte, as an `o` is, so replacing each `o` with a NUL leaves every node's source range unchanged
     /// wherever it leaves the node tree unchanged: this checks the values, not just the presence, of the ranges of
     /// content holding a NUL.
-    @Test("a NUL projects onto its one source byte")
+    @Test("replacing an `o` with a NUL leaves every source range unchanged")
     func nulReplacementPreservesRanges() throws {
         func nodes(_ markdown: String) -> [(kind: String, range: String)] {
             var nodes: [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?, isLeaf: Bool)] = []
@@ -103,13 +102,13 @@ struct SourceRangeCompletenessTests {
     /// The same check over inline-only parsing (`.inlineOnly`, and `.preserveWhitespace`, which
     /// implies it), where each spec example becomes one paragraph of inline content. Each example
     /// also runs with CRLF line endings.
-    @Test("every non-exempt node carries a valid source range in inline-only parsing", arguments: [
+    @Test("every non-exempt node carries a source range in inline-only parsing", arguments: [
         MarkdownDocument.ParseOptions.inlineOnly, .preserveWhitespace,
     ], ["\n", "\r\n"])
-    func everyNonExemptInlineOnlyNodeHasValidRange(mode: MarkdownDocument.ParseOptions, lineEnding: String) throws {
+    func everyNonExemptInlineOnlyNodeHasRange(mode: MarkdownDocument.ParseOptions, lineEnding: String) throws {
         let audit = try Self.audit(options: Self.options.union(mode)) { $0.replacingOccurrences(of: "\n", with: lineEnding) }
 
-        // Fixture sanity: every example yields at least a document, a paragraph, and a child.
+        // Fixture sanity: an empty corpus or a walk that never descends into children fails loudly.
         #expect(audit.totalNodes > 3000)
         // Inline-only parsing builds no tables.
         #expect(audit.exemptFillerCells == 0)
@@ -155,8 +154,8 @@ struct SourceRangeCompletenessTests {
     /// contiguous in the source (each carries its container's prefix), so this covers content that maps
     /// back to source line by line: notably tables, whose rows, cells and cell inlines must each lie on
     /// their own source line.
-    @Test("every non-exempt node carries a valid source range when nested in a container", arguments: Container.allCases)
-    func everyNonExemptNestedNodeHasValidRange(container: Container) throws {
+    @Test("every non-exempt node carries a source range when nested in a container", arguments: Container.allCases)
+    func everyNonExemptNestedNodeHasRange(container: Container) throws {
         let audit = try Self.audit(options: Self.options, transform: container.nest)
 
         #expect(audit.totalNodes > 3000)
@@ -164,12 +163,13 @@ struct SourceRangeCompletenessTests {
         #expect(audit.failures.isEmpty, Comment(rawValue: audit.failures.prefix(25).joined(separator: "\n")))
     }
 
-    /// A range runs from the first byte of a node's own content to just past its last content byte, so no range starts
-    /// or ends on whitespace outside the node's content: the literal whitespace of text, a code block or an HTML block,
-    /// or whitespace a child's range holds. A code block or HTML block whose last line is blank ends at that line's
-    /// start, not past a container's prefix on it, and inline-only parsing keeps the whole input as the paragraph's
-    /// content. The document covers the whole input. Each spec example runs with each line ending preceded by
-    /// whitespace, as written and nested in each `Container`.
+    /// A range runs from the first byte of a node's own content to just past its last content byte, so a range starts
+    /// or ends on whitespace only where that whitespace is the node's content: the literal whitespace of text, a code
+    /// block or an HTML block, or whitespace a child's range holds. A code block or HTML block whose last line is blank
+    /// ends at that line's start, not past a container's prefix on it, and inline-only parsing keeps the whole input as
+    /// the paragraph's content. The document covers the whole input. Each spec example runs with its line endings as
+    /// written, preceded by two spaces, a tab or a line tabulation, or replaced by CRLF, both at top level and nested
+    /// in each `Container`.
     @Test("no range starts or ends on whitespace outside its content", arguments: ["\n", "  \n", "\t\n", "\u{0B}\n", "\r\n"])
     func rangesEndOnContent(lineEnding: String) throws {
         var checked = 0
@@ -254,8 +254,7 @@ struct SourceRangeCompletenessTests {
     }
 
     /// Parses every spec example with `options`, its markdown passed through `transform`, and collects each
-    /// node that lacks a valid source range, skipping the exemptions documented on
-    /// `everyNonExemptNodeHasValidRange`.
+    /// node that lacks a source range, skipping the exemptions documented on `everyNonExemptNodeHasRange`.
     private static func audit(options: MarkdownDocument.ParseOptions, transform: (String) -> String = { $0 }) throws -> (totalNodes: Int, exemptFillerCells: Int, failures: [String]) {
         let examples = try Self.loadSpec()
         #expect(examples.count > 600)
@@ -280,19 +279,13 @@ struct SourceRangeCompletenessTests {
                     break
                 }
 
-                guard let range = node.range else {
+                if node.range == nil {
                     // A childless table cell is one inserted into a body row with fewer cells than the header row.
                     if case .tableCell = node.kind, node.isLeaf {
                         exemptFillerCells += 1
                         continue
                     }
                     failures.append("#\(ex.number) [\(ex.section)] \(node.kind): nil sourceRange; input=\(markdown.debugDescription)")
-                    continue
-                }
-                // `MarkdownNode.sourceRange` reports a start after its end as nil, which the guard above
-                // catches; this check holds if that contract changes.
-                if range.lowerBound > range.upperBound {
-                    failures.append("#\(ex.number) [\(ex.section)] \(node.kind): inverted range \(range); input=\(markdown.debugDescription)")
                 }
             }
         }
