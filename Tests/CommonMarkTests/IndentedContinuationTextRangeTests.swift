@@ -15,7 +15,7 @@ import CommonMark
 @Suite("Text source range on an indented continuation line")
 struct IndentedContinuationTextRangeTests {
 
-    private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .smart]
+    private static let options: MarkdownDocument.ParseOptions = [.sourcePosition]
 
     @Test("text on an indented continuation line starts at its own source column")
     func indentedContinuationKeepsSourceColumn() {
