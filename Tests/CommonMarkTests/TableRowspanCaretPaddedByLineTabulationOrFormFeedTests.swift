@@ -12,8 +12,8 @@ import CommonMark
 import Testing
 
 /// A `^` row-span cell padded by a line tabulation or form feed is a row-span marker.
-@Suite("Row-span marker after vertical whitespace")
-struct TableRowspanCaretAfterVerticalWhitespaceTests {
+@Suite("Row-span marker padded by a line tabulation or form feed")
+struct TableRowspanCaretPaddedByLineTabulationOrFormFeedTests {
 
     private static let options: MarkdownDocument.ParseOptions = [.tables, .tableSpans, .sourcePosition]
 
@@ -43,7 +43,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
             """)
     }
 
-    @Test func verticalTabBeforeCaretInSecondColumn() {
+    @Test func lineTabulationBeforeCaretInSecondColumn() {
         #expect(TreeDump.dump("a|b\n-|-\nx|\u{B}^", options: Self.options) == """
             document
               table
@@ -60,7 +60,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
             """)
     }
 
-    @Test func verticalTabBeforeCaretWithClosingPipe() {
+    @Test func lineTabulationBeforeCaretWithClosingPipe() {
         #expect(TreeDump.dump("a\n|-\n|\u{B}^|", options: Self.options) == """
             document
               table
@@ -86,7 +86,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
             """)
     }
 
-    @Test func verticalTabBeforeCaretInFirstColumnOfTwo() {
+    @Test func lineTabulationBeforeCaretInFirstColumnOfTwo() {
         #expect(TreeDump.dump("a|b\n-|-\n|\u{B}^|x", options: Self.options) == """
             document
               table
@@ -104,7 +104,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
     }
 
     /// A header cell has no row above to span into, so it keeps its `^` text while carrying rowspan 0.
-    @Test func verticalTabBeforeCaretInHeader() {
+    @Test func lineTabulationBeforeCaretInHeader() {
         #expect(TreeDump.dump("|\u{B}^|\n|-|", options: Self.options) == """
             document
               table
@@ -115,7 +115,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
             """)
     }
 
-    @Test func verticalTabBeforeCaretWithoutLeadingPipe() {
+    @Test func lineTabulationBeforeCaretWithoutLeadingPipe() {
         #expect(TreeDump.dump("a|b\n-|-\n\u{B}^|x", options: Self.options) == """
             document
               table
@@ -132,7 +132,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
             """)
     }
 
-    @Test func verticalTabAfterCaret() {
+    @Test func lineTabulationAfterCaret() {
         #expect(TreeDump.dump("a\n|-\n|^\u{B}", options: Self.options) == """
             document
               table
@@ -145,7 +145,7 @@ struct TableRowspanCaretAfterVerticalWhitespaceTests {
             """)
     }
 
-    @Test func verticalTabBeforeCaret() {
+    @Test func lineTabulationBeforeCaret() {
         #expect(TreeDump.dump("a\n|-\n|\u{B}^", options: Self.options) == """
             document
               table

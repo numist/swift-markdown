@@ -164,15 +164,15 @@ struct TaskListMarkerWhitespaceTests {
     // The paragraph's initial whitespace, which includes line tabulation and form feed, is removed
     // (Paragraphs), so the paragraph begins with the checkbox and its content is what follows it.
 
-    @Test("a vertical-tab gap before an unchecked checkbox is recognized")
-    func vertTabGapUnchecked() {
+    @Test("a line tabulation gap before an unchecked checkbox is recognized")
+    func lineTabulationGapUnchecked() {
         let (found, checked, text) = parse("- \u{0B}[ ] a")
         #expect(found && checked == false)
         #expect(text == "a")
     }
 
-    @Test("a vertical-tab gap before a checked checkbox is recognized")
-    func vertTabGapChecked() {
+    @Test("a line tabulation gap before a checked checkbox is recognized")
+    func lineTabulationGapChecked() {
         let (found, checked, text) = parse("- \u{0B}[x] a")
         #expect(found && checked == true)
         #expect(text == "a")
@@ -192,15 +192,15 @@ struct TaskListMarkerWhitespaceTests {
         #expect(text == "a[ ] b")
     }
 
-    @Test("a mixed VT+space gap before the checkbox is recognized")
-    func mixedVertTabSpaceGap() {
+    @Test("a mixed line tabulation and space gap before the checkbox is recognized")
+    func mixedLineTabulationSpaceGap() {
         let (found, checked, text) = parse("- \u{0B} [ ] a")
         #expect(found && checked == false)
         #expect(text == "a")
     }
 
-    @Test("a two-VT gap before the checkbox is recognized")
-    func twoVertTabGap() {
+    @Test("a gap of two line tabulations before the checkbox is recognized")
+    func twoLineTabulationGap() {
         let (found, checked, text) = parse("- \u{0B}\u{0B}[ ] a")
         #expect(found && checked == false)
         #expect(text == "a")
