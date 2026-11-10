@@ -3344,7 +3344,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Skips whitespace characters (Characters and lines).
-    mutating func skipWhitespace(from cursor: Int, in content: borrowing ContentSpan) -> Int {
+    func skipWhitespace(from cursor: Int, in content: borrowing ContentSpan) -> Int {
         var i = cursor
         while i < content.endOffset, content[i].isWhitespaceCharacter {
             i += 1
@@ -3357,7 +3357,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Skips spaces, tabs, line tabulations and form feeds.
     @inline(__always)
-    private mutating func skipLineWhitespace(from cursor: Int, in content: borrowing ContentSpan) -> Int {
+    private func skipLineWhitespace(from cursor: Int, in content: borrowing ContentSpan) -> Int {
         var i = cursor
         while i < content.endOffset, content[i].isLineWhitespace {
             i += 1
@@ -3367,7 +3367,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Skips line whitespace, at most one line ending, and more line whitespace.
     @inline(__always)
-    private mutating func skipSpacesAndOneLineEnd(from cursor: Int, in content: borrowing ContentSpan) -> Int {
+    private func skipSpacesAndOneLineEnd(from cursor: Int, in content: borrowing ContentSpan) -> Int {
         let i = skipLineWhitespace(from: cursor, in: content)
         guard i < content.endOffset, content[i] == UInt8(ascii: "\n") else {
             return i
@@ -3377,7 +3377,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// The offset past a line ending at `cursor`, `cursor` at the end of `content`, or `nil`.
     @inline(__always)
-    private mutating func skipLineEndOrEOF(from cursor: Int, in content: borrowing ContentSpan) -> Int? {
+    private func skipLineEndOrEOF(from cursor: Int, in content: borrowing ContentSpan) -> Int? {
         if cursor >= content.endOffset {
             return cursor
         }
@@ -3533,7 +3533,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// The arena bytes from `offset` to the arena's end, as just appended.
-    mutating func arenaChunk(from offset: Int) -> Chunk {
+    func arenaChunk(from offset: Int) -> Chunk {
         Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
     }
 }
