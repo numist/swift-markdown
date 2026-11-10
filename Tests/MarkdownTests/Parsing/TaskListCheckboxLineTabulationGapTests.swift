@@ -14,14 +14,14 @@ import XCTest
 /// A line tabulation between the list marker and a task list item marker is initial whitespace of the
 /// item's paragraph, which is removed (Paragraphs), so the paragraph begins with the task list item marker
 /// (Task list items (extension)).
-class TaskListCheckboxVerticalTabGapTests: XCTestCase {
+class TaskListCheckboxLineTabulationGapTests: XCTestCase {
     private static let options: ParseOptions = [.disableSmartOpts, .parseMinimalDoxygen, .disableSourcePosOpts]
 
     private func surface() -> String {
         Document(parsing: "- \u{B}[x] \n`", options: Self.options).debugDescription(options: [])
     }
 
-    func testCheckboxRecognizedPastVerticalTabGap() {
+    func testCheckboxRecognizedPastLineTabulationGap() {
         let expected = "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         └─ Text \"`\""
         XCTAssertEqual(expected, surface())
     }

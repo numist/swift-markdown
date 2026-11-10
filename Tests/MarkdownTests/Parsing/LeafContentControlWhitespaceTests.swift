@@ -11,15 +11,15 @@
 import Markdown
 import Testing
 
-/// A paragraph's or setext heading's raw content has its initial and final whitespace removed (spec
-/// "Paragraphs", "Setext headings"), and the spec's whitespace characters include line tabulation
-/// (U+000B) and form feed (U+000C).
+/// A paragraph's or setext heading's raw content has its initial and final whitespace removed (Paragraphs,
+/// Setext headings), and the spec's whitespace characters include line tabulation (U+000B) and form feed
+/// (U+000C).
 struct LeafContentControlWhitespaceTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)
     }
 
-    @Test func finalVerticalTabIsRemoved() {
+    @Test func finalLineTabulationIsRemoved() {
         #expect(tree("foo\u{0B}") == """
             Document @1:1-1:5
             └─ Paragraph @1:1-1:4
@@ -35,7 +35,7 @@ struct LeafContentControlWhitespaceTests {
             """)
     }
 
-    @Test func rejectedDefinitionKeepsNoFinalVerticalTab() {
+    @Test func rejectedDefinitionKeepsNoFinalLineTabulation() {
         #expect(tree("[?]:\u{0B}") == """
             Document @1:1-1:6
             └─ Paragraph @1:1-1:5
@@ -52,7 +52,7 @@ struct LeafContentControlWhitespaceTests {
             """)
     }
 
-    @Test func blockQuoteParagraphTrimsVerticalTabs() {
+    @Test func blockQuoteParagraphTrimsLineTabulations() {
         #expect(tree("> \u{0B}foo\n> bar\u{0B}") == """
             Document @1:1-2:7
             └─ BlockQuote @1:1-2:6
@@ -71,16 +71,16 @@ struct LeafContentControlWhitespaceTests {
             """)
     }
 
-    /// A line holding only a vertical tab is not blank (spec "Blank lines": only spaces or tabs), so it
+    /// A line holding only a line tabulation is not blank (Characters and lines: only spaces or tabs), so it
     /// is a paragraph, whose raw content is empty once its whitespace is removed, as is its range.
-    @Test func verticalTabOnlyLineIsEmptyParagraph() {
+    @Test func lineTabulationOnlyLineIsEmptyParagraph() {
         #expect(tree("\u{0B}") == """
             Document @1:1-1:2
             └─ Paragraph @1:1
             """)
     }
 
-    @Test func paragraphBeforeTableTrimsVerticalTab() {
+    @Test func paragraphBeforeTableTrimsLineTabulation() {
         #expect(tree("\u{0B}foo\nh|i\n-|-") == """
             Document @1:1-3:4
             ├─ Paragraph @1:2-1:5
@@ -95,7 +95,7 @@ struct LeafContentControlWhitespaceTests {
             """)
     }
 
-    @Test func blockQuoteParagraphBeforeTableTrimsVerticalTab() {
+    @Test func blockQuoteParagraphBeforeTableTrimsLineTabulation() {
         #expect(tree("> \u{0B}foo\n> h|i\n> -|-") == """
             Document @1:1-3:6
             └─ BlockQuote @1:1-3:6
@@ -111,7 +111,7 @@ struct LeafContentControlWhitespaceTests {
             """)
     }
 
-    @Test func verticalTabOnlyLineBeforeTableIsEmptyParagraph() {
+    @Test func lineTabulationOnlyLineBeforeTableIsEmptyParagraph() {
         #expect(tree("\u{0B}\nh|i\n-|-") == """
             Document @1:1-3:4
             ├─ Paragraph @1:1

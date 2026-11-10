@@ -15,12 +15,12 @@ import CommonMark
 /// and lines), including form feed (U+000C) and line tabulation (U+000B) (Tables (extension)).
 ///
 /// Alignment comes from colons at the ends of the cell after trimming that padding.
-@Suite("Table delimiter-row FF/VT whitespace")
+@Suite("Form feed and line tabulation in a table delimiter row")
 struct TableDelimiterWhitespaceTests {
 
     // MARK: - Form feed and line tabulation pad a delimiter cell
 
-    @Test("a trailing form-feed in the delimiter cell forms a table")
+    @Test("a trailing form feed in the delimiter cell forms a table")
     func trailingFormFeed() {
         #expect(TreeDump.dump("d\n-\u{0C}", options: [.tables]) == """
             document
@@ -32,8 +32,8 @@ struct TableDelimiterWhitespaceTests {
             """)
     }
 
-    @Test("a trailing vertical-tab in the delimiter cell forms a table")
-    func trailingVerticalTab() {
+    @Test("a trailing line tabulation in the delimiter cell forms a table")
+    func trailingLineTabulation() {
         #expect(TreeDump.dump("d\n-\u{0B}", options: [.tables]) == """
             document
               table
@@ -44,7 +44,7 @@ struct TableDelimiterWhitespaceTests {
             """)
     }
 
-    @Test("a leading-pipe delimiter cell with a trailing form-feed forms a table")
+    @Test("a leading-pipe delimiter cell with a trailing form feed forms a table")
     func leadingPipeTrailingFormFeed() {
         #expect(TreeDump.dump("d\n|-\u{0C}", options: [.tables]) == """
             document
@@ -56,7 +56,7 @@ struct TableDelimiterWhitespaceTests {
             """)
     }
 
-    @Test("a leading form-feed in the delimiter cell forms a table")
+    @Test("a leading form feed in the delimiter cell forms a table")
     func leadingFormFeed() {
         #expect(TreeDump.dump("d\n\u{0C}-", options: [.tables]) == """
             document
@@ -68,7 +68,7 @@ struct TableDelimiterWhitespaceTests {
             """)
     }
 
-    @Test("a form-feed delimiter cell forms a table when the delimiter row is indented")
+    @Test("a form feed delimiter cell forms a table when the delimiter row is indented")
     func indentedDelimiterRowFormFeed() {
         #expect(TreeDump.dump("d\n -\u{0C}", options: [.tables]) == """
             document
@@ -80,7 +80,7 @@ struct TableDelimiterWhitespaceTests {
             """)
     }
 
-    @Test("a form-feed delimiter cell forms a table nested in a block quote")
+    @Test("a form feed delimiter cell forms a table nested in a block quote")
     func nestedBlockQuoteFormFeed() {
         #expect(TreeDump.dump("> d\n> -\u{0C}", options: [.tables]) == """
             document
@@ -95,7 +95,7 @@ struct TableDelimiterWhitespaceTests {
 
     // MARK: - Alignment
 
-    @Test("a colon before a trailing form-feed sets right alignment")
+    @Test("a colon before a trailing form feed sets right alignment")
     func trailingFormFeedRightColon() {
         #expect(TreeDump.dump("d\n-:\u{0C}", options: [.tables]) == """
             document
@@ -108,7 +108,7 @@ struct TableDelimiterWhitespaceTests {
     }
 
     @Test("colons between line tabulations set center alignment")
-    func verticalTabsAroundColons() {
+    func lineTabulationsAroundColons() {
         #expect(TreeDump.dump("a\n|\u{0B}:--:\u{0B}|\n", options: [.tables]) == """
             document
               table
@@ -119,7 +119,7 @@ struct TableDelimiterWhitespaceTests {
             """)
     }
 
-    @Test("a leading colon sets left alignment despite a trailing form-feed")
+    @Test("a leading colon sets left alignment despite a trailing form feed")
     func leadingColonSetsLeftAlignment() {
         #expect(TreeDump.dump("d\n:-\u{0C}", options: [.tables]) == """
             document
@@ -143,7 +143,7 @@ struct TableDelimiterWhitespaceTests {
             """)
     }
 
-    @Test("an interior form-feed invalidates the delimiter cell")
+    @Test("an interior form feed invalidates the delimiter cell")
     func interiorFormFeedStaysParagraph() {
         #expect(TreeDump.dump("d\n-\u{0C}-", options: [.tables]) == """
             document
@@ -155,7 +155,7 @@ struct TableDelimiterWhitespaceTests {
             """)
     }
 
-    @Test("a column-count mismatch with a form-feed delimiter stays a paragraph")
+    @Test("a column-count mismatch with a form feed delimiter stays a paragraph")
     func columnMismatchStaysParagraph() {
         #expect(TreeDump.dump("a|b\n-\u{0C}", options: [.tables]) == """
             document
