@@ -12,7 +12,8 @@ import Testing
 import CommonMark
 
 /// Appends each link, image and attribute node in document order with its destination or attribute string, each soft
-/// line break, and each run of adjacent text nodes as one literal.
+/// line break, and each run of text, in document order with no link, image, attribute or soft line break between, as
+/// one literal.
 private func outline(_ node: borrowing MarkdownNode, into out: inout [String]) {
     switch node.kind {
     case .link:
