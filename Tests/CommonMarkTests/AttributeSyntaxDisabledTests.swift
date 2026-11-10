@@ -15,7 +15,7 @@ import CommonMark
 /// the brackets after it follow the CommonMark link rules, and a `^[label]:` line is ordinary paragraph content.
 ///
 /// Each test mirrors a test that pins attribute behaviour with `.attributes` set, and asserts the whole tree for the same
-/// input with the option off. Columns are 1-based UTF-8 byte offsets and each end is half-open.
+/// input with the option off.
 @Suite("Attribute syntax without the attributes option")
 struct AttributeSyntaxDisabledTests {
 
@@ -102,7 +102,6 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// Emphasis inside link text resolves inside the link.
     @Test("emphasis inside an inline attribute is emphasis inside a link")
     func emphasisInsideLink() {
         #expect(tree("^[*foo*](attr)", Self.plain) == """
@@ -130,7 +129,6 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// A bracket followed by neither an inline link nor a matching definition is text.
     @Test("an attribute opener with no attributes is text")
     func bareBracketIsText() {
         #expect(tree("^[content]", Self.plain) == """
@@ -141,7 +139,6 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// A full reference link whose label matches no definition is text.
     @Test("an attribute reference with an undefined label is text")
     func undefinedReferenceIsText() {
         #expect(tree("^[content][unknown]", Self.plain) == """
@@ -184,8 +181,8 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// The link reference definition ends at its destination, and the `^[foo]:` line after it is paragraph text in
-    /// which `[foo]` is a shortcut reference to that definition, as is every `[foo]` label that follows.
+    /// The link reference definition ends at its destination, the `^[foo]:` line after it is paragraph text, and every
+    /// `[foo]` label resolves to that definition.
     @Test("an attribute definition after a link definition is a paragraph that uses the link definition")
     func definitionAfterLinkDefinitionIsParagraph() {
         #expect(tree("[foo]: /url\n^[foo]: color: red\n\n[foo] and ^[content][foo]", Self.plain) == """
@@ -209,8 +206,8 @@ struct AttributeSyntaxDisabledTests {
 
     /// `[](`, a line ending, then `)` is an inline link with an empty destination, because whitespace around a destination may
     /// include a line ending.
-    @Test("an empty inline attribute spanning a soft line break is an empty link")
-    func attributeTextSpanningSoftBreakIsLink() {
+    @Test("an empty inline attribute whose parentheses span a line ending is an empty link")
+    func attributeParenthesesSpanningLineEndingIsLink() {
         #expect(tree(" ^[](\n)", Self.plain) == """
             document @1:1-2:2
               paragraph @1:2-2:2
@@ -220,7 +217,6 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// `[](x)` is an inline link with empty text.
     @Test("a single-line empty inline attribute is an empty link")
     func singleLineAttributeIsLink() {
         #expect(tree("^[](x)", Self.plain) == """
@@ -244,7 +240,6 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// `[x](/u)` is an inline link.
     @Test("an inline attribute with text is a link with text")
     func attributeWithTextIsLink() {
         #expect(tree("^[x](/u)", Self.plain) == """
@@ -257,7 +252,7 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// An empty bracket pair is neither link text nor a link label, so every bracket is text.
+    /// An empty bracket pair is not a link label, so `[][]` is no reference link and every bracket is text.
     @Test("an empty attribute followed by empty brackets keeps every bracket")
     func emptyBracketPairsAreText() {
         #expect(tree("^[][]", Self.plain) == """
@@ -268,7 +263,6 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// An empty bracket pair with nothing after it is text.
     @Test("a lone empty attribute is text")
     func loneEmptyBracketIsText() {
         #expect(tree("^[]", Self.plain) == """
@@ -279,7 +273,6 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// An empty bracket pair followed by text is text.
     @Test("an empty attribute followed by text is text")
     func emptyBracketThenTextIsText() {
         #expect(tree("^[]x", Self.plain) == """
@@ -334,7 +327,6 @@ struct AttributeSyntaxDisabledTests {
 
     // MARK: - Multi-line content
 
-    /// `[a](`, a line ending, then `b)` is an inline link inside the block quote.
     @Test("a cross-line inline attribute in a block quote is a link")
     func crossLineAttributeInBlockQuoteIsLink() {
         #expect(tree("> ^[a](\n> b)", Self.plain) == """
@@ -348,7 +340,6 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// `[a](`, a line ending, then `b)` is an inline link inside the list item.
     @Test("a cross-line inline attribute in a list item is a link")
     func crossLineAttributeInListItemIsLink() {
         #expect(tree("- ^[a](\n  b)", Self.plain) == """
@@ -365,7 +356,8 @@ struct AttributeSyntaxDisabledTests {
 
     // MARK: - NUL replacement
 
-    /// A NUL becomes U+FFFD before parsing, so `[x](a` NUL `b)` is an inline link whose destination holds U+FFFD.
+    /// A NUL is replaced with U+FFFD (Insecure characters), so `[x](a` NUL `b)` is an inline link whose destination
+    /// holds U+FFFD.
     @Test("a NUL in an inline attribute is a U+FFFD in a link destination")
     func nulInInlineAttributeIsLinkDestination() {
         #expect(tree("^[x](a\u{0}b)", Self.plain) == """
@@ -378,8 +370,8 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// A NUL becomes U+FFFD before parsing, and a line that starts with `^` is not a definition, so it stays paragraph
-    /// text.
+    /// A NUL is replaced with U+FFFD (Insecure characters), and a line that starts with `^` is not a definition, so it
+    /// stays paragraph text.
     @Test("a NUL in an attribute definition is a U+FFFD in paragraph text")
     func nulInDefinitionIsParagraphText() {
         #expect(tree("^[label]: a\u{0}b\n\n^[content][label]", Self.plain) == """
@@ -418,7 +410,7 @@ struct AttributeSyntaxDisabledTests {
 
     // MARK: - Autolinks
 
-    /// A GFM extended autolink is not recognized while a `[` link bracket is open, so the URL after `^[` stays text.
+    /// An extended url or www autolink is not recognized while a `[` is open, so the URL after `^[` stays text.
     @Test("a URL after an unclosed attribute opener is text")
     func urlAfterOpenerIsText() {
         #expect(tree("^[http://t", [.sourcePosition, .gfmAutolink]) == """
@@ -455,7 +447,7 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// A footnote reference whose label matches no definition is text, and so is the text around it.
+    /// A footnote reference whose label matches no definition is text, and it joins the text around it.
     @Test("a footnote-shaped bracket holding `^[` keeps the text after it")
     func caretBracketKeepsTrailingText() {
         #expect(tree("x[^[]]y", Self.footnotes) == """
@@ -502,7 +494,6 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// Unclosed and unmatched brackets are text.
     @Test("an unclosed footnote-shaped bracket is text")
     func unclosedCaretBracketIsText() {
         #expect(tree("[^[]", Self.footnotes) == """
