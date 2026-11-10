@@ -204,7 +204,7 @@ extension BlockParser {
             }
             guard col < cells.count else { continue }
             // A cell covers its content, without the padding between it and the pipes; a cell with no content has an
-            // empty range just past its opening pipe.
+            // empty range just past its opening pipe, if it has one.
             let content = trimmingPadding(cells[col])
             storage.setSourceStart(cellIdx, content.isEmpty ? cells[col].lowerBound : content.lowerBound)
             storage.setSourceEnd(cellIdx, content.isEmpty ? cells[col].lowerBound : content.upperBound)
