@@ -14,7 +14,9 @@ import CommonMark
 /// A block quote marker is `>` plus an optional following space (Block quotes). When a tab follows the `>`, the
 /// marker takes one of the tab's columns and the rest are indentation (Tabs), so on a fenced code block's
 /// content line they become leading spaces of the content.
-@Suite("Tab after a block quote marker in a fenced code block")
+/// A fence's own indentation and a list item's content indentation take columns from a content line's tab in the same
+/// way, and a paragraph or heading strips the columns left after `>` as leading whitespace.
+@Suite("Tabs after a block quote marker and in fenced code block indentation")
 struct BlockQuotePrefixTabFencedCodeTests {
 
     // The tab spans columns 2-4.
