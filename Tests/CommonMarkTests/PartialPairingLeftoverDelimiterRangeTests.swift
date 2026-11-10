@@ -81,6 +81,18 @@ struct PartialPairingLeftoverDelimiterRangeTests {
         ])
     }
 
+    /// The strong emphasis uses the inner two delimiters of each run, the emphasis the outer one.
+    @Test("runs of three paired twice leave no delimiter text")
+    func bothRunsPairedTwice() {
+        #expect(nodes(in: "***o***") == [
+            "document  1:1-1:8",
+            "paragraph  1:1-1:8",
+            "emphasis  1:1-1:8",
+            "strong  1:2-1:7",
+            "text o 1:4-1:5",
+        ])
+    }
+
     /// The run of three closes the first emphasis with its first delimiter and opens the second with its last.
     @Test("a run paired as a closer and then as an opener")
     func closerThenOpener() {
