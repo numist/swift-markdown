@@ -869,6 +869,13 @@ extension BlockParser {
     @inline(__always)
     private static func isUnicodePunctuation(_ uc: Int32) -> Bool {
         if uc < 0x80 { return UInt8(uc).isASCIIPunct }
+        return isNonASCIIPunctuation(uc)
+    }
+
+    /// Whether non-ASCII `uc` is in a Unicode `P` category. Out of line, so that the general-category lookup's setup
+    /// runs only for non-ASCII scalars.
+    @inline(never)
+    private static func isNonASCIIPunctuation(_ uc: Int32) -> Bool {
         switch Unicode.Scalar(UInt32(uc))?.properties.generalCategory {
         case .connectorPunctuation, .dashPunctuation, .openPunctuation, .closePunctuation,
              .initialPunctuation, .finalPunctuation, .otherPunctuation:
