@@ -74,6 +74,8 @@ let inlineFiles = inlineSamples.map { content in
     )
 }
 
+let inlineOnlySwiftOptions: MarkdownDocument.ParseOptions = [.inlineOnly, .attributes]
+
 // MARK: - GFM-feature corpus
 //
 // A markdown document that deliberately exercises every AST-affecting parse option enabled in the
@@ -251,7 +253,7 @@ let benchmarks: @Sendable () -> Void = {
     Benchmark("Parse inline strings (cmark-swift, inline-only)") { benchmark in
         for _ in benchmark.scaledIterations {
             for file in inlineFiles {
-                MarkdownDocument.withParsedDocument(file.content, options: [.inlineOnly, .attributes]) { document in blackHole(document.root.kind) }
+                MarkdownDocument.withParsedDocument(file.content, options: inlineOnlySwiftOptions) { document in blackHole(document.root.kind) }
             }
         }
     }
