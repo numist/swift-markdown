@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// A view of a `DocumentStorage`'s buffers and the borrowed source, carried by `MarkdownNode` and `Children`.
+/// A view of a `DocumentStorage`'s buffers and the borrowed source, carried by `MarkdownNode`, `Children` and `Segments`.
 internal struct StorageView: ~Escapable, Copyable {
     internal let nodes: Span<NodeRecord>
     internal let strings: Span<UInt8>
@@ -31,7 +31,6 @@ internal struct StorageView: ~Escapable, Copyable {
 
     /// The 1-based line and byte column of a source byte. Requires a populated `lineStarts`.
     internal func position(ofByte offset: Int) -> MarkdownNode.SourcePosition {
-        // Binary search for the last line starting at or before `offset`.
         var lo = 0
         var hi = lineStarts.count
         while lo < hi {

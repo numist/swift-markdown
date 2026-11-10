@@ -18,10 +18,10 @@ internal enum NodeData {
 
     case link(url: ContentRef, title: ContentRef)
 
-    /// HTML block start condition (1–7, HTML blocks) and body.
+    /// The HTML block's start condition (HTML blocks), 1–7, and its body.
     case htmlBlock(type: UInt8, literal: ContentRef)
 
-    /// `^[…]` inline attribute: the uninterpreted attribute string.
+    /// `^[…]` inline attribute: its attribute string, as written for `^[text](…)`, or with backslash escapes and character references decoded when it comes from a definition.
     case attribute(ContentRef)
 
     /// Footnote reference label. The assigned index lives on the node's `kind`.

@@ -17,10 +17,10 @@ internal struct DocumentStorage: ~Copyable {
     /// All nodes in creation order; the document is index 0. The initial capacity fits a typical inline-only document.
     internal var nodes: UniqueArray<NodeRecord> = UniqueArray(minimumCapacity: 16)
 
-    /// Arena for bytes that aren't a contiguous range of the source, such as decoded entities and autolink scheme prefixes. Source bytes are never copied here.
+    /// Arena for content that isn't one contiguous range of the source, such as decoded entities, autolink URLs with an added scheme, and text whose NULs became U+FFFD.
     internal var strings: UniqueArray<UInt8>
 
-    /// Append-only pool that `ContentRef`s slice.
+    /// The pool that `ContentRef`s slice; it only grows, though `trimLiteral` narrows a segment in place.
     internal var segments: UniqueArray<Segment> = UniqueArray(minimumCapacity: 16)
 
     /// Link reference definitions by normalized label. The first definition of a label wins.
@@ -74,7 +74,6 @@ internal struct DocumentStorage: ~Copyable {
         let idx = Index(nodes.count)
         nodes.append(record)
         if positionsEnabled {
-            // Keep `sourceRanges` index-aligned with `nodes`; stamped later via `setSourceStart/End`.
             sourceRanges.append(.unset)
         }
         return idx
