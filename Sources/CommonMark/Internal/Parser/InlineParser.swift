@@ -806,10 +806,12 @@ extension BlockParser {
         let afterScalar: Int32 = runEnd < end
             ? Self.flankingScalarAfter(startingAt: runEnd, content: content)
             : 0x0A
-        let beforeIsSpace = Self.isUnicodeWhitespace(beforeScalar)
-        let beforeIsPunct = Self.isUnicodePunctuation(beforeScalar)
-        let afterIsSpace = Self.isUnicodeWhitespace(afterScalar)
-        let afterIsPunct = Self.isUnicodePunctuation(afterScalar)
+        let beforeClass = Self.characterClass(beforeScalar)
+        let afterClass = Self.characterClass(afterScalar)
+        let beforeIsSpace = beforeClass == .whitespace
+        let beforeIsPunct = beforeClass == .punctuation
+        let afterIsSpace = afterClass == .whitespace
+        let afterIsPunct = afterClass == .punctuation
         let leftFlanking = !afterIsSpace && (!afterIsPunct || beforeIsSpace || beforeIsPunct)
         let rightFlanking = !beforeIsSpace && (!beforeIsPunct || afterIsSpace || afterIsPunct)
         return Flanking(
@@ -852,36 +854,36 @@ extension BlockParser {
         return (Int32(b0 & 0x07) << 18) | (Int32(content[idx + 1] & 0x3F) << 12) | (Int32(content[idx + 2] & 0x3F) << 6) | Int32(content[idx + 3] & 0x3F)
     }
 
-    /// Whether `uc` is a Unicode whitespace character (Characters and lines).
+    /// The class of a character in the spec's definitions: a Unicode whitespace character, a punctuation character,
+    /// or neither (Characters and lines).
+    private enum CharacterClass {
+        case whitespace
+        case punctuation
+        case other
+    }
+
+    /// The class of `uc`.
     @inline(__always)
-    private static func isUnicodeWhitespace(_ uc: Int32) -> Bool {
-        if uc < 0x80 { return UInt8(uc).isFlankingSpace }
-        switch uc {
-        case 160, 5760, 8192...8202, 8239, 8287, 12288:
-            return true
-        default:
-            return false
+    private static func characterClass(_ uc: Int32) -> CharacterClass {
+        if uc < 0x80 {
+            let b = UInt8(uc)
+            return b.isFlankingSpace ? .whitespace : b.isASCIIPunct ? .punctuation : .other
         }
+        return nonASCIICharacterClass(uc)
     }
 
-    /// Whether `uc` is a punctuation character (Characters and lines): ASCII punctuation, or a scalar in a Unicode `P`
-    /// category.
-    @inline(__always)
-    private static func isUnicodePunctuation(_ uc: Int32) -> Bool {
-        if uc < 0x80 { return UInt8(uc).isASCIIPunct }
-        return isNonASCIIPunctuation(uc)
-    }
-
-    /// Whether non-ASCII `uc` is in a Unicode `P` category. Out of line, so that the general-category lookup's setup
-    /// runs only for non-ASCII scalars.
+    /// The class of non-ASCII `uc`, from its general category: `Zs` is whitespace and the `P` categories are
+    /// punctuation. Out of line, so that the general-category lookup's setup runs only for non-ASCII scalars.
     @inline(never)
-    private static func isNonASCIIPunctuation(_ uc: Int32) -> Bool {
+    private static func nonASCIICharacterClass(_ uc: Int32) -> CharacterClass {
         switch Unicode.Scalar(UInt32(uc))?.properties.generalCategory {
+        case .spaceSeparator:
+            return .whitespace
         case .connectorPunctuation, .dashPunctuation, .openPunctuation, .closePunctuation,
              .initialPunctuation, .finalPunctuation, .otherPunctuation:
-            return true
+            return .punctuation
         default:
-            return false
+            return .other
         }
     }
 
@@ -1995,7 +1997,7 @@ extension BlockParser {
             }
         } else {
             let scalar = Self.decodeUTF8Scalar(at: afterSlashes, content: content)
-            if Self.isUnicodeWhitespace(scalar) || Self.isUnicodePunctuation(scalar) {
+            if Self.characterClass(scalar) != .other {
                 return false
             }
         }
