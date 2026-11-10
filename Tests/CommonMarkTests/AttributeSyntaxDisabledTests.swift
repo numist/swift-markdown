@@ -13,9 +13,6 @@ import CommonMark
 
 /// Parses without `.attributes`, where neither `^[text](attrs)` nor `^[label]: attrs` is special: `^` is ordinary text,
 /// the brackets after it follow the CommonMark link rules, and a `^[label]:` line is ordinary paragraph content.
-///
-/// Each test mirrors a test that pins attribute behaviour with `.attributes` set, and asserts the whole tree for the same
-/// input with the option off.
 @Suite("Attribute syntax without the attributes option")
 struct AttributeSyntaxDisabledTests {
 
