@@ -20,7 +20,7 @@ import CommonMark
 /// past its container. A code block closed by its closing fence ends past that fence, and
 /// one open at the end of the document ends on the last line.
 @Suite("A fenced code block ends on its last line when its container closes")
-struct FencedCodeEscapedContainerRangeTests {
+struct FencedCodeClosedContainerRangeTests {
 
     struct Case: CustomTestStringConvertible, Sendable {
         let name: String
@@ -38,7 +38,7 @@ struct FencedCodeEscapedContainerRangeTests {
 
     static let cases: [Case] = [
         Case(
-            "block quote, escaped right after the opening fence",
+            "block quote ends right after the opening fence",
             "> ```\nx\n",
             """
             document @1:1-3:1
@@ -50,7 +50,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "block quote, escaped after a content line",
+            "block quote ends after a content line",
             "> ```\n> a\nx\n",
             """
             document @1:1-4:1
@@ -62,7 +62,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "block quote, escaped after a blank content line",
+            "block quote ends after a blank content line",
             "> ```\n>\nx\n",
             """
             document @1:1-4:1
@@ -74,7 +74,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "block quote, escaped by a blank line",
+            "block quote ends at a blank line",
             "> ```\n> a\n\nx\n",
             """
             document @1:1-5:1
@@ -108,7 +108,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "bullet item, escaped right after the opening fence",
+            "bullet item ends right after the opening fence",
             "- ```\nx\n",
             """
             document @1:1-3:1
@@ -121,7 +121,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "bullet item, escaped after a content line",
+            "bullet item ends after a content line",
             "- ```\n  a\nx\n",
             """
             document @1:1-4:1
@@ -134,7 +134,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "bullet item, escaped after a blank content line",
+            "bullet item ends after a blank content line",
             "- ```\n\nx\n",
             """
             document @1:1-4:1
@@ -147,7 +147,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "bullet item, escaped by a sibling item",
+            "bullet item ends at a sibling item",
             "- ```\n  a\n- b\n",
             """
             document @1:1-4:1
@@ -185,7 +185,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "ordered item, escaped right after the opening fence",
+            "ordered item ends right after the opening fence",
             "1. ```\nx\n",
             """
             document @1:1-3:1
@@ -198,7 +198,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "ordered item, escaped after a content line",
+            "ordered item ends after a content line",
             "1. ```\n   a\nx\n",
             """
             document @1:1-4:1
@@ -211,7 +211,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "ordered item, escaped by a sibling item",
+            "ordered item ends at a sibling item",
             "1. ```\n   a\n2. b\n",
             """
             document @1:1-4:1
@@ -225,7 +225,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "footnote definition, escaped right after the opening fence",
+            "footnote definition ends right after the opening fence",
             "[^a]\n\n[^a]: ```\nx\n",
             """
             document @1:1-5:1
@@ -239,7 +239,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "footnote definition, escaped after a content line",
+            "footnote definition ends after a content line",
             "[^a]\n\n[^a]: ```\n    a\nx\n",
             """
             document @1:1-6:1
@@ -253,7 +253,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "footnote definition, escaped after a blank content line",
+            "footnote definition ends after a blank content line",
             "[^a]\n\n[^a]: ```\n\nx\n",
             """
             document @1:1-6:1
@@ -281,7 +281,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "block quote in an item, escaped after a content line",
+            "block quote in an item ends after a content line",
             "- > ```\n  > a\n  x\n",
             """
             document @1:1-4:1
@@ -295,7 +295,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "item in a block quote, escaped after a content line",
+            "item in a block quote ends after a content line",
             "> - ```\n>   a\n> x\n",
             """
             document @1:1-4:1
@@ -309,7 +309,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "block quote in a block quote, escaped after a content line",
+            "block quote in a block quote ends after a content line",
             "> > ```\n> > a\n> x\n",
             """
             document @1:1-4:1
@@ -322,7 +322,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "footnote definition in a block quote, escaped after a content line",
+            "footnote definition in a block quote ends after a content line",
             "[^a]\n\n> [^a]: ```\n>     a\n> x\n",
             """
             document @1:1-6:1
@@ -337,7 +337,7 @@ struct FencedCodeEscapedContainerRangeTests {
             """
         ),
         Case(
-            "item in a block quote, escaped by a blank line",
+            "item in a block quote ends at a blank line",
             "> - ```\n>   a\n\nx\n",
             """
             document @1:1-5:1
