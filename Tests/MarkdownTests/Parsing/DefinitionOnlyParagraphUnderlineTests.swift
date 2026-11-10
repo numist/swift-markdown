@@ -100,7 +100,7 @@ struct DefinitionOnlyParagraphUnderlineTests {
             """)
     }
 
-    /// The removed link reference definition is defined, so a later `[foo]` resolves against it.
+    /// The link reference definition before `===` defines `[foo]`, so the later `[foo]` is a link.
     @Test func definitionBeforeEqualsUnderlineIsDefined() {
         #expect(tree("[foo]: /url\n===\n[foo]") == """
             Document @1:1-3:6
