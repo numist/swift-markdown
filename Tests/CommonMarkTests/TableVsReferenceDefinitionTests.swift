@@ -90,9 +90,9 @@ struct TableVsReferenceDefinitionTests {
 
     // MARK: - Delimiter row after a complete link reference definition
 
-    /// The `-` underlines no setext heading, since the paragraph before it holds only a link reference definition
-    /// (Setext headings), and an empty list item cannot interrupt a paragraph (List items), so the `-` is paragraph
-    /// text.
+    /// A pipe-less `-` is a setext heading underline rather than a delimiter row, but it underlines no setext heading,
+    /// since the paragraph before it holds only a link reference definition (Setext headings), and an empty list item
+    /// cannot interrupt a paragraph (List items), so the `-` is paragraph text.
     @Test("a bare `-` after a complete single-line link reference definition is paragraph text", arguments: [
         ("[o]:o\n-", """
             document
