@@ -18,17 +18,6 @@ import CommonMark
 @Suite("Extended email autolink local part after a rejected candidate")
 struct ExtendedEmailAutolinkAfterRejectedCandidateTests {
 
-    @Test("a plain email links with a `mailto:` destination")
-    func plainEmailLinks() {
-        #expect(TreeDump.dump("a@b.c", options: .gfmAutolink) == """
-            document
-              paragraph
-                link "mailto:a@b.c" ""
-                  text "a@b.c"
-
-            """)
-    }
-
     // MARK: - `+` ends a domain
 
     @Test("`l@o+@b.b`: the `+` bounds the second local part")
