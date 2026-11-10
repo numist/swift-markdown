@@ -12,7 +12,7 @@ import Testing
 import CommonMark
 
 /// Source ranges of footnote references. A reference spans the bracketed text it replaces, from its opener to just
-/// past its `]`. Columns are 1-based UTF-8 byte offsets and each end is half-open.
+/// past its `]`.
 @Suite("Source ranges of footnote references")
 struct FootnoteReferenceSourceRangeTests {
 
@@ -90,8 +90,8 @@ struct FootnoteReferenceSourceRangeTests {
             """)
     }
 
-    /// A backslash-escaped caret is a literal `^` (Backslash escapes), so `![\^…]` is neither an image nor a footnote
-    /// reference.
+    /// A backslash-escaped caret is a literal `^` (Backslash escapes), so `![\^…]` is not a footnote reference, and with
+    /// no matching link reference definition it is no image either.
     @Test("an image-shaped escaped-caret bracket is text")
     func imageShapedEscapedCaretBracketIsText() {
         #expect(tree("![\\^abcdef\nxxxxx]\n\n[^abc]: d") == """
