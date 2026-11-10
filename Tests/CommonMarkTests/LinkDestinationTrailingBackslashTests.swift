@@ -22,30 +22,39 @@ struct LinkDestinationTrailingBackslashTests {
     @Test("a link reference definition whose destination is one backslash ends at the line ending")
     func refDefBareTrailingBackslash() {
         // The destination is `\`, and the `]` line is a paragraph.
-        #expect(TreeDump.dump("[b]:\\\n]", options: []) == """
+        #expect(TreeDump.dump("[b]:\\\n]\n\n[b]", options: []) == """
             document
               paragraph
                 text "]"
+              paragraph
+                link "\\\\" ""
+                  text "b"
 
             """)
     }
 
     @Test("a link reference definition destination ending in a backslash after text ends at the line ending")
     func refDefTrailingBackslashAfterText() {
-        #expect(TreeDump.dump("[b]:a\\\nx", options: []) == """
+        #expect(TreeDump.dump("[b]:a\\\nx\n\n[b]", options: []) == """
             document
               paragraph
                 text "x"
+              paragraph
+                link "a\\\\" ""
+                  text "b"
 
             """)
     }
 
     @Test("a link reference definition destination ending in a backslash after a path ends at the line ending")
     func refDefTrailingBackslashSlashPath() {
-        #expect(TreeDump.dump("[b]:/u\\\ny", options: []) == """
+        #expect(TreeDump.dump("[b]:/u\\\ny\n\n[b]", options: []) == """
             document
               paragraph
                 text "y"
+              paragraph
+                link "/u\\\\" ""
+                  text "b"
 
             """)
     }
@@ -64,42 +73,13 @@ struct LinkDestinationTrailingBackslashTests {
             """)
     }
 
-    // MARK: - Other destinations
-
-    @Test("a link reference definition destination ending in two backslashes ends at the line ending")
-    func refDefEvenTrailingBackslashes() {
-        #expect(TreeDump.dump("[b]:a\\\\\n]", options: []) == """
-            document
-              paragraph
-                text "]"
-
-            """)
-    }
-
-    @Test("a link reference definition destination holding a backslash ends at the line ending")
-    func refDefBackslashMidDestination() {
-        #expect(TreeDump.dump("[b]:a\\b\n]", options: []) == """
-            document
-              paragraph
-                text "]"
-
-            """)
-    }
-
-    @Test("a plain link reference definition destination ends at the line ending")
-    func refDefPlainDestination() {
-        #expect(TreeDump.dump("[b]: x\n]", options: []) == """
-            document
-              paragraph
-                text "]"
-
-            """)
-    }
-
     @Test("a link reference definition whose destination is one backslash at the end of input is a definition")
     func refDefLoneTrailingBackslash() {
-        #expect(TreeDump.dump("[b]:\\", options: []) == """
+        #expect(TreeDump.dump("[b]\n\n[b]:\\", options: []) == """
             document
+              paragraph
+                link "\\\\" ""
+                  text "b"
 
             """)
     }
@@ -115,10 +95,51 @@ struct LinkDestinationTrailingBackslashTests {
 
             """)
     }
+
+    // MARK: - Other destinations
+
+    @Test("a link reference definition destination ending in two backslashes ends at the line ending")
+    func refDefEvenTrailingBackslashes() {
+        #expect(TreeDump.dump("[b]:a\\\\\n]\n\n[b]", options: []) == """
+            document
+              paragraph
+                text "]"
+              paragraph
+                link "a\\\\" ""
+                  text "b"
+
+            """)
+    }
+
+    @Test("a link reference definition destination holding a backslash ends at the line ending")
+    func refDefBackslashMidDestination() {
+        #expect(TreeDump.dump("[b]:a\\b\n]\n\n[b]", options: []) == """
+            document
+              paragraph
+                text "]"
+              paragraph
+                link "a\\\\b" ""
+                  text "b"
+
+            """)
+    }
+
+    @Test("a plain link reference definition destination ends at the line ending")
+    func refDefPlainDestination() {
+        #expect(TreeDump.dump("[b]: x\n]\n\n[b]", options: []) == """
+            document
+              paragraph
+                text "]"
+              paragraph
+                link "x" ""
+                  text "b"
+
+            """)
+    }
 }
 
-/// A bare link destination (Links) is a run of non-whitespace characters whose parentheses are escaped or balanced, and
-/// an inline link's destination may be empty.
+/// A bare link destination (Links) is a run of characters other than ASCII spaces and control characters whose
+/// parentheses are escaped or balanced, and an inline link's destination may be empty.
 @Suite("Link destination forms")
 struct LinkDestinationFormTests {
 
@@ -142,7 +163,6 @@ struct LinkDestinationFormTests {
             """)
     }
 
-    /// A bare destination includes parentheses only when they are escaped or balanced (Links).
     @Test("unbalanced open paren destination stopped by a space is no link")
     func openParenDestinationStoppedBySpace() {
         #expect(TreeDump.dump("[](( )", options: []) == """
