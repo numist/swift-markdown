@@ -15,7 +15,7 @@ import Testing
 ///
 /// A `^` cell, or with ditto row spans a `"` cell instead, extends the nearest cell above it that is not itself a span
 /// marker, and a cell with nothing between its pipes extends the nearest cell to its left that is not itself such a
-/// cell. 40,000 rows of markers, or a row of 40,000 such cells, parse well within the time limit.
+/// cell. 40,000 rows of markers, or a row of 40,000 pipes after one cell, parse well within the time limit.
 @Suite("Runs of spanning table cells")
 struct SpanningTableCellRunTests {
     private static let spans: MarkdownDocument.ParseOptions = [.tables, .tableSpans]
