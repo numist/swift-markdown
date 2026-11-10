@@ -25,20 +25,6 @@ private func firstLinkURL(_ node: borrowing MarkdownNode) -> String? {
     return found
 }
 
-/// The literal text of the first `.text` node in depth-first order, or nil if there is none.
-private func firstText(_ node: borrowing MarkdownNode) -> String? {
-    if node.kind == .text {
-        return node.literal()
-    }
-    var found: String? = nil
-    node.children.forEach { child in
-        if found == nil {
-            found = firstText(child)
-        }
-    }
-    return found
-}
-
 /// A bare link destination does not include ASCII control characters (Links), so a line tabulation (VT) or form feed
 /// (FF) ends it. Both are whitespace characters (Characters and lines), so either may separate the destination from
 /// what follows.
@@ -84,7 +70,7 @@ struct LinkDestinationControlCharacterTests {
     @Test("`[?]:\\u{0B}` is not a link reference definition: the paragraph text is `[?]:`")
     func refDefWithOnlyVT() throws {
         let text = MarkdownDocument.withParsedDocument("[?]:\u{0B}", options: Self.options) { doc -> String? in
-            firstText(doc.root)
+            dfs(doc).first { $0.kind == .text }?.literal
         }
         #expect(try #require(text, "expected a paragraph text node") == "[?]:")
     }
