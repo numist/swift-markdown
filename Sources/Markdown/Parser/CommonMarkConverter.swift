@@ -18,12 +18,11 @@ import Foundation
 struct MarkupParser {
 
     static func parseString(_ string: String, source: URL?, options: ParseOptions) -> Document {
-        // Footnotes stay off: `Markup` has no footnote node.
+        // No footnotes: `Markup` has no footnote node.
         var cmOptions: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes]
         if !options.contains(.disableSmartOpts) {
             cmOptions.insert(.smart)
         }
-        // Parsing always records source ranges, so `.disableSourcePosOpts` has no effect.
         cmOptions.insert(.sourcePosition)
 
         let raw = MarkdownDocument.withParsedDocument(string, options: cmOptions) { document in
@@ -87,7 +86,7 @@ struct MarkupParser {
 
     /// Convert the subtree rooted at `root` into `RawMarkup`.
     ///
-    /// Iterative rather than recursive, because block quotes and lists can nest deeply enough to
+    /// Iterative rather than recursive, because blocks and inlines can nest deeply enough to
     /// overflow the call stack. `accStack[d]` holds the converted children accumulated for the open
     /// ancestor at depth `d`; a node is built once all its children are collected (post-order). Tables
     /// are built whole by `convertTable` and not descended into, since grouping their rows into head
@@ -97,7 +96,6 @@ struct MarkupParser {
         var node = copy root
 
         while true {
-            // Descend into the first child (but never into a table — it's built atomically below).
             if !isTable(node.kind), let firstChild = node.firstChild {
                 accStack.append([])
                 node = firstChild
