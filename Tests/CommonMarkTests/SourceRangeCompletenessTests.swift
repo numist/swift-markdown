@@ -30,13 +30,6 @@ internal func dfsCompleteness(
 @Suite("Source range completeness")
 struct SourceRangeCompletenessTests {
 
-    private static func loadSpec() throws -> [SpecExample] {
-        let here = URL(fileURLWithPath: #filePath)
-        let resource = here.deletingLastPathComponent().appendingPathComponent("spec.txt")
-        let text = try String(contentsOf: resource, encoding: .utf8)
-        return SpecParser.parse(text)
-    }
-
     /// Every example parses with these options rather than its own spec annotation, so each check
     /// covers every example.
     private static let options: MarkdownDocument.ParseOptions =
@@ -83,7 +76,7 @@ struct SourceRangeCompletenessTests {
 
         var compared = 0
         var failures: [String] = []
-        for ex in try Self.loadSpec() {
+        for ex in try SpecParser.loadSpec() {
             let original = nodes(ex.markdown)
             let withNUL = nodes(ex.markdown.replacingOccurrences(of: "o", with: "\u{0}"))
             // A NUL can change structure (an `o` in an entity or HTML tag name, U+FFFD's emphasis flanking), and then its ranges aren't comparable.
@@ -177,7 +170,7 @@ struct SourceRangeCompletenessTests {
         let optionSets: [MarkdownDocument.ParseOptions] = [
             Self.options, Self.options.union([.footnotes, .gfmAutolink]), Self.options.union(.inlineOnly),
         ]
-        for ex in try Self.loadSpec() {
+        for ex in try SpecParser.loadSpec() {
             let markdown = ex.markdown.replacingOccurrences(of: "\n", with: lineEnding)
             for source in [markdown] + Container.allCases.map({ $0.nest(markdown) }) {
                 for options in optionSets {
@@ -256,7 +249,7 @@ struct SourceRangeCompletenessTests {
     /// Parses every spec example with `options`, its markdown passed through `transform`, and collects each
     /// node that lacks a source range, skipping the exemptions documented on `everyNonExemptNodeHasRange`.
     private static func audit(options: MarkdownDocument.ParseOptions, transform: (String) -> String = { $0 }) throws -> (totalNodes: Int, exemptFillerCells: Int, failures: [String]) {
-        let examples = try Self.loadSpec()
+        let examples = try SpecParser.loadSpec()
         #expect(examples.count > 600)
 
         var totalNodes = 0

@@ -25,6 +25,13 @@ internal struct SpecExample: Sendable {
 }
 
 internal enum SpecParser {
+    internal static func loadSpec() throws -> [SpecExample] {
+        let here = URL(fileURLWithPath: #filePath)
+        let resource = here.deletingLastPathComponent().appendingPathComponent("spec.txt")
+        let text = try String(contentsOf: resource, encoding: .utf8)
+        return parse(text)
+    }
+
     internal static func parse(_ text: String) -> [SpecExample] {
         var examples: [SpecExample] = []
         var section = ""
@@ -84,13 +91,6 @@ internal enum SpecParser {
 @Suite("Spec parity")
 struct SpecParityTests {
 
-    private static func loadSpec() throws -> [SpecExample] {
-        let here = URL(fileURLWithPath: #filePath)
-        let resource = here.deletingLastPathComponent().appendingPathComponent("spec.txt")
-        let text = try String(contentsOf: resource, encoding: .utf8)
-        return SpecParser.parse(text)
-    }
-
     /// The parse options for an example's extension annotations (e.g. `autolink`, `table`, `strikethrough`),
     /// plus task list items and footnotes, which the spec doesn't annotate.
     private static func options(forExtensions extensions: [String]) -> MarkdownDocument.ParseOptions {
@@ -110,7 +110,7 @@ struct SpecParityTests {
 
     @Test("every spec example renders its expected HTML")
     func allExamples() throws {
-        let examples = try Self.loadSpec()
+        let examples = try SpecParser.loadSpec()
         #expect(examples.count == 672)
         for ex in examples {
             let source = ex.markdown
