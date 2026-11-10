@@ -881,7 +881,7 @@ extension BlockParser {
         }
     }
 
-    /// Scans the delimiter run at `start`, emits its text unless it is a `*` or `_` run that can neither open nor close, and pushes a delimiter if it can open or close (Emphasis and strong emphasis) and, for `~`, has a strikethrough length. Returns the offset past the run.
+    /// Scans the delimiter run at `start`, emits its text unless it can neither open nor close, and pushes a delimiter if it can open or close (Emphasis and strong emphasis) and, for `~`, has a strikethrough length. Returns the offset past the run.
     private mutating func handleDelimRun(char: UInt8, start: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         let end = content.endOffset
         var runEnd = start
@@ -906,25 +906,22 @@ extension BlockParser {
             canOpen = leftFlanking
             canClose = rightFlanking
         }
-        let isStrikethrough = char == UInt8(ascii: "~")
-        if !canOpen && !canClose && !isStrikethrough {
+        if !canOpen && !canClose {
             return runEnd
         }
         // An unpaired delimiter stays literal text with its own source range.
         let textIdx = emitLiteral(.text, content.chunk(offset: start, length: count), start: start, end: runEnd, to: parent, pendingTextStart: &pendingTextStart, content: content)
-        if canOpen || canClose {
-            // Strikethrough (extension) uses two tildes, or one unless `.strikethroughDoubleTilde` is set.
-            // Other `~` runs stay literal.
-            let pushDelim: Bool
-            if isStrikethrough {
-                let doubleTilde = storage.options.contains(.strikethroughDoubleTilde)
-                pushDelim = count == 2 || (!doubleTilde && count == 1)
-            } else {
-                pushDelim = true
-            }
-            if pushDelim {
-                pushDelimiter(char, length: count, canOpen: canOpen, canClose: canClose, inlText: textIdx, range: start..<runEnd)
-            }
+        // Strikethrough (extension) uses two tildes, or one unless `.strikethroughDoubleTilde` is set.
+        // Other `~` runs stay literal.
+        let pushDelim: Bool
+        if char == UInt8(ascii: "~") {
+            let doubleTilde = storage.options.contains(.strikethroughDoubleTilde)
+            pushDelim = count == 2 || (!doubleTilde && count == 1)
+        } else {
+            pushDelim = true
+        }
+        if pushDelim {
+            pushDelimiter(char, length: count, canOpen: canOpen, canClose: canClose, inlText: textIdx, range: start..<runEnd)
         }
         return runEnd
     }
