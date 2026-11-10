@@ -13,7 +13,7 @@ import CommonMark
 
 /// A task list item marker begins the item's first paragraph (Task list items (extension)), so it may sit
 /// on the line after a list marker with no content.
-@Suite("Task list item marker on a continuation line")
+@Suite("Task list item marker at the start of the item's first paragraph")
 struct TaskListContinuationLineRecognitionTests {
 
     @Test("`-\\n  [x] foo` is a checked task list item")
