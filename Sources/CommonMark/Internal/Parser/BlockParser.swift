@@ -1603,8 +1603,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `startColumn` is the walk's `prefixColumns`, past `startCursor`'s column when a prefix consumed part of a tab.
     /// Indents are measured from it, so that tab's consumed columns don't count twice.
     private mutating func dispatchNewBlocks(lineRange: Range<Int>, startCursor: Int, startColumn: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
-        // The matchers and openers this calls on every line that starts a block are `@inline(__always)`: called out of
-        // line, they cost about 3% of a prose-heavy parse's instructions.
+        // The matchers and openers this calls that are marked `@inline(__always)` cost 0.8% to 1.9% of the instructions
+        // of a parse of `Benchmarks/100kb-test-content.md` out of line.
         var pending = pending
         var cursor = startCursor
         var column = startColumn
@@ -2730,7 +2730,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Whether `</name>` occurs in `range`, ignoring ASCII case.
-    // Inlined because it scans every byte of a type 1 block's lines once per tag; out of line it costs about 2% of a corpus parse's instructions.
+    // Inlined because it scans every byte of a type 1 block's lines once per tag: out of line it costs about 5% of the
+    // instructions of a parse of `Benchmarks/100kb-test-content.md` after a `<pre>` line.
     @inline(__always)
     private func findClosingTag(range: Range<Int>, name: [UInt8]) -> Bool {
         let nameLen = name.count
@@ -3317,7 +3318,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// `content`'s bytes at `range` as a chunk with backslash escapes and character references resolved, copied into
     /// the arena once if `range` holds either or, as a link title can, spans a line join.
-    // Inlined for the reason given before `skipLineWhitespace`.
+    // Inlined because it resolves every inline link's destination and title: out of line it costs about 0.5% of the
+    // instructions of a parse of 20,000 paragraphs each holding an inline link.
     @inline(__always)
     mutating func unescapedChunk(_ range: Range<Int>, in content: borrowing ContentSpan) -> Chunk {
         if range.isEmpty {
@@ -3351,9 +3353,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return i
     }
 
-    // The scanners below are `@inline(__always)` and `mutating` though they only read, and `parseOneLinkDefinition`,
-    // `matchDefinitionLabel` and `unescapedChunk` are `@inline(__always)`: out of line, or as non-mutating methods of
-    // the large `BlockParser`, they measured about 1.5% and 2.6% more instructions on a document of definitions.
+    // The scanners below, `parseOneLinkDefinition` and `matchDefinitionLabel` are `@inline(__always)`: out of line,
+    // they cost about 2% of the instructions of a parse of 200,000 one-line definitions `[aN]: /uN "tN"`.
 
     /// Skips spaces, tabs, line tabulations and form feeds.
     @inline(__always)
