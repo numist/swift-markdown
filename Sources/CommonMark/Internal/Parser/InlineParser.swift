@@ -13,7 +13,7 @@ internal import BasicContainers
 /// The emphasis `openersBottom` table: rows by whether the closer can open and its `length % 3`, columns by delimiter
 /// character (`*_~'"`).
 ///
-/// It wraps `SIMD32` because a nested `InlineArray` requires the anyAppleOS 26 runtime.
+/// It wraps `SIMD32` because `InlineArray` requires the anyAppleOS 26 runtime.
 internal struct OpenersBottom {
     private var storage: SIMD32<Int>
 
@@ -48,7 +48,7 @@ internal struct BacktickRunsSeen {
     /// The latest start of a run of each length at or past `scannedToEndFrom`.
     var latestStart: [Int: Int] = [:]
 
-    /// Whether no run of `length` backticks starts at or past `openEnd`, the end of an opening run of that length.
+    /// Whether the scan to the content end shows that no run of `length` backticks starts at or past `openEnd`, the end of an opening run of that length.
     func rulesOutCloser(length: Int, after openEnd: Int) -> Bool {
         guard let scannedToEndFrom, scannedToEndFrom <= openEnd else {
             return false
@@ -402,9 +402,7 @@ extension BlockParser {
 
     /// A `://` or `www.` extended autolink, triggered by `byte` (`:` or `w`).
     private mutating func handleGFMAutolinkTrigger(_ byte: UInt8, at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
-        // Extended email autolinks are found after emphasis resolution (`gfmEmailAutolinkPass`), so a `_`
-        // or `*` beside an email resolves first. No `://` or `www.` autolink forms while a `[` or `![`
-        // opener is open, so `[a http://t.t` is text; an `^[` opener does not suppress one.
+        // An open `[` or `![` suppresses the autolink even if it never closes, so `[a http://t.t` is text.
         let insideLinkOrImageBracket = lastBracket.map { brackets[$0].insideLinkOrImage } ?? false
         if storage.options.contains(.gfmAutolink),
            !insideLinkOrImageBracket,
@@ -516,7 +514,7 @@ extension BlockParser {
         }
     }
     
-    /// Handles a `]`: the innermost opener becomes a link, image or attribute when that form follows, or a footnote reference when `[^label]` names a definition. Otherwise the `]` is literal; after an `^[` opener its text also spans the label that follows it.
+    /// Handles a `]`: the innermost opener becomes a link, image or attribute when that form follows, or a footnote reference when `[^label]` names a definition. Otherwise the `]` is literal text; after an `^[` opener, a label that follows is consumed into the `]`'s source range but not its text.
     private mutating func handleCloseBracket(cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index) -> Int {
         let afterBracket = cursor + 1
         guard let openerIdx = lastBracket else {
@@ -705,7 +703,7 @@ extension BlockParser {
     /// `definition` over `span`.
     ///
     /// The reference carries the definition's label, so `[^Foo]` resolving to `[^foo]` displays `foo`. Its index is 0
-    /// until the footnote pass numbers the finalized tree, because an enclosing bracket can still discard it.
+    /// until the footnote pass numbers the finalized tree.
     private mutating func emitFootnoteReference(after openerInl: DocumentStorage.Index, definition defIdx: DocumentStorage.Index, span: Range<Int>, content: borrowing ContentSpan) {
         guard case .footnoteDefinition(let defLabel) = storage[defIdx].data else {
             preconditionFailure("footnoteMap holds only footnote definitions")
@@ -725,7 +723,7 @@ extension BlockParser {
         stampInline(fnRefIdx, span.lowerBound, span.upperBound, content: content)
     }
 
-    // MARK: - Extended attributes (`^[..]`)
+    // MARK: - Inline attributes (`^[…]`)
 
     /// The attribute data for the form after the `]` closing an `^[` opener, and the offset past it: an inline `(attrs)`, or a `[label]`.
     ///
@@ -1413,7 +1411,7 @@ extension BlockParser {
             i += 1
             schemeChars += 1
         }
-        // Need at least 2-char scheme and a `:`.
+        // A scheme is 2 to 32 characters (Autolinks).
         if schemeChars < 2 || i >= end {
             return nil
         }
@@ -1697,7 +1695,7 @@ extension BlockParser {
         )
     }
 
-    /// `:`-triggered: looks back for `http`/`https`/`ftp`, then forward for `//` and a URL body.
+    /// Matches an `http://`, `https://` or `ftp://` extended autolink whose `:` is at `colon`.
     private func matchGFMSchemeAutolink(colon: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         let end = content.endOffset
         let chunkStart = content.startOffset
@@ -1860,7 +1858,7 @@ extension BlockParser {
                 continue
             }
             resumeAt = i
-            // The domain holds a period and ends in a letter.
+            // The domain ends in a letter, and it or a domain before a restart holds a period.
             guard i > atSign + 1, hasPeriodBeforeAlphanumeric, content[i - 1].isASCIILetter else {
                 return nil
             }
@@ -2052,7 +2050,7 @@ extension BlockParser {
         return Chunk(offset: offset, length: count, inSource: false)
     }
 
-    /// Emits a `.text` node over `start..<end` if non-empty. Every line ending flushes the run, so it lies within one segment.
+    /// Emits a `.text` node over `start..<end` if non-empty. Every line join is a line break, which flushes the run, so it lies within one segment.
     private mutating func flushPendingText(start: Int, end: Int, content: borrowing ContentSpan, into parent: DocumentStorage.Index) {
         if end <= start {
             return
@@ -2063,7 +2061,7 @@ extension BlockParser {
         appendInline(.text, .literal(storage.intern(chunk)), to: parent, start: start, end: end, content: content)
     }
 
-    /// Append an inline node to `parent`, stamped with the source range of the virtual range `start..<end`.
+    /// Appends an inline node to `parent`, stamped with the source range of the virtual range `start..<end`.
     @discardableResult
     private mutating func appendInline(_ kind: MarkdownNode.Kind, _ data: NodeData?, to parent: DocumentStorage.Index, start: Int, end: Int, content: borrowing ContentSpan) -> DocumentStorage.Index {
         let idx = storage.appendNode(NodeRecord(kind: kind, parent: parent, data: data))
@@ -2080,8 +2078,8 @@ extension BlockParser {
         return appendInline(kind, .literal(storage.intern(chunk)), to: parent, start: start, end: end, content: content)
     }
 
-    /// A chunk for `[start, end)`, copied into the arena only when the range spans segments, as raw HTML or an
-    /// attribute list can.
+    /// A chunk for `start..<end`, copied into the arena only when the range spans segments, as raw HTML or attributes
+    /// can.
     mutating func materializedChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end),
            contiguous.length == end - start {
@@ -2280,7 +2278,7 @@ extension BlockParser {
                 }
             }
 
-            // A fresh tail node becomes the running run. Its content is carved once its end is known, since
+            // A fresh tail node becomes the running text node. Its content is carved once its end is known, since
             // carving the whole tail per address would re-copy a long run's segments each time.
             let tailIdx = storage.appendNode(NodeRecord(
                 kind: .text, parent: parent, data: .literal(.empty)))
@@ -2335,7 +2333,7 @@ extension BlockParser {
         var start = 0
     }
 
-    /// Carves `[lo, hi)` of `ref`'s content into new segments over the same bytes.
+    /// Carves `lo..<hi` of `ref`'s content into new segments over the same bytes.
     ///
     /// Resuming from `position`, carves that never start before an earlier carve's end visit each segment of `ref` a
     /// bounded number of times in total.
