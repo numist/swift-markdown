@@ -11,9 +11,9 @@
 import Testing
 import CommonMark
 
-/// Under Tables (extension), spaces between pipes and cell content are trimmed. Every whitespace character other than
-/// a line ending (Characters and lines), line tabulation (U+000B) and form feed (U+000C) included, is such padding:
-/// it is trimmed from both edges of a cell, and may precede a row's leading pipe or follow its closing pipe.
+/// Under Tables (extension), spaces between pipes and cell content are trimmed. Every whitespace character (Characters
+/// and lines) except a line ending, including line tabulation (U+000B) and form feed (U+000C), is such padding: it is
+/// trimmed from both edges of a cell, and may precede a row's leading pipe or follow its closing pipe.
 @Suite("Table cell pipe-boundary whitespace")
 struct TableCellPipeWhitespaceTests {
 
@@ -68,7 +68,7 @@ struct TableCellPipeWhitespaceTests {
     }
 
     @Test("a trailing pipe then a line tabulation is a closing pipe on the delimiter row")
-    func delimiterTrailingPipeVerticalTab() {
+    func delimiterTrailingPipeLineTabulation() {
         #expect(TreeDump.dump("d\n-|\(Self.vt)", options: [.tables]) == """
             document
               table
@@ -123,7 +123,7 @@ struct TableCellPipeWhitespaceTests {
     }
 
     @Test("a line tabulation starting a first cell with no leading pipe is padding")
-    func leadingVerticalTabFirstCellNoPipe() {
+    func leadingLineTabulationFirstCellNoPipe() {
         #expect(TreeDump.dump("\(Self.vt)a|b\n-|-", options: [.tables]) == """
             document
               table
@@ -137,7 +137,7 @@ struct TableCellPipeWhitespaceTests {
     }
 
     @Test("a line tabulation before a row's leading pipe is padding")
-    func verticalTabBeforeLeadingPipe() {
+    func lineTabulationBeforeLeadingPipe() {
         #expect(TreeDump.dump("| a | b |\n|-|-|\n\(Self.vt)| x | y |\n", options: [.tables, .sourcePosition], sourceRanges: true) == """
             document @1:1-4:1
               table @1:1-3:11
@@ -156,7 +156,7 @@ struct TableCellPipeWhitespaceTests {
     }
 
     @Test("a line tabulation before a header row's leading pipe is padding")
-    func verticalTabBeforeHeaderLeadingPipe() {
+    func lineTabulationBeforeHeaderLeadingPipe() {
         #expect(TreeDump.dump("\(Self.vt)| a | b |\n|-|-|", options: [.tables]) == """
             document
               table
@@ -170,7 +170,7 @@ struct TableCellPipeWhitespaceTests {
     }
 
     @Test("a line tabulation before a closing pipe is padding")
-    func verticalTabBeforeClosingPipe() {
+    func lineTabulationBeforeClosingPipe() {
         #expect(TreeDump.dump("a|b\n-|-\n| x\(Self.vt)| y\(Self.ff)|", options: [.tables]) == """
             document
               table
@@ -189,7 +189,7 @@ struct TableCellPipeWhitespaceTests {
     }
 
     @Test("a lone pipe after a line tabulation is a row with no cells, which ends the table")
-    func verticalTabBeforeLonePipe() {
+    func lineTabulationBeforeLonePipe() {
         #expect(TreeDump.dump("a\n|-\n\(Self.vt)|\n", options: [.tables]) == """
             document
               table
@@ -202,7 +202,7 @@ struct TableCellPipeWhitespaceTests {
             """)
     }
 
-    @Test("a form feed after a leading pipe is skipped")
+    @Test("a form feed after a leading pipe is padding")
     func leadingFormFeedFirstCellWithPipe() {
         #expect(TreeDump.dump("|\(Self.ff)a|b\n-|-", options: [.tables]) == """
             document
