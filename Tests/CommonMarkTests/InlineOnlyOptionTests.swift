@@ -13,9 +13,9 @@ import CommonMark
 
 /// The parse options `.inlineOnly` and `.preserveWhitespace`.
 ///
-/// Neither opens a block container: the whole input is one paragraph, so block markers such as `#`, `* `, `> `, `---`,
-/// ` ``` ` and a 4-space indent are text, and line endings, blank lines and leading and trailing whitespace stay in the
-/// paragraph's text. Inline syntax is parsed. The two options produce the same tree.
+/// Neither recognizes block structure: the whole input is one paragraph, so block markers such as `#`, `* `, `> `,
+/// `---`, ` ``` ` and a 4-space indent are text, and line endings, blank lines and leading and trailing whitespace stay
+/// in the paragraph's text. Inline syntax is parsed. The two options produce the same tree.
 @Suite("Parse options - inlineOnly / preserveWhitespace")
 struct InlineOnlyOptionTests {
 
@@ -31,7 +31,7 @@ struct InlineOnlyOptionTests {
             """)
     }
 
-    @Test("inline-only parsing parses inline emphasis and code spans", arguments: inlineOnlyOptions)
+    @Test("inline-only parsing recognizes emphasis and code spans", arguments: inlineOnlyOptions)
     func keepsInlineSyntax(options: MarkdownDocument.ParseOptions) {
         let source = "# *em* and `code`"
         #expect(TreeDump.dump(source, options: options) == """
@@ -50,7 +50,7 @@ struct InlineOnlyOptionTests {
         #expect(kinds == ["document", "paragraph", "text", "emph", "text", "text", "code backticks=1"])
     }
 
-    @Test("inline-only parsing parses links", arguments: inlineOnlyOptions)
+    @Test("inline-only parsing recognizes links", arguments: inlineOnlyOptions)
     func parsesLinks(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("see [text](http://example.com) ok", options: options) == """
             document

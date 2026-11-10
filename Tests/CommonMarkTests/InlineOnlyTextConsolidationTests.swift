@@ -11,8 +11,8 @@
 import CommonMark
 import Testing
 
-/// Inline-only parsing merges adjacent text nodes, so a delimiter or bracket that opens nothing, an entity reference and
-/// a backslash escape join the text around them.
+/// Adjacent text nodes merge, so a delimiter or bracket that matches nothing, an entity reference and a backslash
+/// escape join the text around them.
 @Suite("Inline-only text consolidation")
 struct InlineOnlyTextConsolidationTests {
 

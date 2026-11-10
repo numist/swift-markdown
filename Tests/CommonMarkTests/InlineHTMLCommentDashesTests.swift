@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// An HTML comment (Raw HTML) is `<!--`, text not containing `-->`, and `-->`, so `<!----->` is a comment whose text
-/// is `-`.
+/// An HTML comment (Raw HTML) is `<!-->`, `<!--->`, or `<!--`, text not containing `-->`, and `-->`, so `<!----->` is
+/// a comment whose text is `-`.
 @Suite("Inline HTML comments made of dashes")
 struct InlineHTMLCommentDashesTests {
 
