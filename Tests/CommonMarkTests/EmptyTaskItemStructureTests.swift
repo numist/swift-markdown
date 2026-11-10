@@ -19,7 +19,7 @@ import CommonMark
 /// begins with a task list item marker followed by whitespace, so the item is a task list item (Task
 /// list items (extension)); the marker becomes the checkbox, and a paragraph left with no content is
 /// removed.
-@Suite("Empty task list item block structure")
+@Suite("Checkbox-only task list item block structure")
 struct EmptyTaskItemStructureTests {
 
     @Test("a checkbox-only task list item line is continued by a lazy continuation line")
@@ -34,7 +34,7 @@ struct EmptyTaskItemStructureTests {
             """)
     }
 
-    @Test("empty task list item followed by a blank line then text")
+    @Test("a checkbox-only task list item followed by a blank line then text")
     func emptyTaskItemBeforeBlankThenText() {
         #expect(TreeDump.dump("- [ ] \n\nx", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
             document @1:1-3:2
@@ -46,7 +46,7 @@ struct EmptyTaskItemStructureTests {
             """)
     }
 
-    @Test("empty task list item as the last line")
+    @Test("a checkbox-only task list item as the last line")
     func emptyTaskItemAtEOF() {
         #expect(TreeDump.dump("- [ ] ", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
             document @1:1-1:7
@@ -56,7 +56,7 @@ struct EmptyTaskItemStructureTests {
             """)
     }
 
-    @Test("empty task list item followed by an indented line continues the item")
+    @Test("a checkbox-only task list item followed by an indented line continues the item")
     func emptyTaskItemContinuesOnIndentedLine() {
         #expect(TreeDump.dump("- [ ] \n  x", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
             document @1:1-2:4
