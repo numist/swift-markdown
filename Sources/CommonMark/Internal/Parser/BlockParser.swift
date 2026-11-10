@@ -882,7 +882,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Splits a segment-list paragraph before its header, the segments after its last line join: the earlier lines
-    /// become a paragraph before `node`.
+    /// become a paragraph before `node`, unless their definitions or task list item marker leave nothing.
     private mutating func splitSegmentHeader(_ node: DocumentStorage.Index, segments: consuming UniqueArray<Segment>, lineJoin: Int) -> PendingLeaf? {
         var segs = segments
         var header = UniqueArray<Segment>()
@@ -1971,10 +1971,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         enqueueRawContent(of: node, segments(segs, in: content, total: total))
     }
 
-    /// The virtual range of the raw content of the paragraph `node` whose lines are `segs`, `total` bytes long (see
-    /// `rawContentStart(in:trimmed:taskItemParagraph:)`), or `nil` when its lines are all whitespace. The range is
-    /// empty, at the end of the lines' trimmed range, when the paragraph's definitions or task list item marker leave
-    /// nothing.
+    /// The virtual range of the raw content of the paragraph `node`, or with `node` nil of a setext heading, whose
+    /// lines are `segs`, `total` bytes long (see `rawContentStart(in:trimmed:taskItemParagraph:)`), or `nil` when its
+    /// lines are all whitespace. The range is empty, at the end of the lines' trimmed range, when the paragraph's
+    /// definitions or task list item marker leave nothing.
     private mutating func rawContentRange(in segs: borrowing UniqueArray<Segment>, total: Int, taskItemParagraph node: DocumentStorage.Index?) -> Range<Int>? {
         let trimmed = trimmedRange(of: segs, total: total)
         if trimmed.isEmpty {
