@@ -32,8 +32,8 @@ private struct InlineScratch: ~Copyable {
 
 /// The Markdown parser: the block structure line by line, then each leaf's inline content.
 ///
-/// A method that only reads the parser but calls its other methods is still `mutating`, since a non-mutating method
-/// copies the whole parser before each such call.
+/// A method that only reads the parser may still be `mutating`, since a non-mutating method can copy the whole parser
+/// before each call it makes to another parser method.
 internal struct BlockParser : ~Copyable, ~Escapable {
     internal var storage: DocumentStorage
     
