@@ -473,7 +473,7 @@ extension BlockParser {
         var virtualStart: Int
         /// The delimiter stack top at push: the `stackBottom` for resolving emphasis inside the link text.
         var delimPosition: Int
-        /// Whether a bracket was pushed after this one. Its text then holds an unescaped bracket, which no link label does, so it skips the shortcut lookup.
+        /// Whether a bracket was pushed after this one. Its text then holds an unescaped bracket, which no link label does, so it can't be the label of a collapsed or shortcut reference.
         var bracketAfter: Bool = false
         /// Whether this bracket or one enclosing it is a link or image opener, which suppresses `://` and `www.` extended autolinks.
         var insideLinkOrImage: Bool
@@ -542,7 +542,7 @@ extension BlockParser {
             formed = inline
             literalEnd = afterBracket
         } else {
-            formed = matchReferenceLinkForm(shortcutLabelStart: brackets[openerIdx].bracketAfter ? nil : openerStart + (openerKind == .image ? 2 : 1), cursor: cursor, content: content)
+            formed = matchReferenceLinkForm(bracketTextStart: brackets[openerIdx].bracketAfter ? nil : openerStart + (openerKind == .image ? 2 : 1), cursor: cursor, content: content)
             literalEnd = afterBracket
         }
         if let formed {
@@ -574,9 +574,9 @@ extension BlockParser {
 
     /// The link or image data for a full, collapsed or shortcut reference after the `]` at `cursor`, and the offset past it.
     ///
-    /// `shortcutLabelStart` is where the shortcut label begins, or `nil` when a bracket nested under the opener rules it out.
+    /// `bracketTextStart` is where the bracket text begins, which collapsed and shortcut references take as their label, or `nil` when a bracket nested under the opener rules that out.
     @inline(__always)
-    private mutating func matchReferenceLinkForm(shortcutLabelStart: Int?, cursor: Int, content: borrowing ContentSpan) -> (data: NodeData, end: Int)? {
+    private mutating func matchReferenceLinkForm(bracketTextStart: Int?, cursor: Int, content: borrowing ContentSpan) -> (data: NodeData, end: Int)? {
         let pos = cursor + 1
         // A reference matches only a link reference definition, so without one no label is normalized.
         if storage.referenceMap.isEmpty {
@@ -592,9 +592,8 @@ extension BlockParser {
                 afterReference = label.afterEnd
             }
         }
-        // A collapsed or blank label, or none, falls back to the shortcut form, whose label is the bracket text.
-        if key.isEmpty, let textStart = shortcutLabelStart {
-            // A link label has at most 999 characters inside its brackets (Links), so a longer shortcut stays literal.
+        if key.isEmpty, let textStart = bracketTextStart {
+            // A link label has at most 999 characters inside its brackets (Links).
             if cursor > textStart, linkLabelFitsLengthCap(virtualRange: textStart..<cursor, in: content) {
                 key = normalizeLabel(virtualRange: textStart..<cursor, in: content)
             }
