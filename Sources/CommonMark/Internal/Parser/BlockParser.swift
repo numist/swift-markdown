@@ -2817,7 +2817,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     // Inlined because it scans every byte of a type 1 block's lines once per tag: out of line it costs about 5% of the
     // instructions of a parse of `Benchmarks/100kb-test-content.md` after a `<pre>` line.
     @inline(__always)
-    private func findClosingTag(range: Range<Int>, name: [UInt8]) -> Bool {
+    private mutating func findClosingTag(range: Range<Int>, name: [UInt8]) -> Bool {
         let nameLen = name.count
         // `</` + name + `>` length:
         let totalLen = nameLen + 3
@@ -2918,7 +2918,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Where the line's closing fence ends, if the line closes a fence of `expectedChar` at least `minimumLength` long
     /// (Fenced code blocks). `indentColumns` is the fence's indent in columns past the container prefixes (Tabs).
-    private func matchClosingFence(range: Range<Int>, firstNonSpace: Int, indentColumns: Int, expectedChar: MarkdownNode.CodeBlockInfo.FenceCharacter?, minimumLength: Int) -> Int? {
+    private mutating func matchClosingFence(range: Range<Int>, firstNonSpace: Int, indentColumns: Int, expectedChar: MarkdownNode.CodeBlockInfo.FenceCharacter?, minimumLength: Int) -> Int? {
         guard let fenceByte = expectedChar?.character else {
             preconditionFailure("a fenced code block always records its fence character")
         }
