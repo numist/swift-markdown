@@ -259,7 +259,7 @@ extension BlockParser {
     // MARK: - Cell splitting
 
     /// Delimiter row `line`'s column alignments.
-    private func parseDelimRow(line: Range<Int>) -> [MarkdownNode.TableAlignment] {
+    private mutating func parseDelimRow(line: Range<Int>) -> [MarkdownNode.TableAlignment] {
         let cells = splitCells(line: line)
         precondition(!cells.isEmpty, "a delimiter-candidate line holds a `-`, so it splits into at least one cell")
         return cells.map { cell in
