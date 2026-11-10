@@ -15,9 +15,9 @@ import CommonMark
 ///
 /// Each line is a snake_case name for the node's kind (`block_quote`, `table_header`, `tasklist`, ...) followed by
 /// the node's defining values: the literal of text-like nodes, the info string and body of a code block, the URL and
-/// title of a link or image, the heading level, a list's marker, start, delimiter and tightness, the checkbox state of
-/// a task list item, the alignment and span of a table cell, and the label of a footnote definition or the number of a
-/// footnote reference. Quoted values escape `\`, `"`, line feed and tab, and write any other C0 control character or
+/// title of a link or image, the attributes of an inline attribute, the heading level, a list's marker, start,
+/// delimiter and tightness, the checkbox state of a task list item, the alignment and span of a table cell, and the
+/// label of a footnote definition or the number of a footnote reference. Quoted values escape `\`, `"`, line feed and tab, and write any other C0 control character or
 /// DEL as `\u{…}` in uppercase hexadecimal.
 ///
 /// With `sourceRanges`, each line ends with the node's source range as `@line:column-line:column` (the end is
