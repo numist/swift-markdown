@@ -2133,21 +2133,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return content.isEmpty && !trimmed.isEmpty ? nil : content
     }
 
-    /// The source span of `content`, a non-empty window of leaf content `raw` with run map `map` (empty for source
-    /// content) that begins and ends on a content byte: from the source byte its first byte images to just past the
-    /// one its last byte images.
-    private func sourceSpan(of content: Chunk, in raw: Chunk, map: [ArenaRun]) -> (start: Int, end: Int) {
+    /// Where `content`, a non-empty window of leaf content `raw` with run map `map` (empty for source content) that ends
+    /// on a content byte, ends in the source: just past the source byte its last byte images.
+    private func sourceEnd(of content: Chunk, in raw: Chunk, map: [ArenaRun]) -> Int {
         precondition(!content.isEmpty, "only non-empty content has a source span")
         if map.isEmpty {
             precondition(content.inSource, "with `.sourcePosition`, arena-backed leaf content carries a run map")
-            return (content.offset, content.offset + content.length)
+            return content.offset + content.length
         }
-        let image = ContentImage(base: raw.offset, runs: map)
-        guard let start = image.sourceOffset(ofArenaByte: content.offset),
-              let last = image.sourceOffset(ofArenaByte: content.offset + content.length - 1) else {
-            preconditionFailure("leaf content lies within its run map")
-        }
-        return (start, last + 1)
+        return sourceSpan(of: Self.sliceRuns(map, from: content.offset - raw.offset, length: content.length)).end
     }
 
     /// Gives `paragraph`, which has no raw content, an empty source range at its start.
@@ -2192,18 +2186,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         let contentChunk = paragraphContent(of: node, trimmed: trimmed)
         if contentChunk.isEmpty {
-            removeEmptiedParagraph(node, contentEnd: positionsEnabled ? sourceSpan(of: trimmed, in: raw, map: map).end : nil)
+            removeEmptiedParagraph(node, contentEnd: positionsEnabled ? sourceEnd(of: trimmed, in: raw, map: map) : nil)
             return
         }
         if positionsEnabled {
-            let span = sourceSpan(of: contentChunk, in: raw, map: map)
-            storage.setSourceStart(node, span.start)
-            storage.setSourceEnd(node, span.end)
-        }
-        if positionsEnabled, !map.isEmpty {
-            let slice = Self.sliceRuns(map, from: contentChunk.offset - raw.offset, length: contentChunk.length)
-            if !slice.isEmpty {
-                arenaSourceMaps[node] = slice
+            if map.isEmpty {
+                precondition(contentChunk.inSource, "with `.sourcePosition`, arena-backed leaf content carries a run map")
+                storage.setSourceStart(node, contentChunk.offset)
+                storage.setSourceEnd(node, contentChunk.offset + contentChunk.length)
+            } else {
+                let contentMap = Self.sliceRuns(map, from: contentChunk.offset - raw.offset, length: contentChunk.length)
+                let span = sourceSpan(of: contentMap)
+                storage.setSourceStart(node, span.start)
+                storage.setSourceEnd(node, span.end)
+                arenaSourceMaps[node] = contentMap
             }
         }
         pendingInlines.append((node, storage.intern(contentChunk)))
