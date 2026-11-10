@@ -30,22 +30,19 @@ class FenceInfoStringEntityTrimTests: XCTestCase {
     }
 
     func testDecodedEdgeWhitespaceKept() {
-        func infoString(_ markdown: String) -> String? {
-            (Document(parsing: markdown, options: []).child(at: 0) as? CodeBlock)?.language
-        }
-        XCTAssertEqual("\t", infoString("```&#9;"))
-        XCTAssertEqual("\tx", infoString("```&#9;x"))
-        XCTAssertEqual("x ", infoString("```x&#32;"))
-        XCTAssertEqual("\t", infoString("~~~&#9;"))
-        XCTAssertEqual(" ", infoString("```&#32;"))
-        XCTAssertEqual("\n", infoString("```&#10;"))
-        XCTAssertEqual(" x", infoString("``` &#32;x"))
-        XCTAssertEqual("\t x", infoString("```&#9; x"))
-        XCTAssertEqual("x\t", infoString("```x&#9;"))
-        XCTAssertEqual(" x", infoString("```&#x20;x"))
-        XCTAssertEqual("\t", infoString("```&#x9;"))
-        XCTAssertEqual("\t \nx\r\t", infoString("```&#9;&#32;&#10;x&#13;&#9;"))
-        XCTAssertEqual(" +x", infoString("```&#32;\\+x"))
+        XCTAssertEqual("\t", language("```&#9;"))
+        XCTAssertEqual("\tx", language("```&#9;x"))
+        XCTAssertEqual("x ", language("```x&#32;"))
+        XCTAssertEqual("\t", language("~~~&#9;"))
+        XCTAssertEqual(" ", language("```&#32;"))
+        XCTAssertEqual("\n", language("```&#10;"))
+        XCTAssertEqual(" x", language("``` &#32;x"))
+        XCTAssertEqual("\t x", language("```&#9; x"))
+        XCTAssertEqual("x\t", language("```x&#9;"))
+        XCTAssertEqual(" x", language("```&#x20;x"))
+        XCTAssertEqual("\t", language("```&#x9;"))
+        XCTAssertEqual("\t \nx\r\t", language("```&#9;&#32;&#10;x&#13;&#9;"))
+        XCTAssertEqual(" +x", language("```&#32;\\+x"))
     }
 
     /// A backslash escapes the `&` that follows it (Backslash escapes), so the reference is literal text.
