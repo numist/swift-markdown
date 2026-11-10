@@ -35,7 +35,7 @@ struct DefinitionRemainderBlockRangeTests {
             """)
     }
 
-    @Test func indentedLazyParagraphAfterReferenceDefinition() {
+    @Test func indentedContinuationLineAfterReferenceDefinition() {
         #expect(tree("[o]:e\n ~") == """
             Document @1:1-2:3
             └─ Paragraph @2:2-2:3
