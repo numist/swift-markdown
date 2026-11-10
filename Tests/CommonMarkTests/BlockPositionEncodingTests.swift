@@ -16,270 +16,293 @@ import CommonMark
 @Suite("Block source positions with multibyte UTF-8")
 struct BlockPositionEncodingTests {
 
-    fileprivate typealias Pos = MarkdownNode.SourcePosition
-
     private static let opts: MarkdownDocument.ParseOptions =
         [.sourcePosition, .smart, .tables, .strikethrough, .tasklist, .tableSpans]
 
-    fileprivate struct Collected {
-        let kind: MarkdownNode.Kind
-        let literal: String?
-        let info: String?
-        let range: Range<Pos>?
-    }
-
-    /// DFS pre-order collect of every node.
-    private func parse(_ src: String) -> [Collected] {
-        var out: [Collected] = []
-        MarkdownDocument.withParsedDocument(src, options: Self.opts) { doc in
-            collect(doc.root, into: &out)
-        }
-        return out
+    private func tree(_ source: String) -> String {
+        TreeDump.dump(source, options: Self.opts, sourceRanges: true)
     }
 
     // MARK: - Paragraph
 
     @Test("paragraph — byte columns track multibyte, combining, replacement, and tab bytes")
-    func paragraph() throws {
+    func paragraph() {
         // ASCII baseline: 11 bytes → end column 12 (last byte column + 1).
-        do {
-            let out = parse("hello world")
-            try #require(shape(out) == ["document", "paragraph", "text"])
-            #expect(out[0].range == r(1, 1, 1, 12))
-            #expect(out[1].range == r(1, 1, 1, 12))
-            #expect(out[2].range == r(1, 1, 1, 12))
-            #expect(out[2].literal == "hello world")
-        }
+        #expect(tree("hello world") == """
+            document @1:1-1:12
+              paragraph @1:1-1:12
+                text "hello world" @1:1-1:12
+
+            """)
         // é (U+00E9, 2 bytes) then " x": 4 bytes → end column 5.
-        try oneLineParagraph("\u{E9} x", endColumn: 5)
+        #expect(tree("\u{E9} x") == """
+            document @1:1-1:5
+              paragraph @1:1-1:5
+                text "\u{E9} x" @1:1-1:5
+
+            """)
         // € (U+20AC, 3 bytes) then " x": 5 bytes → end column 6.
-        try oneLineParagraph("\u{20AC} x", endColumn: 6)
+        #expect(tree("\u{20AC} x") == """
+            document @1:1-1:6
+              paragraph @1:1-1:6
+                text "\u{20AC} x" @1:1-1:6
+
+            """)
         // 😀 (U+1F600, 4 bytes) then " x": 6 bytes → end column 7.
-        try oneLineParagraph("\u{1F600} x", endColumn: 7)
+        #expect(tree("\u{1F600} x") == """
+            document @1:1-1:7
+              paragraph @1:1-1:7
+                text "\u{1F600} x" @1:1-1:7
+
+            """)
         // e + combining acute (U+0301): "e"(1) + combining(2) = 3 bytes, then " x": 5 bytes → col 6.
-        try oneLineParagraph("e\u{301} x", endColumn: 6)
+        #expect(tree("e\u{301} x") == """
+            document @1:1-1:6
+              paragraph @1:1-1:6
+                text "e\u{301} x" @1:1-1:6
+
+            """)
         // U+FFFD (3 bytes) then " x": 5 bytes → end column 6.
-        try oneLineParagraph("\u{FFFD} x", endColumn: 6)
+        #expect(tree("\u{FFFD} x") == """
+            document @1:1-1:6
+              paragraph @1:1-1:6
+                text "\u{FFFD} x" @1:1-1:6
+
+            """)
         // TAB is a single byte, not expanded: "a\tb" = 3 bytes → end column 4.
-        try oneLineParagraph("a\tb", endColumn: 4)
+        #expect(tree("a\tb") == """
+            document @1:1-1:4
+              paragraph @1:1-1:4
+                text "a\\tb" @1:1-1:4
+
+            """)
         // Multibyte INSIDE the run (not leading): "x" + é + " y" = 5 bytes → end column 6.
-        try oneLineParagraph("x\u{E9} y", endColumn: 6)
+        #expect(tree("x\u{E9} y") == """
+            document @1:1-1:6
+              paragraph @1:1-1:6
+                text "x\u{E9} y" @1:1-1:6
+
+            """)
 
         // Multi-line paragraph: the second line's columns reset to line-relative byte offsets.
         // "é" (2 bytes, @1:1-1:3), softbreak, "€" (3 bytes, @2:1-2:4).
-        do {
-            let out = parse("\u{E9}\n\u{20AC}")
-            try #require(shape(out) == ["document", "paragraph", "text", "softBreak", "text"])
-            #expect(out[0].range == r(1, 1, 2, 4))   // document
-            #expect(out[1].range == r(1, 1, 2, 4))   // paragraph
-            #expect(out[2].range == r(1, 1, 1, 3))   // "é" on line 1
-            #expect(out[2].literal == "\u{E9}")
-            #expect(out[3].range == nil)             // soft break carries no range
-            #expect(out[4].range == r(2, 1, 2, 4))   // "€" resets to line-2 column 1
-            #expect(out[4].literal == "\u{20AC}")
-        }
-    }
+        #expect(tree("\u{E9}\n\u{20AC}") == """
+            document @1:1-2:4
+              paragraph @1:1-2:4
+                text "\u{E9}" @1:1-1:3
+                softbreak @-
+                text "\u{20AC}" @2:1-2:4
 
-    /// A single-line paragraph whose sole text run spans the whole line (`@1:1-1:<endColumn>`).
-    private func oneLineParagraph(_ src: String, endColumn: Int) throws {
-        let out = parse(src)
-        try #require(shape(out) == ["document", "paragraph", "text"])
-        #expect(out[1].range == r(1, 1, 1, endColumn))
-        #expect(out[2].range == r(1, 1, 1, endColumn))
-        #expect(out[2].literal == src)
+            """)
     }
 
     // MARK: - ATX heading
 
     @Test("ATX heading — content starts at byte column 3 and its end tracks multibyte width")
-    func atxHeading() throws {
+    func atxHeading() {
         // "# hi": content "hi" at columns 3-4 → text @1:3-1:5; heading spans @1:1-1:5.
-        do {
-            let out = parse("# hi")
-            try #require(shape(out) == ["document", "heading", "text"])
-            #expect(out[1].kind == .heading(level: 1))
-            #expect(out[1].range == r(1, 1, 1, 5))
-            #expect(out[2].range == r(1, 3, 1, 5))
-            #expect(out[2].literal == "hi")
-        }
+        #expect(tree("# hi") == """
+            document @1:1-1:5
+              heading 1 @1:1-1:5
+                text "hi" @1:3-1:5
+
+            """)
         // é content (2 bytes): text @1:3-1:5, heading @1:1-1:5.
-        try atx("# \u{E9}", literal: "\u{E9}", textEnd: 5)
+        #expect(tree("# \u{E9}") == """
+            document @1:1-1:5
+              heading 1 @1:1-1:5
+                text "\u{E9}" @1:3-1:5
+
+            """)
         // €x (3 + 1 bytes): text @1:3-1:7, heading @1:1-1:7.
-        try atx("# \u{20AC}x", literal: "\u{20AC}x", textEnd: 7)
+        #expect(tree("# \u{20AC}x") == """
+            document @1:1-1:7
+              heading 1 @1:1-1:7
+                text "\u{20AC}x" @1:3-1:7
+
+            """)
         // "😀 y" (4 + 1 + 1 bytes): text @1:3-1:9, heading @1:1-1:9.
-        try atx("# \u{1F600} y", literal: "\u{1F600} y", textEnd: 9)
+        #expect(tree("# \u{1F600} y") == """
+            document @1:1-1:9
+              heading 1 @1:1-1:9
+                text "\u{1F600} y" @1:3-1:9
+
+            """)
         // "e" + combining + "x" (3 + 1 bytes): text @1:3-1:7.
-        try atx("# e\u{301}x", literal: "e\u{301}x", textEnd: 7)
+        #expect(tree("# e\u{301}x") == """
+            document @1:1-1:7
+              heading 1 @1:1-1:7
+                text "e\u{301}x" @1:3-1:7
+
+            """)
         // U+FFFD + "x" (3 + 1 bytes): text @1:3-1:7.
-        try atx("# \u{FFFD}x", literal: "\u{FFFD}x", textEnd: 7)
+        #expect(tree("# \u{FFFD}x") == """
+            document @1:1-1:7
+              heading 1 @1:1-1:7
+                text "\u{FFFD}x" @1:3-1:7
+
+            """)
         // TAB inside content counts as one byte: "a\tb" → text @1:3-1:6.
-        try atx("# a\tb", literal: "a\tb", textEnd: 6)
+        #expect(tree("# a\tb") == """
+            document @1:1-1:6
+              heading 1 @1:1-1:6
+                text "a\\tb" @1:3-1:6
+
+            """)
         // The closing "#" sequence is the heading's syntax but not its text: "# hi #" → text @1:3-1:5,
         // heading @1:1-1:7.
-        do {
-            let out = parse("# hi #")
-            try #require(shape(out) == ["document", "heading", "text"])
-            #expect(out[1].range == r(1, 1, 1, 7))
-            #expect(out[2].range == r(1, 3, 1, 5))
-            #expect(out[2].literal == "hi")
-        }
-    }
+        #expect(tree("# hi #") == """
+            document @1:1-1:7
+              heading 1 @1:1-1:7
+                text "hi" @1:3-1:5
 
-    /// An ATX heading `# <content>` whose text run is `@1:3-1:<textEnd>` and heading `@1:1-1:<textEnd>`.
-    private func atx(_ src: String, literal: String, textEnd: Int) throws {
-        let out = parse(src)
-        try #require(shape(out) == ["document", "heading", "text"])
-        #expect(out[1].range == r(1, 1, 1, textEnd))
-        #expect(out[2].range == r(1, 3, 1, textEnd))
-        #expect(out[2].literal == literal)
+            """)
     }
 
     // MARK: - Setext heading
 
     @Test("setext heading — content on line 1, range extends over the underline line")
-    func setextHeading() throws {
+    func setextHeading() {
         // "hi\n===": level 1, text @1:1-1:3, heading extends to end of underline @1:1-2:4.
-        do {
-            let out = parse("hi\n===")
-            try #require(shape(out) == ["document", "heading", "text"])
-            #expect(out[1].kind == .heading(level: 1))
-            #expect(out[1].range == r(1, 1, 2, 4))
-            #expect(out[2].range == r(1, 1, 1, 3))
-            #expect(out[2].literal == "hi")
-        }
+        #expect(tree("hi\n===") == """
+            document @1:1-2:4
+              heading 1 @1:1-2:4
+                text "hi" @1:1-1:3
+
+            """)
         // "ab\n---": level 2 (dash underline), text @1:1-1:3, heading @1:1-2:4.
-        do {
-            let out = parse("ab\n---")
-            try #require(shape(out) == ["document", "heading", "text"])
-            #expect(out[1].kind == .heading(level: 2))
-            #expect(out[1].range == r(1, 1, 2, 4))
-            #expect(out[2].range == r(1, 1, 1, 3))
-            #expect(out[2].literal == "ab")
-        }
+        #expect(tree("ab\n---") == """
+            document @1:1-2:4
+              heading 2 @1:1-2:4
+                text "ab" @1:1-1:3
+
+            """)
         // é content (2 bytes): text @1:1-1:3, heading @1:1-2:4, level 1.
-        do {
-            let out = parse("\u{E9}\n===")
-            try #require(shape(out) == ["document", "heading", "text"])
-            #expect(out[1].kind == .heading(level: 1))
-            #expect(out[1].range == r(1, 1, 2, 4))
-            #expect(out[2].range == r(1, 1, 1, 3))
-            #expect(out[2].literal == "\u{E9}")
-        }
+        #expect(tree("\u{E9}\n===") == """
+            document @1:1-2:4
+              heading 1 @1:1-2:4
+                text "\u{E9}" @1:1-1:3
+
+            """)
         // "€ x" content (3 + 1 + 1 bytes) with dash underline: text @1:1-1:6, level 2.
-        do {
-            let out = parse("\u{20AC} x\n---")
-            try #require(shape(out) == ["document", "heading", "text"])
-            #expect(out[1].kind == .heading(level: 2))
-            #expect(out[1].range == r(1, 1, 2, 4))
-            #expect(out[2].range == r(1, 1, 1, 6))
-            #expect(out[2].literal == "\u{20AC} x")
-        }
+        #expect(tree("\u{20AC} x\n---") == """
+            document @1:1-2:4
+              heading 2 @1:1-2:4
+                text "\u{20AC} x" @1:1-1:6
+
+            """)
         // Combining content "e" + U+0301 (3 bytes): text @1:1-1:4.
-        do {
-            let out = parse("e\u{301}\n===")
-            try #require(shape(out) == ["document", "heading", "text"])
-            #expect(out[1].range == r(1, 1, 2, 4))
-            #expect(out[2].range == r(1, 1, 1, 4))
-            #expect(out[2].literal == "e\u{301}")
-        }
+        #expect(tree("e\u{301}\n===") == """
+            document @1:1-2:4
+              heading 1 @1:1-2:4
+                text "e\u{301}" @1:1-1:4
+
+            """)
         // Multi-line setext content: "a\nb\n===" → two text runs joined by a soft break, heading
         // extends over the underline on line 3 (@1:1-3:4).
-        do {
-            let out = parse("a\nb\n===")
-            try #require(shape(out) == ["document", "heading", "text", "softBreak", "text"])
-            #expect(out[1].range == r(1, 1, 3, 4))
-            #expect(out[2].range == r(1, 1, 1, 2))   // "a"
-            #expect(out[3].range == nil)             // soft break
-            #expect(out[4].range == r(2, 1, 2, 2))   // "b" on line 2
-        }
+        #expect(tree("a\nb\n===") == """
+            document @1:1-3:4
+              heading 1 @1:1-3:4
+                text "a" @1:1-1:2
+                softbreak @-
+                text "b" @2:1-2:2
+
+            """)
     }
 
     // MARK: - Thematic break
 
     @Test("thematic break — full-marker span across the three marker styles")
-    func thematicBreak() throws {
+    func thematicBreak() {
+        // 3 marker bytes → end column 4.
         for marker in ["***", "---", "___"] {
-            let out = parse(marker)
-            try #require(shape(out) == ["document", "thematicBreak"])
-            #expect(out[1].kind == .thematicBreak)
-            #expect(out[1].range == r(1, 1, 1, 4))   // 3 marker bytes → end column 4
+            #expect(tree(marker) == """
+                document @1:1-1:4
+                  thematic_break @1:1-1:4
+
+                """)
         }
     }
 
     // MARK: - Block quote
 
     @Test("block quote — content column 3 after `> `, tracks multibyte, nesting, and matched continuation")
-    func blockQuote() throws {
+    func blockQuote() {
         // "> hi": block quote @1:1-1:5, paragraph/text at content column 3.
-        do {
-            let out = parse("> hi")
-            try #require(shape(out) == ["document", "blockQuote", "paragraph", "text"])
-            #expect(out[1].range == r(1, 1, 1, 5))
-            #expect(out[2].range == r(1, 3, 1, 5))
-            #expect(out[3].range == r(1, 3, 1, 5))
-            #expect(out[3].literal == "hi")
-        }
+        #expect(tree("> hi") == """
+            document @1:1-1:5
+              block_quote @1:1-1:5
+                paragraph @1:3-1:5
+                  text "hi" @1:3-1:5
+
+            """)
         // "> é x" (2 + 1 + 1 bytes of content): text @1:3-1:7.
-        do {
-            let out = parse("> \u{E9} x")
-            try #require(shape(out) == ["document", "blockQuote", "paragraph", "text"])
-            #expect(out[1].range == r(1, 1, 1, 7))
-            #expect(out[3].range == r(1, 3, 1, 7))
-            #expect(out[3].literal == "\u{E9} x")
-        }
+        #expect(tree("> \u{E9} x") == """
+            document @1:1-1:7
+              block_quote @1:1-1:7
+                paragraph @1:3-1:7
+                  text "\u{E9} x" @1:3-1:7
+
+            """)
         // "> €" (3-byte content only): text @1:3-1:6.
-        do {
-            let out = parse("> \u{20AC}")
-            try #require(shape(out) == ["document", "blockQuote", "paragraph", "text"])
-            #expect(out[3].range == r(1, 3, 1, 6))
-            #expect(out[3].literal == "\u{20AC}")
-        }
+        #expect(tree("> \u{20AC}") == """
+            document @1:1-1:6
+              block_quote @1:1-1:6
+                paragraph @1:3-1:6
+                  text "\u{20AC}" @1:3-1:6
+
+            """)
         // Nested "> > hi": inner content column 5.
-        do {
-            let out = parse("> > hi")
-            try #require(shape(out) == ["document", "blockQuote", "blockQuote", "paragraph", "text"])
-            #expect(out[1].range == r(1, 1, 1, 7))
-            #expect(out[2].range == r(1, 3, 1, 7))
-            #expect(out[3].range == r(1, 5, 1, 7))
-            #expect(out[4].range == r(1, 5, 1, 7))
-            #expect(out[4].literal == "hi")
-        }
+        #expect(tree("> > hi") == """
+            document @1:1-1:7
+              block_quote @1:1-1:7
+                block_quote @1:3-1:7
+                  paragraph @1:5-1:7
+                    text "hi" @1:5-1:7
+
+            """)
         // Nested with multibyte "> > é": text @1:5-1:7.
-        do {
-            let out = parse("> > \u{E9}")
-            try #require(shape(out) == ["document", "blockQuote", "blockQuote", "paragraph", "text"])
-            #expect(out[4].range == r(1, 5, 1, 7))
-            #expect(out[4].literal == "\u{E9}")
-        }
+        #expect(tree("> > \u{E9}") == """
+            document @1:1-1:7
+              block_quote @1:1-1:7
+                block_quote @1:3-1:7
+                  paragraph @1:5-1:7
+                    text "\u{E9}" @1:5-1:7
+
+            """)
         // Matched multi-line "> a\n> b": both lines' content starts at column 3.
-        do {
-            let out = parse("> a\n> b")
-            try #require(shape(out) == ["document", "blockQuote", "paragraph", "text", "softBreak", "text"])
-            #expect(out[1].range == r(1, 1, 2, 4))
-            #expect(out[2].range == r(1, 3, 2, 4))
-            #expect(out[3].range == r(1, 3, 1, 4))   // "a"
-            #expect(out[4].range == nil)             // soft break
-            #expect(out[5].range == r(2, 3, 2, 4))   // "b" at content column 3 on line 2
-        }
+        #expect(tree("> a\n> b") == """
+            document @1:1-2:4
+              block_quote @1:1-2:4
+                paragraph @1:3-2:4
+                  text "a" @1:3-1:4
+                  softbreak @-
+                  text "b" @2:3-2:4
+
+            """)
         // Matched multi-line with multibyte "> é\n> €".
-        do {
-            let out = parse("> \u{E9}\n> \u{20AC}")
-            try #require(shape(out) == ["document", "blockQuote", "paragraph", "text", "softBreak", "text"])
-            #expect(out[1].range == r(1, 1, 2, 6))
-            #expect(out[3].range == r(1, 3, 1, 5))   // "é" (2 bytes) line 1
-            #expect(out[5].range == r(2, 3, 2, 6))   // "€" (3 bytes) line 2
-            #expect(out[3].literal == "\u{E9}")
-            #expect(out[5].literal == "\u{20AC}")
-        }
+        #expect(tree("> \u{E9}\n> \u{20AC}") == """
+            document @1:1-2:6
+              block_quote @1:1-2:6
+                paragraph @1:3-2:6
+                  text "\u{E9}" @1:3-1:5
+                  softbreak @-
+                  text "\u{20AC}" @2:3-2:6
+
+            """)
     }
 
     @Test("block quote lazy continuation line — text starts at its own byte column")
-    func blockQuoteLazyContinuation() throws {
-        let out = parse("> a\nb")
-        try #require(shape(out) == ["document", "blockQuote", "paragraph", "text", "softBreak", "text"])
-        #expect(out[3].range == r(1, 3, 1, 4))   // "a"
-        #expect(out[5].range == r(2, 1, 2, 2))   // "b"
-        #expect(out[5].literal == "b")
+    func blockQuoteLazyContinuation() {
+        #expect(tree("> a\nb") == """
+            document @1:1-2:2
+              block_quote @1:1-2:2
+                paragraph @1:3-2:2
+                  text "a" @1:3-1:4
+                  softbreak @-
+                  text "b" @2:1-2:2
+
+            """)
     }
 
     /// A quote opened after a tab starts at its `>`, whatever the tab expands to.
@@ -299,303 +322,222 @@ struct BlockPositionEncodingTests {
     // MARK: - Unordered list
 
     @Test("unordered list — marker styles and content column 3, tracking multibyte and tab")
-    func unorderedList() throws {
-        // Marker styles: -, *, + all put content at column 3, list/item/paragraph @1:1-1:4.
-        for (marker, bullet) in [("-", MarkdownNode.ListInfo.BulletMarker.hyphen),
-                                 ("*", .asterisk),
-                                 ("+", .plus)] {
-            let out = parse("\(marker) x")
-            try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
-            #expect(asList(out[1].kind)?.kind == .bullet)
-            #expect(asList(out[1].kind)?.bulletMarker == bullet)
-            #expect(out[1].range == r(1, 1, 1, 4))   // list
-            #expect(out[2].range == r(1, 1, 1, 4))   // item
-            #expect(out[3].range == r(1, 3, 1, 4))   // paragraph
-            #expect(out[4].range == r(1, 3, 1, 4))   // text
-            #expect(out[4].literal == "x")
+    func unorderedList() {
+        // Marker styles: -, *, + all put content at column 3: list and item @1:1-1:4, paragraph and text @1:3-1:4.
+        for marker in ["-", "*", "+"] {
+            #expect(tree("\(marker) x") == """
+                document @1:1-1:4
+                  list bullet '\(marker)' tight @1:1-1:4
+                    item @1:1-1:4
+                      paragraph @1:3-1:4
+                        text "x" @1:3-1:4
+
+                """)
         }
         // "- é" (2-byte content): text @1:3-1:5, list @1:1-1:5.
-        do {
-            let out = parse("- \u{E9}")
-            try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
-            #expect(out[1].range == r(1, 1, 1, 5))
-            #expect(out[4].range == r(1, 3, 1, 5))
-            #expect(out[4].literal == "\u{E9}")
-        }
+        #expect(tree("- \u{E9}") == """
+            document @1:1-1:5
+              list bullet '-' tight @1:1-1:5
+                item @1:1-1:5
+                  paragraph @1:3-1:5
+                    text "\u{E9}" @1:3-1:5
+
+            """)
         // "- € x" (3 + 1 + 1 bytes): text @1:3-1:8.
-        do {
-            let out = parse("- \u{20AC} x")
-            try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
-            #expect(out[1].range == r(1, 1, 1, 8))
-            #expect(out[4].range == r(1, 3, 1, 8))
-            #expect(out[4].literal == "\u{20AC} x")
-        }
+        #expect(tree("- \u{20AC} x") == """
+            document @1:1-1:8
+              list bullet '-' tight @1:1-1:8
+                item @1:1-1:8
+                  paragraph @1:3-1:8
+                    text "\u{20AC} x" @1:3-1:8
+
+            """)
         // TAB inside content is one byte: "- a\tb" → text @1:3-1:6.
-        do {
-            let out = parse("- a\tb")
-            try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
-            #expect(out[4].range == r(1, 3, 1, 6))
-            #expect(out[4].literal == "a\tb")
-        }
+        #expect(tree("- a\tb") == """
+            document @1:1-1:6
+              list bullet '-' tight @1:1-1:6
+                item @1:1-1:6
+                  paragraph @1:3-1:6
+                    text "a\\tb" @1:3-1:6
+
+            """)
     }
 
     // MARK: - Ordered list
 
     @Test("ordered list — start number, delimiter, and content column 4 tracking multibyte")
-    func orderedList() throws {
+    func orderedList() {
         // "1. x": start 1, period delimiter, content column 4.
-        do {
-            let out = parse("1. x")
-            try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
-            #expect(asList(out[1].kind)?.kind == .ordered)
-            #expect(asList(out[1].kind)?.start == 1)
-            #expect(asList(out[1].kind)?.orderedDelimiter == .period)
-            #expect(out[1].range == r(1, 1, 1, 5))
-            #expect(out[3].range == r(1, 4, 1, 5))
-            #expect(out[4].range == r(1, 4, 1, 5))
-            #expect(out[4].literal == "x")
-        }
+        #expect(tree("1. x") == """
+            document @1:1-1:5
+              list ordered start=1 delim=period tight @1:1-1:5
+                item @1:1-1:5
+                  paragraph @1:4-1:5
+                    text "x" @1:4-1:5
+
+            """)
         // "2) x": start 2, paren delimiter.
-        do {
-            let out = parse("2) x")
-            try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
-            #expect(asList(out[1].kind)?.start == 2)
-            #expect(asList(out[1].kind)?.orderedDelimiter == .paren)
-            #expect(out[1].range == r(1, 1, 1, 5))
-            #expect(out[4].range == r(1, 4, 1, 5))
-            #expect(out[4].literal == "x")
-        }
+        #expect(tree("2) x") == """
+            document @1:1-1:5
+              list ordered start=2 delim=paren tight @1:1-1:5
+                item @1:1-1:5
+                  paragraph @1:4-1:5
+                    text "x" @1:4-1:5
+
+            """)
         // "1. 😀 z" (4 + 1 + 1 bytes content): text @1:4-1:10.
-        do {
-            let out = parse("1. \u{1F600} z")
-            try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
-            #expect(out[1].range == r(1, 1, 1, 10))
-            #expect(out[4].range == r(1, 4, 1, 10))
-            #expect(out[4].literal == "\u{1F600} z")
-        }
+        #expect(tree("1. \u{1F600} z") == """
+            document @1:1-1:10
+              list ordered start=1 delim=period tight @1:1-1:10
+                item @1:1-1:10
+                  paragraph @1:4-1:10
+                    text "\u{1F600} z" @1:4-1:10
+
+            """)
     }
 
     @Test("list item lazy continuation line — text starts at its own byte column")
-    func listLazyContinuation() throws {
-        let out = parse("- a\nb")
-        try #require(shape(out) == ["document", "list", "item", "paragraph", "text", "softBreak", "text"])
-        #expect(out[4].range == r(1, 3, 1, 4))   // "a"
-        #expect(out[6].range == r(2, 1, 2, 2))   // "b"
-        #expect(out[6].literal == "b")
+    func listLazyContinuation() {
+        #expect(tree("- a\nb") == """
+            document @1:1-2:2
+              list bullet '-' tight @1:1-2:2
+                item @1:1-2:2
+                  paragraph @1:3-2:2
+                    text "a" @1:3-1:4
+                    softbreak @-
+                    text "b" @2:1-2:2
+
+            """)
     }
 
     // MARK: - Task list
 
     @Test("task list — checkbox state, content column 7, tracking multibyte")
-    func taskList() throws {
+    func taskList() {
         // "- [ ] x": unchecked item, content after "[ ] " at column 7.
-        do {
-            let out = parse("- [ ] x")
-            try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
-            #expect(out[2].kind == .item(checked: false))
-            #expect(out[1].range == r(1, 1, 1, 8))
-            #expect(out[3].range == r(1, 7, 1, 8))
-            #expect(out[4].range == r(1, 7, 1, 8))
-            #expect(out[4].literal == "x")
-        }
+        #expect(tree("- [ ] x") == """
+            document @1:1-1:8
+              list bullet '-' tight @1:1-1:8
+                tasklist unchecked @1:1-1:8
+                  paragraph @1:7-1:8
+                    text "x" @1:7-1:8
+
+            """)
         // "- [x] x": checked item.
-        do {
-            let out = parse("- [x] x")
-            try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
-            #expect(out[2].kind == .item(checked: true))
-            #expect(out[4].range == r(1, 7, 1, 8))
-            #expect(out[4].literal == "x")
-        }
+        #expect(tree("- [x] x") == """
+            document @1:1-1:8
+              list bullet '-' tight @1:1-1:8
+                tasklist checked @1:1-1:8
+                  paragraph @1:7-1:8
+                    text "x" @1:7-1:8
+
+            """)
         // "- [ ] é" (2-byte content): text @1:7-1:9.
-        do {
-            let out = parse("- [ ] \u{E9}")
-            try #require(shape(out) == ["document", "list", "item", "paragraph", "text"])
-            #expect(out[2].kind == .item(checked: false))
-            #expect(out[1].range == r(1, 1, 1, 9))
-            #expect(out[4].range == r(1, 7, 1, 9))
-            #expect(out[4].literal == "\u{E9}")
-        }
+        #expect(tree("- [ ] \u{E9}") == """
+            document @1:1-1:9
+              list bullet '-' tight @1:1-1:9
+                tasklist unchecked @1:1-1:9
+                  paragraph @1:7-1:9
+                    text "\u{E9}" @1:7-1:9
+
+            """)
     }
 
     // MARK: - Indented code
 
     @Test("indented code — content starts at column 5, end tracks multibyte body width")
-    func indentedCode() throws {
+    func indentedCode() {
         // "    code": indented code block, content @1:5-1:9, body "code\n".
-        do {
-            let out = parse("    code")
-            try #require(shape(out) == ["document", "codeBlock"])
-            let cb = try #require(asCode(out[1].kind))
-            #expect(cb.isFenced == false)
-            #expect(cb.fenceCharacter == nil)
-            #expect(cb.fenceLength == 0)
-            #expect(cb.fenceOffset == 0)
-            #expect(out[1].range == r(1, 5, 1, 9))
-            #expect(out[1].literal == "code\n")   // code block content ends in a line ending
-            #expect(out[1].info == "")
-        }
+        #expect(tree("    code") == """
+            document @1:1-1:9
+              code_block "" "code\\n" @1:5-1:9
+
+            """)
+        #expect(codeBlockKinds("    code", options: Self.opts)
+            == ["code_block indented fence=none length=0 offset=0"])
         // "    é code": multibyte body (é = 2 bytes) → line-1 end column 12 (11 bytes + 1).
-        do {
-            let out = parse("    \u{E9} code")
-            try #require(shape(out) == ["document", "codeBlock"])
-            #expect(asCode(out[1].kind)?.isFenced == false)
-            #expect(out[1].range == r(1, 5, 1, 12))
-            #expect(out[1].literal == "\u{E9} code\n")
-        }
+        #expect(tree("    \u{E9} code") == """
+            document @1:1-1:12
+              code_block "" "\u{E9} code\\n" @1:5-1:12
+
+            """)
+        #expect(codeBlockKinds("    \u{E9} code", options: Self.opts)
+            == ["code_block indented fence=none length=0 offset=0"])
     }
 
     // MARK: - Fenced code
 
     @Test("fenced code — fence metadata, info string, and body across encodings")
-    func fencedCode() throws {
+    func fencedCode() {
         // "```swift\nlet x = 1\n```": backtick fence, length 3, info "swift", body "let x = 1\n".
         // The code block spans fence-to-fence (@1:1-3:4).
-        do {
-            let out = parse("```swift\nlet x = 1\n```")
-            try #require(shape(out) == ["document", "codeBlock"])
-            let cb = try #require(asCode(out[1].kind))
-            #expect(cb.isFenced == true)
-            #expect(cb.fenceCharacter == .backtick)
-            #expect(cb.fenceLength == 3)
-            #expect(cb.fenceOffset == 0)
-            #expect(out[1].range == r(1, 1, 3, 4))
-            #expect(out[1].info == "swift")
-            #expect(out[1].literal == "let x = 1\n")
-        }
+        #expect(tree("```swift\nlet x = 1\n```") == """
+            document @1:1-3:4
+              code_block "swift" "let x = 1\\n" @1:1-3:4
+
+            """)
+        #expect(codeBlockKinds("```swift\nlet x = 1\n```", options: Self.opts)
+            == ["code_block fenced fence='`' length=3 offset=0"])
         // Multibyte info string "```é": info "é", body "code\n".
-        do {
-            let out = parse("```\u{E9}\ncode\n```")
-            try #require(shape(out) == ["document", "codeBlock"])
-            #expect(asCode(out[1].kind)?.isFenced == true)
-            #expect(out[1].range == r(1, 1, 3, 4))
-            #expect(out[1].info == "\u{E9}")
-            #expect(out[1].literal == "code\n")
-        }
+        #expect(tree("```\u{E9}\ncode\n```") == """
+            document @1:1-3:4
+              code_block "\u{E9}" "code\\n" @1:1-3:4
+
+            """)
+        #expect(codeBlockKinds("```\u{E9}\ncode\n```", options: Self.opts)
+            == ["code_block fenced fence='`' length=3 offset=0"])
         // Multibyte body with a combining sequence: empty info, body `e` U+0301 ` code` and a line feed.
-        do {
-            let out = parse("```\ne\u{301} code\n```")
-            try #require(shape(out) == ["document", "codeBlock"])
-            #expect(out[1].range == r(1, 1, 3, 4))
-            #expect(out[1].info == "")
-            #expect(out[1].literal == "e\u{301} code\n")
-        }
+        #expect(tree("```\ne\u{301} code\n```") == """
+            document @1:1-3:4
+              code_block "" "e\u{301} code\\n" @1:1-3:4
+
+            """)
         // Multibyte in both info (€) and body (😀): info "€", body "😀\n".
-        do {
-            let out = parse("```\u{20AC}\n\u{1F600}\n```")
-            try #require(shape(out) == ["document", "codeBlock"])
-            #expect(out[1].range == r(1, 1, 3, 4))
-            #expect(out[1].info == "\u{20AC}")
-            #expect(out[1].literal == "\u{1F600}\n")
-        }
+        #expect(tree("```\u{20AC}\n\u{1F600}\n```") == """
+            document @1:1-3:4
+              code_block "\u{20AC}" "\u{1F600}\\n" @1:1-3:4
+
+            """)
     }
 
     // MARK: - HTML block
 
     @Test("HTML block — span covers the raw lines, body tracks multibyte content")
-    func htmlBlock() throws {
+    func htmlBlock() {
         // "<div>\n</div>": HTML block @1:1-2:7, body includes both lines and a trailing line ending.
-        do {
-            let out = parse("<div>\n</div>")
-            try #require(shape(out) == ["document", "htmlBlock"])
-            #expect(out[1].kind == .htmlBlock)
-            #expect(out[1].range == r(1, 1, 2, 7))
-            #expect(out[1].literal == "<div>\n</div>\n")
-        }
+        #expect(tree("<div>\n</div>") == """
+            document @1:1-2:7
+              html_block "<div>\\n</div>\\n" @1:1-2:7
+
+            """)
         // Multibyte in the first line "<div>é": the block's source range ends on line 2, at column 7.
-        do {
-            let out = parse("<div>\u{E9}\n</div>")
-            try #require(shape(out) == ["document", "htmlBlock"])
-            #expect(out[1].range == r(1, 1, 2, 7))
-            #expect(out[1].literal == "<div>\u{E9}\n</div>\n")
-        }
+        #expect(tree("<div>\u{E9}\n</div>") == """
+            document @1:1-2:7
+              html_block "<div>\u{E9}\\n</div>\\n" @1:1-2:7
+
+            """)
     }
 
     // MARK: - Byte-order mark
 
     @Test("leading BOM — line 1 columns count the BOM's three bytes, and the document starts at the BOM")
-    func leadingByteOrderMark() throws {
-        let out = parse("\u{FEFF}a\nb")
-        try #require(shape(out) == ["document", "paragraph", "text", "softBreak", "text"])
-        #expect(out[0].range == r(1, 1, 2, 2))
-        #expect(out[1].range == r(1, 4, 2, 2))
-        #expect(out[2].range == r(1, 4, 1, 5))
-        #expect(out[4].range == r(2, 1, 2, 2))
+    func leadingByteOrderMark() {
+        #expect(tree("\u{FEFF}a\nb") == """
+            document @1:1-2:2
+              paragraph @1:4-2:2
+                text "a" @1:4-1:5
+                softbreak @-
+                text "b" @2:1-2:2
+
+            """)
     }
 
     /// A BOM alone is one line, which the document spans: the BOM's three bytes.
     @Test("BOM-only input — the document spans the BOM")
-    func byteOrderMarkOnly() throws {
-        let out = parse("\u{FEFF}")
-        try #require(shape(out) == ["document"])
-        #expect(out[0].range == r(1, 1, 1, 4))
-    }
+    func byteOrderMarkOnly() {
+        #expect(tree("\u{FEFF}") == """
+            document @1:1-1:4
 
-    // MARK: - Collection / assertion helpers
-
-    /// Build a source range from 1-based line/byte-column endpoints.
-    private func r(_ l1: Int, _ c1: Int, _ l2: Int, _ c2: Int) -> Range<Pos> {
-        Pos(line: l1, column: c1)..<Pos(line: l2, column: c2)
-    }
-
-    /// The kind names of a collected tree, in DFS order.
-    private func shape(_ out: [Collected]) -> [String] {
-        out.map { tag($0.kind) }
-    }
-
-    private func tag(_ k: MarkdownNode.Kind) -> String {
-        switch k {
-        case .document: "document"
-        case .blockQuote: "blockQuote"
-        case .list: "list"
-        case .item: "item"
-        case .codeBlock: "codeBlock"
-        case .htmlBlock: "htmlBlock"
-        case .paragraph: "paragraph"
-        case .heading: "heading"
-        case .thematicBreak: "thematicBreak"
-        case .footnoteDefinition: "footnoteDefinition"
-        case .table: "table"
-        case .tableRow: "tableRow"
-        case .tableCell: "tableCell"
-        case .text: "text"
-        case .softBreak: "softBreak"
-        case .lineBreak: "lineBreak"
-        case .codeInline: "codeInline"
-        case .htmlInline: "htmlInline"
-        case .emphasis: "emphasis"
-        case .strong: "strong"
-        case .link: "link"
-        case .image: "image"
-        case .footnoteReference: "footnoteReference"
-        case .strikethrough: "strikethrough"
-        case .attribute: "attribute"
-        }
-    }
-
-    private func asList(_ k: MarkdownNode.Kind) -> MarkdownNode.ListInfo? {
-        if case .list(let i) = k { return i }
-        return nil
-    }
-
-    private func asCode(_ k: MarkdownNode.Kind) -> MarkdownNode.CodeBlockInfo? {
-        if case .codeBlock(let i) = k { return i }
-        return nil
-    }
-}
-
-private func collect(
-    _ node: borrowing MarkdownNode,
-    into out: inout [BlockPositionEncodingTests.Collected]
-) {
-    out.append(
-        BlockPositionEncodingTests.Collected(
-            kind: node.kind,
-            literal: node.literal(),
-            info: node.codeBlockInfoString(),
-            range: node.sourceRange
-        )
-    )
-    node.children.forEach { child in
-        collect(child, into: &out)
+            """)
     }
 }
