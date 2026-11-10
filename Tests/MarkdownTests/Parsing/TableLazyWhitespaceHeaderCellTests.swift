@@ -16,7 +16,7 @@ import XCTest
 /// and no table forms (Tables (extension)).
 class TableLazyWhitespaceHeaderCellTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
-        Document(parsing: markdown, options: [.parseSymbolLinks, .parseMinimalDoxygen]).debugDescription(options: [])
+        Document(parsing: markdown).debugDescription(options: [])
     }
 
     func testLazyOneSpace() {

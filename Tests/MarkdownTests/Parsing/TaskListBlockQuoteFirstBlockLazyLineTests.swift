@@ -16,8 +16,7 @@ import XCTest
 /// block is a lazy continuation line of the block quote's paragraph (Block quotes).
 class TaskListBlockQuoteFirstBlockLazyLineTests: XCTestCase {
     private func surface(_ markdown: String) -> String {
-        let options: ParseOptions = [.parseSymbolLinks, .parseMinimalDoxygen]
-        return Document(parsing: markdown, options: options).debugDescription(options: [])
+        Document(parsing: markdown).debugDescription(options: [])
     }
 
     func testCheckboxAfterBlockQuoteAndBlankLine() {

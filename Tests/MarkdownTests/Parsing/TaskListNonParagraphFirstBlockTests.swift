@@ -16,8 +16,7 @@ import XCTest
 /// item, so it is paragraph text too.
 class TaskListNonParagraphFirstBlockTests: XCTestCase {
     private func surface(_ markdown: String) -> String {
-        let options: ParseOptions = [.parseSymbolLinks, .parseMinimalDoxygen]
-        return Document(parsing: markdown, options: options).debugDescription(options: [])
+        Document(parsing: markdown).debugDescription(options: [])
     }
 
     func testCheckboxAfterThematicBreak() {

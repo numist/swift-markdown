@@ -19,7 +19,7 @@ class ListMarkerTabOffsetAfterListFenceTests: XCTestCase {
     private static let listFence = "Document\n├─ UnorderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n"
 
     private func assertSurface(_ expected: String, _ markdown: String, file: StaticString = #filePath, line: UInt = #line) {
-        let actual = Document(parsing: markdown, options: [.disableSourcePosOpts]).debugDescription(options: [])
+        let actual = Document(parsing: markdown).debugDescription(options: [])
         XCTAssertEqual(expected, actual, "input: \(markdown.debugDescription)", file: file, line: line)
     }
 
