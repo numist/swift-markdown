@@ -52,6 +52,16 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
+    @Test func setextHeadingAfterCheckboxGapIsNoTaskItem() {
+        #expect(tree("- [ ]  \tb\n  =\n") == """
+            Document @1:1-3:1
+            └─ UnorderedList @1:1-2:4
+               └─ ListItem @1:1-2:4
+                  └─ Heading @1:3-2:4 level: 1
+                     └─ Text @1:3-1:10 "[ ]  \tb"
+            """)
+    }
+
     @Test func itemInBlockQuote() {
         #expect(tree("> - [x] foo") == """
             Document @1:1-1:12

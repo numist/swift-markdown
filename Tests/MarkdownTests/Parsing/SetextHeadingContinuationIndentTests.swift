@@ -73,11 +73,4 @@ class SetextHeadingContinuationIndentTests: XCTestCase {
             Self.quotedHeading("      ├─ Text \"a\"\n      ├─ SoftBreak\n      └─ Text \"b\""),
             tree(">a\n b\n>=\n"))
     }
-
-    /// A heading is not the paragraph a task list item must begin with (Task list items (extension)).
-    func testTaskCheckboxGap() {
-        XCTAssertEqual(
-            "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 1\n         └─ Text \"[ ]  \tb\"",
-            tree("- [ ]  \tb\n  =\n"))
-    }
 }
