@@ -152,7 +152,8 @@ class FencedCodeTabExpansionTests: XCTestCase {
         let topLevelCodeBlocks = document.children.compactMap { $0 as? CodeBlock }
         XCTAssertEqual(topLevelCodeBlocks.count, 1, "expected exactly one top-level code block")
 
-        // The block quote's fenced code block opened on `>~~~` and never closed, so it is empty.
+        // The block quote's fenced code block opened on `>~~~` has no content lines before the block quote ends, so it
+        // is empty.
         let nestedCodeBlocks = blockQuotes.first?.children.compactMap { $0 as? CodeBlock } ?? []
         XCTAssertEqual(nestedCodeBlocks.count, 1, "expected exactly one code block inside the block quote")
         XCTAssertEqual(nestedCodeBlocks.first?.code, "")
