@@ -20,7 +20,6 @@ struct FootnoteReferenceLabelLengthCapTests {
         TreeDump.dump(markdown, options: [.sourcePosition, .footnotes])
     }
 
-    /// `x[^label]` followed by the definition `[^label]: note`.
     private func referenceAndDefinition(_ label: String) -> String {
         "x[^\(label)]\n\n[^\(label)]: note"
     }
@@ -53,7 +52,7 @@ struct FootnoteReferenceLabelLengthCapTests {
         #expect(surface(referenceAndDefinition(label)) == literalParagraph("x[^\(replaced)]"))
     }
 
-    /// An over-cap reference is ordinary paragraph text, so its entity reference decodes.
+    /// A bracket whose label is over the cap is ordinary paragraph text, so its entity reference decodes.
     @Test func overCapDecodesEntity() {
         let label = String(repeating: "a", count: 996) + "&amp;"
         #expect(surface(referenceAndDefinition(label)) == literalParagraph("x[^\(String(repeating: "a", count: 996))&]"))
@@ -102,10 +101,10 @@ struct FootnoteReferenceLabelLengthCapTests {
             """)
     }
 
-    /// `^`, 497 `a` and `é` are 499 characters but 500 bytes, so with a line ending and 498 `b` the label holds 999
-    /// characters.
+    /// `^`, 498 `a` and `é` are 500 characters but 501 bytes, so with a line ending and 498 `b` the label holds 999
+    /// characters in 1000 bytes.
     @Test func crossLineLabelCountsMultibyteCharacterOnce() {
-        let first = String(repeating: "a", count: 497) + "\u{E9}"
+        let first = String(repeating: "a", count: 498) + "\u{E9}"
         let second = String(repeating: "b", count: 498)
         #expect(surface("x[^\(first)\n\(second)]\n\n[^\(first) \(second)]: /u") == """
             document
