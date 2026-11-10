@@ -37,6 +37,19 @@ struct DeepNestingStackTests {
         }
     }
 
+    /// The kind of node a shape nests `depth` deep, from its name.
+    static func nestedKind(_ shape: String) -> MarkdownNode.Kind {
+        switch shape {
+        case "emphasis", "emphasis around an email", "emphasis around smart quotes",
+             "emphasis around a footnote-shaped bracket across a line", "emphasis around caret brackets": .emphasis
+        case "strong emphasis": .strong
+        case "strikethrough": .strikethrough
+        case "images", "links in images": .image
+        case "attributes": .attribute
+        default: preconditionFailure("unknown shape \(shape)")
+        }
+    }
+
     static let inlineShapes = [
         "emphasis", "strong emphasis", "strikethrough", "images", "links in images", "attributes",
         "emphasis around an email", "emphasis around smart quotes",
@@ -51,8 +64,10 @@ struct DeepNestingStackTests {
     ])
     func inlineNesting(_ shape: String, options: MarkdownDocument.ParseOptions) throws {
         let source = Self.inlineSource(shape)
-        let blocks = try #require(Self.topLevelBlocksOnSmallStack(source, options: options))
-        #expect(blocks == 1, "\(shape)")
+        let kind = Self.nestedKind(shape)
+        let nesting = try #require(Self.nestingOnSmallStack(source, options: options) { $0 == kind })
+        #expect(nesting.blocks == 1, "\(shape)")
+        #expect(nesting.nested == Self.depth, "\(shape)")
     }
 
     /// The reference sits at the bottom of the quotes; its definition, at the top level, follows them.
@@ -63,8 +78,9 @@ struct DeepNestingStackTests {
     ])
     func blockQuoteNesting(_ options: MarkdownDocument.ParseOptions) throws {
         let source = String(repeating: ">", count: Self.depth) + " x[^a]\n\n[^a]: y\n"
-        let blocks = try #require(Self.topLevelBlocksOnSmallStack(source, options: options))
-        #expect(blocks == 2)
+        let nesting = try #require(Self.nestingOnSmallStack(source, options: options) { $0 == .blockQuote })
+        #expect(nesting.blocks == 2)
+        #expect(nesting.nested == Self.depth)
     }
 
     /// The reference sits in the innermost item; its definition, at the top level, follows the lists.
@@ -75,48 +91,59 @@ struct DeepNestingStackTests {
     ])
     func listNesting(_ options: MarkdownDocument.ParseOptions) throws {
         let source = String(repeating: "- ", count: Self.depth) + "x[^a]\n\n[^a]: y\n"
-        let nesting = try #require(Self.listNestingOnSmallStack(source, options: options))
+        let nesting = try #require(Self.nestingOnSmallStack(source, options: options) {
+            if case .list = $0 { true } else { false }
+        })
         #expect(nesting.blocks == 2)
-        #expect(nesting.lists == Self.depth)
+        #expect(nesting.nested == Self.depth)
     }
 
-    /// Each definition opens inside the one before it; the outermost is referenced, and moves to the document's end.
+    /// Each definition opens inside the one before it; the outermost and the innermost are referenced, and move to the
+    /// document's end.
     @available(macOS 15, iOS 18, tvOS 18, watchOS 11, visionOS 2, *)
     @Test("deeply nested footnote definitions parse without exhausting a 512 KB stack", arguments: [
         MarkdownDocument.ParseOptions.footnotes,
         [.footnotes, .sourcePosition],
     ])
     func footnoteDefinitionNesting(_ options: MarkdownDocument.ParseOptions) throws {
-        let source = "x[^a]\n\n" + String(repeating: "[^a]: ", count: Self.depth) + "y\n"
-        let blocks = try #require(Self.topLevelBlocksOnSmallStack(source, options: options))
-        #expect(blocks == 2)
+        let source = "x[^a][^b]\n\n" + String(repeating: "[^a]: ", count: Self.depth - 1) + "[^b]: y\n"
+        let nesting = try #require(Self.nestingOnSmallStack(source, options: options) { $0 == .footnoteDefinition })
+        #expect(nesting.blocks == 3)
+        #expect(nesting.nested == 2)
     }
 
-    /// The number of top-level blocks, or `nil` where no small-stack thread can run the parse.
-    private static func topLevelBlocksOnSmallStack(_ source: String, options: MarkdownDocument.ParseOptions) -> Int? {
-        onThread(stackSize: 512 * 1024) {
-            MarkdownDocument.withParsedDocument(source, options: options) { document in
-                var count = 0
-                document.root.children.forEach { _ in count += 1 }
-                return count
-            }
-        }
-    }
-
-    /// The number of top-level blocks and of lists nested from the root's first child, or `nil` where no small-stack
-    /// thread can run the parse.
-    private static func listNestingOnSmallStack(_ source: String, options: MarkdownDocument.ParseOptions) -> (blocks: Int, lists: Int)? {
+    /// The number of top-level blocks and of nodes whose kind `isNested` accepts, or `nil` where no small-stack thread
+    /// can run the parse. The count walks the tree without recursion, so it fits on the same stack.
+    private static func nestingOnSmallStack(
+        _ source: String,
+        options: MarkdownDocument.ParseOptions,
+        counting isNested: @escaping @Sendable (MarkdownNode.Kind) -> Bool
+    ) -> (blocks: Int, nested: Int)? {
         onThread(stackSize: 512 * 1024) {
             MarkdownDocument.withParsedDocument(source, options: options) { document in
                 var blocks = 0
                 document.root.children.forEach { _ in blocks += 1 }
-                var lists = 0
+                var nested = 0
                 var node = document.root.firstChild
-                while let candidate = node, case .list = candidate.kind {
-                    lists += 1
-                    node = candidate.firstChild?.firstChild
+                while let current = node {
+                    if isNested(current.kind) {
+                        nested += 1
+                    }
+                    if let child = current.firstChild {
+                        node = child
+                        continue
+                    }
+                    node = nil
+                    var ancestor: MarkdownNode? = current
+                    while let candidate = ancestor {
+                        if let sibling = candidate.next {
+                            node = sibling
+                            break
+                        }
+                        ancestor = candidate.parent
+                    }
                 }
-                return (blocks, lists)
+                return (blocks, nested)
             }
         }
     }
