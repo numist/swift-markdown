@@ -1548,33 +1548,33 @@ struct IndentedCodeSplitTabTests {
         ),
         Case(
             "item in block quote, A, after a paragraph in the same container",
-            ">- a\n> \t\tfoo\n",
+            ">- a\n >\t\t\tfoo\n",
             """
             document @1:1-3:1
-              block_quote @1:1-2:8
-                list bullet '-' tight @1:2-2:8
-                  item @1:2-2:8
-                    paragraph @1:4-2:8
+              block_quote @1:1-2:9
+                list bullet '-' tight @1:2-2:9
+                  item @1:2-2:9
+                    paragraph @1:4-2:9
                       text "a" @1:4-1:5
                       softbreak @-
-                      text "foo" @2:5-2:8
+                      text "foo" @2:6-2:9
 
             """
         ),
         Case(
             "item in block quote, A, after a lazy continuation line",
-            ">- a\nb\n> \t\tfoo\n",
+            ">- a\nb\n >\t\t\tfoo\n",
             """
             document @1:1-4:1
-              block_quote @1:1-3:8
-                list bullet '-' tight @1:2-3:8
-                  item @1:2-3:8
-                    paragraph @1:4-3:8
+              block_quote @1:1-3:9
+                list bullet '-' tight @1:2-3:9
+                  item @1:2-3:9
+                    paragraph @1:4-3:9
                       text "a" @1:4-1:5
                       softbreak @-
                       text "b" @2:1-2:2
                       softbreak @-
-                      text "foo" @3:5-3:8
+                      text "foo" @3:6-3:9
 
             """
         ),
@@ -1645,33 +1645,33 @@ struct IndentedCodeSplitTabTests {
         ),
         Case(
             "item in block quote, B, after a paragraph in the same container",
-            ">- a\n>  \t\tfoo\n",
+            ">- a\n > \t\t\tfoo\n",
             """
             document @1:1-3:1
-              block_quote @1:1-2:9
-                list bullet '-' tight @1:2-2:9
-                  item @1:2-2:9
-                    paragraph @1:4-2:9
+              block_quote @1:1-2:10
+                list bullet '-' tight @1:2-2:10
+                  item @1:2-2:10
+                    paragraph @1:4-2:10
                       text "a" @1:4-1:5
                       softbreak @-
-                      text "foo" @2:6-2:9
+                      text "foo" @2:7-2:10
 
             """
         ),
         Case(
             "item in block quote, B, after a lazy continuation line",
-            ">- a\nb\n>  \t\tfoo\n",
+            ">- a\nb\n > \t\t\tfoo\n",
             """
             document @1:1-4:1
-              block_quote @1:1-3:9
-                list bullet '-' tight @1:2-3:9
-                  item @1:2-3:9
-                    paragraph @1:4-3:9
+              block_quote @1:1-3:10
+                list bullet '-' tight @1:2-3:10
+                  item @1:2-3:10
+                    paragraph @1:4-3:10
                       text "a" @1:4-1:5
                       softbreak @-
                       text "b" @2:1-2:2
                       softbreak @-
-                      text "foo" @3:6-3:9
+                      text "foo" @3:7-3:10
 
             """
         ),
@@ -1742,33 +1742,33 @@ struct IndentedCodeSplitTabTests {
         ),
         Case(
             "item in block quote, C, after a paragraph in the same container",
-            ">- a\n>     \tfoo\n",
+            ">- a\n >      \tfoo\n",
             """
             document @1:1-3:1
-              block_quote @1:1-2:11
-                list bullet '-' tight @1:2-2:11
-                  item @1:2-2:11
-                    paragraph @1:4-2:11
+              block_quote @1:1-2:13
+                list bullet '-' tight @1:2-2:13
+                  item @1:2-2:13
+                    paragraph @1:4-2:13
                       text "a" @1:4-1:5
                       softbreak @-
-                      text "foo" @2:8-2:11
+                      text "foo" @2:10-2:13
 
             """
         ),
         Case(
             "item in block quote, C, after a lazy continuation line",
-            ">- a\nb\n>     \tfoo\n",
+            ">- a\nb\n >      \tfoo\n",
             """
             document @1:1-4:1
-              block_quote @1:1-3:11
-                list bullet '-' tight @1:2-3:11
-                  item @1:2-3:11
-                    paragraph @1:4-3:11
+              block_quote @1:1-3:13
+                list bullet '-' tight @1:2-3:13
+                  item @1:2-3:13
+                    paragraph @1:4-3:13
                       text "a" @1:4-1:5
                       softbreak @-
                       text "b" @2:1-2:2
                       softbreak @-
-                      text "foo" @3:8-3:11
+                      text "foo" @3:10-3:13
 
             """
         ),
@@ -1839,33 +1839,33 @@ struct IndentedCodeSplitTabTests {
         ),
         Case(
             "item in block quote, D, after a paragraph in the same container",
-            ">- a\n> \t   foo\n",
+            ">- a\n >\t\t    foo\n",
             """
             document @1:1-3:1
-              block_quote @1:1-2:10
-                list bullet '-' tight @1:2-2:10
-                  item @1:2-2:10
-                    paragraph @1:4-2:10
+              block_quote @1:1-2:12
+                list bullet '-' tight @1:2-2:12
+                  item @1:2-2:12
+                    paragraph @1:4-2:12
                       text "a" @1:4-1:5
                       softbreak @-
-                      text "foo" @2:7-2:10
+                      text "foo" @2:9-2:12
 
             """
         ),
         Case(
             "item in block quote, D, after a lazy continuation line",
-            ">- a\nb\n> \t   foo\n",
+            ">- a\nb\n >\t\t    foo\n",
             """
             document @1:1-4:1
-              block_quote @1:1-3:10
-                list bullet '-' tight @1:2-3:10
-                  item @1:2-3:10
-                    paragraph @1:4-3:10
+              block_quote @1:1-3:12
+                list bullet '-' tight @1:2-3:12
+                  item @1:2-3:12
+                    paragraph @1:4-3:12
                       text "a" @1:4-1:5
                       softbreak @-
                       text "b" @2:1-2:2
                       softbreak @-
-                      text "foo" @3:7-3:10
+                      text "foo" @3:9-3:12
 
             """
         ),
@@ -1912,15 +1912,13 @@ struct IndentedCodeSplitTabTests {
         ),
         Case(
             "item in block quote, continuation lines",
-            ">-\t\tfoo\n>  \t\tfoo\n>     \tfoo\n> \t   foo\n",
+            ">-\t\tfoo\n >\t\t\tfoo\n > \t\t\tfoo\n >      \tfoo\n >\t\t    foo\n",
             """
-            document @1:1-5:1
-              block_quote @1:1-4:10
-                list bullet '-' tight @1:2-4:10
-                  item @1:2-4:10
-                    code_block "" " foo\\nfoo\\nfoo\\n" @1:4-3:11
-                    paragraph @4:7-4:10
-                      text "foo" @4:7-4:10
+            document @1:1-6:1
+              block_quote @1:1-5:12
+                list bullet '-' tight @1:2-5:12
+                  item @1:2-5:12
+                    code_block "" " foo\\n   foo\\n   foo\\n   foo\\n   foo\\n" @1:4-5:12
 
             """
         ),
