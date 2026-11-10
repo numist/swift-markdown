@@ -320,7 +320,7 @@ struct TablePositionEncodingTests {
         // Line 1 `\tcodeé`: \t@byte0 (col1, the indent), c@byte1 (col2) … é@bytes5-6 (cols6-7).
         let nodes = nodes("\tcode\u{E9}")
         let code = nodes.first { if case .codeBlock = $0.kind { return true } else { return false } }
-        // The literal's trailing line ending is not in the source, so the range ends after `é`.
+        // The literal's final line ending is outside the range, so the range ends after `é`.
         try #require(code?.literal == "code\u{E9}\n", "fixture: code body `codeé`")
         #expect(code?.range == r(1, 2, 1, 8))               // body starts at col2, ends past é (col8)
     }
