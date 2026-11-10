@@ -245,7 +245,7 @@ internal struct ContentSpan: ~Escapable {
 
     /// The offset of the next byte at or after `globalCursor` that the inline dispatch acts on, or `endOffset`, so the dispatch skips plain text 16 bytes at a time.
     ///
-    /// The set must include every byte the dispatch switch acts on. An option's bytes are included only with that option, since the switch otherwise treats them as text. `@` is never included, because email autolinks are found in a later pass (`gfmEmailAutolinkPass`).
+    /// The set must include every byte the dispatch switch acts on. `~`, `:`, `w` and the smart punctuation bytes are included only with their options, since the switch otherwise treats them as text; `^`, which only `.attributes` acts on, is always included as part of the `[`–`` ` `` range. `@` is never included, because email autolinks are found in a later pass (`gfmEmailAutolinkPass`).
     func nextSignificant(from globalCursor: Int, strikethrough: Bool, gfmAutolink: Bool, smart: Bool) -> Int {
         if isMultiSegment {
             return multiNextSignificant(from: globalCursor, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
