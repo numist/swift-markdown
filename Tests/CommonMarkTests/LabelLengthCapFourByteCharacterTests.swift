@@ -12,7 +12,8 @@ import CommonMark
 import Testing
 
 /// A label has at most 999 characters (Links), however many bytes each takes: 999 four-byte characters fit, and 1,000
-/// characters don't, whether all four-byte or ending in one-byte characters.
+/// characters don't, whether all four-byte or ending in one-byte characters. A footnote definition's label is capped
+/// likewise, so a `[^label]:` whose label is longer begins no definition and stays paragraph text.
 @Suite("Label length cap with four-byte characters")
 struct LabelLengthCapFourByteCharacterTests {
     private static let wideCharacter = "\u{1F600}"
@@ -41,6 +42,8 @@ struct LabelLengthCapFourByteCharacterTests {
             document
               paragraph
                 text "x[^\(label)]"
+              paragraph
+                text "[^\(label)]: d"
 
             """)
     }

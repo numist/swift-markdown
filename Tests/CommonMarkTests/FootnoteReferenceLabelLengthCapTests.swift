@@ -49,13 +49,14 @@ struct FootnoteReferenceLabelLengthCapTests {
         (String(repeating: "a", count: 1001), String(repeating: "a", count: 1001)),
     ])
     func labelOverCapStaysLiteral(_ label: String, _ replaced: String) {
-        #expect(surface(referenceAndDefinition(label)) == literalParagraph("x[^\(replaced)]"))
+        #expect(surface(referenceAndDefinition(label)) == literalParagraph("x[^\(replaced)]") + "  paragraph\n    text \"[^\(replaced)]: note\"\n")
     }
 
     /// A bracket whose label is over the cap is ordinary paragraph text, so its entity reference decodes.
     @Test func overCapDecodesEntity() {
         let label = String(repeating: "a", count: 996) + "&amp;"
-        #expect(surface(referenceAndDefinition(label)) == literalParagraph("x[^\(String(repeating: "a", count: 996))&]"))
+        let decoded = String(repeating: "a", count: 996) + "&"
+        #expect(surface(referenceAndDefinition(label)) == literalParagraph("x[^\(decoded)]") + "  paragraph\n    text \"[^\(decoded)]: note\"\n")
     }
 
     @Test func imageShapedOpener() {
@@ -63,7 +64,7 @@ struct FootnoteReferenceLabelLengthCapTests {
         #expect(surface("x![^\(atCap)]\n\n[^\(atCap)]: note")
             == "document\n  paragraph\n    text \"x!\"\n    footnote_reference \"1\"\n  footnote_definition \"\(atCap)\"\n    paragraph\n      text \"note\"\n")
         let overCap = String(repeating: "a", count: 1000)
-        #expect(surface("x![^\(overCap)]\n\n[^\(overCap)]: note") == literalParagraph("x![^\(overCap)]"))
+        #expect(surface("x![^\(overCap)]\n\n[^\(overCap)]: note") == literalParagraph("x![^\(overCap)]") + "  paragraph\n    text \"[^\(overCap)]: note\"\n")
     }
 
     @Test func referenceInBlockQuote() {
@@ -71,12 +72,12 @@ struct FootnoteReferenceLabelLengthCapTests {
         #expect(surface("> x[^\(atCap)]\n\n[^\(atCap)]: note")
             == "document\n  block_quote\n    paragraph\n      text \"x\"\n      footnote_reference \"1\"\n  footnote_definition \"\(atCap)\"\n    paragraph\n      text \"note\"\n")
         let overCap = String(repeating: "a", count: 1000)
-        #expect(surface("> x[^\(overCap)]\n\n[^\(overCap)]: note") == "document\n  block_quote\n    paragraph\n      text \"x[^\(overCap)]\"\n")
+        #expect(surface("> x[^\(overCap)]\n\n[^\(overCap)]: note") == "document\n  block_quote\n    paragraph\n      text \"x[^\(overCap)]\"\n  paragraph\n    text \"[^\(overCap)]: note\"\n")
     }
 
     @Test func repeatedReferenceOverCapStaysLiteral() {
         let label = String(repeating: "a", count: 1000)
-        #expect(surface("x[^\(label)] y[^\(label)]\n\n[^\(label)]: note") == literalParagraph("x[^\(label)] y[^\(label)]"))
+        #expect(surface("x[^\(label)] y[^\(label)]\n\n[^\(label)]: note") == literalParagraph("x[^\(label)] y[^\(label)]") + "  paragraph\n    text \"[^\(label)]: note\"\n")
     }
 
     /// A footnote definition's label holds no whitespace, so a footnote-shaped bracket that spans a line ending is
@@ -121,6 +122,6 @@ struct FootnoteReferenceLabelLengthCapTests {
     /// A footnote reference label cannot hold an unescaped `[` (Links), so the whole `[^[…]]` run stays literal text.
     @Test func caretBracketStaysLiteral() {
         let label = String(repeating: "a", count: 1001)
-        #expect(surface("x[^[\(label)]]\n\n[^\(label)]: note") == literalParagraph("x[^[\(label)]]"))
+        #expect(surface("x[^[\(label)]]\n\n[^\(label)]: note") == literalParagraph("x[^[\(label)]]") + "  paragraph\n    text \"[^\(label)]: note\"\n")
     }
 }

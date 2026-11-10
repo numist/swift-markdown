@@ -51,8 +51,8 @@ struct EscapedCaretMultilineFootnoteResolutionTests {
                 text "xxxxx]"
 
             """),
-        ("[\\^\(Self.long)bbb\n\(String(repeating: "x", count: 1002))]\n\n[^\(Self.long)]: note", "document\n  paragraph\n    text \"[^\(Self.long)bbb\"\n    softbreak\n    text \"\(String(repeating: "x", count: 1002))]\"\n"),
-        ("[\\^\(Self.long)abbb\n\(String(repeating: "x", count: 1003))]\n\n[^\(Self.long)a]: note", "document\n  paragraph\n    text \"[^\(Self.long)abbb\"\n    softbreak\n    text \"\(String(repeating: "x", count: 1003))]\"\n"),
+        ("[\\^\(Self.long)bbb\n\(String(repeating: "x", count: 1002))]\n\n[^\(Self.long)]: note", "document\n  paragraph\n    text \"[^\(Self.long)bbb\"\n    softbreak\n    text \"\(String(repeating: "x", count: 1002))]\"\n  paragraph\n    text \"[^\(Self.long)]: note\"\n"),
+        ("[\\^\(Self.long)abbb\n\(String(repeating: "x", count: 1003))]\n\n[^\(Self.long)a]: note", "document\n  paragraph\n    text \"[^\(Self.long)abbb\"\n    softbreak\n    text \"\(String(repeating: "x", count: 1003))]\"\n  paragraph\n    text \"[^\(Self.long)a]: note\"\n"),
         ("[\\^a\u{0}bcdef\nxxxxxxx]\n\n[^a\u{0}b]: note", """
             document
               paragraph
