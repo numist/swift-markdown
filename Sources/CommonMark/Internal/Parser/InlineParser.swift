@@ -768,7 +768,7 @@ extension BlockParser {
 
     // MARK: - Emphasis / strong (delimiter stack)
 
-    /// A delimiter run on the emphasis stack (Appendix: A parsing strategy), pointing at the `.text` node holding it.
+    /// A delimiter run on the delimiter stack (Appendix: A parsing strategy), pointing at the `.text` node holding it.
     ///
     /// The stack is a doubly-linked list through `delimiters`; unlinking a record leaves the array, and so other indices, intact.
     internal struct DelimiterRecord {
@@ -801,7 +801,7 @@ extension BlockParser {
     private func classifyFlanking(start: Int, runEnd: Int, content: borrowing ContentSpan) -> Flanking {
         let end = content.endOffset
         let chunkStart = content.startOffset
-        // The content's start and end count as line endings.
+        // The content's start and end count as Unicode whitespace (Emphasis and strong emphasis).
         let beforeIdx = start - 1
         let beforeChar: UInt8 = beforeIdx >= chunkStart ? content[beforeIdx] : UInt8(ascii: "\n")
         // Flanking is defined over characters, so a multi-byte whitespace or punctuation neighbour counts.
@@ -883,7 +883,7 @@ extension BlockParser {
         }
     }
 
-    /// Scans the delimiter run at `start`, emits its text, and pushes a delimiter if it can open or close (Emphasis and strong emphasis). Returns the offset past the run.
+    /// Scans the delimiter run at `start`, emits its text unless it is a `*` or `_` run that can neither open nor close, and pushes a delimiter if it can open or close (Emphasis and strong emphasis) and, for `~`, has a strikethrough length. Returns the offset past the run.
     private mutating func handleDelimRun(char: UInt8, start: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         let end = content.endOffset
         var runEnd = start
@@ -908,9 +908,6 @@ extension BlockParser {
             canOpen = leftFlanking
             canClose = rightFlanking
         }
-        // A run that can neither open nor close stays pending text, so the email autolink pass sees an
-        // unbroken local part (`a.b-c_d@a.b`). A non-flanking `~` run is surrounded by whitespace, so its
-        // own text node never splits an autolink.
         let isStrikethrough = char == UInt8(ascii: "~")
         if !canOpen && !canClose && !isStrikethrough {
             return runEnd
@@ -936,8 +933,9 @@ extension BlockParser {
 
     /// Resolves emphasis among the delimiters above `stackBottom` (`-1` for the whole stack), pairing each closer with the nearest compatible opener.
     ///
-    /// `openersBottom` records, per closer character, length mod 3 and whether it can open, where a failed opener search
-    /// stopped, so no later closer searches below it. Those three decide which openers rules 9 and 10 admit.
+    /// `openersBottom` records, per closer character, length mod 3 and whether the closer can open, the last closer
+    /// whose opener search failed; a later closer of the same kind searches no lower, since the same openers would fail
+    /// it (rules 9 and 10).
     private mutating func processEmphasis(stackBottom: Int, content: borrowing ContentSpan) {
         var openersBottom = OpenersBottom(fill: stackBottom)
         // The earliest delimiter above `stackBottom`.
@@ -964,8 +962,8 @@ extension BlockParser {
                     let cl = delimiters[c]
                     let op = delimiters[o]
                     // The multiple-of-3 test of rules 9 and 10 (Emphasis and strong emphasis) applies to `~`
-                    // too. A `~` opener of any length is accepted: `insertEmph` discards a mismatched pair,
-                    // so a closer never reaches past the nearest `~` opener.
+                    // too. A `~` opener need not match the closer's length here: `insertEmph` discards a
+                    // mismatched pair, so a closer never reaches past the nearest `~` opener.
                     if !(cl.canOpen || op.canClose)
                         || cl.length % 3 == 0
                         || (op.length + cl.length) % 3 != 0 {
@@ -977,7 +975,7 @@ extension BlockParser {
             }
             let oldCloser = c
             if closerChar == UInt8(ascii: "'") || closerChar == UInt8(ascii: "\"") {
-                // A quote closer already has its closing glyph from `handleQuoteDelim`. Re-interning it would move its segment to the pool's end, so `consolidateTextNodes` could not merge it with its neighbours (the apostrophe in `it's`).
+                // A quote closer already has its closing glyph from `handleQuoteDelim`. Re-interning it would move its segment to the pool's end, so `consolidateTextNodes` would merge it with its neighbours (the apostrophe in `it's`) by copying their segments instead of widening in place.
                 let single = closerChar == UInt8(ascii: "'")
                 let next = delimiters[c].next
                 if openerFound, let opener {
@@ -1020,7 +1018,7 @@ extension BlockParser {
         }
     }
 
-    /// Wraps the nodes between `opener` and `closer` in an `.emphasis`, `.strong` or `.strikethrough` node, trims the used delimiters, and returns the next closer to process: `closer` again if part of its run remains.
+    /// Wraps the nodes between `opener` and `closer` in an `.emphasis`, `.strong` or `.strikethrough` node, trims the used delimiters, and returns the next closer to process: `closer` again if part of its run remains. A `~` pair of unequal lengths forms no node.
     private mutating func insertEmph(opener: Int, closer: Int, content: borrowing ContentSpan) -> Int? {
         let openerInl = delimiters[opener].inlText
         let closerInl = delimiters[closer].inlText
