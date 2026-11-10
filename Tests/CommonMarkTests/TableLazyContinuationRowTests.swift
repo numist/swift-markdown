@@ -1456,7 +1456,7 @@ struct TableLazyContinuationRowTests {
             """
         ),
         Case(
-            "block quote, a line without its prefix after a heading opens a paragraph",
+            "block quote, a line without its prefix after a heading begins a table outside it",
             "> # h\nc|d\n-|-\n",
             """
             document @1:1-4:1
