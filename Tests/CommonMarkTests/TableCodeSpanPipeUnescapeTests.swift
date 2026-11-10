@@ -60,7 +60,7 @@ struct TableCodeSpanPipeUnescapeTests {
             """)
     }
 
-    @Test("code span in a tab-continuation table's preceding paragraph keeps its escaped pipe")
+    @Test("code span before a tab-indented header row keeps its escaped pipe")
     func precedingParagraphCodeSpanKeepsEscapedPipeWithTabContinuation() {
         #expect(TreeDump.dump("`\\|`\n\tx\n|-", options: [.tables]) == """
             document
@@ -98,7 +98,7 @@ struct TableCodeSpanPipeUnescapeTests {
             """)
     }
 
-    @Test("plain code span with an unescaped pipe is unaffected")
+    @Test("a code span with an unescaped pipe keeps the pipe")
     func plainCodeSpanWithPipeUnaffected() {
         #expect(TreeDump.dump("`x|y`", options: [.tables]) == """
             document
