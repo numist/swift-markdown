@@ -75,7 +75,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `joinPending` defers a line's `\n`, so that if the next line is contiguous in the source the run stays one zero-copy source range. Only `appendNewline` sets it and the next `addLine` clears it, so it is never set between lines.
     enum PendingContent : ~Copyable {
         case lazy(range: Range<Int>, joinPending: Bool = false)
-        /// Each non-empty line is a source segment, or an arena copy for a code or HTML block line that splits a tab or holds a NUL, and each line join is `newlineSegment`. Used for code and HTML block bodies and for paragraph lines not contiguous in the source.
+        /// Each non-empty line is a source segment and each line join is `newlineSegment`, except that a paragraph's first segment holds all its leading source-contiguous lines, and a code or HTML block line that splits a tab or holds a NUL is arena segments for the tab's spaces and each U+FFFD and source segments for the rest. Used for code and HTML block bodies and for paragraph lines not contiguous in the source.
         case segments(UniqueArray<Segment>)
     }
 
