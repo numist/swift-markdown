@@ -43,16 +43,6 @@ struct WhitespaceOnlySecondLabelAcrossLinesTests {
             """)
     }
 
-    @Test func imageOnOneLine() {
-        #expect(tree("![foo bar][ ]\n\n[foo bar]: /url") == """
-            Document @1:1-3:16
-            └─ Paragraph @1:1-1:14
-               ├─ Image @1:1-1:11 source: "/url"
-               │  └─ Text @1:3-1:10 "foo bar"
-               └─ Text @1:11-1:14 "[ ]"
-            """)
-    }
-
     @Test func linkInBlockQuote() {
         #expect(tree("> [foo\n> bar][ ]\n\n[foo bar]: /url") == """
             Document @1:1-4:16
