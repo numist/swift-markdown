@@ -150,4 +150,110 @@ struct NoncontiguousLeafStorageTests {
 
             """)
     }
+
+    // MARK: - Lines before a table's header row
+
+    private static let tableOptions = options.union(.tables)
+
+    @Test("lines before a table's header row", arguments: [
+        ("> [abc\n> def\n> a | b\n> --|--\n", """
+            document @1:1-5:1
+              block_quote @1:1-4:8
+                paragraph @1:3-2:6
+                  text "[abc" @1:3-1:7
+                  softbreak @-
+                  text "def" @2:3-2:6
+                table @3:3-4:8
+                  table_header @3:3-3:8
+                    table_cell align=none colspan=1 rowspan=1 @3:3-3:4
+                      text "a" @3:3-3:4
+                    table_cell align=none colspan=1 rowspan=1 @3:7-3:8
+                      text "b" @3:7-3:8
+
+            """),
+        ("> [x]: /u\n> def\n> a | b\n> --|--\n", """
+            document @1:1-5:1
+              block_quote @1:1-4:8
+                paragraph @2:3-2:6
+                  text "def" @2:3-2:6
+                table @3:3-4:8
+                  table_header @3:3-3:8
+                    table_cell align=none colspan=1 rowspan=1 @3:3-3:4
+                      text "a" @3:3-3:4
+                    table_cell align=none colspan=1 rowspan=1 @3:7-3:8
+                      text "b" @3:7-3:8
+
+            """),
+        ("> ^[x]: k: v\n> def\n> a | b\n> --|--\n", """
+            document @1:1-5:1
+              block_quote @1:1-4:8
+                paragraph @2:3-2:6
+                  text "def" @2:3-2:6
+                table @3:3-4:8
+                  table_header @3:3-3:8
+                    table_cell align=none colspan=1 rowspan=1 @3:3-3:4
+                      text "a" @3:3-3:4
+                    table_cell align=none colspan=1 rowspan=1 @3:7-3:8
+                      text "b" @3:7-3:8
+
+            """),
+        ("> [x]: /u\n> [y]: /v\n> a | b\n> --|--\n", """
+            document @1:1-5:1
+              block_quote @1:1-4:8
+                table @3:3-4:8
+                  table_header @3:3-3:8
+                    table_cell align=none colspan=1 rowspan=1 @3:3-3:4
+                      text "a" @3:3-3:4
+                    table_cell align=none colspan=1 rowspan=1 @3:7-3:8
+                      text "b" @3:7-3:8
+
+            """),
+        ("- [ ] abc\n  def\n  a | b\n  --|--\n", """
+            document @1:1-5:1
+              list bullet '-' tight @1:1-4:8
+                tasklist unchecked @1:1-4:8
+                  paragraph @1:7-2:6
+                    text "abc" @1:7-1:10
+                    softbreak @-
+                    text "def" @2:3-2:6
+                  table @3:3-4:8
+                    table_header @3:3-3:8
+                      table_cell align=none colspan=1 rowspan=1 @3:3-3:4
+                        text "a" @3:3-3:4
+                      table_cell align=none colspan=1 rowspan=1 @3:7-3:8
+                        text "b" @3:7-3:8
+
+            """),
+        ("> \u{0B}abc\n> def\u{0C}\n> a | b\n> --|--\n", """
+            document @1:1-5:1
+              block_quote @1:1-4:8
+                paragraph @1:4-2:6
+                  text "abc" @1:4-1:7
+                  softbreak @-
+                  text "def" @2:3-2:6
+                table @3:3-4:8
+                  table_header @3:3-3:8
+                    table_cell align=none colspan=1 rowspan=1 @3:3-3:4
+                      text "a" @3:3-3:4
+                    table_cell align=none colspan=1 rowspan=1 @3:7-3:8
+                      text "b" @3:7-3:8
+
+            """),
+        ("> \u{0B}\n> \u{0C}\n> a | b\n> --|--\n", """
+            document @1:1-5:1
+              block_quote @1:1-4:8
+                paragraph @1:3-1:3
+                table @3:3-4:8
+                  table_header @3:3-3:8
+                    table_cell align=none colspan=1 rowspan=1 @3:3-3:4
+                      text "a" @3:3-3:4
+                    table_cell align=none colspan=1 rowspan=1 @3:7-3:8
+                      text "b" @3:7-3:8
+
+            """),
+    ])
+    func linesBeforeTableHeader(_ source: String, _ expected: String) {
+        #expect(MarkdownDocument.withParsedDocument(source, options: Self.tableOptions) { $0._materializedStringSize } == 1)
+        #expect(TreeDump.dump(source, options: Self.tableOptions, sourceRanges: true) == expected)
+    }
 }

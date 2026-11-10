@@ -885,22 +885,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             header.append(segs[i])
         }
         segs.removeSubrange(lineJoin..<segs.count)
-        let preceding = trimSegments(segs)
         let precedingNode = insertTablePrecedingParagraph(before: node)
-        // Read through a borrow, so `preceding` can then be consumed by `intern`.
         if positionsEnabled {
-            let span = segmentsSourceSpan(preceding)
+            let span = segmentsSourceSpan(segs)
             storage.setSourceStart(precedingNode, span.start)
             storage.setSourceEnd(precedingNode, span.end)
         }
         // These lines bypass `drainLeaf`, so a NUL in them forces a flatten here, since a segment list can't carry
         // the U+FFFD (see `ContentSpan`).
-        let substitutes = segmentsContainNUL(preceding)
-        let trimsControlWhitespace = segmentsEndInControlWhitespace(preceding)
-        let mayHoldMatcher = segmentsCouldMatchMatcher(preceding)
-        if substitutes || trimsControlWhitespace || mayHoldMatcher {
+        if segmentsContainNUL(segs) {
             var map: [ArenaRun] = []
-            let flat = flattenSegments(preceding, map: &map)
+            let flat = flattenSegments(segs, map: &map)
             if let content = tableSplitParagraphContent(flat.trimmingWhitespace(using: self), node: precedingNode) {
                 let contentMap = positionsEnabled ? Self.sliceRuns(map, from: content.offset - flat.offset, length: content.length) : []
                 if positionsEnabled, !content.isEmpty {
@@ -914,8 +909,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             } else {
                 storage.unlinkChild(precedingNode)
             }
+        } else if let content = rawContentRange(in: segs, taskItemParagraph: precedingNode) {
+            if content.isEmpty {
+                storage.unlinkChild(precedingNode)
+            } else {
+                enqueueRawContent(of: precedingNode, self.segments(segs, in: content))
+            }
         } else {
-            pendingInlines.append((precedingNode, storage.intern(preceding)))
+            emptySourceRangeAtStart(precedingNode)
         }
         if positionsEnabled {
             storage.setSourceStart(node, segmentsSourceSpan(header).start)
@@ -1148,8 +1149,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let trimmed = Chunk(offset: range.lowerBound, length: range.count, inSource: true).trimmingWhitespace(using: self)
             return parseDefinitions(in: trimmed).trimmingWhitespace(using: self).range
         case .segments(let segs):
-            let trimmed = trimmedRange(of: segs)
-            return trimmed.isEmpty ? trimmed : rawContentStart(in: segs, trimmed: trimmed, taskItemParagraph: nil)..<trimmed.upperBound
+            return rawContentRange(in: segs, taskItemParagraph: nil) ?? 0..<0
         }
     }
 
@@ -1878,21 +1878,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return storage.strings[seg.offset + local]
     }
 
-    /// Trims trailing spaces, tabs and line endings from the last segment, as `Chunk.trimming(using:)` does. The first
-    /// segment starts at its first byte that is not a space or tab.
-    private func trimSegments(_ segs: consuming UniqueArray<Segment>) -> UniqueArray<Segment> {
-        var segs = segs
-        precondition(segs.count > 0, "a paragraph's segment list starts with its opening line")
-        precondition(!segmentByte(segs[0], 0).isSpaceTabOrNewline, "a paragraph's opening line starts at its first non-space byte")
-        let li = segs.count - 1
-        var last = segs[li]
-        var len = last.length
-        while len > 0 && segmentByte(last, len - 1).isSpaceTabOrNewline { len -= 1 }
-        last.length = len
-        segs[li] = last
-        return segs
-    }
-
     /// The virtual range of a leaf's lines `segs` without leading and trailing whitespace (Paragraphs, Setext headings).
     private func trimmedRange(of segs: borrowing UniqueArray<Segment>) -> Range<Int> {
         var total = 0
@@ -1949,58 +1934,39 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Queues the raw content of the paragraph `node` whose lines are `segs` for inline parsing, as segments of the
     /// source, or removes the paragraph when its definitions or task list item marker leave nothing.
     private mutating func finishParagraph(_ node: DocumentStorage.Index, segments segs: consuming UniqueArray<Segment>) {
-        let trimmed = trimmedRange(of: segs)
-        if trimmed.isEmpty {
+        guard let content = rawContentRange(in: segs, taskItemParagraph: node) else {
             // Lines holding only line tabulations and form feeds leave the paragraph no raw content (Paragraphs).
             emptySourceRangeAtStart(node)
             return
         }
-        let start = rawContentStart(in: segs, trimmed: trimmed, taskItemParagraph: node)
-        if start == trimmed.upperBound {
-            removeEmptiedParagraph(node, contentEnd: positionsEnabled ? sourceEnd(ofVirtual: trimmed.upperBound, in: segs) : nil)
+        if content.isEmpty {
+            removeEmptiedParagraph(node, contentEnd: positionsEnabled ? sourceEnd(ofVirtual: content.upperBound, in: segs) : nil)
             return
         }
-        let content = segments(segs, in: start..<trimmed.upperBound)
+        enqueueRawContent(of: node, segments(segs, in: content))
+    }
+
+    /// The virtual range of the raw content of the paragraph `node` whose lines are `segs` (see
+    /// `rawContentStart(in:trimmed:taskItemParagraph:)`), or `nil` when its lines are all whitespace. The range is
+    /// empty, at the end of the lines' trimmed range, when the paragraph's definitions or task list item marker leave
+    /// nothing.
+    private mutating func rawContentRange(in segs: borrowing UniqueArray<Segment>, taskItemParagraph node: DocumentStorage.Index?) -> Range<Int>? {
+        let trimmed = trimmedRange(of: segs)
+        if trimmed.isEmpty {
+            return nil
+        }
+        return rawContentStart(in: segs, trimmed: trimmed, taskItemParagraph: node)..<trimmed.upperBound
+    }
+
+    /// Stamps the paragraph `node` with the source span of its raw content `content`, the segments of its lines it
+    /// keeps, and queues them for inline parsing.
+    private mutating func enqueueRawContent(of node: DocumentStorage.Index, _ content: consuming UniqueArray<Segment>) {
         if positionsEnabled {
             let span = segmentsSourceSpan(content)
             storage.setSourceStart(node, span.start)
             storage.setSourceEnd(node, span.end)
         }
         pendingInlines.append((node, storage.intern(content)))
-    }
-
-    /// Whether a paragraph's segment list begins or ends with a line tabulation or form feed, whitespace that
-    /// `trimSegments` leaves for the flat content's trim to remove.
-    private func segmentsEndInControlWhitespace(_ segs: borrowing UniqueArray<Segment>) -> Bool {
-        let first = segs[0]
-        let last = segs[segs.count - 1]
-        let isControlWhitespace = { (b: UInt8) in b == 0x0B || b == 0x0C }
-        return (first.length > 0 && isControlWhitespace(segmentByte(first, 0)))
-            || (last.length > 0 && isControlWhitespace(segmentByte(last, last.length - 1)))
-    }
-
-    /// Whether the content could match a finalize-time matcher: a link reference definition or task list item marker (`[`), or an attribute definition (`^[`).
-    ///
-    /// A false positive costs only a materialization, so this must cover every matcher's necessary condition.
-    private func segmentsCouldMatchMatcher(_ segs: borrowing UniqueArray<Segment>) -> Bool {
-        // Raw paragraph content begins at the first non-whitespace byte, line tabulation and form feed included.
-        let attributesEnabled = storage.options.contains(.attributes)
-        outer: for i in 0..<segs.count {
-            let seg = segs[i]
-            for j in 0..<seg.length {
-                let b = segmentByte(seg, j)
-                if b.isASCIISpace { continue }
-                if b == UInt8(ascii: "[") { return true }
-                // An attribute definition opens with a `^` immediately followed by `[`, so a `^` split
-                // from its `[` by a line join is not admitted (the `[` would fall in the next segment).
-                if b == UInt8(ascii: "^"), attributesEnabled, j + 1 < seg.length,
-                   segmentByte(seg, j + 1) == UInt8(ascii: "[") {
-                    return true
-                }
-                break outer   // first non-whitespace byte doesn't open a definition
-            }
-        }
-        return false
     }
 
     /// Flattens a segment list into one arena chunk, recording its run map in `map`: a source segment images its range, and a line join is a gap. The map tiles the content from its first byte, so it survives a later copy of the content.
