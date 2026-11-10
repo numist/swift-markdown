@@ -17,7 +17,7 @@ import Testing
 /// Each large document has a small twin with the same blocks. The large documents need up to 9 GB of memory and take
 /// seconds to parse in an optimized build, so they run only when the environment variable
 /// `COMMONMARK_LARGE_DOCUMENT_TESTS` is set.
-@Suite("Documents larger than 2 GiB")
+@Suite("Documents whose offsets or lengths exceed 2 GiB")
 struct LargeDocumentTests {
 
     static let largeDocumentsEnabled = ProcessInfo.processInfo.environment["COMMONMARK_LARGE_DOCUMENT_TESTS"] != nil
@@ -41,8 +41,9 @@ struct LargeDocumentTests {
         return markdown
     }
 
-    /// The first top-level block's subtree as `TreeDump` renders it with source ranges, except that each node's content
-    /// is its number of segments and bytes.
+    /// The first top-level block's subtree, one node per line with two spaces of indent per depth: the kind as
+    /// `TreeDump.describe` writes it, the segment and byte counts of its text or code block content, and its source
+    /// range.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     static func dumpSizesOfFirstBlock(_ document: borrowing MarkdownDocument) -> String {
         var out = ""
