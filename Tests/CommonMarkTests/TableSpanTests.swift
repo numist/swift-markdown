@@ -73,19 +73,19 @@ struct TableSpanTests {
     // Excess cells are ignored (Tables (extension)), but `||` fillers beyond the column count
     // add to the colspan of the last cell kept, which is not capped at the column count.
 
-    @Test("one trailing `||` grows a single-column cell's colspan past the column count")
+    @Test("one `||` filler grows a single-column cell's colspan past the column count")
     func colspanExceedsColumnCountByOne() {
         let rows = MarkdownDocument.withParsedDocument("o\n|-\no||", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [2])
     }
 
-    @Test("two trailing `||` cells grow a single-column cell's colspan to three")
+    @Test("two `||` fillers grow a single-column cell's colspan to three")
     func colspanExceedsColumnCountByTwo() {
         let rows = MarkdownDocument.withParsedDocument("o\n|-\no|||", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [3])
     }
 
-    @Test("three trailing `||` cells grow a single-column cell's colspan to four")
+    @Test("three `||` fillers grow a single-column cell's colspan to four")
     func colspanExceedsColumnCountByThree() {
         let rows = MarkdownDocument.withParsedDocument("o\n|-\no||||", options: [.tables, .tableSpans]) { tableSpans($0) }
         #expect(rows[1].map(\.columns) == [4])
@@ -163,7 +163,6 @@ struct TableSpanTests {
         | " | z |
         """
         let rows = MarkdownDocument.withParsedDocument(source, options: [.tables, .tableSpans]) { tableSpans($0) }
-        // Without `.smart`, `"` stays a straight quote.
         #expect(rows[1].map(\.rows) == [1, 1])
         #expect(rows[2].map(\.rows) == [1, 1])
         #expect(rows[2][0].text == "\"")
