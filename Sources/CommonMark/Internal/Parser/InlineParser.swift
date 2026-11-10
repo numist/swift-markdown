@@ -2161,7 +2161,7 @@ extension BlockParser {
         if positionsEnabled {
             let a = storage.sourceRanges[dest]
             let b = storage.sourceRanges[source]
-            precondition(a.start >= 0 && b.start >= 0, "with positions tracked, every text node is stamped before it consolidates")
+            precondition(a.start >= 0 && b.start >= 0, "with `.sourcePosition`, every text node is stamped before it consolidates")
             // From the first node's start to the last node's end, which differs from the union only when an earlier node ends past the last.
             storage.sourceRanges[dest] = DocumentStorage.SourceByteRange(
                 start: a.start,

@@ -143,8 +143,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Reset per `parseInline` pass.
     var attributeParentheses = BalancedParenthesesScan()
 
-    /// The character references decoded in this `parseInline` pass with positions on, in arena order: each one's
-    /// decoded arena range and its source range.
+    /// The character references decoded in this `parseInline` pass with `.sourcePosition`, in arena order: each
+    /// one's decoded arena range and its source range.
     var characterReferenceSources: [(arena: Range<Int>, source: Range<Int>)] = []
 
     /// The delimiter stack (see `DelimiterRecord`), topped by `lastDelim` and reused across passes.
@@ -384,9 +384,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             contentStart = rest.offset
             parseInline(chunk: rest, scratch: &scratch, into: paragraph, preserveWhitespace: true)
         } else {
-            // Copy the content to the arena with line endings normalized to `\n` and NULs to U+FFFD. With positions on, record
-            // its run map: a CRLF's `\n` images its LF, so a node ending at the break covers the CRLF, as for LF input (a node
-            // starting there is moved to the CR when stamped), and each of a U+FFFD's three bytes images its NUL.
+            // Copy the content to the arena with line endings normalized to `\n` and NULs to U+FFFD. With `.sourcePosition`,
+            // record its run map: a CRLF's `\n` images its LF, so a node ending at the break covers the CRLF, as for LF input (a
+            // node starting there is moved to the CR when stamped), and each of a U+FFFD's three bytes images its NUL.
             let arenaStart = storage.strings.count
             var runs: [ArenaRun] = []
             var j = start
@@ -703,7 +703,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         storage.strings.append(0xBD)
     }
 
-    /// `replacingNUL(_:)` that also updates `chunk`'s run map `map`: each of a U+FFFD's three bytes images its NUL. With positions off, `map` is untouched.
+    /// `replacingNUL(_:)` that also updates `chunk`'s run map `map`: each of a U+FFFD's three bytes images its NUL. Without `.sourcePosition`, `map` is untouched.
     private mutating func replacingNUL(_ chunk: Chunk, map: inout [ArenaRun]) -> Chunk {
         guard containsNUL(chunk) else { return chunk }
         if positionsEnabled {
@@ -2055,7 +2055,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private func sourceSpan(of content: Chunk, in raw: Chunk, map: [ArenaRun]) -> (start: Int, end: Int) {
         precondition(!content.isEmpty, "only non-empty content has a source span")
         if map.isEmpty {
-            precondition(content.inSource, "with positions tracked, arena-backed leaf content carries a run map")
+            precondition(content.inSource, "with `.sourcePosition`, arena-backed leaf content carries a run map")
             return (content.offset, content.offset + content.length)
         }
         let image = ContentImage(base: raw.offset, runs: map)
