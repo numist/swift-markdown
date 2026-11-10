@@ -798,13 +798,13 @@ extension BlockParser {
     /// Classifies a delimiter run as left- or right-flanking (Emphasis and strong emphasis).
     private func classifyFlanking(start: Int, runEnd: Int, content: borrowing ContentSpan) -> Flanking {
         let end = content.endOffset
-        let chunkStart = content.startOffset
+        let contentStart = content.startOffset
         // The content's start and end count as Unicode whitespace (Emphasis and strong emphasis).
         let beforeIdx = start - 1
-        let beforeChar: UInt8 = beforeIdx >= chunkStart ? content[beforeIdx] : UInt8(ascii: "\n")
+        let beforeChar: UInt8 = beforeIdx >= contentStart ? content[beforeIdx] : UInt8(ascii: "\n")
         // Flanking is defined over characters, so a multi-byte whitespace or punctuation neighbour counts.
-        let beforeScalar: Int32 = beforeIdx >= chunkStart
-            ? Self.flankingScalarBefore(endingAt: beforeIdx, lowerBound: chunkStart, content: content)
+        let beforeScalar: Int32 = beforeIdx >= contentStart
+            ? Self.flankingScalarBefore(endingAt: beforeIdx, lowerBound: contentStart, content: content)
             : 0x0A
         let afterScalar: Int32 = runEnd < end
             ? Self.flankingScalarAfter(startingAt: runEnd, content: content)
@@ -1353,12 +1353,12 @@ extension BlockParser {
         // feed is (`a\f\t  \n` keeps `a\f`). The break is hard when the two characters before the line ending
         // are spaces, so `a  \t\n` is soft.
         var textEnd = newlineOffset
-        var leadingSpaces = 0
+        var spacesBeforeLineEnding = 0
         var inSpaceRun = true
         while textEnd > pendingTextStart {
             let prev = content[textEnd - 1]
             if prev == UInt8(ascii: " ") {
-                if inSpaceRun { leadingSpaces += 1 }
+                if inSpaceRun { spacesBeforeLineEnding += 1 }
             } else if prev == UInt8(ascii: "\t") {
                 inSpaceRun = false
             } else {
@@ -1366,7 +1366,7 @@ extension BlockParser {
             }
             textEnd -= 1
         }
-        return LineBreakInfo(isHard: leadingSpaces >= 2, textEnd: textEnd)
+        return LineBreakInfo(isHard: spacesBeforeLineEnding >= 2, textEnd: textEnd)
     }
 
     // MARK: - Autolinks
@@ -1698,7 +1698,7 @@ extension BlockParser {
     /// Matches an `http://`, `https://` or `ftp://` extended autolink whose `:` is at `colon`.
     private func matchGFMSchemeAutolink(colon: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         let end = content.endOffset
-        let chunkStart = content.startOffset
+        let contentStart = content.startOffset
         if colon + 3 >= end {
             return nil
         }
@@ -1710,7 +1710,7 @@ extension BlockParser {
         }
         // The scheme is the whole run of ASCII letters before `://`, so a letter before `http` makes the scheme
         // something else (`xhttp://a.b` is text). Any other character may precede it.
-        if schemeStart > chunkStart, content[schemeStart - 1].isASCIILetter {
+        if schemeStart > contentStart, content[schemeStart - 1].isASCIILetter {
             return nil
         }
         guard schemeURLDomainAccepted(afterSlashes: colon + 3, content: content) else {
@@ -1727,16 +1727,16 @@ extension BlockParser {
 
     /// The start of a case-insensitive `http`, `https` or `ftp` ending just before `colon`.
     private func matchSchemeBackward(colon: Int, content: borrowing ContentSpan) -> Int? {
-        let chunkStart = content.startOffset
-        if colon - 5 >= chunkStart,
+        let contentStart = content.startOffset
+        if colon - 5 >= contentStart,
            bytesEqual(at: colon - 5, target: "https", content: content, ignoringASCIICase: true) {
             return colon - 5
         }
-        if colon - 4 >= chunkStart,
+        if colon - 4 >= contentStart,
            bytesEqual(at: colon - 4, target: "http", content: content, ignoringASCIICase: true) {
             return colon - 4
         }
-        if colon - 3 >= chunkStart,
+        if colon - 3 >= contentStart,
            bytesEqual(at: colon - 3, target: "ftp", content: content, ignoringASCIICase: true) {
             return colon - 3
         }
@@ -1746,8 +1746,8 @@ extension BlockParser {
     /// `w`-triggered: matches `www.` followed by a URL body.
     private func matchGFMWWWAutolink(start: Int, content: borrowing ContentSpan) -> GFMAutolinkMatch? {
         let end = content.endOffset
-        let chunkStart = content.startOffset
-        if start > chunkStart {
+        let contentStart = content.startOffset
+        if start > contentStart {
             let pre = content[start - 1]
             if !isValidWWWPreceding(pre) {
                 return nil
@@ -2223,11 +2223,11 @@ extension BlockParser {
         // `content` borrows only `scratch`, so the storage mutations below don't affect it.
         let content = ContentSpan(span: scratch.span, base: 0, inSource: false)
 
-        // `current` is the running text node, starting at `segStart`. `cursor` is the floor for the next
-        // backward local-part scan, so a later `@` can't reach into a prior email.
+        // `current` is the running text node, starting at `segStart`. `localBound` keeps a later `@`'s local part
+        // out of a prior email.
         var current = node
         var segStart = 0
-        var cursor = 0
+        var localBound = 0
         var carve = ContentRefCarvePosition()
         var didSplit = false
         var i = 0
@@ -2240,11 +2240,11 @@ extension BlockParser {
                 continue
             }
             guard let auto = matchGFMEmailAutolink(
-                at: i, localBound: cursor, content: content, resumeAt: &resumeAt
+                at: i, localBound: localBound, content: content, resumeAt: &resumeAt
             ) else {
-                // `resumeAt > i`, skipping every `@` the trial settled. The floor moves too, or a `+` or `.`
+                // `resumeAt > i`, skipping every `@` the trial settled. `localBound` moves too, or a `+` or `.`
                 // that ended the domain would pull the abandoned candidate into the next local part.
-                cursor = resumeAt
+                localBound = resumeAt
                 i = resumeAt
                 continue
             }
@@ -2293,7 +2293,7 @@ extension BlockParser {
             }
             current = tailIdx
             segStart = auto.urlEnd
-            cursor = auto.urlEnd
+            localBound = auto.urlEnd
             i = auto.urlEnd
             didSplit = true
         }
