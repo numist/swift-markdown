@@ -11,8 +11,7 @@
 import Testing
 import CommonMark
 
-/// Every U+0000 becomes U+FFFD (Insecure characters) wherever it falls in a line, however long the line is, and
-/// however many NULs it holds.
+/// Every U+0000 becomes U+FFFD (Insecure characters), at any offset in a line and however many NULs the line holds.
 @Suite("NUL replacement in long lines")
 struct NULReplacementInLongLinesTests {
     /// 40-byte lines with NULs at various offsets, each with its replaced form.
@@ -80,8 +79,8 @@ struct NULReplacementInLongLinesTests {
         #expect(codeBlockLiterals("    " + line + "\n") == [replaced + "\n"])
     }
 
-    /// The list item's content starts at column 2, so the second tab of each `\t\t` line contributes two columns of the
-    /// four an indented code block strips and leaves two spaces of content (Tabs).
+    /// The list item's content is indented two columns, so the second tab of each `\t\t` line supplies the last two of
+    /// the four columns an indented code block strips and leaves two spaces of content (Tabs).
     @Test("NULs in an indented code line whose indent splits a tab", arguments: lines)
     func splitTabCodeLine(line: String, replaced: String) {
         #expect(codeBlockLiterals("- foo\n\n\t\t" + line + "\n") == ["  " + replaced + "\n"])

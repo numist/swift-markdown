@@ -11,7 +11,7 @@
 import Testing
 import CommonMark
 
-/// Spaces and tabs after a closing code fence are ignored (Fenced code blocks), as is whitespace after an opening
+/// Spaces and tabs after a closing code fence are ignored (Fenced code blocks, Tabs), as is whitespace after an opening
 /// fence's info string, so a fenced code block ends just past its closing fence's last fence character, or, when its
 /// opening line is its last, just past its info string or opening fence. A content line loses the opening fence's
 /// indentation, so a last line holding only that indentation, or only a container's prefix, has no content bytes, and

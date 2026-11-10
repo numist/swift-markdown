@@ -13,7 +13,7 @@ import XCTest
 
 /// Nested block quote markers separated by tabs, on a line after an unclosed fenced code block. A tab counts
 /// to the next tab stop (Tabs), and the space a block quote marker may be followed by takes one column of
-/// it: all of a tab that starts at column 3 mod 4, part of a wider one (Block quotes).
+/// it: all of a tab that starts at column 3 mod 4, part of a wider one (Block quotes). Columns here count from 0.
 class BlockQuoteTabColumnMatrixTests: XCTestCase {
     private static let listFence = "Document\n├─ UnorderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n"
 
@@ -65,7 +65,8 @@ class BlockQuoteTabColumnMatrixTests: XCTestCase {
         assertSurface(quotes(3, .none), "- ```\n>  >\t>")
     }
 
-    /// `>`×k TAB `x`: the tab is the marker's optional column; `x` is paragraph content.
+    /// `>`×k TAB `x`: one column of the tab is the marker's optional space and at most three remain, so `x` is
+    /// paragraph content.
     func testTabBeforeParagraphContent() {
         for k in 1...5 {
             assertSurface(quotes(k, .paragraph("x")), "- ```\n" + String(repeating: ">", count: k) + "\tx")

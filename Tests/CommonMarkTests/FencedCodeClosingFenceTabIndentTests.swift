@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// A closing code fence may be indented up to three spaces (Fenced code blocks). A leading tab advances to
-/// column 4 (Tabs), so a tab-indented fence line is code content, not a closing fence.
+/// A closing code fence may be indented up to three spaces (Fenced code blocks), and a leading tab is four columns of
+/// indentation (Tabs), so a tab-indented fence line is code content, not a closing fence.
 @Suite("Fenced code block closing fence indentation")
 struct FencedCodeClosingFenceTabIndentTests {
 
