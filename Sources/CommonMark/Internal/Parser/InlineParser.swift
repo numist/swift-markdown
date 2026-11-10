@@ -305,7 +305,7 @@ extension BlockParser {
         )
         if positionsEnabled {
             let source = storage.sourceRanges[textIdx]
-            characterReferenceSources.append((decoded.range, Int(source.start)..<Int(source.end)))
+            characterReferenceSources.append((decoded.range, source.start..<source.end))
         }
         return afterSemi
     }
@@ -2274,7 +2274,7 @@ extension BlockParser {
             let emailRef = subContentRef(of: ref, from: auto.urlStart, to: auto.urlEnd, resumingAt: &carve)
             let email = positionsEnabled ? sourceSpan(of: emailRef, image: image) : nil
             if let email {
-                let currentStart = Int(storage.sourceRanges[current].start)
+                let currentStart = storage.sourceRanges[current].start
                 precondition(currentStart >= 0, "a text run is placed before an address splits it")
                 storage.setSourceStart(current, min(currentStart, email.start))
                 storage.setSourceEnd(current, email.start)
