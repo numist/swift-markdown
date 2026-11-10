@@ -948,10 +948,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return segs[i].offset + end - segmentStart
     }
 
-    /// The last of the non-empty virtual range's segments `segs`, `total` bytes long, whose range ends at or past
-    /// `end`, and where it starts.
+    /// The index and virtual start of the segment of `segs`, `total` bytes long, that holds the byte before virtual
+    /// offset `end`.
     ///
-    /// It is searched for from the end, since a leaf's trailing whitespace lies within its last line or two.
+    /// It is searched for from the end, since the end of a leaf's trimmed lines lies in or near its last line.
     private func segment(endingAtOrAfter end: Int, in segs: borrowing UniqueArray<Segment>, total: Int) -> (index: Int, start: Int) {
         var i = segs.count - 1
         var start = total - segs[i].length
