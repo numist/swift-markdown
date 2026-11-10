@@ -12,7 +12,7 @@ import Testing
 import CommonMark
 
 /// Source ranges of extended autolinks (Autolinks (extension)): a bare URL, a `www.` domain, and an email address. The
-/// link and its text span the matched bytes. Columns are 1-based UTF-8 byte offsets and each end is half-open.
+/// link and its text span the matched bytes.
 @Suite("Source ranges of extended autolinks")
 struct GFMAutolinkSourceRangeTests {
 
@@ -86,8 +86,7 @@ struct GFMAutolinkSourceRangeTests {
     }
 
     /// The first address's last character comes from the character reference `&#111;`, so that address ends just
-    /// past the reference's `;`. The text before it is the NUL and a space, and the text between the two addresses is
-    /// the space.
+    /// past the reference's `;`.
     @Test("an email autolink ending in a character reference ends past the reference")
     func emailEndingInCharacterReferenceBeforeAnotherEmail() {
         #expect(tree("\u{0} a@b.c&#111; x@y.zz") == """

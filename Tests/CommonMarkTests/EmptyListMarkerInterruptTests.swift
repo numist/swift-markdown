@@ -49,7 +49,7 @@ struct EmptyListMarkerInterruptTests {
 
             """),
     ])
-    func emptyMarkerInNestedItemStaysText(markdown: String, tree: String) {
+    func emptyMarkerInContinuedItemStaysText(markdown: String, tree: String) {
         #expect(TreeDump.dump(markdown, options: []) == tree)
     }
 

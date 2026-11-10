@@ -15,7 +15,7 @@ import Testing
 /// renders every level.
 struct DeepBlockQuoteNestingTests {
 
-    /// A line of `>` markers opens one block quote per marker, and a following line keeps them open.
+    /// A line of `>` markers opens one block quote per marker; a following `>` line continues only the outermost.
     @Test func multiLineDeepBlockQuotesBuildFullTree() {
         let markdown = String(repeating: ">", count: 300) + "\n>"
         let document = Document(parsing: markdown)

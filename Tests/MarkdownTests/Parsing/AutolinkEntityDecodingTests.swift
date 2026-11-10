@@ -66,8 +66,6 @@ class AutolinkEntityDecodingTests: XCTestCase {
         )
     }
 
-    /// Autolinks in a table cell holding an escaped pipe, in a setext heading inside a block quote, and in a paragraph
-    /// holding a NUL.
     func testReferenceDecodesInEscapedPipeCellQuotedHeadingAndNULParagraph() {
         XCTAssertEqual(
             """

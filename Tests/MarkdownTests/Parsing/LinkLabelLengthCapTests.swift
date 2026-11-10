@@ -19,7 +19,7 @@ class LinkLabelLengthCapTests: XCTestCase {
             .components(separatedBy: "Link destination:").count - 1
     }
 
-    /// A use whose label content is `length` bytes: `x`, then spaces, then `y`.
+    /// A use whose label content is `length` characters: `x`, then spaces, then `y`.
     private func label(_ length: Int) -> String {
         "[x" + String(repeating: " ", count: length - 2) + "y]"
     }

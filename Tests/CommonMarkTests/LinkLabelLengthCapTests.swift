@@ -16,10 +16,9 @@ import CommonMark
 @Suite("Link label length cap")
 struct LinkLabelLengthCapTests {
 
-    /// A label of `n` characters.
     private func label(_ n: Int) -> String { String(repeating: "a", count: n) }
 
-    @Test("a 999-character label defines a link reference definition, which produces no block")
+    @Test("a link reference definition with a 999-character label is valid and produces no block")
     func referenceDefinitionAtTheCap() {
         #expect(TreeDump.dump("[\(label(999))]: /u", options: []) == """
             document

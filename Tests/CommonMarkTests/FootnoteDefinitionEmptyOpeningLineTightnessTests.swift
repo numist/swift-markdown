@@ -73,7 +73,7 @@ struct FootnoteDefinitionEmptyOpeningLineTightnessTests {
             """)
     }
 
-    @Test("an ordered list in the same shape")
+    @Test("an ordered item whose definition has nothing after its label, followed by the next item")
     func orderedList() {
         #expect(TreeDump.dump("1. [^b]:\n2. c\n", options: [.footnotes]) == """
             document

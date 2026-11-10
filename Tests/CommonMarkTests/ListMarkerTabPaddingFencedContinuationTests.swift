@@ -13,13 +13,13 @@ import CommonMark
 
 /// A list marker followed by tabs, on the line after a fenced code block in a list item. Under the
 /// rule for an item starting with indented code (List items), indentation after the marker is counted
-/// in columns with tab stops of 4: when it reaches five columns, the marker takes one column and the
-/// rest begins an indented code block.
+/// in columns with tab stops of 4: when it reaches five columns, the item's content begins one column
+/// after the marker and the rest begins an indented code block.
 @Suite("List-marker padding tab feeding an indented code body")
 struct ListMarkerTabPaddingFencedContinuationTests {
 
-    // The marker takes one column of the first tab; the six remaining columns exceed the code indent
-    // by two, which the partially consumed second tab contributes as two spaces.
+    // One column of the first tab is the space after the marker; the six remaining columns exceed the
+    // code indent by two, which the partially consumed second tab contributes as two spaces.
     @Test("double-tab list continuation opens a sibling item with indented code")
     func doubleTabSiblingIndentedCode() {
         MarkdownDocument.withParsedDocument("- ```\n-\t\t-") { doc in
@@ -52,8 +52,8 @@ struct ListMarkerTabPaddingFencedContinuationTests {
         }
     }
 
-    // The marker takes one column of the tab; its remaining two columns plus the two spaces are
-    // exactly the code indent.
+    // One column of the tab is the space after the marker; its remaining two columns plus the two
+    // spaces are exactly the code indent.
     @Test("tab-then-spaces list continuation opens a sibling item with indented code")
     func tabThenSpacesSiblingIndentedCode() {
         MarkdownDocument.withParsedDocument("*\t~~~\n*\t  -") { doc in
@@ -90,8 +90,8 @@ struct ListMarkerTabPaddingFencedContinuationTests {
         }
     }
 
-    // The two-column marker `1.` takes one column of the first tab; the five remaining columns exceed
-    // the code indent by one.
+    // One column of the first tab is the space after the two-column marker `1.`; the five remaining
+    // columns exceed the code indent by one.
     @Test("double-tab ordered-list continuation opens a sibling item with indented code")
     func orderedMarkerDoubleTabSiblingIndentedCode() {
         MarkdownDocument.withParsedDocument("1. ```\n1.\t\tx") { doc in

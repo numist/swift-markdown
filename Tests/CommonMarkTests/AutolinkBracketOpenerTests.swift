@@ -18,8 +18,8 @@ struct AutolinkBracketOpenerTests {
 
     private static let options: MarkdownDocument.ParseOptions = [.gfmAutolink]
 
-    @Test("unclosed `[` before a scheme URL leaves it as text")
-    func openBracketSuppressesSchemeAutolink() {
+    @Test("unclosed `[` before a URL leaves it as text")
+    func openBracketSuppressesURLAutolink() {
         #expect(TreeDump.dump("[http://t.t", options: Self.options) == """
             document
               paragraph
@@ -28,8 +28,8 @@ struct AutolinkBracketOpenerTests {
             """)
     }
 
-    @Test("unclosed `![` before a scheme URL leaves it as text")
-    func openImageBracketSuppressesSchemeAutolink() {
+    @Test("unclosed `![` before a URL leaves it as text")
+    func openImageBracketSuppressesURLAutolink() {
         #expect(TreeDump.dump("![http://t.t", options: Self.options) == """
             document
               paragraph
@@ -38,8 +38,8 @@ struct AutolinkBracketOpenerTests {
             """)
     }
 
-    @Test("a scheme URL with no leading `[` autolinks")
-    func bareSchemeAutolinks() {
+    @Test("a URL with no leading `[` autolinks")
+    func bareURLAutolinks() {
         #expect(TreeDump.dump("http://t.t", options: Self.options) == """
             document
               paragraph
@@ -60,7 +60,7 @@ struct AutolinkBracketOpenerTests {
             """)
     }
 
-    @Test("a scheme URL after a closed `[…]` autolinks")
+    @Test("a URL after a closed `[…]` autolinks")
     func afterClosedBracketAutolinks() {
         #expect(TreeDump.dump("[a] http://t.t", options: Self.options) == """
             document

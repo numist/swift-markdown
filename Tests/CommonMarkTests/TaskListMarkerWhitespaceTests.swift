@@ -62,7 +62,7 @@ struct TaskListMarkerWhitespaceTests {
         #expect(text == "a")
     }
 
-    @Test("ordered-list task list item strips all trailing whitespace")
+    @Test("ordered-list task list item strips all whitespace after its checkbox")
     func orderedTaskItem() {
         let (found, checked, text) = parse("2. [x]  a")
         #expect(found && checked == true)
@@ -85,8 +85,8 @@ struct TaskListMarkerWhitespaceTests {
 
     // MARK: - A line ending or the end of input after the checkbox
 
-    // A line ending is a whitespace character (Characters and lines), and so is the end of the paragraph's content
-    // for a checkbox that fills it.
+    // A line ending is a whitespace character (Characters and lines), and the end of the paragraph's content counts
+    // as one after a checkbox that fills it.
 
     @Test("a checkbox at the end of input")
     func checkboxAtEndOfInput() {

@@ -227,7 +227,7 @@ struct TablePositionEncodingTests {
     /// A single-column table (delimiter `|-`) with multibyte in the header and the body.
     @Test("single-column: multibyte header and body cells")
     func singleColumnMultibyte() throws {
-        // Header line 1 `é`: cols1-3 (2 bytes). Body line 3 `€`: cols1-4 (3 bytes).
+        // Header line 1 `é`: cols1-2 (2 bytes). Body line 3 `€`: cols1-3 (3 bytes).
         let rows = tableRows("\u{E9}\n|-\n\u{20AC}")
         try #require(rows.count == 2, "fixture: header + body row, got \(rows.count)")
         try #require(rows[0].cells.count == 1 && rows[1].cells.count == 1, "fixture: one column")
@@ -414,8 +414,7 @@ struct TablePositionEncodingTests {
     }
 }
 
-/// A node's kind, its literal text (if any), and its source range. File-scope because a recursive walk
-/// over `borrowing MarkdownNode` can't be an instance-method closure.
+/// A node's kind, its literal text (if any), and its source range.
 private struct EncNode {
     let kind: MarkdownNode.Kind
     let literal: String?

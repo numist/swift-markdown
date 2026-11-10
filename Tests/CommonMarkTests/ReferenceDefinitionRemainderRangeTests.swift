@@ -31,7 +31,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         }
     }
 
-    /// The first node whose kind equals `kind`, in DFS order.
+    /// The source range of the first node of kind `kind`, in DFS order.
     private func firstRange(
         _ kind: MarkdownNode.Kind,
         in ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)]

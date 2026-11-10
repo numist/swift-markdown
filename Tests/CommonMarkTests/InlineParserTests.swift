@@ -129,8 +129,8 @@ struct CodeSpanTests {
         }
     }
 
-    @Test("greedy matching finds all valid spans after an unmatched longer run")
-    func greedySpansAfterUnmatchedLongerRun() throws {
+    @Test("an unmatched two-backtick run is text, and the single backticks after it form code spans")
+    func codeSpansAfterUnmatchedLongerRun() throws {
         // The opening two-backtick run has no closing run of equal length, so it is text (Code spans) and the
         // single backticks after it pair into two code spans.
         let source = "``a`b`c`d`"
@@ -161,8 +161,8 @@ struct CodeSpanTests {
         }
     }
 
-    @Test("multi-line span reconstructs its full content across a soft line break")
-    func multiLineSpanAcrossSoftBreak() {
+    @Test("a code span across a line ending turns it into a space and drops the next line's leading whitespace")
+    func codeSpanAcrossLineEnding() {
         // A paragraph's raw content strips each line's initial whitespace (Paragraphs), so the content is `x\ny`,
         // and the code span turns the line ending into a space (Code spans).
         let source = "`x\n y`"
@@ -693,7 +693,7 @@ struct InlineHTMLTests {
         }
     }
 
-    @Test("multi-line tag reconstructs its literal with the continuation's leading whitespace stripped")
+    @Test("an open tag across a line ending drops the continuation line's leading whitespace")
     func multiLineTagStripsContinuationIndent() {
         // An open tag may contain a line ending (Raw HTML), and a paragraph's raw content strips each line's initial
         // whitespace (Paragraphs), so the literal is `<e\ne="">`.
@@ -709,7 +709,8 @@ struct InlineHTMLTests {
 @Suite("Inline parser - emphasis / strong")
 struct EmphasisTests {
 
-    /// Render the inline tree of the first paragraph as a flat list of `(kind, literal-or-empty)` in DFS order.
+    /// The inline descendants of every top-level paragraph and heading as `(kind, literal-or-empty)` pairs, in
+    /// depth-first order.
     private static func dfsInlines(_ doc: borrowing MarkdownDocument) -> [(MarkdownNode.Kind, String)] {
         var out: [(MarkdownNode.Kind, String)] = []
         let root = doc.root
@@ -1270,7 +1271,7 @@ struct ExtendedAttributeTests {
         }
     }
 
-    @Test("reference def whose label spans a soft line break resolves")
+    @Test("an attribute definition whose label spans a line ending resolves")
     func crossLineReferenceDef() {
         // Matching normalizes the label's line ending to a space, as for a link label (Links), and the definition
         // produces no node.
@@ -1537,8 +1538,8 @@ struct StrikethroughTests {
         }
     }
 
-    // VT (U+000B) is not a Unicode whitespace character (Characters and lines), so tildes around it are both left- and
-    // right-flanking and pair.
+    // VT (U+000B) is not a Unicode whitespace character (Characters and lines), so a tilde before it is left-flanking
+    // and a tilde after it is right-flanking, and they pair.
     @Test("VT between tildes pairs into a strikethrough")
     func verticalTabPairs() {
         #expect(TreeDump.dump("~\u{0B}~", options: .strikethrough) == """
@@ -1825,7 +1826,6 @@ struct FootnoteTests {
     @Test("multiple footnotes get sequential indices")
     func multipleFootnotes() {
         // Indices are assigned in first-reference order, per label; repeat references reuse the index.
-        // Definitions are required — an unresolved reference becomes literal text (see `unresolvedRef`).
         let source = "[^a] and [^b] and [^a] again\n\n[^a]: A\n[^b]: B"
         MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         var indices: [Int] = []

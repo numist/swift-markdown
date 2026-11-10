@@ -11,9 +11,9 @@
 import CommonMark
 import Testing
 
-/// A footnote-shaped bracket that spans a line ending is literal text unless it is a footnote reference whose whole
-/// label matches a definition: a backslash-escaped caret never opens one, and a definition matching only the bracket's
-/// first line does not match.
+/// A footnote definition's label holds no whitespace, so a footnote-shaped bracket that spans a line ending is no
+/// footnote reference; with only footnote definitions to match, it is literal text, whether its caret is
+/// backslash-escaped or a definition matches the bracket's first line.
 @Suite("Footnote-shaped bracket across a line ending")
 struct EscapedCaretMultilineFootnoteResolutionTests {
     private static let long = String(repeating: "a", count: 1000)

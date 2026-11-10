@@ -107,7 +107,7 @@ struct FootnoteCaretBracketResolutionTests {
 
                 """),
         ] as [(String, String)])
-    func everyBracketStaysLiteral(_ markdown: String, _ expected: String) {
+    func caretBracketStaysLiteral(_ markdown: String, _ expected: String) {
         #expect(Self.surface(markdown) == expected)
     }
 }

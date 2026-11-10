@@ -13,9 +13,9 @@ import Testing
 
 /// Indented code lines in a list item whose indent splits a tab.
 ///
-/// The list item's content starts at column 2, so the second tab of each `\t\tx` line contributes two columns of the
-/// four an indented code block strips and leaves two spaces of content (Tabs). Each such line costs time in proportion
-/// to its own length, so 200,000 of them, about 800 KB of source, parse well within the time limit.
+/// The list item's content is indented two columns, so the second tab of each `\t\tx` line contributes two columns of
+/// the four an indented code block strips and leaves two spaces of content (Tabs). Each such line costs time in
+/// proportion to its own length, so 200,000 of them, about 800 KB of source, parse well within the time limit.
 @Suite("Runs of indented code lines whose indent splits a tab")
 struct SplitTabCodeLineRunTests {
 

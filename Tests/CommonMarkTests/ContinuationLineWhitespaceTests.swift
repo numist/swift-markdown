@@ -21,7 +21,7 @@ struct ContinuationLineWhitespaceTests {
     private static let options: MarkdownDocument.ParseOptions = [.tasklist, .sourcePosition]
 
     /// The U+FFFD that replaces the NUL spans the NUL's one source byte.
-    @Test func lineHoldingNULBeforeCheckbox() {
+    @Test func lineHoldingNULBeforeLiteralBrackets() {
         #expect(TreeDump.dump("+\n  2\u{0} [x] *u*", options: Self.options, sourceRanges: true) == """
             document @1:1-2:13
               list bullet '+' tight @1:1-2:13
@@ -46,7 +46,7 @@ struct ContinuationLineWhitespaceTests {
             """)
     }
 
-    @Test func tabLedLazyLine() {
+    @Test func tabLedContinuationLineCodeSpan() {
         #expect(TreeDump.dump("+\n  2\u{0} [x] `\n\t`", options: Self.options) == """
             document
               list bullet '+' tight

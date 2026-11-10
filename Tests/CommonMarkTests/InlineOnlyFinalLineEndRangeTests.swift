@@ -14,7 +14,7 @@ import CommonMark
 /// Source ranges in the inline-only modes (`.inlineOnly`, `.preserveWhitespace`) of input that ends in a line ending.
 /// The paragraph and any node holding the final line ending end where that line ending starts, so their ranges stay on
 /// the input's last line, as in block mode, while the document covers the whole input. A line ending before the last
-/// one ends a node at the start of the next line. Columns are 1-based UTF-8 byte offsets and each end is half-open.
+/// one ends a node at the start of the next line.
 @Suite("Source ranges of inline-only input that ends in a line ending")
 struct InlineOnlyFinalLineEndRangeTests {
 

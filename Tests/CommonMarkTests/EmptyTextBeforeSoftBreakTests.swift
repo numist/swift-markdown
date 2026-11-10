@@ -23,7 +23,7 @@ internal func dfsKindsAndText(
 }
 
 /// Spaces at the end of a line before a soft line break are removed (Soft line breaks), so a trailing
-/// space after a link, emphasis or inline code produces no text node.
+/// space after a link, emphasis or a code span produces no text node.
 @Suite("Trailing space before a soft line break")
 struct EmptyTextBeforeSoftBreakTests {
 
@@ -47,11 +47,11 @@ struct EmptyTextBeforeSoftBreakTests {
         #expect(ns.compactMap(\.text) == ["x", "y"])
     }
 
-    @Test("inline code + trailing space + soft line break: no empty text node")
-    func inlineCode() {
+    @Test("code span + trailing space + soft line break: no empty text node")
+    func codeSpan() {
         let ns = nodes(in: "`c` \ny")
         #expect(ns.map(\.kind) == [.document, .paragraph, .codeInline(backtickCount: 1), .softBreak, .text])
-        // `literal()` also returns inline code content.
+        // `literal()` also returns a code span's content.
         #expect(ns.compactMap(\.text) == ["c", "y"])
     }
 

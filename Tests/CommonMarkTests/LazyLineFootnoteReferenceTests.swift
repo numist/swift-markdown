@@ -19,9 +19,8 @@ struct LazyLineFootnoteReferenceTests {
         .tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes,
     ]
 
-    /// The item's first block is a block quote, so the item is not a task list item (Task list items (extension)) and
-    /// the `[x]` on the lazy continuation line is text. The NUL becomes U+FFFD (Insecure characters) and the footnote
-    /// reference resolves.
+    /// The `[x]` does not begin a list item's first paragraph, so it is text (Task list items (extension)). The NUL
+    /// becomes U+FFFD (Insecure characters) and the footnote reference resolves.
     @Test func footnoteReferenceResolves() {
         #expect(TreeDump.dump("- > a\n  2\u{0} [x] [^n]\n\n[^n]: z\n", options: Self.options) == """
             document

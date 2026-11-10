@@ -11,11 +11,9 @@
 import CommonMark
 import Testing
 
-/// Lazy continuation lines of a paragraph nested in many block quotes.
-///
 /// A line without a `>` continues the innermost paragraph as a lazy continuation line (Block quotes), however many
-/// block quotes hold it, so 40,000 nested quotes followed by 40,000 lazy lines, about 240 KB of source, parse within
-/// the time limit.
+/// block quotes hold it. 40,000 nested quotes followed by 40,000 lazy lines, about 240 KB of source, parse within the
+/// time limit.
 @Suite("Lazy continuation under deep block-quote nesting")
 struct DeepBlockQuoteLazyContinuationTests {
 

@@ -11,8 +11,8 @@
 import CommonMark
 import Testing
 
-/// An extended autolink ending in `;` excludes a trailing `&`, one or more ASCII letters and the `;`. Any other
-/// character before the `;` leaves the `;` alone excluded.
+/// An extended autolink ending in `;` excludes a trailing `&`, one or more ASCII letters and the `;`; otherwise it
+/// excludes only the `;`.
 @Suite("Entity-like tail of an extended autolink")
 struct ExtendedAutolinkEntityTailTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .gfmAutolink]

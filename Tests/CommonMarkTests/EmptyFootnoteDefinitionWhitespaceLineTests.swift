@@ -11,8 +11,8 @@
 import CommonMark
 import Testing
 
-/// A whitespace-only line is a blank line (Characters and lines), so it keeps an open footnote definition open.
-@Suite("Footnote definition across a whitespace-only line")
+/// A line of only spaces or tabs is a blank line (Characters and lines), so it keeps an open footnote definition open.
+@Suite("Footnote definition across a line of only spaces or tabs")
 struct EmptyFootnoteDefinitionWhitespaceLineTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .footnotes]
 
@@ -75,7 +75,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
             """)
     }
 
-    /// Indented content after a whitespace-only line belongs to the definition, and is dropped with it when the
+    /// Indented content after a line of only spaces or tabs belongs to the definition, and is dropped with it when the
     /// definition is unreferenced.
     @Test(arguments: ["- [^a]:\n\t\n\t\t\"", "- [^a]:\n \n\t\t\"", "- [^a]:\r\t\n\t\t\"", "- [^\u{0}]:\r\t\n\t\t\"", "- [^a]:\n\t\n      x", "- [^a]:\r\n \r\n\t\t\""])
     func listItemDefinitionHoldsContentAfterWhitespaceLine(_ markdown: String) {
@@ -100,8 +100,6 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
             """)
     }
 
-    /// Indented content after a whitespace-only line belongs to the definition, and is dropped with it when the
-    /// definition is unreferenced.
     @Test func definitionHoldsContentAfterWhitespaceLine() {
         #expect(surface("> [^a]:\n>\t\n>\t\tx") == """
             document

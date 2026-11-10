@@ -68,7 +68,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
     }
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
-    func literalDefinitionControls(options: MarkdownDocument.ParseOptions) {
+    func indentedOrNonLeadingDefinitionStaysLiteral(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump(" [a]: /u\n\n[a]", options: options) == """
             document
               paragraph

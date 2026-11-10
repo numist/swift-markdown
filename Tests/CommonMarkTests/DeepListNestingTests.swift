@@ -14,8 +14,8 @@ import CommonMark
 /// List items nest to any depth (List items), so every list marker on a line opens a list in the item the marker
 /// before it opened, below any number of block quotes.
 ///
-/// Each marker deep in such a line is matched as at a line's start: its tab stops count from the line's first column
-/// (Tabs), and the rest of the line from it can be a thematic break (Thematic breaks).
+/// The content after each marker in such a line begins a block, so the rest of the line can be a thematic break
+/// (Thematic breaks), and tab stops count from the line's first column however deep the marker is (Tabs).
 @Suite("Deep list nesting")
 struct DeepListNestingTests {
 
@@ -106,7 +106,7 @@ struct DeepListNestingTests {
                 + [Node(kind: "paragraph"), Node(kind: "text", literal: "x")])
     }
 
-    /// A marker's source range runs from its own byte, however many columns the tabs before it span.
+    /// Each list and item starts at its marker's byte, however many columns the tabs before it span.
     @Test
     func markersSeparatedByTabsBeginAtTheirBytes() {
         let chain = Self.chain(String(repeating: "-\t", count: 150) + "x", options: .sourcePosition)

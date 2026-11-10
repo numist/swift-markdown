@@ -148,8 +148,8 @@ struct AutolinkURLDelimiterTests {
 
     // MARK: - Whitespace at the end of a paragraph
 
-    // The paragraph's raw content has its final whitespace removed, and the spec's whitespace includes
-    // line tabulation and form feed (Paragraphs), so neither ends the URL.
+    // The paragraph's raw content has its final whitespace removed (Paragraphs), and whitespace includes line
+    // tabulation and form feed (Characters and lines).
 
 
     @Test("a trailing vertical tab (0x0B) is not part of the URL")

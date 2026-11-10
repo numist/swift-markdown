@@ -11,8 +11,9 @@
 import CommonMark
 import Testing
 
-/// Footnote references are numbered in document order among those that remain in the final tree, and
-/// definitions are appended in that index order.
+/// Footnote references are numbered in document order, a reference inside a footnote definition at the definition's
+/// place in the source, and a bracket that is not a footnote reference takes no number. Definitions are appended in
+/// that index order.
 @Suite("Footnote reference numbering")
 struct FootnoteDiscardedReferenceNumberingTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .footnotes]

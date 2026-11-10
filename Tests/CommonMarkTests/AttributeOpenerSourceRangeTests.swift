@@ -12,7 +12,7 @@ import Testing
 import CommonMark
 
 /// Source ranges of text holding an inline-attribute opener `^[` that never closes. The opener stays literal text,
-/// and the text spans it. Columns are 1-based UTF-8 byte offsets and each end is half-open.
+/// and the text spans it.
 @Suite("Source ranges of an unclosed inline-attribute opener")
 struct AttributeOpenerSourceRangeTests {
 
