@@ -691,13 +691,10 @@ private enum ParseContainer: CustomStringConvertible {
                 return (trimmedLine, indentation)
             }
 
-            // Build the logical block of text that the parser will see.
             let logicalText = trimmedIndentationAndLines
                 .map { $0.line.text }
                 .joined(separator: "\n")
 
-            // Parse it into a Markdown `Document` consisting of the contents of
-            // this line run.
             let parsedSubdocument = MarkupParser.parseString(logicalText, source: lines.first?.source, options: options)
 
             // Now, we'll adjust the columns of all of the source positions as
