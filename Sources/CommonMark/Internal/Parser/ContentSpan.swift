@@ -303,44 +303,32 @@ internal struct ContentSpan: ~Escapable {
         let dquote = SIMD16<UInt8>(repeating: UInt8(ascii: "\""))
         let hyphen = SIMD16<UInt8>(repeating: UInt8(ascii: "-"))
         let period = SIMD16<UInt8>(repeating: UInt8(ascii: "."))
-        let lanes = SIMD16<UInt8>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
-        let noMatch = SIMD16<UInt8>(repeating: 16)
-        let bytes = span.bytes
-
-        var i = lo
-        while i + 16 <= hi {
-            let v = bytes.loadSIMD16(fromByteOffset: i)
-            var m = ((v .>= clusterLo) .& (v .<= clusterHi))
-                .| (v .== nl) .| (v .== bang) .| (v .== amp) .| (v .== star) .| (v .== lt)
-            if strikethrough {
-                m = m .| (v .== tilde)
+        return span.firstIndex(
+            from: lo,
+            to: hi,
+            matching: { v in
+                var m = ((v .>= clusterLo) .& (v .<= clusterHi))
+                    .| (v .== nl) .| (v .== bang) .| (v .== amp) .| (v .== star) .| (v .== lt)
+                if strikethrough {
+                    m = m .| (v .== tilde)
+                }
+                if gfmAutolink {
+                    m = m .| (v .== colon) .| (v .== w)
+                }
+                if smart {
+                    m = m .| (v .== squote) .| (v .== dquote) .| (v .== hyphen) .| (v .== period)
+                }
+                return m
+            },
+            or: { b in
+                (b >= UInt8(ascii: "[") && b <= UInt8(ascii: "`"))
+                    || b == UInt8(ascii: "\n") || b == UInt8(ascii: "!") || b == UInt8(ascii: "&")
+                    || b == UInt8(ascii: "*") || b == UInt8(ascii: "<")
+                    || (strikethrough && b == UInt8(ascii: "~"))
+                    || (gfmAutolink && (b == UInt8(ascii: ":") || b == UInt8(ascii: "w")))
+                    || (smart && (b == UInt8(ascii: "'") || b == UInt8(ascii: "\"") || b == UInt8(ascii: "-") || b == UInt8(ascii: ".")))
             }
-            if gfmAutolink {
-                m = m .| (v .== colon) .| (v .== w)
-            }
-            if smart {
-                m = m .| (v .== squote) .| (v .== dquote) .| (v .== hyphen) .| (v .== period)
-            }
-            if any(m) {
-                let lane = lanes.replacing(with: noMatch, where: .!m).min()
-                return i + Int(lane)
-            }
-            i += 16
-        }
-        while i < hi {
-            let b = span[i]
-            let significant = (b >= UInt8(ascii: "[") && b <= UInt8(ascii: "`"))
-                || b == UInt8(ascii: "\n") || b == UInt8(ascii: "!") || b == UInt8(ascii: "&")
-                || b == UInt8(ascii: "*") || b == UInt8(ascii: "<")
-                || (strikethrough && b == UInt8(ascii: "~"))
-                || (gfmAutolink && (b == UInt8(ascii: ":") || b == UInt8(ascii: "w")))
-                || (smart && (b == UInt8(ascii: "'") || b == UInt8(ascii: "\"") || b == UInt8(ascii: "-") || b == UInt8(ascii: ".")))
-            if significant {
-                return i
-            }
-            i += 1
-        }
-        return hi
+        )
     }
 }
 

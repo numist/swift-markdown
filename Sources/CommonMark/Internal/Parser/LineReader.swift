@@ -119,13 +119,19 @@ extension Span where Element == UInt8 {
     /// fewer than 16 after them, or `count` if there is none. The two must accept the same bytes.
     @inline(__always)
     internal func firstIndex(matching matches: (SIMD16<UInt8>) -> SIMDMask<SIMD16<Int8>>, or isMatch: (UInt8) -> Bool) -> Int {
+        firstIndex(from: 0, to: count, matching: matches, or: isMatch)
+    }
+
+    /// As `firstIndex(matching:or:)`, within `self[lo..<hi]`, or `hi` if there is none.
+    @inline(__always)
+    internal func firstIndex(from lo: Int, to hi: Int, matching matches: (SIMD16<UInt8>) -> SIMDMask<SIMD16<Int8>>, or isMatch: (UInt8) -> Bool) -> Int {
         let bytes = self.bytes
         // Non-matching lanes become 16, so `.min()` is the first matching lane.
         let lanes = SIMD16<UInt8>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
         let noMatch = SIMD16<UInt8>(repeating: 16)
 
-        var i = 0
-        while i + 16 <= count {
+        var i = lo
+        while i + 16 <= hi {
             let matched = matches(bytes.loadSIMD16(fromByteOffset: i))
             if any(matched) {
                 let lane = lanes.replacing(with: noMatch, where: .!matched).min()
@@ -133,13 +139,13 @@ extension Span where Element == UInt8 {
             }
             i += 16
         }
-        while i < count {
+        while i < hi {
             if isMatch(self[i]) {
                 return i
             }
             i += 1
         }
-        return count
+        return hi
     }
 }
 
