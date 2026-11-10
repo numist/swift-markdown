@@ -45,6 +45,7 @@ struct InlineLiteralStorageTests {
         ("a@b.c", [.gfmAutolink], 13),
         // Code block info strings.
         ("```a&b\n```", [], 1),
+        ("```a&amp;b\n```", [], 4),
     ] as [(String, MarkdownDocument.ParseOptions, Int)])
     func storedStringSize(_ source: String, _ options: MarkdownDocument.ParseOptions, _ size: Int) {
         let measured = MarkdownDocument.withParsedDocument(source, options: options) { $0._materializedStringSize }
