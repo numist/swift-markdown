@@ -39,7 +39,7 @@ struct AttributeDefinitionLineWhitespaceTests {
             """)
     }
 
-    @Test("without attributes, the definition is text")
+    @Test("without `.attributes`, the definition is text")
     func withoutAttributes() {
         #expect(TreeDump.dump("^[x][a]\n\n^[a]:\u{0B}b\n", options: []) == """
             document
