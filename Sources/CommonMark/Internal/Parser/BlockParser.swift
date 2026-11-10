@@ -105,9 +105,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Run maps for content that reaches the inline pass as one arena chunk (flattened, NUL-replaced or pipe-unescaped), keyed by node, so its inlines get source positions.
     var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
 
-    /// What the table check needs to know about the open paragraph, recorded at the first continuation line the
-    /// check sees. Only populated with `.tables`.
-    struct OpenParagraphTableState {
+    /// What the table check and setext underlines need to know about the open paragraph, recorded when either first
+    /// needs it: the table check at the first continuation line it sees, with `.tables`, and an underline once it finds
+    /// a line of only whitespace.
+    struct OpenParagraphState {
         let node: DocumentStorage.Index
 
         /// Whether a line and the next form a table's header and delimiter rows, the delimiter row indented fewer
@@ -115,13 +116,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         /// continue, so `processLine` breaks a later line that fails a container's prefix out of the table and that
         /// container.
         var tablePending = false
+
+        /// Whether an underline found a line of the paragraph that holds only whitespace characters (see
+        /// `holdsWhitespaceOnlyLine`). The line stays in the paragraph, so a later underline needs no scan.
+        var holdsWhitespaceOnlyLine = false
     }
 
-    var openParagraphTableState: OpenParagraphTableState?
-
-    /// The paragraph a setext underline found to hold a line of only whitespace (see `holdsWhitespaceOnlyLine`), which
-    /// stays in it, so a later underline of the paragraph needs no scan.
-    var paragraphWithWhitespaceOnlyLine: DocumentStorage.Index?
+    var openParagraphState: OpenParagraphState?
 
     /// List items whose last block is a removed paragraph that held only definitions or a task list item marker,
     /// mapped to whether a blank line follows it. An entry is dropped when the item gains another block.
@@ -862,7 +863,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         guard lastLineOpensTable(delimRange: delimRange, pending: pending!, lastLineStart: headerStart) else {
             return pending
         }
-        openParagraphTableState!.tablePending = true
+        openParagraphState!.tablePending = true
         let leaf = pending!
         switch consume leaf.content {
         case .lazy(let range, _):
@@ -1130,8 +1131,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Whether a line of the open paragraph and the line after it form a table's header and delimiter rows.
     private var openParagraphIsTablePending: Bool {
-        assert(openParagraphTableState.map { $0.node == current } ?? true, "the recorded table state belongs to the open leaf")
-        return openParagraphTableState?.tablePending == true
+        assert(openParagraphState.map { $0.node == current } ?? true, "the recorded state belongs to the open leaf")
+        return openParagraphState?.tablePending == true
     }
 
     /// Turns the open paragraph into a setext heading when the line underlines it (Setext headings). Returns whether the line is done: it formed a heading, or continued a paragraph holding only definitions.
@@ -1146,10 +1147,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let para = current
         precondition(pending != nil, "an open paragraph always holds its accumulated content")
         // Each line of a setext heading holds a non-whitespace character (Setext headings).
-        if paragraphWithWhitespaceOnlyLine != para, holdsWhitespaceOnlyLine(pending!) {
-            paragraphWithWhitespaceOnlyLine = para
+        if openParagraphState?.holdsWhitespaceOnlyLine != true, holdsWhitespaceOnlyLine(pending!) {
+            if openParagraphState == nil {
+                openParagraphState = OpenParagraphState(node: para)
+            }
+            openParagraphState!.holdsWhitespaceOnlyLine = true
         }
-        if paragraphWithWhitespaceOnlyLine == para {
+        if openParagraphState?.holdsWhitespaceOnlyLine == true {
             return false
         }
         // Leading link reference definitions come out first; if they are the whole paragraph, no heading forms.
@@ -1179,7 +1183,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // container, past the definitions, so they need not extend the container's range.
         pending = nil
         removeEmptiedParagraph(para, contentEnd: nil)
-        openParagraphTableState = nil
+        openParagraphState = nil
         guard let parent = storage[para].parent else {
             fatalError("a paragraph always has a parent")
         }
@@ -1259,7 +1263,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// heading. The heading ends at `underlineEnd`, past its underline's last marker character.
     private mutating func makeHeading(_ para: DocumentStorage.Index, level: UInt8, content: consuming PendingContent, underlineEnd: Int) {
         storage[para].kind = .heading(level: Int(level))
-        openParagraphTableState = nil
+        openParagraphState = nil
         if positionsEnabled {
             switch content {
             case .lazy(let range, _):
@@ -1324,13 +1328,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     @inline(__always)
     private mutating func recordTableDelimiterCandidate(line: LineContext, pending: inout PendingLeaf?) {
         let delimRange = line.firstNonSpace..<line.lineRange.upperBound
-        if openParagraphTableState == nil {
-            openParagraphTableState = OpenParagraphTableState(node: current)
+        if openParagraphState == nil {
+            openParagraphState = OpenParagraphState(node: current)
         }
-        assert(openParagraphTableState!.node == current, "the recorded state belongs to the open paragraph")
+        assert(openParagraphState!.node == current, "the recorded state belongs to the open paragraph")
         // The first such line that opens a table sets `tablePending`, ending the search. `couldBeDelimiterRow` keeps
         // ordinary prose out of the table check.
-        if !openParagraphTableState!.tablePending,
+        if !openParagraphState!.tablePending,
            line.indent < 4, line.allMatched,
            couldBeDelimiterRow(range: delimRange) {
             pending = detectPendingTable(current, delimRange: delimRange, pending: consume pending)
@@ -1915,7 +1919,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func openParagraph(lineRange: Range<Int>, firstNonSpace: Int, pending: consuming PendingLeaf?) -> PendingLeaf? {
         let textRange = firstNonSpace..<lineRange.upperBound
         precondition(storage[current].kind != .paragraph, "dispatch starts at the deepest matched container, which is never a leaf, and opens only containers before a leaf, so `current` is never a paragraph here")
-        assert(openParagraphTableState == nil, "the previous paragraph closed before this one opens")
+        assert(openParagraphState == nil, "the previous paragraph closed before this one opens")
         let paragraphIdx = addChild(kind: .paragraph, parent: current, start: firstNonSpace)
         current = paragraphIdx
         return addLine(range: textRange, to: paragraphIdx, pending: pending)
@@ -2235,13 +2239,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
         switch kind {
         case .paragraph:
-            assert(openParagraphTableState.map { $0.node == node } ?? true, "the recorded table state belongs to the paragraph being closed")
-            defer { openParagraphTableState = nil }
+            assert(openParagraphState.map { $0.node == node } ?? true, "the recorded state belongs to the paragraph being closed")
+            defer { openParagraphState = nil }
             // Tables come before definition extraction: the paragraph is a table from its delimiter row on, and only a
             // paragraph holds definitions, so `[\n|-\n]:/` is a table. A pipe-less `-` or `=` run is a setext underline
             // instead, handled earlier with the definitions extracted: `[o]:o\n-` is a definition and a paragraph,
             // `[o]:o\n|-` a table.
-            if openParagraphTableState?.tablePending == true {
+            if openParagraphState?.tablePending == true {
                 parseTable(node: node, pending: pending)
                 pending = nil
                 break
