@@ -195,7 +195,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             while reader.next() != nil {
                 let lineRangeInOriginalSource = reader.lineRange
                 if positionsEnabled {
-                    storage.lineStarts.append(lineRangeInOriginalSource.lowerBound)
+                    storage.lineStarts.append(reader.lineStart)
                 }
                 noteLineRead(reader)
                 pending = processLine(lineRange: lineRangeInOriginalSource, pending: pending)
@@ -357,7 +357,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var reader = LineReader(source: sourceBytes)
         while reader.next() != nil {
             if positionsEnabled {
-                storage.lineStarts.append(reader.lineRange.lowerBound)
+                storage.lineStarts.append(reader.lineStart)
             }
             contentEnd = reader.lineRange.upperBound
             hasCR = hasCR || (contentEnd < count && sourceBytes[contentEnd] == UInt8(ascii: "\r"))
@@ -442,11 +442,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Stamps the document with the whole input, from the first line's start, after any BOM. The end of input that ends
-    /// in a line ending is column 1 of the line after its last, so that line's start is recorded too.
+    /// Stamps the document with the whole input, any BOM included, and records the start of the line after the last
+    /// when the input ends in a line ending, since the end of such input is column 1 of that line.
     private mutating func stampDocument() {
         let end = sourceBytes.count
-        storage.setSourceStart(documentIndex, storage.lineStarts[0])
+        storage.setSourceStart(documentIndex, 0)
         storage.setSourceEnd(documentIndex, end)
         if sourceBytes[end - 1] == UInt8(ascii: "\n") || sourceBytes[end - 1] == UInt8(ascii: "\r") {
             storage.lineStarts.append(end)

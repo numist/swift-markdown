@@ -521,22 +521,22 @@ struct BlockPositionEncodingTests {
 
     // MARK: - Byte-order mark
 
-    @Test("leading BOM — line 1 columns, including the document's start, count from after the BOM")
+    @Test("leading BOM — line 1 columns count the BOM's three bytes, and the document starts at the BOM")
     func leadingByteOrderMark() throws {
         let out = parse("\u{FEFF}a\nb")
         try #require(shape(out) == ["document", "paragraph", "text", "softBreak", "text"])
         #expect(out[0].range == r(1, 1, 2, 2))
-        #expect(out[1].range == r(1, 1, 2, 2))
-        #expect(out[2].range == r(1, 1, 1, 2))
+        #expect(out[1].range == r(1, 4, 2, 2))
+        #expect(out[2].range == r(1, 4, 1, 5))
         #expect(out[4].range == r(2, 1, 2, 2))
     }
 
-    /// A BOM alone is one empty line, so the document spans that line from just after the BOM: an empty range at 1:1.
-    @Test("BOM-only input — the document is an empty range at 1:1")
+    /// A BOM alone is one line, which the document spans: the BOM's three bytes.
+    @Test("BOM-only input — the document spans the BOM")
     func byteOrderMarkOnly() throws {
         let out = parse("\u{FEFF}")
         try #require(shape(out) == ["document"])
-        #expect(out[0].range == r(1, 1, 1, 1))
+        #expect(out[0].range == r(1, 1, 1, 4))
     }
 
     // MARK: - Collection / assertion helpers

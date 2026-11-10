@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// The document's source range covers the whole input after any byte order mark, trailing whitespace, blank lines and
-/// the final line ending included. Input that ends in a line ending ends at column 1 of the line after its last.
+/// The document's source range covers the whole input, any byte order mark, trailing whitespace, blank lines and the
+/// final line ending included. Input that ends in a line ending ends at column 1 of the line after its last.
 @Suite("Document source ranges")
 struct DocumentSourceRangeTests {
 
@@ -101,8 +101,8 @@ struct DocumentSourceRangeTests {
     func byteOrderMark() {
         #expect(tree("\u{FEFF}a\n") == """
             document @1:1-2:1
-              paragraph @1:1-1:2
-                text "a" @1:1-1:2
+              paragraph @1:4-1:5
+                text "a" @1:4-1:5
 
             """)
     }

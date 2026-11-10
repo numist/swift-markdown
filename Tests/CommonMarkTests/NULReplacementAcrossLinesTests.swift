@@ -113,9 +113,9 @@ struct NULReplacementAcrossLinesTests {
     @Test("a byte order mark before a NUL")
     func byteOrderMarkBeforeNUL() {
         #expect(tree("\u{FEFF}\u{0}") == """
-            document @1:1-1:2
-              paragraph @1:1-1:2
-                text "\u{FFFD}" @1:1-1:2
+            document @1:1-1:5
+              paragraph @1:4-1:5
+                text "\u{FFFD}" @1:4-1:5
 
             """)
     }

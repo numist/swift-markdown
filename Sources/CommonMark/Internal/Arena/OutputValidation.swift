@@ -22,15 +22,15 @@ private struct RangeValidator: ~Escapable {
     private let view: StorageView
     private let lineCount: Int
 
-    /// Where the first line begins, past any byte order mark; no source range starts before it.
-    private let firstLineStart: Int
+    /// Where the first line's content begins, past any byte order mark; no range but the document's starts before it.
+    private let contentStart: Int
 
     @_lifetime(copy view)
     init(view: StorageView, lineCount: Int) {
         self.view = view
         self.lineCount = lineCount
         let source = view.source
-        self.firstLineStart = source.count >= 3 && source[0] == 0xEF && source[1] == 0xBB && source[2] == 0xBF ? 3 : 0
+        self.contentStart = source.count >= 3 && source[0] == 0xEF && source[1] == 0xBB && source[2] == 0xBF ? 3 : 0
     }
 
     /// Visits every node reachable from the document in pre-order, following child and sibling links, so any depth runs
@@ -89,7 +89,7 @@ private struct RangeValidator: ~Escapable {
         guard let range else {
             return false
         }
-        guard firstLineStart <= range.start && range.start <= range.end && range.end <= view.source.count else {
+        guard (record.kind == .document ? 0 : contentStart) <= range.start && range.start <= range.end && range.end <= view.source.count else {
             return false
         }
         guard Self.isScalarBoundary(range.start, in: view.source) && Self.isScalarBoundary(range.end, in: view.source) else {

@@ -17,6 +17,12 @@ internal struct LineReader: ~Escapable, ~Copyable {
     /// The source offsets of the most recently returned line.
     internal var lineRange: Range<Int>
 
+    /// Where the most recently returned line starts: at its first byte, or for line 1 at the input's first byte, so a
+    /// byte order mark counts in line 1's columns.
+    internal var lineStart: Int {
+        lineNumber == 1 ? 0 : lineRange.lowerBound
+    }
+
     /// The source offset of the most recently returned line's first NUL, or the line's end when it holds none.
     internal var lineFirstNUL = 0
     var nextStart: Int

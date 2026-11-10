@@ -127,35 +127,35 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// A leading byte-order mark is skipped: line 1's columns count from the byte after it.
+    /// A leading byte order mark is not content, but it is part of line 1, whose columns count its three bytes.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func leadingByteOrderMark(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("\u{FEFF}a\nb", options: options, sourceRanges: true) == """
             document @1:1-2:2
-              paragraph @1:1-2:2
-                text "a\\nb" @1:1-2:2
+              paragraph @1:4-2:2
+                text "a\\nb" @1:4-2:2
 
             """)
         #expect(TreeDump.dump("\u{FEFF}a\r\nb", options: options, sourceRanges: true) == """
             document @1:1-2:2
-              paragraph @1:1-2:2
-                text "a\\nb" @1:1-2:2
+              paragraph @1:4-2:2
+                text "a\\nb" @1:4-2:2
 
             """)
     }
 
-    /// A BOM-only input's empty paragraph sits at the start of line 1, past the BOM; a blank line after the BOM ends where its line ending starts, so the ranges are empty.
+    /// A BOM-only input's empty paragraph sits just past the BOM, which the document spans; a blank line after the BOM ends where its line ending starts, so the ranges are empty.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func byteOrderMarkWithoutContent(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("\u{FEFF}", options: options, sourceRanges: true) == """
-            document @1:1-1:1
-              paragraph @1:1-1:1
+            document @1:1-1:4
+              paragraph @1:4-1:4
 
             """)
         #expect(TreeDump.dump("\u{FEFF}\n", options: options, sourceRanges: true) == """
             document @1:1-2:1
-              paragraph @1:1-1:1
-                text "\\n" @1:1-1:1
+              paragraph @1:4-1:4
+                text "\\n" @1:4-1:4
 
             """)
     }
