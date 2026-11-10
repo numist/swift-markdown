@@ -126,20 +126,21 @@ struct InlineOnlyTextConsolidationTests {
         #expect(TreeDump.dump(example.source, options: options) == example.tree)
     }
 
-    @Test func preservedLineEndingMergesWithAdjacentText() {
-        #expect(TreeDump.dump("_\nb", options: Self.preserveWhitespace) == """
+    @Test(arguments: [inlineOnly, preserveWhitespace])
+    func lineEndingMergesWithAdjacentText(options: MarkdownDocument.ParseOptions) {
+        #expect(TreeDump.dump("_\nb", options: options) == """
             document
               paragraph
                 text "_\\nb"
 
             """)
-        #expect(TreeDump.dump("a\n&amp;\nb", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("a\n&amp;\nb", options: options) == """
             document
               paragraph
                 text "a\\n&\\nb"
 
             """)
-        #expect(TreeDump.dump("a\n[b", options: Self.preserveWhitespace) == """
+        #expect(TreeDump.dump("a\n[b", options: options) == """
             document
               paragraph
                 text "a\\n[b"
