@@ -30,6 +30,10 @@ class SetextHeadingContinuationIndentTests: XCTestCase {
         XCTAssertEqual(Self.quotedHeading("      └─ Text \"b\""), tree(">[a]:u\n\tb\n>=\n"))
     }
 
+    func testLazyOneSpaceBeforeReplacementCharacter() {
+        XCTAssertEqual(Self.quotedHeading("      └─ Text \"\u{FFFD}\""), tree(">[a]:u\n \u{FFFD}\n>="))
+    }
+
     func testMultiLineRemainder() {
         XCTAssertEqual(
             Self.quotedHeading("      ├─ Text \"b\"\n      ├─ SoftBreak\n      └─ Text \"c\""),
