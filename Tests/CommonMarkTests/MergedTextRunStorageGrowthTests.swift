@@ -13,8 +13,8 @@ import CommonMark
 
 /// Storage growth for a paragraph whose text is one run made of many separate pieces - unmatched brackets, image
 /// openers, emphasis delimiters, apostrophes, link openers, unresolved footnote references - most of them after a
-/// pair of smart quotes. The run's content is stored in proportion to the input.
-@Suite("Text runs merged from many pieces store linear content")
+/// pair of smart quotes. The run's segment count grows in proportion to the input.
+@Suite("Text runs merged from many pieces have a linear segment count")
 struct MergedTextRunStorageGrowthTests {
 
     /// A source of `prefix` followed by `count` copies of `unit`.
