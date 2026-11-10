@@ -340,7 +340,7 @@ extension BlockParser {
 
     /// Source line `line`'s range as a row, from its leading pipe or first cell's content to its closing pipe or last
     /// cell's content, without padding: empty at its start when it holds only padding, as its one empty cell is.
-    private func rowRange(_ line: Range<Int>) -> Range<Int> {
+    private mutating func rowRange(_ line: Range<Int>) -> Range<Int> {
         let content = trimmingPadding(line)
         return content.isEmpty ? line.lowerBound..<line.lowerBound : content
     }
