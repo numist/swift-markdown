@@ -9,14 +9,14 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// The `init(parsing:)` initializers and the `source` accessor, which exist only where `UTF8Span` does.
 @Suite("anyAppleOS 26 initializers")
 struct AppleOS26InitializerTests {
 
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
-    @Test("returning String initializer parses the expected tree")
+    @Test("String initializer parses the expected tree")
     func stringInitializer() {
         let source = "# Title\n\nA paragraph with *emphasis*."
         let doc = MarkdownDocument(parsing: source)
