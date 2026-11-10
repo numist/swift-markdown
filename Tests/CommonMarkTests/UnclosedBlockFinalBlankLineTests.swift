@@ -17,7 +17,7 @@ import CommonMark
 @Suite("Final blank line of a fenced code or HTML block")
 struct UnclosedBlockFinalBlankLineTests {
 
-    @Test("a fenced body of one blank line is that line's newline")
+    @Test("a fenced body of one blank line is that line's line ending")
     func closedFenceBlankBody() {
         #expect(TreeDump.dump("```\n\n```\n", options: []) == """
             document
