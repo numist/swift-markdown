@@ -15,7 +15,7 @@ import Testing
 /// punctuation, so a domain that begins with a non-ASCII punctuation or whitespace character is not an extended url
 /// autolink.
 @Suite("Extended url autolink domain beginning with punctuation")
-struct AutolinkHostLeadingPunctuationTests {
+struct AutolinkDomainLeadingPunctuationTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .gfmAutolink]
 
     private func surface(_ markdown: String) -> String {
