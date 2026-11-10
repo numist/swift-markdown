@@ -23,9 +23,9 @@ private func inlineHTMLLiterals(_ node: borrowing MarkdownNode) -> [String] {
     return literals
 }
 
-/// A raw HTML opener (`<!--`, `<?`, `<!X `, `<![CDATA[`) without its closer later in the paragraph is literal text
-/// (Raw HTML). Every later opener of that kind without a closer stays literal too, while the empty comments, a closer
-/// that overlaps a later opener, constructs of other kinds and later paragraphs match.
+/// A raw HTML opener (`<!--`, `<?`, `<!X `, `<![CDATA[`) with no closer later in its paragraph is literal text
+/// (Raw HTML). The empty comments, a closer that overlaps a later opener, constructs of other kinds and constructs
+/// in later paragraphs still match.
 @Suite("Unclosed inline raw HTML openers")
 struct UnclosedInlineHTMLTests {
 
