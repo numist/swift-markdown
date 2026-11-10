@@ -15,18 +15,18 @@ import XCTest
 /// shortcut reference whose labels contain NULs match, including when the reference is a setext heading's
 /// content.
 class SetextHeadingNulLabelRefResolutionTests: XCTestCase {
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])
     }
 
     func testNulLabelRefResolvesInSetextHeading() {
         let expected = "Document\n└─ Heading level: 2\n   └─ Link destination: \"l\"\n      └─ Text \"a\u{FFFD}\""
-        XCTAssertEqual(expected, surface("[a\0]:l\n[a\0]\n-"))
+        XCTAssertEqual(expected, tree("[a\0]:l\n[a\0]\n-"))
     }
 
     /// The reference's NULs become U+FFFD, so its label matches a definition's label written with U+FFFD.
     func testReplacementCharacterAndNulLabelsMatchInSetextHeading() {
         let expected = "Document\n└─ Heading level: 2\n   └─ Link destination: \"l\"\n      └─ Text \"bar\u{2019}\u{0001}\u{FFFD}\u{FFFD}\u{FFFD}\""
-        XCTAssertEqual(expected, surface("[bar'\u{01}\u{FFFD}\0\0]:l\n[bar'\u{01}\0\0\0]\n-"))
+        XCTAssertEqual(expected, tree("[bar'\u{01}\u{FFFD}\0\0]:l\n[bar'\u{01}\0\0\0]\n-"))
     }
 }

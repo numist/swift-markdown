@@ -43,7 +43,7 @@ class BlockQuoteTabColumnMatrixTests: XCTestCase {
         return head + lines.joined(separator: "\n")
     }
 
-    private func assertSurface(_ expected: String, _ markdown: String, file: StaticString = #filePath, line: UInt = #line) {
+    private func assertTree(_ expected: String, _ markdown: String, file: StaticString = #filePath, line: UInt = #line) {
         let actual = Document(parsing: markdown).debugDescription(options: [])
         XCTAssertEqual(expected, actual, "input: \(markdown.debugDescription)", file: file, line: line)
     }
@@ -52,24 +52,24 @@ class BlockQuoteTabColumnMatrixTests: XCTestCase {
     /// otherwise), leaving the final `>` within three columns, so it always opens quote k+1.
     func testTabBeforeMarkerAtEveryTabStop() {
         for k in 1...8 {
-            assertSurface(quotes(k + 1, .none), "- ```\n" + String(repeating: ">", count: k) + "\t>")
+            assertTree(quotes(k + 1, .none), "- ```\n" + String(repeating: ">", count: k) + "\t>")
         }
     }
 
     /// Spaced markers put the tab at other columns: `> >` puts it at column 3, `> > >` at column 5.
     func testSpacedMarkersThenTabBeforeMarker() {
-        assertSurface(quotes(3, .none), "- ```\n> >\t>")
-        assertSurface(quotes(4, .none), "- ```\n> > >\t>")
-        assertSurface(quotes(4, .none), "- ```\n>> >\t>")
-        assertSurface(quotes(3, .none), "- ```\n >>\t>")
-        assertSurface(quotes(3, .none), "- ```\n>  >\t>")
+        assertTree(quotes(3, .none), "- ```\n> >\t>")
+        assertTree(quotes(4, .none), "- ```\n> > >\t>")
+        assertTree(quotes(4, .none), "- ```\n>> >\t>")
+        assertTree(quotes(3, .none), "- ```\n >>\t>")
+        assertTree(quotes(3, .none), "- ```\n>  >\t>")
     }
 
     /// `>`×k TAB `x`: one column of the tab is the marker's optional space and at most three remain, so `x` is
     /// paragraph content.
     func testTabBeforeParagraphContent() {
         for k in 1...5 {
-            assertSurface(quotes(k, .paragraph("x")), "- ```\n" + String(repeating: ">", count: k) + "\tx")
+            assertTree(quotes(k, .paragraph("x")), "- ```\n" + String(repeating: ">", count: k) + "\tx")
         }
     }
 
@@ -80,30 +80,30 @@ class BlockQuoteTabColumnMatrixTests: XCTestCase {
     func testTabThenIndentedCodeAtEveryTabStop() {
         let leftover = [1: "  x", 2: " x", 3: "x", 4: "   x", 5: "  x"]
         for k in 1...5 {
-            assertSurface(quotes(k, .code(leftover[k]!)), "- ```\n" + String(repeating: ">", count: k) + "\t    x")
+            assertTree(quotes(k, .code(leftover[k]!)), "- ```\n" + String(repeating: ">", count: k) + "\t    x")
         }
     }
 
     /// Two tabs after the markers: indent reaches four columns, so the rest is indented code whose
     /// content keeps the second tab's unconsumed columns (as spaces when that tab is split).
     func testTwoTabsBeforeMarker() {
-        assertSurface(quotes(1, .code("  >")), "- ```\n>\t\t>")
-        assertSurface(quotes(3, .code(">")), "- ```\n>>>\t\t>")
+        assertTree(quotes(1, .code("  >")), "- ```\n>\t\t>")
+        assertTree(quotes(3, .code(">")), "- ```\n>>>\t\t>")
     }
 
     /// Continuation markers of already-open quotes on a fenced-code body line: a quote whose `>` follows
     /// a tab its parent's optional column partially consumed measures its indent from that column.
     func testContinuationMarkerAfterPartiallyConsumedTab() {
-        assertSurface(quotes(2, .code("x"), head: "Document\n"), "> > ```\n>\t>x")
-        assertSurface(quotes(2, .code("x"), head: "Document\n"), "> > ```\n>\t> x")
+        assertTree(quotes(2, .code("x"), head: "Document\n"), "> > ```\n>\t>x")
+        assertTree(quotes(2, .code("x"), head: "Document\n"), "> > ```\n>\t> x")
         // Control: the same markers on a paragraph continuation line.
-        assertSurface("Document\n└─ BlockQuote\n   └─ BlockQuote\n      └─ Paragraph\n         ├─ Text \"a\"\n         ├─ SoftBreak\n         └─ Text \"x\"", "> > a\n>\t> x")
+        assertTree("Document\n└─ BlockQuote\n   └─ BlockQuote\n      └─ Paragraph\n         ├─ Text \"a\"\n         ├─ SoftBreak\n         └─ Text \"x\"", "> > a\n>\t> x")
     }
 
     /// A continuation marker after a tab its parent's optional column fully consumed (column 3).
     func testContinuationMarkerAfterFullyConsumedTab() {
-        assertSurface(quotes(4, .code("x"), head: "Document\n"), ">>>> ```\n>>>\t>x")
-        assertSurface(quotes(3, .code("\tx"), head: "Document\n"), ">>> ```\n>>>\t\tx")
+        assertTree(quotes(4, .code("x"), head: "Document\n"), ">>>> ```\n>>>\t>x")
+        assertTree(quotes(3, .code("\tx"), head: "Document\n"), ">>> ```\n>>>\t\tx")
     }
 
     /// A list item's continuation indent after a quote marker is measured in columns from the column
@@ -111,15 +111,15 @@ class BlockQuoteTabColumnMatrixTests: XCTestCase {
     /// it falls short of the `1. ` item's three-column content indent and the item closes.
     func testItemContinuationIndentAfterQuoteMarker() {
         let closed = "Document\n└─ BlockQuote\n   ├─ OrderedList\n   │  └─ ListItem\n   │     └─ CodeBlock language: none\n\n   └─ Paragraph\n      └─ Text \"x\""
-        assertSurface(closed, "> 1. ```\n> \tx")
-        assertSurface(closed, "> 1. ```\n>\tx")
+        assertTree(closed, "> 1. ```\n> \tx")
+        assertTree(closed, "> 1. ```\n>\tx")
     }
 
     /// A tab that exactly reaches a `- ` item's content column is fully consumed by the item, so a
     /// following `>` continues the item's nested quote.
     func testItemContinuationConsumesTabThenQuoteMarker() {
         let continued = "Document\n└─ BlockQuote\n   └─ UnorderedList\n      └─ ListItem\n         └─ BlockQuote\n            └─ CodeBlock language: none\n               x"
-        assertSurface(continued, "> - > ```\n>\t>x")
-        assertSurface(continued, "> - > ```\n> \t>x")
+        assertTree(continued, "> - > ```\n>\t>x")
+        assertTree(continued, "> - > ```\n> \t>x")
     }
 }

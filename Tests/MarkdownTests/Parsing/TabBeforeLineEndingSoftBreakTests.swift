@@ -17,12 +17,12 @@ class TabBeforeLineEndingSoftBreakTests: XCTestCase {
     private static let source = "[\u{FFFD}\r ]:\u{FFFD}\n=\n*\t\r*"
     private static let options: ParseOptions = [.parseBlockDirectives, .parseMinimalDoxygen]
 
-    private func surface() -> String {
+    private func tree() -> String {
         Document(parsing: Self.source, options: Self.options).debugDescription(options: [])
     }
 
     func testTrailingTabIsSoftBreak() {
         let expected = "Document\n└─ Paragraph\n   ├─ Text \"=\"\n   ├─ SoftBreak\n   ├─ Text \"*\"\n   ├─ SoftBreak\n   └─ Text \"*\""
-        XCTAssertEqual(expected, surface())
+        XCTAssertEqual(expected, tree())
     }
 }

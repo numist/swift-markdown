@@ -18,14 +18,14 @@ import XCTest
 class ListMarkerTabOffsetAfterListFenceTests: XCTestCase {
     private static let listFence = "Document\n├─ UnorderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n"
 
-    private func assertSurface(_ expected: String, _ markdown: String, file: StaticString = #filePath, line: UInt = #line) {
+    private func assertTree(_ expected: String, _ markdown: String, file: StaticString = #filePath, line: UInt = #line) {
         let actual = Document(parsing: markdown).debugDescription(options: [])
         XCTAssertEqual(expected, actual, "input: \(markdown.debugDescription)", file: file, line: line)
     }
 
     func testBulletAfterQuoteTabIsSiblingOfShallowerBullet() {
         let siblings = Self.listFence + "└─ BlockQuote\n   └─ UnorderedList\n      ├─ ListItem\n      │  └─ Paragraph\n      │     └─ Text \"x\"\n      └─ ListItem\n         └─ Paragraph\n            └─ Text \"y\""
-        assertSurface(siblings, "- ```\n>\t- x\n>    - y")
+        assertTree(siblings, "- ```\n>\t- x\n>    - y")
     }
 
     /// Four columns in, one short of the ordered item's content column (2 + 3 = 5): the item does not
@@ -33,12 +33,12 @@ class ListMarkerTabOffsetAfterListFenceTests: XCTestCase {
     /// continuation of `x`'s paragraph.
     func testOrderedAfterQuoteTabShortOfContentColumnIsLazy() {
         let lazy = Self.listFence + "└─ BlockQuote\n   └─ OrderedList\n      └─ ListItem\n         └─ Paragraph\n            ├─ Text \"x\"\n            ├─ SoftBreak\n            └─ Text \"1. y\""
-        assertSurface(lazy, "- ```\n>\t1. x\n>     1. y")
+        assertTree(lazy, "- ```\n>\t1. x\n>     1. y")
     }
 
     /// Indented to the item's content column: the second marker nests.
     func testBulletAtContentColumnNests() {
         let nested = Self.listFence + "└─ BlockQuote\n   └─ UnorderedList\n      └─ ListItem\n         ├─ Paragraph\n         │  └─ Text \"x\"\n         └─ UnorderedList\n            └─ ListItem\n               └─ Paragraph\n                  └─ Text \"y\""
-        assertSurface(nested, "- ```\n>\t- x\n>     - y")
+        assertTree(nested, "- ```\n>\t- x\n>     - y")
     }
 }

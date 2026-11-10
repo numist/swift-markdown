@@ -14,19 +14,19 @@ import XCTest
 /// A backslash before `&` in a link destination escapes it (Backslash escapes), so the character reference
 /// that follows is literal text.
 class LinkDestinationEntityEscapeOrderTests: XCTestCase {
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: [])
     }
 
     func testEscapedAmpersandLeavesNumericReferenceLiteral() {
         XCTAssertEqual(
             "Document\n└─ Paragraph\n   └─ Link destination: \"&#3;\"\n      └─ Text \"a\"",
-            surface("[a](\\&#3;)"))
+            tree("[a](\\&#3;)"))
     }
 
     func testEscapedAmpersandLeavesEntityReferenceLiteral() {
         XCTAssertEqual(
             "Document\n└─ Paragraph\n   └─ Link destination: \"&amp;\"\n      └─ Text \"a\"",
-            surface("[a](\\&amp;)"))
+            tree("[a](\\&amp;)"))
     }
 }

@@ -14,25 +14,25 @@ import XCTest
 /// A list item whose paragraph begins with a digit-led word before `[x]` or `[X]` has no checkbox: the
 /// paragraph does not begin with a task list item marker (Task list items (extension)).
 class TaskListDigitPrefixUppercaseCheckboxTests: XCTestCase {
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])
     }
 
     func testDigitDashPrefix() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2- [X] a\"", surface("+\n  2- [X] a"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2- [X] a\"", tree("+\n  2- [X] a"))
     }
 
     func testMultiDigitDashPrefix() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"12- [X]\"", surface("+\n  12- [X]\t"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"12- [X]\"", tree("+\n  12- [X]\t"))
     }
 
     func testMultiByteScalarAfterDigit() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{E9} [x]\"", surface("+\n  2\u{E9} [x] "))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{E9} [x]\"", tree("+\n  2\u{E9} [x] "))
     }
 
     func testDigitDashPrefixBeforeTab() {
         XCTAssertEqual(
             "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2- [X]\"",
-            surface("+\n  2- [X]\t"))
+            tree("+\n  2- [X]\t"))
     }
 }

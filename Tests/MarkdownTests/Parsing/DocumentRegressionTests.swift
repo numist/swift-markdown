@@ -48,7 +48,7 @@ struct DocumentRegressionTests {
     }
 
     /// The parsed document's debug description, with source locations.
-    static func surface(_ markdown: String, options: ParseOptions) -> String {
+    static func tree(_ markdown: String, options: ParseOptions) -> String {
         return Document(parsing: markdown, options: options).debugDescription(options: .printSourceLocations)
     }
 
@@ -66,7 +66,7 @@ struct DocumentRegressionTests {
             contentsOf: Self.corpusDir.appendingPathComponent("\(name).expected"), encoding: .utf8)
 
         let (markdown, options) = try #require(Self.splitInput(bytes), "\(name): empty input")
-        let actual = Self.surface(markdown, options: options)
+        let actual = Self.tree(markdown, options: options)
 
         #expect(actual == expected, """
             parsed document differs from \(name).expected

@@ -15,11 +15,11 @@ import XCTest
 /// block. A tab after a block quote marker counts in columns (Tabs): one column is the marker's optional space,
 /// so a following `>` opens a further block quote.
 class NestedBlockQuoteTabAfterListFenceTests: XCTestCase {
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])
     }
 
     func testOrderedListFence() {
-        XCTAssertEqual("Document\n├─ OrderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n└─ BlockQuote\n   └─ BlockQuote\n      └─ BlockQuote\n         └─ BlockQuote", surface("1. ```\n>>>\t>"))
+        XCTAssertEqual("Document\n├─ OrderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n└─ BlockQuote\n   └─ BlockQuote\n      └─ BlockQuote\n         └─ BlockQuote", tree("1. ```\n>>>\t>"))
     }
 }

@@ -23,16 +23,16 @@ class RepeatedReferenceLinkTests: XCTestCase {
         Array(repeating: use, count: count).joined(separator: " ")
     }
 
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])
     }
 
-    private func count(_ needle: String, in surface: String) -> Int {
-        surface.components(separatedBy: needle).count - 1
+    private func count(_ needle: String, in tree: String) -> Int {
+        tree.components(separatedBy: needle).count - 1
     }
 
     private func links(_ markdown: String) -> Int {
-        count("Link destination:", in: surface(markdown))
+        count("Link destination:", in: tree(markdown))
     }
 
     func testResolvesEveryUse() {
@@ -42,7 +42,7 @@ class RepeatedReferenceLinkTests: XCTestCase {
     func testEveryLabelResolves() {
         let markdown = Self.definition("a", length: 1999) + Self.definition("b")
             + Self.uses("[a]", 1000) + " [b] [a] [a]"
-        let result = surface(markdown)
+        let result = tree(markdown)
         XCTAssertEqual(1003, count("Link destination:", in: result))
         XCTAssertEqual(1, count("Link destination: \"/" + String(repeating: "a", count: 2000) + "\"", in: result))
     }
@@ -50,7 +50,7 @@ class RepeatedReferenceLinkTests: XCTestCase {
     func testFullReferenceResolves() {
         let markdown = Self.definition("a", length: 1999) + Self.definition("b")
             + Self.uses("[a]", 1000) + " [a][b] [a] [a]"
-        let result = surface(markdown)
+        let result = tree(markdown)
         XCTAssertEqual(1003, count("Link destination:", in: result))
         XCTAssertEqual(0, count("[a][b]", in: result))
     }
@@ -63,9 +63,9 @@ class RepeatedReferenceLinkTests: XCTestCase {
 
     func testImageReferencesAllResolve() {
         let images = Self.definition("bar") + Self.uses("![bar]", 1000)
-        XCTAssertEqual(1000, count("Image source:", in: surface(images)))
+        XCTAssertEqual(1000, count("Image source:", in: tree(images)))
         let mixed = Self.definition("bar") + Self.uses("[bar] ![bar]", 1000)
-        let result = surface(mixed)
+        let result = tree(mixed)
         XCTAssertEqual(1000, count("Link destination:", in: result))
         XCTAssertEqual(1000, count("Image source:", in: result))
     }
@@ -96,7 +96,7 @@ class RepeatedReferenceLinkTests: XCTestCase {
     /// `[bar]` names no inline attribute definition, so after each `^[t]` it is dropped.
     func testAttributeLookupOfLinkReference() {
         let markdown = Self.definition("bar") + Self.uses("^[t][bar]", 10) + " " + Self.uses("[bar]", 1000)
-        let result = surface(markdown)
+        let result = tree(markdown)
         XCTAssertEqual(0, count("InlineAttributes", in: result))
         XCTAssertEqual(1000, count("Link destination:", in: result))
     }
@@ -104,14 +104,14 @@ class RepeatedReferenceLinkTests: XCTestCase {
     /// Each `^[t](a)` forms inline attributes, and every `[bar]` is a link.
     func testAttributeLookupAfterInlineForm() {
         let markdown = Self.definition("bar") + Self.uses("^[t](a)[bar]", 10) + " " + Self.uses("[bar]", 1000)
-        let result = surface(markdown)
+        let result = tree(markdown)
         XCTAssertEqual(10, count("InlineAttributes", in: result))
         XCTAssertEqual(1010, count("Link destination:", in: result))
     }
 
     func testEveryBlockResolves() {
         let markdown = Self.definition("bar") + "# " + Self.uses("[bar]", 500) + "\n\n" + Self.uses("[bar]", 500)
-        let result = surface(markdown)
+        let result = tree(markdown)
         let paragraph = result.components(separatedBy: "Paragraph").last!
         XCTAssertEqual(1000, count("Link destination:", in: result))
         XCTAssertEqual(500, count("Link destination:", in: paragraph))

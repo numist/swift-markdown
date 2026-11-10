@@ -15,87 +15,87 @@ import XCTest
 /// word, has no checkbox: the paragraph does not begin with a task list item marker (Task list items
 /// (extension)). Each NUL is replaced by U+FFFD (Insecure characters).
 class TaskListEmptyFirstLineDigitPrefixTests: XCTestCase {
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])
     }
 
     func testDigitNULPrefixThenCheckbox() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD} [x]\"", surface("+\n  2\u{0} [x] "))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD} [x]\"", tree("+\n  2\u{0} [x] "))
     }
 
     func testDigitNULPrefixThenUppercaseCheckboxAndContent() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD} [X] a\"", surface("+\n  2\u{0} [X] a"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD} [X] a\"", tree("+\n  2\u{0} [X] a"))
     }
 
     func testTwoDigitNULPrefix() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"22\u{FFFD} [x] a\"", surface("+\n  22\u{0} [x] a"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"22\u{FFFD} [x] a\"", tree("+\n  22\u{0} [x] a"))
     }
 
     func testDigitNULPrefixAfterTab() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD} [x] a\"", surface("+\n\t2\u{0} [x] a"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD} [x] a\"", tree("+\n\t2\u{0} [x] a"))
     }
 
     func testLaterNULIsReplaced() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD} [x] a\u{FFFD}b\"", surface("+\n  2\u{0} [x] a\u{0}b"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD} [x] a\u{FFFD}b\"", tree("+\n  2\u{0} [x] a\u{0}b"))
     }
 
     func testContinuationAfterDigitLine() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         ├─ Text \"2\u{FFFD} [x] a\"\n         ├─ SoftBreak\n         └─ Text \"b\"", surface("+\n  2\u{0} [x] a\n  b"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         ├─ Text \"2\u{FFFD} [x] a\"\n         ├─ SoftBreak\n         └─ Text \"b\"", tree("+\n  2\u{0} [x] a\n  b"))
     }
 
     func testNULLineOpensTable() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"2\u{FFFD} [x] a\"\n         │  └─ Cell\n         │     └─ Text \"b\"\n         └─ Body\n            └─ Row\n               ├─ Cell\n               │  └─ Text \"c\"\n               └─ Cell\n                  └─ Text \"d\"", surface("+\n  2\u{0} [x] a|b\n  -|-\n  c|d"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"2\u{FFFD} [x] a\"\n         │  └─ Cell\n         │     └─ Text \"b\"\n         └─ Body\n            └─ Row\n               ├─ Cell\n               │  └─ Text \"c\"\n               └─ Cell\n                  └─ Text \"d\"", tree("+\n  2\u{0} [x] a|b\n  -|-\n  c|d"))
     }
 
     func testMultiByteLineOpensTable() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"22\u{E9} [x] a\"\n         │  └─ Cell\n         │     └─ Text \"b\"\n         └─ Body", surface("+\n  22\u{E9} [x] a|b\n  -|-"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"22\u{E9} [x] a\"\n         │  └─ Cell\n         │     └─ Text \"b\"\n         └─ Body", tree("+\n  22\u{E9} [x] a|b\n  -|-"))
     }
 
     func testFourByteLineOpensTable() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"2\u{1F600} [x] a\"\n         │  └─ Cell\n         │     └─ Text \"b\"\n         └─ Body", surface("+\n  2\u{1F600} [x] a|b\n  -|-"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"2\u{1F600} [x] a\"\n         │  └─ Cell\n         │     └─ Text \"b\"\n         └─ Body", tree("+\n  2\u{1F600} [x] a|b\n  -|-"))
     }
 
     func testTwoDigitLineOpensTable() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"22 [x] a\"\n         │  └─ Cell\n         │     └─ Text \"b\"\n         └─ Body", surface("+\n  22 [x] a|b\n  -|-"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"22 [x] a\"\n         │  └─ Cell\n         │     └─ Text \"b\"\n         └─ Body", tree("+\n  22 [x] a|b\n  -|-"))
     }
 
     func testDigitLedParagraphOpensTableOnLaterLine() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      ├─ Paragraph\n      │  └─ Text \"2\u{FFFD} [x] a\"\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"b\"\n         │  └─ Cell\n         │     └─ Text \"c\"\n         └─ Body", surface("+\n  2\u{0} [x] a\n  b|c\n  -|-"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      ├─ Paragraph\n      │  └─ Text \"2\u{FFFD} [x] a\"\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"b\"\n         │  └─ Cell\n         │     └─ Text \"c\"\n         └─ Body", tree("+\n  2\u{0} [x] a\n  b|c\n  -|-"))
     }
 
     func testNULHeaderWithoutCheckboxOpensTable() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"2\u{FFFD} a\"\n         │  └─ Cell\n         │     └─ Text \"b\"\n         └─ Body", surface("+\n  2\u{0} a|b\n  -|-"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Table alignments: |-|-|\n         ├─ Head\n         │  ├─ Cell\n         │  │  └─ Text \"2\u{FFFD} a\"\n         │  └─ Cell\n         │     └─ Text \"b\"\n         └─ Body", tree("+\n  2\u{0} a|b\n  -|-"))
     }
 
     func testDigitLetterPrefixAfterTab() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2x [x]\"", surface("+\n\t 2x [x] "))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2x [x]\"", tree("+\n\t 2x [x] "))
     }
 
     func testTwoDigitPrefixAfterTab() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"22 [x]\"", surface("+\n\t 22 [x] "))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"22 [x]\"", tree("+\n\t 22 [x] "))
     }
 
     func testDigitNULLetterPrefix() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD}x [x] a\"", surface("+\n  2\u{0}x [x] a"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD}x [x] a\"", tree("+\n  2\u{0}x [x] a"))
     }
 
     func testDigitTwoNULPrefix() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD}\u{FFFD} [x] a\"", surface("+\n  2\u{0}\u{0} [x] a"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD}\u{FFFD} [x] a\"", tree("+\n  2\u{0}\u{0} [x] a"))
     }
 
     func testTwoDigitMultiBytePrefix() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"22\u{E9} [x] a\"", surface("+\n  22\u{E9} [x] a"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"22\u{E9} [x] a\"", tree("+\n  22\u{E9} [x] a"))
     }
 
     /// A paragraph that begins with `22é` does not begin with a task list item marker, so `[x]` is a shortcut
     /// reference link.
     func testShortcutReferenceOnDigitLine() {
-        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         ├─ Text \"22\u{E9} \"\n         └─ Link destination: \"/u\"\n            └─ Text \"x\"", surface("+\n  22\u{E9} [x] \n\n[x]: /u\n"))
+        XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         ├─ Text \"22\u{E9} \"\n         └─ Link destination: \"/u\"\n            └─ Text \"x\"", tree("+\n  22\u{E9} [x] \n\n[x]: /u\n"))
     }
 
     func testDigitNULPrefixThenCheckboxAndContent() {
         XCTAssertEqual(
             "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD} [x] a\"",
-            surface("+\n  2\u{0} [x] a"))
+            tree("+\n  2\u{0} [x] a"))
     }
 }

@@ -15,7 +15,7 @@ import XCTest
 /// reference definitions). In `[f]:&` / `"title"![f]`, the definition ends at its destination, the second
 /// line is paragraph text, and its `![f]` is an image without a title.
 class MultilineRefDefTitleTrailingContentTests: XCTestCase {
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: [])
     }
 
@@ -23,12 +23,12 @@ class MultilineRefDefTitleTrailingContentTests: XCTestCase {
     func testNulTitleWithTrailingImage() {
         XCTAssertEqual(
             "Document\n└─ Paragraph\n   ├─ Text \"“\u{FFFD}”\"\n   └─ Image source: \"&\"\n      └─ Text \"f\"",
-            surface("[f]:&\n\"\u{0}\"![f]"))
+            tree("[f]:&\n\"\u{0}\"![f]"))
     }
 
     func testAsciiTitleWithTrailingImage() {
         XCTAssertEqual(
             "Document\n└─ Paragraph\n   ├─ Text \"“x”\"\n   └─ Image source: \"&\"\n      └─ Text \"f\"",
-            surface("[f]:&\n\"x\"![f]"))
+            tree("[f]:&\n\"x\"![f]"))
     }
 }

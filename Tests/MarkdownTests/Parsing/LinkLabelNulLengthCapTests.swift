@@ -16,17 +16,17 @@ import XCTest
 /// and `=` is a paragraph rather than a setext heading underline; with 1000 the line is paragraph text, which `=`
 /// underlines.
 class LinkLabelNulLengthCapTests: XCTestCase {
-    private func surface(nulCount: Int) -> String {
+    private func tree(nulCount: Int) -> String {
         Document(parsing: "[" + String(repeating: "\u{0}", count: nulCount) + "]:/l\n=").debugDescription(options: [])
     }
 
     func testLabelOf999NulsIsValid() {
-        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"=\"", surface(nulCount: 999))
+        XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"=\"", tree(nulCount: 999))
     }
 
     func testLabelOf1000NulsIsParagraphText() {
         XCTAssertEqual(
             "Document\n└─ Heading level: 1\n   └─ Text \"[" + String(repeating: "\u{FFFD}", count: 1000) + "]:/l\"",
-            surface(nulCount: 1000))
+            tree(nulCount: 1000))
     }
 }
