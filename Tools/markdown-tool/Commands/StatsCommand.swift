@@ -509,5 +509,6 @@ private func displayName(_ kind: MarkdownNode.Kind) -> String {
     case .footnoteReference: return "footnoteReference"
     case .strikethrough: return "strikethrough"
     case .attribute: return "attribute"
+    @unknown default: return "unknown"
     }
 }
