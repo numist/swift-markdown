@@ -84,10 +84,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     let positionsEnabled: Bool
 
-    /// The current line's source range. `lastLineSourceEnd` is the previous line's content end, where a block that a later line closes ends.
-    var currentLineSourceRange: Range<Int> = 0..<0
-    var lastLineSourceEnd: Int = 0
-
     /// The source offset before which the line reader has read every byte.
     var sourceReadEnd: Int = 0
 
@@ -201,16 +197,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 let lineRangeInOriginalSource = reader.lineRange
                 if positionsEnabled {
                     storage.lineStarts.append(lineRangeInOriginalSource.lowerBound)
-                    lastLineSourceEnd = currentLineSourceRange.upperBound
                 }
-                currentLineSourceRange = lineRangeInOriginalSource
                 noteLineRead(reader)
                 pending = processLine(lineRange: lineRangeInOriginalSource, pending: pending)
             }
 
             // At the end of input, close every open block.
             while current != documentIndex {
-                pending = finalize(node: current, pending: pending, endsOnCurrentLine: true)
+                pending = finalize(node: current, pending: pending)
             }
             
             // The document node is never finalized, so it is stamped here. An empty document has no source range.
@@ -1176,7 +1170,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 storage.setSourceStart(para, segmentsSourceSpan(segs).start)
             }
         }
-        _ = finalize(node: para, pending: PendingLeaf(node: para, content: content), endsOnCurrentLine: true)
+        _ = finalize(node: para, pending: PendingLeaf(node: para, content: content))
         if positionsEnabled {
             storage.setSourceEnd(para, underlineEnd)
         }
@@ -2110,32 +2104,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Closes `node`, materializes its content, and makes its parent `current`.
     ///
-    /// A block ends on the current line when `endsOnCurrentLine` (the document ends, a setext heading's underline) or it opened on that line; otherwise it ends on the previous line, which the current line didn't continue. A code block or HTML block ends at `blockContentEnd`, unless a closing fence ends it. A container block ends just past its last content byte: where its last child ends, or where its own marker does if that is later (a block quote's `>` on the last line that has one, a list item's list marker, a footnote definition's `[^label]:`), so blank lines and trailing whitespace after its content are not part of it. A paragraph that held only link reference definitions or a task list item marker leaves no child but still counts as content, while a fenced code block's or HTML block's blank lines are its content, so a container ending in one ends on its last line. `lineContentEnd` is where a one-line ATX heading's or thematic break's content ends, or a closing fence's last fence character.
-    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, endsOnCurrentLine: Bool = false, lineContentEnd: Int? = nil) -> PendingLeaf? {
+    /// A code block or HTML block ends at `blockContentEnd`, unless a closing fence ends it. A container block ends just past its last content byte: where its last child ends, or where its own marker does if that is later (a block quote's `>` on the last line that has one, a list item's list marker, a footnote definition's `[^label]:`), so blank lines and trailing whitespace after its content are not part of it. A paragraph that held only link reference definitions or a task list item marker leaves no child but still counts as content, while a fenced code block's or HTML block's blank lines are its content, so a container ending in one ends on its last line. A paragraph's end is set once its raw content is known, and a setext heading's past its underline. `lineContentEnd` is where a one-line ATX heading's or thematic break's content ends, or a closing fence's last fence character.
+    private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, lineContentEnd: Int? = nil) -> PendingLeaf? {
         var pending = pending
         let kind = storage[node].kind
         openBlocksVersion &+= 1
 
         if positionsEnabled {
-            let startByte = storage.sourceRanges[node].start
-            let startedThisLine = startByte >= currentLineSourceRange.lowerBound
-            let end: Int
             if let lineContentEnd {
                 // An ATX heading, a thematic break or a closing fence ends at its trimmed content extent, not the raw
                 // line.
-                end = lineContentEnd
+                storage.setSourceEnd(node, lineContentEnd)
             } else if kind.isCodeBlock || kind == .htmlBlock {
-                end = blockContentEnd
+                storage.setSourceEnd(node, blockContentEnd)
             } else if Self.isContainer(kind) {
                 // The end of the container's own marker, or of a removed paragraph's content, if that was later.
                 let ownEnd = storage.sourceRanges[node].end
-                end = storage[node].lastChild.map { max(ownEnd, storage.sourceRanges[$0].end) } ?? ownEnd
-            } else {
-                end = (endsOnCurrentLine || startedThisLine || kind == .document)
-                    ? currentLineSourceRange.upperBound
-                    : lastLineSourceEnd
+                storage.setSourceEnd(node, storage[node].lastChild.map { max(ownEnd, storage.sourceRanges[$0].end) } ?? ownEnd)
             }
-            storage.setSourceEnd(node, end)
         }
 
         switch kind {
