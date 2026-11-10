@@ -1120,7 +1120,7 @@ extension BlockParser {
     static let emDash = "\u{2014}"
     static let ellipsis = "\u{2026}"
 
-    private mutating func appendSmartConstant(_ s: String) {
+    private mutating func appendToArena(_ s: String) {
         for b in s.utf8 {
             storage.strings.append(b)
         }
@@ -1129,7 +1129,7 @@ extension BlockParser {
     /// Appends `s` to the arena, returning its chunk.
     private mutating func smartConstantChunk(_ s: String) -> Chunk {
         let offset = storage.strings.count
-        appendSmartConstant(s)
+        appendToArena(s)
         return arenaChunk(from: offset)
     }
 
@@ -1166,10 +1166,10 @@ extension BlockParser {
         }
         let offset = storage.strings.count
         for _ in 0..<emCount {
-            appendSmartConstant(Self.emDash)
+            appendToArena(Self.emDash)
         }
         for _ in 0..<enCount {
-            appendSmartConstant(Self.enDash)
+            appendToArena(Self.enDash)
         }
         let chunk = arenaChunk(from: offset)
         emitLiteral(.text, chunk, start: start, end: runEnd, to: parent, pendingTextStart: &pendingTextStart, content: content)
@@ -1872,9 +1872,7 @@ extension BlockParser {
     /// Appends `prefix` and the content bytes `start..<end` to the arena, returning their chunk.
     private mutating func materializeAutolinkURL(prefix: String, start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         let offset = storage.strings.count
-        for b in prefix.utf8 {
-            storage.strings.append(b)
-        }
+        appendToArena(prefix)
         for j in start..<end {
             storage.strings.append(content[j])
         }
