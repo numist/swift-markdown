@@ -12,7 +12,7 @@ import CommonMark
 import Testing
 
 /// An unquoted attribute value is nonempty, while a quoted one may be empty (Raw HTML), so only a tag whose values
-/// meet those rules is the complete open tag that start condition 7 needs (HTML blocks).
+/// meet those rules is the complete open tag that the type 7 start condition needs (HTML blocks).
 @Suite("Attribute values in a type 7 HTML block start tag")
 struct HTMLBlockType7AttributeValueTests {
 

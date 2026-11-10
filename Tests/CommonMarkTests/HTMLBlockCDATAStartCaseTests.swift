@@ -11,9 +11,9 @@
 import Testing
 import CommonMark
 
-/// HTML block start condition 5 (HTML blocks) is the string `<![CDATA[`, matched case-sensitively. `<![cdata[` and
-/// `<![CDAtA[` meet no start condition, since condition 4 needs an uppercase ASCII letter after `<!`, so they are
-/// paragraphs.
+/// The start condition of an HTML block of type 5 (HTML blocks) is the string `<![CDATA[`, matched case-sensitively.
+/// `<![cdata[` and `<![CDAtA[` meet no start condition, since type 4 needs an uppercase ASCII letter after `<!`, so
+/// they are paragraphs.
 @Suite("HTML block CDATA start condition case")
 struct HTMLBlockCDATAStartCaseTests {
 
@@ -66,7 +66,7 @@ struct HTMLBlockCDATAStartCaseTests {
             """)
     }
 
-    @Test("`<!DOCTYPE html>` meets start condition 4 and opens an HTML block")
+    @Test("`<!DOCTYPE html>` meets the type 4 start condition and opens an HTML block")
     func type4Declaration() {
         #expect(TreeDump.dump("<!DOCTYPE html>", options: []) == """
             document
@@ -75,7 +75,7 @@ struct HTMLBlockCDATAStartCaseTests {
             """)
     }
 
-    @Test("`<!Baz` meets start condition 4, which needs only an uppercase letter after `<!`")
+    @Test("`<!Baz` meets the type 4 start condition, which needs only an uppercase letter after `<!`")
     func type4FirstLetterOnly() {
         #expect(TreeDump.dump("<!Baz", options: []) == """
             document
