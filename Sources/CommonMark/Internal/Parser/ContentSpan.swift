@@ -182,8 +182,8 @@ internal struct ContentSpan: ~Escapable {
     /// The piece is cached in `pieceHint`, since a scan reads a line's bytes one after another, with the content it
     /// belongs to, so a content never takes another's piece for its own.
     private func sourcePiece(covering offset: Int) -> (range: Range<Int>, shift: Int)? {
-        if let hint = pieceHint, hint.lineOwner == multiIdentity, hint.line.contains(offset) {
-            return (hint.line, hint.lineShift)
+        if let hint = pieceHint, hint.sourcePieceOwner == multiIdentity, hint.sourcePiece.contains(offset) {
+            return (hint.sourcePiece, hint.sourcePieceShift)
         }
         let i = pieceIndex(covering: offset)
         precondition(i < pieces.count, "content is read only at offsets inside it")
@@ -194,9 +194,9 @@ internal struct ContentSpan: ~Escapable {
         let range = pieceStart(i)..<pieceEnds[i]
         let shift = seg.offset - range.lowerBound
         if let hint = pieceHint {
-            hint.lineOwner = multiIdentity
-            hint.line = range
-            hint.lineShift = shift
+            hint.sourcePieceOwner = multiIdentity
+            hint.sourcePiece = range
+            hint.sourcePieceShift = shift
         }
         return (range, shift)
     }
@@ -345,7 +345,7 @@ internal struct ContentSpan: ~Escapable {
     }
 }
 
-/// The index of the piece a `ContentSpan` offset lookup last found, held by reference so that lookups through a borrowed `ContentSpan` update it.
+/// The piece a `ContentSpan` offset lookup last found, and the source piece a multi-segment content last read, held by reference so that lookups through a borrowed `ContentSpan` update them.
 ///
 /// One is shared by every `ContentSpan` of a parse. An index left by another content is still a valid hint, since a lookup bounds-checks it and only starts its search there.
 internal final class PieceHint {
@@ -354,10 +354,10 @@ internal final class PieceHint {
     /// How many multi-segment contents have been made with this hint.
     var multiSegmentContentsMade = 0
 
-    /// The `multiIdentity` of the multi-segment content whose source piece `line` is.
-    var lineOwner = 0
+    /// The `multiIdentity` of the multi-segment content whose source piece `sourcePiece` is.
+    var sourcePieceOwner = 0
 
     /// That content's source piece that a lookup last found: its virtual range, and the distance from its offsets to their source offsets.
-    var line: Range<Int> = 0..<0
-    var lineShift = 0
+    var sourcePiece: Range<Int> = 0..<0
+    var sourcePieceShift = 0
 }
