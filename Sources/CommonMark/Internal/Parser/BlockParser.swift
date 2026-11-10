@@ -517,7 +517,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func addChild(kind: MarkdownNode.Kind, parent: DocumentStorage.Index, data: NodeData? = nil, start: Int) -> DocumentStorage.Index {
         let idx = storage.appendNode(NodeRecord(kind: kind, parent: parent, data: data))
         openBlocksVersion &+= 1
-        if itemsEndingInRemovedParagraph.removeValue(forKey: parent) == true {
+        if !itemsEndingInRemovedParagraph.isEmpty, itemsEndingInRemovedParagraph.removeValue(forKey: parent) == true {
             itemsWithBlankLineAroundRemovedParagraph.insert(parent)
         }
         storage.appendChild(idx, to: parent)
