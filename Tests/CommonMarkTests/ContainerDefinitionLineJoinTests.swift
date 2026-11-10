@@ -18,7 +18,7 @@ import CommonMark
 struct ContainerDefinitionLineJoinTests {
 
     @Test("a label, the whitespace before a destination, and a title each span a line ending")
-    func constructsContinueOntoNextLine() {
+    func labelWhitespaceAndTitleSpanLineEnding() {
         #expect(TreeDump.dump("> [a\n> b]: /u\n> [c]:\n> /v\n> 'T\n> t'\n> [a b] [c]", options: [.sourcePosition], sourceRanges: true) == """
             document @1:1-7:12
               block_quote @1:1-7:12
