@@ -3344,15 +3344,15 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func parseDefinitions(in chunk: Chunk) -> Chunk {
         let end = chunk.offset + chunk.length
         let rest: Int
-        if chunk.inSource {
+        if chunk.isEmpty || !Self.mayBeginDefinition(readByte(at: chunk.offset, in: chunk)) {
+            rest = chunk.offset
+        } else if chunk.inSource {
             rest = definitionsEnd(in: ContentSpan(span: sourceBytes.extracting(chunk.range), base: chunk.offset, inSource: true), from: chunk.offset)
-        } else if !chunk.isEmpty && Self.mayBeginDefinition(readByte(at: chunk.offset, in: chunk)) {
+        } else {
             // Arena content is read from a copy, since registering a definition can grow the arena.
             var bytes = UniqueArray<UInt8>()
             bytes.append(copying: storage.strings.span.extracting(chunk.range))
             rest = definitionsEnd(in: ContentSpan(span: bytes.span, base: chunk.offset, inSource: false), from: chunk.offset)
-        } else {
-            rest = chunk.offset
         }
         return Chunk(offset: rest, length: end - rest, inSource: chunk.inSource)
     }
