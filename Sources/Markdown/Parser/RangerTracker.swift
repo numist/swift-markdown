@@ -8,8 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// A structure to automate incrementing child identifiers while
-/// adding their source ranges during parsing.
+/// Collects the narrowest range that covers the source ranges added during parsing.
 struct RangeTracker {
     /// The narrowest range that covers all ranges seen so far.
     private(set) var totalRange: SourceRange
@@ -21,10 +20,10 @@ struct RangeTracker {
         self.totalRange = totalRange
     }
 
-    /// Add a source range and increment the next child identifier.
+    /// Widen ``totalRange`` to cover `range`.
     ///
-    /// - parameter range: An optional ``SourceRange``. This may be `nil` for
-    ///   elements that have no source range.
+    /// - parameter range: An optional ``SourceRange``. This is `nil` for
+    ///   elements that have no source range, such as soft and hard line breaks.
     mutating func add(_ range: SourceRange?) {
         if let range = range {
             totalRange.widen(toFit: range)
