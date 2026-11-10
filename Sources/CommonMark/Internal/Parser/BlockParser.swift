@@ -2711,8 +2711,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             isClosing = true
             nameStart = after + 1
         }
-        // The tag scanners read this copy, not `sourceBytes`: capturing the parser costs 2% to 3.5% of the instructions
-        // of a parse of `Benchmarks/100kb-test-content.md`.
+        // The tag scanners read this copy, not `sourceBytes`: capturing the parser costs about 1.5% of the instructions
+        // of a parse of 5,000 type 7 HTML block openers `<span class="cN" id=x>`, each followed by a paragraph holding
+        // inline tags.
         let bytes = sourceBytes
         guard let nameEnd = htmlTagNameEnd(from: nameStart, end: range.upperBound, byte: { bytes[$0] }) else {
             return nil
