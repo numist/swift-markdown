@@ -61,7 +61,6 @@ internal struct BacktickRunsSeen {
     }
 }
 
-/// Inline-level Markdown parsing functions.
 extension BlockParser {
 
     /// Parses `content` into inline children of `parent`.
@@ -171,7 +170,6 @@ extension BlockParser {
                 cursor = handleGFMAutolinkTrigger(byte, at: cursor, content: content, parent: parent, pendingTextStart: &pendingTextStart)
 
             case UInt8(ascii: "'"), UInt8(ascii: "\""):
-                // `processEmphasis` resolves quote delimiters to curly quotes.
                 if smartEnabled {
                     cursor = handleQuoteDelim(
                         char: byte,
@@ -204,7 +202,6 @@ extension BlockParser {
                 }
 
             default:
-                // Skip plain text to the next significant byte; the skipped run stays pending.
                 cursor = content.nextSignificant(
                     from: cursor,
                     strikethrough: strikethroughEnabled,
@@ -335,7 +332,6 @@ extension BlockParser {
             start: cursor,
             content: content
         ) {
-            // A tag spanning a line ending in multi-segment content is materialized; otherwise the literal is zero-copy.
             emitLiteral(
                 .htmlInline,
                 materializedChunk(start: cursor, end: htmlEnd, content: content),
@@ -389,7 +385,6 @@ extension BlockParser {
         if cursor + 1 < content.endOffset {
             let next = content[cursor + 1]
             if next.isASCIIPunct {
-                // The node's content is the escaped character, but its source range starts at the backslash.
                 emitLiteral(
                     .text,
                     content.chunk(offset: cursor + 1, length: 1),
@@ -442,7 +437,6 @@ extension BlockParser {
               content[cursor + 2] == UInt8(ascii: ".") else {
             return cursor + 1
         }
-        // The ellipsis is arena-backed, but its source range is the three dots.
         emitLiteral(
             .text,
             smartConstantChunk(Self.ellipsis),
@@ -559,7 +553,6 @@ extension BlockParser {
             }
             return formed.end
         }
-        // Failing a link or image form, a `[^label]` naming a footnote definition is a footnote reference.
         if openerKind != .attribute, emitFootnoteReferenceIfDefined(openerIdx: openerIdx, bracketStart: openerKind == .image ? openerStart + 1 : openerStart, closeBracket: cursor, content: content) {
             return afterBracket
         }
@@ -649,7 +642,6 @@ extension BlockParser {
         guard let label = matchLinkLabel(from: pos, end: end, in: content) else {
             return nil
         }
-        // A collapsed `[]` has no label to normalize.
         return (label.interior.isEmpty ? "" : normalizeLabel(virtualRange: label.interior, in: content), label.afterEnd)
     }
 
@@ -718,7 +710,6 @@ extension BlockParser {
         guard case .footnoteDefinition(let defLabel) = storage[defIdx].data else {
             preconditionFailure("footnoteMap holds only footnote definitions")
         }
-        // The inner `^label` nodes go; a reference is rendered from its label and index.
         var sib = storage[openerInl].next
         while let sib_ = sib {
             let nextSib = storage[sib_].next
@@ -1014,7 +1005,6 @@ extension BlockParser {
                 }
             }
         }
-        // Free remaining delimiters above stackBottom.
         while let last = lastDelim, last > stackBottom {
             removeDelim(last)
         }
@@ -1192,7 +1182,6 @@ extension BlockParser {
             appendSmartConstant(Self.enDash)
         }
         let chunk = arenaChunk(from: offset)
-        // The dashes are arena-backed, but their source range is the hyphen run.
         emitLiteral(.text, chunk, start: start, end: runEnd, to: parent, pendingTextStart: &pendingTextStart, content: content)
         return runEnd
     }
@@ -1214,7 +1203,6 @@ extension BlockParser {
         } else {
             literal = canClose ? Self.rightDoubleQuote : Self.leftDoubleQuote
         }
-        // The curly quote is arena-backed, but its source range is the straight quote.
         let textIdx = emitLiteral(.text, smartConstantChunk(literal), start: start, end: runEnd, to: parent, pendingTextStart: &pendingTextStart, content: content)
         if canOpen || canClose {
             // A length of 3 makes the multiple-of-3 test always admit a quote pairing.
@@ -1247,9 +1235,9 @@ extension BlockParser {
     // MARK: - Code spans
 
     private struct CodeSpanMatch {
-        var content: Chunk      // the code span's content (Code spans)
+        var content: Chunk
         var afterClose: Int     // offset just past the closing backtick run
-        var backtickCount: Int  // number of backticks in the opening/closing run
+        var backtickCount: Int
     }
 
     /// Matches a code span at the backtick run at `start`, or `nil` if no closing run of equal length follows.
@@ -1262,7 +1250,6 @@ extension BlockParser {
             return nil
         }
 
-        // Find a matching same-length backtick run after `openEnd`.
         var i = openEnd
         while i < end {
             let b = content[i]
@@ -1354,13 +1341,12 @@ extension BlockParser {
 
     private struct LineBreakInfo {
         var isHard: Bool
-        var textEnd: Int  // exclusive end of the pending-text region (excludes the marker bytes)
+        var textEnd: Int
     }
 
     /// Classifies the line ending at `newlineOffset` as a soft or hard line break (Hard line breaks), with where the
     /// pending text ends, before any backslash or trailing spaces.
     private func classifyLineBreak(at newlineOffset: Int, pendingTextStart: Int, content: borrowing ContentSpan) -> LineBreakInfo {
-        // Backslash hard break.
         if newlineOffset > pendingTextStart {
             let prev = content[newlineOffset - 1]
             if prev == UInt8(ascii: "\\") {
@@ -1461,7 +1447,6 @@ extension BlockParser {
         let end = content.endOffset
         var i = start + 1
         let bodyStart = i
-        // Local part: 1+ local-allowed chars, no `@`.
         var localChars = 0
         while i < end {
             let b = content[i]
@@ -1549,7 +1534,6 @@ extension BlockParser {
             : textChunk
         let urlRef = storage.intern(urlChunk)
         let textRef = storage.intern(textChunk)
-        // The link spans the whole `<…>`; the text child spans just the interior visible bytes.
         let linkIdx = appendInline(.link, .link(url: urlRef, title: .empty), to: parent, start: auto.interior.lowerBound - 1, end: auto.afterClose, content: content)
         appendInline(.text, .literal(textRef), to: linkIdx, start: auto.interior.lowerBound, end: auto.interior.upperBound, content: content)
     }
@@ -2308,7 +2292,6 @@ extension BlockParser {
                 storage.setSourceEnd(tailIdx, max(nodeEnd, email.end))
             }
 
-            // Drop an empty run before the address.
             if beforeRef.totalLength == 0 {
                 storage.unlinkChild(current)
             }
