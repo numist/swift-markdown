@@ -116,6 +116,12 @@ struct EscapedCaretImageTrailingWhitespaceTests {
                 text "![^a]"
 
             """),
+        ("![\\^a]\n===", """
+            document
+              heading 1
+                text "![^a]"
+
+            """),
         ("x\n![\\^a] \n===", """
             document
               heading 1

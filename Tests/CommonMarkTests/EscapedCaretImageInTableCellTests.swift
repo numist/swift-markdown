@@ -12,7 +12,7 @@ import CommonMark
 import Testing
 
 /// An escaped-caret image `![\^…]` in or next to a table (Tables (extension)).
-@Suite("Escaped-caret image in a table cell")
+@Suite("Escaped-caret image in or next to a table")
 struct EscapedCaretImageInTableCellTests {
     private static let options: MarkdownDocument.ParseOptions = [
         .tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink, .footnotes,
@@ -168,12 +168,6 @@ struct EscapedCaretImageInTableCellTests {
                 table_header
                   table_cell align=none colspan=1 rowspan=1
                     text "o"
-
-            """),
-        ("![\\^a]\n===", """
-            document
-              heading 1
-                text "![^a]"
 
             """),
         ("> x ![\\^a]\n> o\n> |-", """
