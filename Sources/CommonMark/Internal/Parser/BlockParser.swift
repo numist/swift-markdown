@@ -404,19 +404,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     }
                     storage.strings.append(UInt8(ascii: "\n"))
                     if positionsEnabled {
-                        Self.appendContentByte(imaging: j, to: &runs)
+                        Self.appendContentBytes(1, imaging: j, to: &runs)
                     }
                 } else if byte == 0 {
                     appendReplacementCharacter()
                     if positionsEnabled {
                         for _ in 0..<3 {
-                            Self.appendContentByte(imaging: j, to: &runs)
+                            Self.appendContentBytes(1, imaging: j, to: &runs)
                         }
                     }
                 } else {
                     storage.strings.append(byte)
                     if positionsEnabled {
-                        Self.appendContentByte(imaging: j, to: &runs)
+                        Self.appendContentBytes(1, imaging: j, to: &runs)
                     }
                 }
                 j += 1
@@ -474,20 +474,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         offset > 0 && sourceBytes[offset] == UInt8(ascii: "\n") && sourceBytes[offset - 1] == UInt8(ascii: "\r") ? offset - 1 : offset
     }
 
-    /// Extends a run map by one byte imaging `sourceOffset`, or by a line-join byte when `sourceOffset < 0`.
+    /// Extends a run map by `count` bytes imaging the source from `sourceOffset`, or by `count` line-join bytes when
+    /// `sourceOffset < 0`.
     @inline(__always)
-    fileprivate static func appendContentByte(imaging sourceOffset: Int, to runs: inout [ArenaRun]) {
+    fileprivate static func appendContentBytes(_ count: Int, imaging sourceOffset: Int, to runs: inout [ArenaRun]) {
         if let last = runs.last {
             let length = last.length
             let continuesGap = sourceOffset < 0 && last.sourceOffset < 0
             let continuesRun = sourceOffset >= 0 && last.sourceOffset >= 0
                 && last.sourceOffset + length == sourceOffset
             if continuesGap || continuesRun {
-                runs[runs.count - 1].length += 1
+                runs[runs.count - 1].length += count
                 return
             }
         }
-        runs.append(ArenaRun(length: 1, sourceOffset: sourceOffset))
+        runs.append(ArenaRun(length: count, sourceOffset: sourceOffset))
     }
 
     /// Merges a leaf's adjacent text nodes, then finds extended email autolinks. `image` maps the leaf's content to the source when it is one arena chunk.
@@ -729,7 +730,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             for local in 0..<run.length {
                 let sourceOffset = run.sourceOffset < 0 ? -1 : run.sourceOffset + local
                 for _ in 0..<copies(i) {
-                    Self.appendContentByte(imaging: sourceOffset, to: &rewritten)
+                    Self.appendContentBytes(1, imaging: sourceOffset, to: &rewritten)
                 }
                 i += 1
             }
@@ -861,27 +862,24 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let span = precedingChunk.isEmpty ? Chunk(offset: precedingLines.offset, length: 0, inSource: true) : precedingChunk
             storage.setSourceStart(preceding, span.offset)
             storage.setSourceEnd(preceding, span.offset + span.length)
-            enqueueTablePrecedingContent(precedingChunk, map: [], of: preceding)
+            var map: [ArenaRun] = []
+            let nulReplaced = replacingNUL(precedingChunk, map: &map)
+            enqueueTablePrecedingContent(nulReplaced, map: map, of: preceding)
         }
         storage.setSourceStart(node, headerRange.lowerBound)
         return PendingLeaf(node: node, content: .lazy(range: headerRange))
     }
 
-    /// Queues a table-preceding paragraph's content for inline parsing with NUL replaced, and registers its run map
-    /// `map`, which is empty for source content.
+    /// Queues a table-preceding paragraph's content, its NULs replaced, for inline parsing, and registers the run map
+    /// `map` of arena content.
     private mutating func enqueueTablePrecedingContent(_ content: Chunk, map: [ArenaRun], of node: DocumentStorage.Index) {
         if content.isEmpty {
             return
         }
-        var map = map
-        let nulReplaced = replacingNUL(content, map: &map)
-        if positionsEnabled, !nulReplaced.inSource {
-            let image = sourceImage(of: nulReplaced, map: map)
-            if !image.isEmpty {
-                arenaSourceMaps[node] = image
-            }
+        if positionsEnabled, !content.inSource {
+            arenaSourceMaps[node] = map
         }
-        pendingInlines.append((node, storage.intern(nulReplaced)))
+        pendingInlines.append((node, storage.intern(content)))
     }
 
     private mutating func insertTablePrecedingParagraph(before node: DocumentStorage.Index) -> DocumentStorage.Index {
@@ -909,7 +907,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // the U+FFFD (see `ContentSpan`).
         if segmentsContainNUL(segs) {
             var map: [ArenaRun] = []
-            let flat = flattenSegments(segs, map: &map)
+            let flat = flattenReplacingNUL(segs, map: &map)
             if let content = tableSplitParagraphContent(flat.trimmingWhitespace(using: self), node: precedingNode) {
                 let contentMap = positionsEnabled ? Self.sliceRuns(map, from: content.offset - flat.offset, length: content.length) : []
                 if positionsEnabled, !content.isEmpty {
@@ -1922,9 +1920,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 // so a NUL forces a flatten with each NUL replaced with U+FFFD.
                 if segmentsContainNUL(segs) {
                     var map: [ArenaRun] = []
-                    let flat = flattenSegments(segs, map: &map)
-                    let replaced = replacingNUL(flat, map: &map)
-                    return LeafDrainResult(content: .chunk(replaced), map: map)
+                    let flat = flattenReplacingNUL(segs, map: &map)
+                    return LeafDrainResult(content: .chunk(flat), map: map)
                 }
                 return LeafDrainResult(content: .segments(segs))
             case .lazy(let range, let joinPending):
@@ -2041,31 +2038,45 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         pendingInlines.append((node, storage.intern(content)))
     }
 
-    /// Flattens a segment list into one arena chunk, recording its run map in `map`: a source segment images its range, and a line join is a gap. The map tiles the content from its first byte, so it survives a later copy of the content.
-    private mutating func flattenSegments(_ segs: borrowing UniqueArray<Segment>, map: inout [ArenaRun]) -> Chunk {
-        let total = totalLength(of: segs)
-        // Arena segments are read through a span of the arena, which can't be borrowed while the arena grows, so the
-        // content is assembled apart and then appended.
-        var buf = UniqueArray<UInt8>(minimumCapacity: total)
+    /// Flattens a paragraph's segment list into one arena chunk with each NUL replaced with U+FFFD (Insecure characters).
+    /// With `.sourcePosition`, records its run map in `map`: a source segment images its range, each of a U+FFFD's three
+    /// bytes images its NUL, and a line join is a gap. The map tiles the content from its first byte, so it survives a
+    /// later copy of the content.
+    private mutating func flattenReplacingNUL(_ segs: borrowing UniqueArray<Segment>, map: inout [ArenaRun]) -> Chunk {
         let offset = storage.strings.count
         for i in 0..<segs.count {
             let seg = segs[i]
-            let len = seg.length
-            if seg.inSource {
-                buf.append(copying: sourceBytes.extracting(seg.chunk.range))
-            } else {
-                buf.append(copying: storage.strings.span.extracting(seg.chunk.range))
-            }
-            if len > 0 {
-                if seg.inSource {
-                    map.append(ArenaRun(length: len, sourceOffset: seg.offset))
-                } else {
-                    map.append(ArenaRun(length: len, sourceOffset: -1))
+            guard seg.inSource else {
+                // A line join, read a byte at a time, since the arena can't be read through a span while it grows.
+                for k in seg.chunk.range {
+                    storage.strings.append(storage.strings[k])
                 }
+                if positionsEnabled {
+                    Self.appendContentBytes(seg.length, imaging: -1, to: &map)
+                }
+                continue
+            }
+            var start = seg.offset
+            let end = seg.offset + seg.length
+            while start < end {
+                let nul = start + Self.firstNUL(in: sourceBytes.extracting(start..<end))
+                storage.strings.append(copying: sourceBytes.extracting(start..<nul))
+                if positionsEnabled, nul > start {
+                    Self.appendContentBytes(nul - start, imaging: start, to: &map)
+                }
+                guard nul < end else {
+                    break
+                }
+                appendReplacementCharacter()
+                if positionsEnabled {
+                    for _ in 0..<3 {
+                        Self.appendContentBytes(1, imaging: nul, to: &map)
+                    }
+                }
+                start = nul + 1
             }
         }
-        storage.strings.append(copying: buf.span)
-        return Chunk(offset: offset, length: total, inSource: false)
+        return arenaChunk(from: offset)
     }
 
     /// Narrows a run map to `[start, start + length)` of its content, rebased to start at 0.
@@ -3446,8 +3457,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         guard let afterAll else {
             return nil
         }
-        // `normalizeLabel` replaces a NUL itself (Insecure characters), so the key matches a reference's even
-        // in content `drainLeaf` hasn't NUL-replaced yet (the setext underline path).
+        // `normalizeLabel` replaces a NUL itself (Insecure characters), so the key matches a reference's even in
+        // content not yet NUL-replaced: a setext heading's lines, or the lines a table's header row splits off a
+        // paragraph contiguous in the source.
         let key = normalizeLabel(virtualRange: label, in: content)
         if key.isEmpty {
             return nil
