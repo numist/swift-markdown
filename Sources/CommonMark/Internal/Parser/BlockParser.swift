@@ -2935,8 +2935,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return (i, 0)
     }
 
-    /// The columns a line's bytes reach (Tabs), counting every byte, container markers included, and advancing from the
-    /// previous answer; queries never move back.
+    /// The columns a line's characters reach (Tabs), counting every character, container markers included, and advancing
+    /// from the previous answer; queries never move back.
     ///
     /// The prefix walk and block dispatch place each container marker by its column, and measuring each from the line
     /// start would make a line of `n` nested markers cost `n` squared.
@@ -2952,7 +2952,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         mutating func column(at target: Int, in source: Span<UInt8>) -> Int {
             precondition(target >= offset, "a line's column queries never move back")
             while offset < target {
-                column += source[offset] == UInt8(ascii: "\t") ? 4 - (column & 3) : 1
+                let byte = source[offset]
+                if byte == UInt8(ascii: "\t") {
+                    column += 4 - (column & 3)
+                } else if byte & 0xC0 != 0x80 {
+                    // A UTF-8 continuation byte belongs to the character before it.
+                    column += 1
+                }
                 offset += 1
             }
             return column
