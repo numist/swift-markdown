@@ -19,7 +19,7 @@ struct DefinitionOnlyParagraphUnderlineTests {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)
     }
 
-    /// An empty list item cannot interrupt a paragraph (spec "List items"), so `-` continues the
+    /// An empty list item cannot interrupt a paragraph (List items), so `-` continues the
     /// paragraph.
     @Test func loneDashIsParagraphText() {
         #expect(tree("[o]:o\n-") == """
@@ -57,7 +57,7 @@ struct DefinitionOnlyParagraphUnderlineTests {
             """)
     }
 
-    /// A thematic break can interrupt a paragraph (spec "Thematic breaks").
+    /// A thematic break can interrupt a paragraph (Thematic breaks).
     @Test func thematicBreakInterrupts() {
         #expect(tree("[o]:o\n---") == """
             Document @1:1-2:4

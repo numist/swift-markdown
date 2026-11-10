@@ -53,7 +53,7 @@ class SetextHeadingContinuationIndentTests: XCTestCase {
     }
 
     /// `[ ] [a]:u` does not begin with a link reference definition, so it is heading text, and a heading is
-    /// not the paragraph a task list item must begin with (spec "Task list items (extension)").
+    /// not the paragraph a task list item must begin with (Task list items (extension)).
     func testTaskCheckboxThenRefDef() {
         XCTAssertEqual(
             "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 1\n         ├─ Text \"[ ] [a]:u\"\n         ├─ SoftBreak\n         └─ Text \"b\"",
@@ -70,7 +70,7 @@ class SetextHeadingContinuationIndentTests: XCTestCase {
             tree(">a\n b\n>=\n"))
     }
 
-    /// A heading is not the paragraph a task list item must begin with (spec "Task list items (extension)").
+    /// A heading is not the paragraph a task list item must begin with (Task list items (extension)).
     func testTaskCheckboxGap() {
         XCTAssertEqual(
             "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 1\n         └─ Text \"[ ]  \tb\"",

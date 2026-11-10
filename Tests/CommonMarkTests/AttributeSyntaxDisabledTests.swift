@@ -552,7 +552,7 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// A footnote definition's label may not hold an unescaped `[`, as a link label may not (spec "Links"), so
+    /// A footnote definition's label may not hold an unescaped `[`, as a link label may not (Links), so
     /// `[^[]: note` is paragraph text and `[^[]]` matches no definition.
     @Test("a footnote-shaped bracket holding `^[` doesn't resolve to a `[` definition")
     func caretBracketDoesNotResolveToBracketDefinition() {
