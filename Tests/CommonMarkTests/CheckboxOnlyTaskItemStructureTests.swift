@@ -20,10 +20,10 @@ import CommonMark
 /// list items (extension)); the marker becomes the checkbox, and a paragraph left with no content is
 /// removed.
 @Suite("Checkbox-only task list item block structure")
-struct EmptyTaskItemStructureTests {
+struct CheckboxOnlyTaskItemStructureTests {
 
     @Test("a checkbox-only task list item line is continued by a lazy continuation line")
-    func emptyTaskItemLineContinuedLazily() {
+    func checkboxOnlyTaskItemLineContinuedLazily() {
         #expect(TreeDump.dump("- [ ] \nx", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
             document @1:1-2:2
               list bullet '-' tight @1:1-2:2
@@ -35,7 +35,7 @@ struct EmptyTaskItemStructureTests {
     }
 
     @Test("a checkbox-only task list item followed by a blank line then text")
-    func emptyTaskItemBeforeBlankThenText() {
+    func checkboxOnlyTaskItemBeforeBlankThenText() {
         #expect(TreeDump.dump("- [ ] \n\nx", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
             document @1:1-3:2
               list bullet '-' tight @1:1-1:6
@@ -47,7 +47,7 @@ struct EmptyTaskItemStructureTests {
     }
 
     @Test("a checkbox-only task list item as the last line")
-    func emptyTaskItemAtEOF() {
+    func checkboxOnlyTaskItemAtEOF() {
         #expect(TreeDump.dump("- [ ] ", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
             document @1:1-1:7
               list bullet '-' tight @1:1-1:6
@@ -57,7 +57,7 @@ struct EmptyTaskItemStructureTests {
     }
 
     @Test("a checkbox-only task list item followed by an indented line continues the item")
-    func emptyTaskItemContinuesOnIndentedLine() {
+    func checkboxOnlyTaskItemContinuesOnIndentedLine() {
         #expect(TreeDump.dump("- [ ] \n  x", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
             document @1:1-2:4
               list bullet '-' tight @1:1-2:4
@@ -69,7 +69,7 @@ struct EmptyTaskItemStructureTests {
     }
 
     @Test("checked checkbox-only task list item line with a tab separator")
-    func emptyCheckedTaskItemTabSeparator() {
+    func checkedCheckboxOnlyTaskItemTabSeparator() {
         #expect(TreeDump.dump("- [x]\t\nx", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
             document @1:1-2:2
               list bullet '-' tight @1:1-2:2
@@ -81,7 +81,7 @@ struct EmptyTaskItemStructureTests {
     }
 
     @Test("a checkbox-only item in a block quote is a task list item")
-    func blockQuotedEmptyCheckboxIsRecognized() {
+    func blockQuotedCheckboxOnlyItemIsRecognized() {
         #expect(TreeDump.dump("> - [ ] ", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
             document @1:1-1:9
               block_quote @1:1-1:8
@@ -92,7 +92,7 @@ struct EmptyTaskItemStructureTests {
     }
 
     @Test("a nested checkbox-only item on the outer item's first line is a task list item")
-    func nestedEmptyCheckboxIsRecognized() {
+    func nestedCheckboxOnlyItemIsRecognized() {
         #expect(TreeDump.dump("- - [ ] ", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
             document @1:1-1:9
               list bullet '-' tight @1:1-1:8
