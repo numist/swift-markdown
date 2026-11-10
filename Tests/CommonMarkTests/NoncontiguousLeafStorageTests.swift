@@ -21,12 +21,12 @@ struct NoncontiguousLeafStorageTests {
 
     private static let options: MarkdownDocument.ParseOptions = [.tasklist, .attributes, .sourcePosition]
 
-    private func materializedSize(_ source: String) -> Int {
-        MarkdownDocument.withParsedDocument(source, options: Self.options) { $0._materializedStringSize }
+    private func materializedSize(_ source: String, options: MarkdownDocument.ParseOptions = Self.options) -> Int {
+        MarkdownDocument.withParsedDocument(source, options: options) { $0._materializedStringSize }
     }
 
-    private func tree(_ source: String) -> String {
-        TreeDump.dump(source, options: Self.options, sourceRanges: true)
+    private func tree(_ source: String, options: MarkdownDocument.ParseOptions = Self.options) -> String {
+        TreeDump.dump(source, options: options, sourceRanges: true)
     }
 
     @Test("the empty document holds the line ending")
@@ -253,7 +253,7 @@ struct NoncontiguousLeafStorageTests {
             """),
     ])
     func linesBeforeTableHeader(_ source: String, _ expected: String) {
-        #expect(MarkdownDocument.withParsedDocument(source, options: Self.tableOptions) { $0._materializedStringSize } == 1)
-        #expect(TreeDump.dump(source, options: Self.tableOptions, sourceRanges: true) == expected)
+        #expect(materializedSize(source, options: Self.tableOptions) == 1)
+        #expect(tree(source, options: Self.tableOptions) == expected)
     }
 }
