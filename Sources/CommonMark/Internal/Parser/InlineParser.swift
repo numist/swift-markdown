@@ -1631,10 +1631,8 @@ extension BlockParser {
         if start + openerLength > end {
             return nil
         }
-        for (k, openerByte) in opener.utf8.enumerated() {
-            if content[start + k] != openerByte {
-                return nil
-            }
+        if !bytesEqual(at: start, target: opener, content: content) {
+            return nil
         }
         return scanRawHTMLCloser(closer, from: start + openerLength, content: content, misses: &misses)
     }
@@ -1652,14 +1650,7 @@ extension BlockParser {
         let width = closer.utf8.count
         var i = start
         while i + width <= end {
-            var matched = 0
-            for closerByte in closer.utf8 {
-                if content[i + matched] != closerByte {
-                    break
-                }
-                matched += 1
-            }
-            if matched == width {
+            if bytesEqual(at: i, target: closer, content: content) {
                 return i + width
             }
             i += 1
@@ -1726,15 +1717,15 @@ extension BlockParser {
     private mutating func matchSchemeBackward(colon: Int, content: borrowing ContentSpan) -> Int? {
         let contentStart = content.startOffset
         if colon - 5 >= contentStart,
-           bytesEqual(at: colon - 5, target: "https", content: content, ignoringASCIICase: true) {
+           Self.bytesEqual(at: colon - 5, target: "https", content: content, ignoringASCIICase: true) {
             return colon - 5
         }
         if colon - 4 >= contentStart,
-           bytesEqual(at: colon - 4, target: "http", content: content, ignoringASCIICase: true) {
+           Self.bytesEqual(at: colon - 4, target: "http", content: content, ignoringASCIICase: true) {
             return colon - 4
         }
         if colon - 3 >= contentStart,
-           bytesEqual(at: colon - 3, target: "ftp", content: content, ignoringASCIICase: true) {
+           Self.bytesEqual(at: colon - 3, target: "ftp", content: content, ignoringASCIICase: true) {
             return colon - 3
         }
         return nil
@@ -1753,7 +1744,7 @@ extension BlockParser {
         if start + 4 > end {
             return nil
         }
-        if !bytesEqual(at: start, target: "www.", content: content) {
+        if !Self.bytesEqual(at: start, target: "www.", content: content) {
             return nil
         }
         guard domainAccepted(base: start, requirePeriod: true, content: content) else {
@@ -1776,7 +1767,7 @@ extension BlockParser {
         if schemeStart < localBound {
             return nil
         }
-        for (k, schemeByte) in scheme.utf8.enumerated() where content[schemeStart + k] != schemeByte {
+        if !Self.bytesEqual(at: schemeStart, target: scheme, content: content) {
             return nil
         }
         if schemeStart == localBound {
@@ -2026,7 +2017,7 @@ extension BlockParser {
     }
 
     /// Whether `target` is at `start`, ignoring ASCII case if `ignoringASCIICase`.
-    private func bytesEqual(at start: Int, target: String, content: borrowing ContentSpan, ignoringASCIICase: Bool = false) -> Bool {
+    private static func bytesEqual(at start: Int, target: String, content: borrowing ContentSpan, ignoringASCIICase: Bool = false) -> Bool {
         let mask: UInt8 = ignoringASCIICase ? 0x20 : 0
         for (k, targetByte) in target.utf8.enumerated() {
             if (content[start + k] | mask) != (targetByte | mask) {
