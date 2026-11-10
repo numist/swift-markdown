@@ -1412,7 +1412,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Whether the line starts a block that ends the open paragraph.
     ///
     /// `interruptsParagraph` is `false` when only a container shallower than the paragraph's matched, so a list marker starts a sibling item.
-    private func lineStartsNewBlock(range: Range<Int>, firstNonSpace: Int, indent: Int, baseColumn: Int, interruptsParagraph: Bool) -> Bool {
+    // `mutating` though it only reads: as a non-mutating method it copied the whole parser before each matcher call,
+    // which cost 3% of a prose parse's instructions and 6% to 9% of a paragraph of link reference definitions'.
+    private mutating func lineStartsNewBlock(range: Range<Int>, firstNonSpace: Int, indent: Int, baseColumn: Int, interruptsParagraph: Bool) -> Bool {
         // A line indented four or more columns starts no block that interrupts a paragraph.
         if indent >= 4 {
             return false
