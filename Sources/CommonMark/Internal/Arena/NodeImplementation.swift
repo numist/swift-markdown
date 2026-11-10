@@ -42,12 +42,16 @@ internal struct NodeLink {
     private var index: Int
 
     internal init(wrappedValue: DocumentStorage.Index?) {
+        assert((wrappedValue ?? 0) >= 0, "a node index is never negative")
         index = wrappedValue ?? -1
     }
 
     internal var wrappedValue: DocumentStorage.Index? {
         get { index < 0 ? nil : index }
-        set { index = newValue ?? -1 }
+        set {
+            assert((newValue ?? 0) >= 0, "a node index is never negative")
+            index = newValue ?? -1
+        }
     }
 }
 
