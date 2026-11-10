@@ -11,18 +11,19 @@
 import CommonMark
 import Testing
 
-/// The lines before a table's header row form an ordinary paragraph (Paragraphs), so a `\|` in them is a backslash
-/// escape (Backslash escapes) rather than a cell's escaped pipe (Tables (extension)).
+/// When a table interrupts a paragraph, the lines before the header row form an ordinary paragraph (Paragraphs).
+/// Only a cell's content unescapes `\|` (Tables (extension)), so in those lines a `\|` is a backslash escape (Backslash
+/// escapes) and a code span keeps its backslash escapes literal (Code spans).
 @Suite("Escaped pipe in the paragraph before a table")
 struct TablePrecedingParagraphPipeEscapeTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .sourcePosition]
 
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: Self.options, sourceRanges: true)
     }
 
     @Test func backslashBeforePipeInCodeSpanIsLiteral() {
-        #expect(surface("`a\\|b`\n| a |\n|-|") == """
+        #expect(tree("`a\\|b`\n| a |\n|-|") == """
             document @1:1-3:4
               paragraph @1:1-1:7
                 code "a\\\\|b" @1:1-1:7
@@ -35,7 +36,7 @@ struct TablePrecedingParagraphPipeEscapeTests {
     }
 
     @Test func escapedBackslashBeforePipeIsBackslash() {
-        #expect(surface("x\\\\|y\n| a |\n|-|") == """
+        #expect(tree("x\\\\|y\n| a |\n|-|") == """
             document @1:1-3:4
               paragraph @1:1-1:6
                 text "x\\\\|y" @1:1-1:6
@@ -48,7 +49,7 @@ struct TablePrecedingParagraphPipeEscapeTests {
     }
 
     @Test func escapedPipeInBlockQuoteKeepsColumns() {
-        #expect(surface("> a\\|b\n> c\n> | x |\n> |-|") == """
+        #expect(tree("> a\\|b\n> c\n> | x |\n> |-|") == """
             document @1:1-4:6
               block_quote @1:1-4:6
                 paragraph @1:3-2:4
@@ -64,7 +65,7 @@ struct TablePrecedingParagraphPipeEscapeTests {
     }
 
     @Test func escapedPipeIsPipe() {
-        #expect(surface("x\\|y\n| a |\n|-|") == """
+        #expect(tree("x\\|y\n| a |\n|-|") == """
             document @1:1-3:4
               paragraph @1:1-1:5
                 text "x|y" @1:1-1:5
@@ -72,6 +73,97 @@ struct TablePrecedingParagraphPipeEscapeTests {
                 table_header @2:1-2:6
                   table_cell align=none colspan=1 rowspan=1 @2:3-2:4
                     text "a" @2:3-2:4
+
+            """)
+    }
+
+    @Test("code span in a table's preceding paragraph keeps its escaped pipe (backtick header)")
+    func precedingParagraphCodeSpanKeepsEscapedPipe() {
+        #expect(TreeDump.dump("`\\|`\n`\n|-", options: [.tables]) == """
+            document
+              paragraph
+                code "\\\\|"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "`"
+
+            """)
+    }
+
+    @Test("code span in a table's preceding paragraph keeps its escaped pipe (backslash header)")
+    func precedingParagraphCodeSpanKeepsEscapedPipeBackslashHeader() {
+        #expect(TreeDump.dump("`\\|`\n\\\n-|", options: [.tables]) == """
+            document
+              paragraph
+                code "\\\\|"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "\\\\"
+
+            """)
+    }
+
+    @Test("code span in a block-quote table's preceding paragraph keeps its escaped pipe")
+    func precedingParagraphCodeSpanKeepsEscapedPipeInBlockQuote() {
+        #expect(TreeDump.dump("> `\\|`\n> `\n> |-", options: [.tables]) == """
+            document
+              block_quote
+                paragraph
+                  code "\\\\|"
+                table
+                  table_header
+                    table_cell align=none colspan=1 rowspan=1
+                      text "`"
+
+            """)
+    }
+
+    @Test("code span before a tab-indented header row keeps its escaped pipe")
+    func precedingParagraphCodeSpanKeepsEscapedPipeWithTabContinuation() {
+        #expect(TreeDump.dump("`\\|`\n\tx\n|-", options: [.tables]) == """
+            document
+              paragraph
+                code "\\\\|"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "x"
+
+            """)
+    }
+
+    @Test("code span with no table keeps its escaped pipe")
+    func standaloneCodeSpanKeepsEscapedPipe() {
+        #expect(TreeDump.dump("`\\|`", options: [.tables]) == """
+            document
+              paragraph
+                code "\\\\|"
+
+            """)
+    }
+
+    @Test("preceding-paragraph code span keeps a non-pipe backslash escape")
+    func precedingParagraphCodeSpanKeepsNonPipeEscape() {
+        #expect(TreeDump.dump("`\\!`\n`\n|-", options: [.tables]) == """
+            document
+              paragraph
+                code "\\\\!"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "`"
+
+            """)
+    }
+
+    @Test("a code span with an unescaped pipe keeps the pipe")
+    func plainCodeSpanWithPipeUnaffected() {
+        #expect(TreeDump.dump("`x|y`", options: [.tables]) == """
+            document
+              paragraph
+                code "x|y"
 
             """)
     }
