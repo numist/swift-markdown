@@ -12,9 +12,9 @@ import CommonMark
 import Testing
 
 /// An extended www autolink comes at the start of the inline content, or after a space, tab, line ending, `*`, `_`,
-/// `~` or `(`. An extended url autolink's scheme is the whole run of ASCII letters before `://`, so the autolink may
-/// follow any character but a letter. An extended email autolink's local part is the run of local-part characters
-/// before the `@`, so the autolink may follow any other character.
+/// `~` or `(`. An extended url autolink's scheme is the whole run of ASCII letters before `://`, so outside an open `[`
+/// the autolink may follow any character but an ASCII letter. An extended email autolink's local part is the run of
+/// local-part characters before the `@`, so the autolink may follow any other character.
 @Suite("Character before an extended autolink")
 struct ExtendedAutolinkPrecedingCharacterTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .attributes, .gfmAutolink]
