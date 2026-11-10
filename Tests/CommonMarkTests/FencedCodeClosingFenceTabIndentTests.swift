@@ -67,19 +67,3 @@ struct FencedCodeClosingFenceTabIndentTests {
         #expect(codeBlockKinds("```\n    ```") == ["code_block fenced fence='`' length=3 offset=0"])
     }
 }
-
-/// The kind of every code block in `markdown`, depth-first, as `TreeDump.describe` gives it, which tells a fenced code
-/// block from an indented one.
-private func codeBlockKinds(_ markdown: String, options: MarkdownDocument.ParseOptions = []) -> [String] {
-    MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
-        var kinds: [String] = []
-        func visit(_ node: borrowing MarkdownNode) {
-            if case .codeBlock = node.kind {
-                kinds.append(TreeDump.describe(node.kind))
-            }
-            node.children.forEach { visit($0) }
-        }
-        visit(doc.root)
-        return kinds
-    }
-}
