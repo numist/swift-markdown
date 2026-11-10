@@ -2120,12 +2120,7 @@ extension BlockParser {
         guard positionsEnabled, end > start else {
             return
         }
-        var sourceStart = content.sourceOffset(ofVirtual: start)
-        // The `\n` that stands for a CRLF images its LF, but a node starting with it starts at the CR.
-        if sourceStart > 0, sourceBytes[sourceStart] == UInt8(ascii: "\n"), sourceBytes[sourceStart - 1] == UInt8(ascii: "\r") {
-            sourceStart -= 1
-        }
-        storage.setSourceStart(node, sourceStart)
+        storage.setSourceStart(node, lineEndingStart(content.sourceOffset(ofVirtual: start)))
         storage.setSourceEnd(node, content.sourceOffset(ofVirtual: end - 1) + 1)
     }
 

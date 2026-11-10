@@ -366,10 +366,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         storage.lineCount = reader.lineNumber
 
         // Link reference definitions leading the content are consumed, and the paragraph is kept even when
-        // nothing, or only whitespace, remains.
+        // nothing, or only whitespace, remains. It starts at its first content byte and ends where the last line's
+        // content ends, so with no content before that its range is empty there.
         let paragraph = addChild(kind: .paragraph, parent: documentIndex, start: start)
-        // The paragraph holds the whole input after any BOM, but it ends where the last line's content ends, as in block mode.
         storage.setSourceEnd(paragraph, contentEnd)
+        var contentStart = contentEnd
         if positionsEnabled {
             stampDocument()
         }
@@ -381,6 +382,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var scratch = InlineScratch()
         if !hasCR && !hasNUL {
             let rest = parseDefinitions(in: Chunk(offset: start, length: count - start, inSource: true))
+            contentStart = rest.offset
             parseInline(chunk: rest, scratch: &scratch, into: paragraph, preserveWhitespace: true)
         } else {
             // Copy the content to the arena with line endings normalized to `\n` and NULs to U+FFFD. With positions on, record
@@ -426,9 +428,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 preserveWhitespace: true
             )
             if positionsEnabled {
-                image = ContentImage(base: arenaStart, runs: runs)
+                let arenaImage = ContentImage(base: arenaStart, runs: runs)
+                if let restStart = arenaImage.sourceOffset(ofArenaByte: rest.offset) {
+                    contentStart = lineEndingStart(restStart)
+                }
+                image = arenaImage
             }
         }
+        storage.setSourceStart(paragraph, min(contentStart, contentEnd))
         finishInlines(paragraph, image: image)
         if positionsEnabled {
             endInlinesWithinLastLine(after: paragraph, contentEnd: contentEnd)
@@ -454,6 +461,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             storage.sourceRanges[node].end = contentEnd
             storage.sourceRanges[node].start = min(storage.sourceRanges[node].start, contentEnd)
         }
+    }
+
+    /// Where a node whose first byte images source byte `offset` starts: at `offset`, or at the CR before it when it is
+    /// a CRLF's LF, which the `\n` standing for that CRLF images.
+    func lineEndingStart(_ offset: Int) -> Int {
+        offset > 0 && sourceBytes[offset] == UInt8(ascii: "\n") && sourceBytes[offset - 1] == UInt8(ascii: "\r") ? offset - 1 : offset
     }
 
     /// Extends a run map by one byte imaging `sourceOffset`, or by a line-join byte when `sourceOffset < 0`.

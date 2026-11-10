@@ -123,11 +123,11 @@ struct InlineOnlyFinalLineEndRangeTests {
             """)
     }
 
-    @Test("a paragraph left empty by a reference definition ends where the final line feed starts", arguments: modes)
+    @Test("a paragraph left empty by a reference definition is empty where the final line feed starts", arguments: modes)
     func definitionOnly(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("[x]: /u\n", mode) == """
             document @1:1-2:1
-              paragraph @1:1-1:8
+              paragraph @1:8-1:8
 
             """)
     }

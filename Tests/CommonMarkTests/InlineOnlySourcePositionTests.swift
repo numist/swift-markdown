@@ -189,10 +189,46 @@ struct InlineOnlySourcePositionTests {
     func leadingReferenceDefinitionWithCRLF(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("[a]: /u\r\n\r\n[a]", options: options, sourceRanges: true) == """
             document @1:1-3:4
-              paragraph @1:1-3:4
+              paragraph @2:1-3:4
                 text "\\n" @2:1-3:1
                 link "/u" "" @3:1-3:4
                   text "a" @3:2-3:3
+
+            """)
+    }
+
+    /// Leading link reference definitions are not paragraph content, so the paragraph starts at the first byte after
+    /// them, and with nothing left before the end of the last line its range is empty there.
+    @Test(arguments: [inlineOnly, preserveWhitespace])
+    func paragraphStartsAfterLeadingDefinitions(options: MarkdownDocument.ParseOptions) {
+        #expect(TreeDump.dump("[a]: /u\nb", options: options, sourceRanges: true) == """
+            document @1:1-2:2
+              paragraph @2:1-2:2
+                text "b" @2:1-2:2
+
+            """)
+        #expect(TreeDump.dump("[a]: /u\r\nb", options: options, sourceRanges: true) == """
+            document @1:1-2:2
+              paragraph @2:1-2:2
+                text "b" @2:1-2:2
+
+            """)
+        #expect(TreeDump.dump("[a]: /u\n\u{0}b", options: options, sourceRanges: true) == """
+            document @1:1-2:3
+              paragraph @2:1-2:3
+                text "\u{FFFD}b" @2:1-2:3
+
+            """)
+        #expect(TreeDump.dump("[a]: /u\n\\\nb", options: options, sourceRanges: true) == """
+            document @1:1-3:2
+              paragraph @2:1-3:2
+                linebreak @-
+                text "b" @3:1-3:2
+
+            """)
+        #expect(TreeDump.dump("[a]: /u", options: options, sourceRanges: true) == """
+            document @1:1-1:8
+              paragraph @1:8-1:8
 
             """)
     }
