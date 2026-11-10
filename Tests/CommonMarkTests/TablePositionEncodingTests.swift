@@ -373,8 +373,7 @@ struct TablePositionEncodingTests {
         let rows = tableRows("a|b\n-|-\n \u{E9}x|y")
         try #require(rows.count == 2, "fixture: header + body row")
         let body = rows[1]
-        try #require(body.cells.count == 2 && body.cells.allSatisfy { $0.range.lowerBound.column > 0 },
-                     "fixture: cells must have source ranges")
+        try #require(body.cells.count == 2, "fixture: two body cells")
         try #require(body.cells[0].text == "\u{E9}x" && body.cells[1].text == "y", "fixture: cell literals")
         #expect(body.range == r(3, 2, 3, 7))
         #expect(body.cells[0].range == r(3, 2, 3, 5))       // `éx`

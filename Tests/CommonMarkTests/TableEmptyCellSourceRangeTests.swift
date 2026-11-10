@@ -23,10 +23,6 @@ struct TableEmptyCellSourceRangeTests {
         let startColumn: Int
         let endColumn: Int
         let text: String
-        /// The first inline child's source range (line, column) for start and end, or `nil` if the cell
-        /// has no positioned inline.
-        let textStart: (line: Int, column: Int)?
-        let textEnd: (line: Int, column: Int)?
     }
 
     private struct Row {
@@ -39,12 +35,8 @@ struct TableEmptyCellSourceRangeTests {
     /// Rows (with per-cell columns, colspan, and text) of the first table in `source`, parsed with
     /// spans and source positions. Rows and cells with no source range are omitted.
     private func tableRows(_ source: String) -> [Row] {
-        tableRows(source, options: [.tables, .tableSpans, .sourcePosition])
-    }
-
-    private func tableRows(_ source: String, options: MarkdownDocument.ParseOptions) -> [Row] {
         MarkdownDocument.withParsedDocument(
-            source, options: options
+            source, options: [.tables, .tableSpans, .sourcePosition]
         ) { doc -> [Row] in
             var rows: [Row] = []
             var found = false
@@ -58,22 +50,14 @@ struct TableEmptyCellSourceRangeTests {
                         guard case .tableCell(_, let columns, _) = cell.kind,
                               let range = cell.sourceRange else { return }
                         var text = ""
-                        var textStart: (line: Int, column: Int)? = nil
-                        var textEnd: (line: Int, column: Int)? = nil
                         cell.children.forEach { inline in
                             if let lit = inline.literal() { text += lit }
-                            if textStart == nil, let r = inline.sourceRange {
-                                textStart = (r.lowerBound.line, r.lowerBound.column)
-                                textEnd = (r.upperBound.line, r.upperBound.column)
-                            }
                         }
                         cells.append(Cell(
                             colspan: columns,
                             startColumn: range.lowerBound.column,
                             endColumn: range.upperBound.column,
-                            text: text,
-                            textStart: textStart,
-                            textEnd: textEnd
+                            text: text
                         ))
                     }
                     rows.append(Row(
@@ -93,7 +77,6 @@ struct TableEmptyCellSourceRangeTests {
         let body = tableRows("a|b\n-|-\n x|y")
         let bodyRow = try #require(body.last, "expected a body row")
         try #require(bodyRow.cells.count == 2, "fixture: expected two body cells, got \(bodyRow.cells.count)")
-        try #require(bodyRow.cells.allSatisfy { $0.startColumn > 0 }, "fixture: cells must have source ranges")
         #expect((bodyRow.cells[0].startColumn, bodyRow.cells[0].endColumn, bodyRow.cells[0].text) == (2, 3, "x"))
         #expect((bodyRow.cells[1].startColumn, bodyRow.cells[1].endColumn, bodyRow.cells[1].text) == (4, 5, "y"))
 
