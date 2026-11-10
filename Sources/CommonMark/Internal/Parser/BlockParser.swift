@@ -165,8 +165,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The number of links and autolinks formed in this `parseInline` pass.
     var linksFormed = 0
 
-    /// The `ContentSpan.pieceHint` of every content this parse reads through a segment list or run map.
-    let pieceHint = PieceHint()
+    /// The `ContentSpan.pieceHint` of every content this parse reads through a segment list or run map, made on first
+    /// use, so a parse that reads none allocates none.
+    var pieceHint: PieceHint {
+        mutating get {
+            if let hint = lazyPieceHint {
+                return hint
+            }
+            let hint = PieceHint()
+            lazyPieceHint = hint
+            return hint
+        }
+    }
+    private var lazyPieceHint: PieceHint?
 
     // MARK: - Init
     
