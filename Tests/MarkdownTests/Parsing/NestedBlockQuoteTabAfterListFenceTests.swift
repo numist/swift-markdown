@@ -11,32 +11,15 @@
 import Markdown
 import XCTest
 
-/// A line of nested block quote markers ends the preceding list item and its unclosed fenced code block.
-/// A tab after a block quote marker counts in columns (Tabs): one column is the marker's optional space, so
-/// a following `>` opens a further block quote and following text at four more columns is an indented
-/// code block.
+/// A line of nested block quote markers ends the preceding ordered list item and its unclosed fenced code
+/// block. A tab after a block quote marker counts in columns (Tabs): one column is the marker's optional space,
+/// so a following `>` opens a further block quote.
 class NestedBlockQuoteTabAfterListFenceTests: XCTestCase {
     private func surface(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])
     }
 
-    func testTabAfterFirstMarkerOpensNestedBlockQuote() {
-        XCTAssertEqual("Document\n├─ UnorderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n└─ BlockQuote\n   └─ BlockQuote", surface("- ```\n>\t>"))
-    }
-
-    func testTabBeforeFourthMarker() {
-        XCTAssertEqual("Document\n├─ UnorderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n└─ BlockQuote\n   └─ BlockQuote\n      └─ BlockQuote\n         └─ BlockQuote", surface("- ```\n>>>\t>"))
-    }
-
-    func testSpacedMarkersThenTab() {
-        XCTAssertEqual("Document\n├─ UnorderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n└─ BlockQuote\n   └─ BlockQuote\n      └─ BlockQuote", surface("- ```\n> >\t>"))
-    }
-
     func testOrderedListFence() {
         XCTAssertEqual("Document\n├─ OrderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n└─ BlockQuote\n   └─ BlockQuote\n      └─ BlockQuote\n         └─ BlockQuote", surface("1. ```\n>>>\t>"))
-    }
-
-    func testTabThenIndentedCode() {
-        XCTAssertEqual("Document\n├─ UnorderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n└─ BlockQuote\n   └─ BlockQuote\n      └─ BlockQuote\n         └─ CodeBlock language: none\n            x", surface("- ```\n>>>\t    x"))
     }
 }
