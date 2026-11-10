@@ -1714,21 +1714,4 @@ struct TableTests {
         #expect(rows[0].map { $0.1 } == ["a", "b"])
         }
     }
-
-    @Test("table column count is recorded")
-    func columnCount() {
-        let source = "| a | b | c |\n|---|---|---|"
-        MarkdownDocument.withParsedDocument(source, options: .tables) { doc in
-        var foundCols: Int?
-        let root = doc.root
-        root.children.forEach { block in
-            if block.kind == .table {
-                if case .table(let cols) = doc._storage[block._index].data {
-                    foundCols = cols
-                }
-            }
-        }
-        #expect(foundCols == 3)
-        }
-    }
 }

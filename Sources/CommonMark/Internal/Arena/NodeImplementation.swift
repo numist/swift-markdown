@@ -29,9 +29,6 @@ internal enum NodeData {
 
     case footnoteDefinition(label: ContentRef)
 
-    /// Column alignments live on each cell's `kind`.
-    case table(columnCount: Int)
-
     /// `padding` is the indent, in columns past the enclosing containers' prefixes, that a continuation line needs to belong to the item (List items).
     case item(padding: Int)
 }
