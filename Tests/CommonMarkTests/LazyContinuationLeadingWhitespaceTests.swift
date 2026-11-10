@@ -50,7 +50,7 @@ struct LazyContinuationLeadingWhitespaceTests {
             """)
     }
 
-    @Test("plain text on a lazy continuation line is stripped")
+    @Test("the leading space before plain text on a lazy continuation line is stripped")
     func textOnBlockQuoteLazyLine() {
         #expect(TreeDump.dump("> a\n b", options: .sourcePosition, sourceRanges: true) == """
             document @1:1-2:3
