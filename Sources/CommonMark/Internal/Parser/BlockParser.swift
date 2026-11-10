@@ -1349,7 +1349,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 } else {
                     return (deepestMatched, cursor, prefixColumns, false)
                 }
-            case .paragraph, .heading, .codeBlock, .htmlBlock, .text, .thematicBreak:
+            case .paragraph, .codeBlock, .htmlBlock:
                 // Leaves have no prefix; the caller handles their continuation.
                 return (deepestMatched, cursor, prefixColumns, true)
             default:
@@ -1395,7 +1395,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 deepestMatched = node
             case .list, .footnoteDefinition:
                 deepestMatched = node
-            case .paragraph, .heading, .codeBlock, .htmlBlock, .text, .thematicBreak:
+            case .paragraph, .codeBlock, .htmlBlock:
                 allMatched = true
                 break walk
             default:
@@ -1883,14 +1883,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Byte `local` of `seg`.
-    private func segmentByte(_ seg: Segment, _ local: Int) -> UInt8 {
-        if seg.inSource {
-            return sourceBytes[seg.offset + local]
-        }
-        return storage.strings[seg.offset + local]
-    }
-
     /// The total length of a leaf's lines `segs`, line joins included.
     private func totalLength(of segs: borrowing UniqueArray<Segment>) -> Int {
         var total = 0
@@ -1907,7 +1899,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         leading: for i in 0..<segs.count {
             let seg = segs[i]
             for j in 0..<seg.length {
-                if !segmentByte(seg, j).isWhitespaceCharacter {
+                if !readByte(at: seg.offset + j, in: seg.chunk).isWhitespaceCharacter {
                     break leading
                 }
                 lower += 1
@@ -1917,7 +1909,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         trailing: for i in stride(from: segs.count - 1, through: 0, by: -1) {
             let seg = segs[i]
             for j in stride(from: seg.length - 1, through: 0, by: -1) {
-                if upper == lower || !segmentByte(seg, j).isWhitespaceCharacter {
+                if upper == lower || !readByte(at: seg.offset + j, in: seg.chunk).isWhitespaceCharacter {
                     break trailing
                 }
                 upper -= 1
@@ -2323,7 +2315,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The column width of the spaces and tabs `start..<end`, with tab stops every four columns (Tabs).
     ///
     /// `baseColumn` is `start`'s column, which places the tab stops: a tab's width depends on the column it starts at.
-    private func indentColumns(from start: Int, to end: Int, baseColumn: Int = 0) -> Int {
+    private func indentColumns(from start: Int, to end: Int, baseColumn: Int) -> Int {
         var col = baseColumn
         for i in start..<end {
             let b = sourceBytes[i]
@@ -2359,7 +2351,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `indentColumns`).
     ///
     /// A tab that would overshoot `columns` is not split; the result stops before it.
-    private func advanceColumns(from start: Int, to end: Int, columns: Int, baseColumn: Int = 0) -> Int {
+    private func advanceColumns(from start: Int, to end: Int, columns: Int, baseColumn: Int) -> Int {
         var i = start
         var col = baseColumn
         let target = baseColumn + columns
@@ -2424,8 +2416,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     // Inlined for the reason given in `dispatchNewBlocks`.
     @inline(__always)
     private func matchListMarker(range: Range<Int>, firstNonSpace: Int, markerColumn: Int, indent: Int) -> ListMarkerInfo? {
-        let markerOffset = indent
-        assert(markerOffset <= 3, "block-start matchers run only on a line indented less than four columns")
+        assert(indent <= 3, "block-start matchers run only on a line indented less than four columns")
         precondition(firstNonSpace < range.upperBound, "block-start matchers run only on a non-blank line")
         let first = sourceBytes[firstNonSpace]
 
@@ -2463,7 +2454,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 digits += 1
                 i += 1
             }
-            if digits == 0 || i >= range.upperBound {
+            if i >= range.upperBound {
                 return nil
             }
             let delim = sourceBytes[i]
@@ -2531,7 +2522,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             bulletMarker: bulletMarker,
             orderedDelimiter: orderedDelimiter,
             start: startNumber,
-            contentColumn: markerOffset + markerWidth + padding,
+            contentColumn: indent + markerWidth + padding,
             contentStartColumn: columnAfterMarker + padding,
             markerEnd: afterMarker,
             consumedTo: contentStart,
@@ -2744,22 +2735,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         let limit = range.upperBound - totalLen
         while i <= limit {
             if sourceBytes[i] == UInt8(ascii: "<"),
-               sourceBytes[i + 1] == UInt8(ascii: "/") {
-                let nameRange = (i + 2)..<(i + 2 + nameLen)
-                var matched = true
-                for k in 0..<nameLen {
-                    var a = sourceBytes[nameRange.lowerBound + k]
-                    if a.isUppercaseASCIILetter {
-                        a += 32
-                    }
-                    if a != name[k] {
-                        matched = false
-                        break
-                    }
-                }
-                if matched, sourceBytes[i + 2 + nameLen] == UInt8(ascii: ">") {
-                    return true
-                }
+               sourceBytes[i + 1] == UInt8(ascii: "/"),
+               bytesEqualASCIICaseInsensitive(range: (i + 2)..<(i + 2 + nameLen), target: name),
+               sourceBytes[i + 2 + nameLen] == UInt8(ascii: ">") {
+                return true
             }
             i += 1
         }
@@ -2771,7 +2750,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// `baseColumn` is `range.lowerBound`'s column (see `indentColumns`).
     // Inlined for the reason given in `dispatchNewBlocks`.
     @inline(__always)
-    private func matchBlockQuoteMarker(range: Range<Int>, firstNonSpace: Int, baseColumn: Int = 0) -> Int? {
+    private func matchBlockQuoteMarker(range: Range<Int>, firstNonSpace: Int, baseColumn: Int) -> Int? {
         // A byte count would under-measure a tab: `\t>` is no block quote marker.
         if indentColumns(from: range.lowerBound, to: firstNonSpace, baseColumn: baseColumn) > 3 {
             return nil
@@ -3139,7 +3118,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             first += 1
         }
         // A definition begins with `[` or `^`, and a task list item marker with `[`.
-        guard Self.mayBeginDefinition(segmentByte(segs[first], trimmed.lowerBound - offset)) else {
+        guard Self.mayBeginDefinition(readByte(at: segs[first].offset + trimmed.lowerBound - offset, in: segs[first].chunk)) else {
             return trimmed.lowerBound
         }
         var segmentEnds = UniqueArray<Int>(minimumCapacity: segs.count)
@@ -3368,7 +3347,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Skips line whitespace, at most one line ending, and more line whitespace.
     @inline(__always)
-    private func skipSpacesAndOneLineEnd(from cursor: Int, in content: borrowing ContentSpan) -> Int {
+    private func skipLineWhitespaceAndOneLineEnd(from cursor: Int, in content: borrowing ContentSpan) -> Int {
         let i = skipLineWhitespace(from: cursor, in: content)
         guard i < content.endOffset, content[i] == UInt8(ascii: "\n") else {
             return i
@@ -3399,7 +3378,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // When the line doesn't end after a title, the definition ends at the destination instead.
         var title: Range<Int> = destination.afterEnd..<destination.afterEnd
         var afterAll: Int? = nil
-        let titleStart = skipSpacesAndOneLineEnd(from: destination.afterEnd, in: content)
+        let titleStart = skipLineWhitespaceAndOneLineEnd(from: destination.afterEnd, in: content)
         if titleStart > destination.afterEnd,
            let match = matchLinkTitle(from: titleStart, end: end, in: content),
            let lineEnd = skipLineEndOrEOF(from: skipLineWhitespace(from: match.afterEnd, in: content), in: content) {
@@ -3439,7 +3418,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
               content[label.afterEnd] == UInt8(ascii: ":") else {
             return nil
         }
-        return (label.interior, skipSpacesAndOneLineEnd(from: label.afterEnd + 1, in: content))
+        return (label.interior, skipLineWhitespaceAndOneLineEnd(from: label.afterEnd + 1, in: content))
     }
 
     // MARK: - Attribute definition
