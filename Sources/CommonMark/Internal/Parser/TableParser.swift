@@ -45,9 +45,9 @@ extension BlockParser {
         let columnCount = alignments.count
         storage[node].kind = .table
         storage[node].data = .table(columnCount: columnCount)
-        // Per column, the cell a rowspan marker in the next row grows: the nearest cell above that isn't a rowspan filler. It is kept rather than searched for, so a long column of markers stays linear. Empty without `.tableSpans`.
+        // Per column, the cell a rowspan filler in the next row grows: the nearest cell above that isn't a rowspan filler. It is kept rather than searched for, so a long column of markers stays linear. Empty without `.tableSpans`.
         var rowspanOwners: [DocumentStorage.Index?] = storage.options.contains(.tableSpans) ? Array(repeating: nil, count: columnCount) : []
-        // The delimiter row (line 1) is not a row.
+        // The delimiter row (line 1) makes no `.tableRow`.
         for k in lines.indices where k != 1 {
             appendRow(
                 parent: node,
@@ -124,9 +124,9 @@ extension BlockParser {
 
     // MARK: - Row construction
 
-    /// Appends a `.tableRow` and its cells under `parent`, padding missing cells and dropping extras.
+    /// Appends a `.tableRow` and its cells under `parent`, inserting missing cells and dropping extras.
     ///
-    /// With `.tableSpans`, an empty `||` cell is a colspan filler (0) that grows the nearest real cell to its left, and a cell holding only the rowspan marker (`^`, or `"` with `.tableRowspanDitto`) is a rowspan filler (0) that, when its column has an owner above, grows that owner and drops its text. Every cell that isn't a rowspan marker, colspan fillers and padding cells included, becomes its column's owner.
+    /// With `.tableSpans`, a zero-width `||` cell is a colspan filler (`columns: 0`) that grows the nearest cell to its left that isn't one, and a cell holding only the rowspan marker (`^`, or `"` with `.tableRowspanDitto`) is a rowspan filler (`rows: 0`) that, when its column has an owner above, grows that owner and drops its text. Every cell that isn't a rowspan filler, colspan fillers and inserted cells included, becomes its column's owner.
     private mutating func appendRow(
         parent: DocumentStorage.Index,
         line: Range<Int>,
@@ -152,8 +152,8 @@ extension BlockParser {
         var rowspans: [Int] = []
         var skipContent: [Bool] = []
         if spansEnabled {
-            // Colspan accumulates over every cell, so empty cells past `columnCount`, which are dropped, still
-            // grow the nearest real cell to their left, uncapped.
+            // Colspan accumulates over every cell, so colspan fillers past `columnCount`, which are dropped, still
+            // grow the nearest cell to their left that isn't one, uncapped.
             colspans = [Int](repeating: 1, count: max(columnCount, cells.count))
             rowspans = [Int](repeating: 1, count: columnCount)
             skipContent = [Bool](repeating: false, count: columnCount)
@@ -170,7 +170,7 @@ extension BlockParser {
                 } else {
                     lastRealCell = col
                 }
-                // A cell whose content is exactly the marker byte is a rowspan marker.
+                // A cell whose content is exactly the marker byte is a rowspan filler.
                 if col < columnCount {
                     let content = trimmingPadding(cells[col])
                     if content.count == 1 && sourceBytes[content.lowerBound] == markerByte {
@@ -253,7 +253,7 @@ extension BlockParser {
     }
 
     /// Whether `sourceBytes[i]` is a `|` directly after a backslash at or after `start`. Such a pipe is cell content,
-    /// not a cell boundary, however many backslashes precede it (Tables (extension)).
+    /// not a cell boundary, however many backslashes precede it.
     private func isEscapedPipe(at i: Int, from start: Int) -> Bool {
         sourceBytes[i] == UInt8(ascii: "|") && i > start && sourceBytes[i - 1] == UInt8(ascii: "\\")
     }
@@ -302,8 +302,9 @@ extension BlockParser {
         return cells
     }
 
-    /// Calls `body` with each cell of source line `line`, in order. Cells split on unescaped `|`. Padding may precede a
-    /// leading `|` and follow a closing one; both pipes and that padding are stripped.
+    /// Calls `body` with each cell of source line `line`, in order. Cells split on each `|` that doesn't directly follow
+    /// a backslash (`isEscapedPipe`). Padding may precede a leading `|` and follow a closing one; both pipes and that
+    /// padding are stripped.
     // Out of line, a table-heavy parse costs 0.7% more.
     @inline(__always)
     private func forEachCell(in line: Range<Int>, _ body: (Range<Int>) -> Void) {
