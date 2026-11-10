@@ -19,7 +19,7 @@ import Testing
 struct FootnoteNestedDefinitionTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes]
 
-    /// The winning definition supplies the reference's displayed label.
+    /// The outer definition wins, so the definition in the document has its label, `b`, not `B`.
     @Test
     func outerDuplicateDefinitionSuppliesLabel() {
         #expect(TreeDump.dump("[^b]\n[^b]:[^B]:A", options: Self.options) == """

@@ -17,7 +17,7 @@ struct FootnoteDefinitionTabExpandedLineTests {
 
     private static let positionModes: [MarkdownDocument.ParseOptions] = [[], [.sourcePosition]]
 
-    @Test("the definition keeps its label and resolves a reference", arguments: positionModes)
+    @Test("the definition's label resolves a reference", arguments: positionModes)
     func labelResolves(mode: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump(">\t[^ab]: x\n\nc[^ab]\n", options: mode.union(.footnotes)) == """
             document
