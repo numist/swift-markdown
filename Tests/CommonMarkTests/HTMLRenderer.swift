@@ -361,41 +361,6 @@ internal enum HTMLRenderer {
         }
     }
 
-    /// Replaces each backslash-escaped ASCII punctuation character with the character itself (Backslash escapes).
-    private static func unescapeBackslashes(_ s: String) -> String {
-        var out: [UInt8] = []
-        out.reserveCapacity(s.utf8.count)
-        let bytes = Array(s.utf8)
-        var i = 0
-        while i < bytes.count {
-            let b = bytes[i]
-            if b == 0x5C, i + 1 < bytes.count {
-                let next = bytes[i + 1]
-                if isASCIIPunctByte(next) {
-                    out.append(next)
-                    i += 2
-                    continue
-                }
-            }
-            out.append(b)
-            i += 1
-        }
-        return String(decoding: out, as: UTF8.self)
-    }
-
-    private static func isASCIIPunctByte(_ b: UInt8) -> Bool {
-        switch b {
-        case 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29,
-             0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F,
-             0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40,
-             0x5B, 0x5C, 0x5D, 0x5E, 0x5F, 0x60,
-             0x7B, 0x7C, 0x7D, 0x7E:
-            return true
-        default:
-            return false
-        }
-    }
-
     /// HTML-escapes `&`, `<`, `>` and `"`. All other bytes, including non-ASCII ones, pass through unchanged.
     internal static func htmlEscape(_ s: String) -> String {
         var out: [UInt8] = []
