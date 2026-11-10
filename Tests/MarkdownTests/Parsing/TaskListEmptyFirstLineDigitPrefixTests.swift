@@ -93,9 +93,9 @@ class TaskListEmptyFirstLineDigitPrefixTests: XCTestCase {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         ├─ Text \"22\u{E9} \"\n         └─ Link destination: \"/u\"\n            └─ Text \"x\"", surface("+\n  22\u{E9} [x] \n\n[x]: /u\n"))
     }
 
-    func testDigitNULPrefixWithDefaultOptions() {
+    func testDigitNULPrefixThenCheckboxAndContent() {
         XCTAssertEqual(
             "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{FFFD} [x] a\"",
-            Document(parsing: "+\n  2\u{0} [x] a").debugDescription(options: []))
+            surface("+\n  2\u{0} [x] a"))
     }
 }

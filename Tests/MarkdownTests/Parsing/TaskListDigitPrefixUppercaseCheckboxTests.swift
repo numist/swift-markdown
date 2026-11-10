@@ -30,9 +30,9 @@ class TaskListDigitPrefixUppercaseCheckboxTests: XCTestCase {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2\u{E9} [x]\"", surface("+\n  2\u{E9} [x] "))
     }
 
-    func testDigitDashPrefixWithDefaultOptions() {
+    func testDigitDashPrefixBeforeTab() {
         XCTAssertEqual(
             "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"2- [X]\"",
-            Document(parsing: "+\n  2- [X]\t").debugDescription(options: []))
+            surface("+\n  2- [X]\t"))
     }
 }
