@@ -17,12 +17,12 @@ import Testing
 struct TablePipeEscapeSourceRangeTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .sourcePosition]
 
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: Self.options, sourceRanges: true)
     }
 
     @Test func textAfterEscapedPipeEndsAtItsLastByte() {
-        #expect(surface("| f\\|a |\n|-|") == """
+        #expect(tree("| f\\|a |\n|-|") == """
             document @1:1-2:4
               table @1:1-2:4
                 table_header @1:1-1:9
@@ -33,7 +33,7 @@ struct TablePipeEscapeSourceRangeTests {
     }
 
     @Test func textAfterTwoEscapedPipesEndsAtItsLastByte() {
-        #expect(surface("| a\\|b\\|c |\n|-|") == """
+        #expect(tree("| a\\|b\\|c |\n|-|") == """
             document @1:1-2:4
               table @1:1-2:4
                 table_header @1:1-1:12
@@ -44,7 +44,7 @@ struct TablePipeEscapeSourceRangeTests {
     }
 
     @Test func textEndingInEscapedPipeEndsAfterThePipe() {
-        #expect(surface("| a\\| |\n|-|") == """
+        #expect(tree("| a\\| |\n|-|") == """
             document @1:1-2:4
               table @1:1-2:4
                 table_header @1:1-1:8
@@ -55,7 +55,7 @@ struct TablePipeEscapeSourceRangeTests {
     }
 
     @Test func emphasisAfterEscapedPipeKeepsItsColumns() {
-        #expect(surface("| \\|*a* |\n|-|") == """
+        #expect(tree("| \\|*a* |\n|-|") == """
             document @1:1-2:4
               table @1:1-2:4
                 table_header @1:1-1:10
