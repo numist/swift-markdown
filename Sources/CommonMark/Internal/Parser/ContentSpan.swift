@@ -80,9 +80,8 @@ internal struct ContentSpan: ~Escapable {
         self.pieceHint = hint
         self.isMultiSegment = true
         self.multiVirtualLength = virtualLength
-        hint.lineOwner &+= 1
-        hint.line = 0..<0
-        self.multiIdentity = hint.lineOwner
+        hint.multiSegmentContentsMade &+= 1
+        self.multiIdentity = hint.multiSegmentContentsMade
     }
 
     var startOffset: Int { isMultiSegment ? 0 : base }
@@ -180,13 +179,11 @@ internal struct ContentSpan: ~Escapable {
 
     /// The virtual range of the multi-segment content's source piece covering `offset`, and the distance from its offsets to their source offsets, or `nil` where a line join covers `offset`.
     ///
-    /// The piece is cached in `pieceHint`, since a scan reads a line's bytes one after another.
+    /// The piece is cached in `pieceHint`, since a scan reads a line's bytes one after another, with the content it
+    /// belongs to, so a content never takes another's piece for its own.
     private func sourcePiece(covering offset: Int) -> (range: Range<Int>, shift: Int)? {
-        if let hint = pieceHint {
-            assert(hint.lineOwner == multiIdentity, "a hint caches the line of the latest multi-segment content made with it, so only that content is read")
-            if hint.line.contains(offset) {
-                return (hint.line, hint.lineShift)
-            }
+        if let hint = pieceHint, hint.lineOwner == multiIdentity, hint.line.contains(offset) {
+            return (hint.line, hint.lineShift)
         }
         let i = pieceIndex(covering: offset)
         precondition(i < pieces.count, "content is read only at offsets inside it")
@@ -197,6 +194,7 @@ internal struct ContentSpan: ~Escapable {
         let range = pieceStart(i)..<pieceEnds[i]
         let shift = seg.offset - range.lowerBound
         if let hint = pieceHint {
+            hint.lineOwner = multiIdentity
             hint.line = range
             hint.lineShift = shift
         }
@@ -353,7 +351,10 @@ internal struct ContentSpan: ~Escapable {
 internal final class PieceHint {
     var index = 0
 
-    /// The `multiIdentity` of the latest multi-segment content made with this hint, the only one read through it.
+    /// How many multi-segment contents have been made with this hint.
+    var multiSegmentContentsMade = 0
+
+    /// The `multiIdentity` of the multi-segment content whose source piece `line` is.
     var lineOwner = 0
 
     /// That content's source piece that a lookup last found: its virtual range, and the distance from its offsets to their source offsets.
