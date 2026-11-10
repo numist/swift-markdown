@@ -45,12 +45,15 @@ struct UnclosedInlineHTMLTests {
         #expect(htmlLiterals("x<![CDATA[a <![CDATA[b\n<![CDATA[c", options: []) == [])
     }
 
+    @Test("`<!->` opens no comment")
+    func dashGreaterThanOpensNoComment() {
+        #expect(htmlLiterals("x<!-> <!--a", options: []) == [])
+    }
+
     // MARK: A closer that overlaps its own opener never closes it
 
-    @Test("the comment closer search starts after `<!--`")
-    func commentCloserSearchStartsAfterOpener() {
-        // `<!-` + `->` would read as `-->` only if the search started inside the opener.
-        #expect(htmlLiterals("x<!-> <!--a", options: []) == [])
+    @Test("a later `<!-->` closes an earlier comment at its `-->`")
+    func laterEmptyCommentClosesEarlierComment() {
         #expect(htmlLiterals("x<!--a <!-->", options: []) == ["<!--a <!-->"])
     }
 
@@ -67,6 +70,7 @@ struct UnclosedInlineHTMLTests {
 
     @Test("the processing-instruction closer search starts after `<?`")
     func processingInstructionCloserSearchStartsAfterOpener() {
+        #expect(htmlLiterals("x<?>", options: []) == [])
         #expect(htmlLiterals("x<?a <?>", options: []) == ["<?a <?>"])
         #expect(htmlLiterals("x<?a <?b ?>", options: []) == ["<?a <?b ?>"])
     }
