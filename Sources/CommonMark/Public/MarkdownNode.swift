@@ -378,7 +378,7 @@ extension MarkdownNode {
     public struct SourcePosition: Comparable, Hashable, Sendable {
         /// The 1-based line number.
         public var line: Int
-        /// The 1-based UTF-8 byte offset within the line.
+        /// The 1-based UTF-8 byte offset within the line; line 1 includes a leading byte order mark.
         public var column: Int
 
         /// Creates a source position.
@@ -403,7 +403,7 @@ extension MarkdownNode {
     ///
     /// The range runs from the first byte of the node's own content to just past its last content byte. The node's own syntax counts as content: a list item's marker and checkbox, a block quote's marker, a footnote definition's `[^label]:`, a code block's fences, an ATX heading's `#`s, a setext heading's underline, a code span's backticks, emphasis and strikethrough delimiters, a link's or image's brackets with its destination and title, an autolink's `<` and `>`, a table's delimiter row, and a table row's leading and closing pipes. Whitespace, line endings, blank lines, table cell padding and the pipes between cells never begin or end a node's range unless they are part of its content, such as whitespace in a code block's text. So a container ends where its last child, its own syntax, or a link reference, attribute or footnote definition it held ends, whichever is latest, the definition counting even after it leaves the container; and a node with no content bytes, such as an empty table cell or a paragraph of only line tabulations, has an empty range at its start, which for a cell is just past its opening pipe. The line ending that ends a node's last line is outside it, even where the node's text holds it.
     ///
-    /// The document's range covers the whole input, any byte order mark included, whose three bytes count in line 1's columns. For input that ends in a line ending, it ends at column 1 of the line after the last.
+    /// The document's range covers the whole input, any byte order mark included. For input that ends in a line ending, it ends at column 1 of the line after the last.
     public var sourceRange: Range<SourcePosition>? {
         _view.sourceRange(of: _index)
     }
