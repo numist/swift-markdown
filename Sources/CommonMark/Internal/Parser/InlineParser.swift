@@ -1335,7 +1335,7 @@ extension BlockParser {
     }
 
     /// Classifies the line ending at `newlineOffset` as a soft or hard line break (Hard line breaks), with where the
-    /// pending text ends, before any backslash or trailing spaces.
+    /// pending text ends, before any backslash or trailing spaces and tabs.
     private func classifyLineBreak(at newlineOffset: Int, pendingTextStart: Int, content: borrowing ContentSpan) -> LineBreakInfo {
         if newlineOffset > pendingTextStart {
             let prev = content[newlineOffset - 1]
