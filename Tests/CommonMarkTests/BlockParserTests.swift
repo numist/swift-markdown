@@ -649,7 +649,6 @@ struct FencedCodeTests {
 
     @Test("backtick fence info may not contain backticks")
     func backticksInInfoRejected() {
-        // A single line, because a later ``` line would open a fence of its own.
         let source = "```foo`bar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1239,8 +1238,8 @@ struct HTMLBlockTests {
         }
     }
 
-    @Test("non-block-tag like <foo> does not start a type-6 block")
-    func nonBlockTagIsParagraph() {
+    @Test("type 7: a complete open tag whose name is not a type 6 tag name")
+    func type7NonBlockTag() {
         let source = "<foo>\nbar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
