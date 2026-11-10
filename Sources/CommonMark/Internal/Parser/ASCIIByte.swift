@@ -32,7 +32,7 @@ extension UInt8 {
     }
 
     @inline(__always)
-    var isSpaceTabOrNewline: Bool {
+    var isSpaceTabOrLineEnding: Bool {
         self == UInt8(ascii: " ") || self == UInt8(ascii: "\t")
             || self == UInt8(ascii: "\n") || self == UInt8(ascii: "\r")
     }
@@ -46,7 +46,7 @@ extension UInt8 {
 
     /// A whitespace character (Characters and lines).
     @inline(__always)
-    var isASCIISpace: Bool {
+    var isWhitespaceCharacter: Bool {
         switch self {
         case UInt8(ascii: " "), UInt8(ascii: "\t"), UInt8(ascii: "\n"),
              UInt8(ascii: "\r"), 0x0B, 0x0C:

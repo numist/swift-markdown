@@ -1905,7 +1905,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         leading: for i in 0..<segs.count {
             let seg = segs[i]
             for j in 0..<seg.length {
-                if !segmentByte(seg, j).isASCIISpace {
+                if !segmentByte(seg, j).isWhitespaceCharacter {
                     break leading
                 }
                 lower += 1
@@ -1915,7 +1915,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         trailing: for i in stride(from: segs.count - 1, through: 0, by: -1) {
             let seg = segs[i]
             for j in stride(from: seg.length - 1, through: 0, by: -1) {
-                if upper == lower || !segmentByte(seg, j).isASCIISpace {
+                if upper == lower || !segmentByte(seg, j).isWhitespaceCharacter {
                     break trailing
                 }
                 upper -= 1
@@ -2639,7 +2639,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 if bytesEqualASCIICaseInsensitive(range: nameRange, target: tag) {
                     if nameEnd >= range.upperBound { return 1 }
                     let follow = sourceBytes[nameEnd]
-                    if follow.isASCIISpace || follow == UInt8(ascii: ">") {
+                    if follow.isWhitespaceCharacter || follow == UInt8(ascii: ">") {
                         return 1
                     }
                     // Start condition 7 excludes these tag names, so `<script/>` starts no HTML block.
@@ -2652,7 +2652,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if bytesEqualASCIICaseInsensitive(range: nameRange, target: tag) {
                 if nameEnd >= range.upperBound { return 6 }
                 let follow = sourceBytes[nameEnd]
-                if follow.isASCIISpace || follow == UInt8(ascii: ">") {
+                if follow.isWhitespaceCharacter || follow == UInt8(ascii: ">") {
                     return 6
                 }
                 if follow == UInt8(ascii: "/"),
@@ -2674,7 +2674,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     private func isOnlyWhitespaceToEnd(from start: Int, end: Int) -> Bool {
         var i = start
-        while i < end, sourceBytes[i].isASCIISpace {
+        while i < end, sourceBytes[i].isWhitespaceCharacter {
             i += 1
         }
         return i == end
@@ -2818,11 +2818,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         var infoStart = i
-        while infoStart < range.upperBound && sourceBytes[infoStart].isASCIISpace {
+        while infoStart < range.upperBound && sourceBytes[infoStart].isWhitespaceCharacter {
             infoStart += 1
         }
         var infoEnd = range.upperBound
-        while infoEnd > infoStart && sourceBytes[infoEnd - 1].isASCIISpace {
+        while infoEnd > infoStart && sourceBytes[infoEnd - 1].isWhitespaceCharacter {
             infoEnd -= 1
         }
         if marker == .backtick {
@@ -3181,7 +3181,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         guard length >= 3,
               byte(0) == UInt8(ascii: "["),
               byte(2) == UInt8(ascii: "]"),
-              length == 3 || byte(3).isASCIISpace else {
+              length == 3 || byte(3).isWhitespaceCharacter else {
             return nil
         }
         let between = byte(1)
@@ -3211,11 +3211,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             if b == UInt8(ascii: "[") {
                 return nil
             }
-            if b == UInt8(ascii: "\\"), i + 1 < end, !sourceBytes[i + 1].isASCIISpace {
+            if b == UInt8(ascii: "\\"), i + 1 < end, !sourceBytes[i + 1].isWhitespaceCharacter {
                 i += 2
                 continue
             }
-            if b.isASCIISpace {
+            if b.isWhitespaceCharacter {
                 return nil
             }
             i += 1
@@ -3345,7 +3345,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Skips whitespace characters (Characters and lines).
     mutating func skipWhitespace(from cursor: Int, in content: borrowing ContentSpan) -> Int {
         var i = cursor
-        while i < content.endOffset, content[i].isASCIISpace {
+        while i < content.endOffset, content[i].isWhitespaceCharacter {
             i += 1
         }
         return i

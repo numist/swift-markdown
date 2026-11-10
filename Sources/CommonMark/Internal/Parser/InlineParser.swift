@@ -1902,7 +1902,7 @@ extension BlockParser {
         var i = start
         while i < end {
             let b = content[i]
-            if b.isSpaceTabOrNewline || b == UInt8(ascii: "<") {
+            if b.isSpaceTabOrLineEnding || b == UInt8(ascii: "<") {
                 break
             }
             i += 1
@@ -2011,13 +2011,13 @@ extension BlockParser {
 
     /// Whether `b` is a host character: ASCII other than punctuation, space, tab, line ending or form feed.
     private func isHostByte(_ b: UInt8) -> Bool {
-        b < 0x80 && !b.isASCIIPunct && (b == 0x0B || !b.isASCIISpace)
+        b < 0x80 && !b.isASCIIPunct && (b == 0x0B || !b.isWhitespaceCharacter)
     }
 
     /// Characters that may directly precede an extended www autolink: space, tab, line feed, carriage return, `*`,
     /// `_`, `~` and `(`.
     private func isValidWWWPreceding(_ b: UInt8) -> Bool {
-        if b.isSpaceTabOrNewline {
+        if b.isSpaceTabOrLineEnding {
             return true
         }
         switch b {

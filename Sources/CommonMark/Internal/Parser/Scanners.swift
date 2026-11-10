@@ -293,7 +293,7 @@ extension BlockParser {
     internal func htmlTagEnd(afterName nameEnd: Int, isClosing: Bool, end: Int, byte: (Int) -> UInt8) -> Int? {
         func skipWhitespace(from start: Int) -> Int {
             var i = start
-            while i < end, byte(i).isASCIISpace {
+            while i < end, byte(i).isWhitespaceCharacter {
                 i += 1
             }
             return i
@@ -340,7 +340,7 @@ extension BlockParser {
                 k = valueStart
                 while k < end {
                     let b = byte(k)
-                    if b.isASCIISpace || b == UInt8(ascii: "\"") || b == UInt8(ascii: "'") || b == UInt8(ascii: "=")
+                    if b.isWhitespaceCharacter || b == UInt8(ascii: "\"") || b == UInt8(ascii: "'") || b == UInt8(ascii: "=")
                         || b == UInt8(ascii: "<") || b == UInt8(ascii: ">") || b == UInt8(ascii: "`") {
                         break
                     }
@@ -411,7 +411,7 @@ extension BlockParser {
 
             for i in 0..<span.count {
                 let b = span[i]
-                if b.isASCIISpace {
+                if b.isWhitespaceCharacter {
                     if !output.isEmpty {
                         pendingSpace = true
                     }
