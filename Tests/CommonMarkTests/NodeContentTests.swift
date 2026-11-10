@@ -59,7 +59,7 @@ struct NodeContentTests {
         walk(doc.root)
         #expect(info == "swift")
         #expect(bodyJoined == "a\nb\n")
-        #expect(segmentCount == 4)   // the body borrows each source line rather than copying them into one span
+        #expect(segmentCount == 4)   // each line is borrowed from the source and followed by a shared "\n" segment, rather than copied into one span
         }
     }
 
