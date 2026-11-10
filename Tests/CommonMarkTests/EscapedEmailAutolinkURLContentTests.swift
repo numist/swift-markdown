@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// The URL of an extended email autolink whose address skips a backslash escape is the whole address without the
-/// backslash, and the borrowed `content` API vends it as one `UTF8Span` holding that whole URL.
+/// An extended email autolink may span a backslash escape; its URL is the address without the backslash, and the
+/// borrowed `content` API vends it as one `UTF8Span`.
 @Suite("Escaped email autolink URL content")
 struct EscapedEmailAutolinkURLContentTests {
 
@@ -33,7 +33,7 @@ struct EscapedEmailAutolinkURLContentTests {
         #expect(linkURLSpans("xmpp:@\\.c") == ["xmpp:@.c"])
     }
 
-    @Test("a mailto address with an escaped local-part byte")
+    @Test("a mailto address with an escaped local-part character")
     func mailtoAroundEscapedUnderscoreTree() {
         #expect(TreeDump.dump("mailto:a\\_b@c.d", options: [.gfmAutolink]) == """
             document
@@ -45,12 +45,12 @@ struct EscapedEmailAutolinkURLContentTests {
     }
 
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
-    @Test("a mailto address with an escaped local-part byte has one whole URL span")
+    @Test("a mailto address with an escaped local-part character has one whole URL span")
     func mailtoAroundEscapedUnderscoreContent() {
         #expect(linkURLSpans("mailto:a\\_b@c.d") == ["mailto:a_b@c.d"])
     }
 
-    @Test("a bare address with an escaped local-part byte")
+    @Test("a bare address with an escaped local-part character")
     func bareAroundEscapedPeriodTree() {
         #expect(TreeDump.dump("a\\.b@c.d", options: [.gfmAutolink]) == """
             document
@@ -62,7 +62,7 @@ struct EscapedEmailAutolinkURLContentTests {
     }
 
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
-    @Test("a bare address with an escaped local-part byte has one whole mailto URL span")
+    @Test("a bare address with an escaped local-part character has one whole mailto URL span")
     func bareAroundEscapedPeriodContent() {
         #expect(linkURLSpans("a\\.b@c.d") == ["mailto:a.b@c.d"])
     }
