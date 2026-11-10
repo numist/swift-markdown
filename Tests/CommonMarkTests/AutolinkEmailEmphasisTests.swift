@@ -12,7 +12,7 @@ import Testing
 import CommonMark
 
 /// Extended email autolinks (Autolinks (extension)) are recognized in text after emphasis is resolved, so a `_`
-/// that is not part of an emphasis run may be part of an address's local part.
+/// that delimits no emphasis may be part of an address's local part.
 @Suite("Extended email autolinks next to emphasis delimiters")
 struct AutolinkEmailEmphasisTests {
 
@@ -84,7 +84,7 @@ struct AutolinkEmailEmphasisTests {
             """)
     }
 
-    // MARK: - Several addresses in one text
+    // MARK: - Several addresses in one text node
 
     @Test("`a@b.c x@y.z`: both emails link, with the ` ` between them")
     func twoEmailsInOneRun() {
