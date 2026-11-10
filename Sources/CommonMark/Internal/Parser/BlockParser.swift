@@ -1996,8 +1996,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Flattens a segment list into one arena chunk, recording its run map in `map`: a source segment images its range, and a line join is a gap. The map tiles the content from its first byte, so it survives a later copy of the content.
     private mutating func flattenSegments(_ segs: borrowing UniqueArray<Segment>, map: inout [ArenaRun]) -> Chunk {
-        var total = 0
-        for i in 0..<segs.count { total += segs[i].length }
+        let total = totalLength(of: segs)
         // Arena segments are read through a span of the arena, which can't be borrowed while the arena grows, so the
         // content is assembled apart and then appended.
         var buf = UniqueArray<UInt8>(minimumCapacity: total)
