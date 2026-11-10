@@ -12,7 +12,8 @@ import Testing
 import CommonMark
 
 /// The document's source range covers the whole input, any byte order mark, trailing whitespace, blank lines and the
-/// final line ending included. Input that ends in a line ending ends at column 1 of the line after its last.
+/// final line ending included. Input that ends in a line ending ends at column 1 of the line after its last. Empty
+/// input has no source range.
 @Suite("Document source ranges")
 struct DocumentSourceRangeTests {
 

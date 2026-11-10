@@ -11,7 +11,7 @@
 import CommonMark
 import Testing
 
-/// Footnote-shaped brackets nested many levels deep (Footnotes).
+/// Footnote-shaped brackets nested many levels deep.
 ///
 /// A `]` closes the innermost open `[^`. A label may not contain an unescaped bracket (Links), so no outer bracket is a
 /// footnote reference however deep the nesting, and 32,000 nested brackets, about 96 KB of source, parse within the
