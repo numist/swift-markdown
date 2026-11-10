@@ -151,7 +151,7 @@ struct ExtendedAutolinkDomainTests {
             """)
     }
 
-    @Test("url autolink whose domain holds a U+FFFD before an underscore links")
+    @Test("url autolink with a U+FFFD before an underscore links")
     func urlReplacementCharacterInDomainAutolinks() {
         // U+FFFD is not a domain character, so the domain ends before it and the underscore is outside its last two
         // segments.
@@ -263,7 +263,7 @@ struct ExtendedAutolinkDomainTests {
         #expect(tree(markdown) == expected)
     }
 
-    @Test("www domain with a non-ASCII letter")
+    @Test("www autolink with a non-ASCII letter after `www.`")
     func wwwNonASCIILetterDomainAutolinks() {
         #expect(tree("www.\u{E9}x y") == """
             document @1:1-1:10
@@ -283,7 +283,7 @@ struct ExtendedAutolinkDomainTests {
             """)
     }
 
-    @Test("www domain beginning with U+FFFD")
+    @Test("www autolink with a U+FFFD after `www.`")
     func wwwReplacementCharacterDomainAutolinks() {
         // U+FFFD is not a domain character, so the domain ends before it and the underscores are outside its last two
         // segments. As trailing punctuation, they are not part of the autolink.
@@ -431,7 +431,8 @@ struct ExtendedAutolinkDomainTests {
             """)
     }
 
-    /// A second `@` in the domain restarts the address there; the periods the first domain held still count.
+    /// A second `@` in the domain restarts the address just past the first `@`; the periods the first domain held still
+    /// count.
     @Test func emailRestartedAtSecondAtSignKeepsFirstDomainPeriod() {
         #expect(tree("o@.e@b") == """
             document @1:1-1:7
@@ -522,10 +523,10 @@ struct ExtendedAutolinkDomainTests {
     }
 }
 
-/// The domain scan of an extended www or url autolink runs over the rest of the inline content, short of its final
-/// character, without regard to where the trailing punctuation trim later ends the link. A backslash makes the scan
-/// examine the character after it in its place. An underscore in the last two segments rejects the domain only while
-/// the scan has passed ten periods or fewer.
+/// The domain scan of an extended www or url autolink runs to the first character outside a domain and never examines
+/// the inline content's final character, whatever the trailing punctuation trim later leaves of the link. A backslash
+/// makes the scan examine the character after it in its place. An underscore in the last two segments rejects the
+/// domain only while the scan has passed ten periods or fewer.
 @Suite("Extended www and url autolink domain scan")
 struct ExtendedAutolinkDomainScanTests {
     private func tree(_ markdown: String) -> String {
