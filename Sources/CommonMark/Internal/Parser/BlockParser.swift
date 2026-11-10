@@ -1238,7 +1238,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Checks whether a continuation line opens a table with the paragraph's last line as its header (see
     /// `detectPendingTable`).
     ///
-    /// Inlined because it runs on every paragraph continuation line: out of line, it costs about 0.2% of the spec
+    /// Inlined because it runs on every paragraph continuation line: out of line, it costs about 0.3% of the spec
     /// text's parse instructions with tables enabled.
     @inline(__always)
     private mutating func recordTableDelimiterCandidate(line: LineContext, pending: inout PendingLeaf?) {
@@ -2866,7 +2866,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Whether `sourceBytes[range]` holds only spaces and tabs.
-    // Inlined because out of line it costs about 0.5% of the spec text's parse instructions.
+    // Inlined because out of line it costs about 1% of the spec text's parse instructions.
     @inline(__always)
     private func isSpaceOrTabOnly(_ range: Range<Int>) -> Bool {
         range.allSatisfy { sourceBytes[$0].isSpaceOrTab }
