@@ -11,10 +11,10 @@
 import Testing
 import CommonMark
 
-/// Source positions of inline constructs across Unicode encodings. A `SourcePosition.column` is a 1-based UTF-8 byte
-/// offset within its line, so a multi-byte scalar advances the column by its byte count (é = 2, € = 3, 😀 = 4,
+/// Source positions of inline constructs in text with multi-byte scalars. A `SourcePosition.column` is a 1-based UTF-8
+/// byte offset within its line, so a multi-byte scalar advances the column by its byte count (é = 2, € = 3, 😀 = 4,
 /// U+FFFD = 3, a combining mark = its own 2 bytes).
-@Suite("Inline source positions — Unicode encodings")
+@Suite("Inline source positions of multi-byte scalars")
 struct InlinePositionEncodingTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
@@ -143,8 +143,8 @@ struct InlinePositionEncodingTests {
         #expect(n[2].range == range(1, 1, 1, 5))
         #expect(n[3].range == range(1, 2, 1, 4))
 
-        // "é " then "_x_": the space makes `_` left-flanking (intraword `_` after a letter would
-        // NOT open), so emphasis begins at col 4 (é=2 bytes + space).
+        // "é " then "_x_": the space keeps `_` from being right-flanking, so it can open (an intraword `_`
+        // cannot), and emphasis begins at col 4 (é = 2 bytes + space).
         n = nodes("\u{E9} _x_")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .emphasis, .text])
         try #require(n[2].literal == "\u{E9} " && n[4].literal == "x")
@@ -424,7 +424,7 @@ struct InlinePositionEncodingTests {
 
     @Test("hard line break (two spaces) — preceding text ends at its content; break carries no range")
     func hardBreakTwoSpaces() throws {
-        // "a  \nb": text "a" range ends at its last byte, col 2, not over the 2 stripped spaces;
+        // "a  \nb": text "a" ends just past its last byte, at column 2, excluding the two stripped spaces;
         // the LineBreak has no source range; "b" is line 2 col 1.
         var n = nodes("a  \nb")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .lineBreak, .text])
@@ -478,7 +478,7 @@ struct InlinePositionEncodingTests {
 
     @Test("soft line break — line advance; break carries no range; multibyte on either line")
     func softBreak() throws {
-        // "a\nb": text "a" cols 1-2 (owns nothing extra), SoftBreak no range, "b" line 2 col 1.
+        // "a\nb": text "a" col 1, end column 2; SoftBreak no range; "b" line 2 col 1.
         var n = nodes("a\nb")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .softBreak, .text])
         try #require(n[2].literal == "a" && n[4].literal == "b")
