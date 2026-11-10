@@ -155,7 +155,6 @@ internal enum HTMLRenderer {
             // No spec example has a footnote definition, so it renders in place rather than in a footnote section at the end of the document.
             renderChildren(node, into: &out, tight: false, tagfilter: tagfilter)
         case .attribute:
-            // An inline attribute renders as its content alone.
             renderChildren(node, into: &out, tight: false, tagfilter: tagfilter)
         }
     }
@@ -203,7 +202,6 @@ internal enum HTMLRenderer {
                     // Any first child other than a tight paragraph starts on the line after `<li>`.
                     out += "\n"
                 } else if prevWasTightParagraph {
-                    // A tight paragraph has no trailing `\n` to separate it from the next block.
                     out += "\n"
                 }
                 renderNode(child, into: &out, tight: tight, tagfilter: tagfilter)
@@ -377,7 +375,7 @@ internal enum HTMLRenderer {
         return String(decoding: out, as: UTF8.self)
     }
 
-    /// Escapes a URL for an HTML attribute. Control characters, space, DEL, non-ASCII bytes and `"`, `<`, `>`, `[`, `\\`, `]`, `^`, `` ` ``, `{`, `|`, `}` are percent-encoded. `&` becomes `&amp;`. A `%` followed by two hex digits passes through; any other `%` is percent-encoded.
+    /// Escapes a URL for an HTML attribute. Control characters, space, DEL, non-ASCII bytes and `"`, `<`, `>`, `[`, `\`, `]`, `^`, `` ` ``, `{`, `|`, `}` are percent-encoded. `&` becomes `&amp;`. A `%` followed by two hex digits passes through; any other `%` is percent-encoded.
     internal static func escapeURL(_ s: String) -> String {
         var out: [UInt8] = []
         out.reserveCapacity(s.utf8.count)
