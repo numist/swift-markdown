@@ -975,7 +975,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// The source offset just past virtual offset `end - 1` of a paragraph's segments, `total` bytes long, a byte that
     /// is not whitespace.
-    private func sourceEnd(ofVirtual end: Int, in segs: borrowing UniqueArray<Segment>, total: Int) -> Int {
+    private mutating func sourceEnd(ofVirtual end: Int, in segs: borrowing UniqueArray<Segment>, total: Int) -> Int {
         precondition(end > 0, "a paragraph's content that is not whitespace is not empty")
         let (i, segmentStart) = segment(endingAtOrAfter: end, in: segs, total: total)
         precondition(segs[i].inSource, "a paragraph's lines start and end on a source byte")
@@ -1244,7 +1244,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// `leaf`'s content narrowed to `range`, in the offsets `headingContentRange` returns.
-    private func narrowedContent(_ leaf: consuming PendingLeaf, to range: Range<Int>) -> PendingContent {
+    private mutating func narrowedContent(_ leaf: consuming PendingLeaf, to range: Range<Int>) -> PendingContent {
         switch consume leaf.content {
         case .lazy:
             return .lazy(range: range)
@@ -1997,7 +1997,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// `segs`, `total` bytes long, narrowed to the virtual `range`, whose bounds lie on source bytes.
-    private func segments(_ segs: consuming UniqueArray<Segment>, in range: Range<Int>, total: Int) -> UniqueArray<Segment> {
+    private mutating func segments(_ segs: consuming UniqueArray<Segment>, in range: Range<Int>, total: Int) -> UniqueArray<Segment> {
         precondition(!range.isEmpty, "a leaf's narrowed content is not empty")
         var segs = segs
         let (last, lastStart) = segment(endingAtOrAfter: range.upperBound, in: segs, total: total)
