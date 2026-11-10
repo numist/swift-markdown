@@ -11,7 +11,7 @@
 import CommonMark
 
 /// Reports, for every text node's segments in document order, whether the segment's bytes lie inside the parsed
-/// source or in a copy the document made, so a test can compare the result with a literal.
+/// source or in a copy the document made.
 ///
 /// Each line is a segment's text in quotes followed by `source` or `copy`.
 internal enum SourceBackedText {
