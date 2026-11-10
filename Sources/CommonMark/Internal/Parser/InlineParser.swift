@@ -1768,7 +1768,7 @@ extension BlockParser {
     }
 
     /// The length of lowercase `scheme` (`mailto:` or `xmpp:`) ending at `colon`, when it lies within
-    /// `[localBound, colon]` and starts at `localBound` or after a non-alphanumeric byte, so it folds into an
+    /// `localBound...colon` and starts at `localBound` or after a non-alphanumeric byte, so it folds into an
     /// extended email autolink.
     private func matchEmailScheme(_ scheme: String, colon: Int, localBound: Int, content: borrowing ContentSpan) -> Int? {
         let len = scheme.utf8.count
