@@ -12,7 +12,7 @@ internal import BasicContainers
 
 /// Reused buffers for the inline pass, owned by its caller so their borrow is independent of the `storage` mutations `parseInline` performs.
 ///
-/// `bytes` holds a copy of arena content. `pieces` holds a copy of a segment list or run map, since `storage.segments` grows during inline parsing, and `pieceEnds` their running ends.
+/// `bytes` holds a copy of arena content. `pieces` holds a copy of a segment list, since `storage.segments` grows during inline parsing, or a run map as segments, and `pieceEnds` their running ends.
 private struct InlineScratch: ~Copyable {
     var bytes = UniqueArray<UInt8>()
     var pieces = UniqueArray<Segment>()
@@ -58,8 +58,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
     var emptyRemainderWalks: [DocumentStorage.Index: EmptyRemainderWalk] = [:]
 
-    /// How many list items and footnote definitions a line's walk continues with nothing left of the line before
-    /// `walkPastEmptyRemainder` takes over.
+    /// Once a line's walk has continued more than this many list items and footnote definitions with nothing left of
+    /// the line, `walkPastEmptyRemainder` walks the rest.
     static let emptyRemainderWalkLimit = 8
 
     /// The open leaf's accumulated content and its node.
@@ -846,7 +846,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func splitContiguousHeader(_ node: DocumentStorage.Index, range: Range<Int>, lastNewline: Int) -> PendingLeaf? {
         let headerRange = (lastNewline + 1)..<range.upperBound
         // The preceding lines are non-blank paragraph content (a blank line would have closed the
-        // paragraph); they trim to empty only when they hold nothing but line tabulations and form feeds.
+        // paragraph); they trim to empty only when their only characters other than spaces and tabs are line
+        // tabulations and form feeds.
         let precedingLines = Chunk(offset: range.lowerBound, length: lastNewline - range.lowerBound, inSource: true)
         // The split-off lines are a paragraph that bypasses finalize, so its raw content is formed here.
         if let precedingChunk = tableSplitParagraphContent(precedingLines.trimmingWhitespace(using: self), node: node) {
@@ -1195,9 +1196,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Whether the open paragraph absorbs the line as a continuation; otherwise the line starts a block that closes it.
     ///
-    /// A table-pending paragraph is a table, so a line that can't be a row closes it and its container: a lazy continuation
-    /// line, a lone `|`, which has no cells, or a line indented four or more columns, which starts an indented code block
-    /// because a table is not a paragraph (Indented code blocks).
+    /// A table-pending paragraph is a table, so a line that can't be a row closes it: a lazy continuation line, which
+    /// also closes the containers whose prefix it fails, a lone `|`, which has no cells, or a line indented four or more
+    /// columns, which starts an indented code block because a table is not a paragraph (Indented code blocks).
     private mutating func absorbParagraphLine(line: LineContext, pending: inout PendingLeaf?) -> Bool {
         let lineRange = line.lineRange
         let tablePending = openParagraphIsTablePending
@@ -2134,7 +2135,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Closes `node`, materializes its content, and makes its parent `current`.
     ///
-    /// A code block or HTML block ends at `blockContentEnd`, unless a closing fence ends it. A container block ends just past its last content byte: where its last child ends, or where its own marker does if that is later (a block quote's `>` on the last line that has one, a list item's list marker, a footnote definition's `[^label]:`), so blank lines and trailing whitespace after its content are not part of it. A paragraph that held only link reference definitions or a task list item marker leaves no child but still counts as content, while a fenced code block's or HTML block's blank lines are its content, so a container ending in one ends on its last line. A paragraph's end is set once its raw content is known, and a setext heading's past its underline. `lineContentEnd` is where an ATX heading (see `ATXMatch.end`), a thematic break or a closing fence ends on its line.
+    /// A code block or HTML block ends at `blockContentEnd`, unless a closing fence ends it. A container block ends just past its last content byte: where its last child ends, or where its own marker does if that is later (a block quote's `>` on the last line that has one, a list item's list marker, a footnote definition's `[^label]:`), so blank lines and trailing whitespace after its content are not part of it. A paragraph that held only definitions or a task list item marker leaves no child but still counts as content, while a fenced code block's or HTML block's blank lines are its content, so a container ending in one ends on its last line. A paragraph's end is set once its raw content is known, and a setext heading's past its underline. `lineContentEnd` is where an ATX heading (see `ATXMatch.end`), a thematic break or a closing fence ends on its line.
     private mutating func finalize(node: DocumentStorage.Index, pending: consuming PendingLeaf?, lineContentEnd: Int? = nil) -> PendingLeaf? {
         var pending = pending
         let kind = storage[node].kind
