@@ -1433,12 +1433,12 @@ struct ReferenceDefinitionTests {
 
     @Test("text after the title on its line leaves no definition")
     func titleWithTrailingJunk() {
-        // Per Link reference definitions, only spaces or tabs may follow the title on its line. Without the title,
-        // the destination is followed by other text on its line, so there is no definition.
+        // Per Link reference definitions, no non-whitespace character may follow the title on its line. Without the
+        // title, the destination is followed by other text on its line, so there is no definition.
         let source = "[foo]: /url \"title\" extra\n\nhello"
         MarkdownDocument.withParsedDocument(source) { doc in
         #expect(doc._storage.referenceMap["foo"] == nil)
-        #expect(dfs(doc).map(\.kind).contains(.paragraph))
+        #expect(dfs(doc).compactMap(\.literal) == ["[foo]: /url \"title\" extra", "hello"])
         }
     }
 }
@@ -1494,6 +1494,7 @@ struct TasklistTests {
         MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstItem(doc)
         #expect(info.checked == nil)
+        #expect(info.text == "[ ] foo")
         }
     }
 
@@ -1612,7 +1613,7 @@ struct TableTests {
         let source = "| a | b |\n|---|---|\n| 1 | 2 |"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map(\.kind)
-        #expect(!kinds.contains(.table))
+        #expect(kinds == [.document, .paragraph, .text, .softBreak, .text, .softBreak, .text])
         }
     }
 
