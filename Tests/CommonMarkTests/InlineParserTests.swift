@@ -1415,7 +1415,7 @@ struct StrikethroughTests {
         }
     }
 
-    @Test("doubleTilde option rejects single tilde")
+    @Test("`.strikethroughDoubleTilde` rejects a single tilde")
     func doubleTildeFlagRejects() {
         let source = "~foo~"
         MarkdownDocument.withParsedDocument(source, options: [.strikethrough, .strikethroughDoubleTilde]) { doc in
@@ -1423,7 +1423,7 @@ struct StrikethroughTests {
         }
     }
 
-    @Test("doubleTilde option accepts double tilde")
+    @Test("`.strikethroughDoubleTilde` accepts a double tilde")
     func doubleTildeFlagAccepts() {
         let source = "~~foo~~"
         MarkdownDocument.withParsedDocument(source, options: [.strikethrough, .strikethroughDoubleTilde]) { doc in
