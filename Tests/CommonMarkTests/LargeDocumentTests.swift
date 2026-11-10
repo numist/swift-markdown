@@ -12,7 +12,7 @@ import CommonMark
 import Foundation
 import Testing
 
-/// Documents whose source offsets, content lengths or materialized byte offsets exceed `Int32.max`.
+/// Documents whose source offsets, content lengths or materialized byte offsets exceed 2 GiB.
 ///
 /// Each large document has a small twin with the same blocks. The large documents need up to 9 GB of memory and take
 /// seconds to parse in an optimized build, so they run only when the environment variable

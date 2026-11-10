@@ -201,7 +201,7 @@ extension MarkdownNode {
         case thematicBreak
         /// A footnote definition (`[^label]: …`), produced when parsing with `MarkdownDocument.ParseOptions.footnotes`.
         ///
-        /// Footnote definitions are children of the document, after its other blocks, in the order their labels are first referenced. A definition whose label no reference uses is dropped, as is any later definition of the same label.
+        /// Footnote definitions are children of the document, after its other blocks, in the order their labels are first referenced. A definition whose label no reference uses is dropped, as is any later definition of the same label. A reference inside a dropped definition counts as a use, so the definition it names is kept.
         case footnoteDefinition
         /// A GFM table, produced when parsing with `MarkdownDocument.ParseOptions.tables`.
         case table
@@ -222,7 +222,7 @@ extension MarkdownNode {
         case softBreak
         /// A hard line break (a line ending with two or more spaces or a backslash).
         case lineBreak
-        /// An inline code span. `backtickCount` is the length of each delimiter run, which the node's source range includes.
+        /// An inline code span. `backtickCount` is the length of each delimiter run.
         case codeInline(backtickCount: Int)
         /// An inline span of raw HTML.
         case htmlInline
@@ -234,7 +234,7 @@ extension MarkdownNode {
         case link
         /// An image. The source URL and title are available through the node's content.
         case image
-        /// A footnote reference (`[^label]`), produced when parsing with `MarkdownDocument.ParseOptions.footnotes`. `index` numbers labels from 1 in order of first reference; repeated references reuse it.
+        /// A footnote reference (`[^label]`), produced when parsing with `MarkdownDocument.ParseOptions.footnotes`. `index` numbers labels from 1 in order of first reference; repeated references reuse it. A reference inside a dropped footnote definition takes part in the numbering, so a kept definition can have an index whose first reference is not in the tree.
         case footnoteReference(index: Int)
         /// Struck-through text (`~text~` or `~~text~~`), produced when parsing with `MarkdownDocument.ParseOptions.strikethrough`.
         case strikethrough
@@ -399,9 +399,9 @@ extension MarkdownNode {
 }
 
 extension MarkdownNode {
-    /// The node's source range, or `nil` without `MarkdownDocument.ParseOptions.sourcePosition` or for a node that has no source range: a soft or hard line break, a cell that a body row with fewer cells than the header row lacks, and the document of empty input.
+    /// The node's source range, or `nil` without `MarkdownDocument.ParseOptions.sourcePosition` or for a node that has no source range: a soft or hard line break, a cell inserted into a body row that has fewer cells than the header row, and the document of empty input.
     ///
-    /// The range runs from the first byte of the node's own content to just past its last content byte. The node's own syntax counts as content: a list item's marker and checkbox, a block quote's marker, a footnote definition's `[^label]:`, a code block's fences, an ATX heading's `#`s, a setext heading's underline, a code span's backticks, emphasis and strikethrough delimiters, a link's or image's brackets with its destination and title, an autolink's `<` and `>`, a table's delimiter row, and a table row's leading and closing pipes. Whitespace, line endings, blank lines, table cell padding and the pipes between cells are never inside a node's range unless they are part of its content, such as whitespace inside a code block's text or a code span. So a container ends at the end of its last child or of its own marker, whichever is later, and a node with no content bytes, such as an empty table cell or a paragraph of only line tabulations, has an empty range where it starts, which for a cell is just past its opening pipe. The line ending that ends a node's last line is outside it, even where the node's text holds it.
+    /// The range runs from the first byte of the node's own content to just past its last content byte. The node's own syntax counts as content: a list item's marker and checkbox, a block quote's marker, a footnote definition's `[^label]:`, a code block's fences, an ATX heading's `#`s, a setext heading's underline, a code span's backticks, emphasis and strikethrough delimiters, a link's or image's brackets with its destination and title, an autolink's `<` and `>`, a table's delimiter row, and a table row's leading and closing pipes. Whitespace, line endings, blank lines, table cell padding and the pipes between cells are never inside a node's range unless they are part of its content, such as whitespace inside a code block's text or a code span. So a container ends where its last child or its own marker ends, whichever is later, and a node with no content bytes, such as an empty table cell or a paragraph of only line tabulations, has an empty range at its start, which for a cell is just past its opening pipe. The line ending that ends a node's last line is outside it, even where the node's text holds it.
     ///
     /// The document's range covers the whole input, any byte order mark included, whose three bytes count in line 1's columns. For input that ends in a line ending, it ends at column 1 of the line after the last.
     public var sourceRange: Range<SourcePosition>? {

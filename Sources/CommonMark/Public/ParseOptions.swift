@@ -64,7 +64,7 @@ extension MarkdownDocument {
 
         /// Enables GFM task list items.
         ///
-        /// A list item whose first block is a paragraph beginning with `[ ]`, `[x]`, or `[X]`, followed by whitespace or the end of the line, becomes an unchecked or checked task list item. Any whitespace character can stand in for the space between the brackets.
+        /// A list item whose first block is a paragraph beginning with `[ ]`, `[x]`, or `[X]`, followed by whitespace or the end of the line, becomes an unchecked or checked task list item. Any whitespace character other than a line ending can stand in for the space between the brackets.
         public static let tasklist = MarkdownDocument.ParseOptions(rawValue: 1 << 23)
 
         /// Enables GFM extended autolinks.
@@ -74,7 +74,7 @@ extension MarkdownDocument {
 
         /// Enables GFM tables.
         ///
-        /// A paragraph line followed by a delimiter row, such as `| --- | :---: |`, with as many cells as the line becomes the header row of a table. Any lines of the paragraph before it remain a paragraph.
+        /// A paragraph line becomes the header row of a table when the next line is a delimiter row, such as `| --- | :---: |`, with as many cells. Any lines of the paragraph before it remain a paragraph.
         public static let tables = MarkdownDocument.ParseOptions(rawValue: 1 << 25)
 
         /// Enables inline attributes, written as `^[text](key: value)`, and attribute definitions, written as `^[label]: key: value`.

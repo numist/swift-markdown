@@ -36,7 +36,7 @@ internal enum NodeData {
     case item(padding: Int)
 }
 
-/// A link to a node, or none, stored in one word as `-1` for none, which no index in `DocumentStorage.nodes` is.
+/// A link to a node, or to none, stored in one word. None is `-1`, which is no index in `DocumentStorage.nodes`.
 @propertyWrapper
 internal struct NodeLink {
     private var index: Int

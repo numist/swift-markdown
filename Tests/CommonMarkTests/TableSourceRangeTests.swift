@@ -11,7 +11,7 @@
 import Testing
 import CommonMark
 
-/// The spaces between pipes and cell content, and the pipes themselves, are not part of a cell (Tables (extension)), so a
+/// The whitespace between pipes and cell content, and the pipes themselves, are not part of a cell (Tables (extension)), so a
 /// cell covers just its content, and a cell with no content has an empty range just past its opening pipe. A row runs
 /// from its first byte to its closing pipe, or to its last cell's content when it has none, and a table runs from its
 /// header row to its last row, or to its delimiter row when it has no body; trailing whitespace is outside all three.

@@ -29,7 +29,7 @@ internal struct DocumentStorage: ~Copyable {
     /// `^[label]: attrs` definitions, keyed like `referenceMap` but kept apart so `[foo]` and `^[foo]` don't collide. The first definition wins.
     internal var attributeReferenceMap: [String: Chunk] = [:]
 
-    /// Footnote definition nodes by normalized label. The first definition to close wins, so a definition nested in a same-label one wins over its encloser.
+    /// Footnote definition nodes by normalized label. The first definition in the document wins.
     internal var footnoteMap: [String: Index] = [:]
 
     /// Every `.footnoteDefinition` node in document order, so unreferenced ones can be dropped.
