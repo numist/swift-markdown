@@ -11,7 +11,7 @@
 import Markdown
 import Testing
 
-/// A link label holds at least one non-whitespace character (spec "Links"), so a whitespace-only `[ ]`
+/// A link label holds at least one non-whitespace character (Links), so a whitespace-only `[ ]`
 /// after a shortcut reference is neither a link label nor `[]`, and stays text.
 struct WhitespaceOnlySecondLabelTests {
     private func tree(_ markdown: String) -> String {

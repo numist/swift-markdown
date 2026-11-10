@@ -12,8 +12,8 @@ import Markdown
 import Testing
 
 /// The lines before a table's header row form a paragraph of their own, so link reference definitions at its
-/// start are removed (spec "Link reference definitions"), and in a list item it is the paragraph a task list
-/// item marker begins (spec "Task list items (extension)").
+/// start are removed (Link reference definitions), and in a list item it is the paragraph a task list
+/// item marker begins (Task list items (extension)).
 struct TableSplitParagraphDefinitionTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription()

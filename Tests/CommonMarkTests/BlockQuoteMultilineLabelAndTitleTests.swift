@@ -16,7 +16,7 @@ import Testing
 @Suite("Labels and titles across a block quote line")
 struct BlockQuoteMultilineLabelAndTitleTests {
 
-    /// A link label may contain a line ending (spec "Links"), so an inline attribute's reference label continues
+    /// A link label may contain a line ending (Links), so an inline attribute's reference label continues
     /// onto the next line and matches the definition whose label is the same after normalization.
     @Test("an inline attribute's reference label continues onto the next line")
     func attributeReferenceLabel() {
@@ -31,8 +31,8 @@ struct BlockQuoteMultilineLabelAndTitleTests {
             """)
     }
 
-    /// A link title may span lines (spec "Links"), and a backslash before punctuation in it is an escape (spec
-    /// "Backslash escapes").
+    /// A link title may span lines (Links), and a backslash before punctuation in it is an escape
+    /// (Backslash escapes).
     @Test("a link title with an escaped quote continues onto the next line")
     func linkTitleWithEscape() {
         #expect(TreeDump.dump("> x [a](b \"c\n> d\\\"e\")", options: [.sourcePosition], sourceRanges: true) == """
@@ -46,7 +46,7 @@ struct BlockQuoteMultilineLabelAndTitleTests {
             """)
     }
 
-    /// A link title that is never closed is no title (spec "Links"), so the bracket and parenthesis stay text.
+    /// A link title that is never closed is no title (Links), so the bracket and parenthesis stay text.
     @Test("an unclosed link title continuing onto the next line forms no link")
     func unclosedLinkTitle() {
         #expect(TreeDump.dump("> x [a](b \"c\n> d)", options: [.sourcePosition], sourceRanges: true) == """

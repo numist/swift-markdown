@@ -12,7 +12,7 @@ import Markdown
 import Testing
 
 /// Markdown parsing recognizes no footnotes, so footnote syntax is a link reference definition whose label begins
-/// with `^`, and a reference to it is a link (spec "Link reference definitions").
+/// with `^`, and a reference to it is a link (Link reference definitions).
 @Suite("Footnote syntax")
 struct FootnoteSyntaxTests {
     @Test("a footnote reference and definition are a link and a link reference definition")

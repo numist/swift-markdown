@@ -12,8 +12,8 @@ import Markdown
 import Testing
 
 /// A task list item is a list item whose first block is a paragraph that begins with a task list item
-/// marker and at least one whitespace character before any other content (spec "Task list items
-/// (extension)"); the end of the paragraph's content counts as that whitespace. The marker is
+/// marker and at least one whitespace character before any other content (Task list items
+/// (extension)); the end of the paragraph's content counts as that whitespace. The marker is
 /// recognized on the paragraph, whatever line the paragraph starts on and whatever precedes the list
 /// marker on its line.
 struct TaskListFirstParagraphTests {
@@ -106,7 +106,7 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    /// The paragraph's initial whitespace, a line tabulation here, is removed (spec "Paragraphs"), so
+    /// The paragraph's initial whitespace, a line tabulation here, is removed (Paragraphs), so
     /// the paragraph begins with the marker.
     @Test func lineTabulationBeforeMarker() {
         #expect(tree("- \u{0B}[x] \n`") == """
