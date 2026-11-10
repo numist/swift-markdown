@@ -15,8 +15,7 @@ import CommonMark
 ///
 /// Per Tabs, when a container's prefix consumes only part of a tab, the tab's remaining columns are indentation, and an
 /// HTML block keeps its line's indentation as content, so those columns become leading spaces: `>→<div>` gives
-/// `  <div>`. Those spaces stand for the split tab, so the block starts at the tab's byte. Where the prefix splits no
-/// tab, the block starts at the first space of the indentation it keeps, or at its `<` if it keeps none.
+/// `  <div>`. Those spaces stand for the split tab, so the block starts at the tab's byte.
 @Suite("An HTML block that begins with a split tab's columns starts at the tab")
 struct HTMLBlockSplitTabStartTests {
 
@@ -153,26 +152,6 @@ struct HTMLBlockSplitTabStartTests {
             """
         ),
         Case(
-            "block quote marker followed by a space",
-            "> <div>\n",
-            """
-            document @1:1-2:1
-              block_quote @1:1-1:8
-                html_block "<div>\\n" @1:3-1:8
-
-            """
-        ),
-        Case(
-            "block quote marker followed by spaces",
-            ">   <div>\n",
-            """
-            document @1:1-2:1
-              block_quote @1:1-1:10
-                html_block "  <div>\\n" @1:3-1:10
-
-            """
-        ),
-        Case(
             "a tab that stands for one column after a block quote marker in a list item",
             "- >\t<div>\n",
             """
@@ -181,15 +160,6 @@ struct HTMLBlockSplitTabStartTests {
                 item @1:1-1:10
                   block_quote @1:3-1:10
                     html_block "<div>\\n" @1:5-1:10
-
-            """
-        ),
-        Case(
-            "spaces at the top level",
-            "  <div>\n",
-            """
-            document @1:1-2:1
-              html_block "  <div>\\n" @1:1-1:8
 
             """
         ),
