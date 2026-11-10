@@ -21,7 +21,7 @@ import Testing
 struct ExtendedEmailAutolinkScanTests {
     private static let options: MarkdownDocument.ParseOptions = [.gfmAutolink]
 
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: Self.options)
     }
 
@@ -30,7 +30,7 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func plainAddressGetsMailtoDestination() {
-        #expect(surface("a@b.c") == """
+        #expect(tree("a@b.c") == """
             document
               paragraph
                 link "mailto:a@b.c" ""
@@ -40,7 +40,7 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func localPartStopsAtOtherCharacter() {
-        #expect(surface("a!b@c.d") == """
+        #expect(tree("a!b@c.d") == """
             document
               paragraph
                 text "a!"
@@ -51,7 +51,7 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func secondAtSignRestartsAddress() {
-        #expect(surface("a@b.c@d.e") == """
+        #expect(tree("a@b.c@d.e") == """
             document
               paragraph
                 text "a@"
@@ -62,7 +62,7 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func restartedAddressAfterSchemeGetsNoMailtoDestination() {
-        #expect(surface("mailto:a@b.c@d.e") == """
+        #expect(tree("mailto:a@b.c@d.e") == """
             document
               paragraph
                 text "mailto:a@"
@@ -73,7 +73,7 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func periodBeforeSecondAtSignCountsForRestartedAddress() {
-        #expect(surface("a@b.c@d") == """
+        #expect(tree("a@b.c@d") == """
             document
               paragraph
                 text "a@"
@@ -81,11 +81,11 @@ struct ExtendedEmailAutolinkScanTests {
                   text "b.c@d"
 
             """)
-        #expect(surface("a@bc@d") == text("a@bc@d"))
+        #expect(tree("a@bc@d") == text("a@bc@d"))
     }
 
     @Test func domainEndsBeforePeriodWithoutAlphanumeric() {
-        #expect(surface("a@x.y.-5") == """
+        #expect(tree("a@x.y.-5") == """
             document
               paragraph
                 link "mailto:a@x.y" ""
@@ -96,13 +96,13 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func domainSegmentStartingWithHyphenAfterPeriodIsText() {
-        #expect(surface("a@b.-c") == text("a@b.-c"))
+        #expect(tree("a@b.-c") == text("a@b.-c"))
     }
 
     // MARK: - Schemes
 
     @Test func mailtoSchemeIsPartOfLink() {
-        #expect(surface("mailto:x@a.b") == """
+        #expect(tree("mailto:x@a.b") == """
             document
               paragraph
                 link "mailto:x@a.b" ""
@@ -112,7 +112,7 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func xmppSchemeIsPartOfLink() {
-        #expect(surface("xmpp:x@a.b") == """
+        #expect(tree("xmpp:x@a.b") == """
             document
               paragraph
                 link "xmpp:x@a.b" ""
@@ -122,7 +122,7 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func xmppDomainHoldsSlash() {
-        #expect(surface("xmpp:x@a.b/c") == """
+        #expect(tree("xmpp:x@a.b/c") == """
             document
               paragraph
                 link "xmpp:x@a.b/c" ""
@@ -132,7 +132,7 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func xmppAddressWithResourceIsLink() {
-        #expect(surface("xmpp:a@b.c/d") == """
+        #expect(tree("xmpp:a@b.c/d") == """
             document
               paragraph
                 link "xmpp:a@b.c/d" ""
@@ -142,22 +142,22 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func xmppAddressEndingInSlashIsText() {
-        #expect(surface("xmpp:a@b.c/") == text("xmpp:a@b.c/"))
+        #expect(tree("xmpp:a@b.c/") == text("xmpp:a@b.c/"))
     }
 
     @Test func schemeAllowsEmptyLocalPart() {
-        #expect(surface("mailto:@a.b") == """
+        #expect(tree("mailto:@a.b") == """
             document
               paragraph
                 link "mailto:@a.b" ""
                   text "mailto:@a.b"
 
             """)
-        #expect(surface("@a.b") == text("@a.b"))
+        #expect(tree("@a.b") == text("@a.b"))
     }
 
     @Test func schemeAfterText() {
-        #expect(surface("x mailto:a@b.c") == """
+        #expect(tree("x mailto:a@b.c") == """
             document
               paragraph
                 text "x "
@@ -168,7 +168,7 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func localPartCharacterBeforeSchemeJoinsLink() {
-        #expect(surface(".mailto:x@a.b") == """
+        #expect(tree(".mailto:x@a.b") == """
             document
               paragraph
                 link ".mailto:x@a.b" ""
@@ -178,7 +178,7 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func schemeAfterPunctuationJoinsLocalPart() {
-        #expect(surface("a.mailto:x@b.c") == """
+        #expect(tree("a.mailto:x@b.c") == """
             document
               paragraph
                 link "a.mailto:x@b.c" ""
@@ -188,7 +188,7 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func uppercaseSchemeEndsLocalPart() {
-        #expect(surface("MAILTO:x@a.b") == """
+        #expect(tree("MAILTO:x@a.b") == """
             document
               paragraph
                 text "MAILTO:"
@@ -199,7 +199,7 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func otherSchemeEndsLocalPart() {
-        #expect(surface("foo:x@a.b") == """
+        #expect(tree("foo:x@a.b") == """
             document
               paragraph
                 text "foo:"
@@ -210,7 +210,7 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func schemeAfterLetterEndsLocalPart() {
-        #expect(surface("amailto:x@a.b") == """
+        #expect(tree("amailto:x@a.b") == """
             document
               paragraph
                 text "amailto:"

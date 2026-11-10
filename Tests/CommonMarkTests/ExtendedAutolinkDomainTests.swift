@@ -528,12 +528,12 @@ struct ExtendedAutolinkDomainTests {
 /// the scan has passed ten periods or fewer.
 @Suite("Extended www and url autolink domain scan")
 struct ExtendedAutolinkDomainScanTests {
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: autolinkOptions)
     }
 
     @Test func wwwTrailingPeriodIsTrimmed() {
-        #expect(surface("www.a.") == """
+        #expect(tree("www.a.") == """
             document
               paragraph
                 link "http://www.a" ""
@@ -544,7 +544,7 @@ struct ExtendedAutolinkDomainScanTests {
     }
 
     @Test func wwwDomainTrimmedBeforeItsPeriodIsLink() {
-        #expect(surface("www..") == """
+        #expect(tree("www..") == """
             document
               paragraph
                 link "http://www" ""
@@ -555,7 +555,7 @@ struct ExtendedAutolinkDomainScanTests {
     }
 
     @Test func underscoreEndingInlineContentIsTrimmed() {
-        #expect(surface("www.a_") == """
+        #expect(tree("www.a_") == """
             document
               paragraph
                 link "http://www.a" ""
@@ -563,7 +563,7 @@ struct ExtendedAutolinkDomainScanTests {
                 text "_"
 
             """)
-        #expect(surface("_www.a.b_") == """
+        #expect(tree("_www.a.b_") == """
             document
               paragraph
                 emph
@@ -574,25 +574,25 @@ struct ExtendedAutolinkDomainScanTests {
     }
 
     @Test func trailingUnderscoreBeforeMoreContentRejectsDomain() {
-        #expect(surface("www.a.b_ c") == """
+        #expect(tree("www.a.b_ c") == """
             document
               paragraph
                 text "www.a.b_ c"
 
             """)
-        #expect(surface("http://a.b_ x") == """
+        #expect(tree("http://a.b_ x") == """
             document
               paragraph
                 text "http://a.b_ x"
 
             """)
-        #expect(surface("x www.a.b__ y") == """
+        #expect(tree("x www.a.b__ y") == """
             document
               paragraph
                 text "x www.a.b__ y"
 
             """)
-        #expect(surface("__www.a.b__") == """
+        #expect(tree("__www.a.b__") == """
             document
               paragraph
                 strong
@@ -602,13 +602,13 @@ struct ExtendedAutolinkDomainScanTests {
     }
 
     @Test func escapedUnderscoreRejectsDomain() {
-        #expect(surface("www.a.b\\_c d") == """
+        #expect(tree("www.a.b\\_c d") == """
             document
               paragraph
                 text "www.a.b_c d"
 
             """)
-        #expect(surface("http://a\\_b.c x") == """
+        #expect(tree("http://a\\_b.c x") == """
             document
               paragraph
                 text "http://a_b.c x"
@@ -617,7 +617,7 @@ struct ExtendedAutolinkDomainScanTests {
     }
 
     @Test func backslashInDomainIsLink() {
-        #expect(surface("www.a\\b.c") == """
+        #expect(tree("www.a\\b.c") == """
             document
               paragraph
                 link "http://www.a\\\\b.c" ""
@@ -627,19 +627,19 @@ struct ExtendedAutolinkDomainScanTests {
     }
 
     @Test func underscoreInLastTwoSegmentsRejectsDomain() {
-        #expect(surface("www.a_b.c") == """
+        #expect(tree("www.a_b.c") == """
             document
               paragraph
                 text "www.a_b.c"
 
             """)
-        #expect(surface("www.a.b_c") == """
+        #expect(tree("www.a.b_c") == """
             document
               paragraph
                 text "www.a.b_c"
 
             """)
-        #expect(surface("www.a.b.c.d.e.f.g.h.i.l_m") == """
+        #expect(tree("www.a.b.c.d.e.f.g.h.i.l_m") == """
             document
               paragraph
                 text "www.a.b.c.d.e.f.g.h.i.l_m"
@@ -663,7 +663,7 @@ struct ExtendedAutolinkDomainScanTests {
     }
 
     @Test func underscoreAfterMoreThanTenPeriodsIsLink() {
-        #expect(surface("www.a.b.c.d.e.f.g.h.i.j.l_m") == """
+        #expect(tree("www.a.b.c.d.e.f.g.h.i.j.l_m") == """
             document
               paragraph
                 link "http://www.a.b.c.d.e.f.g.h.i.j.l_m" ""
@@ -709,13 +709,13 @@ struct ExtendedAutolinkDomainScanTests {
 
             """),
     ])
-    func urlWithPortPathAndUserIsLink(markdown: String, tree: String) {
-        #expect(surface(markdown) == tree)
+    func urlWithPortPathAndUserIsLink(markdown: String, expected: String) {
+        #expect(tree(markdown) == expected)
     }
 
     /// Line tabulation is not whitespace that ends an extended autolink.
     @Test func urlDomainStartingWithLineTabulationIsLink() {
-        #expect(surface("http://\u{0B}x") == """
+        #expect(tree("http://\u{0B}x") == """
             document
               paragraph
                 link "http://\\u{B}x" ""
