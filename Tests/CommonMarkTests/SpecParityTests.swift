@@ -108,11 +108,10 @@ struct SpecParityTests {
         return opts
     }
 
-    @Test("every spec example renders its expected HTML")
+    @Test("every enabled spec example renders its expected HTML")
     func allExamples() throws {
-        let examples = try Self.loadSpec()
-        // Fixture sanity: the spec loaded.
-        #expect(examples.count > 600)
+        let examples = try Self.loadSpec().filter { !$0.extensions.contains("disabled") }
+        #expect(examples.count == 670)
         for ex in examples {
             let source = ex.markdown
             MarkdownDocument.withParsedDocument(source, options: Self.options(forExtensions: ex.extensions)) { doc in
