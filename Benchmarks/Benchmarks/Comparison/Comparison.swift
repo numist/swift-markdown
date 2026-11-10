@@ -118,8 +118,8 @@ let gfmFeatureFile = PreparedFile(
 //
 // The GitHub-Flavored Markdown feature set plus the other AST-affecting parse options, applied
 // identically to both parsers so the comparison stays apples-to-apples. The two option sets below
-// MUST stay in lockstep — every cmark-swift `ParseOption` has a matching cmark-gfm extension or
-// `CMARK_OPT_*` bit, and vice versa:
+// MUST stay in lockstep — every cmark-swift `ParseOption` has a matching cmark-gfm extension,
+// `CMARK_OPT_*` bit, or always-on cmark-gfm behaviour, and vice versa:
 //
 //   feature              cmark-swift ParseOption     cmark-gfm
 //   tables               .tables                     "table" extension
