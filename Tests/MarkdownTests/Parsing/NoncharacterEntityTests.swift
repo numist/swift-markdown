@@ -47,6 +47,7 @@ class NoncharacterEntityTests: XCTestCase {
     func testUFFFEAndUFFFFDecode() {
         XCTAssertEqual(Self.text("\u{FFFE}\u{FFFF}"), surface("&#xFFFE;&#65535;"))
         XCTAssertEqual(Self.text("\u{FFFE}"), surface("&#xFFFE;"))
+        XCTAssertEqual(Self.text("\u{FFFE}"), surface("&#65534;"))
         XCTAssertEqual(Self.text("\u{FFFF}"), surface("&#xFFFF;"))
         XCTAssertEqual(Self.text("\u{FFFF}"), surface("&#65535;"))
         XCTAssertEqual(Self.image(source: "/\u{FFFF}", title: "\u{FFFE}"), surface("![a](/&#xFFFF; \"&#xFFFE;\")"))
