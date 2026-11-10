@@ -63,4 +63,10 @@ class TableLazyWhitespaceHeaderCellTests: XCTestCase {
             "Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"",
             tree(">x\n  |\n>-|\n"))
     }
+
+    func testLazyTwoSpacesAtEndOfInput() {
+        XCTAssertEqual(
+            "Document\n└─ BlockQuote\n   └─ Paragraph\n      ├─ Text \"x\"\n      ├─ SoftBreak\n      ├─ Text \"|\"\n      ├─ SoftBreak\n      └─ Text \"-|\"",
+            tree(">x\n  |\n>-|"))
+    }
 }
