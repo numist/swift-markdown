@@ -56,7 +56,10 @@ private struct RangeValidator: ~Escapable {
                     node = next
                     continue descending
                 }
-                node = view.nodes[node].parent!
+                guard let parent = view.nodes[node].parent else {
+                    return false
+                }
+                node = parent
             }
             return true
         }

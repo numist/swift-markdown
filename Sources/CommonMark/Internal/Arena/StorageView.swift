@@ -45,7 +45,7 @@ internal struct StorageView: ~Escapable, Copyable {
         let lineIndex = max(0, lo - 1)
         precondition(!lineStarts.isEmpty, "a stamped source range lies on a line the parser read")
         let lineStart = lineStarts[lineIndex]
-        return MarkdownNode.SourcePosition(line: lineIndex + 1, column: Int(offset - lineStart) + 1)
+        return MarkdownNode.SourcePosition(line: lineIndex + 1, column: offset - lineStart + 1)
     }
 
     /// The node's source range, or `nil` if positions are off or the node has none.
@@ -67,8 +67,8 @@ internal struct StorageView: ~Escapable, Copyable {
 
     @_lifetime(borrow self)
     internal func bytes(of chunk: Chunk) -> Span<UInt8> {
-        let start = Int(chunk.offset)
-        let length = Int(chunk.length)
+        let start = chunk.offset
+        let length = chunk.length
         if chunk.inSource {
             return source.extracting(start..<(start + length))
         } else {

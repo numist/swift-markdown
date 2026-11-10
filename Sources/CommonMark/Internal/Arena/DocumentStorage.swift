@@ -157,16 +157,19 @@ internal struct DocumentStorage: ~Copyable {
         if parent == root {
             return false
         }
-        precondition(nodes[parent].parent != nil, "only the document node has no parent, and a walk never climbs above its root")
+        guard let grandparent = nodes[parent].parent else {
+            preconditionFailure("only the document node has no parent, and a walk never climbs above its root")
+        }
         child = nodes[parent].next
-        parent = nodes[parent].parent!
+        parent = grandparent
         return true
     }
 
     /// Removes `childIndex` from its parent's children. It keeps its `parent`, so paragraph finalization can climb out of a paragraph it removes.
     internal mutating func unlinkChild(_ childIndex: Index) {
-        precondition(nodes[childIndex].parent != nil, "only the document node has no parent, and it is never unlinked")
-        let parent = nodes[childIndex].parent!
+        guard let parent = nodes[childIndex].parent else {
+            preconditionFailure("only the document node has no parent, and it is never unlinked")
+        }
         let prev = nodes[childIndex].previous
         let next = nodes[childIndex].next
         assert(prev != nil || nodes[parent].firstChild == childIndex, "unlinkChild on a node that isn't linked into its parent's child list")

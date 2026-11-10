@@ -39,11 +39,10 @@ internal enum NodeData {
 /// A link to a node, or to none, stored in one word. None is `-1`, which is no index in `DocumentStorage.nodes`.
 @propertyWrapper
 internal struct NodeLink {
-    private var index: Int
+    private var index = -1
 
     internal init(wrappedValue: DocumentStorage.Index?) {
-        assert((wrappedValue ?? 0) >= 0, "a node index is never negative")
-        index = wrappedValue ?? -1
+        self.wrappedValue = wrappedValue
     }
 
     internal var wrappedValue: DocumentStorage.Index? {
