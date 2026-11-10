@@ -38,7 +38,7 @@ struct InlineAttributesBracketTests {
         }
     }
 
-    @Test("`^[](` line ending `)` forms one attribute whose text is the line ending")
+    @Test("`^[](` line ending `)` forms one attribute whose attribute string is the line ending")
     func attributeTextSpansSoftBreak() {
         let ns = nodes(in: " ^[](\n)", options: Self.options)
         #expect(ns.map(\.kind) == [.document, .paragraph, .attribute])

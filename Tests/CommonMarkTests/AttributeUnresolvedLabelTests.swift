@@ -238,7 +238,7 @@ struct AttributeUnresolvedLabelTests {
     }
 
     @Test("a bracket after an unresolved label is ordinary inline content")
-    func labelAfterUnresolvedLabel() {
+    func bracketAfterUnresolvedLabel() {
         #expect(tree("^[x][b][c]\n\n^[c]: d") == """
             document @1:1-3:8
               paragraph @1:1-1:11
@@ -255,8 +255,8 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    @Test("a label after a resolved one is parsed as text")
-    func labelAfterResolvedLabel() {
+    @Test("a bracket after a resolved label is ordinary inline content")
+    func bracketAfterResolvedLabel() {
         #expect(tree("^[x][c][b]\n\n^[c]: d") == """
             document @1:1-3:8
               paragraph @1:1-1:11
@@ -279,8 +279,7 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    /// Link definitions and attribute definitions are separate, so a label naming only a link definition names no
-    /// attribute definition.
+    /// Attribute definitions and link reference definitions are looked up separately.
     @Test("a label naming only a link definition is dropped")
     func labelNamingLinkDefinition() {
         #expect(tree("[b]: /u\n\n^[x][b]") == """
@@ -318,8 +317,6 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    /// The `]` that closes the attribute's text is the text node's content, and its source range runs on to the end of
-    /// the dropped label.
     @Test("the closing bracket's text spans the dropped label")
     func closingBracketTextSpansLabel() {
         #expect(tree("^[*x*][b]") == """
@@ -531,8 +528,8 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    /// An inline attribute's `(attributes)` form takes no label, so a bracket after it is text.
-    @Test("a bracket after the attributes form stays text")
+    /// An inline attribute's `(attributes)` form takes no label, so a bracket after it is ordinary inline content.
+    @Test("a bracket after the attributes form is ordinary inline content")
     func bracketAfterAttributesForm() {
         #expect(tree("^[](x)[undef]") == """
             document @1:1-1:14
