@@ -126,18 +126,6 @@ struct SingleColumnTableTests {
             """)
     }
 
-    @Test("a top-level row with leading whitespace forms a single-column table")
-    func leadingWhitespaceDelimiterRow() {
-        #expect(TreeDump.dump("a\n :-", options: [.tables]) == """
-            document
-              table
-                table_header
-                  table_cell align=left colspan=1 rowspan=1
-                    text "a"
-
-            """)
-    }
-
     @Test("a single-column table nested in a block quote forms")
     func nestedBlockQuoteSingleColumn() {
         #expect(TreeDump.dump("> a\n> :-", options: [.tables]) == """
@@ -281,6 +269,14 @@ struct SingleColumnTableTests {
               table
                 table_header
                   table_cell align=center colspan=1 rowspan=1
+                    text "a"
+
+            """),
+        ("a\n :-", """
+            document
+              table
+                table_header
+                  table_cell align=left colspan=1 rowspan=1
                     text "a"
 
             """),
