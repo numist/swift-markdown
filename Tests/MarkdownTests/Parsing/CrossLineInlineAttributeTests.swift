@@ -59,8 +59,9 @@ struct CrossLineInlineAttributeTests {
         #expect(Self.tree(markdown) == expected)
     }
 
-    /// An inline attribute's `(attributes)` form completes it, so a following `[label]` is not part of it and
-    /// stays text, also when the label spans a line ending in a block quote.
+    /// An inline attribute's `(attributes)` form completes it, so a following `[label]` is not part of it; with no
+    /// link reference definition for that label it stays text, also when the label spans a line ending in a block
+    /// quote.
     @Test func trailingBracketAfterAttributeIsText() {
         #expect(Document(parsing: "^[](x)[y]").debugDescription() == """
             Document
