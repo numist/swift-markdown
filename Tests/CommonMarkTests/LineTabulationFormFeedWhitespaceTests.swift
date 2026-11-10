@@ -16,20 +16,20 @@ import Testing
 /// blocks).
 @Suite("Line tabulation and form feed as whitespace")
 struct LineTabulationFormFeedWhitespaceTests {
-    private func surface(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: [])
     }
 
     @Test(arguments: [("\u{0B}", "\\u{B}"), ("\u{0C}", "\\u{C}")])
     func labelWhitespaceCollapsesForMatching(_ whitespace: String, _ escaped: String) {
-        #expect(surface("[a\(whitespace)b]: /u\n\n[a b]") == """
+        #expect(tree("[a\(whitespace)b]: /u\n\n[a b]") == """
             document
               paragraph
                 link "/u" ""
                   text "a b"
 
             """)
-        #expect(surface("[a b]: /u\n\n[a\(whitespace)\(whitespace)b]") == """
+        #expect(tree("[a b]: /u\n\n[a\(whitespace)\(whitespace)b]") == """
             document
               paragraph
                 link "/u" ""
@@ -40,7 +40,7 @@ struct LineTabulationFormFeedWhitespaceTests {
 
     @Test(arguments: [("\u{0B}", "\\u{B}"), ("\u{0C}", "\\u{C}")])
     func whitespaceOnlyLabelIsNoLabel(_ whitespace: String, _ escaped: String) {
-        #expect(surface("[\(whitespace)]: /u\n\n[\(whitespace)]") == """
+        #expect(tree("[\(whitespace)]: /u\n\n[\(whitespace)]") == """
             document
               paragraph
                 text "[\(escaped)]: /u"
@@ -52,7 +52,7 @@ struct LineTabulationFormFeedWhitespaceTests {
 
     @Test(arguments: [("\u{0B}", "\\u{B}"), ("\u{0C}", "\\u{C}")])
     func whitespaceOnlyFullReferenceLabelLeavesShortcut(_ whitespace: String, _ escaped: String) {
-        #expect(surface("[x][\(whitespace)]\n\n[x]: /u") == """
+        #expect(tree("[x][\(whitespace)]\n\n[x]: /u") == """
             document
               paragraph
                 link "/u" ""
@@ -91,7 +91,7 @@ struct LineTabulationFormFeedWhitespaceTests {
 
     @Test(arguments: ["\u{0B}", "\u{0C}"])
     func infoStringIsTrimmedOfWhitespace(_ whitespace: String) {
-        #expect(surface("```\(whitespace)js\(whitespace) \n```") == """
+        #expect(tree("```\(whitespace)js\(whitespace) \n```") == """
             document
               code_block "js" ""
 

@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// A link destination between `<` and `>` is every character between them, spaces and tabs included, in an inline
-/// link and in a link reference definition (Links, Link reference definitions). A link title keeps all its whitespace.
+/// A link destination between `<` and `>` keeps its leading, trailing and interior spaces and tabs, in an inline link
+/// and in a link reference definition (Links, Link reference definitions). A link title keeps all its whitespace.
 @Suite("Whitespace in link destinations")
 struct LinkDestinationWhitespaceTests {
 

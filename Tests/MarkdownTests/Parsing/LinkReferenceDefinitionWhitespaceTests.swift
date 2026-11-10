@@ -13,13 +13,13 @@ import Testing
 
 /// A link reference definition allows whitespace after its colon, between its destination and title, and
 /// after its destination or title on its last line, and line tabulation (U+000B) and form feed (U+000C) are
-/// whitespace characters (spec "Link reference definitions", "Characters and lines").
+/// whitespace characters (Link reference definitions, Characters and lines).
 struct LinkReferenceDefinitionWhitespaceTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)
     }
 
-    /// The title of the first link in the last block of `markdown`.
+    /// The title of the last block's first inline, when that inline is a link.
     private func title(_ markdown: String) -> String? {
         let document = Document(parsing: markdown)
         return document.child(at: document.childCount - 1)?.child(at: 0).flatMap { $0 as? Link }?.title

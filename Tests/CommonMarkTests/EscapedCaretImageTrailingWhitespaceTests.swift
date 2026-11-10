@@ -11,13 +11,13 @@
 import CommonMark
 import Testing
 
-/// An escaped-caret image `![\^…]` ending a paragraph or setext heading whose last line has trailing whitespace.
-@Suite("Escaped-caret image before trailing whitespace")
+/// `![\^…]` followed by spaces or tabs at the end of a line of a paragraph or heading.
+@Suite("`![\\^…]` before trailing whitespace")
 struct EscapedCaretImageTrailingWhitespaceTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink, .footnotes]
 
-    /// With no matching link reference definition, `![\^…]` is literal text, `!` included, and the line's trailing
-    /// whitespace is stripped.
+    /// With no matching link reference definition, `![\^…]` is literal text, and the spaces or tabs after it are not
+    /// part of that text.
     @Test(arguments: [
         ("![\\^a] ", """
             document

@@ -14,15 +14,15 @@ import XCTest
 /// A backslash before `&` in a fenced code block's info string escapes it (Backslash escapes), so the
 /// character reference that follows is literal text.
 class FencedInfoStringEntityEscapeOrderTests: XCTestCase {
-    private func language(_ markdown: String) -> String {
+    private func tree(_ markdown: String) -> String {
         return Document(parsing: markdown).debugDescription(options: [])
     }
 
     func testEscapedAmpersandLeavesNumericReferenceLiteral() {
-        XCTAssertEqual("Document\n└─ CodeBlock language: &#3;\n", language("```\\&#3;"))
+        XCTAssertEqual("Document\n└─ CodeBlock language: &#3;\n", tree("```\\&#3;"))
     }
 
     func testEscapedAmpersandLeavesEntityReferenceLiteral() {
-        XCTAssertEqual("Document\n└─ CodeBlock language: &amp;\n", language("```\\&amp;"))
+        XCTAssertEqual("Document\n└─ CodeBlock language: &amp;\n", tree("```\\&amp;"))
     }
 }
