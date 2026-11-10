@@ -16,7 +16,7 @@ struct PreserveWhitespaceLinkDestinationEndTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .preserveWhitespace]
 
     @Test
-    func destinationFollowedBySpacesAtEndOfInlineContent() {
+    func destinationFollowedByASpaceAtEndOfInlineContent() {
         #expect(TreeDump.dump("[](a ", options: Self.options) == """
             document
               paragraph
