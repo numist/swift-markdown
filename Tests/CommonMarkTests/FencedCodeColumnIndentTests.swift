@@ -211,9 +211,6 @@ struct FencedCodeColumnIndentTests {
     @Test(arguments: cases)
     func tree(_ c: Case) {
         #expect(TreeDump.dump(c.source, options: [.sourcePosition, .footnotes], sourceRanges: true) == c.expected)
-        let codeBlockKinds = MarkdownDocument.withParsedDocument(c.source, options: [.footnotes]) { doc in
-            dfs(doc).map(\.kind).filter { if case .codeBlock = $0 { true } else { false } }.map(TreeDump.describe)
-        }
-        #expect(codeBlockKinds == ["code_block fenced fence='`' length=3 offset=\(c.fenceOffset)"])
+        #expect(codeBlockKinds(c.source, options: [.footnotes]) == ["code_block fenced fence='`' length=3 offset=\(c.fenceOffset)"])
     }
 }
