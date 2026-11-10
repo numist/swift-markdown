@@ -10,7 +10,7 @@
 
 import CommonMark
 
-/// Walks a document and returns a compact `(kind, optional-literal)` sequence in DFS order. Useful for asserting the shape of parsed trees in tests without writing nested forEach blocks.
+/// Walks a document and returns a compact `(kind, optional-literal)` sequence in DFS order.
 internal func dfs(_ doc: borrowing MarkdownDocument) -> [(kind: MarkdownNode.Kind, literal: String?)] {
     var out: [(MarkdownNode.Kind, String?)] = []
     visit(doc.root, into: &out)
@@ -53,7 +53,7 @@ private func collectTightness(_ node: borrowing MarkdownNode, into tight: inout 
     }
 }
 
-/// Collect `(info, literal)` for every code block in the document in DFS order, so tests can assert
+/// Collects `(info, literal)` for every code block in the document in DFS order, so tests can assert
 /// on code blocks nested inside containers (e.g. a fenced block inside a list item).
 internal func codeBlocks(_ doc: borrowing MarkdownDocument) -> [(info: String, literal: String)] {
     var out: [(String, String)] = []
