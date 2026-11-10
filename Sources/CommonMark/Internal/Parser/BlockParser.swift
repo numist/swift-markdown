@@ -2814,7 +2814,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Whether `</name>` occurs in `range`, ignoring ASCII case.
-    // Inlined because it scans every byte of a type 1 block's lines once per tag: out of line it costs about 5% of the
+    // Inlined because it scans every byte of a type 1 block's lines once per tag: out of line it costs about 0.9% of the
     // instructions of a parse of `Benchmarks/100kb-test-content.md` after a `<pre>` line.
     @inline(__always)
     private mutating func findClosingTag(range: Range<Int>, name: [UInt8]) -> Bool {
