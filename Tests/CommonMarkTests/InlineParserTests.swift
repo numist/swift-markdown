@@ -419,7 +419,7 @@ struct EntityTests {
 @Suite("Inline parser - autolinks")
 struct AutolinkTests {
 
-    /// Pull the (kind, url, text-of-first-child) for the first link in the document's first paragraph. Returns nil for any of these if not found.
+    /// Pull the (url, text-of-first-child) for the first link in the document's first paragraph. Returns nil for any of these if not found.
     private static func firstLink(_ doc: borrowing MarkdownDocument) -> (url: String?, text: String?) {
         var url: String?
         var text: String?
@@ -551,7 +551,7 @@ struct AutolinkTests {
 @Suite("Inline parser - raw inline HTML")
 struct InlineHTMLTests {
 
-    /// Fetch the kind+literal of the first `.htmlInline` node in the first paragraph, or nil if none is present.
+    /// Fetch the literal of the first `.htmlInline` node in the first paragraph, or nil if none is present.
     private static func firstHTMLInline(_ doc: borrowing MarkdownDocument) -> String? {
         var out: String?
         let root = doc.root
