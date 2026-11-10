@@ -2940,7 +2940,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Whether `sourceBytes[range]` holds only spaces and tabs.
-    // Inlined because out of line it costs about 1% of the spec text's parse instructions.
+    // Inlined because out of line it costs about 0.3% of the spec text's parse instructions.
     @inline(__always)
     private func isSpaceOrTabOnly(_ range: Range<Int>) -> Bool {
         range.allSatisfy { sourceBytes[$0].isSpaceOrTab }
