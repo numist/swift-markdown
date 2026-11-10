@@ -11,9 +11,9 @@
 import CommonMark
 import Testing
 
-/// A code span, link destination, link title or autolink is stored as its source bytes when its value is those bytes,
-/// and otherwise is stored once. The stored strings of a document start with one byte, a line feed, so each expected
-/// size is one more than the bytes the document's values add.
+/// A code span, link destination, link title, autolink or code block info string is stored as its source bytes when
+/// its value is those bytes, and otherwise is stored once. The stored strings of a document start with one byte, a line
+/// feed, so each expected size is one more than the bytes the document's values add.
 @Suite("Inline literals store at most one copy")
 struct InlineLiteralStorageTests {
 
