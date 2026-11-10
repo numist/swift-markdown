@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// The `.smart` parse option replaces straight quotes with curly quotes, `--`/`---` with en/em dashes, and `...` with an ellipsis.
 @Suite("Parse option - smart punctuation")

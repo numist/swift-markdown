@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 @Suite("Inline parser - code spans")
 struct CodeSpanTests {
@@ -715,15 +715,21 @@ struct EmphasisTests {
         var out: [(MarkdownNode.Kind, String)] = []
         let root = doc.root
         root.children.forEach { block in
-            if block.kind.canAccumulateText {
+            switch block.kind {
+            case .paragraph, .heading:
                 visit(block, into: &out)
+            default:
+                break
             }
         }
         return out
     }
 
     private static func visit(_ node: MarkdownNode, into out: inout [(MarkdownNode.Kind, String)]) {
-        if !node.kind.canAccumulateText {
+        switch node.kind {
+        case .paragraph, .heading:
+            break
+        default:
             out.append((node.kind, node.literal() ?? ""))
         }
         node.children.forEach { child in
@@ -1288,9 +1294,6 @@ struct ExtendedAttributeTests {
     func separateRefMaps() {
         let source = "[foo]: /url\n^[foo]: color: red\n\n[foo] and ^[content][foo]"
         MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
-        // Both should be registered.
-        #expect(doc._storage.referenceMap["foo"] != nil)
-        #expect(doc._storage.attributeReferenceMap["foo"] != nil)
         // Inline parsing should produce both a .link and a .attribute.
         var hasLink = false
         var hasAttr = false

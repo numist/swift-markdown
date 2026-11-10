@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 @Suite("Source positions - blocks")
 struct SourcePositionTests {

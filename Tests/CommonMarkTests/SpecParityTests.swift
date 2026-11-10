@@ -14,7 +14,7 @@ import FoundationEssentials
 #else
 import Foundation
 #endif
-@testable import CommonMark
+import CommonMark
 
 internal struct SpecExample: Sendable {
     var section: String

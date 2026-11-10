@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 @Suite("Node content projection")
 struct NodeContentTests {
