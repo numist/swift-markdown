@@ -154,13 +154,10 @@ struct MarkupTreeDumper: MarkupWalker {
     }
 
     /**
-     Dump the tree rooted at `root`, emitting one node per `visit` in depth-first, pre-order.
+     Dump `root` and its subtree in depth-first pre-order.
 
      Traversal uses an explicit iterator stack rather than recursion so that deeply nested trees do
-     not overflow the call stack. `path` holds the ancestors of the node being emitted, which
-     `lineIndentPrefix` uses to draw the tree's edges.
-
-     - parameter root: The element to dump, together with its entire subtree.
+     not overflow the call stack.
      */
     fileprivate mutating func dumpTree(_ root: Markup) {
         visit(root)
