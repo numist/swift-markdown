@@ -11,9 +11,9 @@
 import CommonMark
 import Testing
 
-/// An extended www autolink comes at the start of the inline content, or after a space, tab, line ending, `*`, `_`,
-/// `~` or `(`. An extended url autolink's scheme is the whole run of ASCII letters before `://`, so outside an open `[`
-/// the autolink may follow any character but an ASCII letter. An extended email autolink's local part is the run of
+/// Outside an open `[`, an extended www autolink comes at the start of the inline content, or after a space, tab, line
+/// ending, `*`, `_`, `~` or `(`, and an extended url autolink, whose scheme is the whole run of ASCII letters before
+/// `://`, may follow any character but an ASCII letter. An extended email autolink's local part is the run of
 /// local-part characters before the `@`, so the autolink may follow any other character.
 @Suite("Character before an extended autolink")
 struct ExtendedAutolinkPrecedingCharacterTests {
@@ -532,6 +532,90 @@ struct ExtendedAutolinkPrecedingCharacterTests {
                 linebreak
                 link "mailto:foo@b.cd" ""
                   text "foo@b.cd"
+
+            """)
+    }
+
+    @Test("email autolinks after a leading `<`")
+    func emailAfterAngle() {
+        // Without a `>`, the `<` is literal text.
+        #expect(tree("<o@e.e") == """
+            document
+              paragraph
+                text "<"
+                link "mailto:o@e.e" ""
+                  text "o@e.e"
+
+            """)
+    }
+
+    @Test("standalone email autolinks")
+    func emailStandalone() {
+        #expect(tree("o@e.e") == """
+            document
+              paragraph
+                link "mailto:o@e.e" ""
+                  text "o@e.e"
+
+            """)
+    }
+
+    @Test("email after text and a space autolinks")
+    func emailAfterTextSpace() {
+        #expect(tree("x o@e.e") == """
+            document
+              paragraph
+                text "x "
+                link "mailto:o@e.e" ""
+                  text "o@e.e"
+
+            """)
+    }
+
+    @Test("email after `(` autolinks")
+    func emailAfterParen() {
+        #expect(tree("(o@e.e") == """
+            document
+              paragraph
+                text "("
+                link "mailto:o@e.e" ""
+                  text "o@e.e"
+
+            """)
+    }
+
+    // MARK: - Local-part characters
+
+    // An extended email autolink's local part holds only alphanumerics, `.`, `-`, `_` and `+`, unlike the email
+    // address of an email autolink (Autolinks), which admits characters such as `!`.
+
+    @Test("`<a!@e.e` is text: `!` is not a local-part character")
+    func bangBeforeAtNoLink() {
+        #expect(tree("<a!@e.e") == """
+            document
+              paragraph
+                text "<a!@e.e"
+
+            """)
+    }
+
+    @Test("`x!@e.e` at the start of a line is text")
+    func bangLocalAtStartNoLink() {
+        #expect(tree("x!@e.e") == """
+            document
+              paragraph
+                text "x!@e.e"
+
+            """)
+    }
+
+    @Test("an email autolink admits `!` in its local part")
+    func angleEmailKeepsBroadLocalSet() {
+        #expect(tree("<a!b@c.de>") == """
+            document
+              paragraph
+                link "mailto:a!b@c.de" ""
+                  text "a!b@c.de"
 
             """)
     }
