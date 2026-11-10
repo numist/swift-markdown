@@ -117,9 +117,9 @@ struct SpecParityTests {
             MarkdownDocument.withParsedDocument(source, options: Self.options(forExtensions: ex.extensions)) { doc in
             let actual = HTMLRenderer.render(doc, tagfilter: ex.extensions.contains("tagfilter"))
             if actual != ex.expectedHTML {
-                var debugOutput = "=== #\(ex.number) [\(ex.section)] ==="
-                debugOutput += "input:    \(ex.markdown.debugDescription)"
-                debugOutput += "expected: \(ex.expectedHTML.debugDescription)"
+                var debugOutput = "=== #\(ex.number) [\(ex.section)] ===\n"
+                debugOutput += "input:    \(ex.markdown.debugDescription)\n"
+                debugOutput += "expected: \(ex.expectedHTML.debugDescription)\n"
                 debugOutput += "got:      \(actual.debugDescription)"
                 #expect(actual == ex.expectedHTML, Comment(rawValue: debugOutput))
             }
