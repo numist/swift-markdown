@@ -66,7 +66,7 @@ struct LinkDestinationTrailingBackslashTests {
 
     // MARK: - Other destinations
 
-    @Test("a link reference definition destination ending in two backslashes ends in an escaped backslash")
+    @Test("a link reference definition destination ending in two backslashes ends at the line ending")
     func refDefEvenTrailingBackslashes() {
         #expect(TreeDump.dump("[b]:a\\\\\n]", options: []) == """
             document
@@ -76,7 +76,7 @@ struct LinkDestinationTrailingBackslashTests {
             """)
     }
 
-    @Test("a backslash inside a link reference definition destination stays in the destination")
+    @Test("a link reference definition destination holding a backslash ends at the line ending")
     func refDefBackslashMidDestination() {
         #expect(TreeDump.dump("[b]:a\\b\n]", options: []) == """
             document
@@ -117,7 +117,8 @@ struct LinkDestinationTrailingBackslashTests {
     }
 }
 
-/// A link destination (Links) is a bare run of characters with balanced parentheses, or empty.
+/// A bare link destination (Links) is a run of non-whitespace characters whose parentheses are escaped or balanced, and
+/// an inline link's destination may be empty.
 @Suite("Link destination forms")
 struct LinkDestinationFormTests {
 
@@ -152,7 +153,7 @@ struct LinkDestinationFormTests {
             """)
     }
 
-    /// Whitespace, including a line ending, may precede the destination, which is then empty.
+    /// Whitespace, including a line ending, may follow the `(`, and the destination may be empty.
     @Test("empty destination across a line ending")
     func emptyDestinationAcrossLineEnding() {
         #expect(TreeDump.dump("[](\n)", options: []) == """
