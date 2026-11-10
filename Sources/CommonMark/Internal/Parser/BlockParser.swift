@@ -119,6 +119,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     var openParagraphTableState: OpenParagraphTableState?
 
+    /// The paragraph a setext underline found to hold a line of only whitespace (see `holdsWhitespaceOnlyLine`), which
+    /// stays in it, so a later underline of the paragraph needs no scan.
+    var paragraphWithWhitespaceOnlyLine: DocumentStorage.Index?
+
     /// List items whose last block is a removed paragraph that held only definitions or a task list item marker,
     /// mapped to whether a blank line follows it. An entry is dropped when the item gains another block.
     ///
@@ -1114,6 +1118,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         let para = current
         precondition(pending != nil, "an open paragraph always holds its accumulated content")
+        // Each line of a setext heading holds a non-whitespace character (Setext headings).
+        if paragraphWithWhitespaceOnlyLine != para, holdsWhitespaceOnlyLine(pending!) {
+            paragraphWithWhitespaceOnlyLine = para
+        }
+        if paragraphWithWhitespaceOnlyLine == para {
+            return false
+        }
         // Leading link reference definitions come out first; if they are the whole paragraph, no heading forms.
         let content = headingContentRange(of: pending!)
         if !content.isEmpty {
@@ -1150,6 +1161,44 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return false
     }
 
+    /// Whether a line of the open paragraph's pending `leaf` holds only whitespace characters, which a line tabulation or
+    /// form feed keeps from being blank (Characters and lines).
+    private func holdsWhitespaceOnlyLine(_ leaf: borrowing PendingLeaf) -> Bool {
+        var lineHoldsNonWhitespace = false
+        switch leaf.content {
+        case .lazy(let range, _):
+            if Self.endsWhitespaceOnlyLine(sourceBytes.extracting(range), lineHoldsNonWhitespace: &lineHoldsNonWhitespace) {
+                return true
+            }
+        case .segments(let segs):
+            for i in 0..<segs.count {
+                let chunk = segs[i].chunk
+                let bytes = chunk.inSource ? sourceBytes.extracting(chunk.range) : storage.strings.span.extracting(chunk.range)
+                if Self.endsWhitespaceOnlyLine(bytes, lineHoldsNonWhitespace: &lineHoldsNonWhitespace) {
+                    return true
+                }
+            }
+        }
+        return !lineHoldsNonWhitespace
+    }
+
+    /// Whether a `\n` in `bytes`, the next bytes of a paragraph's lines, ends a line of only whitespace characters.
+    /// `lineHoldsNonWhitespace` is whether the line being read holds another character, from one call to the next.
+    private static func endsWhitespaceOnlyLine(_ bytes: Span<UInt8>, lineHoldsNonWhitespace: inout Bool) -> Bool {
+        for i in bytes.indices {
+            let b = bytes[i]
+            if b == UInt8(ascii: "\n") {
+                if !lineHoldsNonWhitespace {
+                    return true
+                }
+                lineHoldsNonWhitespace = false
+            } else if !b.isLineWhitespace {
+                lineHoldsNonWhitespace = true
+            }
+        }
+        return false
+    }
+
     /// Where a setext heading's raw content (Setext headings) lies in the open paragraph's pending `leaf`: past its
     /// leading definitions and the whitespace after them, up to its trailing whitespace. The offsets are source offsets
     /// for a `.lazy` range and virtual offsets for a segment list.
@@ -1160,7 +1209,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let trimmed = Chunk(offset: range.lowerBound, length: range.count, inSource: true).trimmingWhitespace(using: self)
             return parseDefinitions(in: trimmed).trimmingWhitespace(using: self).range
         case .segments(let segs):
-            return rawContentRange(in: segs, total: totalLength(of: segs), taskItemParagraph: nil) ?? 0..<0
+            guard let content = rawContentRange(in: segs, total: totalLength(of: segs), taskItemParagraph: nil) else {
+                preconditionFailure("a paragraph without a line of only whitespace holds a non-whitespace character")
+            }
+            return content
         }
     }
 
