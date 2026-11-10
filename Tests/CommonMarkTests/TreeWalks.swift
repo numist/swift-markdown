@@ -53,8 +53,7 @@ private func collectTightness(_ node: borrowing MarkdownNode, into tight: inout 
     }
 }
 
-/// Collects `(info, literal)` for every code block in the document in DFS order, so tests can assert
-/// on code blocks nested inside containers (e.g. a fenced block inside a list item).
+/// Collects `(info, literal)` for every code block in the document in DFS order.
 internal func codeBlocks(_ doc: borrowing MarkdownDocument) -> [(info: String, literal: String)] {
     var out: [(String, String)] = []
     collectCodeBlocks(doc.root, into: &out)
