@@ -690,8 +690,8 @@ struct TableHeaderRowSelectionTests {
 
     // MARK: - Earlier lines remain a paragraph
 
-    @Test("nested block quote: preceding line splits off, header is the last line")
-    func nestedBlockQuote() {
+    @Test("block quote: preceding line splits off, header is the last line")
+    func blockQuote() {
         #expect(TreeDump.dump("> x\n> a\n> |-", options: [.tables]) == """
             document
               block_quote
@@ -705,8 +705,8 @@ struct TableHeaderRowSelectionTests {
             """)
     }
 
-    @Test("nested list item: preceding line splits off, header is the last line")
-    func nestedListItem() {
+    @Test("list item: preceding line splits off, header is the last line")
+    func listItem() {
         #expect(TreeDump.dump("- x\n  a\n  |-", options: [.tables]) == """
             document
               list bullet '-' tight
@@ -735,8 +735,8 @@ struct TableHeaderRowSelectionTests {
             """)
     }
 
-    @Test("nested block quote: a following body row joins the table")
-    func nestedBlockQuoteBodyRow() {
+    @Test("block quote: a following body row joins the table")
+    func blockQuoteBodyRow() {
         #expect(TreeDump.dump("> x\n> a\n> |-\n> b", options: [.tables]) == """
             document
               block_quote
@@ -828,7 +828,7 @@ struct TableHeaderRowSelectionTests {
     // MARK: - No earlier lines
 
     @Test("bare block-quote header: no preceding paragraph")
-    func bareNestedBlockQuoteTable() {
+    func bareBlockQuoteTable() {
         #expect(TreeDump.dump("> a\n> |-", options: [.tables]) == """
             document
               block_quote
@@ -841,7 +841,7 @@ struct TableHeaderRowSelectionTests {
     }
 
     @Test("bare list-item header: no preceding paragraph")
-    func bareNestedListTable() {
+    func bareListTable() {
         #expect(TreeDump.dump("- a\n  |-", options: [.tables]) == """
             document
               list bullet '-' tight
@@ -872,8 +872,8 @@ struct TableHeaderRowSelectionTests {
             """)
     }
 
-    @Test("a nested header row whose cell count differs from the delimiter row's forms no table")
-    func nestedHeaderMismatchStaysParagraph() {
+    @Test("a block-quoted header row whose cell count differs from the delimiter row's forms no table")
+    func blockQuoteHeaderMismatchStaysParagraph() {
         #expect(TreeDump.dump("> x\n> a|b\n> |-", options: [.tables]) == """
             document
               block_quote
@@ -887,8 +887,8 @@ struct TableHeaderRowSelectionTests {
             """)
     }
 
-    @Test("nested block quote: lines with a colon inside the dashes are no delimiter row")
-    func nestedInteriorColonStaysParagraph() {
+    @Test("block quote: lines with a colon inside the dashes are no delimiter row")
+    func blockQuoteInteriorColonStaysParagraph() {
         #expect(TreeDump.dump("> a\n> -:-\n> -:-\n", options: [.tables]) == """
             document
               block_quote
