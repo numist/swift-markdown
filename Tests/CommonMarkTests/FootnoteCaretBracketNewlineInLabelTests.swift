@@ -11,7 +11,6 @@
 import CommonMark
 import Testing
 
-/// A bracket opening `[^[`, followed by a bracket pair that spans a line ending.
 @Suite("Footnote-shaped bracket holding an attribute opener across a line ending")
 struct FootnoteCaretBracketNewlineInLabelTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink, .footnotes]

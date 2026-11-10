@@ -16,8 +16,7 @@ import Testing
 /// A blank line continues every open footnote definition, so a run of blank lines after 40,000 footnote
 /// definitions opened on one line keeps them all open. Each blank line costs time in proportion to its own length
 /// rather than to the number of open definitions, so 40,000 blank lines, about 240 KB of source, parse well within the
-/// time limit. Only the innermost definition has the label of the reference; the others hold no reference and are
-/// dropped.
+/// time limit. Only the innermost definition's label is referenced; the others are unreferenced and dropped.
 @Suite("Blank lines under deep footnote definition nesting")
 struct DeepFootnoteDefinitionBlankLineTests {
 

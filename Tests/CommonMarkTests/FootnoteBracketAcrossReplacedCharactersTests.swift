@@ -11,9 +11,9 @@
 import Testing
 import CommonMark
 
-/// A footnote-shaped bracket that crosses a line ending, beside a NUL (replaced by U+FFFD) and a checkbox that does not
-/// begin its list item's first paragraph. The item is not a task list item (Task list items (extension)), and with no
-/// matching definition the bracket is literal text.
+/// A footnote-shaped bracket that crosses a line ending, beside a NUL (replaced by U+FFFD) or a multibyte character and
+/// a checkbox that does not begin its list item's first paragraph. The item is not a task list item (Task list items
+/// (extension)), and with no matching definition the bracket is literal text.
 @Suite("Cross-line footnote-shaped bracket beside replaced characters")
 struct FootnoteBracketAcrossReplacedCharactersTests {
 

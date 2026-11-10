@@ -11,12 +11,9 @@
 import CommonMark
 import Testing
 
-/// Emphasis inside a footnote reference's label.
-///
-/// A footnote reference's label is the raw text between its brackets, matched against a definition's label after
-/// the same normalization as a link label (Links), so emphasis delimiters in it are part of the label and produce no
-/// emphasis node. Without a definition of that label, the bracket is literal text
-/// and its emphasis is parsed as usual.
+/// A footnote reference's label is the raw text after its `^`, matched against a definition's label after the same
+/// normalization as a link label (Links), so emphasis delimiters in it are part of the label and produce no emphasis
+/// node. Without a definition of that label, the bracket is literal text and its emphasis is parsed as usual.
 @Suite("Emphasis delimiters inside a footnote reference label")
 struct FootnoteReferenceEmphasisLabelTests {
     @Test(arguments: [

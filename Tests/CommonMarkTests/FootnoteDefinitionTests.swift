@@ -14,7 +14,7 @@ import CommonMark
 @Suite("Footnote Definition Tests")
 struct FootnoteDefinitionTests {
 
-    @Test("footnote definition whose lines end in CRLF registers and resolves")
+    @Test("footnote definition with a CRLF line ending registers and resolves")
     func crlfFootnoteDefinitionResolves() {
         #expect(TreeDump.dump("[^a]: first line\r\nsecond line\n\nsee [^a]\n", options: .footnotes) == """
             document
