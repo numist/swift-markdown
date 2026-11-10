@@ -162,7 +162,7 @@ internal struct ContentSpan: ~Escapable {
         guard isMultiSegment else {
             return body { span[$0 - base] }
         }
-        // A scan from the end reads nothing.
+        // At the end or at a line join no source piece covers `offset`, so every byte is read through the subscript.
         guard offset < multiVirtualLength, let piece = sourcePiece(covering: offset) else {
             return body { multiByte(at: $0) }
         }
@@ -206,7 +206,7 @@ internal struct ContentSpan: ~Escapable {
         if !isMultiSegment && inSource {
             return offset
         }
-        // Arena content reaches here only with positions on, when it carries a run map that tiles it.
+        // Multi-segment content resolves through its segments, and arena content, which reaches here only with `.sourcePosition`, through the run map that tiles it.
         let k = offset - base
         let i = pieceIndex(covering: k)
         precondition(i < pieces.count, "an inline node's source range lies inside its content's pieces")
@@ -229,7 +229,7 @@ internal struct ContentSpan: ~Escapable {
 
     /// A `Chunk` for scanning forward from `offset`, bounded by `limit` and, in multi-segment content, by the end of the segment containing `offset`.
     ///
-    /// Chunk readers such as `EntityParser.matchEntity` index one buffer by the chunk's offsets, which virtual offsets don't, so a form that continues onto the next line isn't seen. Returns `nil` when `offset >= limit` or `offset` is a line join, where no form begins. A scanner's buffer offset `b` maps back to `offset + (b - chunk.offset)`.
+    /// Chunk readers such as `EntityParser.matchEntity` index a single buffer, which virtual offsets don't address, so in multi-segment content they see only the rest of `offset`'s line. Returns `nil` when `offset >= limit` or `offset` is a line join. A scanner's buffer offset `b` maps back to `offset + (b - chunk.offset)`.
     func contiguousChunk(fromVirtual offset: Int, limit: Int) -> Chunk? {
         if offset >= limit {
             return nil
@@ -268,7 +268,7 @@ internal struct ContentSpan: ~Escapable {
             let seg = pieces[i]
             let len = seg.length
             if seg.inSource {
-                let local = cursor - vStart                 // 0 past the entry segment
+                let local = cursor - vStart
                 let absLo = seg.offset + local
                 let absHi = seg.offset + len
                 let foundAbs = Self.scanSignificant(span, from: absLo, to: absHi, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
@@ -289,8 +289,8 @@ internal struct ContentSpan: ~Escapable {
     /// The index of the first significant byte in `span[lo..<hi]`, or `hi`; see `nextSignificant`.
     @inline(__always)
     private static func scanSignificant(_ span: Span<UInt8>, from lo: Int, to hi: Int, strikethrough: Bool, gfmAutolink: Bool, smart: Bool) -> Int {
-        let clusterLo = SIMD16<UInt8>(repeating: 91)    // '['
-        let clusterHi = SIMD16<UInt8>(repeating: 96)    // '`'
+        let clusterLo = SIMD16<UInt8>(repeating: UInt8(ascii: "["))
+        let clusterHi = SIMD16<UInt8>(repeating: UInt8(ascii: "`"))
         let nl = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
         let bang = SIMD16<UInt8>(repeating: UInt8(ascii: "!"))
         let amp = SIMD16<UInt8>(repeating: UInt8(ascii: "&"))
@@ -299,7 +299,6 @@ internal struct ContentSpan: ~Escapable {
         let tilde = SIMD16<UInt8>(repeating: UInt8(ascii: "~"))
         let colon = SIMD16<UInt8>(repeating: UInt8(ascii: ":"))
         let w = SIMD16<UInt8>(repeating: UInt8(ascii: "w"))
-        // Smart-punctuation triggers: straight quotes (`'` `"`), `-` (dashes), `.` (ellipsis).
         let squote = SIMD16<UInt8>(repeating: UInt8(ascii: "'"))
         let dquote = SIMD16<UInt8>(repeating: UInt8(ascii: "\""))
         let hyphen = SIMD16<UInt8>(repeating: UInt8(ascii: "-"))
@@ -330,7 +329,7 @@ internal struct ContentSpan: ~Escapable {
         }
         while i < hi {
             let b = span[i]
-            let significant = (b >= 91 && b <= 96)
+            let significant = (b >= UInt8(ascii: "[") && b <= UInt8(ascii: "`"))
                 || b == UInt8(ascii: "\n") || b == UInt8(ascii: "!") || b == UInt8(ascii: "&")
                 || b == UInt8(ascii: "*") || b == UInt8(ascii: "<")
                 || (strikethrough && b == UInt8(ascii: "~"))
