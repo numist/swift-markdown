@@ -9,7 +9,7 @@
 */
 
 import Testing
-@testable import CommonMark
+import CommonMark
 
 /// Tests for `.tableSpans` and `.tableRowspanDitto`, which let GFM table cells span columns and rows.
 @Suite("Parse options - table spans")
