@@ -166,7 +166,6 @@ struct TaskItemTableInterruptTests {
             """)
     }
 
-    /// The checked state comes from the leading checkbox only; a later `[x]` is text.
     @Test func checkedStateFromLeadingCheckboxOnSplitOffLine() {
         #expect(TreeDump.dump("- [ ] a [x]\n  b|\n  -|", options: Self.options) == """
             document
@@ -182,9 +181,9 @@ struct TaskItemTableInterruptTests {
             """)
     }
 
+    /// `[x] [a]: /u` does not begin with a link reference definition, so `===` underlines it as a heading,
+    /// and a heading is not the paragraph a task list item must begin with (Task list items (extension)).
     @Test func setextHeadingAfterTaskItemRefDef() {
-        // `[x] [a]: /u` does not begin with a link reference definition, so it is heading text, and a
-        // heading is not the paragraph a task list item must begin with (Task list items (extension)).
         #expect(TreeDump.dump("- [x] [a]: /u\n  b\n  ===", options: Self.options) == """
             document
               list bullet '-' tight
@@ -195,11 +194,6 @@ struct TaskItemTableInterruptTests {
                     text "b"
 
             """)
-    }
-
-    /// `[x] [a]: /u` does not begin with a link reference definition, so `===` underlines it as a heading,
-    /// and a heading is not the paragraph a task list item must begin with (Task list items (extension)).
-    @Test func setextUnderlineAfterTaskItemRefDefOnly() {
         #expect(TreeDump.dump("- [x] [a]: /u\n  ===", options: Self.options) == """
             document
               list bullet '-' tight
@@ -226,8 +220,6 @@ struct TaskItemTableInterruptTests {
     }
 
     @Test func checkboxInListInBlockQuote() {
-        // The item's first paragraph begins with a task list item marker, whatever precedes the list
-        // marker on its line (Task list items (extension)).
         #expect(TreeDump.dump("> - [x] a\n>   b|\n>   -|", options: Self.options) == """
             document
               block_quote
@@ -243,9 +235,9 @@ struct TaskItemTableInterruptTests {
             """)
     }
 
+    /// The header row `[x] |a|` has two cells and the delimiter row one, so no table forms (Tables
+    /// (extension)) and the paragraph begins with the task list item marker.
     @Test func mismatchedCellCountsFormNoTable() {
-        // The header row `[x] |a|` has two cells and the delimiter row one, so no table forms (Tables
-        // (extension)) and the paragraph begins with the task list item marker.
         #expect(TreeDump.dump("- [x] |a|\n  |-|", options: Self.options) == """
             document
               list bullet '-' tight
@@ -271,8 +263,8 @@ struct TaskItemTableInterruptTests {
             """)
     }
 
+    /// A heading is not the paragraph a task list item must begin with (Task list items (extension)).
     @Test func setextHeadingHasNoCheckbox() {
-        // A heading is not the paragraph a task list item must begin with (Task list items (extension)).
         #expect(TreeDump.dump("- [ ] a\n  b\n  ---", options: Self.options) == """
             document
               list bullet '-' tight
@@ -285,8 +277,8 @@ struct TaskItemTableInterruptTests {
             """)
     }
 
+    /// `[x] [a]: /u` does not begin with a link reference definition, so `[a]: /u` is the paragraph's text.
     @Test func refDefOnlyTaskItem() {
-        // `[x] [a]: /u` does not begin with a link reference definition, so `[a]: /u` is the paragraph's text.
         #expect(TreeDump.dump("- [x] [a]: /u", options: Self.options) == """
             document
               list bullet '-' tight
