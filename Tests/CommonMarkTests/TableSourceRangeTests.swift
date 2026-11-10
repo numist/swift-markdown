@@ -11,10 +11,12 @@
 import Testing
 import CommonMark
 
-/// The whitespace between pipes and cell content, and the pipes themselves, are not part of a cell (Tables (extension)), so a
-/// cell covers just its content, and a cell with no content has an empty range just past its opening pipe. A row runs
-/// from its first byte to its closing pipe, or to its last cell's content when it has none, and a table runs from its
-/// header row to its last row, or to its delimiter row when it has no body; trailing whitespace is outside all three.
+/// The whitespace between pipes and cell content, and the pipes themselves, are not part of a cell (Tables
+/// (extension)), so a cell covers just its content, and a cell with no content has an empty range just past its
+/// opening pipe. A row runs from its opening pipe or first cell's content to its closing pipe, or to its last cell's
+/// content when it has none, and a table runs from its header row to its last row, or to its delimiter row when it has
+/// no body; whitespace before or after a row is outside all three. A row of only whitespace and its one cell have an
+/// empty range before that whitespace, and a cell that a short row lacks has no range.
 @Suite("Table, row and cell source ranges")
 struct TableSourceRangeTests {
 
@@ -109,7 +111,7 @@ struct TableSourceRangeTests {
     }
 
     /// A form feed is whitespace but not a blank line, so a line holding only one is a body row. The form feed is
-    /// padding before the row's one cell, which holds nothing, as the cell in `||` does.
+    /// the padding of the row's one cell, which holds nothing, as the cell in `||` does.
     @Test
     func whitespaceOnlyLastRow() {
         #expect(tree("| a |\n|---|\n\u{0C}\n") == """
@@ -156,7 +158,8 @@ struct TableSourceRangeTests {
             """)
     }
 
-    /// A form feed is padding before a row's first cell or pipe, so the row and the table start after it.
+    /// A form feed before a row's opening pipe or first cell's content is padding, so the row and the table
+    /// start after it.
     @Test
     func formFeedBeforeRows() {
         #expect(tree("\u{0C}| a |\n|---|\n\u{0C}x\n") == """
