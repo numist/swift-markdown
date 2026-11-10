@@ -23,7 +23,7 @@ struct EmailAutolinkSmartPunctuationSegmentGrowthTests {
     private static let block: MarkdownDocument.ParseOptions = [.gfmAutolink, .smart]
     private static let inlineOnly: MarkdownDocument.ParseOptions = [.gfmAutolink, .smart, .inlineOnly]
 
-    @Test("segment count grows linearly with the addresses", arguments: [
+    @Test("segments and materialized bytes grow linearly with the addresses", arguments: [
         ("a@b.c ...", block, 6001, 12001, 15001, 30001),
         ("a@b.c ...", inlineOnly, 6000, 12000, 15001, 30001),
         ("a@b.c --", block, 6001, 12001, 15001, 30001),

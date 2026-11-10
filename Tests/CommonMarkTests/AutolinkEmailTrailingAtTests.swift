@@ -11,7 +11,8 @@
 import Testing
 import CommonMark
 
-/// Text holding two `@`s, where an extended email autolink's domain would run into the second `@`.
+/// Text holding two `@`s, where an extended email autolink's domain would run into the second `@`, and addresses with
+/// one `@` to compare against.
 ///
 /// An address can't span both `@`s, so the run between them is the local part of an address after the first `@`. A
 /// period between the two `@`s counts as the period that address's domain needs.
