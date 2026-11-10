@@ -14,8 +14,9 @@ import XCTest
 /// Strong emphasis around an interior `**` that can both open and close.
 ///
 /// Rule 10 of Emphasis and strong emphasis sums the lengths of whole delimiter runs, and the `openers_bottom`
-/// table (An algorithm for parsing nested emphasis and links) is keyed by the closing run's length modulo 3;
-/// both use a run's full length, not what remains of it after earlier matches.
+/// table (An algorithm for parsing nested emphasis and links) is keyed by the closing run's length modulo 3 and,
+/// so that it skips no opener rule 9 admits, by whether the closer can also open. Both use a run's full length,
+/// not what remains of it after earlier matches.
 class EmphasisNestingTests: XCTestCase {
     /// `(4 + 2) % 3 == 0`, so the interior `**` matches neither outer run and is text. The outer runs match
     /// twice, as two nested strong emphasis spans.
