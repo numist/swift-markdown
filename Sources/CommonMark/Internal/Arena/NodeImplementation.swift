@@ -36,14 +36,29 @@ internal enum NodeData {
     case item(padding: Int)
 }
 
+/// A link to a node, or none, stored in one word as `-1` for none, which no index in `DocumentStorage.nodes` is.
+@propertyWrapper
+internal struct NodeLink {
+    private var index: Int
+
+    internal init(wrappedValue: DocumentStorage.Index?) {
+        index = wrappedValue ?? -1
+    }
+
+    internal var wrappedValue: DocumentStorage.Index? {
+        get { index < 0 ? nil : index }
+        set { index = newValue ?? -1 }
+    }
+}
+
 /// One node, stored contiguously in `DocumentStorage.nodes`.
 internal struct NodeRecord {
     internal var kind: MarkdownNode.Kind
-    internal var firstChild: DocumentStorage.Index?
-    internal var lastChild: DocumentStorage.Index?
-    internal var next: DocumentStorage.Index?
-    internal var previous: DocumentStorage.Index?
-    internal var parent: DocumentStorage.Index?
+    @NodeLink internal var firstChild: DocumentStorage.Index?
+    @NodeLink internal var lastChild: DocumentStorage.Index?
+    @NodeLink internal var next: DocumentStorage.Index?
+    @NodeLink internal var previous: DocumentStorage.Index?
+    @NodeLink internal var parent: DocumentStorage.Index?
     internal var data: NodeData?
 
     /// Whether the last line processed while this node was open was blank; drives tight/loose list detection.
