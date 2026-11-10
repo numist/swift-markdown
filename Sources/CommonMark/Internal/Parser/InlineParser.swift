@@ -619,11 +619,11 @@ extension BlockParser {
     @inline(__always)
     private mutating func matchInlineLinkTail(afterParen: Int, content: borrowing ContentSpan) -> (url: Chunk, title: Chunk, end: Int)? {
         let end = content.endOffset
-        let destStart = skipSpaceChars(start: afterParen, content: content)
+        let destStart = skipWhitespace(from: afterParen, in: content)
         guard let dest = matchLinkDestination(from: destStart, end: end, in: content) else {
             return nil
         }
-        let titleStart = skipSpaceChars(start: dest.afterEnd, content: content)
+        let titleStart = skipWhitespace(from: dest.afterEnd, in: content)
         var titleEnd = dest.afterEnd
         var titleInterior = dest.afterEnd..<dest.afterEnd
         if titleStart > dest.afterEnd,
@@ -631,7 +631,7 @@ extension BlockParser {
             titleInterior = title.interior
             titleEnd = title.afterEnd
         }
-        let close = skipSpaceChars(start: titleEnd, content: content)
+        let close = skipWhitespace(from: titleEnd, in: content)
         guard close < end, content[close] == UInt8(ascii: ")") else {
             return nil
         }
@@ -1641,9 +1641,7 @@ extension BlockParser {
         if nameLen == 0 {
             return nil
         }
-        let afterSpaces = skipSpaceChars(
-            start: i, content: content
-        )
+        let afterSpaces = skipWhitespace(from: i, in: content)
         if afterSpaces == i {
             return nil
         }
@@ -2064,20 +2062,6 @@ extension BlockParser {
 
     // MARK: - Helpers
 
-    /// Skips whitespace characters (Characters and lines).
-    private func skipSpaceChars(start: Int, content: borrowing ContentSpan) -> Int {
-        let end = content.endOffset
-        var i = start
-        while i < end {
-            let b = content[i]
-            if !b.isASCIISpace {
-                break
-            }
-            i += 1
-        }
-        return i
-    }
-
     /// Appends `count` bytes to `out`, returning their chunk.
     private static func appendUTF8Bytes(bytes: Bytes8, count: Int, into out: inout UniqueArray<UInt8>) -> Chunk {
         let offset = out.count
@@ -2117,7 +2101,7 @@ extension BlockParser {
 
     /// A chunk for `[start, end)`, copied into the arena only when the range spans segments, as raw HTML or an
     /// attribute list can.
-    private mutating func materializedChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
+    mutating func materializedChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end),
            contiguous.length == end - start {
             return contiguous

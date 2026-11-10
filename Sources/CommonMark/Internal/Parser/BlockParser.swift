@@ -3397,24 +3397,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return i
     }
 
-    /// `content`'s bytes at `range` as a chunk, copied into the arena only when `range` spans a line join.
-    // Inlined for the reason given before `skipLineWhitespace`.
-    @inline(__always)
-    private mutating func definitionChunk(_ range: Range<Int>, in content: borrowing ContentSpan) -> Chunk {
-        if range.isEmpty {
-            return .empty
-        }
-        if let contiguous = content.contiguousChunk(fromVirtual: range.lowerBound, limit: range.upperBound),
-           contiguous.length == range.count {
-            return contiguous
-        }
-        let offset = storage.strings.count
-        for i in range {
-            storage.strings.append(content[i])
-        }
-        return arenaChunk(from: offset)
-    }
-
     /// `content`'s bytes at `range` as a chunk with backslash escapes and character references resolved, copied into
     /// the arena once if `range` holds either or, as a link title can, spans a line join.
     // Inlined for the reason given before `skipLineWhitespace`.
@@ -3442,10 +3424,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return arenaChunk(from: offset)
     }
 
-    // These scanners are `@inline(__always)`, as are `parseOneLinkDefinition`, `matchDefinitionLabel`,
-    // `definitionChunk` and `unescapedChunk`, and `mutating` though they only read: out of line, or as non-mutating
-    // methods of the large `BlockParser`, they measured about 1.5% and 2.6% more instructions on a document of
-    // definitions.
+    /// Skips whitespace characters (Characters and lines).
+    mutating func skipWhitespace(from cursor: Int, in content: borrowing ContentSpan) -> Int {
+        var i = cursor
+        while i < content.endOffset, content[i].isASCIISpace {
+            i += 1
+        }
+        return i
+    }
+
+    // The scanners below are `@inline(__always)` and `mutating` though they only read, and `parseOneLinkDefinition`,
+    // `matchDefinitionLabel` and `unescapedChunk` are `@inline(__always)`: out of line, or as non-mutating methods of
+    // the large `BlockParser`, they measured about 1.5% and 2.6% more instructions on a document of definitions.
 
     /// Skips spaces, tabs, line tabulations and form feeds.
     @inline(__always)
@@ -3474,15 +3464,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return cursor
         }
         return content[cursor] == UInt8(ascii: "\n") ? cursor + 1 : nil
-    }
-
-    /// Skips whitespace characters (Characters and lines).
-    private mutating func skipWhitespace(from cursor: Int, in content: borrowing ContentSpan) -> Int {
-        var i = cursor
-        while i < content.endOffset, content[i].isASCIISpace {
-            i += 1
-        }
-        return i
     }
 
     // MARK: - Link definition
@@ -3565,7 +3546,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         if storage.attributeReferenceMap[key] == nil {
             // Trimmed, then unescaped like a link destination, with NULs replaced as above.
-            let attributesChunk = definitionChunk(attributesStart..<attributesEnd, in: content)
+            let attributesChunk = materializedChunk(start: attributesStart, end: attributesEnd, content: content)
             storage.attributeReferenceMap[key] = replacingNUL(unescapeURLChunk(attributesChunk.trimming(using: self)))
         }
         return attributesEnd < end ? attributesEnd + 1 : attributesEnd
