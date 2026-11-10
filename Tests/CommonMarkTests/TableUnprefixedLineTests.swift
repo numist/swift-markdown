@@ -15,12 +15,12 @@ import CommonMark
 /// container, a following line without the container's prefix is not a lazy continuation line: it closes
 /// the table and the container and starts a new paragraph.
 @Suite("Table followed by a line without its container's prefix")
-struct TableLazyBodyRowTests {
+struct TableUnprefixedLineTests {
 
     // MARK: - Unprefixed lines close the table and its container
 
     @Test("an unprefixed row closes the table and block quote and starts a paragraph")
-    func lazyBodyRowBreaksOut() {
+    func unprefixedRowClosesTableAndBlockQuote() {
         #expect(TreeDump.dump(">a|b\n>-|-\nc|d", options: .tables) == """
             document
               block_quote
@@ -37,7 +37,7 @@ struct TableLazyBodyRowTests {
     }
 
     @Test("two unprefixed lines after the delimiter row form one paragraph")
-    func twoLazyLinesFormOneParagraph() {
+    func twoUnprefixedLinesFormOneParagraph() {
         #expect(TreeDump.dump(">a|b\n>-|-\nc|d\ne|f", options: .tables) == """
             document
               block_quote
@@ -56,7 +56,7 @@ struct TableLazyBodyRowTests {
     }
 
     @Test("unprefixed text without pipes after the delimiter row starts a paragraph")
-    func lazyNonTableTextBreaksOut() {
+    func unprefixedTextClosesTableAndBlockQuote() {
         #expect(TreeDump.dump(">a|b\n>-|-\nxy", options: .tables) == """
             document
               block_quote
@@ -73,7 +73,7 @@ struct TableLazyBodyRowTests {
     }
 
     @Test("a row not indented to a list item's content closes the table and list")
-    func lazyBodyRowBreaksOutOfListItem() {
+    func underindentedRowClosesTableAndList() {
         #expect(TreeDump.dump("- a|b\n  -|-\nc|d", options: .tables) == """
             document
               list bullet '-' tight
@@ -93,7 +93,7 @@ struct TableLazyBodyRowTests {
     // MARK: - Prefixed body rows
 
     @Test("a prefixed body row stays in the table; a following unprefixed line starts a paragraph")
-    func matchedBodyThenLazyBreaksOut() {
+    func prefixedBodyRowThenUnprefixedLineClosesTable() {
         #expect(TreeDump.dump(">a|b\n>-|-\n>c|d\ne|f", options: .tables) == """
             document
               block_quote

@@ -13,13 +13,13 @@ import CommonMark
 
 /// A line holding only a leading pipe (Tables (extension)), optionally with whitespace, has no cells. It
 /// is not a body row, so it closes the table and starts a paragraph.
-@Suite("Lone-pipe table body row terminates the table")
-struct TableLonePipeBodyRowTests {
+@Suite("A lone-pipe line ends the table")
+struct TableLonePipeLineTests {
 
     // MARK: - Lone pipe
 
-    @Test("a lone-pipe body row after a single-column header is not a table row")
-    func lonePipeBodyRowSingleColumn() {
+    @Test("a lone-pipe line after a single-column header row is not a body row")
+    func lonePipeLineSingleColumn() {
         #expect(TreeDump.dump("f\n|-\n|", options: .tables) == """
             document
               table
@@ -32,8 +32,8 @@ struct TableLonePipeBodyRowTests {
             """)
     }
 
-    @Test("a lone-pipe body row after a multi-column header is not a table row")
-    func lonePipeBodyRowMultiColumn() {
+    @Test("a lone-pipe line after a multi-column header row is not a body row")
+    func lonePipeLineMultiColumn() {
         #expect(TreeDump.dump("a|b\n-|-\n|", options: .tables) == """
             document
               table

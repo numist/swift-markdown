@@ -14,11 +14,11 @@ import CommonMark
 /// Source ranges of emphasis, strong emphasis and links that span a soft line break inside a
 /// multi-line setext heading with an indented first line. Each ends just past its closing delimiter on
 /// that delimiter's own line, before the underline.
-@Suite("Setext heading multi-line wrapper source ranges")
-struct SetextWrapperEndRangeTests {
+@Suite("Source ranges of emphasis and links across the lines of a setext heading")
+struct SetextHeadingMultilineInlineRangeTests {
 
     @Test("emphasis spanning lines ends on the closer's line, not the underline line")
-    func emphasisWrapperEnd() {
+    func emphasisEndsOnCloserLine() {
         #expect(TreeDump.dump("  Foo *bar\nbaz*\n====", options: [.sourcePosition], sourceRanges: true) == """
             document @1:1-3:5
               heading 1 @1:3-3:5
@@ -32,7 +32,7 @@ struct SetextWrapperEndRangeTests {
     }
 
     @Test("strong emphasis spanning lines ends on the closer's line, not the underline line")
-    func strongWrapperEnd() {
+    func strongEmphasisEndsOnCloserLine() {
         #expect(TreeDump.dump("  Foo **bar\nbaz**\n====", options: [.sourcePosition], sourceRanges: true) == """
             document @1:1-3:5
               heading 1 @1:3-3:5
@@ -46,7 +46,7 @@ struct SetextWrapperEndRangeTests {
     }
 
     @Test("link spanning lines ends on the closer's line, not the underline line")
-    func linkWrapperEnd() {
+    func linkEndsOnCloserLine() {
         #expect(TreeDump.dump("  Foo [bar\nbaz](/u)\n====", options: [.sourcePosition], sourceRanges: true) == """
             document @1:1-3:5
               heading 1 @1:3-3:5

@@ -11,13 +11,12 @@
 import Testing
 import CommonMark
 
-/// Source ranges of raw HTML that spans a line ending, such as `<foo\nbar>`. The end is half-open, one column past the
-/// closing `>`, as for every other node.
-@Suite("Multi-line inline HTML source ranges")
-struct InlineHTMLMultilineEndTests {
+/// Source ranges of raw HTML that spans a line ending, such as `<foo\nbar>`.
+@Suite("Source ranges of raw HTML across a line ending")
+struct RawHTMLMultilineEndTests {
 
-    @Test("a two-line inline HTML span keeps the half-open end")
-    func twoLineSpanHalfOpen() {
+    @Test("raw HTML across a line ending ends just past its `>`")
+    func twoLineEndsPastBracket() {
         #expect(TreeDump.dump("<foo\nbar>", options: [.sourcePosition], sourceRanges: true) == """
             document @1:1-2:5
               paragraph @1:1-2:5
@@ -26,8 +25,8 @@ struct InlineHTMLMultilineEndTests {
             """)
     }
 
-    @Test("a mid-text two-line inline HTML span keeps the half-open end")
-    func midTextTwoLineSpanHalfOpen() {
+    @Test("raw HTML across a line ending between text ends just past its `>`")
+    func midTextTwoLineEndsPastBracket() {
         #expect(TreeDump.dump("x<a\nb>y", options: [.sourcePosition], sourceRanges: true) == """
             document @1:1-2:4
               paragraph @1:1-2:4
@@ -38,8 +37,8 @@ struct InlineHTMLMultilineEndTests {
             """)
     }
 
-    @Test("a single-line inline HTML span keeps the half-open end")
-    func singleLineSpanHalfOpen() {
+    @Test("single-line raw HTML ends just past its `>`")
+    func singleLineEndsPastBracket() {
         #expect(TreeDump.dump("a <foo> b", options: [.sourcePosition], sourceRanges: true) == """
             document @1:1-1:10
               paragraph @1:1-1:10

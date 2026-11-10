@@ -15,8 +15,8 @@ import CommonMark
 /// line, so a self-closing `<script/>` doesn't meet it. Start condition 7 excludes those tag names from its open tags,
 /// so `<script/>` starts no HTML block. `textarea` is not a start condition 1 tag name, so `<textarea>` and
 /// `<textarea/>` meet start condition 7.
-@Suite("Self-closing type-1 tag names as HTML block starts")
-struct HTMLBlockType1TagFallthroughTests {
+@Suite("Self-closing start condition 1 tag names as HTML block starts")
+struct HTMLBlockStartCondition1TagNameTests {
 
     @Test("`<script/>` is a paragraph")
     func scriptSelfClosing() {
@@ -42,13 +42,13 @@ struct HTMLBlockType1TagFallthroughTests {
 
             """),
     ])
-    func otherType1TagsSelfClosing(_ source: String, _ tree: String) {
+    func otherStartCondition1TagsSelfClosing(_ source: String, _ tree: String) {
         #expect(TreeDump.dump(source, options: []) == tree)
     }
 
     // MARK: Start condition 1
 
-    @Test("bare `<script>`/`<pre>`/`<style>` open HTML blocks (type 1)", arguments: [
+    @Test("bare `<script>`/`<pre>`/`<style>` open HTML blocks (start condition 1)", arguments: [
         ("<script>", """
             document
               html_block "<script>\\n"
@@ -65,11 +65,11 @@ struct HTMLBlockType1TagFallthroughTests {
 
             """),
     ])
-    func bareType1Tags(_ source: String, _ tree: String) {
+    func bareStartCondition1Tags(_ source: String, _ tree: String) {
         #expect(TreeDump.dump(source, options: []) == tree)
     }
 
-    @Test("`<script ` (trailing space) opens an HTML block (type 1)")
+    @Test("`<script ` (trailing space) opens an HTML block (start condition 1)")
     func scriptTrailingSpace() {
         #expect(TreeDump.dump("<script ", options: []) == """
             document
@@ -80,7 +80,7 @@ struct HTMLBlockType1TagFallthroughTests {
 
     // MARK: Start condition 7
 
-    @Test("`<scripting>` opens an HTML block (type 7, tag name is not `script`)")
+    @Test("`<scripting>` opens an HTML block (start condition 7, tag name is not `script`)")
     func scriptingNearMiss() {
         #expect(TreeDump.dump("<scripting>", options: []) == """
             document
@@ -89,7 +89,7 @@ struct HTMLBlockType1TagFallthroughTests {
             """)
     }
 
-    @Test("`<textarea>` and `<textarea/>` open HTML blocks (type 7)", arguments: [
+    @Test("`<textarea>` and `<textarea/>` open HTML blocks (start condition 7)", arguments: [
         ("<textarea>", """
             document
               html_block "<textarea>\\n"
@@ -101,11 +101,11 @@ struct HTMLBlockType1TagFallthroughTests {
 
             """),
     ])
-    func textareaOpensType7Block(_ source: String, _ tree: String) {
+    func textareaMeetsStartCondition7(_ source: String, _ tree: String) {
         #expect(TreeDump.dump(source, options: []) == tree)
     }
 
-    @Test("a `<textarea>` HTML block ends at a blank line (type 7)")
+    @Test("a `<textarea>` HTML block ends at a blank line (start condition 7)")
     func textareaBlockEndsAtBlankLine() {
         #expect(TreeDump.dump("<textarea>\n\nx</textarea>", options: []) == """
             document
@@ -117,8 +117,8 @@ struct HTMLBlockType1TagFallthroughTests {
             """)
     }
 
-    @Test("a `</textarea>` doesn't end a type 1 HTML block")
-    func textareaClosingTagDoesNotEndType1Block() {
+    @Test("a `</textarea>` doesn't end a start condition 1 HTML block")
+    func textareaClosingTagDoesNotEndStartCondition1Block() {
         #expect(TreeDump.dump("<pre>\n</textarea>\nx", options: []) == """
             document
               html_block "<pre>\\n</textarea>\\nx\\n"
@@ -152,7 +152,7 @@ struct HTMLBlockType1TagFallthroughTests {
             """)
     }
 
-    @Test("bare `<script>` interrupts a paragraph (type 1)")
+    @Test("bare `<script>` interrupts a paragraph (start condition 1)")
     func bareTagInterruptsParagraph() {
         #expect(TreeDump.dump("foo\n<script>", options: []) == """
             document

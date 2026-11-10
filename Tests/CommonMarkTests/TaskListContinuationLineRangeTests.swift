@@ -14,7 +14,7 @@ import CommonMark
 /// A paragraph continuation line in a task list item has a source range that starts at the line's first content byte,
 /// whatever the width of the checkbox on the opening line, and ends after the line's last content byte.
 @Suite("Task list item continuation line source ranges")
-struct TasklistLazyContinuationRangeTests {
+struct TaskListContinuationLineRangeTests {
 
     private static let options: MarkdownDocument.ParseOptions = [.tasklist, .sourcePosition]
 

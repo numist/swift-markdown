@@ -16,7 +16,7 @@ import CommonMark
 /// an alphanumeric, ends a domain, while `-`, `_`, alphanumerics and a `.` followed by an alphanumeric continue it.
 /// A second `@` in a domain restarts the address just past the first `@`.
 @Suite("Extended email autolink local part after a rejected candidate")
-struct AutolinkEmailLocalRewindBoundaryTests {
+struct ExtendedEmailAutolinkAfterRejectedCandidateTests {
 
     @Test("a plain email links with a `mailto:` destination")
     func plainEmailLinks() {

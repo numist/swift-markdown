@@ -11,11 +11,11 @@
 import Testing
 import CommonMark
 
-/// Link labels, destinations and titles (Links) in a paragraph whose lines are not contiguous in the source, such as a
-/// block quote or list item body or a paragraph with a lazy continuation line. A label, destination or title may span
+/// Link labels (Links) and inline-attribute strings in a paragraph whose lines are not contiguous in the source, such as
+/// a block quote or list item body or a paragraph with a lazy continuation line. A label or attribute string may span
 /// a line ending.
 @Suite("Links across the lines of a container's paragraph")
-struct MultiSegmentLinkLabelTests {
+struct LinksAcrossContainerLinesTests {
 
     @Test("block-quote lazy continuation with empty brackets is literal text")
     func blockQuoteEmptyBrackets() {
@@ -57,9 +57,8 @@ struct MultiSegmentLinkLabelTests {
             """)
     }
 
-    /// `[x]` sits on a lazy continuation line of the block quote.
     @Test("a shortcut reference on a lazy continuation line resolves")
-    func shortcutReferenceResolvesMultiSegment() {
+    func shortcutReferenceResolvesOnLazyLine() {
         #expect(TreeDump.dump("[x]: /u\n\n>a\n[x]b", options: []) == """
             document
               block_quote

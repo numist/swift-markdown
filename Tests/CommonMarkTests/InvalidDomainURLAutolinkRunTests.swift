@@ -11,12 +11,11 @@
 import CommonMark
 import Testing
 
-/// Lines of extended URL autolink candidates whose domains are not valid (Autolinks (extension)).
-///
-/// A candidate whose domain is not valid stays text, and the candidates after it are recognized as if it were absent, so
-/// a line of 40,000 such candidates, about 340 KB of source, parses well within the time limit.
-@Suite("Runs of scheme autolink candidates with invalid domains")
-struct InvalidDomainSchemeAutolinkRunTests {
+/// An extended URL autolink candidate whose domain is not valid stays text (Autolinks (extension)), and the candidates
+/// after it are recognized as if it were absent. A line of 40,000 such candidates, 320 KB to 360 KB of source, parses
+/// within the time limit.
+@Suite("Runs of extended URL autolink candidates with invalid domains")
+struct InvalidDomainURLAutolinkRunTests {
     private static let options: [MarkdownDocument.ParseOptions] = [.gfmAutolink, [.gfmAutolink, .inlineOnly]]
 
     @Test(arguments: options)

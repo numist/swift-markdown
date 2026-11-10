@@ -14,7 +14,7 @@ import Testing
 /// Inline constructs whose label or title continues onto the next line of a block quote paragraph, past the
 /// continuation line's `>` marker.
 @Suite("Labels and titles across a block quote line")
-struct BlockQuoteLineJoinScanTests {
+struct BlockQuoteMultilineLabelAndTitleTests {
 
     /// A link label may contain a line ending (spec "Links"), so an inline attribute's reference label continues
     /// onto the next line and matches the definition whose label is the same after normalization.
