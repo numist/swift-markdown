@@ -122,7 +122,7 @@ extension BlockParser {
     /// Matches a link label (Links) at virtual offset `start` of `content`, returning its interior and the offset past
     /// its `]`.
     internal func matchLinkLabel(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
-        scanLinkLabel(from: start, end: end) { content[$0] }
+        content.withForwardReader(from: start) { byte in scanLinkLabel(from: start, end: end, byte: byte) }
     }
 
     /// Whether a label that `matchLinkLabel` didn't scan, such as a shortcut reference's link text or a footnote
@@ -204,7 +204,7 @@ extension BlockParser {
 
     /// Matches a link destination (Links) at virtual offset `start` of `content`.
     internal mutating func matchLinkDestination(from start: Int, end: Int, in content: borrowing ContentSpan) -> (destination: Range<Int>, afterEnd: Int)? {
-        Self.scanLinkDestination(from: start, end: end, parentheses: &destinationParentheses) { content[$0] }
+        content.withForwardReader(from: start) { byte in Self.scanLinkDestination(from: start, end: end, parentheses: &destinationParentheses, byte: byte) }
     }
 
     // MARK: - Link title
@@ -266,7 +266,7 @@ extension BlockParser {
 
     /// Matches a link title (Links) at virtual offset `start` of `content`.
     internal func matchLinkTitle(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
-        scanLinkTitle(from: start, end: end) { content[$0] }
+        content.withForwardReader(from: start) { byte in scanLinkTitle(from: start, end: end, byte: byte) }
     }
 
     // MARK: - HTML tags

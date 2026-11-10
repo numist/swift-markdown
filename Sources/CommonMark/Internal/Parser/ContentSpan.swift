@@ -145,6 +145,23 @@ internal struct ContentSpan: ~Escapable {
         return span[offset - base]
     }
 
+    /// Calls `body` with a reader of the content byte at any offset from `offset` on.
+    ///
+    /// In multi-segment content the reader takes the bytes of the piece covering `offset` straight from the source, and later pieces through the subscript, so a scan that ends on the line it starts on finds its piece once rather than once per byte.
+    @inline(__always)
+    func withForwardReader<Result>(from offset: Int, _ body: ((Int) -> UInt8) -> Result) -> Result {
+        guard isMultiSegment else {
+            return body { span[$0 - base] }
+        }
+        let i = pieceIndex(covering: offset)
+        guard i < pieces.count, pieces[i].inSource else {
+            return body { multiByte(at: $0) }
+        }
+        let pieceEnd = pieceEnds[i]
+        let shift = pieces[i].offset - pieceStart(i)
+        return body { $0 < pieceEnd ? span[$0 + shift] : multiByte(at: $0) }
+    }
+
     private func multiByte(at offset: Int) -> UInt8 {
         let i = pieceIndex(covering: offset)
         assert(i < pieces.count, "inline content is read only at offsets inside the content")
