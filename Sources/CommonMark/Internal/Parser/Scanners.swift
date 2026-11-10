@@ -10,8 +10,9 @@
 
 internal import BasicContainers
 
-/// The unescaped `(` that the latest scan for balanced parentheses passed, in a bare link destination (Links) or an
-/// attribute form's `(…)`, so that a scan starting just after one of them reads its result rather than the bytes.
+/// Remembers each unescaped `(` that the latest scan for balanced parentheses passed, in a bare link destination
+/// (Links) or an attribute form's `(…)`, so that a scan starting just after one of them reads its result rather than
+/// the bytes.
 ///
 /// A scan stops at a `)` that closes no `(` it passed, at a byte that ends the run, or at the end, and its parentheses
 /// are balanced when it closed every `(` it passed. A scan starting just after a `(` the latest scan passed reads the
@@ -82,8 +83,8 @@ extension BlockParser {
 
     // MARK: - Link label
 
-    /// Scans a link label through `byte`. A full reference's label may span a line ending. Returns the interior's range
-    /// and the offset past `]`, or nil at an unescaped `[`, past `maxLinkLabelLength`, or at the end.
+    /// Scans a link label through `byte`; a label may span line endings. Returns the interior's range and the offset
+    /// past `]`, or nil at an unescaped `[`, past `maxLinkLabelLength`, or at the end.
     @inline(__always)
     private func scanLinkLabel(from start: Int, end: Int, byte: (Int) -> UInt8) -> (interior: Range<Int>, afterEnd: Int)? {
         if start >= end || byte(start) != UInt8(ascii: "[") {
@@ -364,7 +365,7 @@ extension BlockParser {
 
     // MARK: - Label normalization
 
-    /// Normalizes a link label for matching (Links): trims whitespace, collapses interior runs to one space, and applies the Unicode case fold. Whitespace includes line tabulation and form feed.
+    /// Normalizes a link label for matching (Links): trims whitespace (Characters and lines), collapses interior runs to one space, and applies the Unicode case fold.
     internal func normalizeLabel(chunk: Chunk) -> String {
         let span = if chunk.inSource {
             sourceBytes.extracting(chunk.range)
@@ -392,11 +393,10 @@ extension BlockParser {
 
     /// `span` normalized as `normalizeLabel(chunk:)` describes, with each NUL replaced with U+FFFD (Insecure characters).
     ///
-    /// The label is built in its own buffer rather than `storage.strings`, because a definition's label can be normalized
-    /// while that arena is borrowed. Each NUL takes three bytes, and every other byte at most one, since a whitespace run
-    /// becomes at most one space. Sizing the buffer to that, rather than to three bytes per source byte, stores a short
-    /// label inline instead of in a heap allocation. ASCII letters are lowercased in the same pass, which completes the
-    /// case fold of a label with no non-ASCII bytes.
+    /// Each NUL takes three bytes, and every other byte at most one, since a whitespace run becomes at most one space.
+    /// Sizing the buffer to that, rather than to three bytes per source byte, stores a short label inline instead of in a
+    /// heap allocation. ASCII letters are lowercased in the same pass, which completes the case fold of a label with no
+    /// non-ASCII bytes.
     private static func normalizeLabel(_ span: Span<UInt8>) -> String {
         var hasNonASCII = false
         var nulCount = 0
