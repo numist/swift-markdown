@@ -73,7 +73,7 @@ struct NumericCharacterReferenceDigitLimitTests {
         // The maximum scalar at the 7-decimal and 6-hex digit limits.
         #expect(try text("&#1114111;", options: Self.options) == Self.maxScalar)
         #expect(try text("&#x10FFFF;", options: Self.options) == Self.maxScalar)
-        // Invalid code points within the digit limits decode to U+FFFD.
+        // Invalid code points, and U+0000, within the digit limits decode to U+FFFD.
         #expect(try text("&#0;", options: Self.options) == Self.replacement)
         #expect(try text("&#1234567;", options: Self.options) == Self.replacement)
         #expect(try text("&#xFFFFFF;", options: Self.options) == Self.replacement)
