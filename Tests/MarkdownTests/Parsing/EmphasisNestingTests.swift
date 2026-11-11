@@ -11,7 +11,7 @@
 import Markdown
 import XCTest
 
-/// Strong emphasis around an interior `**` that can both open and close.
+/// How runs of `*` pair into emphasis and strong emphasis, and how the matches nest.
 ///
 /// Rule 10 of Emphasis and strong emphasis sums the lengths of whole delimiter runs, and the `openers_bottom`
 /// table (An algorithm for parsing nested emphasis and links) is keyed by the closing run's length modulo 3 and,
@@ -31,6 +31,23 @@ class EmphasisNestingTests: XCTestCase {
            │  └─ Strong @1:2-1:7
            │     └─ Text @1:4-1:5 "a"
            └─ Text @1:8-1:10 "*a"
+        """
+
+        let document = Document(parsing: text)
+        XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
+    }
+
+    /// The interior `**` can both open and close and `(4 + 2) % 3 == 0`, so it matches neither outer run and is
+    /// text. The outer runs match twice, as two nested strong emphasis spans.
+    func testInteriorDoubleRunStaysTextInsideNestedStrong() {
+        let text = "****a**o****"
+
+        let expectedDump = """
+        Document @1:1-1:13
+        └─ Paragraph @1:1-1:13
+           └─ Strong @1:1-1:13
+              └─ Strong @1:3-1:11
+                 └─ Text @1:5-1:9 "a**o"
         """
 
         let document = Document(parsing: text)
