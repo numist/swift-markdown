@@ -8,6 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
+import Testing
 import CommonMark
 
 /// Renders a parsed tree one node per line, two spaces of indent per depth, so a test can compare the whole tree
@@ -193,4 +194,19 @@ internal enum TreeDump {
         }
         return out + "\""
     }
+}
+
+/// A named source and the `TreeDump` rendering a parameterized test expects for it.
+internal struct TreeDumpCase: CustomTestStringConvertible, Sendable {
+    let name: String
+    let source: String
+    let expected: String
+
+    init(_ name: String, _ source: String, _ expected: String) {
+        self.name = name
+        self.source = source
+        self.expected = expected
+    }
+
+    var testDescription: String { name }
 }

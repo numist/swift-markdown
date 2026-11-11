@@ -24,22 +24,8 @@ import CommonMark
 @Suite("A table's header row may be a lazy continuation line, but its delimiter and data rows may not")
 struct TableLazyContinuationRowTests {
 
-    struct Case: CustomTestStringConvertible, Sendable {
-        let name: String
-        let source: String
-        let expected: String
-
-        init(_ name: String, _ source: String, _ expected: String) {
-            self.name = name
-            self.source = source
-            self.expected = expected
-        }
-
-        var testDescription: String { name }
-    }
-
-    static let cases: [Case] = [
-        Case(
+    static let cases: [TreeDumpCase] = [
+        TreeDumpCase(
             "block quote, lazy header row",
             "> x\na|b\n> -|-\n",
             """
@@ -56,7 +42,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, lazy delimiter row",
             "> a|b\n-|-\n",
             """
@@ -69,7 +55,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, lazy data row",
             "> a|b\n> -|-\nc|d\n",
             """
@@ -86,7 +72,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, prefixed data row",
             "> a|b\n> -|-\n> c|d\n",
             """
@@ -106,7 +92,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, lazy header row and lazy data row",
             "> x\na|b\n> -|-\nc|d\n",
             """
@@ -125,7 +111,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, lazy header row and prefixed data row",
             "> x\na|b\n> -|-\n> c|d\n",
             """
@@ -147,7 +133,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, lazy header row and lazy delimiter row",
             "> x\na|b\n-|-\n",
             """
@@ -162,7 +148,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, lazy line before a prefixed header row",
             "> x\ny\n> a|b\n> -|-\n",
             """
@@ -181,7 +167,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, lazy header row",
             "- x\na|b\n  -|-\n",
             """
@@ -199,7 +185,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, lazy delimiter row",
             "- a|b\n-|-\n",
             """
@@ -213,7 +199,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, lazy data row",
             "- a|b\n  -|-\nc|d\n",
             """
@@ -231,7 +217,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, prefixed data row",
             "- a|b\n  -|-\n  c|d\n",
             """
@@ -252,7 +238,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, lazy header row and lazy data row",
             "- x\na|b\n  -|-\nc|d\n",
             """
@@ -272,7 +258,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, lazy header row and prefixed data row",
             "- x\na|b\n  -|-\n  c|d\n",
             """
@@ -295,7 +281,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, lazy header row and lazy delimiter row",
             "- x\na|b\n-|-\n",
             """
@@ -311,7 +297,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, lazy line before a prefixed header row",
             "- x\ny\n  a|b\n  -|-\n",
             """
@@ -331,7 +317,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, lazy header row",
             "1. x\na|b\n   -|-\n",
             """
@@ -349,7 +335,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, prefixed header row",
             "1. x\n   a|b\n   -|-\n",
             """
@@ -367,7 +353,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, lazy delimiter row",
             "1. a|b\n-|-\n",
             """
@@ -381,7 +367,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, prefixed delimiter row",
             "1. a|b\n   -|-\n",
             """
@@ -397,7 +383,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, lazy data row",
             "1. a|b\n   -|-\nc|d\n",
             """
@@ -415,7 +401,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, prefixed data row",
             "1. a|b\n   -|-\n   c|d\n",
             """
@@ -436,7 +422,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, lazy header row and lazy data row",
             "1. x\na|b\n   -|-\nc|d\n",
             """
@@ -456,7 +442,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, lazy header row and prefixed data row",
             "1. x\na|b\n   -|-\n   c|d\n",
             """
@@ -479,7 +465,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, lazy header row and lazy delimiter row",
             "1. x\na|b\n-|-\n",
             """
@@ -495,7 +481,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, lazy line before a prefixed header row",
             "1. x\ny\n   a|b\n   -|-\n",
             """
@@ -515,7 +501,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, lazy header row",
             "[^a]\n\n[^a]: x\na|b\n    -|-\n",
             """
@@ -534,7 +520,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, prefixed header row",
             "[^a]\n\n[^a]: x\n    a|b\n    -|-\n",
             """
@@ -553,7 +539,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, lazy delimiter row",
             "[^a]\n\n[^a]: a|b\n-|-\n",
             """
@@ -568,7 +554,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, prefixed delimiter row",
             "[^a]\n\n[^a]: a|b\n    -|-\n",
             """
@@ -585,7 +571,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, lazy data row",
             "[^a]\n\n[^a]: a|b\n    -|-\nc|d\n",
             """
@@ -604,7 +590,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, prefixed data row",
             "[^a]\n\n[^a]: a|b\n    -|-\n    c|d\n",
             """
@@ -626,7 +612,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, lazy header row and lazy data row",
             "[^a]\n\n[^a]: x\na|b\n    -|-\nc|d\n",
             """
@@ -647,7 +633,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, lazy header row and prefixed data row",
             "[^a]\n\n[^a]: x\na|b\n    -|-\n    c|d\n",
             """
@@ -671,7 +657,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, lazy header row and lazy delimiter row",
             "[^a]\n\n[^a]: x\na|b\n-|-\n",
             """
@@ -688,7 +674,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, lazy line before a prefixed header row",
             "[^a]\n\n[^a]: x\ny\n    a|b\n    -|-\n",
             """
@@ -709,7 +695,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, lazy header row",
             "> > x\na|b\n> > -|-\n",
             """
@@ -727,7 +713,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, prefixed header row",
             "> > x\n> > a|b\n> > -|-\n",
             """
@@ -745,7 +731,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, lazy delimiter row",
             "> > a|b\n-|-\n",
             """
@@ -759,7 +745,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, prefixed delimiter row",
             "> > a|b\n> > -|-\n",
             """
@@ -775,7 +761,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, lazy data row",
             "> > a|b\n> > -|-\nc|d\n",
             """
@@ -793,7 +779,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, prefixed data row",
             "> > a|b\n> > -|-\n> > c|d\n",
             """
@@ -814,7 +800,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, lazy header row and lazy data row",
             "> > x\na|b\n> > -|-\nc|d\n",
             """
@@ -834,7 +820,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, lazy header row and prefixed data row",
             "> > x\na|b\n> > -|-\n> > c|d\n",
             """
@@ -857,7 +843,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, lazy header row and lazy delimiter row",
             "> > x\na|b\n-|-\n",
             """
@@ -873,7 +859,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, lazy line before a prefixed header row",
             "> > x\ny\n> > a|b\n> > -|-\n",
             """
@@ -893,7 +879,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, header row with only the outer prefix",
             "> > x\n> a|b\n> > -|-\n",
             """
@@ -911,7 +897,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, delimiter row with only the outer prefix",
             "> > a|b\n> -|-\n",
             """
@@ -925,7 +911,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, data row with only the outer prefix",
             "> > a|b\n> > -|-\n> c|d\n",
             """
@@ -943,7 +929,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item in a block quote, lazy header row",
             "> - x\na|b\n>   -|-\n",
             """
@@ -962,7 +948,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item in a block quote, prefixed header row",
             "> - x\n>   a|b\n>   -|-\n",
             """
@@ -981,7 +967,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item in a block quote, lazy delimiter row",
             "> - a|b\n-|-\n",
             """
@@ -996,7 +982,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item in a block quote, prefixed delimiter row",
             "> - a|b\n>   -|-\n",
             """
@@ -1013,7 +999,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item in a block quote, lazy data row",
             "> - a|b\n>   -|-\nc|d\n",
             """
@@ -1032,7 +1018,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item in a block quote, prefixed data row",
             "> - a|b\n>   -|-\n>   c|d\n",
             """
@@ -1054,7 +1040,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item in a block quote, lazy header row and lazy data row",
             "> - x\na|b\n>   -|-\nc|d\n",
             """
@@ -1075,7 +1061,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item in a block quote, lazy header row and prefixed data row",
             "> - x\na|b\n>   -|-\n>   c|d\n",
             """
@@ -1099,7 +1085,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item in a block quote, lazy header row and lazy delimiter row",
             "> - x\na|b\n-|-\n",
             """
@@ -1116,7 +1102,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item in a block quote, lazy line before a prefixed header row",
             "> - x\ny\n>   a|b\n>   -|-\n",
             """
@@ -1137,7 +1123,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item in a block quote, header row with only the outer prefix",
             "> - x\n> a|b\n>   -|-\n",
             """
@@ -1156,7 +1142,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item in a block quote, delimiter row with only the outer prefix",
             "> - a|b\n> -|-\n",
             """
@@ -1171,7 +1157,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item in a block quote, data row with only the outer prefix",
             "> - a|b\n>   -|-\n> c|d\n",
             """
@@ -1190,7 +1176,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a bullet item, lazy header row",
             "- > x\na|b\n  > -|-\n",
             """
@@ -1209,7 +1195,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a bullet item, prefixed header row",
             "- > x\n  > a|b\n  > -|-\n",
             """
@@ -1228,7 +1214,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a bullet item, lazy delimiter row",
             "- > a|b\n-|-\n",
             """
@@ -1243,7 +1229,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a bullet item, prefixed delimiter row",
             "- > a|b\n  > -|-\n",
             """
@@ -1260,7 +1246,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a bullet item, lazy data row",
             "- > a|b\n  > -|-\nc|d\n",
             """
@@ -1279,7 +1265,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a bullet item, prefixed data row",
             "- > a|b\n  > -|-\n  > c|d\n",
             """
@@ -1301,7 +1287,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a bullet item, lazy header row and lazy data row",
             "- > x\na|b\n  > -|-\nc|d\n",
             """
@@ -1322,7 +1308,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a bullet item, lazy header row and prefixed data row",
             "- > x\na|b\n  > -|-\n  > c|d\n",
             """
@@ -1346,7 +1332,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a bullet item, lazy header row and lazy delimiter row",
             "- > x\na|b\n-|-\n",
             """
@@ -1363,7 +1349,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a bullet item, lazy line before a prefixed header row",
             "- > x\ny\n  > a|b\n  > -|-\n",
             """
@@ -1384,7 +1370,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a bullet item, header row with only the outer prefix",
             "- > x\n  a|b\n  > -|-\n",
             """
@@ -1403,7 +1389,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a bullet item, delimiter row with only the outer prefix",
             "- > a|b\n  -|-\n",
             """
@@ -1418,7 +1404,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a bullet item, data row with only the outer prefix",
             "- > a|b\n  > -|-\n  c|d\n",
             """
@@ -1437,7 +1423,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, lazy header row indented less than the content column",
             "- x\n a|b\n  -|-\n",
             """
@@ -1455,7 +1441,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a line without its prefix after a heading begins a table outside it",
             "> # h\nc|d\n-|-\n",
             """
@@ -1472,7 +1458,7 @@ struct TableLazyContinuationRowTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a line without its prefix that opens a list item",
             "> a\n- b|c\n  -|-\n",
             """
@@ -1494,7 +1480,7 @@ struct TableLazyContinuationRowTests {
     ]
 
     @Test(arguments: cases)
-    func tree(_ c: Case) {
+    func tree(_ c: TreeDumpCase) {
         #expect(TreeDump.dump(c.source, options: [.sourcePosition, .tables, .footnotes], sourceRanges: true) == c.expected)
     }
 }

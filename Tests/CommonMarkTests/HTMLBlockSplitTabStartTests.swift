@@ -19,22 +19,8 @@ import CommonMark
 @Suite("An HTML block that begins with a split tab's columns starts at the tab")
 struct HTMLBlockSplitTabStartTests {
 
-    struct Case: CustomTestStringConvertible, Sendable {
-        let name: String
-        let source: String
-        let expected: String
-
-        init(_ name: String, _ source: String, _ expected: String) {
-            self.name = name
-            self.source = source
-            self.expected = expected
-        }
-
-        var testDescription: String { name }
-    }
-
-    static let cases: [Case] = [
-        Case(
+    static let cases: [TreeDumpCase] = [
+        TreeDumpCase(
             "block quote, type 6, first line",
             ">\t<div>\n",
             """
@@ -44,7 +30,7 @@ struct HTMLBlockSplitTabStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, type 6, interrupting a paragraph",
             "> a\n>\t<div>\n",
             """
@@ -56,7 +42,7 @@ struct HTMLBlockSplitTabStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, type 7, after a blank line",
             ">\n>\t<a>\n",
             """
@@ -66,7 +52,7 @@ struct HTMLBlockSplitTabStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, type 2, ending on its first line",
             ">\t<!-- x -->\n",
             """
@@ -76,7 +62,7 @@ struct HTMLBlockSplitTabStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, type 1, open at the end of the document",
             ">\t<pre>\n> x\n",
             """
@@ -86,7 +72,7 @@ struct HTMLBlockSplitTabStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, type 6",
             ">>\t<div>\n",
             """
@@ -97,7 +83,7 @@ struct HTMLBlockSplitTabStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item content column, type 6",
             "- a\n\n \t<div>\n",
             """
@@ -110,7 +96,7 @@ struct HTMLBlockSplitTabStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item content column, type 6",
             "1. a\n\n\t<div>\n",
             """
@@ -123,7 +109,7 @@ struct HTMLBlockSplitTabStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition content column in a block quote, type 6",
             "[^a]\n\n> [^a]: x\n>\n>    \t<div>\n",
             """
@@ -138,7 +124,7 @@ struct HTMLBlockSplitTabStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote after a list item, type 4",
             "- ```\n>\t<!AD\n",
             """
@@ -151,7 +137,7 @@ struct HTMLBlockSplitTabStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "a tab that stands for one column after a block quote marker in a list item",
             "- >\t<div>\n",
             """
@@ -166,7 +152,7 @@ struct HTMLBlockSplitTabStartTests {
     ]
 
     @Test(arguments: cases)
-    func tree(_ c: Case) {
+    func tree(_ c: TreeDumpCase) {
         #expect(TreeDump.dump(c.source, options: [.sourcePosition, .footnotes], sourceRanges: true) == c.expected)
     }
 }

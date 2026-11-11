@@ -22,22 +22,8 @@ import CommonMark
 @Suite("A fenced code block ends on its last line when its container closes")
 struct FencedCodeClosedContainerRangeTests {
 
-    struct Case: CustomTestStringConvertible, Sendable {
-        let name: String
-        let source: String
-        let expected: String
-
-        init(_ name: String, _ source: String, _ expected: String) {
-            self.name = name
-            self.source = source
-            self.expected = expected
-        }
-
-        var testDescription: String { name }
-    }
-
-    static let cases: [Case] = [
-        Case(
+    static let cases: [TreeDumpCase] = [
+        TreeDumpCase(
             "block quote ends right after the opening fence",
             "> ```\nx\n",
             """
@@ -49,7 +35,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote ends after a content line",
             "> ```\n> a\nx\n",
             """
@@ -61,7 +47,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote ends after a blank content line",
             "> ```\n>\nx\n",
             """
@@ -73,7 +59,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote ends at a blank line",
             "> ```\n> a\n\nx\n",
             """
@@ -85,7 +71,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, closed by its closing fence",
             "> ```\n> a\n> ```\nx\n",
             """
@@ -97,7 +83,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, open at the end of the document",
             "> ```\n> a\n",
             """
@@ -107,7 +93,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item ends right after the opening fence",
             "- ```\nx\n",
             """
@@ -120,7 +106,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item ends after a content line",
             "- ```\n  a\nx\n",
             """
@@ -133,7 +119,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item ends after a blank content line",
             "- ```\n\nx\n",
             """
@@ -146,7 +132,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item ends at a sibling item",
             "- ```\n  a\n- b\n",
             """
@@ -160,7 +146,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, closed by its closing fence",
             "- ```\n  a\n  ```\nx\n",
             """
@@ -173,7 +159,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, open at the end of the document",
             "- ```\n  a\n",
             """
@@ -184,7 +170,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item ends right after the opening fence",
             "1. ```\nx\n",
             """
@@ -197,7 +183,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item ends after a content line",
             "1. ```\n   a\nx\n",
             """
@@ -210,7 +196,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item ends at a sibling item",
             "1. ```\n   a\n2. b\n",
             """
@@ -224,7 +210,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition ends right after the opening fence",
             "[^a]\n\n[^a]: ```\nx\n",
             """
@@ -238,7 +224,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition ends after a content line",
             "[^a]\n\n[^a]: ```\n    a\nx\n",
             """
@@ -252,7 +238,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition ends after a blank content line",
             "[^a]\n\n[^a]: ```\n\nx\n",
             """
@@ -266,7 +252,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, closed by its closing fence",
             "[^a]\n\n[^a]: ```\n    a\n    ```\nx\n",
             """
@@ -280,7 +266,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in an item ends after a content line",
             "- > ```\n  > a\n  x\n",
             """
@@ -294,7 +280,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in a block quote ends after a content line",
             "> - ```\n>   a\n> x\n",
             """
@@ -308,7 +294,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote ends after a content line",
             "> > ```\n> > a\n> x\n",
             """
@@ -321,7 +307,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote ends after a content line",
             "[^a]\n\n> [^a]: ```\n>     a\n> x\n",
             """
@@ -336,7 +322,7 @@ struct FencedCodeClosedContainerRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in a block quote ends at a blank line",
             "> - ```\n>   a\n\nx\n",
             """
@@ -353,7 +339,7 @@ struct FencedCodeClosedContainerRangeTests {
     ]
 
     @Test(arguments: cases)
-    func tree(_ c: Case) {
+    func tree(_ c: TreeDumpCase) {
         #expect(TreeDump.dump(c.source, options: [.sourcePosition, .footnotes], sourceRanges: true) == c.expected)
     }
 }

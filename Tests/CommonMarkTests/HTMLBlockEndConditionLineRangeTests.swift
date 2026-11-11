@@ -19,22 +19,8 @@ import CommonMark
 @Suite("An HTML block ends on the line that meets its end condition")
 struct HTMLBlockEndConditionLineRangeTests {
 
-    struct Case: CustomTestStringConvertible, Sendable {
-        let name: String
-        let source: String
-        let expected: String
-
-        init(_ name: String, _ source: String, _ expected: String) {
-            self.name = name
-            self.source = source
-            self.expected = expected
-        }
-
-        var testDescription: String { name }
-    }
-
-    static let cases: [Case] = [
-        Case(
+    static let cases: [TreeDumpCase] = [
+        TreeDumpCase(
             "top level, type 1, after a line",
             "<pre>\nfoo\n</pre>\n",
             """
@@ -43,7 +29,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, type 1, on the next line, then a paragraph",
             "<pre>\n</pre>\nfoo\n",
             """
@@ -54,7 +40,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, type 1, with trailing spaces",
             "<pre>\n</pre>  \n",
             """
@@ -63,7 +49,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, type 2, after a blank line",
             "<!--\n\nx -->\n",
             """
@@ -72,7 +58,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, type 3, with text after the end condition",
             "<?php\necho 1; ?> trailing\n",
             """
@@ -81,7 +67,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, type 4, on the next line",
             "<!DOCTYPE\nhtml>\n",
             """
@@ -90,7 +76,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, type 5, after a line",
             "<![CDATA[\nx\n]]>\n",
             """
@@ -99,7 +85,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, type 1, after a line",
             "> <pre>\n> x\n> </pre>\n",
             """
@@ -109,7 +95,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, type 1, after a tab split by the marker",
             ">\t<pre>\n>\t</pre>\n",
             """
@@ -119,7 +105,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, type 2, on the next line",
             "- <!--\n  x -->\n",
             """
@@ -130,7 +116,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, type 3, on the next line",
             "1. <?\n   ?>\n",
             """
@@ -141,7 +127,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, type 1, on the next line",
             "[^a]\n\n[^a]: <pre>\n    </pre>\n",
             """
@@ -153,7 +139,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a list item, type 5, on the next line",
             "- > <![CDATA[\n  > ]]>\n",
             """
@@ -165,7 +151,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "list item in a block quote, type 4, on the next line",
             "> - <!X\n>   >\n",
             """
@@ -177,7 +163,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, type 1, on its first line",
             "<pre>x</pre>\nfoo\n",
             """
@@ -188,7 +174,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, type 6, ended by a blank line",
             "<div>\nx\n\nfoo\n",
             """
@@ -199,7 +185,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, type 1, ended by a line that does not continue the block quote",
             "> <pre>\n> x\nfoo\n",
             """
@@ -211,7 +197,7 @@ struct HTMLBlockEndConditionLineRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, type 1, open at the end of the document",
             "<pre>\nx\n",
             """
@@ -223,7 +209,7 @@ struct HTMLBlockEndConditionLineRangeTests {
     ]
 
     @Test(arguments: cases)
-    func tree(_ c: Case) {
+    func tree(_ c: TreeDumpCase) {
         #expect(TreeDump.dump(c.source, options: [.sourcePosition, .footnotes], sourceRanges: true) == c.expected)
     }
 }

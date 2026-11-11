@@ -22,22 +22,8 @@ import CommonMark
 @Suite("An HTML block starts at the first byte of its indentation")
 struct HTMLBlockIndentationStartTests {
 
-    struct Case: CustomTestStringConvertible, Sendable {
-        let name: String
-        let source: String
-        let expected: String
-
-        init(_ name: String, _ source: String, _ expected: String) {
-            self.name = name
-            self.source = source
-            self.expected = expected
-        }
-
-        var testDescription: String { name }
-    }
-
-    static let cases: [Case] = [
-        Case(
+    static let cases: [TreeDumpCase] = [
+        TreeDumpCase(
             "top level, no indentation, type 1",
             "<pre>\n",
             """
@@ -46,7 +32,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, no indentation, type 2",
             "<!-- x -->\n",
             """
@@ -55,7 +41,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, no indentation, type 3",
             "<?x?>\n",
             """
@@ -64,7 +50,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, no indentation, type 4",
             "<!X>\n",
             """
@@ -73,7 +59,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, no indentation, type 5",
             "<![CDATA[x]]>\n",
             """
@@ -82,7 +68,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, no indentation, type 6",
             "<div>\n",
             """
@@ -91,7 +77,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, no indentation, type 7",
             "<a>\n",
             """
@@ -100,7 +86,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 1 space, type 1",
             " <pre>\n",
             """
@@ -109,7 +95,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 1 space, type 2",
             " <!-- x -->\n",
             """
@@ -118,7 +104,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 1 space, type 3",
             " <?x?>\n",
             """
@@ -127,7 +113,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 1 space, type 4",
             " <!X>\n",
             """
@@ -136,7 +122,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 1 space, type 5",
             " <![CDATA[x]]>\n",
             """
@@ -145,7 +131,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 1 space, type 6",
             " <div>\n",
             """
@@ -154,7 +140,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 1 space, type 7",
             " <a>\n",
             """
@@ -163,7 +149,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 2 spaces, type 1",
             "  <pre>\n",
             """
@@ -172,7 +158,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 2 spaces, type 2",
             "  <!-- x -->\n",
             """
@@ -181,7 +167,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 2 spaces, type 3",
             "  <?x?>\n",
             """
@@ -190,7 +176,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 2 spaces, type 4",
             "  <!X>\n",
             """
@@ -199,7 +185,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 2 spaces, type 5",
             "  <![CDATA[x]]>\n",
             """
@@ -208,7 +194,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 2 spaces, type 6",
             "  <div>\n",
             """
@@ -217,7 +203,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 2 spaces, type 7",
             "  <a>\n",
             """
@@ -226,7 +212,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 3 spaces, type 1",
             "   <pre>\n",
             """
@@ -235,7 +221,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 3 spaces, type 2",
             "   <!-- x -->\n",
             """
@@ -244,7 +230,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 3 spaces, type 3",
             "   <?x?>\n",
             """
@@ -253,7 +239,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 3 spaces, type 4",
             "   <!X>\n",
             """
@@ -262,7 +248,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 3 spaces, type 5",
             "   <![CDATA[x]]>\n",
             """
@@ -271,7 +257,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 3 spaces, type 6",
             "   <div>\n",
             """
@@ -280,7 +266,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 3 spaces, type 7",
             "   <a>\n",
             """
@@ -289,7 +275,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 4 spaces: indented code",
             "    <div>\n",
             """
@@ -298,7 +284,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, no indentation, type 1",
             "> <pre>\n",
             """
@@ -308,7 +294,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, no indentation, type 2",
             "> <!-- x -->\n",
             """
@@ -318,7 +304,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, no indentation, type 3",
             "> <?x?>\n",
             """
@@ -328,7 +314,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, no indentation, type 4",
             "> <!X>\n",
             """
@@ -338,7 +324,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, no indentation, type 5",
             "> <![CDATA[x]]>\n",
             """
@@ -348,7 +334,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, no indentation, type 6",
             "> <div>\n",
             """
@@ -358,7 +344,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, no indentation, type 7",
             "> <a>\n",
             """
@@ -368,7 +354,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 1 space, type 1",
             ">  <pre>\n",
             """
@@ -378,7 +364,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 1 space, type 2",
             ">  <!-- x -->\n",
             """
@@ -388,7 +374,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 1 space, type 3",
             ">  <?x?>\n",
             """
@@ -398,7 +384,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 1 space, type 4",
             ">  <!X>\n",
             """
@@ -408,7 +394,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 1 space, type 5",
             ">  <![CDATA[x]]>\n",
             """
@@ -418,7 +404,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 1 space, type 6",
             ">  <div>\n",
             """
@@ -428,7 +414,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 1 space, type 7",
             ">  <a>\n",
             """
@@ -438,7 +424,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 2 spaces, type 1",
             ">   <pre>\n",
             """
@@ -448,7 +434,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 2 spaces, type 2",
             ">   <!-- x -->\n",
             """
@@ -458,7 +444,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 2 spaces, type 3",
             ">   <?x?>\n",
             """
@@ -468,7 +454,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 2 spaces, type 4",
             ">   <!X>\n",
             """
@@ -478,7 +464,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 2 spaces, type 5",
             ">   <![CDATA[x]]>\n",
             """
@@ -488,7 +474,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 2 spaces, type 6",
             ">   <div>\n",
             """
@@ -498,7 +484,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 2 spaces, type 7",
             ">   <a>\n",
             """
@@ -508,7 +494,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 3 spaces, type 1",
             ">    <pre>\n",
             """
@@ -518,7 +504,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 3 spaces, type 2",
             ">    <!-- x -->\n",
             """
@@ -528,7 +514,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 3 spaces, type 3",
             ">    <?x?>\n",
             """
@@ -538,7 +524,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 3 spaces, type 4",
             ">    <!X>\n",
             """
@@ -548,7 +534,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 3 spaces, type 5",
             ">    <![CDATA[x]]>\n",
             """
@@ -558,7 +544,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 3 spaces, type 6",
             ">    <div>\n",
             """
@@ -568,7 +554,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 3 spaces, type 7",
             ">    <a>\n",
             """
@@ -578,7 +564,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab, type 1",
             "> \t<pre>\n",
             """
@@ -588,7 +574,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab, type 2",
             "> \t<!-- x -->\n",
             """
@@ -598,7 +584,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab, type 3",
             "> \t<?x?>\n",
             """
@@ -608,7 +594,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab, type 4",
             "> \t<!X>\n",
             """
@@ -618,7 +604,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab, type 5",
             "> \t<![CDATA[x]]>\n",
             """
@@ -628,7 +614,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab, type 6",
             "> \t<div>\n",
             """
@@ -638,7 +624,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab, type 7",
             "> \t<a>\n",
             """
@@ -648,7 +634,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a space and a tab, type 1",
             ">  \t<pre>\n",
             """
@@ -658,7 +644,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a space and a tab, type 2",
             ">  \t<!-- x -->\n",
             """
@@ -668,7 +654,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a space and a tab, type 3",
             ">  \t<?x?>\n",
             """
@@ -678,7 +664,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a space and a tab, type 4",
             ">  \t<!X>\n",
             """
@@ -688,7 +674,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a space and a tab, type 5",
             ">  \t<![CDATA[x]]>\n",
             """
@@ -698,7 +684,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a space and a tab, type 6",
             ">  \t<div>\n",
             """
@@ -708,7 +694,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a space and a tab, type 7",
             ">  \t<a>\n",
             """
@@ -718,7 +704,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab and a space, type 1",
             "> \t <pre>\n",
             """
@@ -728,7 +714,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab and a space, type 2",
             "> \t <!-- x -->\n",
             """
@@ -738,7 +724,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab and a space, type 3",
             "> \t <?x?>\n",
             """
@@ -748,7 +734,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab and a space, type 4",
             "> \t <!X>\n",
             """
@@ -758,7 +744,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab and a space, type 5",
             "> \t <![CDATA[x]]>\n",
             """
@@ -768,7 +754,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab and a space, type 6",
             "> \t <div>\n",
             """
@@ -778,7 +764,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a tab and a space, type 7",
             "> \t <a>\n",
             """
@@ -788,7 +774,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 4 spaces: indented code",
             ">     <div>\n",
             """
@@ -798,7 +784,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, no indentation, type 1",
             "- a\n\n  <pre>\n",
             """
@@ -811,7 +797,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, no indentation, type 2",
             "- a\n\n  <!-- x -->\n",
             """
@@ -824,7 +810,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, no indentation, type 3",
             "- a\n\n  <?x?>\n",
             """
@@ -837,7 +823,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, no indentation, type 4",
             "- a\n\n  <!X>\n",
             """
@@ -850,7 +836,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, no indentation, type 5",
             "- a\n\n  <![CDATA[x]]>\n",
             """
@@ -863,7 +849,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, no indentation, type 6",
             "- a\n\n  <div>\n",
             """
@@ -876,7 +862,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, no indentation, type 7",
             "- a\n\n  <a>\n",
             """
@@ -889,7 +875,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 1 space, type 1",
             "- a\n\n   <pre>\n",
             """
@@ -902,7 +888,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 1 space, type 2",
             "- a\n\n   <!-- x -->\n",
             """
@@ -915,7 +901,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 1 space, type 3",
             "- a\n\n   <?x?>\n",
             """
@@ -928,7 +914,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 1 space, type 4",
             "- a\n\n   <!X>\n",
             """
@@ -941,7 +927,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 1 space, type 5",
             "- a\n\n   <![CDATA[x]]>\n",
             """
@@ -954,7 +940,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 1 space, type 6",
             "- a\n\n   <div>\n",
             """
@@ -967,7 +953,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 1 space, type 7",
             "- a\n\n   <a>\n",
             """
@@ -980,7 +966,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 2 spaces, type 1",
             "- a\n\n    <pre>\n",
             """
@@ -993,7 +979,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 2 spaces, type 2",
             "- a\n\n    <!-- x -->\n",
             """
@@ -1006,7 +992,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 2 spaces, type 3",
             "- a\n\n    <?x?>\n",
             """
@@ -1019,7 +1005,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 2 spaces, type 4",
             "- a\n\n    <!X>\n",
             """
@@ -1032,7 +1018,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 2 spaces, type 5",
             "- a\n\n    <![CDATA[x]]>\n",
             """
@@ -1045,7 +1031,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 2 spaces, type 6",
             "- a\n\n    <div>\n",
             """
@@ -1058,7 +1044,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 2 spaces, type 7",
             "- a\n\n    <a>\n",
             """
@@ -1071,7 +1057,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 3 spaces, type 1",
             "- a\n\n     <pre>\n",
             """
@@ -1084,7 +1070,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 3 spaces, type 2",
             "- a\n\n     <!-- x -->\n",
             """
@@ -1097,7 +1083,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 3 spaces, type 3",
             "- a\n\n     <?x?>\n",
             """
@@ -1110,7 +1096,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 3 spaces, type 4",
             "- a\n\n     <!X>\n",
             """
@@ -1123,7 +1109,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 3 spaces, type 5",
             "- a\n\n     <![CDATA[x]]>\n",
             """
@@ -1136,7 +1122,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 3 spaces, type 6",
             "- a\n\n     <div>\n",
             """
@@ -1149,7 +1135,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 3 spaces, type 7",
             "- a\n\n     <a>\n",
             """
@@ -1162,7 +1148,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab, type 1",
             "- a\n\n  \t<pre>\n",
             """
@@ -1175,7 +1161,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab, type 2",
             "- a\n\n  \t<!-- x -->\n",
             """
@@ -1188,7 +1174,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab, type 3",
             "- a\n\n  \t<?x?>\n",
             """
@@ -1201,7 +1187,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab, type 4",
             "- a\n\n  \t<!X>\n",
             """
@@ -1214,7 +1200,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab, type 5",
             "- a\n\n  \t<![CDATA[x]]>\n",
             """
@@ -1227,7 +1213,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab, type 6",
             "- a\n\n  \t<div>\n",
             """
@@ -1240,7 +1226,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab, type 7",
             "- a\n\n  \t<a>\n",
             """
@@ -1253,7 +1239,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a space and a tab, type 1",
             "- a\n\n   \t<pre>\n",
             """
@@ -1266,7 +1252,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a space and a tab, type 2",
             "- a\n\n   \t<!-- x -->\n",
             """
@@ -1279,7 +1265,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a space and a tab, type 3",
             "- a\n\n   \t<?x?>\n",
             """
@@ -1292,7 +1278,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a space and a tab, type 4",
             "- a\n\n   \t<!X>\n",
             """
@@ -1305,7 +1291,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a space and a tab, type 5",
             "- a\n\n   \t<![CDATA[x]]>\n",
             """
@@ -1318,7 +1304,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a space and a tab, type 6",
             "- a\n\n   \t<div>\n",
             """
@@ -1331,7 +1317,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a space and a tab, type 7",
             "- a\n\n   \t<a>\n",
             """
@@ -1344,7 +1330,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab and a space, type 1",
             "- a\n\n  \t <pre>\n",
             """
@@ -1357,7 +1343,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab and a space, type 2",
             "- a\n\n  \t <!-- x -->\n",
             """
@@ -1370,7 +1356,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab and a space, type 3",
             "- a\n\n  \t <?x?>\n",
             """
@@ -1383,7 +1369,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab and a space, type 4",
             "- a\n\n  \t <!X>\n",
             """
@@ -1396,7 +1382,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab and a space, type 5",
             "- a\n\n  \t <![CDATA[x]]>\n",
             """
@@ -1409,7 +1395,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab and a space, type 6",
             "- a\n\n  \t <div>\n",
             """
@@ -1422,7 +1408,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a tab and a space, type 7",
             "- a\n\n  \t <a>\n",
             """
@@ -1435,7 +1421,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 4 spaces: indented code",
             "- a\n\n      <div>\n",
             """
@@ -1448,7 +1434,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, no indentation, type 1",
             "1. a\n\n   <pre>\n",
             """
@@ -1461,7 +1447,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, no indentation, type 2",
             "1. a\n\n   <!-- x -->\n",
             """
@@ -1474,7 +1460,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, no indentation, type 3",
             "1. a\n\n   <?x?>\n",
             """
@@ -1487,7 +1473,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, no indentation, type 4",
             "1. a\n\n   <!X>\n",
             """
@@ -1500,7 +1486,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, no indentation, type 5",
             "1. a\n\n   <![CDATA[x]]>\n",
             """
@@ -1513,7 +1499,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, no indentation, type 6",
             "1. a\n\n   <div>\n",
             """
@@ -1526,7 +1512,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, no indentation, type 7",
             "1. a\n\n   <a>\n",
             """
@@ -1539,7 +1525,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 1 space, type 1",
             "1. a\n\n    <pre>\n",
             """
@@ -1552,7 +1538,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 1 space, type 2",
             "1. a\n\n    <!-- x -->\n",
             """
@@ -1565,7 +1551,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 1 space, type 3",
             "1. a\n\n    <?x?>\n",
             """
@@ -1578,7 +1564,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 1 space, type 4",
             "1. a\n\n    <!X>\n",
             """
@@ -1591,7 +1577,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 1 space, type 5",
             "1. a\n\n    <![CDATA[x]]>\n",
             """
@@ -1604,7 +1590,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 1 space, type 6",
             "1. a\n\n    <div>\n",
             """
@@ -1617,7 +1603,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 1 space, type 7",
             "1. a\n\n    <a>\n",
             """
@@ -1630,7 +1616,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 2 spaces, type 1",
             "1. a\n\n     <pre>\n",
             """
@@ -1643,7 +1629,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 2 spaces, type 2",
             "1. a\n\n     <!-- x -->\n",
             """
@@ -1656,7 +1642,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 2 spaces, type 3",
             "1. a\n\n     <?x?>\n",
             """
@@ -1669,7 +1655,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 2 spaces, type 4",
             "1. a\n\n     <!X>\n",
             """
@@ -1682,7 +1668,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 2 spaces, type 5",
             "1. a\n\n     <![CDATA[x]]>\n",
             """
@@ -1695,7 +1681,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 2 spaces, type 6",
             "1. a\n\n     <div>\n",
             """
@@ -1708,7 +1694,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 2 spaces, type 7",
             "1. a\n\n     <a>\n",
             """
@@ -1721,7 +1707,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 3 spaces, type 1",
             "1. a\n\n      <pre>\n",
             """
@@ -1734,7 +1720,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 3 spaces, type 2",
             "1. a\n\n      <!-- x -->\n",
             """
@@ -1747,7 +1733,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 3 spaces, type 3",
             "1. a\n\n      <?x?>\n",
             """
@@ -1760,7 +1746,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 3 spaces, type 4",
             "1. a\n\n      <!X>\n",
             """
@@ -1773,7 +1759,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 3 spaces, type 5",
             "1. a\n\n      <![CDATA[x]]>\n",
             """
@@ -1786,7 +1772,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 3 spaces, type 6",
             "1. a\n\n      <div>\n",
             """
@@ -1799,7 +1785,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 3 spaces, type 7",
             "1. a\n\n      <a>\n",
             """
@@ -1812,7 +1798,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab, type 1",
             "1. a\n\n   \t<pre>\n",
             """
@@ -1825,7 +1811,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab, type 2",
             "1. a\n\n   \t<!-- x -->\n",
             """
@@ -1838,7 +1824,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab, type 3",
             "1. a\n\n   \t<?x?>\n",
             """
@@ -1851,7 +1837,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab, type 4",
             "1. a\n\n   \t<!X>\n",
             """
@@ -1864,7 +1850,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab, type 5",
             "1. a\n\n   \t<![CDATA[x]]>\n",
             """
@@ -1877,7 +1863,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab, type 6",
             "1. a\n\n   \t<div>\n",
             """
@@ -1890,7 +1876,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab, type 7",
             "1. a\n\n   \t<a>\n",
             """
@@ -1903,7 +1889,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab and a space, type 1",
             "1. a\n\n   \t <pre>\n",
             """
@@ -1916,7 +1902,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab and a space, type 2",
             "1. a\n\n   \t <!-- x -->\n",
             """
@@ -1929,7 +1915,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab and a space, type 3",
             "1. a\n\n   \t <?x?>\n",
             """
@@ -1942,7 +1928,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab and a space, type 4",
             "1. a\n\n   \t <!X>\n",
             """
@@ -1955,7 +1941,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab and a space, type 5",
             "1. a\n\n   \t <![CDATA[x]]>\n",
             """
@@ -1968,7 +1954,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab and a space, type 6",
             "1. a\n\n   \t <div>\n",
             """
@@ -1981,7 +1967,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, a tab and a space, type 7",
             "1. a\n\n   \t <a>\n",
             """
@@ -1994,7 +1980,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, 4 spaces: indented code",
             "1. a\n\n       <div>\n",
             """
@@ -2007,7 +1993,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, no indentation, type 1",
             "[^a]\n\n[^a]: x\n\n    <pre>\n",
             """
@@ -2021,7 +2007,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, no indentation, type 2",
             "[^a]\n\n[^a]: x\n\n    <!-- x -->\n",
             """
@@ -2035,7 +2021,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, no indentation, type 3",
             "[^a]\n\n[^a]: x\n\n    <?x?>\n",
             """
@@ -2049,7 +2035,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, no indentation, type 4",
             "[^a]\n\n[^a]: x\n\n    <!X>\n",
             """
@@ -2063,7 +2049,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, no indentation, type 5",
             "[^a]\n\n[^a]: x\n\n    <![CDATA[x]]>\n",
             """
@@ -2077,7 +2063,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, no indentation, type 6",
             "[^a]\n\n[^a]: x\n\n    <div>\n",
             """
@@ -2091,7 +2077,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, no indentation, type 7",
             "[^a]\n\n[^a]: x\n\n    <a>\n",
             """
@@ -2105,7 +2091,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 1 space, type 1",
             "[^a]\n\n[^a]: x\n\n     <pre>\n",
             """
@@ -2119,7 +2105,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 1 space, type 2",
             "[^a]\n\n[^a]: x\n\n     <!-- x -->\n",
             """
@@ -2133,7 +2119,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 1 space, type 3",
             "[^a]\n\n[^a]: x\n\n     <?x?>\n",
             """
@@ -2147,7 +2133,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 1 space, type 4",
             "[^a]\n\n[^a]: x\n\n     <!X>\n",
             """
@@ -2161,7 +2147,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 1 space, type 5",
             "[^a]\n\n[^a]: x\n\n     <![CDATA[x]]>\n",
             """
@@ -2175,7 +2161,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 1 space, type 6",
             "[^a]\n\n[^a]: x\n\n     <div>\n",
             """
@@ -2189,7 +2175,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 1 space, type 7",
             "[^a]\n\n[^a]: x\n\n     <a>\n",
             """
@@ -2203,7 +2189,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 2 spaces, type 1",
             "[^a]\n\n[^a]: x\n\n      <pre>\n",
             """
@@ -2217,7 +2203,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 2 spaces, type 2",
             "[^a]\n\n[^a]: x\n\n      <!-- x -->\n",
             """
@@ -2231,7 +2217,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 2 spaces, type 3",
             "[^a]\n\n[^a]: x\n\n      <?x?>\n",
             """
@@ -2245,7 +2231,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 2 spaces, type 4",
             "[^a]\n\n[^a]: x\n\n      <!X>\n",
             """
@@ -2259,7 +2245,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 2 spaces, type 5",
             "[^a]\n\n[^a]: x\n\n      <![CDATA[x]]>\n",
             """
@@ -2273,7 +2259,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 2 spaces, type 6",
             "[^a]\n\n[^a]: x\n\n      <div>\n",
             """
@@ -2287,7 +2273,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 2 spaces, type 7",
             "[^a]\n\n[^a]: x\n\n      <a>\n",
             """
@@ -2301,7 +2287,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 3 spaces, type 1",
             "[^a]\n\n[^a]: x\n\n       <pre>\n",
             """
@@ -2315,7 +2301,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 3 spaces, type 2",
             "[^a]\n\n[^a]: x\n\n       <!-- x -->\n",
             """
@@ -2329,7 +2315,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 3 spaces, type 3",
             "[^a]\n\n[^a]: x\n\n       <?x?>\n",
             """
@@ -2343,7 +2329,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 3 spaces, type 4",
             "[^a]\n\n[^a]: x\n\n       <!X>\n",
             """
@@ -2357,7 +2343,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 3 spaces, type 5",
             "[^a]\n\n[^a]: x\n\n       <![CDATA[x]]>\n",
             """
@@ -2371,7 +2357,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 3 spaces, type 6",
             "[^a]\n\n[^a]: x\n\n       <div>\n",
             """
@@ -2385,7 +2371,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 3 spaces, type 7",
             "[^a]\n\n[^a]: x\n\n       <a>\n",
             """
@@ -2399,7 +2385,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, 4 spaces: indented code",
             "[^a]\n\n[^a]: x\n\n        <div>\n",
             """
@@ -2413,7 +2399,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, no indentation, type 1",
             "[^a]\n\n[^a]: x\n\n\t<pre>\n",
             """
@@ -2427,7 +2413,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, no indentation, type 2",
             "[^a]\n\n[^a]: x\n\n\t<!-- x -->\n",
             """
@@ -2441,7 +2427,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, no indentation, type 3",
             "[^a]\n\n[^a]: x\n\n\t<?x?>\n",
             """
@@ -2455,7 +2441,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, no indentation, type 4",
             "[^a]\n\n[^a]: x\n\n\t<!X>\n",
             """
@@ -2469,7 +2455,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, no indentation, type 5",
             "[^a]\n\n[^a]: x\n\n\t<![CDATA[x]]>\n",
             """
@@ -2483,7 +2469,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, no indentation, type 6",
             "[^a]\n\n[^a]: x\n\n\t<div>\n",
             """
@@ -2497,7 +2483,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, no indentation, type 7",
             "[^a]\n\n[^a]: x\n\n\t<a>\n",
             """
@@ -2511,7 +2497,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 1 space, type 1",
             "[^a]\n\n[^a]: x\n\n\t <pre>\n",
             """
@@ -2525,7 +2511,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 1 space, type 2",
             "[^a]\n\n[^a]: x\n\n\t <!-- x -->\n",
             """
@@ -2539,7 +2525,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 1 space, type 3",
             "[^a]\n\n[^a]: x\n\n\t <?x?>\n",
             """
@@ -2553,7 +2539,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 1 space, type 4",
             "[^a]\n\n[^a]: x\n\n\t <!X>\n",
             """
@@ -2567,7 +2553,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 1 space, type 5",
             "[^a]\n\n[^a]: x\n\n\t <![CDATA[x]]>\n",
             """
@@ -2581,7 +2567,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 1 space, type 6",
             "[^a]\n\n[^a]: x\n\n\t <div>\n",
             """
@@ -2595,7 +2581,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 1 space, type 7",
             "[^a]\n\n[^a]: x\n\n\t <a>\n",
             """
@@ -2609,7 +2595,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 2 spaces, type 1",
             "[^a]\n\n[^a]: x\n\n\t  <pre>\n",
             """
@@ -2623,7 +2609,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 2 spaces, type 2",
             "[^a]\n\n[^a]: x\n\n\t  <!-- x -->\n",
             """
@@ -2637,7 +2623,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 2 spaces, type 3",
             "[^a]\n\n[^a]: x\n\n\t  <?x?>\n",
             """
@@ -2651,7 +2637,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 2 spaces, type 4",
             "[^a]\n\n[^a]: x\n\n\t  <!X>\n",
             """
@@ -2665,7 +2651,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 2 spaces, type 5",
             "[^a]\n\n[^a]: x\n\n\t  <![CDATA[x]]>\n",
             """
@@ -2679,7 +2665,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 2 spaces, type 6",
             "[^a]\n\n[^a]: x\n\n\t  <div>\n",
             """
@@ -2693,7 +2679,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 2 spaces, type 7",
             "[^a]\n\n[^a]: x\n\n\t  <a>\n",
             """
@@ -2707,7 +2693,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 3 spaces, type 1",
             "[^a]\n\n[^a]: x\n\n\t   <pre>\n",
             """
@@ -2721,7 +2707,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 3 spaces, type 2",
             "[^a]\n\n[^a]: x\n\n\t   <!-- x -->\n",
             """
@@ -2735,7 +2721,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 3 spaces, type 3",
             "[^a]\n\n[^a]: x\n\n\t   <?x?>\n",
             """
@@ -2749,7 +2735,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 3 spaces, type 4",
             "[^a]\n\n[^a]: x\n\n\t   <!X>\n",
             """
@@ -2763,7 +2749,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 3 spaces, type 5",
             "[^a]\n\n[^a]: x\n\n\t   <![CDATA[x]]>\n",
             """
@@ -2777,7 +2763,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 3 spaces, type 6",
             "[^a]\n\n[^a]: x\n\n\t   <div>\n",
             """
@@ -2791,7 +2777,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 3 spaces, type 7",
             "[^a]\n\n[^a]: x\n\n\t   <a>\n",
             """
@@ -2805,7 +2791,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, content indentation a tab, 4 spaces: indented code",
             "[^a]\n\n[^a]: x\n\n\t    <div>\n",
             """
@@ -2819,7 +2805,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, no indentation, type 1",
             ">> <pre>\n",
             """
@@ -2830,7 +2816,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, no indentation, type 2",
             ">> <!-- x -->\n",
             """
@@ -2841,7 +2827,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, no indentation, type 3",
             ">> <?x?>\n",
             """
@@ -2852,7 +2838,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, no indentation, type 4",
             ">> <!X>\n",
             """
@@ -2863,7 +2849,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, no indentation, type 5",
             ">> <![CDATA[x]]>\n",
             """
@@ -2874,7 +2860,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, no indentation, type 6",
             ">> <div>\n",
             """
@@ -2885,7 +2871,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, no indentation, type 7",
             ">> <a>\n",
             """
@@ -2896,7 +2882,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 1 space, type 1",
             ">>  <pre>\n",
             """
@@ -2907,7 +2893,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 1 space, type 2",
             ">>  <!-- x -->\n",
             """
@@ -2918,7 +2904,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 1 space, type 3",
             ">>  <?x?>\n",
             """
@@ -2929,7 +2915,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 1 space, type 4",
             ">>  <!X>\n",
             """
@@ -2940,7 +2926,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 1 space, type 5",
             ">>  <![CDATA[x]]>\n",
             """
@@ -2951,7 +2937,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 1 space, type 6",
             ">>  <div>\n",
             """
@@ -2962,7 +2948,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 1 space, type 7",
             ">>  <a>\n",
             """
@@ -2973,7 +2959,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 2 spaces, type 1",
             ">>   <pre>\n",
             """
@@ -2984,7 +2970,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 2 spaces, type 2",
             ">>   <!-- x -->\n",
             """
@@ -2995,7 +2981,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 2 spaces, type 3",
             ">>   <?x?>\n",
             """
@@ -3006,7 +2992,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 2 spaces, type 4",
             ">>   <!X>\n",
             """
@@ -3017,7 +3003,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 2 spaces, type 5",
             ">>   <![CDATA[x]]>\n",
             """
@@ -3028,7 +3014,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 2 spaces, type 6",
             ">>   <div>\n",
             """
@@ -3039,7 +3025,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 2 spaces, type 7",
             ">>   <a>\n",
             """
@@ -3050,7 +3036,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 3 spaces, type 1",
             ">>    <pre>\n",
             """
@@ -3061,7 +3047,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 3 spaces, type 2",
             ">>    <!-- x -->\n",
             """
@@ -3072,7 +3058,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 3 spaces, type 3",
             ">>    <?x?>\n",
             """
@@ -3083,7 +3069,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 3 spaces, type 4",
             ">>    <!X>\n",
             """
@@ -3094,7 +3080,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 3 spaces, type 5",
             ">>    <![CDATA[x]]>\n",
             """
@@ -3105,7 +3091,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 3 spaces, type 6",
             ">>    <div>\n",
             """
@@ -3116,7 +3102,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 3 spaces, type 7",
             ">>    <a>\n",
             """
@@ -3127,7 +3113,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab, type 1",
             ">> \t<pre>\n",
             """
@@ -3138,7 +3124,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab, type 2",
             ">> \t<!-- x -->\n",
             """
@@ -3149,7 +3135,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab, type 3",
             ">> \t<?x?>\n",
             """
@@ -3160,7 +3146,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab, type 4",
             ">> \t<!X>\n",
             """
@@ -3171,7 +3157,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab, type 5",
             ">> \t<![CDATA[x]]>\n",
             """
@@ -3182,7 +3168,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab, type 6",
             ">> \t<div>\n",
             """
@@ -3193,7 +3179,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab, type 7",
             ">> \t<a>\n",
             """
@@ -3204,7 +3190,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab and a space, type 1",
             ">> \t <pre>\n",
             """
@@ -3215,7 +3201,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab and a space, type 2",
             ">> \t <!-- x -->\n",
             """
@@ -3226,7 +3212,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab and a space, type 3",
             ">> \t <?x?>\n",
             """
@@ -3237,7 +3223,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab and a space, type 4",
             ">> \t <!X>\n",
             """
@@ -3248,7 +3234,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab and a space, type 5",
             ">> \t <![CDATA[x]]>\n",
             """
@@ -3259,7 +3245,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab and a space, type 6",
             ">> \t <div>\n",
             """
@@ -3270,7 +3256,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, a tab and a space, type 7",
             ">> \t <a>\n",
             """
@@ -3281,7 +3267,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a block quote, 4 spaces: indented code",
             ">>     <div>\n",
             """
@@ -3292,7 +3278,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, no indentation, type 1",
             "[^a]\n\n> [^a]: x\n>\n>     <pre>\n",
             """
@@ -3307,7 +3293,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, no indentation, type 2",
             "[^a]\n\n> [^a]: x\n>\n>     <!-- x -->\n",
             """
@@ -3322,7 +3308,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, no indentation, type 3",
             "[^a]\n\n> [^a]: x\n>\n>     <?x?>\n",
             """
@@ -3337,7 +3323,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, no indentation, type 4",
             "[^a]\n\n> [^a]: x\n>\n>     <!X>\n",
             """
@@ -3352,7 +3338,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, no indentation, type 5",
             "[^a]\n\n> [^a]: x\n>\n>     <![CDATA[x]]>\n",
             """
@@ -3367,7 +3353,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, no indentation, type 6",
             "[^a]\n\n> [^a]: x\n>\n>     <div>\n",
             """
@@ -3382,7 +3368,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, no indentation, type 7",
             "[^a]\n\n> [^a]: x\n>\n>     <a>\n",
             """
@@ -3397,7 +3383,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 1 space, type 1",
             "[^a]\n\n> [^a]: x\n>\n>      <pre>\n",
             """
@@ -3412,7 +3398,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 1 space, type 2",
             "[^a]\n\n> [^a]: x\n>\n>      <!-- x -->\n",
             """
@@ -3427,7 +3413,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 1 space, type 3",
             "[^a]\n\n> [^a]: x\n>\n>      <?x?>\n",
             """
@@ -3442,7 +3428,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 1 space, type 4",
             "[^a]\n\n> [^a]: x\n>\n>      <!X>\n",
             """
@@ -3457,7 +3443,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 1 space, type 5",
             "[^a]\n\n> [^a]: x\n>\n>      <![CDATA[x]]>\n",
             """
@@ -3472,7 +3458,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 1 space, type 6",
             "[^a]\n\n> [^a]: x\n>\n>      <div>\n",
             """
@@ -3487,7 +3473,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 1 space, type 7",
             "[^a]\n\n> [^a]: x\n>\n>      <a>\n",
             """
@@ -3502,7 +3488,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 2 spaces, type 1",
             "[^a]\n\n> [^a]: x\n>\n>       <pre>\n",
             """
@@ -3517,7 +3503,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 2 spaces, type 2",
             "[^a]\n\n> [^a]: x\n>\n>       <!-- x -->\n",
             """
@@ -3532,7 +3518,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 2 spaces, type 3",
             "[^a]\n\n> [^a]: x\n>\n>       <?x?>\n",
             """
@@ -3547,7 +3533,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 2 spaces, type 4",
             "[^a]\n\n> [^a]: x\n>\n>       <!X>\n",
             """
@@ -3562,7 +3548,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 2 spaces, type 5",
             "[^a]\n\n> [^a]: x\n>\n>       <![CDATA[x]]>\n",
             """
@@ -3577,7 +3563,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 2 spaces, type 6",
             "[^a]\n\n> [^a]: x\n>\n>       <div>\n",
             """
@@ -3592,7 +3578,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 2 spaces, type 7",
             "[^a]\n\n> [^a]: x\n>\n>       <a>\n",
             """
@@ -3607,7 +3593,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 3 spaces, type 1",
             "[^a]\n\n> [^a]: x\n>\n>        <pre>\n",
             """
@@ -3622,7 +3608,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 3 spaces, type 2",
             "[^a]\n\n> [^a]: x\n>\n>        <!-- x -->\n",
             """
@@ -3637,7 +3623,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 3 spaces, type 3",
             "[^a]\n\n> [^a]: x\n>\n>        <?x?>\n",
             """
@@ -3652,7 +3638,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 3 spaces, type 4",
             "[^a]\n\n> [^a]: x\n>\n>        <!X>\n",
             """
@@ -3667,7 +3653,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 3 spaces, type 5",
             "[^a]\n\n> [^a]: x\n>\n>        <![CDATA[x]]>\n",
             """
@@ -3682,7 +3668,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 3 spaces, type 6",
             "[^a]\n\n> [^a]: x\n>\n>        <div>\n",
             """
@@ -3697,7 +3683,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 3 spaces, type 7",
             "[^a]\n\n> [^a]: x\n>\n>        <a>\n",
             """
@@ -3712,7 +3698,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab, type 1",
             "[^a]\n\n> [^a]: x\n>\n>     \t<pre>\n",
             """
@@ -3727,7 +3713,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab, type 2",
             "[^a]\n\n> [^a]: x\n>\n>     \t<!-- x -->\n",
             """
@@ -3742,7 +3728,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab, type 3",
             "[^a]\n\n> [^a]: x\n>\n>     \t<?x?>\n",
             """
@@ -3757,7 +3743,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab, type 4",
             "[^a]\n\n> [^a]: x\n>\n>     \t<!X>\n",
             """
@@ -3772,7 +3758,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab, type 5",
             "[^a]\n\n> [^a]: x\n>\n>     \t<![CDATA[x]]>\n",
             """
@@ -3787,7 +3773,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab, type 6",
             "[^a]\n\n> [^a]: x\n>\n>     \t<div>\n",
             """
@@ -3802,7 +3788,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab, type 7",
             "[^a]\n\n> [^a]: x\n>\n>     \t<a>\n",
             """
@@ -3817,7 +3803,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a space and a tab, type 1",
             "[^a]\n\n> [^a]: x\n>\n>      \t<pre>\n",
             """
@@ -3832,7 +3818,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a space and a tab, type 2",
             "[^a]\n\n> [^a]: x\n>\n>      \t<!-- x -->\n",
             """
@@ -3847,7 +3833,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a space and a tab, type 3",
             "[^a]\n\n> [^a]: x\n>\n>      \t<?x?>\n",
             """
@@ -3862,7 +3848,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a space and a tab, type 4",
             "[^a]\n\n> [^a]: x\n>\n>      \t<!X>\n",
             """
@@ -3877,7 +3863,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a space and a tab, type 5",
             "[^a]\n\n> [^a]: x\n>\n>      \t<![CDATA[x]]>\n",
             """
@@ -3892,7 +3878,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a space and a tab, type 6",
             "[^a]\n\n> [^a]: x\n>\n>      \t<div>\n",
             """
@@ -3907,7 +3893,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a space and a tab, type 7",
             "[^a]\n\n> [^a]: x\n>\n>      \t<a>\n",
             """
@@ -3922,7 +3908,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab and a space, type 1",
             "[^a]\n\n> [^a]: x\n>\n>     \t <pre>\n",
             """
@@ -3937,7 +3923,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab and a space, type 2",
             "[^a]\n\n> [^a]: x\n>\n>     \t <!-- x -->\n",
             """
@@ -3952,7 +3938,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab and a space, type 3",
             "[^a]\n\n> [^a]: x\n>\n>     \t <?x?>\n",
             """
@@ -3967,7 +3953,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab and a space, type 4",
             "[^a]\n\n> [^a]: x\n>\n>     \t <!X>\n",
             """
@@ -3982,7 +3968,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab and a space, type 5",
             "[^a]\n\n> [^a]: x\n>\n>     \t <![CDATA[x]]>\n",
             """
@@ -3997,7 +3983,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab and a space, type 6",
             "[^a]\n\n> [^a]: x\n>\n>     \t <div>\n",
             """
@@ -4012,7 +3998,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, a tab and a space, type 7",
             "[^a]\n\n> [^a]: x\n>\n>     \t <a>\n",
             """
@@ -4027,7 +4013,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in a block quote, 4 spaces: indented code",
             "[^a]\n\n> [^a]: x\n>\n>         <div>\n",
             """
@@ -4042,7 +4028,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item first line, spaces after the marker",
             "-   <div>\n",
             """
@@ -4053,7 +4039,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item first line, a tab after the marker",
             "-\t<div>\n",
             """
@@ -4064,7 +4050,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item first line, spaces after the marker",
             "1.  <div>\n",
             """
@@ -4075,7 +4061,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition first line, spaces after the label",
             "[^a]\n\n[^a]:   <div>\n",
             """
@@ -4087,7 +4073,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 2 spaces, interrupting a paragraph",
             "a\n  <div>\n",
             """
@@ -4098,7 +4084,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 2 spaces, type 7 after a paragraph line: inline HTML",
             "a\n  <a>\n",
             """
@@ -4110,7 +4096,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 2 spaces, interrupting a paragraph",
             "> a\n>   <div>\n",
             """
@@ -4122,7 +4108,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, 2 spaces, after a blank line",
             ">\n>   <div>\n",
             """
@@ -4132,7 +4118,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, 1 space, interrupting a paragraph",
             "- a\n   <div>\n",
             """
@@ -4145,7 +4131,7 @@ struct HTMLBlockIndentationStartTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, 2 spaces, after a block quote",
             "> a\n  <div>\n",
             """
@@ -4160,7 +4146,7 @@ struct HTMLBlockIndentationStartTests {
     ]
 
     @Test(arguments: cases)
-    func tree(_ c: Case) {
+    func tree(_ c: TreeDumpCase) {
         #expect(TreeDump.dump(c.source, options: [.sourcePosition, .footnotes], sourceRanges: true) == c.expected)
     }
 }

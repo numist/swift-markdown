@@ -20,22 +20,8 @@ import CommonMark
 @Suite("A table after a header row and delimiter row that differ in cell count")
 struct TableAfterHeaderCellCountMismatchTests {
 
-    struct Case: CustomTestStringConvertible, Sendable {
-        let name: String
-        let source: String
-        let expected: String
-
-        init(_ name: String, _ source: String, _ expected: String) {
-            self.name = name
-            self.source = source
-            self.expected = expected
-        }
-
-        var testDescription: String { name }
-    }
-
-    static let cases: [Case] = [
-        Case(
+    static let cases: [TreeDumpCase] = [
+        TreeDumpCase(
             "top level, two mismatched pairs before a valid pair",
             "a|b|c\n-|-\np|q\n-|-|-\nd|e\n-|-\n",
             """
@@ -57,7 +43,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, two mismatched pairs before a valid pair",
             "> a|b|c\n> -|-\n> p|q\n> -|-|-\n> d|e\n> -|-\n",
             """
@@ -80,7 +66,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "list item, two mismatched pairs before a valid pair",
             "- a|b|c\n  -|-\n  p|q\n  -|-|-\n  d|e\n  -|-\n",
             """
@@ -104,7 +90,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "CRLF, two mismatched pairs before a valid pair",
             "a|b|c\r\n-|-\r\np|q\r\n-|-|-\r\nd|e\r\n-|-\r\n",
             """
@@ -126,7 +112,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "tab after the block quote marker, two mismatched pairs before a valid pair",
             ">\ta|b|c\n>\t-|-\n>\tp|q\n>\t-|-|-\n>\td|e\n>\t-|-\n",
             """
@@ -149,7 +135,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, the mismatched delimiter row is the header row of a valid pair",
             "a|b\n-|-|-\n-|-|-\n",
             """
@@ -167,7 +153,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, the mismatched delimiter row is the header row of a valid pair",
             "> a|b\n> -|-|-\n> -|-|-\n",
             """
@@ -186,7 +172,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "list item, the mismatched delimiter row is the header row of a valid pair",
             "- a|b\n  -|-|-\n  -|-|-\n",
             """
@@ -206,7 +192,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "CRLF, the mismatched delimiter row is the header row of a valid pair",
             "a|b\r\n-|-|-\r\n-|-|-\r\n",
             """
@@ -224,7 +210,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "tab after the block quote marker, the mismatched delimiter row is the header row of a valid pair",
             ">\ta|b\n>\t-|-|-\n>\t-|-|-\n",
             """
@@ -243,7 +229,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, a valid pair after a mismatched pair, with data rows",
             "x\na|b|c\n-|-\nd|e\n-|-\nf|g\nh\n",
             """
@@ -272,7 +258,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a valid pair after a mismatched pair, with data rows",
             "> x\n> a|b|c\n> -|-\n> d|e\n> -|-\n> f|g\n> h\n",
             """
@@ -302,7 +288,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "list item, a valid pair after a mismatched pair, with data rows",
             "- x\n  a|b|c\n  -|-\n  d|e\n  -|-\n  f|g\n  h\n",
             """
@@ -333,7 +319,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, the later pair also differs in cell count",
             "x\na|b|c\n-|-\nd|e|f|g\n-|-\n",
             """
@@ -351,7 +337,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, the later pair also differs in cell count",
             "> x\n> a|b|c\n> -|-\n> d|e|f|g\n> -|-\n",
             """
@@ -370,7 +356,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "list item, the later pair also differs in cell count",
             "- x\n  a|b|c\n  -|-\n  d|e|f|g\n  -|-\n",
             """
@@ -390,7 +376,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, the later line is not a delimiter row",
             "x\na|b|c\n-|-\nd|e\nf|g\n",
             """
@@ -408,7 +394,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, the later line is not a delimiter row",
             "> x\n> a|b|c\n> -|-\n> d|e\n> f|g\n",
             """
@@ -427,7 +413,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "list item, the later line is not a delimiter row",
             "- x\n  a|b|c\n  -|-\n  d|e\n  f|g\n",
             """
@@ -447,7 +433,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, the later delimiter row is indented four columns",
             "x\na|b|c\n-|-\nd|e\n    -|-\n",
             """
@@ -465,7 +451,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, the later delimiter row is indented four columns",
             "> x\n> a|b|c\n> -|-\n> d|e\n>     -|-\n",
             """
@@ -484,7 +470,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "list item, the later delimiter row is indented four columns",
             "- x\n  a|b|c\n  -|-\n  d|e\n      -|-\n",
             """
@@ -504,7 +490,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, the later delimiter row is a lazy continuation line",
             "> a|b|c\n> -|-\n> d|e\n-|-\n",
             """
@@ -521,7 +507,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "list item, the later delimiter row is a lazy continuation line",
             "- a|b|c\n  -|-\n  d|e\n-|-\n",
             """
@@ -539,7 +525,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, a setext heading underline after a mismatched pair",
             "x\na|b|c\n-|-\n===\n",
             """
@@ -553,7 +539,7 @@ struct TableAfterHeaderCellCountMismatchTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "a header row with more cells than its delimiter row, then a body-like row",
             "| abc | def |\n| --- |\n| bar |\n",
             """
@@ -570,7 +556,7 @@ struct TableAfterHeaderCellCountMismatchTests {
     ]
 
     @Test(arguments: cases)
-    func tree(_ c: Case) {
+    func tree(_ c: TreeDumpCase) {
         #expect(TreeDump.dump(c.source, options: [.tables, .sourcePosition], sourceRanges: true) == c.expected)
     }
 }

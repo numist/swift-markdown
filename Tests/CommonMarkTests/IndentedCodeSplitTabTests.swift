@@ -31,22 +31,8 @@ import CommonMark
 @Suite("Indented code after a split tab")
 struct IndentedCodeSplitTabTests {
 
-    struct Case: CustomTestStringConvertible, Sendable {
-        let name: String
-        let source: String
-        let expected: String
-
-        init(_ name: String, _ source: String, _ expected: String) {
-            self.name = name
-            self.source = source
-            self.expected = expected
-        }
-
-        var testDescription: String { name }
-    }
-
-    static let cases: [Case] = [
-        Case(
+    static let cases: [TreeDumpCase] = [
+        TreeDumpCase(
             "block quote, A, first line",
             ">\t\tfoo\n",
             """
@@ -56,7 +42,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, A, after a blank line",
             "\n>\t\tfoo\n",
             """
@@ -66,7 +52,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, A, after a paragraph in the same container",
             "> a\n>\t\tfoo\n",
             """
@@ -79,7 +65,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, A, after a lazy continuation line",
             "> a\nb\n>\t\tfoo\n",
             """
@@ -94,7 +80,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, A, ending an open fenced code block's container",
             "- ```\n>\t\tfoo\n",
             """
@@ -107,7 +93,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, A, after a closed fenced code block",
             "```\nx\n```\n>\t\tfoo\n",
             """
@@ -118,7 +104,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, A, after an indented code block",
             "    code\n>\t\tfoo\n",
             """
@@ -129,7 +115,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, B, first line",
             "> \t\tfoo\n",
             """
@@ -139,7 +125,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, B, after a blank line",
             "\n> \t\tfoo\n",
             """
@@ -149,7 +135,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, B, after a paragraph in the same container",
             "> a\n> \t\tfoo\n",
             """
@@ -162,7 +148,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, B, after a lazy continuation line",
             "> a\nb\n> \t\tfoo\n",
             """
@@ -177,7 +163,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, B, ending an open fenced code block's container",
             "- ```\n> \t\tfoo\n",
             """
@@ -190,7 +176,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, B, after a closed fenced code block",
             "```\nx\n```\n> \t\tfoo\n",
             """
@@ -201,7 +187,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, B, after an indented code block",
             "    code\n> \t\tfoo\n",
             """
@@ -212,7 +198,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, C, first line",
             ">   \tfoo\n",
             """
@@ -222,7 +208,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, C, after a blank line",
             "\n>   \tfoo\n",
             """
@@ -232,7 +218,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, C, after a paragraph in the same container",
             "> a\n>   \tfoo\n",
             """
@@ -245,7 +231,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, C, after a lazy continuation line",
             "> a\nb\n>   \tfoo\n",
             """
@@ -260,7 +246,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, C, ending an open fenced code block's container",
             "- ```\n>   \tfoo\n",
             """
@@ -273,7 +259,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, C, after a closed fenced code block",
             "```\nx\n```\n>   \tfoo\n",
             """
@@ -284,7 +270,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, C, after an indented code block",
             "    code\n>   \tfoo\n",
             """
@@ -295,7 +281,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, D, first line",
             ">\t  foo\n",
             """
@@ -305,7 +291,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, D, after a blank line",
             "\n>\t  foo\n",
             """
@@ -315,7 +301,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, D, after a paragraph in the same container",
             "> a\n>\t  foo\n",
             """
@@ -328,7 +314,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, D, after a lazy continuation line",
             "> a\nb\n>\t  foo\n",
             """
@@ -343,7 +329,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, D, ending an open fenced code block's container",
             "- ```\n>\t  foo\n",
             """
@@ -356,7 +342,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, D, after a closed fenced code block",
             "```\nx\n```\n>\t  foo\n",
             """
@@ -367,7 +353,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, D, after an indented code block",
             "    code\n>\t  foo\n",
             """
@@ -378,7 +364,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, continuation lines",
             ">\t\tfoo\n> \t\tfoo\n>   \tfoo\n>\t  foo\n",
             """
@@ -388,7 +374,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, A, first line",
             "-\t\tfoo\n",
             """
@@ -399,7 +385,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, A, after a blank line",
             "\n-\t\tfoo\n",
             """
@@ -410,7 +396,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, A, after a paragraph in the same container",
             "- a\n \t\tfoo\n",
             """
@@ -424,7 +410,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, A, after a lazy continuation line",
             "- a\nb\n \t\tfoo\n",
             """
@@ -440,7 +426,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, A, ending an open fenced code block's container",
             "- ```\n-\t\tfoo\n",
             """
@@ -453,7 +439,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, A, after a closed fenced code block",
             "```\nx\n```\n-\t\tfoo\n",
             """
@@ -465,7 +451,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, A, after an indented code block",
             "    code\n-\t\tfoo\n",
             """
@@ -477,7 +463,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, B, first line",
             "- \t\tfoo\n",
             """
@@ -488,7 +474,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, B, after a blank line",
             "\n- \t\tfoo\n",
             """
@@ -499,7 +485,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, B, after a paragraph in the same container",
             "- a\n  \t\tfoo\n",
             """
@@ -513,7 +499,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, B, after a lazy continuation line",
             "- a\nb\n  \t\tfoo\n",
             """
@@ -529,7 +515,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, B, ending an open fenced code block's container",
             "- ```\n- \t\tfoo\n",
             """
@@ -542,7 +528,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, B, after a closed fenced code block",
             "```\nx\n```\n- \t\tfoo\n",
             """
@@ -554,7 +540,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, B, after an indented code block",
             "    code\n- \t\tfoo\n",
             """
@@ -566,7 +552,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, C, first line",
             "-    \tfoo\n",
             """
@@ -577,7 +563,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, C, after a blank line",
             "\n-    \tfoo\n",
             """
@@ -588,7 +574,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, C, after a paragraph in the same container",
             "- a\n     \tfoo\n",
             """
@@ -602,7 +588,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, C, after a lazy continuation line",
             "- a\nb\n     \tfoo\n",
             """
@@ -618,7 +604,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, C, ending an open fenced code block's container",
             "- ```\n-    \tfoo\n",
             """
@@ -631,7 +617,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, C, after a closed fenced code block",
             "```\nx\n```\n-    \tfoo\n",
             """
@@ -643,7 +629,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, C, after an indented code block",
             "    code\n-    \tfoo\n",
             """
@@ -655,7 +641,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, D, first line",
             "-\t  foo\n",
             """
@@ -666,7 +652,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, D, after a blank line",
             "\n-\t  foo\n",
             """
@@ -677,7 +663,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, D, after a paragraph in the same container",
             "- a\n \t  foo\n",
             """
@@ -691,7 +677,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, D, after a lazy continuation line",
             "- a\nb\n \t  foo\n",
             """
@@ -707,7 +693,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, D, ending an open fenced code block's container",
             "- ```\n-\t  foo\n",
             """
@@ -720,7 +706,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, D, after a closed fenced code block",
             "```\nx\n```\n-\t  foo\n",
             """
@@ -732,7 +718,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, D, after an indented code block",
             "    code\n-\t  foo\n",
             """
@@ -744,7 +730,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, continuation lines",
             "-\t\tfoo\n  \t\tfoo\n     \tfoo\n \t  foo\n",
             """
@@ -755,7 +741,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, A, first line",
             "1.\t\tfoo\n",
             """
@@ -766,7 +752,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, A, after a blank line",
             "\n1.\t\tfoo\n",
             """
@@ -777,7 +763,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, A, after a paragraph in the same container",
             "1. a\n  \t\tfoo\n",
             """
@@ -791,7 +777,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, A, after a lazy continuation line",
             "1. a\nb\n  \t\tfoo\n",
             """
@@ -807,7 +793,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, A, ending an open fenced code block's container",
             "- ```\n1.\t\tfoo\n",
             """
@@ -821,7 +807,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, A, after a closed fenced code block",
             "```\nx\n```\n1.\t\tfoo\n",
             """
@@ -833,7 +819,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, A, after an indented code block",
             "    code\n1.\t\tfoo\n",
             """
@@ -845,7 +831,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, B, first line",
             "1. \t\tfoo\n",
             """
@@ -856,7 +842,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, B, after a blank line",
             "\n1. \t\tfoo\n",
             """
@@ -867,7 +853,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, B, after a paragraph in the same container",
             "1. a\n   \t\tfoo\n",
             """
@@ -881,7 +867,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, B, after a lazy continuation line",
             "1. a\nb\n   \t\tfoo\n",
             """
@@ -897,7 +883,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, B, ending an open fenced code block's container",
             "- ```\n1. \t\tfoo\n",
             """
@@ -911,7 +897,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, B, after a closed fenced code block",
             "```\nx\n```\n1. \t\tfoo\n",
             """
@@ -923,7 +909,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, B, after an indented code block",
             "    code\n1. \t\tfoo\n",
             """
@@ -935,7 +921,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, C, first line",
             "1.    \tfoo\n",
             """
@@ -946,7 +932,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, C, after a blank line",
             "\n1.    \tfoo\n",
             """
@@ -957,7 +943,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, C, after a paragraph in the same container",
             "1. a\n      \tfoo\n",
             """
@@ -971,7 +957,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, C, after a lazy continuation line",
             "1. a\nb\n      \tfoo\n",
             """
@@ -987,7 +973,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, C, ending an open fenced code block's container",
             "- ```\n1.    \tfoo\n",
             """
@@ -1001,7 +987,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, C, after a closed fenced code block",
             "```\nx\n```\n1.    \tfoo\n",
             """
@@ -1013,7 +999,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, C, after an indented code block",
             "    code\n1.    \tfoo\n",
             """
@@ -1025,7 +1011,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, D, first line",
             "1.\t   foo\n",
             """
@@ -1036,7 +1022,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, D, after a blank line",
             "\n1.\t   foo\n",
             """
@@ -1047,7 +1033,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, D, after a paragraph in the same container",
             "1. a\n  \t   foo\n",
             """
@@ -1061,7 +1047,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, D, after a lazy continuation line",
             "1. a\nb\n  \t   foo\n",
             """
@@ -1077,7 +1063,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, D, ending an open fenced code block's container",
             "- ```\n1.\t   foo\n",
             """
@@ -1091,7 +1077,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, D, after a closed fenced code block",
             "```\nx\n```\n1.\t   foo\n",
             """
@@ -1103,7 +1089,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, D, after an indented code block",
             "    code\n1.\t   foo\n",
             """
@@ -1115,7 +1101,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "one-digit ordered item, continuation lines",
             "1.\t\tfoo\n   \t\tfoo\n      \tfoo\n  \t   foo\n",
             """
@@ -1126,7 +1112,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, A, first line",
             "-  >\t\tfoo\n",
             """
@@ -1138,7 +1124,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, A, after a blank line",
             "\n-  >\t\tfoo\n",
             """
@@ -1150,7 +1136,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, A, after a paragraph in the same container",
             "-  > a\n   >\t\tfoo\n",
             """
@@ -1165,7 +1151,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, A, after a lazy continuation line",
             "-  > a\nb\n   >\t\tfoo\n",
             """
@@ -1182,7 +1168,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, A, ending an open fenced code block's container",
             "- ```\n-  >\t\tfoo\n",
             """
@@ -1196,7 +1182,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, A, after a closed fenced code block",
             "```\nx\n```\n-  >\t\tfoo\n",
             """
@@ -1209,7 +1195,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, A, after an indented code block",
             "    code\n-  >\t\tfoo\n",
             """
@@ -1222,7 +1208,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, B, first line",
             "-  > \t\tfoo\n",
             """
@@ -1234,7 +1220,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, B, after a blank line",
             "\n-  > \t\tfoo\n",
             """
@@ -1246,7 +1232,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, B, after a paragraph in the same container",
             "-  > a\n   > \t\tfoo\n",
             """
@@ -1261,7 +1247,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, B, after a lazy continuation line",
             "-  > a\nb\n   > \t\tfoo\n",
             """
@@ -1278,7 +1264,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, B, ending an open fenced code block's container",
             "- ```\n-  > \t\tfoo\n",
             """
@@ -1292,7 +1278,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, B, after a closed fenced code block",
             "```\nx\n```\n-  > \t\tfoo\n",
             """
@@ -1305,7 +1291,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, B, after an indented code block",
             "    code\n-  > \t\tfoo\n",
             """
@@ -1318,7 +1304,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, C, first line",
             "-  >    \tfoo\n",
             """
@@ -1330,7 +1316,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, C, after a blank line",
             "\n-  >    \tfoo\n",
             """
@@ -1342,7 +1328,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, C, after a paragraph in the same container",
             "-  > a\n   >    \tfoo\n",
             """
@@ -1357,7 +1343,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, C, after a lazy continuation line",
             "-  > a\nb\n   >    \tfoo\n",
             """
@@ -1374,7 +1360,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, C, ending an open fenced code block's container",
             "- ```\n-  >    \tfoo\n",
             """
@@ -1388,7 +1374,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, C, after a closed fenced code block",
             "```\nx\n```\n-  >    \tfoo\n",
             """
@@ -1401,7 +1387,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, C, after an indented code block",
             "    code\n-  >    \tfoo\n",
             """
@@ -1414,7 +1400,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, D, first line",
             "-  >\t   foo\n",
             """
@@ -1426,7 +1412,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, D, after a blank line",
             "\n-  >\t   foo\n",
             """
@@ -1438,7 +1424,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, D, after a paragraph in the same container",
             "-  > a\n   >\t   foo\n",
             """
@@ -1453,7 +1439,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, D, after a lazy continuation line",
             "-  > a\nb\n   >\t   foo\n",
             """
@@ -1470,7 +1456,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, D, ending an open fenced code block's container",
             "- ```\n-  >\t   foo\n",
             """
@@ -1484,7 +1470,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, D, after a closed fenced code block",
             "```\nx\n```\n-  >\t   foo\n",
             """
@@ -1497,7 +1483,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, D, after an indented code block",
             "    code\n-  >\t   foo\n",
             """
@@ -1510,7 +1496,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in item, continuation lines",
             "-  >\t\tfoo\n   > \t\tfoo\n   >    \tfoo\n   >\t   foo\n",
             """
@@ -1522,7 +1508,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, A, first line",
             ">-\t\tfoo\n",
             """
@@ -1534,7 +1520,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, A, after a blank line",
             "\n>-\t\tfoo\n",
             """
@@ -1546,7 +1532,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, A, after a paragraph in the same container",
             ">- a\n >\t\t\tfoo\n",
             """
@@ -1561,7 +1547,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, A, after a lazy continuation line",
             ">- a\nb\n >\t\t\tfoo\n",
             """
@@ -1578,7 +1564,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, A, ending an open fenced code block's container",
             "- ```\n>-\t\tfoo\n",
             """
@@ -1593,7 +1579,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, A, after a closed fenced code block",
             "```\nx\n```\n>-\t\tfoo\n",
             """
@@ -1606,7 +1592,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, A, after an indented code block",
             "    code\n>-\t\tfoo\n",
             """
@@ -1619,7 +1605,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, B, first line",
             ">- \t\tfoo\n",
             """
@@ -1631,7 +1617,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, B, after a blank line",
             "\n>- \t\tfoo\n",
             """
@@ -1643,7 +1629,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, B, after a paragraph in the same container",
             ">- a\n > \t\t\tfoo\n",
             """
@@ -1658,7 +1644,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, B, after a lazy continuation line",
             ">- a\nb\n > \t\t\tfoo\n",
             """
@@ -1675,7 +1661,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, B, ending an open fenced code block's container",
             "- ```\n>- \t\tfoo\n",
             """
@@ -1690,7 +1676,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, B, after a closed fenced code block",
             "```\nx\n```\n>- \t\tfoo\n",
             """
@@ -1703,7 +1689,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, B, after an indented code block",
             "    code\n>- \t\tfoo\n",
             """
@@ -1716,7 +1702,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, C, first line",
             ">-    \tfoo\n",
             """
@@ -1728,7 +1714,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, C, after a blank line",
             "\n>-    \tfoo\n",
             """
@@ -1740,7 +1726,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, C, after a paragraph in the same container",
             ">- a\n >      \tfoo\n",
             """
@@ -1755,7 +1741,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, C, after a lazy continuation line",
             ">- a\nb\n >      \tfoo\n",
             """
@@ -1772,7 +1758,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, C, ending an open fenced code block's container",
             "- ```\n>-    \tfoo\n",
             """
@@ -1787,7 +1773,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, C, after a closed fenced code block",
             "```\nx\n```\n>-    \tfoo\n",
             """
@@ -1800,7 +1786,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, C, after an indented code block",
             "    code\n>-    \tfoo\n",
             """
@@ -1813,7 +1799,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, D, first line",
             ">-\t   foo\n",
             """
@@ -1825,7 +1811,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, D, after a blank line",
             "\n>-\t   foo\n",
             """
@@ -1837,7 +1823,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, D, after a paragraph in the same container",
             ">- a\n >\t\t    foo\n",
             """
@@ -1852,7 +1838,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, D, after a lazy continuation line",
             ">- a\nb\n >\t\t    foo\n",
             """
@@ -1869,7 +1855,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, D, ending an open fenced code block's container",
             "- ```\n>-\t   foo\n",
             """
@@ -1884,7 +1870,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, D, after a closed fenced code block",
             "```\nx\n```\n>-\t   foo\n",
             """
@@ -1897,7 +1883,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, D, after an indented code block",
             "    code\n>-\t   foo\n",
             """
@@ -1910,7 +1896,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "item in block quote, continuation lines",
             ">-\t\tfoo\n >\t\t\tfoo\n > \t\t\tfoo\n >      \tfoo\n >\t\t    foo\n",
             """
@@ -1922,7 +1908,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, A, first line",
             ">>\t\tfoo\n",
             """
@@ -1933,7 +1919,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, A, after a blank line",
             "\n>>\t\tfoo\n",
             """
@@ -1944,7 +1930,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, A, after a paragraph in the same container",
             ">> a\n>>\t\tfoo\n",
             """
@@ -1958,7 +1944,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, A, after a lazy continuation line",
             ">> a\nb\n>>\t\tfoo\n",
             """
@@ -1974,7 +1960,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, A, ending an open fenced code block's container",
             "- ```\n>>\t\tfoo\n",
             """
@@ -1988,7 +1974,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, A, after a closed fenced code block",
             "```\nx\n```\n>>\t\tfoo\n",
             """
@@ -2000,7 +1986,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, A, after an indented code block",
             "    code\n>>\t\tfoo\n",
             """
@@ -2012,7 +1998,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, B, first line",
             ">> \t\tfoo\n",
             """
@@ -2023,7 +2009,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, B, after a blank line",
             "\n>> \t\tfoo\n",
             """
@@ -2034,7 +2020,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, B, after a paragraph in the same container",
             ">> a\n>> \t\tfoo\n",
             """
@@ -2048,7 +2034,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, B, after a lazy continuation line",
             ">> a\nb\n>> \t\tfoo\n",
             """
@@ -2064,7 +2050,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, B, ending an open fenced code block's container",
             "- ```\n>> \t\tfoo\n",
             """
@@ -2078,7 +2064,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, B, after a closed fenced code block",
             "```\nx\n```\n>> \t\tfoo\n",
             """
@@ -2090,7 +2076,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, B, after an indented code block",
             "    code\n>> \t\tfoo\n",
             """
@@ -2102,7 +2088,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, C, first line",
             ">>    \tfoo\n",
             """
@@ -2113,7 +2099,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, C, after a blank line",
             "\n>>    \tfoo\n",
             """
@@ -2124,7 +2110,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, C, after a paragraph in the same container",
             ">> a\n>>    \tfoo\n",
             """
@@ -2138,7 +2124,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, C, after a lazy continuation line",
             ">> a\nb\n>>    \tfoo\n",
             """
@@ -2154,7 +2140,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, C, ending an open fenced code block's container",
             "- ```\n>>    \tfoo\n",
             """
@@ -2168,7 +2154,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, C, after a closed fenced code block",
             "```\nx\n```\n>>    \tfoo\n",
             """
@@ -2180,7 +2166,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, C, after an indented code block",
             "    code\n>>    \tfoo\n",
             """
@@ -2192,7 +2178,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, D, first line",
             ">>\t    foo\n",
             """
@@ -2203,7 +2189,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, D, after a blank line",
             "\n>>\t    foo\n",
             """
@@ -2214,7 +2200,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, D, after a paragraph in the same container",
             ">> a\n>>\t    foo\n",
             """
@@ -2228,7 +2214,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, D, after a lazy continuation line",
             ">> a\nb\n>>\t    foo\n",
             """
@@ -2244,7 +2230,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, D, ending an open fenced code block's container",
             "- ```\n>>\t    foo\n",
             """
@@ -2258,7 +2244,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, D, after a closed fenced code block",
             "```\nx\n```\n>>\t    foo\n",
             """
@@ -2270,7 +2256,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, D, after an indented code block",
             "    code\n>>\t    foo\n",
             """
@@ -2282,7 +2268,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in block quote, continuation lines",
             ">>\t\tfoo\n>> \t\tfoo\n>>    \tfoo\n>>\t    foo\n",
             """
@@ -2293,7 +2279,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, A, after a blank line",
             "10.  a\n\n\t\t\tfoo\n",
             """
@@ -2306,7 +2292,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, A, after a paragraph in the same container",
             "10.  a\n\t\t\tfoo\n",
             """
@@ -2320,7 +2306,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, A, after a lazy continuation line",
             "10.  a\nb\n\t\t\tfoo\n",
             """
@@ -2336,7 +2322,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, A, after a closed fenced code block",
             "10.  a\n\n     ```\n     ```\n\t\t\tfoo\n",
             """
@@ -2350,7 +2336,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, B, after a blank line",
             "10.  a\n\n     \t\tfoo\n",
             """
@@ -2363,7 +2349,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, B, after a paragraph in the same container",
             "10.  a\n     \t\tfoo\n",
             """
@@ -2377,7 +2363,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, B, after a lazy continuation line",
             "10.  a\nb\n     \t\tfoo\n",
             """
@@ -2393,7 +2379,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, B, after a closed fenced code block",
             "10.  a\n\n     ```\n     ```\n     \t\tfoo\n",
             """
@@ -2407,7 +2393,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, C, after a blank line",
             "10.  a\n\n        \tfoo\n",
             """
@@ -2420,7 +2406,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, C, after a paragraph in the same container",
             "10.  a\n        \tfoo\n",
             """
@@ -2434,7 +2420,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, C, after a lazy continuation line",
             "10.  a\nb\n        \tfoo\n",
             """
@@ -2450,7 +2436,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, C, after a closed fenced code block",
             "10.  a\n\n     ```\n     ```\n        \tfoo\n",
             """
@@ -2464,7 +2450,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, D, after a blank line",
             "10.  a\n\n\t\t    foo\n",
             """
@@ -2477,7 +2463,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, D, after a paragraph in the same container",
             "10.  a\n\t\t    foo\n",
             """
@@ -2491,7 +2477,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, D, after a lazy continuation line",
             "10.  a\nb\n\t\t    foo\n",
             """
@@ -2507,7 +2493,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, D, after a closed fenced code block",
             "10.  a\n\n     ```\n     ```\n\t\t    foo\n",
             """
@@ -2521,7 +2507,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "two-digit ordered item, continuation lines",
             "10.  a\n\n\t\t\tfoo\n     \t\tfoo\n        \tfoo\n\t\t    foo\n",
             """
@@ -2534,7 +2520,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, A, after a blank line",
             "x[^a]\n\n>[^a]: y\n>\n>\t\t\tfoo\n",
             """
@@ -2550,7 +2536,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, A, after a paragraph in the same container",
             "x[^a]\n\n>[^a]: y\n>\t\t\tfoo\n",
             """
@@ -2567,7 +2553,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, A, after a lazy continuation line",
             "x[^a]\n\n>[^a]: y\nb\n>\t\t\tfoo\n",
             """
@@ -2586,7 +2572,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, A, after a closed fenced code block",
             "x[^a]\n\n>[^a]: y\n>\n>     ```\n>     ```\n>\t\t\tfoo\n",
             """
@@ -2603,7 +2589,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, B, after a blank line",
             "x[^a]\n\n>[^a]: y\n>\n> \t\t\tfoo\n",
             """
@@ -2619,7 +2605,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, B, after a paragraph in the same container",
             "x[^a]\n\n>[^a]: y\n> \t\t\tfoo\n",
             """
@@ -2636,7 +2622,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, B, after a lazy continuation line",
             "x[^a]\n\n>[^a]: y\nb\n> \t\t\tfoo\n",
             """
@@ -2655,7 +2641,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, B, after a closed fenced code block",
             "x[^a]\n\n>[^a]: y\n>\n>     ```\n>     ```\n> \t\t\tfoo\n",
             """
@@ -2672,7 +2658,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, C, after a blank line",
             "x[^a]\n\n>[^a]: y\n>\n>       \tfoo\n",
             """
@@ -2688,7 +2674,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, C, after a paragraph in the same container",
             "x[^a]\n\n>[^a]: y\n>       \tfoo\n",
             """
@@ -2705,7 +2691,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, C, after a lazy continuation line",
             "x[^a]\n\n>[^a]: y\nb\n>       \tfoo\n",
             """
@@ -2724,7 +2710,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, C, after a closed fenced code block",
             "x[^a]\n\n>[^a]: y\n>\n>     ```\n>     ```\n>       \tfoo\n",
             """
@@ -2741,7 +2727,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, D, after a blank line",
             "x[^a]\n\n>[^a]: y\n>\n>\t\t  foo\n",
             """
@@ -2757,7 +2743,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, D, after a paragraph in the same container",
             "x[^a]\n\n>[^a]: y\n>\t\t  foo\n",
             """
@@ -2774,7 +2760,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, D, after a lazy continuation line",
             "x[^a]\n\n>[^a]: y\nb\n>\t\t  foo\n",
             """
@@ -2793,7 +2779,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, D, after a closed fenced code block",
             "x[^a]\n\n>[^a]: y\n>\n>     ```\n>     ```\n>\t\t  foo\n",
             """
@@ -2810,7 +2796,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition in block quote, continuation lines",
             "x[^a]\n\n>[^a]: y\n>\n>\t\t\tfoo\n> \t\t\tfoo\n>       \tfoo\n>\t\t  foo\n",
             """
@@ -2826,7 +2812,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, tab after spaces, first line",
             "  \tfoo\n",
             """
@@ -2835,7 +2821,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, tab after spaces, after a blank line",
             "\n  \tfoo\n",
             """
@@ -2844,7 +2830,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, tab after spaces, after a paragraph in the same container",
             "a\n  \tfoo\n",
             """
@@ -2856,7 +2842,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, tab after spaces, after a closed fenced code block",
             "```\nx\n```\n  \tfoo\n",
             """
@@ -2866,7 +2852,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, tab after spaces, after an indented code block",
             "    code\n  \tfoo\n",
             """
@@ -2875,7 +2861,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, tab after three spaces then a tab, first line",
             "   \t\tfoo\n",
             """
@@ -2884,7 +2870,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, tab after three spaces then a tab, after a blank line",
             "\n   \t\tfoo\n",
             """
@@ -2893,7 +2879,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, tab after three spaces then a tab, after a paragraph in the same container",
             "a\n   \t\tfoo\n",
             """
@@ -2905,7 +2891,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, tab after three spaces then a tab, after a closed fenced code block",
             "```\nx\n```\n   \t\tfoo\n",
             """
@@ -2915,7 +2901,7 @@ struct IndentedCodeSplitTabTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, tab after three spaces then a tab, after an indented code block",
             "    code\n   \t\tfoo\n",
             """
@@ -2927,7 +2913,7 @@ struct IndentedCodeSplitTabTests {
     ]
 
     @Test(arguments: cases)
-    func tree(_ c: Case) {
+    func tree(_ c: TreeDumpCase) {
         #expect(TreeDump.dump(c.source, options: [.sourcePosition, .footnotes], sourceRanges: true) == c.expected)
     }
 }

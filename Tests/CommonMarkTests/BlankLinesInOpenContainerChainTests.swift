@@ -19,22 +19,8 @@ import CommonMark
 @Suite("Blank lines in a long chain of open containers")
 struct BlankLinesInOpenContainerChainTests {
 
-    struct Case: CustomTestStringConvertible, Sendable {
-        let name: String
-        let source: String
-        let expected: String
-
-        init(_ name: String, _ source: String, _ expected: String) {
-            self.name = name
-            self.source = source
-            self.expected = expected
-        }
-
-        var testDescription: String { name }
-    }
-
-    static let cases: [Case] = [
-        Case(
+    static let cases: [TreeDumpCase] = [
+        TreeDumpCase(
             "block quote in the innermost of ten footnote definitions",
             "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:>x\n\n\ny\n",
             """
@@ -50,7 +36,7 @@ struct BlankLinesInOpenContainerChainTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "empty list item in the innermost of ten footnote definitions",
             "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:-\n\n\nx\n",
             """
@@ -65,7 +51,7 @@ struct BlankLinesInOpenContainerChainTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "list item holding a paragraph in the innermost of ten footnote definitions",
             "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:- a\n\n\n",
             """
@@ -80,7 +66,7 @@ struct BlankLinesInOpenContainerChainTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "twelve footnote definitions, blank lines of tabs that continue some of them",
             "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\t\n\t\t\n\n",
             """
@@ -93,7 +79,7 @@ struct BlankLinesInOpenContainerChainTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "twelve footnote definitions, three empty lines",
             "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\n\n",
             """
@@ -106,7 +92,7 @@ struct BlankLinesInOpenContainerChainTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "twelve footnote definitions, empty lines around a line of spaces that continues the outermost",
             "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\n    \n\n",
             """
@@ -119,7 +105,7 @@ struct BlankLinesInOpenContainerChainTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ten nested list items holding a paragraph",
             "- - - - - - - - - - x\n\n\ny\n",
             """
@@ -151,7 +137,7 @@ struct BlankLinesInOpenContainerChainTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "eleven nested list items, the innermost without a block",
             "- + - + - + - + - + -\n\n\nx\n",
             """
@@ -183,7 +169,7 @@ struct BlankLinesInOpenContainerChainTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "eleven nested list items, the innermost without a block, a line of spaces",
             "- + - + - + - + - + -\n  \n\nx\n",
             """
@@ -218,7 +204,7 @@ struct BlankLinesInOpenContainerChainTests {
     ]
 
     @Test(arguments: cases)
-    func tree(_ c: Case) {
+    func tree(_ c: TreeDumpCase) {
         #expect(TreeDump.dump(c.source, options: [.sourcePosition, .footnotes], sourceRanges: true) == c.expected)
     }
 }

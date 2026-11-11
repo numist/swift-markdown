@@ -18,22 +18,8 @@ import CommonMark
 @Suite("An indented code block ends at its last line that is not blank")
 struct IndentedCodeTrailingBlankRangeTests {
 
-    struct Case: CustomTestStringConvertible, Sendable {
-        let name: String
-        let source: String
-        let expected: String
-
-        init(_ name: String, _ source: String, _ expected: String) {
-            self.name = name
-            self.source = source
-            self.expected = expected
-        }
-
-        var testDescription: String { name }
-    }
-
-    static let cases: [Case] = [
-        Case(
+    static let cases: [TreeDumpCase] = [
+        TreeDumpCase(
             "top level, an empty line, closed by a line that is not indented",
             "    a\n\nb\n",
             """
@@ -44,7 +30,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, a line of more than four columns of spaces, closed by a line that is not indented",
             "    a\n      \nb\n",
             """
@@ -55,7 +41,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, a line of fewer than four columns of spaces, at the end of the document",
             "    a\n  \n",
             """
@@ -64,7 +50,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, a tab, at the end of the document",
             "    a\n\t\n",
             """
@@ -73,7 +59,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, several blank lines",
             "    a\n\n    \n\t\nb\n",
             """
@@ -84,7 +70,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, a blank line between two lines",
             "    a\n\n    b\n",
             """
@@ -93,7 +79,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, a blank line between two lines, then a blank line",
             "    a\n\n    b\n\n",
             """
@@ -102,7 +88,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, a last line ending with spaces, then a blank line",
             "    a  \n\nb\n",
             """
@@ -113,7 +99,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "top level, closed by the next line",
             "    a\nb\n",
             """
@@ -124,7 +110,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, a blank line, closed by a line that does not continue the block quote",
             ">     a\n>\nb\n",
             """
@@ -136,7 +122,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote, more than four columns of spaces, at the end of the document",
             ">     a\n>     \n",
             """
@@ -146,7 +132,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, an empty line, closed by a line that does not continue the item",
             "-     a\n\nb\n",
             """
@@ -159,7 +145,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "bullet item, a split tab and a line of tabs and spaces, at the end of the document",
             "+ \t\tB\r\t\t  ",
             """
@@ -170,7 +156,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "ordered item, fewer than four columns of spaces, at the end of the document",
             "1.     a\n   \n",
             """
@@ -181,7 +167,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "footnote definition, an empty line, closed by a line that does not continue the definition",
             "[^a]\n\n[^a]: x\n\n        a\n\nb\n",
             """
@@ -197,7 +183,7 @@ struct IndentedCodeTrailingBlankRangeTests {
 
             """
         ),
-        Case(
+        TreeDumpCase(
             "block quote in a list item, a blank line, at the end of the document",
             "- >     a\n  >\n",
             """
@@ -212,7 +198,7 @@ struct IndentedCodeTrailingBlankRangeTests {
     ]
 
     @Test(arguments: cases)
-    func tree(_ c: Case) {
+    func tree(_ c: TreeDumpCase) {
         #expect(TreeDump.dump(c.source, options: [.sourcePosition, .footnotes], sourceRanges: true) == c.expected)
     }
 }
