@@ -11,17 +11,6 @@
 import Testing
 import CommonMark
 
-/// Appends every node's kind and literal text to `out`, in depth-first order.
-internal func dfsKindsAndText(
-    _ node: borrowing MarkdownNode,
-    into out: inout [(kind: MarkdownNode.Kind, text: String?)]
-) {
-    out.append((node.kind, node.literal()))
-    node.children.forEach { child in
-        dfsKindsAndText(child, into: &out)
-    }
-}
-
 /// Spaces at the end of a line before a soft line break are removed (Soft line breaks), so a trailing
 /// space after a link, emphasis or a code span produces no text node.
 @Suite("Trailing space before a soft line break")
@@ -30,21 +19,16 @@ struct EmptyTextBeforeSoftBreakTests {
     private static let options: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
-    /// The `(kind, text)` of every node, in depth-first order.
-    private func nodes(in src: String) -> [(kind: MarkdownNode.Kind, text: String?)] {
-        MarkdownDocument.withParsedDocument(src, options: Self.options) {
-            doc -> [(kind: MarkdownNode.Kind, text: String?)] in
-            var out: [(kind: MarkdownNode.Kind, text: String?)] = []
-            dfsKindsAndText(doc.root, into: &out)
-            return out
-        }
+    /// The `(kind, literal)` of every node, in depth-first order.
+    private func nodes(in src: String) -> [(kind: MarkdownNode.Kind, literal: String?)] {
+        MarkdownDocument.withParsedDocument(src, options: Self.options) { dfs($0) }
     }
 
     @Test("emphasis + trailing space + soft line break: no empty text node")
     func emphasis() {
         let ns = nodes(in: "*x* \ny")
         #expect(ns.map(\.kind) == [.document, .paragraph, .emphasis, .text, .softBreak, .text])
-        #expect(ns.compactMap(\.text) == ["x", "y"])
+        #expect(ns.compactMap(\.literal) == ["x", "y"])
     }
 
     @Test("code span + trailing space + soft line break: no empty text node")
@@ -52,13 +36,13 @@ struct EmptyTextBeforeSoftBreakTests {
         let ns = nodes(in: "`c` \ny")
         #expect(ns.map(\.kind) == [.document, .paragraph, .codeInline(backtickCount: 1), .softBreak, .text])
         // `literal()` also returns a code span's content.
-        #expect(ns.compactMap(\.text) == ["c", "y"])
+        #expect(ns.compactMap(\.literal) == ["c", "y"])
     }
 
     @Test("link + trailing space + soft line break: no empty text node")
     func link() {
         let ns = nodes(in: "[foo] \n[]\n\n[foo]: /url \"title\"")
         #expect(ns.map(\.kind) == [.document, .paragraph, .link, .text, .softBreak, .text])
-        #expect(ns.compactMap(\.text) == ["foo", "[]"])
+        #expect(ns.compactMap(\.literal) == ["foo", "[]"])
     }
 }

@@ -21,13 +21,12 @@ struct PartialPairingLeftoverDelimiterRangeTests {
     /// Every node's kind, literal text and source range, depth-first.
     private func nodes(in src: String) -> [String] {
         MarkdownDocument.withParsedDocument(src, options: [.sourcePosition]) { doc -> [String] in
-            var out: [(kind: MarkdownNode.Kind, text: String?)] = []
-            dfsKindsAndText(doc.root, into: &out)
+            let out = dfs(doc)
             var ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)] = []
             dfsRanges(doc.root, into: &ranges)
             return zip(out, ranges).map { node, ranged in
                 let range = ranged.range.map { "\($0.lowerBound.line):\($0.lowerBound.column)-\($0.upperBound.line):\($0.upperBound.column)" } ?? "-"
-                return "\(node.kind) \(node.text ?? "") \(range)"
+                return "\(node.kind) \(node.literal ?? "") \(range)"
             }
         }
     }
