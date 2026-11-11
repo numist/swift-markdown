@@ -419,7 +419,8 @@ struct EntityTests {
 @Suite("Inline parser - autolinks")
 struct AutolinkTests {
 
-    /// Pull the (url, text-of-first-child) for the first link in the document's first paragraph. Returns nil for any of these if not found.
+    /// The URL of the first link among the inline children of the top-level blocks, and the literal of that link's
+    /// first text child; each is nil if there is none.
     private static func firstLink(_ doc: borrowing MarkdownDocument) -> (url: String?, text: String?) {
         var url: String?
         var text: String?
