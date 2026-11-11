@@ -13,9 +13,9 @@ import CommonMark
 
 /// The spaces between pipes and cell content are not part of the cell (Tables (extension)), so a cell's source range
 /// covers just its content, and a cell with no content, empty or holding only whitespace, has an empty range just past
-/// its opening pipe, or at the row's start in a row of only whitespace, which has no opening pipe; a zero-width `||`
-/// cell has colspan 0. A row runs from its first byte to its closing pipe, or to its last cell's content when it has
-/// none, so trailing whitespace is outside it.
+/// its opening pipe, or at the row's start in a row of only whitespace, which has no opening pipe. Under `.tableSpans`,
+/// a zero-width `||` cell and the first cell of a row of only whitespace have colspan 0. A row runs from its first byte
+/// to its closing pipe, or to its last cell's content when it has none, so trailing whitespace is outside it.
 @Suite("Table cell and row source ranges")
 struct TableEmptyCellSourceRangeTests {
 
