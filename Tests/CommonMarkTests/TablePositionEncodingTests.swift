@@ -31,52 +31,6 @@ struct TablePositionEncodingTests {
         Pos(line: sl, column: sc)..<Pos(line: el, column: ec)
     }
 
-    private struct Cell {
-        let alignment: MarkdownNode.TableAlignment
-        let colspan: Int
-        let range: Range<Pos>
-        /// Concatenated literal text of the cell's inline children.
-        let text: String
-        /// The first positioned inline child's source range (the cell's Text run).
-        let textRange: Range<Pos>?
-    }
-
-    private struct Row {
-        let isHeader: Bool
-        let range: Range<Pos>
-        let cells: [Cell]
-    }
-
-    /// Rows (header first, then body rows in order) of the first top-level `.table` in `source`.
-    /// Each cell carries its span, range, literal text, and the range of its first inline Text run.
-    private func tableRows(_ source: String) -> [Row] {
-        MarkdownDocument.withParsedDocument(source, options: Self.opts) { doc -> [Row] in
-            var rows: [Row] = []
-            var found = false
-            doc.root.children.forEach { block in
-                if found || block.kind != .table { return }
-                found = true
-                block.children.forEach { row in
-                    guard case .tableRow(let isHeader) = row.kind, let rowRange = row.sourceRange else { return }
-                    var cells: [Cell] = []
-                    row.children.forEach { cell in
-                        guard case .tableCell(let alignment, let columns, _) = cell.kind,
-                              let range = cell.sourceRange else { return }
-                        var text = ""
-                        var textRange: Range<Pos>? = nil
-                        cell.children.forEach { inline in
-                            if let lit = inline.literal() { text += lit }
-                            if textRange == nil, let ir = inline.sourceRange { textRange = ir }
-                        }
-                        cells.append(Cell(alignment: alignment, colspan: columns, range: range, text: text, textRange: textRange))
-                    }
-                    rows.append(Row(isHeader: isHeader, range: rowRange, cells: cells))
-                }
-            }
-            return rows
-        }
-    }
-
     /// Every node's (kind, literal, range) in document order.
     private func nodes(_ source: String) -> [EncNode] {
         MarkdownDocument.withParsedDocument(source, options: Self.opts) { doc -> [EncNode] in
@@ -91,7 +45,7 @@ struct TablePositionEncodingTests {
     @Test("multi-column: multibyte at a body cell's start counts its bytes")
     func bodyCellMultibyteStart() throws {
         // Body line 3 `éx|y`: é@bytes0-1 (cols1-2), x@byte2 (col3), |@byte3 (col4), y@byte4 (col5).
-        let rows = tableRows("a|b\n-|-\n\u{E9}x|y")
+        let rows = firstTableRows("a|b\n-|-\n\u{E9}x|y", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row, got \(rows.count)")
         let body = rows[1]
         try #require(body.cells.count == 2, "fixture: two body cells, got \(body.cells.count)")
@@ -107,7 +61,7 @@ struct TablePositionEncodingTests {
     @Test("multi-column: a padded multibyte cell covers just its content bytes")
     func paddedMultibyteCells() throws {
         // Body line 3 `| é | 😀 |  `: é@bytes2-3 (cols3-4), 😀@bytes7-10 (cols8-11), closing |@byte12 (col13).
-        let rows = tableRows("a|b\n-|-\n| \u{E9} | \u{1F600} |  ")
+        let rows = firstTableRows("a|b\n-|-\n| \u{E9} | \u{1F600} |  ", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row")
         let body = rows[1]
         try #require(body.cells.count == 2 && body.cells[0].text == "\u{E9}" && body.cells[1].text == "\u{1F600}", "fixture: cell literals")
@@ -122,7 +76,7 @@ struct TablePositionEncodingTests {
     @Test("multi-column: a 3-byte cell spans three byte-columns")
     func bodyCellThreeByte() throws {
         // Body line 3 `x|€`: x@byte0 (col1), |@byte1 (col2), €@bytes2-4 (cols3-5).
-        let rows = tableRows("a|b\n-|-\nx|\u{20AC}")
+        let rows = firstTableRows("a|b\n-|-\nx|\u{20AC}", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row")
         let body = rows[1]
         try #require(body.cells.count == 2 && body.cells[1].text == "\u{20AC}", "fixture: `€` cell literal")
@@ -136,7 +90,7 @@ struct TablePositionEncodingTests {
     @Test("multi-column: a 4-byte emoji cell spans four byte-columns")
     func bodyCellEmoji() throws {
         // Body line 3 `x|😀`: x@byte0 (col1), |@byte1 (col2), 😀@bytes2-5 (cols3-6).
-        let rows = tableRows("a|b\n-|-\nx|\u{1F600}")
+        let rows = firstTableRows("a|b\n-|-\nx|\u{1F600}", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row")
         let body = rows[1]
         try #require(body.cells.count == 2 && body.cells[1].text == "\u{1F600}", "fixture: emoji cell literal")
@@ -150,7 +104,7 @@ struct TablePositionEncodingTests {
     @Test("multi-column: a combining sequence in a cell counts its bytes")
     func bodyCellCombining() throws {
         // Body line 3 `e´x|y`: e@byte0 (col1), U+0301@bytes1-2 (cols2-3), x@byte3 (col4).
-        let rows = tableRows("a|b\n-|-\ne\u{301}x|y")
+        let rows = firstTableRows("a|b\n-|-\ne\u{301}x|y", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row")
         let body = rows[1]
         try #require(body.cells.count == 2 && body.cells[0].text == "e\u{301}x", "fixture: combining cell literal")
@@ -164,7 +118,7 @@ struct TablePositionEncodingTests {
     @Test("multi-column: a literal U+FFFD cell counts three byte-columns")
     func bodyCellReplacementChar() throws {
         // Body line 3 `x|�`: x@byte0 (col1), |@byte1 (col2), U+FFFD@bytes2-4 (cols3-5).
-        let rows = tableRows("a|b\n-|-\nx|\u{FFFD}")
+        let rows = firstTableRows("a|b\n-|-\nx|\u{FFFD}", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row")
         let body = rows[1]
         try #require(body.cells.count == 2 && body.cells[1].text == "\u{FFFD}", "fixture: U+FFFD cell literal")
@@ -177,7 +131,7 @@ struct TablePositionEncodingTests {
     @Test("multi-column: multibyte in the middle column shifts the right column by its byte width")
     func middleColumnMultibyte() throws {
         // Body line 3 `x|é|z`: x@byte0 (col1), |@byte1 (col2), é@bytes2-3 (cols3-4), |@byte4 (col5), z@byte5 (col6).
-        let rows = tableRows("a|b|c\n-|-|-\nx|\u{E9}|z")
+        let rows = firstTableRows("a|b|c\n-|-|-\nx|\u{E9}|z", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row")
         let body = rows[1]
         try #require(body.cells.count == 3 && body.cells.map(\.text) == ["x", "\u{E9}", "z"], "fixture: three cells")
@@ -192,7 +146,7 @@ struct TablePositionEncodingTests {
     @Test("multi-column: multibyte in the header widens the header ranges")
     func headerMultibyte() throws {
         // Header line 1 `€x|y`: €@bytes0-2 (cols1-3), x@byte3 (col4), |@byte4 (col5), y@byte5 (col6).
-        let rows = tableRows("\u{20AC}x|y\n-|-\nc|d")
+        let rows = firstTableRows("\u{20AC}x|y\n-|-\nc|d", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row")
         let head = rows[0]
         try #require(head.isHeader && head.cells.count == 2 && head.cells[0].text == "\u{20AC}x", "fixture: header cells")
@@ -207,7 +161,7 @@ struct TablePositionEncodingTests {
     @Test("multi-column: independent multibyte in header and body")
     func headerAndBodyMultibyte() throws {
         // Header `é|b`: é@cols1-2, |@col3, b@col4. Body `c|€`: c@col1, |@col2, €@cols3-5.
-        let rows = tableRows("\u{E9}|b\n-|-\nc|\u{20AC}")
+        let rows = firstTableRows("\u{E9}|b\n-|-\nc|\u{20AC}", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row")
         try #require(rows[0].cells.map(\.text) == ["\u{E9}", "b"] && rows[1].cells.map(\.text) == ["c", "\u{20AC}"],
                      "fixture: cell literals")
@@ -228,7 +182,7 @@ struct TablePositionEncodingTests {
     @Test("single-column: multibyte header and body cells")
     func singleColumnMultibyte() throws {
         // Header line 1 `é`: cols1-2 (2 bytes). Body line 3 `€`: cols1-3 (3 bytes).
-        let rows = tableRows("\u{E9}\n|-\n\u{20AC}")
+        let rows = firstTableRows("\u{E9}\n|-\n\u{20AC}", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row, got \(rows.count)")
         try #require(rows[0].cells.count == 1 && rows[1].cells.count == 1, "fixture: one column")
         try #require(rows[0].cells[0].text == "\u{E9}" && rows[1].cells[0].text == "\u{20AC}", "fixture: literals")
@@ -245,7 +199,7 @@ struct TablePositionEncodingTests {
     @Test("single-column: leading-pipe body cell with multibyte")
     func singleColumnLeadingPipeMultibyte() throws {
         // Body line 3 `|€`: |@byte0 (col1), €@bytes1-3 (cols2-4).
-        let rows = tableRows("a\n|-\n|\u{20AC}")
+        let rows = firstTableRows("a\n|-\n|\u{20AC}", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row")
         try #require(rows[1].cells.count == 1 && rows[1].cells[0].text == "\u{20AC}", "fixture: `€` body cell")
         #expect(rows[1].range == r(3, 1, 3, 5))
@@ -261,7 +215,7 @@ struct TablePositionEncodingTests {
     func escapedPipeHeaderCellMultibyte() throws {
         // Header line 1 `é\|€|c`: é@bytes0-1 (cols1-2), \@byte2 (col3), |@byte3 (col4),
         // €@bytes4-6 (cols5-7), |@byte7 (col8, cell separator), c@byte8 (col9).
-        let rows = tableRows("\u{E9}\\|\u{20AC}|c\n-|-")
+        let rows = firstTableRows("\u{E9}\\|\u{20AC}|c\n-|-", options: Self.opts)
         try #require(rows.count == 1, "fixture: header-only table, got \(rows.count) rows")
         let head = rows[0]
         try #require(head.cells.count == 2 && head.cells[0].text == "\u{E9}|\u{20AC}" && head.cells[1].text == "c",
@@ -277,7 +231,7 @@ struct TablePositionEncodingTests {
     func escapedPipeHeaderCellEmoji() throws {
         // Header line 1 `x\|😀|y`: x@byte0 (col1), \@byte1 (col2), |@byte2 (col3),
         // 😀@bytes3-6 (cols4-7), |@byte7 (col8), y@byte8 (col9).
-        let rows = tableRows("x\\|\u{1F600}|y\n-|-")
+        let rows = firstTableRows("x\\|\u{1F600}|y\n-|-", options: Self.opts)
         try #require(rows.count == 1, "fixture: header-only table")
         let head = rows[0]
         try #require(head.cells.count == 2 && head.cells[0].text == "x|\u{1F600}" && head.cells[1].text == "y",
@@ -290,7 +244,7 @@ struct TablePositionEncodingTests {
     @Test("escaped pipe: \\|-escaped body cell counts the bytes around the pipe")
     func escapedPipeBodyCellMultibyte() throws {
         // Body line 3 `é\|€|c`, same byte layout as the header case.
-        let rows = tableRows("a|b\n-|-\n\u{E9}\\|\u{20AC}|c")
+        let rows = firstTableRows("a|b\n-|-\n\u{E9}\\|\u{20AC}|c", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row")
         let body = rows[1]
         try #require(body.cells.count == 2 && body.cells[0].text == "\u{E9}|\u{20AC}" && body.cells[1].text == "c",
@@ -370,7 +324,7 @@ struct TablePositionEncodingTests {
     func leadingWhitespaceBodyRowMultibyte() throws {
         // Body line 3 ` éx|y`: space@byte0 (col1), é@bytes1-2 (cols2-3), x@byte3 (col4), |@byte4 (col5),
         // y@byte5 (col6).
-        let rows = tableRows("a|b\n-|-\n \u{E9}x|y")
+        let rows = firstTableRows("a|b\n-|-\n \u{E9}x|y", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row")
         let body = rows[1]
         try #require(body.cells.count == 2, "fixture: two body cells")
@@ -385,7 +339,7 @@ struct TablePositionEncodingTests {
     func leadingWhitespaceHeaderMultibyte() throws {
         // Header line 1 ` é|b`: space@byte0 (col1), é@bytes1-2 (cols2-3), |@byte3 (col4), b@byte4 (col5).
         // Body line 3 `x|y`: x@byte0 (col1), |@byte1 (col2), y@byte2 (col3).
-        let rows = tableRows(" \u{E9}|b\n-|-\nx|y")
+        let rows = firstTableRows(" \u{E9}|b\n-|-\nx|y", options: Self.opts)
         try #require(rows.count == 2, "fixture: header + body row")
         try #require(rows[0].cells.count == 2 && rows[1].cells.count == 2, "fixture: two cells per row")
         try #require(rows[0].cells[0].text == "\u{E9}" && rows[1].cells.map(\.text) == ["x", "y"], "fixture: literals")

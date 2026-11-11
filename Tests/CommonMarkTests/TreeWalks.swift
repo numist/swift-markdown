@@ -101,3 +101,80 @@ internal func paragraphInlines(_ doc: borrowing MarkdownDocument) -> [(kind: Mar
     }
     return out.map { ($0.0, $0.1) }
 }
+
+/// `(columns, rows, text)` for each cell of each row of the first table in `markdown`.
+internal func firstTableCells(
+    _ markdown: String, options: MarkdownDocument.ParseOptions
+) -> [[(columns: Int, rows: Int, text: String)]] {
+    MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
+        var rows: [[(columns: Int, rows: Int, text: String)]] = []
+        var found = false
+        doc.root.children.forEach { block in
+            if found || block.kind != .table { return }
+            found = true
+            block.children.forEach { row in
+                guard case .tableRow = row.kind else { return }
+                var cells: [(columns: Int, rows: Int, text: String)] = []
+                row.children.forEach { cell in
+                    guard case .tableCell(_, let columns, let rows) = cell.kind else { return }
+                    var text = ""
+                    cell.children.forEach { inline in
+                        if let lit = inline.literal() { text += lit }
+                    }
+                    cells.append((columns, rows, text))
+                }
+                rows.append(cells)
+            }
+        }
+        return rows
+    }
+}
+
+/// A row of a table that has a source range, with the cells of it that have one.
+internal struct PositionedTableRow {
+    let isHeader: Bool
+    let range: Range<MarkdownNode.SourcePosition>
+    let cells: [Cell]
+
+    struct Cell {
+        let alignment: MarkdownNode.TableAlignment
+        let colspan: Int
+        let range: Range<MarkdownNode.SourcePosition>
+        /// The concatenated literal text of the cell's inline children.
+        let text: String
+        /// The source range of the cell's first inline child that has one.
+        let textRange: Range<MarkdownNode.SourcePosition>?
+    }
+}
+
+/// The rows of the first top-level table in `markdown`, header first, then body rows in order. Rows and cells with no
+/// source range are omitted.
+internal func firstTableRows(_ markdown: String, options: MarkdownDocument.ParseOptions) -> [PositionedTableRow] {
+    MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
+        var rows: [PositionedTableRow] = []
+        var found = false
+        doc.root.children.forEach { block in
+            if found || block.kind != .table { return }
+            found = true
+            block.children.forEach { row in
+                guard case .tableRow(let isHeader) = row.kind, let rowRange = row.sourceRange else { return }
+                var cells: [PositionedTableRow.Cell] = []
+                row.children.forEach { cell in
+                    guard case .tableCell(let alignment, let columns, _) = cell.kind,
+                          let range = cell.sourceRange else { return }
+                    var text = ""
+                    var textRange: Range<MarkdownNode.SourcePosition>? = nil
+                    cell.children.forEach { inline in
+                        if let lit = inline.literal() { text += lit }
+                        if textRange == nil, let ir = inline.sourceRange { textRange = ir }
+                    }
+                    cells.append(PositionedTableRow.Cell(
+                        alignment: alignment, colspan: columns, range: range, text: text, textRange: textRange
+                    ))
+                }
+                rows.append(PositionedTableRow(isHeader: isHeader, range: rowRange, cells: cells))
+            }
+        }
+        return rows
+    }
+}
