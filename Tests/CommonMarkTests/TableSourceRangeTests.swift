@@ -16,7 +16,7 @@ import CommonMark
 /// opening pipe. A row runs from its opening pipe or first cell's content to its closing pipe, or to its last cell's
 /// content when it has none, and a table runs from its header row to its last row, or to its delimiter row when it has
 /// no body; whitespace before or after a row is outside all three. A row of only whitespace and its one cell have an
-/// empty range before that whitespace, and a cell that a short row lacks has no range.
+/// empty range at its first byte past its indentation, and a cell that a short row lacks has no range.
 @Suite("Table, row and cell source ranges")
 struct TableSourceRangeTests {
 
