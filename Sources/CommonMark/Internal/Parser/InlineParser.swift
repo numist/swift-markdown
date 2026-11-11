@@ -637,7 +637,7 @@ extension BlockParser {
         }
         return (
             unescapedChunk(dest.destination, in: content),
-            unescapedChunk(titleInterior, in: content),
+            unescapedTitle(titleInterior, in: content),
             close + 1
         )
     }
@@ -1305,13 +1305,15 @@ extension BlockParser {
     /// one-space strip applied, copied into the arena only if it holds a line ending.
     private mutating func codeSpanContent(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end), contiguous.length == end - start {
+            // Content holding a CR is the source itself, whose line endings are written as `\n` first, so that a CRLF
+            // becomes one space.
+            if contentHoldsCR, let copy = lineFeedCopy(of: contiguous) {
+                return trimSingleSpaces(spacingLineEndings(copy))
+            }
             var holdsLineEnding = false
-            for i in contiguous.range {
-                let b = readByte(at: i, in: contiguous)
-                if b == UInt8(ascii: "\n") || b == UInt8(ascii: "\r") {
-                    holdsLineEnding = true
-                    break
-                }
+            for i in contiguous.range where readByte(at: i, in: contiguous) == UInt8(ascii: "\n") {
+                holdsLineEnding = true
+                break
             }
             if !holdsLineEnding {
                 return trimSingleSpaces(contiguous)
@@ -1320,13 +1322,17 @@ extension BlockParser {
         let outOffset = storage.strings.count
         for k in start..<end {
             let b = content[k]
-            // A CRLF is one line ending, so its LF adds no second space.
-            if b == UInt8(ascii: "\n"), content[k - 1] == UInt8(ascii: "\r") {
-                continue
-            }
-            storage.strings.append(b == UInt8(ascii: "\n") || b == UInt8(ascii: "\r") ? UInt8(ascii: " ") : b)
+            storage.strings.append(b == UInt8(ascii: "\n") ? UInt8(ascii: " ") : b)
         }
         return trimSingleSpaces(arenaChunk(from: outOffset))
+    }
+
+    /// `chunk`, a copy just made in the arena, with each `\n` replaced by a space.
+    private mutating func spacingLineEndings(_ chunk: Chunk) -> Chunk {
+        for k in chunk.range where storage.strings[k] == UInt8(ascii: "\n") {
+            storage.strings[k] = UInt8(ascii: " ")
+        }
+        return chunk
     }
 
     /// The code span one-space strip (Code spans).
@@ -2096,12 +2102,10 @@ extension BlockParser {
     mutating func materializedChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end),
            contiguous.length == end - start {
-            guard contentHoldsCR, contiguous.inSource, firstCR(in: contiguous.range) < contiguous.range.upperBound else {
-                return contiguous
+            if contentHoldsCR, let copy = lineFeedCopy(of: contiguous) {
+                return copy
             }
-            let offset = storage.strings.count
-            appendWritingLineEndingsAsLineFeeds(contiguous.range)
-            return arenaChunk(from: offset)
+            return contiguous
         }
         let outOffset = storage.strings.count
         for k in start..<end {

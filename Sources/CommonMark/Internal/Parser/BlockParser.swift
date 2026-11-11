@@ -87,6 +87,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     let positionsEnabled: Bool
 
+    /// Whether the content being parsed holds a CR, which only inline-only content parsed in place does, so a literal
+    /// formed from it writes each line ending as `\n`.
+    var contentHoldsCR = false
+
     /// The source offset before which the line reader has read every byte.
     var sourceReadEnd: Int = 0
 
@@ -101,10 +105,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Inline parsing deferred until all blocks close, so a reference resolves against a definition later in the document.
     var pendingInlines: [(DocumentStorage.Index, ContentRef)] = []
-
-    /// Whether the content being parsed holds a CR, which only inline-only content parsed in place does, so a literal
-    /// formed from it writes each line ending as `\n`.
-    var contentHoldsCR = false
 
     /// Run maps for content that reaches the inline pass as one arena chunk (flattened, NUL-replaced or pipe-unescaped), keyed by node, so its inlines get source positions.
     var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
@@ -3411,12 +3411,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         if let contiguous = content.contiguousChunk(fromVirtual: range.lowerBound, limit: range.upperBound),
            contiguous.length == range.count {
-            guard contentHoldsCR, contiguous.inSource, firstCR(in: contiguous.range) < contiguous.range.upperBound else {
-                return unescapedChunk(contiguous)
-            }
-            let offset = storage.strings.count
-            appendWritingLineEndingsAsLineFeeds(contiguous.range, unescaping: true)
-            return arenaChunk(from: offset)
+            return unescapedChunk(contiguous)
         }
         // A backslash escape or character reference never continues past a line ending, so each line resolves alone.
         let offset = storage.strings.count
@@ -3459,7 +3454,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     @inline(__always)
     private func skipLineWhitespaceAndOneLineEnd(from cursor: Int, in content: borrowing ContentSpan) -> Int {
         let i = skipLineWhitespace(from: cursor, in: content)
-        guard i < content.endOffset, let afterLineEnding = lineEndingEnd(at: i, in: content) else {
+        guard i < content.endOffset else {
+            return i
+        }
+        if content[i] == UInt8(ascii: "\n") {
+            return skipLineWhitespace(from: i + 1, in: content)
+        }
+        guard contentHoldsCR, let afterLineEnding = lineEndingEnd(at: i, in: content) else {
             return i
         }
         return skipLineWhitespace(from: afterLineEnding, in: content)
@@ -3471,11 +3472,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if cursor >= content.endOffset {
             return cursor
         }
-        return lineEndingEnd(at: cursor, in: content)
+        if content[cursor] == UInt8(ascii: "\n") {
+            return cursor + 1
+        }
+        return contentHoldsCR ? lineEndingEnd(at: cursor, in: content) : nil
     }
 
     /// The offset past the line ending at `cursor`, an LF, a CR or a CRLF, or `nil` when the byte there begins none.
-    @inline(__always)
+    @inline(never)
     func lineEndingEnd(at cursor: Int, in content: borrowing ContentSpan) -> Int? {
         let byte = content[cursor]
         if byte == UInt8(ascii: "\n") {
@@ -3526,7 +3530,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // here, where every stored definition passes.
             storage.referenceMap[key] = ReferenceDefinition(
                 destination: replacingNUL(unescapedChunk(destination.destination, in: content)),
-                title: replacingNUL(unescapedChunk(title, in: content))
+                title: replacingNUL(unescapedTitle(title, in: content))
             )
         }
         return afterAll
@@ -3570,6 +3574,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             storage.attributeReferenceMap[key] = replacingNUL(unescapedChunk(attributesChunk.trimming(using: self)))
         }
         return skipLineEndOrEOF(from: attributesEnd, in: content)
+    }
+
+    /// `unescapedChunk(_:in:)` for a link title, which may span a line ending: in content holding a CR, which is the
+    /// source itself, each line ending is written as `\n`.
+    @inline(__always)
+    mutating func unescapedTitle(_ range: Range<Int>, in content: borrowing ContentSpan) -> Chunk {
+        guard contentHoldsCR, firstCR(in: range) < range.upperBound else {
+            return unescapedChunk(range, in: content)
+        }
+        let offset = storage.strings.count
+        appendWritingLineEndingsAsLineFeeds(range, unescaping: true)
+        return arenaChunk(from: offset)
     }
 
     /// `chunk` with backslash escapes removed and character references decoded, copied to the arena only if it holds either.
@@ -3645,6 +3661,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     func firstCR(in range: Range<Int>) -> Int {
         let cr = SIMD16<UInt8>(repeating: UInt8(ascii: "\r"))
         return range.lowerBound + sourceBytes.extracting(range).firstIndex(matching: { $0 .== cr }, or: { $0 == UInt8(ascii: "\r") })
+    }
+
+    /// A copy in the arena of source `chunk` with each line ending written as `\n`, or `nil` if it holds no CR.
+    @inline(never)
+    mutating func lineFeedCopy(of chunk: Chunk) -> Chunk? {
+        guard firstCR(in: chunk.range) < chunk.range.upperBound else {
+            return nil
+        }
+        let offset = storage.strings.count
+        appendWritingLineEndingsAsLineFeeds(chunk.range)
+        return arenaChunk(from: offset)
     }
 
     /// Appends source bytes `range` to the arena with each CRLF and lone CR written as `\n`, and with `unescaping`,

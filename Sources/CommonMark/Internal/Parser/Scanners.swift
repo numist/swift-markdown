@@ -84,9 +84,10 @@ extension BlockParser {
     // MARK: - Link label
 
     /// Scans a link label through `byte`; a label may span line endings. Returns the interior's range and the offset
-    /// past `]`, or nil at an unescaped `[`, past `maxLinkLabelLength`, or at the end.
+    /// past `]`, or nil at an unescaped `[`, past `maxLinkLabelLength`, or at the end. With `crlfIsOneCharacter`, a
+    /// CRLF's LF doesn't count toward the length, since a CRLF is one line ending.
     @inline(__always)
-    private func scanLinkLabel(from start: Int, end: Int, byte: (Int) -> UInt8) -> (interior: Range<Int>, afterEnd: Int)? {
+    private func scanLinkLabel(from start: Int, end: Int, crlfIsOneCharacter: Bool, byte: (Int) -> UInt8) -> (interior: Range<Int>, afterEnd: Int)? {
         if start >= end || byte(start) != UInt8(ascii: "[") {
             return nil
         }
@@ -94,7 +95,6 @@ extension BlockParser {
         let interiorStart = start + 1
         var i = interiorStart
         var length = 0
-        var previous = UInt8(ascii: "[")
         while i < end {
             let b = byte(i)
             if b == UInt8(ascii: "[") {
@@ -106,16 +106,15 @@ extension BlockParser {
             if b == UInt8(ascii: "\\") {
                 i += 1
                 length += 1
-                previous = b
                 if i < end {
-                    let escaped = byte(i)
-                    length += labelLengthWeight(escaped, after: previous)
-                    previous = escaped
+                    length += labelLengthWeight(byte(i))
                     i += 1
                 }
             } else {
-                length += labelLengthWeight(b, after: previous)
-                previous = b
+                length += labelLengthWeight(b)
+                if crlfIsOneCharacter, b == UInt8(ascii: "\n"), byte(i - 1) == UInt8(ascii: "\r") {
+                    length -= 1
+                }
                 i += 1
             }
             if length > maxLabelLength {
@@ -128,7 +127,18 @@ extension BlockParser {
     /// Matches a link label (Links) at virtual offset `start` of `content`, returning its interior and the offset past
     /// its `]`.
     internal func matchLinkLabel(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
-        content.withForwardReader(from: start) { byte in scanLinkLabel(from: start, end: end, byte: byte) }
+        if let label = content.withForwardReader(from: start, { byte in scanLinkLabel(from: start, end: end, crlfIsOneCharacter: false, byte: byte) }) {
+            return label
+        }
+        // A label counted past `maxLinkLabelLength` with each CRLF as two characters may still fit. Only inline-only
+        // content parsed in place holds a CR.
+        return contentHoldsCR ? matchLinkLabelCountingCRLFOnce(from: start, end: end, in: content) : nil
+    }
+
+    /// `matchLinkLabel` counting a CRLF as one character.
+    @inline(never)
+    private func matchLinkLabelCountingCRLFOnce(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
+        content.withForwardReader(from: start) { byte in scanLinkLabel(from: start, end: end, crlfIsOneCharacter: true, byte: byte) }
     }
 
     /// Whether a label that `matchLinkLabel` didn't scan, such as a shortcut reference's link text or a footnote
@@ -145,11 +155,13 @@ extension BlockParser {
             return false
         }
         var length = 0
-        var previous: UInt8 = 0
         for i in range {
             let b = content[i]
-            length += labelLengthWeight(b, after: previous)
-            previous = b
+            length += labelLengthWeight(b)
+            // A CRLF is one line ending. Only inline-only content parsed in place holds a CR.
+            if contentHoldsCR, b == UInt8(ascii: "\n"), content[i - 1] == UInt8(ascii: "\r") {
+                length -= 1
+            }
             if length > maxLabelLength {
                 return false
             }
@@ -160,10 +172,9 @@ extension BlockParser {
     /// A link label has at most 999 characters (Links), counted by `labelLengthWeight`.
     private static let maxLinkLabelLength = 999
 
-    /// Counts characters (code points) of a label read a byte at a time, `previous` being the byte before `byte`: a
-    /// UTF-8 continuation byte counts 0, as does a CRLF's LF, since a CRLF is one line ending, and every other byte 1.
-    private func labelLengthWeight(_ byte: UInt8, after previous: UInt8) -> Int {
-        return byte & 0xC0 == 0x80 || (byte == UInt8(ascii: "\n") && previous == UInt8(ascii: "\r")) ? 0 : 1
+    /// Counts characters (code points): a UTF-8 continuation byte counts 0 and every other byte 1.
+    private func labelLengthWeight(_ byte: UInt8) -> Int {
+        return byte & 0xC0 == 0x80 ? 0 : 1
     }
 
     // MARK: - Link destination
