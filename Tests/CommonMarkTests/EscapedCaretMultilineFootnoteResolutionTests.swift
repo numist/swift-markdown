@@ -16,7 +16,7 @@ import Testing
 /// backslash-escaped or a definition matches the bracket's first line.
 @Suite("Footnote-shaped bracket across a line ending")
 struct EscapedCaretMultilineFootnoteResolutionTests {
-    private static let long = String(repeating: "a", count: 1000)
+    private static let long = String(repeating: "a", count: 998)
 
     static let cases: [(markdown: String, expected: String)] = [
         ("[\\^abcdef\nxxxxx]\n\n[^abc]: note", """
@@ -51,8 +51,8 @@ struct EscapedCaretMultilineFootnoteResolutionTests {
                 text "xxxxx]"
 
             """),
-        ("[\\^\(Self.long)bbb\n\(String(repeating: "x", count: 1002))]\n\n[^\(Self.long)]: note", "document\n  paragraph\n    text \"[^\(Self.long)bbb\"\n    softbreak\n    text \"\(String(repeating: "x", count: 1002))]\"\n  paragraph\n    text \"[^\(Self.long)]: note\"\n"),
-        ("[\\^\(Self.long)abbb\n\(String(repeating: "x", count: 1003))]\n\n[^\(Self.long)a]: note", "document\n  paragraph\n    text \"[^\(Self.long)abbb\"\n    softbreak\n    text \"\(String(repeating: "x", count: 1003))]\"\n  paragraph\n    text \"[^\(Self.long)a]: note\"\n"),
+        ("[\\^\(Self.long)bbb\n\(String(repeating: "x", count: 1000))]\n\n[^\(Self.long)]: note", "document\n  paragraph\n    text \"[^\(Self.long)bbb\"\n    softbreak\n    text \"\(String(repeating: "x", count: 1000))]\"\n"),
+        ("[\\^\(Self.long)abbb\n\(String(repeating: "x", count: 1001))]\n\n[^\(Self.long)a]: note", "document\n  paragraph\n    text \"[^\(Self.long)abbb\"\n    softbreak\n    text \"\(String(repeating: "x", count: 1001))]\"\n"),
         ("[\\^a\u{0}bcdef\nxxxxxxx]\n\n[^a\u{0}b]: note", """
             document
               paragraph
