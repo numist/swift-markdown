@@ -263,17 +263,23 @@ extension BlockParser {
                 content: content
             )
         }
+        return appendLineBreak(isHard: info.isHard, textEnd: info.textEnd, resumingAt: cursor + 1, content: content, parent: parent, pendingTextStart: &pendingTextStart)
+    }
+
+    /// Flushes the pending text before `textEnd` and appends a soft or hard line break, after which scanning and pending
+    /// text resume at `resume`.
+    private mutating func appendLineBreak(isHard: Bool, textEnd: Int, resumingAt resume: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         flushPendingText(
             start: pendingTextStart,
-            end: info.textEnd,
+            end: textEnd,
             content: content,
             into: parent
         )
-        let kind: MarkdownNode.Kind = info.isHard ? .lineBreak : .softBreak
+        let kind: MarkdownNode.Kind = isHard ? .lineBreak : .softBreak
         let breakIdx = storage.appendNode(NodeRecord(kind: kind, parent: parent))
         storage.appendChild(breakIdx, to: parent)
-        pendingTextStart = cursor + 1
-        return cursor + 1
+        pendingTextStart = resume
+        return resume
     }
 
     /// An entity or numeric character reference (Entity and numeric character references).
@@ -395,6 +401,11 @@ extension BlockParser {
                     content: content
                 )
                 return cursor + 2
+            }
+            // A line ending after a backslash is a hard line break (Hard line breaks). An LF forms it when scanned; a
+            // CR, which only inline-only content parsed in place holds, forms it here, with a CRLF's LF.
+            if next == UInt8(ascii: "\r"), let afterLineEnding = lineEndingEnd(at: cursor + 1, in: content) {
+                return appendLineBreak(isHard: true, textEnd: cursor, resumingAt: afterLineEnding, content: content, parent: parent, pendingTextStart: &pendingTextStart)
             }
         }
         return cursor + 1
@@ -1295,9 +1306,12 @@ extension BlockParser {
     private mutating func codeSpanContent(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end), contiguous.length == end - start {
             var holdsLineEnding = false
-            for i in contiguous.range where readByte(at: i, in: contiguous) == UInt8(ascii: "\n") {
-                holdsLineEnding = true
-                break
+            for i in contiguous.range {
+                let b = readByte(at: i, in: contiguous)
+                if b == UInt8(ascii: "\n") || b == UInt8(ascii: "\r") {
+                    holdsLineEnding = true
+                    break
+                }
             }
             if !holdsLineEnding {
                 return trimSingleSpaces(contiguous)
@@ -1306,7 +1320,11 @@ extension BlockParser {
         let outOffset = storage.strings.count
         for k in start..<end {
             let b = content[k]
-            storage.strings.append(b == UInt8(ascii: "\n") ? UInt8(ascii: " ") : b)
+            // A CRLF is one line ending, so its LF adds no second space.
+            if b == UInt8(ascii: "\n"), content[k - 1] == UInt8(ascii: "\r") {
+                continue
+            }
+            storage.strings.append(b == UInt8(ascii: "\n") || b == UInt8(ascii: "\r") ? UInt8(ascii: " ") : b)
         }
         return trimSingleSpaces(arenaChunk(from: outOffset))
     }
@@ -2074,11 +2092,16 @@ extension BlockParser {
     }
 
     /// A chunk for `start..<end`, copied into the arena only when the range spans segments, as raw HTML or attributes
-    /// can.
+    /// can, or holds a CR, so that each line ending is `\n`.
     mutating func materializedChunk(start: Int, end: Int, content: borrowing ContentSpan) -> Chunk {
         if let contiguous = content.contiguousChunk(fromVirtual: start, limit: end),
            contiguous.length == end - start {
-            return contiguous
+            guard contentHoldsCR, contiguous.inSource, firstCR(in: contiguous.range) < contiguous.range.upperBound else {
+                return contiguous
+            }
+            let offset = storage.strings.count
+            appendWritingLineEndingsAsLineFeeds(contiguous.range)
+            return arenaChunk(from: offset)
         }
         let outOffset = storage.strings.count
         for k in start..<end {
@@ -2121,6 +2144,57 @@ extension BlockParser {
             }
             child = storage[current].next
         }
+    }
+
+    /// Writes each line ending in the text of `root`'s inline subtree as `\n`, copying each text node that holds a CR into
+    /// the arena once the text is final, after the email autolink pass has split it.
+    mutating func writeLineEndingsAsLineFeeds(inTextOf root: DocumentStorage.Index) {
+        var parent = root
+        var child = storage[root].firstChild
+        while true {
+            guard let current = child else {
+                guard storage.ascend(from: &parent, resumingAt: &child, within: root) else {
+                    return
+                }
+                continue
+            }
+            guard storage[current].kind == .text else {
+                parent = current
+                child = storage[current].firstChild
+                continue
+            }
+            guard case .literal(let ref) = storage[current].data else {
+                preconditionFailure("a text node holds a literal")
+            }
+            if sourceSegmentsHoldCR(ref) {
+                let offset = storage.strings.count
+                for i in 0..<ref.count {
+                    let chunk = storage.segments[ref.first + i].chunk
+                    if chunk.inSource {
+                        appendWritingLineEndingsAsLineFeeds(chunk.range)
+                    } else {
+                        // A CR decoded from a character reference is text, not a line ending. The arena can't be read
+                        // through a span while it grows, so its bytes are copied one at a time.
+                        for k in chunk.range {
+                            storage.strings.append(storage.strings[k])
+                        }
+                    }
+                }
+                storage[current].data = .literal(storage.intern(arenaChunk(from: offset)))
+            }
+            child = storage[current].next
+        }
+    }
+
+    /// Whether any of `ref`'s source segments holds a CR.
+    private func sourceSegmentsHoldCR(_ ref: ContentRef) -> Bool {
+        for i in 0..<ref.count {
+            let chunk = storage.segments[ref.first + i].chunk
+            if chunk.inSource, firstCR(in: chunk.range) < chunk.range.upperBound {
+                return true
+            }
+        }
+        return false
     }
 
     /// Appends copies of `ref`'s segments to the pool.

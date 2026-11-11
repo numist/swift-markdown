@@ -102,6 +102,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Inline parsing deferred until all blocks close, so a reference resolves against a definition later in the document.
     var pendingInlines: [(DocumentStorage.Index, ContentRef)] = []
 
+    /// Whether the content being parsed holds a CR, which only inline-only content parsed in place does, so a literal
+    /// formed from it writes each line ending as `\n`.
+    var contentHoldsCR = false
+
     /// Run maps for content that reaches the inline pass as one arena chunk (flattened, NUL-replaced or pipe-unescaped), keyed by node, so its inlines get source positions.
     var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
 
@@ -366,8 +370,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             start = 3
         }
 
-        // Count lines and note any CR in one pass, so LF-only input stays zero-copy below. A BOM-only input counts as
-        // one empty line.
+        // Count lines and note any CR in one pass, so the literals of LF-only input need no line ending written as `\n`
+        // below. A BOM-only input counts as one empty line.
         var hasCR = false
         // Where the last line's content ends: its terminator's first byte, or the end of input for an unterminated last line.
         var contentEnd = count
@@ -397,7 +401,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // The arena copy's source image, for the email autolink pass.
         var image: ContentImage? = nil
         var scratch = InlineScratch()
-        if !hasCR && !hasNUL {
+        if !hasNUL {
+            contentHoldsCR = hasCR
             let rest = parseDefinitions(in: Chunk(offset: start, length: count - start, inSource: true))
             contentStart = rest.offset
             parseInline(chunk: rest, scratch: &scratch, into: paragraph, preserveWhitespace: true)
@@ -454,6 +459,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         storage.setSourceStart(paragraph, min(contentStart, contentEnd))
         finishInlines(paragraph, image: image)
+        if contentHoldsCR {
+            writeLineEndingsAsLineFeeds(inTextOf: paragraph)
+        }
         if positionsEnabled {
             endInlinesWithinLastLine(after: paragraph, contentEnd: contentEnd)
         }
@@ -3403,7 +3411,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         if let contiguous = content.contiguousChunk(fromVirtual: range.lowerBound, limit: range.upperBound),
            contiguous.length == range.count {
-            return unescapedChunk(contiguous)
+            guard contentHoldsCR, contiguous.inSource, firstCR(in: contiguous.range) < contiguous.range.upperBound else {
+                return unescapedChunk(contiguous)
+            }
+            let offset = storage.strings.count
+            appendWritingLineEndingsAsLineFeeds(contiguous.range, unescaping: true)
+            return arenaChunk(from: offset)
         }
         // A backslash escape or character reference never continues past a line ending, so each line resolves alone.
         let offset = storage.strings.count
@@ -3446,10 +3459,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     @inline(__always)
     private func skipLineWhitespaceAndOneLineEnd(from cursor: Int, in content: borrowing ContentSpan) -> Int {
         let i = skipLineWhitespace(from: cursor, in: content)
-        guard i < content.endOffset, content[i] == UInt8(ascii: "\n") else {
+        guard i < content.endOffset, let afterLineEnding = lineEndingEnd(at: i, in: content) else {
             return i
         }
-        return skipLineWhitespace(from: i + 1, in: content)
+        return skipLineWhitespace(from: afterLineEnding, in: content)
     }
 
     /// The offset past a line ending at `cursor`, `cursor` at the end of `content`, or `nil`.
@@ -3458,7 +3471,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if cursor >= content.endOffset {
             return cursor
         }
-        return content[cursor] == UInt8(ascii: "\n") ? cursor + 1 : nil
+        return lineEndingEnd(at: cursor, in: content)
+    }
+
+    /// The offset past the line ending at `cursor`, an LF, a CR or a CRLF, or `nil` when the byte there begins none.
+    @inline(__always)
+    func lineEndingEnd(at cursor: Int, in content: borrowing ContentSpan) -> Int? {
+        let byte = content[cursor]
+        if byte == UInt8(ascii: "\n") {
+            return cursor + 1
+        }
+        guard byte == UInt8(ascii: "\r") else {
+            return nil
+        }
+        return cursor + 1 < content.endOffset && content[cursor + 1] == UInt8(ascii: "\n") ? cursor + 2 : cursor + 1
     }
 
     // MARK: - Link definition
@@ -3529,7 +3555,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return nil
         }
         var attributesEnd = attributesStart
-        while attributesEnd < end, content[attributesEnd] != UInt8(ascii: "\n") {
+        while attributesEnd < end, content[attributesEnd] != UInt8(ascii: "\n"), content[attributesEnd] != UInt8(ascii: "\r") {
             attributesEnd += 1
         }
         if attributesEnd == attributesStart {
@@ -3543,7 +3569,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let attributesChunk = materializedChunk(start: attributesStart, end: attributesEnd, content: content)
             storage.attributeReferenceMap[key] = replacingNUL(unescapedChunk(attributesChunk.trimming(using: self)))
         }
-        return attributesEnd < end ? attributesEnd + 1 : attributesEnd
+        return skipLineEndOrEOF(from: attributesEnd, in: content)
     }
 
     /// `chunk` with backslash escapes removed and character references decoded, copied to the arena only if it holds either.
@@ -3613,5 +3639,30 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The arena bytes from `offset` to the arena's end, as just appended.
     func arenaChunk(from offset: Int) -> Chunk {
         Chunk(offset: offset, length: storage.strings.count - offset, inSource: false)
+    }
+
+    /// The offset of the first CR in source bytes `range`, or its end if there is none.
+    func firstCR(in range: Range<Int>) -> Int {
+        let cr = SIMD16<UInt8>(repeating: UInt8(ascii: "\r"))
+        return range.lowerBound + sourceBytes.extracting(range).firstIndex(matching: { $0 .== cr }, or: { $0 == UInt8(ascii: "\r") })
+    }
+
+    /// Appends source bytes `range` to the arena with each CRLF and lone CR written as `\n`, and with `unescaping`,
+    /// backslash escapes removed and character references decoded, which never continue past a line ending.
+    mutating func appendWritingLineEndingsAsLineFeeds(_ range: Range<Int>, unescaping: Bool = false) {
+        var i = range.lowerBound
+        while i < range.upperBound {
+            let cr = firstCR(in: i..<range.upperBound)
+            if unescaping {
+                appendUnescaped(Chunk(offset: i, length: cr - i, inSource: true))
+            } else {
+                storage.strings.append(copying: sourceBytes.extracting(i..<cr))
+            }
+            if cr == range.upperBound {
+                return
+            }
+            storage.strings.append(UInt8(ascii: "\n"))
+            i = cr + 1 < range.upperBound && sourceBytes[cr + 1] == UInt8(ascii: "\n") ? cr + 2 : cr + 1
+        }
     }
 }

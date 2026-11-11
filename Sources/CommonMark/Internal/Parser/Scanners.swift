@@ -94,6 +94,7 @@ extension BlockParser {
         let interiorStart = start + 1
         var i = interiorStart
         var length = 0
+        var previous = UInt8(ascii: "[")
         while i < end {
             let b = byte(i)
             if b == UInt8(ascii: "[") {
@@ -105,12 +106,16 @@ extension BlockParser {
             if b == UInt8(ascii: "\\") {
                 i += 1
                 length += 1
+                previous = b
                 if i < end {
-                    length += labelLengthWeight(byte(i))
+                    let escaped = byte(i)
+                    length += labelLengthWeight(escaped, after: previous)
+                    previous = escaped
                     i += 1
                 }
             } else {
-                length += labelLengthWeight(b)
+                length += labelLengthWeight(b, after: previous)
+                previous = b
                 i += 1
             }
             if length > maxLabelLength {
@@ -140,8 +145,11 @@ extension BlockParser {
             return false
         }
         var length = 0
+        var previous: UInt8 = 0
         for i in range {
-            length += labelLengthWeight(content[i])
+            let b = content[i]
+            length += labelLengthWeight(b, after: previous)
+            previous = b
             if length > maxLabelLength {
                 return false
             }
@@ -152,9 +160,10 @@ extension BlockParser {
     /// A link label has at most 999 characters (Links), counted by `labelLengthWeight`.
     private static let maxLinkLabelLength = 999
 
-    /// Counts characters (code points): a UTF-8 continuation byte counts 0 and every other byte 1.
-    private func labelLengthWeight(_ byte: UInt8) -> Int {
-        return byte & 0xC0 == 0x80 ? 0 : 1
+    /// Counts characters (code points) of a label read a byte at a time, `previous` being the byte before `byte`: a
+    /// UTF-8 continuation byte counts 0, as does a CRLF's LF, since a CRLF is one line ending, and every other byte 1.
+    private func labelLengthWeight(_ byte: UInt8, after previous: UInt8) -> Int {
+        return byte & 0xC0 == 0x80 || (byte == UInt8(ascii: "\n") && previous == UInt8(ascii: "\r")) ? 0 : 1
     }
 
     // MARK: - Link destination
@@ -180,7 +189,7 @@ extension BlockParser {
                     i += 2
                     continue
                 }
-                if c == UInt8(ascii: "\n") || c == UInt8(ascii: "<") {
+                if c == UInt8(ascii: "\n") || c == UInt8(ascii: "\r") || c == UInt8(ascii: "<") {
                     return nil
                 }
                 i += 1
