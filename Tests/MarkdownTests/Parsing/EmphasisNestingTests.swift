@@ -18,17 +18,19 @@ import XCTest
 /// so that it skips no opener rule 9 admits, by whether the closer can also open. Both use a run's full length,
 /// not what remains of it after earlier matches.
 class EmphasisNestingTests: XCTestCase {
-    /// `(4 + 2) % 3 == 0`, so the interior `**` matches neither outer run and is text. The outer runs match
-    /// twice, as two nested strong emphasis spans.
-    func testDoubleRunNestsAroundUnpairableInterior() {
-        let text = "****a**o****"
+    /// The `****` closes the `***` as strong emphasis, which leaves one `*` of the opener and two of the closer.
+    /// Rule 9 sums the runs' lengths, 3 and 4, not the 1 and 2 delimiters left, so those match again as emphasis, and
+    /// the closer's last `*` is text.
+    func testSecondMatchSumsWholeRunLengths() {
+        let text = "***a****a"
 
         let expectedDump = """
-        Document @1:1-1:13
-        └─ Paragraph @1:1-1:13
-           └─ Strong @1:1-1:13
-              └─ Strong @1:3-1:11
-                 └─ Text @1:5-1:9 "a**o"
+        Document @1:1-1:10
+        └─ Paragraph @1:1-1:10
+           ├─ Emphasis @1:1-1:8
+           │  └─ Strong @1:2-1:7
+           │     └─ Text @1:4-1:5 "a"
+           └─ Text @1:8-1:10 "*a"
         """
 
         let document = Document(parsing: text)
