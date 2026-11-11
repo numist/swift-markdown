@@ -426,7 +426,7 @@ struct AutolinkTests {
         let root = doc.root
         root.children.forEach { block in
             block.children.forEach { inline in
-                if inline.kind == .link {
+                if inline.kind == .link, url == nil {
                     url = inline.url()
                     inline.children.forEach { child in
                         if child.kind == .text, text == nil {
