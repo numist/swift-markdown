@@ -136,6 +136,7 @@ extension BlockParser {
     }
 
     /// `matchLinkLabel` counting a CRLF as one character.
+    // Out of line, as only content holding a CR calls it, so that its callers on every content's path stay small.
     @inline(never)
     private func matchLinkLabelCountingCRLFOnce(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
         content.withForwardReader(from: start) { byte in scanLinkLabel(from: start, end: end, crlfIsOneCharacter: true, byte: byte) }

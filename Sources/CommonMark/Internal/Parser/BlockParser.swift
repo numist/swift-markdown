@@ -3479,6 +3479,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// The offset past the line ending at `cursor`, an LF, a CR or a CRLF, or `nil` when the byte there begins none.
+    // Out of line, as only content holding a CR calls it, so that its callers on every content's path stay small.
     @inline(never)
     func lineEndingEnd(at cursor: Int, in content: borrowing ContentSpan) -> Int? {
         let byte = content[cursor]
@@ -3664,6 +3665,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// A copy in the arena of source `chunk` with each line ending written as `\n`, or `nil` if it holds no CR.
+    // Out of line, as only content holding a CR calls it, so that its callers on every content's path stay small.
     @inline(never)
     mutating func lineFeedCopy(of chunk: Chunk) -> Chunk? {
         guard firstCR(in: chunk.range) < chunk.range.upperBound else {
