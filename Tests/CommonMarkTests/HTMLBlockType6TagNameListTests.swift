@@ -51,8 +51,8 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
-    @Test("`<search>` on its own line opens a type 7 HTML block")
-    func searchOpensType7Block() {
+    @Test("`<search>` on its own line, a complete open tag, opens an HTML block")
+    func searchOpensHTMLBlock() {
         #expect(TreeDump.dump("<search>\n", options: Self.options, sourceRanges: true) == """
             document @1:1-2:1
               html_block "<search>\\n" @1:1-1:9
@@ -117,12 +117,12 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
-    @Test("a longer name starting with `source` is paragraph text")
+    @Test("a longer name starting with a listed name, `<divs`, is paragraph text")
     func longerNameIsParagraph() {
-        #expect(TreeDump.dump("<sources\n", options: Self.options, sourceRanges: true) == """
+        #expect(TreeDump.dump("<divs\n", options: Self.options, sourceRanges: true) == """
             document @1:1-2:1
-              paragraph @1:1-1:9
-                text "<sources" @1:1-1:9
+              paragraph @1:1-1:6
+                text "<divs" @1:1-1:6
 
             """)
     }
