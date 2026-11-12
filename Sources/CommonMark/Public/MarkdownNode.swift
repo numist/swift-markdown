@@ -218,9 +218,9 @@ extension MarkdownNode {
 
         /// A run of literal text.
         case text
-        /// A soft line break (a line ending in inline content, outside a code span or raw HTML, that isn't a hard line break).
+        /// A soft line break (a line ending in inline content, outside a code span or raw HTML, that isn't a hard line break). With `.inlineOnly`, such a line ending stays in the text around it.
         case softBreak
-        /// A hard line break (a line ending with two or more spaces or a backslash).
+        /// A hard line break (a line ending after a backslash, or, without `.inlineOnly`, after two or more spaces).
         case lineBreak
         /// An inline code span. `backtickCount` is the length of its opening and closing backtick strings.
         case codeInline(backtickCount: Int)
