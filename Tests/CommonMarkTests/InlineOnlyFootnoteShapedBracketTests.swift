@@ -11,7 +11,8 @@
 import CommonMark
 import Testing
 
-/// Inline-only mode has no footnote definitions, so a footnote-shaped bracket is text.
+/// Inline-only mode has no footnote definitions, so a footnote-shaped bracket with no matching link reference
+/// definition is text.
 @Suite("Footnote-shaped brackets in inline-only mode")
 struct InlineOnlyFootnoteShapedBracketTests {
 
