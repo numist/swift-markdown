@@ -110,8 +110,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     var arenaSourceMaps: [DocumentStorage.Index: [ArenaRun]] = [:]
 
     /// What the table check and setext underlines need to know about the open paragraph, recorded when either first
-    /// needs it: the table check at the first continuation line it sees, with `.tables`, and an underline once it finds
-    /// a line of only whitespace.
+    /// needs it: the table check at the first continuation line it sees, with `.tables`, and the first underline.
     struct OpenParagraphState {
         let node: DocumentStorage.Index
 
@@ -121,9 +120,39 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         /// container.
         var tablePending = false
 
-        /// Whether an underline found a line of the paragraph that holds only whitespace characters (see
-        /// `holdsWhitespaceOnlyLine`). The line stays in the paragraph, so a later underline needs no scan.
+        /// Whether an underline removed definitions from the start of the paragraph's lines (see
+        /// `commitLeadingDefinitions`). They are still the paragraph's content and its list item's first block, so
+        /// the paragraph is removed when only whitespace follows them, and no task list item marker follows them.
+        var definitionsCommitted = false
+
+        /// Whether a line of only whitespace characters came before the definitions an underline removed. It is one
+        /// of the setext heading's lines (Setext headings) whatever later underlines remove.
+        var whitespaceOnlyLineBeforeDefinitions = false
+
+        /// Whether an underline found a line of only whitespace characters among the paragraph's lines past the
+        /// definitions it removed (see `holdsWhitespaceOnlyLine`). The line stays, so a later underline needs no
+        /// scan unless it removes a definition that takes the line in.
         var holdsWhitespaceOnlyLine = false
+
+        /// How the definition that begins the paragraph's lines past those an underline removed, and that doesn't
+        /// complete there, can complete on later lines, or `nil` when a later underline reads it again.
+        var incompleteDefinition: IncompleteDefinition?
+
+        /// Whether a line of only whitespace characters is among the setext heading's lines, which keeps an underline
+        /// from forming it (Setext headings).
+        var headingHoldsWhitespaceOnlyLine: Bool {
+            whitespaceOnlyLineBeforeDefinitions || holdsWhitespaceOnlyLine
+        }
+    }
+
+    /// How a definition that begins an open paragraph's lines but doesn't complete there can complete as lines are
+    /// added (Link reference definitions).
+    enum IncompleteDefinition {
+        /// No later line completes it.
+        case cannotComplete
+        /// Its title, on its destination's line, is still open, so it completes only at a closer that whitespace alone
+        /// follows on its line. `title` has read the lines up to the source offset `readEnd`.
+        case openTitle(LinkTitleScan, readEnd: Int)
     }
 
     var openParagraphState: OpenParagraphState?
@@ -964,6 +993,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             } else {
                 enqueueRawContent(of: precedingNode, self.segments(segs, in: content, total: total))
             }
+        } else if openParagraphState?.definitionsCommitted == true {
+            storage.unlinkChild(precedingNode)
         } else {
             emptySourceRangeAtStart(precedingNode)
         }
@@ -1152,21 +1183,37 @@ internal struct BlockParser : ~Copyable, ~Escapable {
               let underline = matchSetextUnderline(range: line.cursor..<lineRange.upperBound, firstNonSpace: line.firstNonSpace) else {
             return false
         }
+        return handleSetextUnderline(underline, line: &line, pending: &pending)
+    }
+
+    /// `underlineParagraph(line:pending:)` for a line that is a setext heading underline, `underline`, below the open
+    /// paragraph.
+    // Out of line: inlined into `processLine`, which checks every line for an underline, it measured 0.7% more
+    // instructions on a parse of a 100 KB document of mixed blocks.
+    @inline(never)
+    private mutating func handleSetextUnderline(_ underline: (level: UInt8, end: Int), line: inout LineContext, pending: inout PendingLeaf?) -> Bool {
+        let lineRange = line.lineRange
         let para = current
         precondition(pending != nil, "an open paragraph always holds its accumulated content")
-        // Each line of a setext heading holds a non-whitespace character (Setext headings).
-        if openParagraphState?.holdsWhitespaceOnlyLine != true, holdsWhitespaceOnlyLine(pending!) {
-            if openParagraphState == nil {
-                openParagraphState = OpenParagraphState(node: para)
-            }
-            openParagraphState!.holdsWhitespaceOnlyLine = true
+        if openParagraphState == nil {
+            openParagraphState = OpenParagraphState(node: para)
         }
-        if openParagraphState?.holdsWhitespaceOnlyLine == true {
+        assert(openParagraphState!.node == para, "the recorded state belongs to the open paragraph")
+        // Each line of a setext heading holds a non-whitespace character (Setext headings). Once a line of only
+        // whitespace keeps an underline from forming the heading, a later one can form it only by ending a definition
+        // that takes the line in.
+        if openParagraphState!.headingHoldsWhitespaceOnlyLine && !incompleteDefinitionMayComplete(pending!) {
             return false
         }
-        // Leading link reference definitions come out first; if they are the whole paragraph, no heading forms.
-        let content = headingContentRange(of: pending!)
-        if !content.isEmpty {
+        // Leading definitions come out first; if they are the whole paragraph, no heading forms.
+        if let content = commitLeadingDefinitions(&pending) {
+            if !openParagraphState!.holdsWhitespaceOnlyLine && holdsWhitespaceOnlyLine(pending!) {
+                openParagraphState!.holdsWhitespaceOnlyLine = true
+            }
+            if openParagraphState!.headingHoldsWhitespaceOnlyLine {
+                return false
+            }
+            precondition(!content.isEmpty, "a paragraph without a line of only whitespace holds a non-whitespace character")
             makeHeading(para, level: underline.level, content: narrowedContent(pending.take()!, to: content), underlineEnd: underline.end)
             return true
         }
@@ -1181,10 +1228,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             interruptsParagraph: true
         )
         if continuesParagraph {
-            // The leading definitions are registered already; the paragraph's finalize, or the split of a table that
-            // forms first, strips them from its content.
-            pending = appendNewline(to: para, pending: consume pending)
-            pending = addLine(range: line.firstNonSpace..<lineRange.upperBound, to: para, pending: consume pending)
+            // The line is all that is left of the paragraph's lines.
+            pending = addLine(range: line.firstNonSpace..<lineRange.upperBound, to: para, pending: nil)
+            openParagraphState!.holdsWhitespaceOnlyLine = false
+            openParagraphState!.incompleteDefinition = nil
             return true
         }
         // Only definitions: drop the paragraph and dispatch the line as a new block. That block opens in the same
@@ -1239,24 +1286,252 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return false
     }
 
-    /// Where a setext heading's raw content (Setext headings) lies in the open paragraph's pending `leaf`: past its
-    /// leading definitions and the whitespace after them, up to its trailing whitespace. The offsets are source offsets
-    /// for a `.lazy` range and virtual offsets for a segment list.
-    private mutating func headingContentRange(of leaf: borrowing PendingLeaf) -> Range<Int> {
-        switch leaf.content {
-        case .lazy(let range, let joinPending):
-            precondition(!joinPending, "a deferred line join is always consumed by the next line")
-            let trimmed = Chunk(offset: range.lowerBound, length: range.count, inSource: true).trimmingWhitespace(using: self)
-            return parseDefinitions(in: trimmed).trimmingWhitespace(using: self).range
-        case .segments(let segs):
-            guard let content = rawContentRange(in: segs, total: totalLength(of: segs), taskItemParagraph: nil) else {
-                preconditionFailure("a paragraph without a line of only whitespace holds a non-whitespace character")
+    /// Reads the definitions that begin the open paragraph's lines in `pending`, registering each, and removes them from
+    /// its lines for good. The lines before an underline are read as the paragraph they would be without it (Setext
+    /// headings), so the definitions that paragraph begins with end there, and a later underline or the paragraph's
+    /// close reads only the lines past them. Records how the first definition that doesn't complete can complete on
+    /// later lines (see `IncompleteDefinition`).
+    ///
+    /// Returns the raw content of the setext heading the lines left would form, past the whitespace after the
+    /// definitions and up to the trailing whitespace, in the offsets of the narrowed leaf, or `nil` when the definitions
+    /// are the whole paragraph. When only lines of whitespace follow them, the last of those is the one line left.
+    private mutating func commitLeadingDefinitions(_ pending: inout PendingLeaf?) -> Range<Int>? {
+        let lines = leadingDefinitions(of: pending!)
+        guard let definitions = lines.definitions else {
+            openParagraphState!.incompleteDefinition = .cannotComplete
+            return lines.trimmed
+        }
+        guard definitions.end > lines.trimmed.lowerBound else {
+            return lines.trimmed
+        }
+        openParagraphState!.definitionsCommitted = true
+        openParagraphState!.holdsWhitespaceOnlyLine = false
+        var rest = definitions.end
+        var content = definitions.contentStart..<lines.trimmed.upperBound
+        if content.isEmpty {
+            // Each line of only whitespace after the definitions' last line is a heading line, and the last stands for
+            // them all.
+            guard lines.lastLineStart >= lines.trimmed.upperBound else {
+                return nil
             }
-            return content
+            rest = lines.lastLineStart
+            content = rest..<rest
+        }
+        pending = PendingLeaf(node: openParagraphState!.node, content: trailingLines(pending.take()!, from: rest))
+        let start = leafStart(pending!)
+        return (start + content.lowerBound - rest)..<(start + content.upperBound - rest)
+    }
+
+    /// `leaf`'s lines from offset `start` on. Lines left that are contiguous in the source are a source range, since a
+    /// segment list holds a line join.
+    private mutating func trailingLines(_ leaf: consuming PendingLeaf, from start: Int) -> PendingContent {
+        switch consume leaf.content {
+        case .lazy(let range, _):
+            return .lazy(range: start..<range.upperBound)
+        case .segments(let segs):
+            let total = totalLength(of: segs)
+            let rest = segments(segs, in: start..<total, total: total)
+            if rest.count == 1 {
+                return .lazy(range: rest[0].chunk.range)
+            }
+            return .segments(rest)
         }
     }
 
-    /// `leaf`'s content narrowed to `range`, in the offsets `headingContentRange` returns.
+    /// Where `leaf`'s lines begin in its offsets: a `.lazy` range's source offset, or a segment list's virtual offset 0.
+    private func leafStart(_ leaf: borrowing PendingLeaf) -> Int {
+        switch leaf.content {
+        case .lazy(let range, _):
+            return range.lowerBound
+        case .segments:
+            return 0
+        }
+    }
+
+    /// The open paragraph's lines as `commitLeadingDefinitions` reads them, in the offsets of its pending leaf.
+    private struct LeadingDefinitionLines {
+        /// Where the last line begins.
+        let lastLineStart: Int
+        /// The lines without leading and trailing whitespace.
+        let trimmed: Range<Int>
+        /// Where the leading definitions end and the raw content past them begins, or `nil` when no definition can
+        /// begin the lines.
+        let definitions: (end: Int, contentStart: Int)?
+    }
+
+    /// Reads the definitions that begin the open paragraph's lines in `leaf`, registering each (see
+    /// `readLeadingDefinitions(in:linesStart:from:readEnd:)`).
+    private mutating func leadingDefinitions(of leaf: borrowing PendingLeaf) -> LeadingDefinitionLines {
+        switch leaf.content {
+        case .lazy(let range, let joinPending):
+            precondition(!joinPending, "a deferred line join is always consumed by the next line")
+            let trimmed = Chunk(offset: range.lowerBound, length: range.count, inSource: true).trimmingWhitespace(using: self).range
+            var definitions: (end: Int, contentStart: Int)? = nil
+            if !trimmed.isEmpty, Self.mayBeginDefinition(sourceBytes[trimmed.lowerBound]) {
+                let content = ContentSpan(span: sourceBytes.extracting(range.lowerBound..<trimmed.upperBound), base: range.lowerBound, inSource: true)
+                definitions = readLeadingDefinitions(in: content, linesStart: range.lowerBound, from: trimmed.lowerBound, readEnd: trimmed.upperBound)
+            }
+            let lastLineStart = lastNewline(in: range).map { $0 + 1 } ?? range.lowerBound
+            return LeadingDefinitionLines(lastLineStart: lastLineStart, trimmed: trimmed, definitions: definitions)
+        case .segments(let segs):
+            let total = totalLength(of: segs)
+            let trimmed = trimmedRange(of: segs, total: total)
+            var definitions: (end: Int, contentStart: Int)? = nil
+            if !trimmed.isEmpty, Self.mayBeginDefinition(byte(at: trimmed.lowerBound, in: segs)) {
+                let readEnd = sourceEnd(ofVirtual: trimmed.upperBound, in: segs, total: total)
+                let segmentEnds = Self.segmentEnds(of: segs)
+                let content = ContentSpan(source: sourceBytes, segments: segs.span, segmentEnds: segmentEnds.span, virtualLength: trimmed.upperBound, hint: pieceHint)
+                definitions = readLeadingDefinitions(in: content, linesStart: 0, from: trimmed.lowerBound, readEnd: readEnd)
+            }
+            let lastLineStart = total - segs[segs.count - 1].length
+            return LeadingDefinitionLines(lastLineStart: lastLineStart, trimmed: trimmed, definitions: definitions)
+        }
+    }
+
+    /// Reads the definitions that `content`, the open paragraph's lines from `linesStart`, holds from `start`, its first
+    /// non-whitespace character, registering each (see `definitionsEnd(in:from:)`). Records how the first that doesn't
+    /// complete can complete on later lines, `readEnd` being the source offset where `content` ends, and whether a line
+    /// of only whitespace comes before the definitions. Returns where they end and where the raw content past them
+    /// begins.
+    private mutating func readLeadingDefinitions(in content: borrowing ContentSpan, linesStart: Int, from start: Int, readEnd: Int) -> (end: Int, contentStart: Int) {
+        let end = definitionsEnd(in: content, from: start)
+        openParagraphState!.incompleteDefinition = incompleteDefinition(at: end, in: content, readEnd: readEnd)
+        if end > start {
+            var i = linesStart
+            while i < start, content[i] != UInt8(ascii: "\n") {
+                i += 1
+            }
+            if i < start {
+                openParagraphState!.whitespaceOnlyLineBeforeDefinitions = true
+            }
+        }
+        return (end, skipWhitespace(from: end, in: content))
+    }
+
+    /// How the definition at `start` in `content`, the open paragraph's lines, which doesn't complete there, can complete
+    /// as lines are added, `readEnd` being the source offset where `content` ends, or `nil` when it is cheap to read
+    /// again (Link reference definitions). A later line can only close a label still open at the end, begin the
+    /// destination or attributes after a label at the end, or close a title still open on its destination's line.
+    private mutating func incompleteDefinition(at start: Int, in content: borrowing ContentSpan, readEnd: Int) -> IncompleteDefinition? {
+        let end = content.endOffset
+        guard start < end else {
+            return .cannotComplete
+        }
+        let isAttributeDefinition = content[start] == UInt8(ascii: "^")
+        var labelStart = start
+        if isAttributeDefinition {
+            guard storage.options.contains(.attributes), start + 1 < end, content[start + 1] == UInt8(ascii: "[") else {
+                return .cannotComplete
+            }
+            labelStart = start + 1
+        } else if content[start] != UInt8(ascii: "[") {
+            return .cannotComplete
+        }
+        guard let (label, contentStart) = matchDefinitionLabel(from: labelStart, in: content) else {
+            // A label holds at most 999 characters.
+            return linkLabelIsOpen(from: labelStart, end: end, in: content) ? nil : .cannotComplete
+        }
+        if normalizeLabel(virtualRange: label, in: content).isEmpty {
+            return .cannotComplete
+        }
+        if contentStart == end {
+            return nil
+        }
+        // Attributes complete the definition on whatever line they begin.
+        if isAttributeDefinition {
+            return .cannotComplete
+        }
+        // A destination doesn't continue past its line, and with whitespace alone after it on its line, it completes
+        // the definition.
+        destinationParentheses.reset()
+        guard let destination = matchLinkDestination(from: contentStart, end: end, in: content) else {
+            return .cannotComplete
+        }
+        let titleStart = skipLineWhitespace(from: destination.afterEnd, in: content)
+        guard titleStart > destination.afterEnd, titleStart < end, var title = LinkTitleScan(opener: content[titleStart]) else {
+            return .cannotComplete
+        }
+        var i = titleStart + 1
+        while i < end, title.canContinue {
+            _ = title.read(content[i])
+            i += 1
+        }
+        return title.canContinue ? .openTitle(title, readEnd: readEnd) : .cannotComplete
+    }
+
+    /// Whether the definition that begins the open paragraph's lines in `leaf`, which an earlier underline found
+    /// incomplete (see `IncompleteDefinition`), may complete now, so that the lines must be read again. An open title
+    /// reads the lines added since.
+    private mutating func incompleteDefinitionMayComplete(_ leaf: borrowing PendingLeaf) -> Bool {
+        let recorded = openParagraphState!.incompleteDefinition
+        switch recorded {
+        case nil:
+            return true
+        case .cannotComplete?:
+            return false
+        case .openTitle(var title, let readEnd)?:
+            let read = readTitle(&title, from: readEnd, in: leaf)
+            if read.closes {
+                return true
+            }
+            openParagraphState!.incompleteDefinition = title.canContinue ? .openTitle(title, readEnd: read.end) : .cannotComplete
+            return false
+        }
+    }
+
+    /// Reads the open paragraph's lines in `leaf` from the source offset `start`, just past a byte read before, into
+    /// `title`. Returns whether the last closer read ends the title, being followed on its line by whitespace alone,
+    /// and the source offset where the lines end.
+    private func readTitle(_ title: inout LinkTitleScan, from start: Int, in leaf: borrowing PendingLeaf) -> (closes: Bool, end: Int) {
+        var closer: (end: Int, lineEnd: Int)? = nil
+        let end: Int
+        switch leaf.content {
+        case .lazy(let range, _):
+            readTitle(&title, sourceBytes: start..<range.upperBound, lastCloser: &closer)
+            end = range.upperBound
+        case .segments(let segs):
+            // The lines lie in source order, so the segment that holds the byte before `start` is found from the last.
+            var first = segs.count - 1
+            while !(segs[first].inSource && segs[first].offset < start) {
+                first -= 1
+            }
+            readTitle(&title, sourceBytes: start..<(segs[first].offset + segs[first].length), lastCloser: &closer)
+            for i in (first + 1)..<segs.count {
+                if segs[i].inSource {
+                    readTitle(&title, sourceBytes: segs[i].chunk.range, lastCloser: &closer)
+                } else if title.canContinue {
+                    _ = title.read(UInt8(ascii: "\n"))
+                }
+            }
+            end = segmentsSourceSpan(segs).end
+        }
+        guard let closer else {
+            return (false, end)
+        }
+        var i = closer.end
+        while i < closer.lineEnd, sourceBytes[i] != UInt8(ascii: "\n") {
+            if !sourceBytes[i].isLineWhitespace {
+                return (false, end)
+            }
+            i += 1
+        }
+        return (true, end)
+    }
+
+    /// Reads `title` on through source bytes `range`, which end at a line ending or the end of a paragraph's lines,
+    /// recording in `lastCloser` where the last closer read ends and where `range` does.
+    private func readTitle(_ title: inout LinkTitleScan, sourceBytes range: Range<Int>, lastCloser: inout (end: Int, lineEnd: Int)?) {
+        var i = range.lowerBound
+        while i < range.upperBound, title.canContinue {
+            if title.read(sourceBytes[i]) {
+                lastCloser = (i + 1, range.upperBound)
+            }
+            i += 1
+        }
+    }
+
+    /// `leaf`'s content narrowed to `range`, in its offsets: source offsets for a `.lazy` range and virtual offsets for a
+    /// segment list.
     private mutating func narrowedContent(_ leaf: consuming PendingLeaf, to range: Range<Int>) -> PendingContent {
         switch consume leaf.content {
         case .lazy:
@@ -2044,9 +2319,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func finishParagraph(_ node: DocumentStorage.Index, segments segs: consuming UniqueArray<Segment>) {
         let total = totalLength(of: segs)
         guard let content = rawContentRange(in: segs, total: total, taskItemParagraph: node) else {
-            // Lines of whitespace that include a line tabulation or form feed are not blank (Characters and lines),
-            // yet leave the paragraph no raw content (Paragraphs).
-            emptySourceRangeAtStart(node)
+            finishWhitespaceOnlyParagraph(node)
             return
         }
         if content.isEmpty {
@@ -2056,11 +2329,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         enqueueRawContent(of: node, segments(segs, in: content, total: total))
     }
 
-    /// The virtual range of the raw content of the paragraph `node`, or with `node` nil of a setext heading, whose
-    /// lines are `segs`, `total` bytes long (see `rawContentStart(in:trimmed:taskItemParagraph:)`), or `nil` when its
-    /// lines are all whitespace. The range is empty, at the end of the lines' trimmed range, when the paragraph's
-    /// definitions or task list item marker leave nothing.
-    private mutating func rawContentRange(in segs: borrowing UniqueArray<Segment>, total: Int, taskItemParagraph node: DocumentStorage.Index?) -> Range<Int>? {
+    /// The virtual range of the raw content of the paragraph `node` whose lines are `segs`, `total` bytes long (see
+    /// `rawContentStart(in:trimmed:taskItemParagraph:)`), or `nil` when its lines are all whitespace. The range is
+    /// empty, at the end of the lines' trimmed range, when the paragraph's definitions or task list item marker leave
+    /// nothing.
+    private mutating func rawContentRange(in segs: borrowing UniqueArray<Segment>, total: Int, taskItemParagraph node: DocumentStorage.Index) -> Range<Int>? {
         let trimmed = trimmedRange(of: segs, total: total)
         if trimmed.isEmpty {
             return nil
@@ -2139,11 +2412,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// The raw content (`paragraphContent`) of the paragraph a table's header row splits off, whose trimmed lines are
-    /// `trimmed`, or `nil` when its definitions or task list item marker leave nothing. `node` is checked for being its
-    /// list item's first block: the split-off paragraph, or before that is inserted, the paragraph it splits from.
+    /// `trimmed`, or `nil` when its definitions, those an underline removed included, or task list item marker leave
+    /// nothing. `node` is checked for being its list item's first block: the split-off paragraph, or before that is
+    /// inserted, the paragraph it splits from.
     private mutating func tableSplitParagraphContent(_ trimmed: Chunk, node: DocumentStorage.Index) -> Chunk? {
         let content = paragraphContent(of: node, trimmed: trimmed)
-        return content.isEmpty && !trimmed.isEmpty ? nil : content
+        return content.isEmpty && (!trimmed.isEmpty || openParagraphState?.definitionsCommitted == true) ? nil : content
     }
 
     /// Where `content`, a non-empty window of leaf content `raw` with run map `map` (empty for source content) that ends
@@ -2155,6 +2429,19 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return content.offset + content.length
         }
         return sourceSpan(of: Self.sliceRuns(map, from: content.offset - raw.offset, length: content.length)).end
+    }
+
+    /// Ends the paragraph `node`, whose lines past any definitions an underline removed are only whitespace. Lines of
+    /// whitespace that include a line tabulation or form feed are not blank (Characters and lines), yet leave a
+    /// paragraph no raw content (Paragraphs), so the paragraph keeps an empty range at its start. After definitions it
+    /// holds only definitions and is removed. Only an underline that is a thematic break closes it then, and the break
+    /// opens in the same container past the definitions, so they need not extend the container's range.
+    private mutating func finishWhitespaceOnlyParagraph(_ node: DocumentStorage.Index) {
+        if openParagraphState?.definitionsCommitted == true {
+            removeEmptiedParagraph(node, contentEnd: nil)
+        } else {
+            emptySourceRangeAtStart(node)
+        }
     }
 
     /// Gives `paragraph`, which has no raw content, an empty source range at its start.
@@ -2192,9 +2479,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func finishParagraph(_ node: DocumentStorage.Index, chunk raw: Chunk, map: [ArenaRun]) {
         let trimmed = raw.trimmingWhitespace(using: self)
         if trimmed.isEmpty {
-            // Lines of whitespace that include a line tabulation or form feed are not blank (Characters and lines),
-            // yet leave the paragraph no raw content (Paragraphs).
-            emptySourceRangeAtStart(node)
+            finishWhitespaceOnlyParagraph(node)
             return
         }
         let contentChunk = paragraphContent(of: node, trimmed: trimmed)
@@ -3205,36 +3490,23 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// Where the raw content of the paragraph `node` whose lines are `segs` begins (see `paragraphContent(of:trimmed:)`),
     /// as a virtual offset of the lines within `trimmed`, their virtual range without leading and trailing whitespace.
-    /// With `node` nil, a setext heading's content, which has no task list item marker. A task list item marker makes
-    /// `node`'s list item a task list item.
+    /// A task list item marker makes `node`'s list item a task list item.
     ///
     /// The lines are read in place, so content that isn't contiguous in the source is not copied.
-    private mutating func rawContentStart(in segs: borrowing UniqueArray<Segment>, trimmed: Range<Int>, taskItemParagraph node: DocumentStorage.Index?) -> Int {
+    private mutating func rawContentStart(in segs: borrowing UniqueArray<Segment>, trimmed: Range<Int>, taskItemParagraph node: DocumentStorage.Index) -> Int {
         precondition(!trimmed.isEmpty, "only non-blank content begins past definitions or a marker")
-        var first = 0
-        var offset = 0
-        while offset + segs[first].length <= trimmed.lowerBound {
-            offset += segs[first].length
-            first += 1
-        }
         // A definition begins with `[` or `^`, and a task list item marker with `[`.
-        guard Self.mayBeginDefinition(readByte(at: segs[first].offset + trimmed.lowerBound - offset, in: segs[first].chunk)) else {
+        guard Self.mayBeginDefinition(byte(at: trimmed.lowerBound, in: segs)) else {
             return trimmed.lowerBound
         }
-        var segmentEnds = UniqueArray<Int>(minimumCapacity: segs.count)
-        var end = 0
-        for i in 0..<segs.count {
-            end += segs[i].length
-            segmentEnds.append(end)
-        }
+        let segmentEnds = Self.segmentEnds(of: segs)
         let content = ContentSpan(source: sourceBytes, segments: segs.span, segmentEnds: segmentEnds.span, virtualLength: trimmed.upperBound, hint: pieceHint)
         let afterDefinitions = definitionsEnd(in: content, from: trimmed.lowerBound)
         // As in `paragraphContent(of:trimmed:)`, a marker after a definition doesn't begin the item's first block.
         if afterDefinitions != trimmed.lowerBound {
             return skipWhitespace(from: afterDefinitions, in: content)
         }
-        guard let node,
-              let item = taskListItem(firstBlock: node),
+        guard let item = taskListItem(firstBlock: node),
               let checked = Self.taskItemMarker(length: trimmed.count, byte: { content[trimmed.lowerBound + $0] }) else {
             return trimmed.lowerBound
         }
@@ -3242,14 +3514,38 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return skipWhitespace(from: trimmed.lowerBound + 3, in: content)
     }
 
+    /// The byte at virtual offset `offset` of a leaf's segments `segs`, found from their start.
+    private func byte(at offset: Int, in segs: borrowing UniqueArray<Segment>) -> UInt8 {
+        var first = 0
+        var segmentStart = 0
+        while segmentStart + segs[first].length <= offset {
+            segmentStart += segs[first].length
+            first += 1
+        }
+        return readByte(at: segs[first].offset + offset - segmentStart, in: segs[first].chunk)
+    }
+
+    /// The virtual offset where each of a leaf's segments `segs` ends, by which `ContentSpan` reads them.
+    private static func segmentEnds(of segs: borrowing UniqueArray<Segment>) -> UniqueArray<Int> {
+        var segmentEnds = UniqueArray<Int>(minimumCapacity: segs.count)
+        var end = 0
+        for i in 0..<segs.count {
+            end += segs[i].length
+            segmentEnds.append(end)
+        }
+        return segmentEnds
+    }
+
     /// The list item whose first block is the paragraph `node`, which may make it a task list item (Task list items
-    /// (extension)).
+    /// (extension)). Definitions an underline removed from the start of the open paragraph's lines, which hold `node`'s,
+    /// are that block.
     private func taskListItem(firstBlock node: DocumentStorage.Index) -> DocumentStorage.Index? {
         guard storage.options.contains(.tasklist),
               let item = storage[node].parent,
               case .item = storage[item].kind,
               storage[item].firstChild == node,
-              !itemsWithRemovedFirstParagraph.contains(item) else {
+              !itemsWithRemovedFirstParagraph.contains(item),
+              openParagraphState?.definitionsCommitted != true else {
             return nil
         }
         return item

@@ -78,6 +78,62 @@ internal struct BalancedParenthesesScan {
     }
 }
 
+/// A link title (Links) read a byte at a time from just past its opener, as `scanLinkTitle(from:end:byte:)` reads one,
+/// so that a scan can stop at the end of the bytes it has and go on from there when more follow.
+///
+/// Inline links keep that scanner's own loop: reading their titles through this type measured 0.6% more instructions
+/// on a parse of list items of inline links with titles.
+internal struct LinkTitleScan {
+    private let opener: UInt8
+    private let closer: UInt8
+    /// Whether the next byte may be a content byte (any byte but a delimiter), begin an escape, or close.
+    private var inBody = true
+    /// Whether the next byte completes an escape if it is ASCII punctuation.
+    private var afterBackslash = false
+
+    /// The scan of a title that `opener` begins, or nil when it begins none.
+    @inline(__always)
+    init?(opener: UInt8) {
+        switch opener {
+        case UInt8(ascii: "\""), UInt8(ascii: "'"):
+            closer = opener
+        case UInt8(ascii: "("):
+            closer = UInt8(ascii: ")")
+        default:
+            return nil
+        }
+        self.opener = opener
+    }
+
+    /// Whether a later byte may still close the title, or close it past a closer already read.
+    var canContinue: Bool {
+        inBody || afterBackslash
+    }
+
+    /// Reads the title's next byte, returning whether it is a closer, which the title ends after unless a later one
+    /// closes it.
+    @inline(__always)
+    mutating func read(_ c: UInt8) -> Bool {
+        var nextInBody = false
+        var nextAfterBackslash = false
+        if inBody {
+            if c != opener && c != closer {
+                nextInBody = true
+            }
+            if c == UInt8(ascii: "\\") {
+                nextAfterBackslash = true
+            }
+        }
+        if afterBackslash && c.isASCIIPunct {
+            nextInBody = true
+        }
+        let closes = inBody && c == closer
+        inBody = nextInBody
+        afterBackslash = nextAfterBackslash
+        return closes
+    }
+}
+
 /// Scanners for link labels, destinations and titles, shared by link reference definitions and inline links, and for raw HTML tags.
 extension BlockParser {
 
@@ -133,6 +189,17 @@ extension BlockParser {
         // A label counted past `maxLinkLabelLength` with each CRLF as two characters may still fit. Only inline-only
         // content parsed in place holds a CR.
         return contentHoldsCR ? matchLinkLabelCountingCRLFOnce(from: start, end: end, in: content) : nil
+    }
+
+    /// Whether a link label that `matchLinkLabel` doesn't match from `start` is still open at `end`, so that a `]` there
+    /// would close it: it holds no unescaped `[` and fits `maxLinkLabelLength`.
+    internal func linkLabelIsOpen(from start: Int, end: Int, in content: borrowing ContentSpan) -> Bool {
+        content.withForwardReader(from: start) { byte in
+            let label = scanLinkLabel(from: start, end: end + 1, crlfIsOneCharacter: contentHoldsCR) { i in
+                i == end ? UInt8(ascii: "]") : byte(i)
+            }
+            return label?.afterEnd == end + 1
+        }
     }
 
     /// `matchLinkLabel` counting a CRLF as one character.
