@@ -79,8 +79,9 @@ let inlineOnlySwiftOptions: MarkdownDocument.ParseOptions = [.inlineOnly, .attri
 // MARK: - GFM-feature corpus
 //
 // A markdown document that deliberately exercises every AST-affecting parse option enabled in the
-// GFM configuration below — so the "GFM feature sample" benchmarks measure the table-span, smart-
-// punctuation, footnote, strikethrough, task-list, and autolink code paths rather than plain prose.
+// GFM configuration below except `.attributes` — so the "GFM feature sample" benchmarks measure the
+// table-span, smart-punctuation, footnote, strikethrough, task-list, and autolink code paths rather
+// than plain prose.
 // Note the table spans use the `"` ("ditto") rowspan marker and `||` colspan filler, matching
 // `.tableRowspanDitto` + `.tableSpans`; and the prose uses straight quotes, `--`/`---`, and `...`
 // so `.smart` has work to do.
