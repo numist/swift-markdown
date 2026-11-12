@@ -13,7 +13,8 @@ import Testing
 
 /// A footnote reference label holds at most 999 characters, as a link label does (Links); a longer one stays
 /// literal text. A multibyte character counts as one character, and so does a NUL, which is replaced by U+FFFD
-/// (Insecure characters).
+/// (Insecure characters). Each over-cap reference here has a definition within the cap whose label matches it after
+/// case folding, which turns each `ß` into `ss` (Links).
 @Suite("Footnote reference label length cap")
 struct FootnoteReferenceLabelLengthCapTests {
     private func tree(_ markdown: String) -> String {
@@ -43,41 +44,61 @@ struct FootnoteReferenceLabelLengthCapTests {
     }
 
     @Test(arguments: [
-        (String(repeating: "a", count: 1000), String(repeating: "a", count: 1000)),
-        (String(repeating: "\u{E9}", count: 1000), String(repeating: "\u{E9}", count: 1000)),
-        (String(repeating: "a", count: 999) + "\u{0}", String(repeating: "a", count: 999) + "\u{FFFD}"),
-        (String(repeating: "a", count: 1001), String(repeating: "a", count: 1001)),
-    ])
-    func labelOverCapStaysLiteral(_ label: String, _ replaced: String) {
-        #expect(tree(referenceAndDefinition(label)) == literalParagraph("x[^\(replaced)]") + "  paragraph\n    text \"[^\(replaced)]: note\"\n")
+        (
+            String(repeating: "s", count: 1000),
+            String(repeating: "\u{DF}", count: 500),
+            String(repeating: "s", count: 1000)
+        ),
+        (
+            String(repeating: "\u{E9}", count: 998) + "ss",
+            String(repeating: "\u{E9}", count: 998) + "\u{DF}",
+            String(repeating: "\u{E9}", count: 998) + "ss"
+        ),
+        (
+            String(repeating: "s", count: 999) + "\u{0}",
+            String(repeating: "\u{DF}", count: 499) + "s\u{0}",
+            String(repeating: "s", count: 999) + "\u{FFFD}"
+        ),
+        (
+            String(repeating: "s", count: 1001),
+            String(repeating: "\u{DF}", count: 500) + "s",
+            String(repeating: "s", count: 1001)
+        ),
+    ] as [(String, String, String)])
+    func labelOverCapStaysLiteral(_ label: String, _ definitionLabel: String, _ replaced: String) {
+        #expect(tree("x[^\(label)]\n\n[^\(definitionLabel)]: note") == literalParagraph("x[^\(replaced)]"))
     }
 
     /// A bracket whose label is over the cap is ordinary paragraph text, so its entity reference decodes.
     @Test func overCapDecodesEntity() {
-        let label = String(repeating: "a", count: 996) + "&amp;"
-        let decoded = String(repeating: "a", count: 996) + "&"
-        #expect(tree(referenceAndDefinition(label)) == literalParagraph("x[^\(decoded)]") + "  paragraph\n    text \"[^\(decoded)]: note\"\n")
+        let label = String(repeating: "s", count: 996) + "&amp;"
+        let definitionLabel = String(repeating: "\u{DF}", count: 498) + "&amp;"
+        let decoded = String(repeating: "s", count: 996) + "&"
+        #expect(tree("x[^\(label)]\n\n[^\(definitionLabel)]: note") == literalParagraph("x[^\(decoded)]"))
     }
 
     @Test func imageShapedOpener() {
         let atCap = String(repeating: "a", count: 999)
         #expect(tree("x![^\(atCap)]\n\n[^\(atCap)]: note")
             == "document\n  paragraph\n    text \"x!\"\n    footnote_reference \"1\"\n  footnote_definition \"\(atCap)\"\n    paragraph\n      text \"note\"\n")
-        let overCap = String(repeating: "a", count: 1000)
-        #expect(tree("x![^\(overCap)]\n\n[^\(overCap)]: note") == literalParagraph("x![^\(overCap)]") + "  paragraph\n    text \"[^\(overCap)]: note\"\n")
+        let overCap = String(repeating: "s", count: 1000)
+        let definitionLabel = String(repeating: "\u{DF}", count: 500)
+        #expect(tree("x![^\(overCap)]\n\n[^\(definitionLabel)]: note") == literalParagraph("x![^\(overCap)]"))
     }
 
     @Test func referenceInBlockQuote() {
         let atCap = String(repeating: "a", count: 999)
         #expect(tree("> x[^\(atCap)]\n\n[^\(atCap)]: note")
             == "document\n  block_quote\n    paragraph\n      text \"x\"\n      footnote_reference \"1\"\n  footnote_definition \"\(atCap)\"\n    paragraph\n      text \"note\"\n")
-        let overCap = String(repeating: "a", count: 1000)
-        #expect(tree("> x[^\(overCap)]\n\n[^\(overCap)]: note") == "document\n  block_quote\n    paragraph\n      text \"x[^\(overCap)]\"\n  paragraph\n    text \"[^\(overCap)]: note\"\n")
+        let overCap = String(repeating: "s", count: 1000)
+        let definitionLabel = String(repeating: "\u{DF}", count: 500)
+        #expect(tree("> x[^\(overCap)]\n\n[^\(definitionLabel)]: note") == "document\n  block_quote\n    paragraph\n      text \"x[^\(overCap)]\"\n")
     }
 
     @Test func repeatedReferenceOverCapStaysLiteral() {
-        let label = String(repeating: "a", count: 1000)
-        #expect(tree("x[^\(label)] y[^\(label)]\n\n[^\(label)]: note") == literalParagraph("x[^\(label)] y[^\(label)]") + "  paragraph\n    text \"[^\(label)]: note\"\n")
+        let label = String(repeating: "s", count: 1000)
+        let definitionLabel = String(repeating: "\u{DF}", count: 500)
+        #expect(tree("x[^\(label)] y[^\(label)]\n\n[^\(definitionLabel)]: note") == literalParagraph("x[^\(label)] y[^\(label)]"))
     }
 
     /// A footnote definition's label holds no whitespace, so a footnote-shaped bracket with a line ending between two
