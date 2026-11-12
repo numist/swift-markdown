@@ -10,7 +10,7 @@
 
 /// A block's inline content.
 ///
-/// Single-segment content is one region of the source or of the arena, addressed by that buffer's offsets; arena content is read from a copy, since the arena grows during inline parsing. Multi-segment content is a list of source line ranges joined by the interned `"\n"`, addressed by virtual offsets from 0, so lines that aren't contiguous in the source are read without copying.
+/// Single-segment content is one region of the source or of the arena, addressed by that buffer's offsets, or a copy of a text node's content addressed from 0; arena content is read from a copy, since the arena grows during inline parsing. Multi-segment content is a list of source line ranges joined by the interned `"\n"`, addressed by virtual offsets from 0, so lines that aren't contiguous in the source are read without copying.
 internal struct ContentSpan: ~Escapable {
     /// Single-segment: the content bytes. Multi-segment: the whole source.
     let span: Span<UInt8>

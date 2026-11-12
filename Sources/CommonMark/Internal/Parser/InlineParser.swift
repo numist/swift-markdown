@@ -1695,7 +1695,7 @@ extension BlockParser {
     // MARK: - Extended autolinks
 
     /// An extended autolink's visible text range, and the scheme its destination adds before that text: `http://`
-    /// for a `www.` link, `mailto:` for an email unless a `mailto:` or `xmpp:` scheme was folded into it or into the
+    /// for an extended www autolink, `mailto:` for an email unless a `mailto:` or `xmpp:` scheme was folded into it or into the
     /// address a second `@` restarted it from, and nothing otherwise.
     private struct GFMAutolinkMatch {
         var urlStart: Int
