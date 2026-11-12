@@ -84,7 +84,8 @@ struct UnclosedInlineHTMLTests {
 
     @Test("a declaration's body may hold `<!B`")
     func declarationBodyHoldsBangName() {
-        // The later `<!B` has no whitespace after its name, so it is no declaration; the `>` closes the first.
+        // In the first input the later `<!B` has no whitespace after its name, so it is no declaration. In both, the
+        // first `>` closes the first declaration, whose body holds the later `<!B`.
         #expect(htmlLiterals("x<!A a <!B>", options: []) == ["<!A a <!B>"])
         #expect(htmlLiterals("x<!A a\nb<!B c>", options: []) == ["<!A a\nb<!B c>"])
     }
