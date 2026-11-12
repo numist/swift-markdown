@@ -20,7 +20,7 @@ struct TaskListBlockQuoteFirstBlockTests {
     private static let positionModes: [MarkdownDocument.ParseOptions] = [[], [.sourcePosition]]
 
     /// The lazy line keeps its text, with the NUL replaced by U+FFFD (Insecure characters).
-    @Test("the item has no checkbox and the lazy line keeps its text", arguments: positionModes)
+    @Test("the lazy line keeps its text", arguments: positionModes)
     func lazyLineAfterUnderline(mode: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("- > [a]:\n  > u\n  > ===\n  1\u{0} [x] b\n", options: mode.union(.tasklist)) == """
             document
@@ -31,6 +31,19 @@ struct TaskListBlockQuoteFirstBlockTests {
                       text "==="
                       softbreak
                       text "1\u{FFFD} [x] b"
+
+            """)
+    }
+
+    @Test("a checkbox beginning the block quote's paragraph is text")
+    func checkboxInBlockQuote() {
+        #expect(TreeDump.dump("- > [x] b\n", options: .tasklist) == """
+            document
+              list bullet '-' tight
+                item
+                  block_quote
+                    paragraph
+                      text "[x] b"
 
             """)
     }
