@@ -12,8 +12,8 @@ import Markdown
 import XCTest
 
 /// A lazy continuation line of a block quote in a list item holds a NUL, which is replaced by U+FFFD (Insecure
-/// characters), or a multibyte character, and a `[x]` that does not begin a paragraph and so is text (Task list items
-/// (extension)). Raw HTML opened on an earlier line may close on that line (Raw HTML).
+/// characters), or a multibyte character, and a `[x]` that does not begin a paragraph and so is no task list item
+/// marker (Task list items (extension)). Raw HTML opened on an earlier line may close on that line (Raw HTML).
 class TaskListBlockQuoteFirstBlockRawHTMLTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: [.disableSmartOpts]).debugDescription(options: [])
