@@ -11,13 +11,13 @@
 import CommonMark
 import Testing
 
-/// `![\^…]` followed by spaces or tabs at the end of a line of a paragraph or heading.
-@Suite("`![\\^…]` before trailing whitespace")
+/// `[\^…]` or `![\^…]` at the end of a line of a paragraph or heading, with or without spaces or tabs after it.
+@Suite("`[\\^…]` or `![\\^…]` at the end of a line")
 struct EscapedCaretImageTrailingWhitespaceTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink, .footnotes]
 
-    /// With no matching link reference definition, `![\^…]` is literal text, and the spaces or tabs after it are not
-    /// part of that text.
+    /// With no matching link reference definition, `[\^…]` or `![\^…]` is literal text, and any spaces or tabs after it
+    /// are not part of that text.
     @Test(arguments: [
         ("![\\^a] ", """
             document
