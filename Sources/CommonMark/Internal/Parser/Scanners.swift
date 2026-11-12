@@ -78,11 +78,11 @@ internal struct BalancedParenthesesScan {
     }
 }
 
-/// A link title (Links) read a byte at a time from just past its opener, as `scanLinkTitle(from:end:byte:)` reads one,
-/// so that a scan can stop at the end of the bytes it has and go on from there when more follow.
+/// A link title (Links) read a byte at a time from just past its opener, so that a scan can stop at the end of the bytes
+/// it has and go on from there when more follow.
 ///
-/// Inline links keep that scanner's own loop: reading their titles through this type measured 0.6% more instructions
-/// on a parse of list items of inline links with titles.
+/// A `\` in the body may begin a backslash escape or be literal, and the title closes at the furthest closer either
+/// reading reaches: `'\')` has the title `\`, since no later `'` completes the escape.
 internal struct LinkTitleScan {
     private let opener: UInt8
     private let closer: UInt8
@@ -107,30 +107,16 @@ internal struct LinkTitleScan {
 
     /// Whether a later byte may still close the title, or close it past a closer already read.
     var canContinue: Bool {
-        inBody || afterBackslash
+        inBody
     }
 
-    /// Reads the title's next byte, returning whether it is a closer, which the title ends after unless a later one
-    /// closes it.
+    /// Reads the title's next byte, while `canContinue`, returning whether it is a closer, which the title ends after
+    /// unless a later one closes it.
     @inline(__always)
     mutating func read(_ c: UInt8) -> Bool {
-        var nextInBody = false
-        var nextAfterBackslash = false
-        if inBody {
-            if c != opener && c != closer {
-                nextInBody = true
-            }
-            if c == UInt8(ascii: "\\") {
-                nextAfterBackslash = true
-            }
-        }
-        if afterBackslash && c.isASCIIPunct {
-            nextInBody = true
-        }
-        let closes = inBody && c == closer
-        inBody = nextInBody
-        afterBackslash = nextAfterBackslash
-        return closes
+        inBody = (c != opener && c != closer) || (afterBackslash && c.isASCIIPunct)
+        afterBackslash = c == UInt8(ascii: "\\")
+        return c == closer
     }
 }
 
@@ -305,46 +291,15 @@ extension BlockParser {
         if start >= end {
             return nil
         }
-        let opener = byte(start)
-        let closer: UInt8
-        switch opener {
-        case UInt8(ascii: "\""):
-            closer = UInt8(ascii: "\"")
-        case UInt8(ascii: "'"):
-            closer = UInt8(ascii: "'")
-        case UInt8(ascii: "("):
-            closer = UInt8(ascii: ")")
-        default:
+        guard var title = LinkTitleScan(opener: byte(start)) else {
             return nil
         }
-        // A `\` in the body may begin a backslash escape or be literal, and the title closes at the furthest
-        // closer either reading reaches: `'\')` has the title `\`, since no later `'` completes the escape.
-        // `inBody` may take a content byte (any byte but a delimiter), begin an escape, or close;
-        // `afterBackslash` needs ASCII punctuation to complete an escape.
-        var inBody = true
-        var afterBackslash = false
         var closeAfterEnd: Int? = nil
         var i = start + 1
-        while i < end, inBody || afterBackslash {
-            let c = byte(i)
-            var nextInBody = false
-            var nextAfterBackslash = false
-            if inBody {
-                if c == closer {
-                    closeAfterEnd = i + 1
-                }
-                if c != opener && c != closer {
-                    nextInBody = true
-                }
-                if c == UInt8(ascii: "\\") {
-                    nextAfterBackslash = true
-                }
+        while i < end, title.canContinue {
+            if title.read(byte(i)) {
+                closeAfterEnd = i + 1
             }
-            if afterBackslash && c.isASCIIPunct {
-                nextInBody = true
-            }
-            inBody = nextInBody
-            afterBackslash = nextAfterBackslash
             i += 1
         }
         guard let closeAfterEnd else {
