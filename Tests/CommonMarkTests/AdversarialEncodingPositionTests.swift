@@ -229,7 +229,7 @@ struct AdversarialEncodingPositionTests {
     }
 
     @Test("emoji inside link text")
-    func linkLabelEmoji() throws {
+    func linkTextEmoji() throws {
         // "[😀](/u)": '['(1) 😀(2..5, 4 bytes) ']'(6) '('(7) '/'(8) 'u'(9) ')'(10), 10 bytes.
         // Link 1:1..1:11, inner text 1:2..1:6.
         let ranges = collect("[\u{1F600}](/u)")
