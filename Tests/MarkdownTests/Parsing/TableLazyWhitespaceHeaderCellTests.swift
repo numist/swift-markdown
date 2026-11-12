@@ -11,9 +11,9 @@
 import Markdown
 import XCTest
 
-/// A table header row whose first cell is only whitespace before a pipe (`<ws>|`). A lazy continuation
-/// line loses its initial whitespace like any paragraph line (Paragraphs), so the header row is a lone `|`
-/// and no table forms (Tables (extension)).
+/// A table header row that is only whitespace before a pipe (`<ws>|`). The whitespace is the line's initial
+/// whitespace, which a paragraph line loses (Paragraphs), or padding before a leading pipe; either way the header
+/// row is a lone `|`, which holds no cells, so no table forms (Tables (extension)).
 class TableLazyWhitespaceHeaderCellTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: [])
