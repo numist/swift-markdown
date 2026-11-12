@@ -124,6 +124,28 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
+    /// A node starting at a CRLF starts at its CR, including in content that holds a NUL.
+    @Test(arguments: [inlineOnly, preserveWhitespace])
+    func nodeStartingAtCRLFWithNUL(options: MarkdownDocument.ParseOptions) {
+        #expect(TreeDump.dump("*a*\r\nb\u{0}", options: options, sourceRanges: true) == """
+            document @1:1-2:3
+              paragraph @1:1-2:3
+                emph @1:1-1:4
+                  text "a" @1:2-1:3
+                text "\\nb\u{FFFD}" @1:4-2:3
+
+            """)
+        #expect(TreeDump.dump("[a]: /u\r\n\r\n[a]\u{0}", options: options, sourceRanges: true) == """
+            document @1:1-3:5
+              paragraph @2:1-3:5
+                text "\\n" @2:1-3:1
+                link "/u" "" @3:1-3:4
+                  text "a" @3:2-3:3
+                text "\u{FFFD}" @3:4-3:5
+
+            """)
+    }
+
     /// A leading byte order mark is not content, but it is part of line 1, whose columns count its three bytes.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func leadingByteOrderMark(options: MarkdownDocument.ParseOptions) {
