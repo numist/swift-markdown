@@ -93,8 +93,8 @@ struct SourcePositionTests {
 
     @Test("empty list item ends before a trailing whitespace-only line")
     func emptyItemWhitespaceLine() {
-        // A line of only spaces or tabs is a blank line, and a list item can begin with at most one blank line, so the
-        // item ends on line 1 however far the line is indented.
+        // An item's range ends just past its last content byte, and a line of only spaces or tabs holds none, however
+        // far it is indented.
         #expect(TreeDump.dump("-\n\t", options: .sourcePosition, sourceRanges: true) == """
             document @1:1-2:2
               list bullet '-' tight @1:1-1:2
