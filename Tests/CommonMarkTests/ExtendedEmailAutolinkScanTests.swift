@@ -63,6 +63,14 @@ struct ExtendedEmailAutolinkScanTests {
     }
 
     @Test func periodBeforeSecondAtSignCountsForRestartedAddress() {
+        #expect(tree("a@b.c@d") == """
+            document
+              paragraph
+                text "a@"
+                link "mailto:b.c@d" ""
+                  text "b.c@d"
+
+            """)
         #expect(tree("a@bc@d") == text("a@bc@d"))
     }
 
