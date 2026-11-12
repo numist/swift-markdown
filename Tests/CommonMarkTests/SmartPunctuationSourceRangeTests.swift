@@ -51,22 +51,24 @@ struct SmartPunctuationSourceRangeTests {
             """)
     }
 
-    @Test("an en dash spans its two hyphens")
+    @Test("an en dash alone in emphasis spans its two hyphens")
     func enDash() {
-        #expect(tree("a--b") == """
+        #expect(tree("*--*") == """
             document @1:1-1:5
               paragraph @1:1-1:5
-                text "a–b" @1:1-1:5
+                emph @1:1-1:5
+                  text "–" @1:2-1:4
 
             """)
     }
 
-    @Test("an em dash spans its three hyphens")
+    @Test("an em dash alone in emphasis spans its three hyphens")
     func emDash() {
-        #expect(tree("a---b") == """
+        #expect(tree("*---*") == """
             document @1:1-1:6
               paragraph @1:1-1:6
-                text "a—b" @1:1-1:6
+                emph @1:1-1:6
+                  text "—" @1:2-1:5
 
             """)
     }
@@ -128,26 +130,28 @@ struct SmartPunctuationSourceRangeTests {
             """)
     }
 
-    @Test("an en dash in a list item spans its two hyphens")
+    @Test("an en dash alone in emphasis in a list item spans its two hyphens")
     func enDashInListItem() {
-        #expect(tree("- a--b") == """
+        #expect(tree("- *--*") == """
             document @1:1-1:7
               list bullet '-' tight @1:1-1:7
                 item @1:1-1:7
                   paragraph @1:3-1:7
-                    text "a–b" @1:3-1:7
+                    emph @1:3-1:7
+                      text "–" @1:4-1:6
 
             """)
     }
 
-    @Test("an em dash in a list item spans its three hyphens")
+    @Test("an em dash alone in emphasis in a list item spans its three hyphens")
     func emDashInListItem() {
-        #expect(tree("- a---b") == """
+        #expect(tree("- *---*") == """
             document @1:1-1:8
               list bullet '-' tight @1:1-1:8
                 item @1:1-1:8
                   paragraph @1:3-1:8
-                    text "a—b" @1:3-1:8
+                    emph @1:3-1:8
+                      text "—" @1:4-1:7
 
             """)
     }
