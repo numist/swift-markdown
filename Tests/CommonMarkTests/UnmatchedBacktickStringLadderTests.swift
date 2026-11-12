@@ -14,7 +14,7 @@ import Testing
 /// Paragraphs of backtick strings of distinct lengths (Code spans).
 ///
 /// A backtick string begins a code span only if a backtick string of equal length closes it, so none of these does and
-/// the paragraph is text. A paragraph of 1,500 such strings, about 1.1 MB of source, parses well within the time
+/// the paragraph is text. A paragraph of 3,000 such strings, about 4.5 MB of source, parses well within the time
 /// limit.
 @Suite("Ladders of unmatched backtick strings")
 struct UnmatchedBacktickStringLadderTests {
@@ -50,7 +50,7 @@ struct UnmatchedBacktickStringLadderTests {
 
     @Test(.timeLimit(.minutes(1)), arguments: options)
     func longLadderIsText(options: MarkdownDocument.ParseOptions) {
-        let source = Self.ladder(count: 1500)
+        let source = Self.ladder(count: 3000)
         #expect(TreeDump.dump(source, options: options) == """
             document
               paragraph
