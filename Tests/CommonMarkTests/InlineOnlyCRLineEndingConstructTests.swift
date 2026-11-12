@@ -43,14 +43,14 @@ struct InlineOnlyCRLineEndingConstructTests {
     /// A link destination in `<` `>` holds no line ending (Links).
     @Test("a pointy link destination across a lone CR and a CRLF", arguments: modes)
     func pointyDestination(_ options: MarkdownDocument.ParseOptions) {
-        #expect(tree("[a](<b\rc>) [d]: <e\r\nf>\r\n[d]", options) == """
+        #expect(tree("[d]: <e\r\nf>\r\n[d] [a](<b\rc>)", options) == """
             document @1:1-4:4
               paragraph @1:1-4:4
-                text "[a](" @1:1-1:5
-                html_inline "<b\\nc>" @1:5-2:3
-                text ") [d]: " @2:3-2:10
-                html_inline "<e\\nf>" @2:10-3:3
-                text "\\n[d]" @3:3-4:4
+                text "[d]: " @1:1-1:6
+                html_inline "<e\\nf>" @1:6-2:3
+                text "\\n[d] [a](" @2:3-3:9
+                html_inline "<b\\nc>" @3:9-4:3
+                text ")" @4:3-4:4
 
             """)
     }
