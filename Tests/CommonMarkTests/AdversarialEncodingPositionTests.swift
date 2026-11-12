@@ -228,7 +228,7 @@ struct AdversarialEncodingPositionTests {
         #expect(texts[0] == Pos(line: 1, column: 1)..<Pos(line: 1, column: 4))
     }
 
-    @Test("emoji inside a link label")
+    @Test("emoji inside link text")
     func linkLabelEmoji() throws {
         // "[😀](/u)": '['(1) 😀(2..5, 4 bytes) ']'(6) '('(7) '/'(8) 'u'(9) ')'(10), 10 bytes.
         // Link 1:1..1:11, inner text 1:2..1:6.
