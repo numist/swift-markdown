@@ -67,10 +67,13 @@ struct InlineOnlyFinalLineEndRangeTests {
 
     @Test("a line ending before the last line ends the text at the start of the next line", arguments: modes)
     func interiorLineFeed(_ mode: MarkdownDocument.ParseOptions) {
-        #expect(tree("a\nb\n", mode) == """
+        #expect(tree("a\n*b*\n", mode) == """
             document @1:1-3:1
-              paragraph @1:1-2:2
-                text "a\\nb\\n" @1:1-2:2
+              paragraph @1:1-2:4
+                text "a\\n" @1:1-2:1
+                emph @2:1-2:4
+                  text "b" @2:2-2:3
+                text "\\n" @2:4-2:4
 
             """)
     }
