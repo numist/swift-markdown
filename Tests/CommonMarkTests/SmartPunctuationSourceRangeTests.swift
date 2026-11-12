@@ -73,22 +73,28 @@ struct SmartPunctuationSourceRangeTests {
             """)
     }
 
-    @Test("curly double quotes span their straight quotes")
+    @Test("curly double quotes around emphasis span their straight quotes")
     func doubleQuotes() {
-        #expect(tree("\"q\"") == """
-            document @1:1-1:4
-              paragraph @1:1-1:4
-                text "“q”" @1:1-1:4
+        #expect(tree("\"*q*\"") == """
+            document @1:1-1:6
+              paragraph @1:1-1:6
+                text "“" @1:1-1:2
+                emph @1:2-1:5
+                  text "q" @1:3-1:4
+                text "”" @1:5-1:6
 
             """)
     }
 
-    @Test("curly single quotes span their straight quotes")
+    @Test("curly single quotes around emphasis span their straight quotes")
     func singleQuotes() {
-        #expect(tree("'q'") == """
-            document @1:1-1:4
-              paragraph @1:1-1:4
-                text "‘q’" @1:1-1:4
+        #expect(tree("'*q*'") == """
+            document @1:1-1:6
+              paragraph @1:1-1:6
+                text "‘" @1:1-1:2
+                emph @1:2-1:5
+                  text "q" @1:3-1:4
+                text "’" @1:5-1:6
 
             """)
     }
@@ -156,26 +162,32 @@ struct SmartPunctuationSourceRangeTests {
             """)
     }
 
-    @Test("curly double quotes in a list item span their straight quotes")
+    @Test("curly double quotes around emphasis in a list item span their straight quotes")
     func doubleQuotesInListItem() {
-        #expect(tree("- \"q\"") == """
-            document @1:1-1:6
-              list bullet '-' tight @1:1-1:6
-                item @1:1-1:6
-                  paragraph @1:3-1:6
-                    text "“q”" @1:3-1:6
+        #expect(tree("- \"*q*\"") == """
+            document @1:1-1:8
+              list bullet '-' tight @1:1-1:8
+                item @1:1-1:8
+                  paragraph @1:3-1:8
+                    text "“" @1:3-1:4
+                    emph @1:4-1:7
+                      text "q" @1:5-1:6
+                    text "”" @1:7-1:8
 
             """)
     }
 
-    @Test("curly single quotes in a list item span their straight quotes")
+    @Test("curly single quotes around emphasis in a list item span their straight quotes")
     func singleQuotesInListItem() {
-        #expect(tree("- 'q'") == """
-            document @1:1-1:6
-              list bullet '-' tight @1:1-1:6
-                item @1:1-1:6
-                  paragraph @1:3-1:6
-                    text "‘q’" @1:3-1:6
+        #expect(tree("- '*q*'") == """
+            document @1:1-1:8
+              list bullet '-' tight @1:1-1:8
+                item @1:1-1:8
+                  paragraph @1:3-1:8
+                    text "‘" @1:3-1:4
+                    emph @1:4-1:7
+                      text "q" @1:5-1:6
+                    text "’" @1:7-1:8
 
             """)
     }
