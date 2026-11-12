@@ -96,6 +96,7 @@ class BlockQuoteTabColumnMatrixTests: XCTestCase {
     func testContinuationMarkerAfterPartiallyConsumedTab() {
         assertTree(quotes(2, .code("x"), head: "Document\n"), "> > ```\n>\t>x")
         assertTree(quotes(2, .code("x"), head: "Document\n"), "> > ```\n>\t> x")
+        assertTree(quotes(2, .code("x"), head: "Document\n"), "> > ```\n>\t >x")
         // Control: the same markers on a paragraph continuation line.
         assertTree("Document\n└─ BlockQuote\n   └─ BlockQuote\n      └─ Paragraph\n         ├─ Text \"a\"\n         ├─ SoftBreak\n         └─ Text \"x\"", "> > a\n>\t> x")
     }
