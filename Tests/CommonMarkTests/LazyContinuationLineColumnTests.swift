@@ -11,7 +11,7 @@
 import Testing
 import CommonMark
 
-/// A lazy continuation line's text starts at its first byte, column 1.
+/// An unindented lazy continuation line's text starts at its first byte, column 1.
 @Suite("Lazy continuation line columns")
 struct LazyContinuationLineColumnTests {
 

@@ -13,7 +13,8 @@ import CommonMark
 
 /// Tables whose delimiter row has one column, such as `|-`, `-|`, `|-|` or `:-` (Tables (extension)).
 /// The header row needs no pipe when its cell count matches the delimiter row's. A pipe-less line of
-/// dashes is a setext heading underline (Setext headings) rather than a delimiter row.
+/// dashes under a paragraph that can be a setext heading is its underline (Setext headings) rather than a
+/// delimiter row.
 @Suite("Single-column GFM tables")
 struct SingleColumnTableTests {
 

@@ -110,7 +110,7 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// A NUL ending the input, after a CRLF: the U+FFFD text ends at the source's last byte.
+    /// A NUL ending the input, after a CRLF: the U+FFFD text ends just past the source's last byte.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func trailingNULAfterCRLF(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("a\r\n*b*\u{0}", options: options, sourceRanges: true) == """
