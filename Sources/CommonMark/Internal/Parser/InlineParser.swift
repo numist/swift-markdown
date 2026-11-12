@@ -615,7 +615,7 @@ extension BlockParser {
 
     /// Matches an inline link's `destination "title")` after its `(`, returning the destination and title with backslash escapes and character references resolved, and the offset past the `)`.
     ///
-    /// A title may span a line ending, and a destination never does. Each is zero-copy when it lies within one segment and holds no escape or reference.
+    /// A title may span a line ending, and a destination never does. Each is zero-copy when it lies within one segment and holds no escape, reference or CR.
     @inline(__always)
     private mutating func matchInlineLinkTail(afterParen: Int, content: borrowing ContentSpan) -> (url: Chunk, title: Chunk, end: Int)? {
         let end = content.endOffset
