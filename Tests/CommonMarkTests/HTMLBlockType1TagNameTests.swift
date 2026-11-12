@@ -83,9 +83,11 @@ struct HTMLBlockType1TagNameTests {
 
     @Test("`<scripting>` opens an HTML block (type 7, tag name is not `script`)")
     func scriptingNearMiss() {
-        #expect(TreeDump.dump("<scripting>", options: []) == """
+        #expect(TreeDump.dump("<scripting>\n\nx", options: []) == """
             document
               html_block "<scripting>\\n"
+              paragraph
+                text "x"
 
             """)
     }
@@ -115,9 +117,9 @@ struct HTMLBlockType1TagNameTests {
     }
 
     @Test("`</script>` and `<scripting/>` open HTML blocks (type 7)", arguments: [
-        ("</script>", """
-            document @1:1-1:10
-              html_block "</script>\\n" @1:1-1:10
+        ("</script>\nx", """
+            document @1:1-2:2
+              html_block "</script>\\nx\\n" @1:1-2:2
 
             """),
         ("<scripting/>", """
