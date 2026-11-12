@@ -11,9 +11,9 @@
 import Testing
 import CommonMark
 
-/// Link labels (Links) and inline-attribute strings in a paragraph whose lines are not contiguous in the source, such as
-/// a block quote or list item body or a paragraph with a lazy continuation line. A label or attribute string may span
-/// a line ending.
+/// Link labels (Links) and inline-attribute strings in a block quote or list item paragraph, on lines that carry the
+/// container's markers or indentation and on lazy continuation lines. A label or attribute string may span a line
+/// ending.
 @Suite("Links across the lines of a container's paragraph")
 struct LinksAcrossContainerLinesTests {
 
