@@ -191,14 +191,14 @@ extension BlockParser {
         return contentHoldsCR ? matchLinkLabelCountingCRLFOnce(from: start, end: end, in: content) : nil
     }
 
-    /// Whether a link label that `matchLinkLabel` doesn't match from `start` is still open at `end`, so that a `]` there
-    /// would close it: it holds no unescaped `[` and fits `maxLinkLabelLength`.
+    /// Whether a link label that `matchLinkLabel` doesn't match from `start` can still close on a later line: up to `end`
+    /// and a line ending after it, it holds no unescaped `[` and fits `maxLinkLabelLength`.
     internal func linkLabelIsOpen(from start: Int, end: Int, in content: borrowing ContentSpan) -> Bool {
         content.withForwardReader(from: start) { byte in
-            let label = scanLinkLabel(from: start, end: end + 1, crlfIsOneCharacter: contentHoldsCR) { i in
-                i == end ? UInt8(ascii: "]") : byte(i)
+            let label = scanLinkLabel(from: start, end: end + 2, crlfIsOneCharacter: contentHoldsCR) { i in
+                i == end ? UInt8(ascii: "\n") : i == end + 1 ? UInt8(ascii: "]") : byte(i)
             }
-            return label?.afterEnd == end + 1
+            return label?.afterEnd == end + 2
         }
     }
 
