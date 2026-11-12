@@ -75,13 +75,15 @@ struct UnclosedInlineHTMLTests {
         #expect(htmlLiterals("x<?a <?b ?>", options: []) == ["<?a <?b ?>"])
     }
 
-    @Test("the CDATA closer search starts after `<![CDATA[`")
-    func cdataCloserSearchStartsAfterOpener() {
+    // MARK: A construct's body may hold an opener of its kind
+
+    @Test("a CDATA section's body may hold `<![CDATA[`")
+    func cdataBodyHoldsCDATAOpener() {
         #expect(htmlLiterals("x<![CDATA[a <![CDATA[]]>", options: []) == ["<![CDATA[a <![CDATA[]]>"])
     }
 
-    @Test("the declaration closer search starts after the name and its whitespace")
-    func declarationCloserSearchStartsAfterName() {
+    @Test("a declaration's body may hold `<!B`")
+    func declarationBodyHoldsBangName() {
         // The later `<!B` has no whitespace after its name, so it is no declaration; the `>` closes the first.
         #expect(htmlLiterals("x<!A a <!B>", options: []) == ["<!A a <!B>"])
         #expect(htmlLiterals("x<!A a\nb<!B c>", options: []) == ["<!A a\nb<!B c>"])
