@@ -777,6 +777,9 @@ extension BlockParser {
     /// A delimiter run on the delimiter stack (Appendix: A parsing strategy), pointing at the `.text` node holding it.
     ///
     /// The stack is a doubly-linked list through `delimiters`; unlinking a record leaves the array, and so other indices, intact.
+    /// `processEmphasis` also links the records of each character into a list of their own, so an opener search passes
+    /// only delimiters of its closer's character, not those that a quote pair or a `~` pair of unequal lengths leaves on
+    /// the stack.
     internal struct DelimiterRecord {
         var character: UInt8
         var length: Int
@@ -790,6 +793,8 @@ extension BlockParser {
         var virtualEnd: Int
         var previous: Int?
         var next: Int?
+        var previousOfCharacter: Int? = nil
+        var nextOfCharacter: Int? = nil
     }
 
     /// The flanking classification of a delimiter run.
@@ -952,8 +957,17 @@ extension BlockParser {
         var openersBottom = OpenersBottom(fill: stackBottom)
         // The earliest delimiter above `stackBottom`.
         var closer: Int? = nil
+        // The walk runs from the top down, so per character this holds the nearest delimiter above the walker, or -1.
+        var laterOfCharacter = SIMD8<Int>(repeating: -1)
         var walker = lastDelim
         while let w = walker, w > stackBottom {
+            let wCharIdx = charIndex(for: delimiters[w].character)
+            let later = laterOfCharacter[wCharIdx]
+            if later >= 0 {
+                delimiters[later].previousOfCharacter = w
+                delimiters[w].nextOfCharacter = later
+            }
+            laterOfCharacter[wCharIdx] = w
             closer = w
             walker = delimiters[w].previous
         }
@@ -965,12 +979,11 @@ extension BlockParser {
             let closerChar = delimiters[c].character
             let charIdx = charIndex(for: closerChar)
             let bottomRow = (delimiters[c].canOpen ? 3 : 0) + delimiters[c].length % 3
-            var opener = delimiters[c].previous
+            var opener = delimiters[c].previousOfCharacter
             var openerFound = false
             while let o = opener, o > stackBottom,
                   o >= openersBottom[bottomRow, charIdx] {
-                if delimiters[o].canOpen
-                    && delimiters[o].character == closerChar {
+                if delimiters[o].canOpen {
                     let cl = delimiters[c]
                     let op = delimiters[o]
                     // The multiple-of-3 test of rules 9 and 10 (Emphasis and strong emphasis) applies to `~`
@@ -983,7 +996,7 @@ extension BlockParser {
                         break
                     }
                 }
-                opener = delimiters[o].previous
+                opener = delimiters[o].previousOfCharacter
             }
             let oldCloser = c
             if closerChar == UInt8(ascii: "'") || closerChar == UInt8(ascii: "\"") {
@@ -1119,6 +1132,14 @@ extension BlockParser {
         }
         if idx == lastDelim {
             lastDelim = prev
+        }
+        let previousOfCharacter = delimiters[idx].previousOfCharacter
+        let nextOfCharacter = delimiters[idx].nextOfCharacter
+        if let previousOfCharacter {
+            delimiters[previousOfCharacter].nextOfCharacter = nextOfCharacter
+        }
+        if let nextOfCharacter {
+            delimiters[nextOfCharacter].previousOfCharacter = previousOfCharacter
         }
     }
 
