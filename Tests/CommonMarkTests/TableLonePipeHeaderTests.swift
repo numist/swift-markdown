@@ -92,6 +92,17 @@ struct TableLonePipeHeaderTests {
             """)
     }
 
+    @Test("a leading+trailing pipe (one empty cell) with a 1-column delimiter forms a table")
+    func doublePipeOneColumnTable() {
+        #expect(TreeDump.dump("||\n-|", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+
+            """)
+    }
+
     @Test("a two-column header with a two-column delimiter forms a table")
     func ordinaryTable() {
         #expect(TreeDump.dump("a|b\n-|-", options: [.tables]) == """
