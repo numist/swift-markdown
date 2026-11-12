@@ -15,7 +15,7 @@ import Testing
 struct FootnoteCaretBracketNewlineInLabelTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink, .footnotes]
 
-    /// `[^[` opens no footnote reference, because a label may not contain an unescaped `[` (Links). The bracket pair after
+    /// No footnote definition exists, so `[^[` opens no footnote reference. The bracket pair after
     /// `^[…]`, a link label or a blank one, names no attribute definition, so it is dropped and `^[…]` stays literal text.
     /// A bracket pair after another opener can still form a link or image.
     @Test(arguments: [

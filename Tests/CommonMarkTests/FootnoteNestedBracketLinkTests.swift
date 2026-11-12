@@ -95,7 +95,7 @@ struct FootnoteNestedBracketLinkTests {
 
     // MARK: - `[^[…]` is literal text
 
-    // `[^[` opens no footnote reference, because a label may not contain an unescaped `[` (Links).
+    // No footnote definition exists, so `[^[` opens no footnote reference.
 
     @Test("`[[^[]]]()` is a link whose text is `[^[]]`")
     func nestedCaretBracketFormsLink() {
