@@ -122,6 +122,16 @@ struct EscapedCaretMultilineFootnoteResolutionTests {
                 text "x]"
 
             """),
+        ("[^a\nx]\n\n[^a x]: note text", """
+            document
+              paragraph
+                text "[^a"
+                softbreak
+                text "x]"
+              paragraph
+                text "[^a x]: note text"
+
+            """),
         ("![\\^\u{07F9}\n\u{FFFD}]", """
             document
               paragraph
