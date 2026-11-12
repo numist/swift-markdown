@@ -1082,7 +1082,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if scan.isBlank {
             return handleBlankLine(deepestMatched: deepestMatched, allMatched: allMatched, pending: pending)
         }
-        // The containers that matched a non-blank line, and their ancestors, no longer end with a blank line. One that failed keeps its flag, since this line closes it.
+        // The containers that matched a non-blank line, and their ancestors, no longer end with a blank line. One that failed keeps its flag: this line closes it, or continues lazily a paragraph it holds, which a blank line would have closed, so its flag is already clear.
         var clearUp: DocumentStorage.Index? = deepestMatched
         while let clearUp_ = clearUp {
             storage.nodes[clearUp_].lastLineBlank = false
@@ -1322,8 +1322,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return (start + content.lowerBound - rest)..<(start + content.upperBound - rest)
     }
 
-    /// `leaf`'s lines from offset `start` on. Lines left that are contiguous in the source are a source range, since a
-    /// segment list holds a line join.
+    /// `leaf`'s lines from offset `start` on. When one segment is left, it is a source range, since a segment list holds
+    /// a line join.
     private mutating func trailingLines(_ leaf: consuming PendingLeaf, from start: Int) -> PendingContent {
         switch consume leaf.content {
         case .lazy(let range, _):
