@@ -13,9 +13,9 @@ import CommonMark
 
 /// A list item whose first block is a paragraph of only link reference or inline-attribute definitions.
 ///
-/// A definition is a block of the item, so the item does not begin with a blank line (List items) and blank lines
-/// after the definitions keep it open for a following line indented to its content column. A blank line between the
-/// definitions and that line's block makes the list loose (Lists).
+/// A definition is a block of the item, so the blank lines after the definitions are not blank lines the item begins
+/// with (List items), and they keep it open for a following line indented to its content column. A blank line between
+/// the definitions and that line's block makes the list loose (Lists).
 @Suite("List item whose first block is only definitions")
 struct ListItemDefinitionsFirstBlockTests {
 
