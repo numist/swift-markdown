@@ -80,12 +80,12 @@ struct StrikethroughDelimiterRunLengthTests {
 
             """),
     ])
-    func shortOpenerBeforeLongRun(markdown: String, tree: String) {
+    func longRunInsideStrikethroughStaysLiteral(markdown: String, tree: String) {
         #expect(TreeDump.dump(markdown, options: .strikethrough) == tree)
     }
 
     @Test("a run of ten thousand tildes inside one-tilde strikethrough stays literal")
-    func shortOpenerBeforeVeryLongRun() {
+    func veryLongRunInsideStrikethroughStaysLiteral() {
         #expect(TreeDump.dump("**~)" + Self.longRun + ")~", options: .strikethrough) == """
             document
               paragraph
