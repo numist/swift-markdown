@@ -20,6 +20,6 @@ class NestedBlockQuoteTabAfterListFenceTests: XCTestCase {
     }
 
     func testOrderedListFence() {
-        XCTAssertEqual("Document\n├─ OrderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n└─ BlockQuote\n   └─ BlockQuote\n      └─ BlockQuote\n         └─ BlockQuote", tree("1. ```\n>>>\t>"))
+        XCTAssertEqual("Document\n├─ OrderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n└─ BlockQuote\n   └─ BlockQuote\n      └─ BlockQuote\n         └─ BlockQuote\n            └─ BlockQuote", tree("1. ```\n>>>>\t>"))
     }
 }
