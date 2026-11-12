@@ -28,6 +28,10 @@ struct DeepBlockQuoteNestingTests {
         }
 
         #expect(depth == 300)
+        #expect(document.child(at: 0)?.range
+            == SourceLocation(line: 1, column: 1, source: nil)..<SourceLocation(line: 2, column: 2, source: nil))
+        #expect(document.child(at: 0)?.child(at: 0)?.range
+            == SourceLocation(line: 1, column: 2, source: nil)..<SourceLocation(line: 1, column: 301, source: nil))
     }
 
     @Test func deepTreeDebugDescriptionDoesNotOverflow() {
