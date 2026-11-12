@@ -18,9 +18,9 @@ struct EscapedCaretImageInTableCellTests {
         .tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink, .footnotes,
     ]
 
-    /// With no matching link reference definition, `![\^…]` is literal text, `!` included, and the cell ends at its
-    /// own `|` or line ending.
-    @Test("an escaped-caret image without a matching definition is literal text", arguments: [
+    /// With no matching link reference definition, `[\^…]` and `![\^…]` are literal text, an image's `!` included, and
+    /// the cell ends at its own `|` or line ending.
+    @Test("an escaped-caret bracket or image without a matching definition is literal text", arguments: [
         ("o\n|-\n![\\^\u{14}]", """
             document
               table
