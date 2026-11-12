@@ -68,15 +68,17 @@ struct BlankLinesInOpenContainerChainTests {
             """
         ),
         TreeDumpCase(
-            "twelve footnote definitions, blank lines of tabs that continue some of them",
-            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\t\n\t\t\n\n",
+            "blank lines of tabs keep twelve footnote definitions open",
+            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\t\n\t\t\n\n" + String(repeating: "\t", count: 12) + "y\n",
             """
-            document @1:1-8:1
+            document @1:1-9:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
-              footnote_definition "a" @3:56-3:62
+              footnote_definition "a" @3:56-8:14
                 paragraph @3:61-3:62
                   text "x" @3:61-3:62
+                paragraph @8:13-8:14
+                  text "y" @8:13-8:14
 
             """
         ),
@@ -94,15 +96,17 @@ struct BlankLinesInOpenContainerChainTests {
             """
         ),
         TreeDumpCase(
-            "twelve footnote definitions, empty lines around a line of spaces that continues the outermost",
-            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\n    \n\n",
+            "empty lines around a line of spaces keep twelve footnote definitions open",
+            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\n    \n\n" + String(repeating: " ", count: 48) + "y\n",
             """
-            document @1:1-8:1
+            document @1:1-9:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
-              footnote_definition "a" @3:56-3:62
+              footnote_definition "a" @3:56-8:50
                 paragraph @3:61-3:62
                   text "x" @3:61-3:62
+                paragraph @8:49-8:50
+                  text "y" @8:49-8:50
 
             """
         ),
