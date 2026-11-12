@@ -62,7 +62,7 @@ struct StrikethroughDelimiterRunLengthTests {
         #expect(TreeDump.dump(markdown, options: .strikethrough) == tree)
     }
 
-    @Test("a run of three or more tildes doesn't close a one- or two-tilde opener", arguments: [
+    @Test("a run of three or more tildes inside one- or two-tilde strikethrough stays literal", arguments: [
         ("**~)~~~)~", """
             document
               paragraph
@@ -84,7 +84,7 @@ struct StrikethroughDelimiterRunLengthTests {
         #expect(TreeDump.dump(markdown, options: .strikethrough) == tree)
     }
 
-    @Test("a run of ten thousand tildes doesn't close a one-tilde opener")
+    @Test("a run of ten thousand tildes inside one-tilde strikethrough stays literal")
     func shortOpenerBeforeVeryLongRun() {
         #expect(TreeDump.dump("**~)" + Self.longRun + ")~", options: .strikethrough) == """
             document
