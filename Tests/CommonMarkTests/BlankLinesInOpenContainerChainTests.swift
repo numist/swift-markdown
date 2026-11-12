@@ -22,17 +22,18 @@ struct BlankLinesInOpenContainerChainTests {
     static let cases: [TreeDumpCase] = [
         TreeDumpCase(
             "block quote in the innermost of ten footnote definitions",
-            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:>x\n\n\ny\n",
+            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:>x\n\n\n" + String(repeating: " ", count: 40) + ">y\n",
             """
             document @1:1-7:1
               paragraph @1:1-1:5
                 footnote_reference "1" @1:1-1:5
-              paragraph @6:1-6:2
-                text "y" @6:1-6:2
-              footnote_definition "a" @3:46-3:53
+              footnote_definition "a" @3:46-6:43
                 block_quote @3:51-3:53
                   paragraph @3:52-3:53
                     text "x" @3:52-3:53
+                block_quote @6:41-6:43
+                  paragraph @6:42-6:43
+                    text "y" @6:42-6:43
 
             """
         ),
@@ -139,33 +140,33 @@ struct BlankLinesInOpenContainerChainTests {
         ),
         TreeDumpCase(
             "eleven nested list items, the innermost without a block",
-            "- + - + - + - + - + -\n\n\nx\n",
+            "- + - + - + - + - + -\n\n\n" + String(repeating: " ", count: 22) + "x\n",
             """
             document @1:1-5:1
-              list bullet '-' tight @1:1-1:22
-                item @1:1-1:22
-                  list bullet '+' tight @1:3-1:22
-                    item @1:3-1:22
-                      list bullet '-' tight @1:5-1:22
-                        item @1:5-1:22
-                          list bullet '+' tight @1:7-1:22
-                            item @1:7-1:22
-                              list bullet '-' tight @1:9-1:22
-                                item @1:9-1:22
-                                  list bullet '+' tight @1:11-1:22
-                                    item @1:11-1:22
-                                      list bullet '-' tight @1:13-1:22
-                                        item @1:13-1:22
-                                          list bullet '+' tight @1:15-1:22
-                                            item @1:15-1:22
-                                              list bullet '-' tight @1:17-1:22
-                                                item @1:17-1:22
-                                                  list bullet '+' tight @1:19-1:22
-                                                    item @1:19-1:22
+              list bullet '-' tight @1:1-4:24
+                item @1:1-4:24
+                  list bullet '+' tight @1:3-4:24
+                    item @1:3-4:24
+                      list bullet '-' tight @1:5-4:24
+                        item @1:5-4:24
+                          list bullet '+' tight @1:7-4:24
+                            item @1:7-4:24
+                              list bullet '-' tight @1:9-4:24
+                                item @1:9-4:24
+                                  list bullet '+' tight @1:11-4:24
+                                    item @1:11-4:24
+                                      list bullet '-' tight @1:13-4:24
+                                        item @1:13-4:24
+                                          list bullet '+' tight @1:15-4:24
+                                            item @1:15-4:24
+                                              list bullet '-' tight @1:17-4:24
+                                                item @1:17-4:24
+                                                  list bullet '+' loose @1:19-4:24
+                                                    item @1:19-4:24
                                                       list bullet '-' tight @1:21-1:22
                                                         item @1:21-1:22
-              paragraph @4:1-4:2
-                text "x" @4:1-4:2
+                                                      paragraph @4:23-4:24
+                                                        text "x" @4:23-4:24
 
             """
         ),
