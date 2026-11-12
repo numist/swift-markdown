@@ -123,4 +123,25 @@ class EmphasisNestingTests: XCTestCase {
         let document = Document(parsing: text)
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
+
+    /// The `****` gives two delimiters to the interior `**`. The first `**` can both open and close and
+    /// `(2 + 4) % 3 == 0`, so the rest of the `****` finds no opener. That bounds later searches only for closers that
+    /// can't open and whose full length is 1 modulo 3, so the final `**` still matches the first.
+    func testOpenersBottomKeyedByFullCloserLength() {
+        let text = "a**b **c**** d**"
+
+        let expectedDump = """
+        Document @1:1-1:17
+        └─ Paragraph @1:1-1:17
+           ├─ Text @1:1-1:2 "a"
+           └─ Strong @1:2-1:17
+              ├─ Text @1:4-1:6 "b "
+              ├─ Strong @1:6-1:11
+              │  └─ Text @1:8-1:9 "c"
+              └─ Text @1:11-1:15 "** d"
+        """
+
+        let document = Document(parsing: text)
+        XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
+    }
 }
