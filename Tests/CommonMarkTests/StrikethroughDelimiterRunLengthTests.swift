@@ -62,17 +62,21 @@ struct StrikethroughDelimiterRunLengthTests {
         #expect(TreeDump.dump(markdown, options: .strikethrough) == tree)
     }
 
-    @Test("a one- or two-tilde opener stays literal before a closing run of three or more tildes", arguments: [
-        ("**~)~~~", """
+    @Test("a run of three or more tildes doesn't close a one- or two-tilde opener", arguments: [
+        ("**~)~~~)~", """
             document
               paragraph
-                text "**~)~~~"
+                text "**"
+                strikethrough
+                  text ")~~~)"
 
             """),
-        ("**~~)~~~", """
+        ("**~~)~~~)~~", """
             document
               paragraph
-                text "**~~)~~~"
+                text "**"
+                strikethrough
+                  text ")~~~)"
 
             """),
     ])
@@ -80,28 +84,30 @@ struct StrikethroughDelimiterRunLengthTests {
         #expect(TreeDump.dump(markdown, options: .strikethrough) == tree)
     }
 
-    @Test("a one-tilde opener stays literal before a run of ten thousand tildes")
+    @Test("a run of ten thousand tildes doesn't close a one-tilde opener")
     func shortOpenerBeforeVeryLongRun() {
-        #expect(TreeDump.dump("**~)" + Self.longRun, options: .strikethrough) == """
+        #expect(TreeDump.dump("**~)" + Self.longRun + ")~", options: .strikethrough) == """
             document
               paragraph
-                text "**~)\(Self.longRun)"
+                text "**"
+                strikethrough
+                  text ")\(Self.longRun))"
 
             """)
     }
 
     @Test("an opener of three or more tildes stays literal")
     func longOpenerStaysLiteral() {
-        #expect(TreeDump.dump("**~~~)~", options: .strikethrough) == """
+        #expect(TreeDump.dump("**~~~)~~~", options: .strikethrough) == """
             document
               paragraph
-                text "**~~~)~"
+                text "**~~~)~~~"
 
             """)
-        #expect(TreeDump.dump("**" + Self.longRun + ")~", options: .strikethrough) == """
+        #expect(TreeDump.dump("**" + Self.longRun + ")" + Self.longRun, options: .strikethrough) == """
             document
               paragraph
-                text "**\(Self.longRun))~"
+                text "**\(Self.longRun))\(Self.longRun)"
 
             """)
     }
