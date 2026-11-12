@@ -68,8 +68,8 @@ struct FlankingUnicodePunctuationTests {
         #expect(render("''\u{2014}", options: .smart) == "\u{2018}\u{2019}\u{2014}")
     }
 
-    @Test("a further trailing quote after Unicode punctuation stays a right curly")
-    func trailingQuoteAfterUnicodePunct() {
+    @Test("a later quote after Unicode punctuation does not pair with the second quote")
+    func laterQuoteDoesNotPairWithSecondQuote() {
         #expect(render("''\u{055E}'", options: .smart) == "\u{2018}\u{2019}\u{055E}\u{2019}")
     }
 
