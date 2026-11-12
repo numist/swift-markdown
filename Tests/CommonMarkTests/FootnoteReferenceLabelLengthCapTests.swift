@@ -13,8 +13,8 @@ import Testing
 
 /// A footnote reference label holds at most 999 characters, as a link label does (Links); a longer one stays
 /// literal text. A multibyte character counts as one character, and so does a NUL, which is replaced by U+FFFD
-/// (Insecure characters). Each over-cap reference here has a definition within the cap whose label matches it after
-/// case folding, which turns each `ß` into `ss` (Links).
+/// (Insecure characters). Each over-cap reference here whose label holds no whitespace has a footnote definition within
+/// the cap whose label matches it after case folding, which turns each `ß` into `ss` (Links).
 @Suite("Footnote reference label length cap")
 struct FootnoteReferenceLabelLengthCapTests {
     private func tree(_ markdown: String) -> String {
