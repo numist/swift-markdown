@@ -102,7 +102,7 @@ internal func paragraphInlines(_ doc: borrowing MarkdownDocument) -> [(kind: Mar
     return out.map { ($0.0, $0.1) }
 }
 
-/// `(columns, rows, text)` for each cell of each row of the first table in `markdown`.
+/// `(columns, rows, text)` for each cell of each row of the first top-level table in `markdown`.
 internal func firstTableCells(
     _ markdown: String, options: MarkdownDocument.ParseOptions
 ) -> [[(columns: Int, rows: Int, text: String)]] {
