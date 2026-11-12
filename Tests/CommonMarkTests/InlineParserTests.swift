@@ -552,7 +552,8 @@ struct AutolinkTests {
 @Suite("Inline parser - raw inline HTML")
 struct InlineHTMLTests {
 
-    /// Fetch the literal of the first `.htmlInline` node in the first paragraph, or nil if none is present.
+    /// The literal of the first `.htmlInline` node among the inline children of the top-level blocks, or nil if there
+    /// is none.
     private static func firstHTMLInline(_ doc: borrowing MarkdownDocument) -> String? {
         var out: String?
         let root = doc.root
