@@ -3733,8 +3733,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return i
     }
 
-    // The scanners below, `parseOneLinkDefinition` and `matchDefinitionLabel` are `@inline(__always)`: out of line,
-    // they cost about 2% of the instructions of a parse of 200,000 one-line definitions `[aN]: /uN "tN"`.
+    // `skipLineWhitespace`, `skipLineWhitespaceAndOneLineEnd`, `skipLineEndOrEOF`, `parseOneLinkDefinition` and
+    // `matchDefinitionLabel` are `@inline(__always)`: out of line, they cost about 8% of the instructions of a parse of
+    // 200,000 one-line definitions `[aN]: /uN "tN"`.
 
     /// Skips spaces, tabs, line tabulations and form feeds.
     @inline(__always)
