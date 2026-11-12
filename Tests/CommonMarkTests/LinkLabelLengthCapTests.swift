@@ -75,12 +75,14 @@ struct LinkLabelLengthCapTests {
                 text "[\(label(length))]: /u"
 
             """)
-        #expect(TreeDump.dump("[\(label(length))]: /u\n\n[\(label(length))]", options: []) == """
+        // The reference's label normalizes to the defined 999-character label, so only its own length keeps it from
+        // resolving.
+        let half = label(499)
+        let reference = "[\(half)\(String(repeating: " ", count: length - 998))\(half)]"
+        #expect(TreeDump.dump("[\(half) \(half)]: /u\n\n" + reference, options: []) == """
             document
               paragraph
-                text "[\(label(length))]: /u"
-              paragraph
-                text "[\(label(length))]"
+                text "\(reference)"
 
             """)
     }
