@@ -18,7 +18,7 @@ private let autolinkOptions: MarkdownDocument.ParseOptions = [.tables, .striketh
 /// An extended url autolink's domain begins with a character that is neither a punctuation character nor a Unicode
 /// whitespace character, and continues as a www domain does.
 /// An underscore in either of the last two period-separated segments rejects a www or url domain unless the domain
-/// holds more than ten periods.
+/// holds more than ten periods; the domain scan never examines the inline content's last character.
 /// An extended email autolink's domain is a run of ASCII alphanumerics, `-`, `_`, and periods each followed by an
 /// alphanumeric; it holds a period and ends in a letter.
 @Suite("Extended autolink domains")
