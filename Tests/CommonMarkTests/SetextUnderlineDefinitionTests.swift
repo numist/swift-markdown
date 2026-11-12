@@ -190,7 +190,7 @@ struct SetextUnderlineDefinitionTests {
             """)
     }
 
-    @Test("a label after a form feed past the definitions an underline ends begins no definition at a later underline")
+    @Test("a label after a form feed past the definitions an underline ends begins no definition")
     func labelAfterFormFeedPastUnderlineDefinitions() {
         #expect(tree("[a]: /u\n\u{0C}[b\n\u{0B}\n=\n]: /v\nx\n=\n") == """
             document @1:1-8:1
