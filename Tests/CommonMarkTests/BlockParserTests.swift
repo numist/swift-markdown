@@ -1247,6 +1247,10 @@ struct HTMLBlockTests {
         // line and so includes `bar`.
         #expect(kinds == [.document, .htmlBlock])
         }
+        // A type 7 HTML block cannot interrupt a paragraph.
+        MarkdownDocument.withParsedDocument("x\n<foo>") { doc in
+        #expect(dfs(doc).map { $0.kind } == [.document, .paragraph, .text, .softBreak, .htmlInline])
+        }
     }
 
     @Test("HTML block interrupts a paragraph")
