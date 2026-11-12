@@ -20,7 +20,7 @@ struct SmartPunctuationSourceRangeTests {
         TreeDump.dump(source, options: [.smart, .sourcePosition], sourceRanges: true)
     }
 
-    @Test("an ellipsis that starts a text spans its three dots")
+    @Test("a text that starts with an ellipsis starts at its first dot")
     func leadingEllipsis() {
         #expect(tree("...a") == """
             document @1:1-1:5
@@ -30,7 +30,7 @@ struct SmartPunctuationSourceRangeTests {
             """)
     }
 
-    @Test("an ellipsis that ends a text spans its three dots")
+    @Test("a text that ends with an ellipsis ends just past its last dot")
     func trailingEllipsis() {
         #expect(tree("a...") == """
             document @1:1-1:5
@@ -93,7 +93,7 @@ struct SmartPunctuationSourceRangeTests {
             """)
     }
 
-    @Test("an ellipsis that starts a list item's text spans its three dots")
+    @Test("a list item's text that starts with an ellipsis starts at its first dot")
     func leadingEllipsisInListItem() {
         #expect(tree("- ...a") == """
             document @1:1-1:7
@@ -105,7 +105,7 @@ struct SmartPunctuationSourceRangeTests {
             """)
     }
 
-    @Test("an ellipsis that ends a list item's text spans its three dots")
+    @Test("a list item's text that ends with an ellipsis ends just past its last dot")
     func trailingEllipsisInListItem() {
         #expect(tree("- a...") == """
             document @1:1-1:7
@@ -181,7 +181,7 @@ struct SmartPunctuationSourceRangeTests {
     }
 
     /// The second line is a block-quote continuation, so the paragraph's lines are not contiguous in the source.
-    @Test("an ellipsis on a block quote's continuation line spans its three dots")
+    @Test("a continuation line's text that starts with an ellipsis starts at its first dot")
     func ellipsisOnContinuationLine() {
         #expect(tree("> a\n> ...b") == """
             document @1:1-2:7
