@@ -34,6 +34,8 @@ struct AppleOS26InitializerTests {
         let spanKinds = dfs(viaSpan).map { TreeDump.describe($0.kind) }
         #expect(stringKinds == ["document", "paragraph", "text", "code backticks=1", "text"])
         #expect(spanKinds == stringKinds)
+        #expect(dfs(viaString).map(\.literal) == [nil, nil, "one ", "code", " two"])
+        #expect(dfs(viaSpan).map(\.literal) == dfs(viaString).map(\.literal))
     }
 
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
