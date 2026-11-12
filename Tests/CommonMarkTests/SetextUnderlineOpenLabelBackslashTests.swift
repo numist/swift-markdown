@@ -11,8 +11,8 @@
 import CommonMark
 import Testing
 
-/// A backslash before a line ending is a literal backslash (Backslash escapes), so a link label whose line ends in one
-/// is still open and a `]` on a later line closes it (Link reference definitions). An underline that a line of only
+/// A backslash before a line ending escapes nothing (Backslash escapes), so a link label whose line ends in one is
+/// still open and a `]` on a later line closes it (Link reference definitions). An underline that a line of only
 /// whitespace keeps from forming a heading leaves the definition to complete, and a later underline forms a heading of
 /// the lines past it (Setext headings).
 @Suite("An open label ending in a backslash at a setext underline")
