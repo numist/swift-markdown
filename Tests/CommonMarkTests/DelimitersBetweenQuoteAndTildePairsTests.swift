@@ -38,13 +38,12 @@ struct DelimitersBetweenQuoteAndTildePairsTests {
     }
 
     @Test func emphasisSpansQuotePair() {
-        #expect(TreeDump.dump("\"a *b \"c\" d* e\"\n", options: .smart) == """
+        #expect(TreeDump.dump("\"a *b\" c*\n", options: .smart) == """
             document
               paragraph
                 text "“a "
                 emph
-                  text "b “c” d"
-                text " e”"
+                  text "b” c"
 
             """)
     }
