@@ -513,29 +513,29 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// `[]()` is an inline link, which deactivates the enclosing `[`, so its `]` is text and no footnote forms.
+    /// `[]()` is an inline link, which deactivates the enclosing `[`, so the `](/u)` after it is text.
     @Test("an empty inline attribute inside a footnote-shaped bracket is a link between text")
     func emptyInlineFormInsideBracketIsLink() {
-        #expect(tree("[^[]()]", Self.footnotes) == """
-            document @1:1-1:8
-              paragraph @1:1-1:8
+        #expect(tree("[^[]()](/u)", Self.footnotes) == """
+            document @1:1-1:12
+              paragraph @1:1-1:12
                 text "[^" @1:1-1:3
                 link "" "" @1:3-1:7
-                text "]" @1:7-1:8
+                text "](/u)" @1:7-1:12
 
             """)
     }
 
-    /// `[x](y)` is an inline link, which deactivates the enclosing `[`, so its `]` is text and no footnote forms.
+    /// `[x](y)` is an inline link, which deactivates the enclosing `[`, so the `](/u)` after it is text.
     @Test("an inline attribute with text inside a footnote-shaped bracket is a link between text")
     func inlineFormInsideBracketIsLink() {
-        #expect(tree("[^[x](y)]", Self.footnotes) == """
-            document @1:1-1:10
-              paragraph @1:1-1:10
+        #expect(tree("[^[x](y)](/u)", Self.footnotes) == """
+            document @1:1-1:14
+              paragraph @1:1-1:14
                 text "[^" @1:1-1:3
                 link "y" "" @1:3-1:9
                   text "x" @1:4-1:5
-                text "]" @1:9-1:10
+                text "](/u)" @1:9-1:14
 
             """)
     }
