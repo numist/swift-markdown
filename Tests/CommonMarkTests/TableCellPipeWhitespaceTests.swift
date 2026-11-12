@@ -218,19 +218,22 @@ struct TableCellPipeWhitespaceTests {
 
     @Test("a trailing pipe then a form feed closes a body row")
     func trailingBodyPipeFormFeed() {
-        #expect(TreeDump.dump("a|b\n-|-\nc|d|\(Self.ff)", options: [.tables]) == """
-            document
-              table
-                table_header
-                  table_cell align=none colspan=1 rowspan=1
-                    text "a"
-                  table_cell align=none colspan=1 rowspan=1
-                    text "b"
-                table_row
-                  table_cell align=none colspan=1 rowspan=1
-                    text "c"
-                  table_cell align=none colspan=1 rowspan=1
-                    text "d"
+        #expect(TreeDump.dump("a|b|c\n-|-|-\nc|d|\(Self.ff)", options: [.tables, .sourcePosition], sourceRanges: true) == """
+            document @1:1-3:6
+              table @1:1-3:5
+                table_header @1:1-1:6
+                  table_cell align=none colspan=1 rowspan=1 @1:1-1:2
+                    text "a" @1:1-1:2
+                  table_cell align=none colspan=1 rowspan=1 @1:3-1:4
+                    text "b" @1:3-1:4
+                  table_cell align=none colspan=1 rowspan=1 @1:5-1:6
+                    text "c" @1:5-1:6
+                table_row @3:1-3:5
+                  table_cell align=none colspan=1 rowspan=1 @3:1-3:2
+                    text "c" @3:1-3:2
+                  table_cell align=none colspan=1 rowspan=1 @3:3-3:4
+                    text "d" @3:3-3:4
+                  table_cell align=none colspan=1 rowspan=1 @-
 
             """)
     }
