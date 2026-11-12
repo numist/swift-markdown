@@ -11,9 +11,9 @@
 import Testing
 import CommonMark
 
-/// A code or HTML block's body holds a segment for each nonempty line's content, split around a `U+FFFD` segment at
-/// each NUL, and a `\n` segment for each line ending, CRLF included. A line whose stripped indentation splits a tab
-/// holds the tab's leftover columns as a segment of spaces before its content's segment.
+/// A code or HTML block's body holds a segment for each nonempty line's content, split around a segment of `U+FFFD`s
+/// at each run of NULs, and a `\n` segment for each line ending, CRLF included. A line whose stripped indentation
+/// splits a tab holds the tab's leftover columns as a segment of spaces before its content's segment.
 @Suite("Code/HTML block segment content")
 struct CodeBlockSegmentTests {
 
