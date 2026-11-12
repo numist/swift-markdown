@@ -145,6 +145,112 @@ struct SetextUnderlineDefinitionTests {
             """)
     }
 
+    @Test("a definition after a line of only whitespace past the definitions an underline ends is paragraph text")
+    func definitionAfterWhitespaceOnlyLinePastUnderlineDefinitions() {
+        #expect(tree("[a]: /u\n\u{0B}\n[b]: /v\n===\n\n[b]\n") == """
+            document @1:1-7:1
+              paragraph @3:1-4:4
+                text "[b]: /v" @3:1-3:8
+                softbreak @-
+                text "===" @4:1-4:4
+              paragraph @6:1-6:4
+                text "[b]" @6:1-6:4
+
+            """)
+    }
+
+    @Test("a definition after a line of only whitespace past the definitions an underline ends is paragraph text in a block quote")
+    func definitionAfterWhitespaceOnlyLinePastUnderlineDefinitionsInBlockQuote() {
+        #expect(tree("> [a]: /u\n> \u{0B}\n> [b]: /v\n> ===\n\n[b]\n") == """
+            document @1:1-7:1
+              block_quote @1:1-4:6
+                paragraph @3:3-4:6
+                  text "[b]: /v" @3:3-3:10
+                  softbreak @-
+                  text "===" @4:3-4:6
+              paragraph @6:1-6:4
+                text "[b]" @6:1-6:4
+
+            """)
+    }
+
+    @Test("a definition after a form feed past the definitions an underline ends is paragraph text")
+    func definitionAfterFormFeedPastUnderlineDefinitions() {
+        #expect(tree("[a]: /u\n\u{0C}[b]: /v\n\u{0B}\n===\n\n[b]\n") == """
+            document @1:1-7:1
+              paragraph @2:2-4:4
+                text "[b]: /v" @2:2-2:9
+                softbreak @-
+                text "\\u{B}" @3:1-3:2
+                softbreak @-
+                text "===" @4:1-4:4
+              paragraph @6:1-6:4
+                text "[b]" @6:1-6:4
+
+            """)
+    }
+
+    @Test("a label after a form feed past the definitions an underline ends begins no definition at a later underline")
+    func labelAfterFormFeedPastUnderlineDefinitions() {
+        #expect(tree("[a]: /u\n\u{0C}[b\n\u{0B}\n=\n]: /v\nx\n=\n") == """
+            document @1:1-8:1
+              paragraph @2:2-7:2
+                text "[b" @2:2-2:4
+                softbreak @-
+                text "\\u{B}" @3:1-3:2
+                softbreak @-
+                text "=" @4:1-4:2
+                softbreak @-
+                text "]: /v" @5:1-5:6
+                softbreak @-
+                text "x" @6:1-6:2
+                softbreak @-
+                text "=" @7:1-7:2
+
+            """)
+    }
+
+    @Test("a definition after a line of only whitespace past the definitions an underline ends is paragraph text before a table")
+    func definitionAfterWhitespaceOnlyLinePastUnderlineDefinitionsBeforeTable() {
+        #expect(tree("[a]: /u\n\u{0B}\n[b]: /v\n===\nh|i\n-|-\n\n[b]\n", options: [.tables, .sourcePosition]) == """
+            document @1:1-9:1
+              paragraph @3:1-4:4
+                text "[b]: /v" @3:1-3:8
+                softbreak @-
+                text "===" @4:1-4:4
+              table @5:1-6:4
+                table_header @5:1-5:4
+                  table_cell align=none colspan=1 rowspan=1 @5:1-5:2
+                    text "h" @5:1-5:2
+                  table_cell align=none colspan=1 rowspan=1 @5:3-5:4
+                    text "i" @5:3-5:4
+              paragraph @8:1-8:4
+                text "[b]" @8:1-8:4
+
+            """)
+    }
+
+    @Test("a definition after a line of only whitespace past the definitions an underline ends is paragraph text before a table in a block quote")
+    func definitionAfterWhitespaceOnlyLinePastUnderlineDefinitionsBeforeTableInBlockQuote() {
+        #expect(tree("> [a]: /u\n> \u{0B}\n> [b]: /v\n> ===\n> h|i\n> -|-\n\n[b]\n", options: [.tables, .sourcePosition]) == """
+            document @1:1-9:1
+              block_quote @1:1-6:6
+                paragraph @3:3-4:6
+                  text "[b]: /v" @3:3-3:10
+                  softbreak @-
+                  text "===" @4:3-4:6
+                table @5:3-6:6
+                  table_header @5:3-5:6
+                    table_cell align=none colspan=1 rowspan=1 @5:3-5:4
+                      text "h" @5:3-5:4
+                    table_cell align=none colspan=1 rowspan=1 @5:5-5:6
+                      text "i" @5:5-5:6
+              paragraph @8:1-8:4
+                text "[b]" @8:1-8:4
+
+            """)
+    }
+
     /// Lines that many underlines follow.
     struct Shape: Sendable, CustomTestStringConvertible {
         let prefix: String

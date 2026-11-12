@@ -922,7 +922,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // tabulations and form feeds.
         let precedingLines = Chunk(offset: range.lowerBound, length: lastNewline - range.lowerBound, inSource: true)
         // The split-off lines are a paragraph that bypasses finalize, so its raw content is formed here.
-        if let precedingChunk = tableSplitParagraphContent(precedingLines.trimmingWhitespace(using: self), node: node) {
+        if let precedingChunk = tableSplitParagraphContent(precedingLines.trimmingWhitespace(using: self), node: node, linesStart: precedingLines.offset) {
             let preceding = insertTablePrecedingParagraph(before: node)
             // With no raw content, the paragraph's range is empty at its start.
             let span = precedingChunk.isEmpty ? Chunk(offset: precedingLines.offset, length: 0, inSource: true) : precedingChunk
@@ -974,7 +974,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if segmentsContainNUL(segs) {
             var map: [ArenaRun] = []
             let flat = flattenReplacingNUL(segs, map: &map)
-            if let content = tableSplitParagraphContent(flat.trimmingWhitespace(using: self), node: precedingNode) {
+            if let content = tableSplitParagraphContent(flat.trimmingWhitespace(using: self), node: precedingNode, linesStart: flat.offset) {
                 let contentMap = positionsEnabled ? Self.sliceRuns(map, from: content.offset - flat.offset, length: content.length) : []
                 if positionsEnabled, !content.isEmpty {
                     let span = sourceSpan(of: contentMap)
@@ -1367,7 +1367,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             precondition(!joinPending, "a deferred line join is always consumed by the next line")
             let trimmed = Chunk(offset: range.lowerBound, length: range.count, inSource: true).trimmingWhitespace(using: self).range
             var definitions: (end: Int, contentStart: Int)? = nil
-            if !trimmed.isEmpty, Self.mayBeginDefinition(sourceBytes[trimmed.lowerBound]) {
+            if !trimmed.isEmpty, Self.mayBeginDefinition(sourceBytes[trimmed.lowerBound]), definitionMayBegin(at: trimmed.lowerBound, linesStart: range.lowerBound) {
                 let content = ContentSpan(span: sourceBytes.extracting(range.lowerBound..<trimmed.upperBound), base: range.lowerBound, inSource: true)
                 definitions = readLeadingDefinitions(in: content, linesStart: range.lowerBound, from: trimmed.lowerBound, readEnd: trimmed.upperBound)
             }
@@ -1377,7 +1377,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             let total = totalLength(of: segs)
             let trimmed = trimmedRange(of: segs, total: total)
             var definitions: (end: Int, contentStart: Int)? = nil
-            if !trimmed.isEmpty, Self.mayBeginDefinition(byte(at: trimmed.lowerBound, in: segs)) {
+            if !trimmed.isEmpty, Self.mayBeginDefinition(byte(at: trimmed.lowerBound, in: segs)), definitionMayBegin(at: trimmed.lowerBound, linesStart: 0) {
                 let readEnd = sourceEnd(ofVirtual: trimmed.upperBound, in: segs, total: total)
                 let segmentEnds = Self.segmentEnds(of: segs)
                 let content = ContentSpan(source: sourceBytes, segments: segs.span, segmentEnds: segmentEnds.span, virtualLength: trimmed.upperBound, hint: pieceHint)
@@ -2411,12 +2411,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return result
     }
 
-    /// The raw content (`paragraphContent`) of the paragraph a table's header row splits off, whose trimmed lines are
-    /// `trimmed`, or `nil` when its definitions, those an underline removed included, or task list item marker leave
-    /// nothing. `node` is checked for being its list item's first block: the split-off paragraph, or before that is
-    /// inserted, the paragraph it splits from.
-    private mutating func tableSplitParagraphContent(_ trimmed: Chunk, node: DocumentStorage.Index) -> Chunk? {
-        let content = paragraphContent(of: node, trimmed: trimmed)
+    /// The raw content (`paragraphContent`) of the paragraph a table's header row splits off, whose lines, beginning at
+    /// `linesStart`, are `trimmed` without leading and trailing whitespace, or `nil` when its definitions, those an
+    /// underline removed included, or task list item marker leave nothing. `node` is checked for being its list item's
+    /// first block: the split-off paragraph, or before that is inserted, the paragraph it splits from.
+    private mutating func tableSplitParagraphContent(_ trimmed: Chunk, node: DocumentStorage.Index, linesStart: Int) -> Chunk? {
+        let content = paragraphContent(of: node, trimmed: trimmed, linesStart: linesStart)
         return content.isEmpty && (!trimmed.isEmpty || openParagraphState?.definitionsCommitted == true) ? nil : content
     }
 
@@ -2482,7 +2482,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             finishWhitespaceOnlyParagraph(node)
             return
         }
-        let contentChunk = paragraphContent(of: node, trimmed: trimmed)
+        let contentChunk = paragraphContent(of: node, trimmed: trimmed, linesStart: raw.offset)
         if contentChunk.isEmpty {
             removeEmptiedParagraph(node, contentEnd: positionsEnabled ? sourceEnd(of: trimmed, in: raw, map: map) : nil)
             return
@@ -3470,11 +3470,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         chunk.inSource ? sourceBytes[offset] : storage.strings[offset]
     }
 
-    /// The raw content of the paragraph `node` whose trimmed lines are `trimmed`: what follows its leading definitions,
-    /// from its first non-whitespace byte, or without definitions, `trimmed` less any task list item marker. A marker
-    /// makes `node`'s list item a task list item.
-    private mutating func paragraphContent(of node: DocumentStorage.Index, trimmed: Chunk) -> Chunk {
-        let afterDefinitions = parseDefinitions(in: trimmed)
+    /// The raw content of the paragraph `node` whose lines, beginning at `linesStart`, are `trimmed` without leading and
+    /// trailing whitespace: what follows its leading definitions, from its first non-whitespace byte, or without
+    /// definitions, `trimmed` less any task list item marker. A marker makes `node`'s list item a task list item.
+    private mutating func paragraphContent(of node: DocumentStorage.Index, trimmed: Chunk, linesStart: Int) -> Chunk {
+        let afterDefinitions = definitionMayBegin(at: trimmed.offset, linesStart: linesStart) ? parseDefinitions(in: trimmed) : trimmed
         // A definition counts as a block of its list item (Lists), so a marker after one doesn't begin the item's
         // first block.
         guard afterDefinitions.offset == trimmed.offset else {
@@ -3488,21 +3488,22 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return trimmed.extracting(3..<trimmed.length).trimmingWhitespace(using: self)
     }
 
-    /// Where the raw content of the paragraph `node` whose lines are `segs` begins (see `paragraphContent(of:trimmed:)`),
-    /// as a virtual offset of the lines within `trimmed`, their virtual range without leading and trailing whitespace.
-    /// A task list item marker makes `node`'s list item a task list item.
+    /// Where the raw content of the paragraph `node` whose lines are `segs` begins (see
+    /// `paragraphContent(of:trimmed:linesStart:)`), as a virtual offset of the lines within `trimmed`, their virtual
+    /// range without leading and trailing whitespace. A task list item marker makes `node`'s list item a task list item.
     ///
     /// The lines are read in place, so content that isn't contiguous in the source is not copied.
     private mutating func rawContentStart(in segs: borrowing UniqueArray<Segment>, trimmed: Range<Int>, taskItemParagraph node: DocumentStorage.Index) -> Int {
         precondition(!trimmed.isEmpty, "only non-blank content begins past definitions or a marker")
         // A definition begins with `[` or `^`, and a task list item marker with `[`.
-        guard Self.mayBeginDefinition(byte(at: trimmed.lowerBound, in: segs)) else {
+        guard Self.mayBeginDefinition(byte(at: trimmed.lowerBound, in: segs)), definitionMayBegin(at: trimmed.lowerBound, linesStart: 0) else {
             return trimmed.lowerBound
         }
         let segmentEnds = Self.segmentEnds(of: segs)
         let content = ContentSpan(source: sourceBytes, segments: segs.span, segmentEnds: segmentEnds.span, virtualLength: trimmed.upperBound, hint: pieceHint)
         let afterDefinitions = definitionsEnd(in: content, from: trimmed.lowerBound)
-        // As in `paragraphContent(of:trimmed:)`, a marker after a definition doesn't begin the item's first block.
+        // As in `paragraphContent(of:trimmed:linesStart:)`, a marker after a definition doesn't begin the item's first
+        // block.
         if afterDefinitions != trimmed.lowerBound {
             return skipWhitespace(from: afterDefinitions, in: content)
         }
@@ -3661,6 +3662,14 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             rest = definitionsEnd(in: ContentSpan(span: bytes.span, base: chunk.offset, inSource: false), from: chunk.offset)
         }
         return Chunk(offset: rest, length: end - rest, inSource: chunk.inSource)
+    }
+
+    /// Whether a definition may begin the open paragraph's lines at `start`, their first non-whitespace byte, the lines
+    /// beginning at `linesStart`. Past the definitions an underline removed, the lines go on from those definitions, so
+    /// a definition begins only at the first byte of its line, as one that follows another does (Link reference
+    /// definitions).
+    private func definitionMayBegin(at start: Int, linesStart: Int) -> Bool {
+        openParagraphState?.definitionsCommitted != true || start == linesStart
     }
 
     /// Whether a definition can begin with `byte`: `[`, or `^` for an attribute definition.
