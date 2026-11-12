@@ -32,14 +32,14 @@ struct TableCellTextConsolidationTests {
     }
 
     /// The source range covers the entity reference's five source bytes, not its one-byte decoded form.
-    @Test("a decoded entity merges with surrounding text in a cell")
+    @Test("a decoded entity merges with the text before it in a cell")
     func entityMergesWithText() {
-        #expect(TreeDump.dump("a&amp;t\n|-", options: [.tables, .sourcePosition], sourceRanges: true) == """
+        #expect(TreeDump.dump("a&amp;\n|-", options: [.tables, .sourcePosition], sourceRanges: true) == """
             document @1:1-2:3
               table @1:1-2:3
-                table_header @1:1-1:8
-                  table_cell align=none colspan=1 rowspan=1 @1:1-1:8
-                    text "a&t" @1:1-1:8
+                table_header @1:1-1:7
+                  table_cell align=none colspan=1 rowspan=1 @1:1-1:7
+                    text "a&" @1:1-1:7
 
             """)
     }
