@@ -22,6 +22,12 @@ struct InlineOnlyFootnoteShapedBracketTests {
     ]
 
     static let cases: [(markdown: String, expected: String)] = [
+        ("[^x]:\n\n[^x]", """
+            document
+              paragraph
+                text "[^x]:\\n\\n[^x]"
+
+            """),
         ("[^\n\u{FFFD}]", """
             document
               paragraph
