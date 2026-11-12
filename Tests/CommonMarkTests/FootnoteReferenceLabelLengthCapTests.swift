@@ -120,8 +120,9 @@ struct FootnoteReferenceLabelLengthCapTests {
             """)
     }
 
-    /// A footnote reference label cannot hold an unescaped `[` (Links), so the whole `[^[…]]` run stays literal text.
+    /// A footnote definition label cannot hold an unescaped `[` (Links), so `[^a[b]: note` is paragraph text and
+    /// `x[^a[b]` stays literal.
     @Test func caretBracketStaysLiteral() {
-        #expect(tree("x[^[a]]\n\n[^[a]]: note") == literalParagraph("x[^[a]]") + "  paragraph\n    text \"[^[a]]: note\"\n")
+        #expect(tree("x[^a[b]\n\n[^a[b]: note") == literalParagraph("x[^a[b]") + "  paragraph\n    text \"[^a[b]: note\"\n")
     }
 }
