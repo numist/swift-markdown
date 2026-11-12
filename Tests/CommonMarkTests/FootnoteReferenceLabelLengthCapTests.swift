@@ -80,9 +80,10 @@ struct FootnoteReferenceLabelLengthCapTests {
         #expect(tree("x[^\(label)] y[^\(label)]\n\n[^\(label)]: note") == literalParagraph("x[^\(label)] y[^\(label)]") + "  paragraph\n    text \"[^\(label)]: note\"\n")
     }
 
-    /// A footnote definition's label holds no whitespace, so a footnote-shaped bracket that spans a line ending is
-    /// a link label, and the cap counts its characters before whitespace is collapsed for matching: `^`, 499 `a`, a
-    /// line ending and 498 `b` are 999 characters, and a space before the line ending makes 1000.
+    /// A footnote definition's label holds no whitespace, so a footnote-shaped bracket with a line ending between two
+    /// non-whitespace characters after its caret is a link label, and the cap counts its characters before whitespace
+    /// is collapsed for matching: `^`, 499 `a`, a line ending and 498 `b` are 999 characters, and a space before the
+    /// line ending makes 1000.
     @Test func crossLineLabelIsLinkLabelUpToCap() {
         let first = String(repeating: "a", count: 499)
         let second = String(repeating: "b", count: 498)

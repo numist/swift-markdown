@@ -11,9 +11,9 @@
 import CommonMark
 import Testing
 
-/// A footnote definition's label holds no whitespace, so a footnote-shaped bracket whose `]` is on a later line matches
-/// no footnote definition. With no matching link reference definition, the bracket stays literal text around the soft
-/// line break.
+/// A footnote definition's label holds no whitespace, so a footnote-shaped bracket with a line ending between two
+/// non-whitespace characters after its caret matches no footnote definition. With no matching link reference
+/// definition, the bracket stays literal text around the soft line break.
 @Suite("Footnote-shaped bracket across a line ending: definition lookup")
 struct FootnoteCrossLineBracketLookupTests {
     private static func tree(_ markdown: String) -> String {
