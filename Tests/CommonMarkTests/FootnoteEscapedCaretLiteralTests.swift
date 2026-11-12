@@ -26,21 +26,21 @@ struct FootnoteEscapedCaretLiteralTests {
 
     @Test("`[\\^x]` is text `[^x]`")
     func escapedCaretIsText() {
-        let ns = nodes(in: "[\\^x]", options: [.sourcePosition, .footnotes])
+        let ns = nodes(in: "[\\^x]\n\n[^x]: n", options: [.sourcePosition, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.literal) == ["[^x]"])
     }
 
     @Test("`![\\^x]` is text `![^x]`")
     func escapedCaretImageIsText() {
-        let ns = nodes(in: "![\\^x]", options: [.sourcePosition, .footnotes])
+        let ns = nodes(in: "![\\^x]\n\n[^x]: n", options: [.sourcePosition, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text])
         #expect(ns.compactMap(\.literal) == ["![^x]"])
     }
 
     @Test("`[\\^\\nx]` is text `[^`, a soft line break, then text `x]`")
     func escapedCaretCrossLineKeepsSoftBreak() {
-        let ns = nodes(in: "[\\^\nx]", options: [.sourcePosition, .footnotes])
+        let ns = nodes(in: "[\\^\nx]\n\n[^x]: n", options: [.sourcePosition, .footnotes])
         #expect(ns.map(\.kind) == [.document, .paragraph, .text, .softBreak, .text])
         #expect(ns.compactMap(\.literal) == ["[^", "x]"])
     }
