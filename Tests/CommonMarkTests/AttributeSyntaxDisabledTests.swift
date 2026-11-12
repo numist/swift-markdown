@@ -252,10 +252,12 @@ struct AttributeSyntaxDisabledTests {
     /// An empty bracket pair is not a link label, so `[][]` is no reference link and every bracket is text.
     @Test("an empty attribute followed by empty brackets keeps every bracket")
     func emptyBracketPairsAreText() {
-        #expect(tree("^[][]", Self.plain) == """
-            document @1:1-1:6
-              paragraph @1:1-1:6
-                text "^[][]" @1:1-1:6
+        #expect(tree("[]: /u\n\n^[][]", Self.plain) == """
+            document @1:1-3:6
+              paragraph @1:1-1:7
+                text "[]: /u" @1:1-1:7
+              paragraph @3:1-3:6
+                text "^[][]" @3:1-3:6
 
             """)
     }
