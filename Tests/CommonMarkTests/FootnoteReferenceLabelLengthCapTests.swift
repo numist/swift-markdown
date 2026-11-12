@@ -122,7 +122,6 @@ struct FootnoteReferenceLabelLengthCapTests {
 
     /// A footnote reference label cannot hold an unescaped `[` (Links), so the whole `[^[…]]` run stays literal text.
     @Test func caretBracketStaysLiteral() {
-        let label = String(repeating: "a", count: 1001)
-        #expect(tree("x[^[\(label)]]\n\n[^\(label)]: note") == literalParagraph("x[^[\(label)]]") + "  paragraph\n    text \"[^\(label)]: note\"\n")
+        #expect(tree("x[^[a]]\n\n[^[a]]: note") == literalParagraph("x[^[a]]") + "  paragraph\n    text \"[^[a]]: note\"\n")
     }
 }
