@@ -48,6 +48,18 @@ struct LabelLengthCapFourByteCharacterTests {
             """)
     }
 
+    /// The reference's label normalizes to the defined 999-character label, so only its own length keeps it from
+    /// resolving.
+    @Test
+    func footnoteReferenceOf1000CharactersMatchingADefinitionIsText() {
+        #expect(TreeDump.dump("x[^\(Self.wide(999)) ]\n\n[^\(Self.wide(999))]: d", options: .footnotes) == """
+            document
+              paragraph
+                text "x[^\(Self.wide(999)) ]"
+
+            """)
+    }
+
     @Test
     func shortcutReferenceOf999FourByteCharactersResolves() {
         #expect(TreeDump.dump("[\(Self.wide(999))]\n\n[\(Self.wide(999))]: /u", options: []) == """
@@ -67,6 +79,18 @@ struct LabelLengthCapFourByteCharacterTests {
                 text "[\(label)]"
               paragraph
                 text "[\(label)]: /u"
+
+            """)
+    }
+
+    /// The reference's label normalizes to the defined 999-character label, so only its own length keeps it from
+    /// resolving.
+    @Test
+    func shortcutReferenceOf1000CharactersMatchingADefinitionIsText() {
+        #expect(TreeDump.dump("[\(Self.wide(999)) ]\n\n[\(Self.wide(999))]: /u", options: []) == """
+            document
+              paragraph
+                text "[\(Self.wide(999)) ]"
 
             """)
     }
