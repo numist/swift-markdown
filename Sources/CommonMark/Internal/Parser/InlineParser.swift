@@ -988,7 +988,7 @@ extension BlockParser {
                     let op = delimiters[o]
                     // The multiple-of-3 test of rules 9 and 10 (Emphasis and strong emphasis) applies to `~`
                     // too. A `~` opener need not match the closer's length here: `insertEmph` discards a
-                    // mismatched pair, so a closer never reaches past the nearest `~` opener.
+                    // mismatched pair, so a closer never reaches past the nearest `~` opener that passes that test.
                     if !(cl.canOpen || op.canClose)
                         || cl.length % 3 == 0
                         || (op.length + cl.length) % 3 != 0 {
