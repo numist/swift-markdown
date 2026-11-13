@@ -16,7 +16,7 @@ import CommonMark
 /// from its open tags, so `<script/>` starts no HTML block. The exclusion applies to open tags only, so a closing
 /// `</script>` meets the type 7 start condition. `textarea` is not a type 1 tag name, so `<textarea>` and
 /// `<textarea/>` meet the type 7 start condition.
-@Suite("Self-closing type 1 tag names as HTML block starts")
+@Suite("Type 1 tag names in HTML blocks")
 struct HTMLBlockType1TagNameTests {
 
     @Test("`<script/>` is a paragraph")
@@ -50,19 +50,19 @@ struct HTMLBlockType1TagNameTests {
     // MARK: Type 1
 
     @Test("bare `<script>`/`<pre>`/`<style>` open HTML blocks (type 1)", arguments: [
-        ("<script>", """
+        ("<script>\n\nx", """
             document
-              html_block "<script>\\n"
+              html_block "<script>\\n\\nx\\n"
 
             """),
-        ("<pre>", """
+        ("<pre>\n\nx", """
             document
-              html_block "<pre>\\n"
+              html_block "<pre>\\n\\nx\\n"
 
             """),
-        ("<style>", """
+        ("<style>\n\nx", """
             document
-              html_block "<style>\\n"
+              html_block "<style>\\n\\nx\\n"
 
             """),
     ])
@@ -72,9 +72,9 @@ struct HTMLBlockType1TagNameTests {
 
     @Test("`<script ` (trailing space) opens an HTML block (type 1)")
     func scriptTrailingSpace() {
-        #expect(TreeDump.dump("<script ", options: []) == """
+        #expect(TreeDump.dump("<script \n\nx", options: []) == """
             document
-              html_block "<script \\n"
+              html_block "<script \\n\\nx\\n"
 
             """)
     }
