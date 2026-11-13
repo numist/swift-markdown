@@ -105,9 +105,9 @@ struct InlineOnlyCRLineEndingConstructTests {
     }
 
     /// An attribute definition's attributes end at its line ending.
-    @Test("an attribute definition before a CRLF, and attributes across one", arguments: modes)
+    @Test("an attribute definition before a lone CR, and attributes across a CRLF", arguments: modes)
     func attributes(_ options: MarkdownDocument.ParseOptions) {
-        #expect(tree("^[a]: class=x\r\n^[t][a] ^[u](y\r\nz)", options.union(.attributes)) == """
+        #expect(tree("^[a]: class=x\r^[t][a] ^[u](y\r\nz)", options.union(.attributes)) == """
             document @1:1-3:3
               paragraph @2:1-3:3
                 attribute "class=x" @2:1-2:8
