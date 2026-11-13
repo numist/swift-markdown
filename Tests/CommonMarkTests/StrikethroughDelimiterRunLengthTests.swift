@@ -79,6 +79,22 @@ struct StrikethroughDelimiterRunLengthTests {
                   text ")~~~)"
 
             """),
+        ("**~)~~~~)~", """
+            document
+              paragraph
+                text "**"
+                strikethrough
+                  text ")~~~~)"
+
+            """),
+        ("**~~)~~~~)~~", """
+            document
+              paragraph
+                text "**"
+                strikethrough
+                  text ")~~~~)"
+
+            """),
     ])
     func longRunInsideStrikethroughStaysLiteral(markdown: String, tree: String) {
         #expect(TreeDump.dump(markdown, options: .strikethrough) == tree)
