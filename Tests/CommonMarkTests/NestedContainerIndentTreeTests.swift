@@ -105,15 +105,15 @@ struct NestedContainerIndentTreeTests {
 
     @Test
     func orderedItemsNestedByMarkerWidth() {
-        let source = "1. a\n   1. b\n      1. c\n         1. d\n"
+        let source = "1. a\n   1. b\n      1. c\n         1. d\n\n        e\n"
         #expect(TreeDump.dump(source, options: Self.options, sourceRanges: true) == """
-            document @1:1-5:1
-              list ordered start=1 delim=period tight @1:1-4:14
-                item @1:1-4:14
+            document @1:1-7:1
+              list ordered start=1 delim=period tight @1:1-6:10
+                item @1:1-6:10
                   paragraph @1:4-1:5
                     text "a" @1:4-1:5
-                  list ordered start=1 delim=period tight @2:4-4:14
-                    item @2:4-4:14
+                  list ordered start=1 delim=period loose @2:4-6:10
+                    item @2:4-6:10
                       paragraph @2:7-2:8
                         text "b" @2:7-2:8
                       list ordered start=1 delim=period tight @3:7-4:14
@@ -124,6 +124,8 @@ struct NestedContainerIndentTreeTests {
                             item @4:10-4:14
                               paragraph @4:13-4:14
                                 text "d" @4:13-4:14
+                      paragraph @6:9-6:10
+                        text "e" @6:9-6:10
 
             """)
     }
