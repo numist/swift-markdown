@@ -11,9 +11,9 @@
 import Testing
 import CommonMark
 
-/// A block-quoted link reference definition followed by `===`, then a table. As under Link reference definitions,
-/// `===` follows no paragraph content, so it is paragraph text rather than a setext heading underline; the table
-/// takes its header row from that paragraph's last line (Tables (extension)).
+/// A link reference definition followed by a `=` line, then table rows. As under Link reference definitions, the `=`
+/// line follows no paragraph content, so it is paragraph text rather than a setext heading underline; with `.tables`,
+/// the table takes its header row from that paragraph's last line (Tables (extension)).
 @Suite("Table after a definition-only setext paragraph")
 struct TableAfterSetextDefinitionTests {
 
