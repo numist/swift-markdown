@@ -11,7 +11,7 @@
 import Markdown
 import XCTest
 
-/// Nested block quote markers separated by tabs, on a line after an unclosed fenced code block. A tab counts
+/// Tabs after block quote markers, on the line after an unclosed fenced code block or, as a control, a paragraph. A tab counts
 /// to the next tab stop (Tabs), and the space a block quote marker may be followed by takes one column of
 /// it: all of a tab that starts at column 3 mod 4, part of a wider one (Block quotes). Columns here count from 0.
 class BlockQuoteTabColumnMatrixTests: XCTestCase {
@@ -97,6 +97,7 @@ class BlockQuoteTabColumnMatrixTests: XCTestCase {
         assertTree(quotes(2, .code("x"), head: "Document\n"), "> > ```\n>\t>x")
         assertTree(quotes(2, .code("x"), head: "Document\n"), "> > ```\n>\t> x")
         assertTree(quotes(2, .code("x"), head: "Document\n"), "> > ```\n>\t >x")
+        assertTree("Document\n└─ BlockQuote\n   ├─ BlockQuote\n   │  └─ CodeBlock language: none\n\n   └─ CodeBlock language: none\n      >x", "> > ```\n>\t  >x")
         // Control: the same markers on a paragraph continuation line.
         assertTree("Document\n└─ BlockQuote\n   └─ BlockQuote\n      └─ Paragraph\n         ├─ Text \"a\"\n         ├─ SoftBreak\n         └─ Text \"x\"", "> > a\n>\t> x")
     }
@@ -104,6 +105,10 @@ class BlockQuoteTabColumnMatrixTests: XCTestCase {
     /// A continuation marker after a tab its parent's optional column fully consumed (column 3).
     func testContinuationMarkerAfterFullyConsumedTab() {
         assertTree(quotes(4, .code("x"), head: "Document\n"), ">>>> ```\n>>>\t>x")
+    }
+
+    /// A tab at column 3 is all of the marker's optional column, so fenced code content starts at the next tab.
+    func testFencedContentAfterFullyConsumedTab() {
         assertTree(quotes(3, .code("\tx"), head: "Document\n"), ">>> ```\n>>>\t\tx")
     }
 
