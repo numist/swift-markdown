@@ -64,7 +64,7 @@ struct TreeRegressionTests {
     /// pairs.
     @Test
     func corpusHasEveryPair() {
-        #expect(Self.corpus.count == 117, "unexpected pair count in \(Self.corpusDir.path)")
+        #expect(Self.corpus.count == 118, "unexpected pair count in \(Self.corpusDir.path)")
     }
 
     @Test(arguments: corpus)
