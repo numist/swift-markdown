@@ -11,7 +11,7 @@
 import CommonMark
 import Testing
 
-@Suite("Footnote-shaped bracket holding an attribute opener across a line ending")
+@Suite("Bracket pair after an attribute or image bracket inside a footnote-shaped bracket")
 struct FootnoteCaretBracketNewlineInLabelTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink, .footnotes]
 
