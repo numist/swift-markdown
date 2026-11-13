@@ -15,9 +15,10 @@ import Testing
 /// renders every level.
 struct DeepBlockQuoteNestingTests {
 
-    /// A line of `>` markers opens one block quote per marker; a following `>` line continues only the outermost.
+    /// A line of `>` markers opens one block quote per marker; a following `>` line continues only the outermost, so a
+    /// `>>` line after it opens a second block quote inside the outermost.
     @Test func multiLineDeepBlockQuotesBuildFullTree() {
-        let markdown = String(repeating: ">", count: 300) + "\n>"
+        let markdown = String(repeating: ">", count: 300) + "\n>\n>>"
         let document = Document(parsing: markdown)
 
         var depth = 0
@@ -29,9 +30,12 @@ struct DeepBlockQuoteNestingTests {
 
         #expect(depth == 300)
         #expect(document.child(at: 0)?.range
-            == SourceLocation(line: 1, column: 1, source: nil)..<SourceLocation(line: 2, column: 2, source: nil))
+            == SourceLocation(line: 1, column: 1, source: nil)..<SourceLocation(line: 3, column: 3, source: nil))
+        #expect(document.child(at: 0)?.childCount == 2)
         #expect(document.child(at: 0)?.child(at: 0)?.range
             == SourceLocation(line: 1, column: 2, source: nil)..<SourceLocation(line: 1, column: 301, source: nil))
+        #expect(document.child(at: 0)?.child(at: 1)?.range
+            == SourceLocation(line: 3, column: 2, source: nil)..<SourceLocation(line: 3, column: 3, source: nil))
     }
 
     @Test func deepTreeDebugDescriptionDoesNotOverflow() {
