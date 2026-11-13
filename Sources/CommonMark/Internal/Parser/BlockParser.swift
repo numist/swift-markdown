@@ -3954,10 +3954,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
 
     /// The character reference at the `&` at `offset` in `chunk`, or `nil` if none starts there.
     func characterReference(at offset: Int, in chunk: Chunk) -> EntityParser.EntityMatch? {
-        if chunk.inSource {
-            EntityParser.matchEntity(start: offset, end: chunk.range.upperBound, source: sourceBytes)
+        let maxDecimalDigits = storage.limits.maxDecimalCharacterReferenceDigits
+        let maxHexadecimalDigits = storage.limits.maxHexadecimalCharacterReferenceDigits
+        return if chunk.inSource {
+            EntityParser.matchEntity(start: offset, end: chunk.range.upperBound, source: sourceBytes, maxDecimalDigits: maxDecimalDigits, maxHexadecimalDigits: maxHexadecimalDigits)
         } else {
-            EntityParser.matchEntity(start: offset, end: chunk.range.upperBound, source: storage.strings.span)
+            EntityParser.matchEntity(start: offset, end: chunk.range.upperBound, source: storage.strings.span, maxDecimalDigits: maxDecimalDigits, maxHexadecimalDigits: maxHexadecimalDigits)
         }
     }
 

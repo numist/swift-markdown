@@ -29,20 +29,22 @@ internal enum EntityParser {
     }
 
     /// Matches a reference at the `&` at `start`, returning its decoded bytes and the offset past its `;` (Entity and numeric character references).
-    internal static func matchEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
+    ///
+    /// A numeric reference has at most `maxDecimalDigits` decimal or `maxHexadecimalDigits` hexadecimal digits, leading zeros included.
+    internal static func matchEntity(start: Int, end: Int, source: Span<UInt8>, maxDecimalDigits: Int, maxHexadecimalDigits: Int) -> EntityMatch? {
         let after = start + 1
         if after >= end {
             return nil
         }
         let next = source[after]
         if next == UInt8(ascii: "#") {
-            return matchNumericEntity(start: start, end: end, source: source)
+            return matchNumericEntity(start: start, end: end, source: source, maxDecimalDigits: maxDecimalDigits, maxHexadecimalDigits: maxHexadecimalDigits)
         }
         return matchNamedEntity(start: start, end: end, source: source)
     }
 
-    /// Match `&#NNN;` (decimal, 1–7 digits) or `&#xHHH;` / `&#XHHH;` (hex, 1–6 digits).
-    private static func matchNumericEntity(start: Int, end: Int, source: Span<UInt8>) -> EntityMatch? {
+    /// Match `&#NNN;` (decimal, 1 to `maxDecimalDigits` digits) or `&#xHHH;` / `&#XHHH;` (hex, 1 to `maxHexadecimalDigits` digits).
+    private static func matchNumericEntity(start: Int, end: Int, source: Span<UInt8>, maxDecimalDigits: Int, maxHexadecimalDigits: Int) -> EntityMatch? {
         var i = start + 2
         if i >= end {
             return nil
@@ -55,7 +57,7 @@ internal enum EntityParser {
         }
         var n: UInt32 = 0
         var digits = 0
-        let maxDigits = hex ? 6 : 7
+        let maxDigits = hex ? maxHexadecimalDigits : maxDecimalDigits
         while i < end {
             let b = source[i]
             let value: UInt32
@@ -68,8 +70,8 @@ internal enum EntityParser {
             } else {
                 break
             }
-            // At most one digit past the limit is accumulated, which stays far below `UInt32.max`.
-            n = n * (hex ? 16 : 10) + value
+            // Every value past U+10FFFF decodes alike, so saturating there keeps any number of digits from overflowing.
+            n = min(n * (hex ? 16 : 10) + value, 0x110000)
             digits += 1
             if digits > maxDigits {
                 return nil
