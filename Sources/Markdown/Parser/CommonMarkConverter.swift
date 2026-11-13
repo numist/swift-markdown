@@ -17,6 +17,27 @@ import Foundation
 /// converted into an owned `RawMarkup` tree before the borrow ends.
 struct MarkupParser {
 
+    // These reproduce the limits this module has always parsed documents with, so a document keeps its tree.
+    private static let shippingLimits: MarkdownDocument.ParseLimits = {
+        var limits = MarkdownDocument.ParseLimits()
+        limits.maxLinkLabelCharacters = .max
+        limits.maxLinkLabelBytes = 1000
+        limits.maxFootnoteLabelCharacters = .max
+        limits.maxFootnoteLabelBytes = 1000
+        limits.maxDecimalCharacterReferenceDigits = 8
+        limits.maxHexadecimalCharacterReferenceDigits = 8
+        limits.maxLinkDestinationParenthesisNesting = 32
+        limits.maxAttributeParenthesisNesting = 32
+        limits.maxCodeSpanOpeningBackticks = 80
+        limits.maxContainersOpenedOnLineBeforeListMarker = 99
+        limits.fenceLengthClampForClosing = 255
+        limits.strikethroughTildeRunChunk = 100
+        limits.referenceExpansionBudget = 100_000
+        limits.maxTableRowCells = 65_534
+        limits.maxTableAutocompletedCells = 524_288
+        return limits
+    }()
+
     static func parseString(_ string: String, source: URL?, options: ParseOptions) -> Document {
         // No footnotes: `Markup` has no footnote node.
         var cmOptions: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes]
@@ -25,7 +46,7 @@ struct MarkupParser {
         }
         cmOptions.insert(.sourcePosition)
 
-        let raw = MarkdownDocument.withParsedDocument(string, options: cmOptions) { document in
+        let raw = MarkdownDocument.withParsedDocument(string, options: cmOptions, limits: shippingLimits) { document in
             convert(document.root, source: source, options: options)
         }
 

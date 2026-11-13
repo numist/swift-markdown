@@ -26,6 +26,7 @@ add_library(CommonMark
   Public/MarkdownDocument.swift
   Public/MarkdownNode.swift
   Public/NodeContent.swift
+  Public/ParseLimits.swift
   Public/ParseOptions.swift)
 
 target_compile_options(CommonMark PRIVATE

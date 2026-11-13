@@ -25,8 +25,8 @@ import CommonMark
 /// half-open), or `@-` for a node without one.
 internal enum TreeDump {
 
-    internal static func dump(_ source: String, options: MarkdownDocument.ParseOptions, sourceRanges: Bool = false) -> String {
-        MarkdownDocument.withParsedDocument(source, options: options) { doc in
+    internal static func dump(_ source: String, options: MarkdownDocument.ParseOptions, limits: MarkdownDocument.ParseLimits = .init(), sourceRanges: Bool = false) -> String {
+        MarkdownDocument.withParsedDocument(source, options: options, limits: limits) { doc in
             var out = ""
             dump(doc.root, depth: 0, sourceRanges: sourceRanges, segments: false, into: &out)
             return out

@@ -10,7 +10,7 @@
 
 /// A parsed Markdown document.
 ///
-/// A document borrows its source's UTF-8 bytes rather than copying them, so the source must outlive it. `withParsedDocument(_:options:_:)` works on every OS release; where `UTF8Span` is available, `init(parsing:options:)` returns a document whose lifetime is tied to the source.
+/// A document borrows its source's UTF-8 bytes rather than copying them, so the source must outlive it. `withParsedDocument(_:options:limits:_:)` works on every OS release; where `UTF8Span` is available, `init(parsing:options:limits:)` returns a document whose lifetime is tied to the source.
 ///
 ///     let source = "# Hello\n\nworld"
 ///     MarkdownDocument.withParsedDocument(source) { document in
@@ -24,8 +24,8 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
 
     /// Parses `source` in place. Internal because the public initializers accept only `String` and `UTF8Span`, which guarantee valid UTF-8.
     @_lifetime(copy source)
-    internal init(parsing source: Span<UInt8>, options: MarkdownDocument.ParseOptions = []) {
-        let storage = DocumentStorage(options: options)
+    internal init(parsing source: Span<UInt8>, options: MarkdownDocument.ParseOptions = [], limits: MarkdownDocument.ParseLimits = .init()) {
+        let storage = DocumentStorage(options: options, limits: limits)
         let parser = BlockParser(storage: storage, source: source)
         self._storage = parser.parse()
         self._source = source
@@ -39,10 +39,11 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
     /// - Parameters:
     ///   - source: The Markdown text to parse.
     ///   - options: The options that control parsing.
+    ///   - limits: The bounds on the size of constructs the parser recognizes.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @_lifetime(copy source)
-    public init(parsing source: UTF8Span, options: MarkdownDocument.ParseOptions = []) {
-        self.init(parsing: source.span, options: options)
+    public init(parsing source: UTF8Span, options: MarkdownDocument.ParseOptions = [], limits: MarkdownDocument.ParseLimits = .init()) {
+        self.init(parsing: source.span, options: options, limits: limits)
     }
 
     /// Parses a string as Markdown and passes the borrowed document to a closure.
@@ -52,17 +53,19 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
     /// - Parameters:
     ///   - source: The Markdown text to parse.
     ///   - options: The options that control parsing.
+    ///   - limits: The bounds on the size of constructs the parser recognizes.
     ///   - body: A closure that receives the borrowed document, valid only for the duration of the call.
     /// - Returns: The value returned by `body`.
     /// - Throws: Any error `body` throws.
     public static func withParsedDocument<R>(
         _ source: borrowing String,
         options: MarkdownDocument.ParseOptions = [],
+        limits: MarkdownDocument.ParseLimits = .init(),
         _ body: (borrowing MarkdownDocument) throws -> R
     ) rethrows -> R {
         if #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
             let utf8 = source.utf8Span
-            let document = MarkdownDocument(parsing: utf8, options: options)
+            let document = MarkdownDocument(parsing: utf8, options: options, limits: limits)
             return try body(document)
         }
         // `withUTF8` copies the bytes only of a small or non-contiguous string.
@@ -70,7 +73,7 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
         return try contiguous.withUTF8 { buffer in
             // SAFETY: `buffer` is valid for this closure, and the span over it backs a document that `body` borrows and can't escape, so no access outlives it.
             //         Before anyAppleOS 26 no API vends a `Span` over a `String`'s UTF-8 (`String.UTF8View.span` and `String.utf8Span` are anyAppleOS 26). The safe spans available there, such as `ContiguousArray.span`, cover only storage the caller owns, so they require copying the whole source, which defeats parsing the source in place.
-            let document = MarkdownDocument(parsing: unsafe Span(_unsafeElements: buffer), options: options)
+            let document = MarkdownDocument(parsing: unsafe Span(_unsafeElements: buffer), options: options, limits: limits)
             return try body(document)
         }
     }
@@ -119,14 +122,15 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
 extension MarkdownDocument {
     /// Creates a document by parsing a string as Markdown.
     ///
-    /// The document borrows the string's UTF-8 bytes instead of copying them, so its lifetime is tied to `source`. To parse on an OS release that doesn't provide `UTF8Span`, use `withParsedDocument(_:options:_:)` instead.
+    /// The document borrows the string's UTF-8 bytes instead of copying them, so its lifetime is tied to `source`. To parse on an OS release that doesn't provide `UTF8Span`, use `withParsedDocument(_:options:limits:_:)` instead.
     ///
     /// - Parameters:
     ///   - source: The Markdown text to parse.
     ///   - options: The options that control parsing.
+    ///   - limits: The bounds on the size of constructs the parser recognizes.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @_lifetime(borrow source)
-    public init(parsing source: borrowing String, options: MarkdownDocument.ParseOptions = []) {
-        self.init(parsing: source.utf8Span, options: options)
+    public init(parsing source: borrowing String, options: MarkdownDocument.ParseOptions = [], limits: MarkdownDocument.ParseLimits = .init()) {
+        self.init(parsing: source.utf8Span, options: options, limits: limits)
     }
 }
