@@ -115,6 +115,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
             #expect(codeBlocks(doc).map(\.literal) == [""])
             #expect(dfs(doc).last?.literal == "x")
         }
+        #expect(TreeDump.dump(">>```\n>\tx", options: []) == "document\n  block_quote\n    block_quote\n      code_block \"\" \"\"\n    paragraph\n      text \"x\"\n")
     }
 
     @Test("a missing inner `>` before a blank rest of line leaves just the empty code block")
