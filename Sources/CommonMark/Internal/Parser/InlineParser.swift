@@ -584,6 +584,8 @@ extension BlockParser {
     /// The link or image data for a full, collapsed or shortcut reference after the `]` at `cursor`, and the offset past it.
     ///
     /// `bracketTextStart` is where the bracket text begins, which collapsed and shortcut references take as their label, or `nil` when a bracket nested under the opener rules that out.
+    ///
+    /// A reference resolves only while its definition's destination and title bytes fit `referenceExpansionRemaining`, which it is then charged.
     @inline(__always)
     private mutating func matchReferenceLinkForm(bracketTextStart: Int?, cursor: Int, content: borrowing ContentSpan) -> (data: NodeData, end: Int)? {
         let pos = cursor + 1
@@ -610,6 +612,11 @@ extension BlockParser {
         guard !key.isEmpty, let definition = storage.referenceMap[key] else {
             return nil
         }
+        let expansion = definition.destination.length + definition.title.length
+        guard expansion <= referenceExpansionRemaining else {
+            return nil
+        }
+        referenceExpansionRemaining -= expansion
         return (.link(url: storage.intern(definition.destination), title: storage.intern(definition.title)), afterReference)
     }
 

@@ -199,6 +199,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// The number of links and autolinks formed in this `parseInline` pass.
     var linksFormed = 0
 
+    /// The bytes of destination and title that link references can still expand to (see
+    /// `ParseLimits.referenceExpansionBudget`), across every `parseInline` pass.
+    var referenceExpansionRemaining: Int
+
     /// The `ContentSpan.pieceHint` of every content this parse reads through a segment list or run map, made on first
     /// use, so a parse that reads none allocates none.
     var pieceHint: PieceHint {
@@ -222,6 +226,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         self.positionsEnabled = self.storage.options.contains(.sourcePosition)
         self.destinationParentheses = BalancedParenthesesScan(maxNesting: self.storage.limits.maxLinkDestinationParenthesisNesting)
         self.attributeParentheses = BalancedParenthesesScan(maxNesting: self.storage.limits.maxAttributeParenthesisNesting)
+        self.referenceExpansionRemaining = max(self.storage.limits.referenceExpansionBudget, source.count)
 
         // Reserve the append-only arenas in proportion to the input, so they regrow only for dense input.
         let byteCount = self.sourceBytes.count
