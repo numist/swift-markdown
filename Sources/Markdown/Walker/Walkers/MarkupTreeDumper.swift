@@ -43,7 +43,7 @@ extension Markup {
     /// - Returns: a description illustrating the hierarchy and contents of each element of the tree.
     public func debugDescription(options: MarkupDumpOptions = []) -> String {
         var dumper = MarkupTreeDumper(options: options)
-        dumper.dumpTree(self)
+        dumper.visit(self)
         return dumper.result
     }
 }
@@ -103,6 +103,7 @@ struct MarkupTreeDumper: MarkupWalker {
             }
             result += "\(customDescription)"
         }
+        increasingDepth(markup)
     }
 
     mutating func defaultVisit(_ markup: Markup) {
@@ -112,8 +113,8 @@ struct MarkupTreeDumper: MarkupWalker {
     private var lineIndentPrefix: String {
         var prefix = ""
         for (depth, element) in path.enumerated().reversed() {
-            guard let parent = element.parent,
-                parent.childCount - 1 != element.indexInParent else {
+            guard let lastChildIndex = element.parent?.children.reversed().first?.indexInParent,
+                lastChildIndex != element.indexInParent else {
                     if depth > 0 {
                         prefix.append("   ")
                     }
@@ -146,36 +147,22 @@ struct MarkupTreeDumper: MarkupWalker {
 
         result += lineIndentPrefix
 
-        guard let parent = markup.parent else {
+        guard let lastChildIndex = markup.parent?.children.reversed().first?.indexInParent else {
             return
         }
-        let treeMarker = markup.indexInParent == parent.childCount - 1 ? "└─ " : "├─ "
+        let treeMarker = markup.indexInParent == lastChildIndex ? "└─ " : "├─ "
         result.append(treeMarker)
     }
 
     /**
-     Dump `root` and its subtree in depth-first pre-order.
+     Push `element` to the current path and descend into the children, popping `element` from the path when returning.
 
-     Traversal uses an explicit iterator stack rather than recursion so that deeply nested trees do
-     not overflow the call stack.
+     - parameter element: The parent element you're descending into.
      */
-    fileprivate mutating func dumpTree(_ root: Markup) {
-        visit(root)
-        guard root.childCount > 0 else { return }
-        path.append(root)
-        var iterators = [root.children.makeIterator()]
-        while !iterators.isEmpty {
-            guard let child = iterators[iterators.count - 1].next() else {
-                iterators.removeLast()
-                path.removeLast()
-                continue
-            }
-            visit(child)
-            if child.childCount > 0 {
-                path.append(child)
-                iterators.append(child.children.makeIterator())
-            }
-        }
+    private mutating func increasingDepth(_ element: Markup) {
+        path.append(element)
+        descendInto(element)
+        path.removeLast()
     }
 
     mutating func visitText(_ text: Text) {
@@ -247,7 +234,7 @@ struct MarkupTreeDumper: MarkupWalker {
     }
 
     mutating func visitCustomInline(_ customInline: CustomInline) {
-        dump(customInline, customDescription: "\(customInline.text)")
+        dump(customInline, customDescription: "customInline.text")
     }
 
     mutating func visitListItem(_ listItem: ListItem) {

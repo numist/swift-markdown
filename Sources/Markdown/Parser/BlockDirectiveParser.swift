@@ -347,8 +347,9 @@ struct TrimmedLine {
             case " ":
                 return count + 1
             case "\t":
-                // Per the spec's Tabs section, tabs that define block structure
-                // behave as spaces with a tab stop of 4 characters.
+                // Align up to units of 4.
+                // We're using 4 instead of 8 here because cmark has traditionally
+                // considered a tab to be equivalent to 4 spaces.
                 return (count + 4) & ~0b11
             default:
                 fatalError("Non-whitespace character found while calculating equivalent indentation column count")
@@ -681,8 +682,8 @@ private enum ParseContainer: CustomStringConvertible {
             let indentationColumnCount = indentationAdjustment(under: parent)
 
             // Trim up to that number of whitespace characters off.
-            // The parser reports source locations relative to the trimmed lines, so keep track of what is removed
-            // in order to adjust those locations afterward.
+            // We need to keep track of what we removed because cmark will report different source locations than what we
+            // had in the source. We'll adjust those when we get them back.
             let trimmedIndentationAndLines = lines.map { line -> (line: TrimmedLine,
                                                                   indentation: Int) in
                 var trimmedLine = line
@@ -691,14 +692,20 @@ private enum ParseContainer: CustomStringConvertible {
                 return (trimmedLine, indentation)
             }
 
+            // Build the logical block of text that cmark will see.
             let logicalText = trimmedIndentationAndLines
                 .map { $0.line.text }
                 .joined(separator: "\n")
 
+            // Ask cmark to parse it. Now we have a Markdown `Document` consisting
+            // of the contents of this line run.
             let parsedSubdocument = MarkupParser.parseString(logicalText, source: lines.first?.source, options: options)
 
             // Now, we'll adjust the columns of all of the source positions as
             // needed to offset that indentation trimming we did above.
+            // Note that the child identifiers under this document will start at
+            // 0, so we will need to adjust those as well, because child identifiers
+            // start at 0 from the `root`.
 
             var columnAdjuster = RangeAdjuster(startLine: lines.first?.lineNumber ?? 1,
                                                ranges: ranges,

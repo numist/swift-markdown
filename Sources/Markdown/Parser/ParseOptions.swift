@@ -28,7 +28,7 @@ public struct ParseOptions: OptionSet, Sendable {
     /// Parse a limited set of Doxygen commands. Requires ``parseBlockDirectives``.
     public static let parseMinimalDoxygen = ParseOptions(rawValue: 1 << 3)
 
-    /// Has no effect: parsing always records source ranges.
+    /// Disable including a `data-sourcepos` attribute on all block elements during parsing.
     public static let disableSourcePosOpts = ParseOptions(rawValue: 1 << 4)
 }
 

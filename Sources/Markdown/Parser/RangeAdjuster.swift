@@ -18,10 +18,12 @@ struct RangeAdjuster: MarkupWalker {
     var ranges: RangeTracker
 
     /// An array of whitespace spans that were removed for each line, indexed
-    /// by line number. `0` means that no whitespace was removed on that line.
+    /// by line number. `nil` means that no whitespace was removed on that line.
     var trimmedIndentationPerLine: [Int]
 
     mutating func defaultVisit(_ markup: Markup) {
+        /// This should only be used in the parser where ranges are guaranteed
+        /// to be filled in from cmark.
         let adjustedRange = markup.range.map { range -> SourceRange in
             // Add back the offset to the column as if the indentation weren't stripped.
             let start = SourceLocation(line: startLine + range.lowerBound.line - 1,
