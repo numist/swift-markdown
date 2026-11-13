@@ -86,10 +86,10 @@ struct InlineOnlyTextConsolidationTests {
                 text "_x"
 
             """)
-        #expect(TreeDump.dump("a\\qb", options: options) == """
+        #expect(TreeDump.dump("a\\_b", options: options) == """
             document
               paragraph
-                text "a\\\\qb"
+                text "a_b"
 
             """)
     }
