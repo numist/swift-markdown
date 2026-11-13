@@ -70,23 +70,24 @@ struct ListMarkerTabPaddingFencedContinuationTests {
         }
     }
 
-    // A single tab after the marker is three columns, fewer than five, so all of it is padding and `x`
-    // begins a paragraph at the item's content column.
+    // A single tab after the marker is three columns, fewer than five, so all of it is padding: `x` begins a
+    // paragraph at the item's content column, and a line indented two columns past it continues the item.
     @Test("single-tab list continuation opens a sibling item with a paragraph")
     func singleTabSiblingParagraph() {
-        MarkdownDocument.withParsedDocument("- ```\n-\tx") { doc in
+        MarkdownDocument.withParsedDocument("- ```\n-\tx\n\n      y") { doc in
             let kinds = dfs(doc).map(\.kind)
             #expect(kinds.map(TreeDump.describe) == [
                 "document",
-                "list bullet '-' tight",
+                "list bullet '-' loose",
                 "item",
                 "code_block fenced fence='`' length=3 offset=0",
                 "item",
                 "paragraph",
                 "text",
+                "paragraph",
+                "text",
             ])
-            #expect(codeBlocks(doc).map(\.literal) == [""])
-            #expect(dfs(doc).last?.literal == "x")
+            #expect(dfs(doc).compactMap(\.literal) == ["", "x", "y"])
         }
     }
 
