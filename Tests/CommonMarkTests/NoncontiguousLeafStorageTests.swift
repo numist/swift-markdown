@@ -14,8 +14,9 @@ import Testing
 /// Storage for paragraphs and setext headings whose lines are not contiguous in the source.
 ///
 /// Such content is read in place as its source lines joined by line endings, including where leading definitions and
-/// a task list item marker are matched, so only a link title spanning lines is copied into the materialized string
-/// buffer. The empty document's buffer holds one byte, the line ending that joins lines.
+/// a task list item marker are matched. It is copied into the materialized string buffer only where its output differs
+/// from its source bytes, as for a NUL, or where one string spans lines, as a link title, raw HTML, an attribute list
+/// or a code span can. The empty document's buffer holds one byte, the line ending that joins lines.
 @Suite("Content of non-contiguous lines stays in the source")
 struct NoncontiguousLeafStorageTests {
 
