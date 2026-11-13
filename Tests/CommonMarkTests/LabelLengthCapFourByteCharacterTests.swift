@@ -37,7 +37,7 @@ struct LabelLengthCapFourByteCharacterTests {
     }
 
     @Test(arguments: [wide(1000), wide(999) + "a", wide(998) + "aa"])
-    func footnoteReferenceOf1000CharactersIsText(_ label: String) {
+    func footnoteDefinitionOf1000CharactersIsText(_ label: String) {
         #expect(TreeDump.dump("x[^\(label)]\n\n[^\(label)]: d", options: .footnotes) == """
             document
               paragraph
@@ -72,7 +72,7 @@ struct LabelLengthCapFourByteCharacterTests {
     }
 
     @Test(arguments: [wide(1000), wide(999) + "a", wide(998) + "aa"])
-    func shortcutReferenceOf1000CharactersIsText(_ label: String) {
+    func linkReferenceDefinitionOf1000CharactersIsText(_ label: String) {
         #expect(TreeDump.dump("[\(label)]\n\n[\(label)]: /u", options: []) == """
             document
               paragraph
