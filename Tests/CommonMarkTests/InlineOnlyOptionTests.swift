@@ -13,15 +13,16 @@ import CommonMark
 
 /// The parse options `.inlineOnly` and `.preserveWhitespace`.
 ///
-/// Neither recognizes block structure: the whole input is one paragraph, so block markers such as `#`, `* `, `> `,
-/// `---` and a 4-space indent are text, and line endings, blank lines and leading and trailing whitespace stay in the
-/// paragraph's text. Inline syntax is parsed. The two options produce the same tree.
+/// Neither recognizes block structure other than link reference definitions at the start of the input: the rest of the
+/// input is one paragraph, so block markers such as `#`, `* `, `> `, `---` and a 4-space indent are text, and line
+/// endings, blank lines and leading and trailing whitespace stay in the paragraph's text, except that a line ending
+/// after a backslash is a hard line break. Inline syntax is parsed. The two options produce the same tree.
 @Suite("Parse options - inlineOnly / preserveWhitespace")
 struct InlineOnlyOptionTests {
 
     private static let inlineOnlyOptions: [MarkdownDocument.ParseOptions] = [.inlineOnly, .preserveWhitespace]
 
-    @Test("inline-only parsing suppresses all block structure into one paragraph", arguments: inlineOnlyOptions)
+    @Test("inline-only parsing keeps heading and list item markers as text in one paragraph", arguments: inlineOnlyOptions)
     func suppressesBlocks(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("# heading\n\n* item", options: options) == """
             document
