@@ -11,10 +11,10 @@
 import Testing
 import CommonMark
 
-/// Link reference definitions in a block quote or list item, whose paragraph lines are not contiguous in the source.
-/// A definition's label, title, and the whitespace before its destination or title may span a line ending (Link
-/// reference definitions).
-@Suite("Definitions across the lines of a container's paragraph")
+/// Link reference definitions and inline links in a block quote or list item, whose paragraph lines are not contiguous in the
+/// source. A definition's label, title, and the whitespace before its destination or title may span a line ending (Link
+/// reference definitions), as may the whitespace before an inline link's destination and title (Links).
+@Suite("Definitions and inline links across the lines of a container's paragraph")
 struct ContainerDefinitionLineJoinTests {
 
     @Test("a label, the whitespace before a destination, and a title each span a line ending")
