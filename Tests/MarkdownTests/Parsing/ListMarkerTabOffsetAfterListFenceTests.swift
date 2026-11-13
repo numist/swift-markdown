@@ -23,7 +23,7 @@ class ListMarkerTabOffsetAfterListFenceTests: XCTestCase {
         XCTAssertEqual(expected, actual, "input: \(markdown.debugDescription)", file: file, line: line)
     }
 
-    func testBulletAfterQuoteTabIsSiblingOfShallowerBullet() {
+    func testBulletAfterQuoteTabShortOfContentColumnIsSibling() {
         let siblings = Self.listFence + "└─ BlockQuote\n   └─ UnorderedList\n      ├─ ListItem\n      │  └─ Paragraph\n      │     └─ Text \"x\"\n      └─ ListItem\n         └─ Paragraph\n            └─ Text \"y\""
         assertTree(siblings, "- ```\n>\t- x\n>    - y")
     }
