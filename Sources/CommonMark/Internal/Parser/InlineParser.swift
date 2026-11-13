@@ -903,9 +903,12 @@ extension BlockParser {
         }
     }
 
-    /// Scans the delimiter run at `start`, emits its text unless it can neither open nor close, and pushes a delimiter if it can open or close (Emphasis and strong emphasis) and, for `~`, has a strikethrough length. Returns the offset past the run.
+    /// Scans the delimiter run at `start`, emits its text unless it can neither open nor close, and pushes a delimiter if it can open or close (Emphasis and strong emphasis) and, for `~`, has a strikethrough length. A `~` run ends after `strikethroughTildeRunChunk` tildes, so the rest of a longer run is scanned as runs of its own. Returns the offset past the run.
     private mutating func handleDelimRun(char: UInt8, start: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
-        let end = content.endOffset
+        var end = content.endOffset
+        if char == UInt8(ascii: "~") {
+            end = start + min(end - start, max(storage.limits.strikethroughTildeRunChunk, 1))
+        }
         var runEnd = start
         while runEnd < end, content[runEnd] == char {
             runEnd += 1
