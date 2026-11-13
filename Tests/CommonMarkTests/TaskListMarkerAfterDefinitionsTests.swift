@@ -71,7 +71,7 @@ struct TaskListMarkerAfterDefinitionsTests {
             """)
     }
 
-    @Test("without tasklist, the marker is text")
+    @Test("without tasklist, a line tabulation after the definitions is not the paragraph's text")
     func markerAfterLineTabulationWithoutTasklist() {
         #expect(TreeDump.dump("- [a]: /u\n  \u{0B}[ ] b\n", options: []) == """
             document
