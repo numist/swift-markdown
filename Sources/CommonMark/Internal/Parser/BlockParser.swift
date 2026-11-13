@@ -1880,7 +1880,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 firstNonSpace: firstNonSpace,
                 indentColumns: closingFenceIndent,
                 expectedChar: info.fenceCharacter,
-                minimumLength: info.fenceLength
+                // A closing fence is a code fence, so it is at least 3 long whatever the clamp (Fenced code blocks).
+                minimumLength: min(info.fenceLength, max(storage.limits.fenceLengthClampForClosing, 3))
             ) {
                 pending = finalize(node: current, pending: pending, lineContentEnd: fenceEnd)
                 return LeafContinuation(consumedLine: true, pending: pending)
