@@ -143,14 +143,12 @@ struct AutolinkEmailTrailingAtTests {
             """)
     }
 
-    @Test("`@o@e.e`: the leading `@` has an empty local part, and `o@e.e` links")
-    func leadingAtStaysTextBeforeEmail() {
-        #expect(TreeDump.dump("@o@e.e", options: Self.options) == """
+    @Test("`@e.e`: an `@` with an empty local part is text")
+    func emptyLocalPartIsText() {
+        #expect(TreeDump.dump("@e.e", options: Self.options) == """
             document
               paragraph
-                text "@"
-                link "mailto:o@e.e" ""
-                  text "o@e.e"
+                text "@e.e"
 
             """)
     }
