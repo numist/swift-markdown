@@ -14,7 +14,7 @@ import CommonMark
 /// A table is broken at the beginning of another block-level structure (Tables (extension)). Unlike a
 /// paragraph, a table can be interrupted by an indented code block, so a line indented four or more
 /// columns after the delimiter row closes the table and opens indented code.
-@Suite("Indented line after a table delimiter row opens indented code")
+@Suite("Block starts after a table delimiter row close the table")
 struct TableIndentedBreakoutTests {
 
     /// Top-level child kinds of the document, in order.
