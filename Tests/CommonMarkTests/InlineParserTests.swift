@@ -861,11 +861,12 @@ struct EmphasisTests {
 
     @Test("flanking with punctuation: \"*\"foo\"*\"")
     func quotesAroundEmph() {
-        let source = "\"*foo*\""
+        let source = "*\"foo\"*"
         MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
-        // text(`"`), emph(text(`foo`)), text(`"`)
-        #expect(inlines.map(\.0) == [.text, .emphasis, .text, .text])
+        // emph(text(`"foo"`))
+        #expect(inlines.map(\.0) == [.emphasis, .text])
+        #expect(inlines[1].1 == "\"foo\"")
         }
     }
 
@@ -896,7 +897,7 @@ struct EmphasisTests {
 @Suite("Inline parser - links and images")
 struct LinkImageTests {
 
-    /// Pull (kind, url, title) for the first link/image found in DFS order, or all-nils if none.
+    /// The kind, URL, title and first child literal of the first link or image among the inline children of the top-level blocks, or `(.text, nil, nil, nil)` if there is none.
     private static func firstLinkOrImage(
         _ doc: borrowing MarkdownDocument
     ) -> (kind: MarkdownNode.Kind, url: String?, title: String?, text: String?) {
@@ -1720,7 +1721,7 @@ struct GFMAutolinkTests {
         }
     }
 
-    @Test("URL preceded by word char is rejected")
+    @Test("URL preceded by an ASCII letter is rejected")
     func wordCharBefore() {
         let source = "abchttp://example.com"
         MarkdownDocument.withParsedDocument(source, options: .gfmAutolink) { doc in
@@ -1798,10 +1799,11 @@ struct FootnoteTests {
 
     @Test("default-disabled: [^x] stays as text")
     func defaultDisabled() {
-        let source = "ref [^x]"
+        let source = "[^x]: body\n\nref [^x]"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = paragraphInlines(doc).map(\.kind)
         #expect(!kinds.contains { if case .footnoteReference = $0 { true } else { false } })
+        #expect(kinds == [.text, .link])
         }
     }
 
@@ -1882,11 +1884,12 @@ struct FootnoteTests {
 
     @Test("[^x] without `^` interior stays as link/text")
     func noFootnoteWithoutCaret() {
-        // `[x]` is a shortcut reference link candidate with no definition, so it is text.
-        let source = "[x]"
+        // `[x]` has no `^`, so it is not a footnote reference to `[^x]`; with no link reference definition it is text.
+        let source = "[^x]: body\n\n[x]"
         MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         let kinds = paragraphInlines(doc).map(\.kind)
         #expect(!kinds.contains { if case .footnoteReference = $0 { true } else { false } })
+        #expect(kinds == [.text])
         }
     }
 
