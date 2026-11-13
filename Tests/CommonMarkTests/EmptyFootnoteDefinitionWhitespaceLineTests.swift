@@ -120,7 +120,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
                     item
 
             """)
-        #expect(tree("- > [^a]:\n  >\n  >     x") == """
+        #expect(tree("- > [^a]:\n  >  \n  >     x") == """
             document
               list bullet '-' tight
                 item
