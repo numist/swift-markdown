@@ -12,7 +12,7 @@ import Testing
 import CommonMark
 
 /// A link destination between `<` and `>` keeps its leading, trailing and interior spaces and tabs, in an inline link
-/// and in a link reference definition (Links, Link reference definitions). A link title keeps all its whitespace.
+/// and in a link reference definition (Links, Link reference definitions). A link title on one line keeps the spaces and tabs at its ends.
 @Suite("Whitespace in link destinations")
 struct LinkDestinationWhitespaceTests {
 
