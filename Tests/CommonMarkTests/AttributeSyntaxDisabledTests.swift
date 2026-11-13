@@ -64,10 +64,10 @@ struct AttributeSyntaxDisabledTests {
     /// A destination that ends at a space with an unbalanced `(` is not a link destination, so the whole line is text.
     @Test("attributes with balanced parentheses and spaces are text")
     func attributesWithParensAreText() {
-        #expect(tree("^[x](rgb(255, 0, 0))", Self.plain) == """
-            document @1:1-1:21
-              paragraph @1:1-1:21
-                text "^[x](rgb(255, 0, 0))" @1:1-1:21
+        #expect(tree("^[x](rgb(255, \"t\"))", Self.plain) == """
+            document @1:1-1:20
+              paragraph @1:1-1:20
+                text "^[x](rgb(255, \\"t\\"))" @1:1-1:20
 
             """)
     }
@@ -152,10 +152,10 @@ struct AttributeSyntaxDisabledTests {
     /// it matches no definition.
     @Test("an attribute definition is a paragraph")
     func definitionIsParagraph() {
-        #expect(tree("^[label]: color: blue\n\n^[content][label]", Self.plain) == """
+        #expect(tree("^[label]: blue\n\n^[content][label]", Self.plain) == """
             document @1:1-3:18
-              paragraph @1:1-1:22
-                text "^[label]: color: blue" @1:1-1:22
+              paragraph @1:1-1:15
+                text "^[label]: blue" @1:1-1:15
               paragraph @3:1-3:18
                 text "^[content][label]" @3:1-3:18
 
@@ -166,12 +166,12 @@ struct AttributeSyntaxDisabledTests {
     /// text with a soft line break.
     @Test("an attribute definition whose label spans a soft line break is a paragraph")
     func crossLineDefinitionIsParagraph() {
-        #expect(tree("^[la\nbel]: color: blue\n\n^[content][la bel]", Self.plain) == """
+        #expect(tree("^[la\nbel]: blue\n\n^[content][la bel]", Self.plain) == """
             document @1:1-4:19
-              paragraph @1:1-2:18
+              paragraph @1:1-2:11
                 text "^[la" @1:1-1:5
                 softbreak @-
-                text "bel]: color: blue" @2:1-2:18
+                text "bel]: blue" @2:1-2:11
               paragraph @4:1-4:19
                 text "^[content][la bel]" @4:1-4:19
 
@@ -542,10 +542,10 @@ struct AttributeSyntaxDisabledTests {
             """)
     }
 
-    /// A footnote definition's label may not hold an unescaped `[`, as a link label may not (Links), so
-    /// `[^[]: note` is paragraph text and `[^[]]` matches no definition.
-    @Test("a footnote-shaped bracket holding `^[` doesn't resolve to a `[` definition")
-    func caretBracketDoesNotResolveToBracketDefinition() {
+    /// A footnote definition's label may not hold an unescaped `[`, as a link label may not (Links), so `[^[]: note` is
+    /// paragraph text.
+    @Test("a footnote definition whose label holds `[` is paragraph text")
+    func footnoteDefinitionLabelWithBracketIsParagraph() {
         #expect(tree("[^[]: note\n\n[^[]]", Self.footnotes) == """
             document @1:1-3:6
               paragraph @1:1-1:11
