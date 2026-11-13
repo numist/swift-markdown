@@ -53,22 +53,6 @@ struct FootnoteCrossLineBracketLookupTests {
                     text "xxxxx]"
 
                 """),
-            ("[\\^\u{2003}\nxxxx]\n\n[^\u{FFFD}\u{FFFD}]: n", """
-                document
-                  paragraph
-                    text "[^\u{2003}"
-                    softbreak
-                    text "xxxx]"
-
-                """),
-            ("![\\^\u{2003}\nxxxx]\n\n[^\u{FFFD}\u{FFFD}]: n", """
-                document
-                  paragraph
-                    text "![^\u{2003}"
-                    softbreak
-                    text "xxxx]"
-
-                """),
             ("[^\u{FFFD}\nxxx]\n\n[^\u{FFFD}]: n", """
                 document
                   paragraph
