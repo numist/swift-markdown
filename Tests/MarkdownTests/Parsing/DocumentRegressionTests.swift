@@ -17,8 +17,7 @@ import Testing
 /// Each pair is two files:
 ///   - `<name>.input`: the Markdown source bytes followed by one final byte, the `ParseOptions` raw value
 ///     to parse with. Invalid UTF-8 in the source decodes to U+FFFD.
-///   - `<name>.expected`: the parsed document's `debugDescription(options: .printSourceLocations)`, as the
-///     CommonMark spec and the GFM extensions define its structure and content.
+///   - `<name>.expected`: the parsed document's expected `debugDescription(options: .printSourceLocations)`.
 struct DocumentRegressionTests {
 
     static let corpusDir: URL = {
