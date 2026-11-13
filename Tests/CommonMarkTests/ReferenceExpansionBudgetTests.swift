@@ -76,6 +76,15 @@ struct ReferenceExpansionBudgetTests {
             """)
     }
 
+    @Test("the default limits resolve 1000 uses of a 2001-byte destination")
+    func defaultLimitsAtScale() {
+        let source = "[a]: /" + String(repeating: "u", count: 2000) + "\n\n"
+            + Array(repeating: "[a]", count: 1000).joined(separator: " ")
+        let tree = TreeDump.dump(source, options: [])
+        #expect(tree.components(separatedBy: "link \"/").count - 1 == 1000)
+        #expect(tree.components(separatedBy: "text \" \"").count - 1 == 999)
+    }
+
     @Test("a budget below the source's byte count is the source's byte count")
     func sourceByteCount() {
         let fits = "[a]: uuuuuuuuuuuuuuuuuuuu\n\n[a] [a]\n\nzzzz"
