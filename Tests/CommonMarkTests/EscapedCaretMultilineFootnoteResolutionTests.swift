@@ -11,14 +11,16 @@
 import CommonMark
 import Testing
 
-/// A footnote definition's label holds no whitespace, so a footnote-shaped bracket that spans a line ending is no
-/// footnote reference; with only footnote definitions to match, it is literal text, whether its caret is
-/// backslash-escaped or a definition matches the bracket's first line.
+/// A footnote reference's caret directly follows its `[`, and a footnote definition's label holds no whitespace, so
+/// neither a bracket whose caret is backslash-escaped nor one that spans a line ending is a footnote reference; with only
+/// footnote definitions to match, it is literal text.
 @Suite("Footnote-shaped bracket across a line ending")
 struct EscapedCaretMultilineFootnoteResolutionTests {
     private static let long = String(repeating: "a", count: 998)
 
     static let cases: [(markdown: String, expected: String)] = [
+        ("[\\^abc]\n\n[^abc]: note", "document\n  paragraph\n    text \"[^abc]\"\n"),
+        ("[^abc\nxxxxx]\n\n[^abc]: note", "document\n  paragraph\n    text \"[^abc\"\n    softbreak\n    text \"xxxxx]\"\n"),
         ("[\\^abcdef\nxxxxx]\n\n[^abc]: note", """
             document
               paragraph
