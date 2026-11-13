@@ -51,38 +51,46 @@ struct HTMLBlockEndConditionLineRangeTests {
             """
         ),
         TreeDumpCase(
-            "top level, type 2, after a blank line",
-            "<!--\n\nx -->\n",
+            "top level, type 2, after a blank line, then a paragraph",
+            "<!--\n\nx -->\nfoo\n",
             """
-            document @1:1-4:1
+            document @1:1-5:1
               html_block "<!--\\n\\nx -->\\n" @1:1-3:6
+              paragraph @4:1-4:4
+                text "foo" @4:1-4:4
 
             """
         ),
         TreeDumpCase(
-            "top level, type 3, with text after the end condition",
-            "<?php\necho 1; ?> trailing\n",
-            """
-            document @1:1-3:1
-              html_block "<?php\\necho 1; ?> trailing\\n" @1:1-2:20
-
-            """
-        ),
-        TreeDumpCase(
-            "top level, type 4, on the next line",
-            "<!DOCTYPE\nhtml>\n",
-            """
-            document @1:1-3:1
-              html_block "<!DOCTYPE\\nhtml>\\n" @1:1-2:6
-
-            """
-        ),
-        TreeDumpCase(
-            "top level, type 5, after a line",
-            "<![CDATA[\nx\n]]>\n",
+            "top level, type 3, with text after the end condition, then a paragraph",
+            "<?php\necho 1; ?> trailing\nfoo\n",
             """
             document @1:1-4:1
+              html_block "<?php\\necho 1; ?> trailing\\n" @1:1-2:20
+              paragraph @3:1-3:4
+                text "foo" @3:1-3:4
+
+            """
+        ),
+        TreeDumpCase(
+            "top level, type 4, on the next line, then a paragraph",
+            "<!DOCTYPE\nhtml>\nfoo\n",
+            """
+            document @1:1-4:1
+              html_block "<!DOCTYPE\\nhtml>\\n" @1:1-2:6
+              paragraph @3:1-3:4
+                text "foo" @3:1-3:4
+
+            """
+        ),
+        TreeDumpCase(
+            "top level, type 5, after a line, then a paragraph",
+            "<![CDATA[\nx\n]]>\nfoo\n",
+            """
+            document @1:1-5:1
               html_block "<![CDATA[\\nx\\n]]>\\n" @1:1-3:4
+              paragraph @4:1-4:4
+                text "foo" @4:1-4:4
 
             """
         ),
@@ -107,24 +115,28 @@ struct HTMLBlockEndConditionLineRangeTests {
             """
         ),
         TreeDumpCase(
-            "bullet item, type 2, on the next line",
-            "- <!--\n  x -->\n",
+            "bullet item, type 2, on the next line, then a paragraph",
+            "- <!--\n  x -->\n  foo\n",
             """
-            document @1:1-3:1
-              list bullet '-' tight @1:1-2:8
-                item @1:1-2:8
+            document @1:1-4:1
+              list bullet '-' tight @1:1-3:6
+                item @1:1-3:6
                   html_block "<!--\\nx -->\\n" @1:3-2:8
+                  paragraph @3:3-3:6
+                    text "foo" @3:3-3:6
 
             """
         ),
         TreeDumpCase(
-            "ordered item, type 3, on the next line",
-            "1. <?\n   ?>\n",
+            "ordered item, type 3, on the next line, then a paragraph",
+            "1. <?\n   ?>\n   foo\n",
             """
-            document @1:1-3:1
-              list ordered start=1 delim=period tight @1:1-2:6
-                item @1:1-2:6
+            document @1:1-4:1
+              list ordered start=1 delim=period tight @1:1-3:7
+                item @1:1-3:7
                   html_block "<?\\n?>\\n" @1:4-2:6
+                  paragraph @3:4-3:7
+                    text "foo" @3:4-3:7
 
             """
         ),
@@ -141,26 +153,30 @@ struct HTMLBlockEndConditionLineRangeTests {
             """
         ),
         TreeDumpCase(
-            "block quote in a list item, type 5, on the next line",
-            "- > <![CDATA[\n  > ]]>\n",
+            "block quote in a list item, type 5, on the next line, then a paragraph",
+            "- > <![CDATA[\n  > ]]>\n  > foo\n",
             """
-            document @1:1-3:1
-              list bullet '-' tight @1:1-2:8
-                item @1:1-2:8
-                  block_quote @1:3-2:8
+            document @1:1-4:1
+              list bullet '-' tight @1:1-3:8
+                item @1:1-3:8
+                  block_quote @1:3-3:8
                     html_block "<![CDATA[\\n]]>\\n" @1:5-2:8
+                    paragraph @3:5-3:8
+                      text "foo" @3:5-3:8
 
             """
         ),
         TreeDumpCase(
-            "list item in a block quote, type 4, on the next line",
-            "> - <!X\n>   >\n",
+            "list item in a block quote, type 4, on the next line, then a paragraph",
+            "> - <!X\n>   >\n>   foo\n",
             """
-            document @1:1-3:1
-              block_quote @1:1-2:6
-                list bullet '-' tight @1:3-2:6
-                  item @1:3-2:6
+            document @1:1-4:1
+              block_quote @1:1-3:8
+                list bullet '-' tight @1:3-3:8
+                  item @1:3-3:8
                     html_block "<!X\\n>\\n" @1:5-2:6
+                    paragraph @3:5-3:8
+                      text "foo" @3:5-3:8
 
             """
         ),
