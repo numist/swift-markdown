@@ -86,25 +86,29 @@ struct FootnoteDefinitionEmptyOpeningLineTightnessTests {
             """)
     }
 
-    @Test("a definition with an empty opening line as the only item")
+    @Test("a definition with an empty opening line, followed by a paragraph, as the only item")
     func onlyItem() {
-        #expect(TreeDump.dump("- [^b]:\n", options: [.footnotes]) == """
+        #expect(TreeDump.dump("- [^b]:\n  x\n", options: [.footnotes]) == """
             document
               list bullet '-' tight
                 item
+                  paragraph
+                    text "x"
 
             """)
     }
 
-    @Test("a definition with an empty opening line in the last item")
+    @Test("a definition with an empty opening line, followed by a paragraph, in the last item")
     func lastItem() {
-        #expect(TreeDump.dump("- a\n- [^b]:\n", options: [.footnotes]) == """
+        #expect(TreeDump.dump("- a\n- [^b]:\n  x\n", options: [.footnotes]) == """
             document
               list bullet '-' tight
                 item
                   paragraph
                     text "a"
                 item
+                  paragraph
+                    text "x"
 
             """)
     }
