@@ -16,11 +16,13 @@ private let autolinkOptions: MarkdownDocument.ParseOptions = [.tables, .striketh
 /// An extended www autolink's domain runs from `www.` to the first non-ASCII character, Unicode whitespace character,
 /// or ASCII punctuation character other than `.`, `-` and `_`, and holds a period.
 /// An extended url autolink's domain begins with a character that is neither a punctuation character nor a Unicode
-/// whitespace character, and continues as a www domain does.
+/// whitespace character; a non-ASCII first character ends it, and an ASCII one continues it as a www domain does.
 /// An underscore in either of the last two period-separated segments rejects a www or url domain unless the domain
-/// holds more than ten periods; the domain scan never examines the inline content's last character.
-/// An extended email autolink's domain is a run of ASCII alphanumerics, `-`, `_`, and periods each followed by an
-/// alphanumeric; it holds a period and ends in a letter.
+/// holds more than ten periods; the domain scan never examines the inline content's last character, and a backslash
+/// makes it examine the character after it in its place.
+/// An extended email autolink's domain is a run of ASCII alphanumerics, `-`, `_`, periods each followed by an
+/// alphanumeric, and, after `xmpp:`, `/`; it ends in a letter, and it holds a period unless a second `@` restarted the
+/// address after a domain that held one.
 @Suite("Extended autolink domains")
 struct ExtendedAutolinkDomainTests {
     private func tree(_ markdown: String) -> String {
@@ -710,7 +712,7 @@ struct ExtendedAutolinkDomainScanTests {
 
             """),
     ])
-    func urlWithPortPathAndUserIsLink(markdown: String, expected: String) {
+    func urlWithPortUserPathQueryOrFragmentIsLink(markdown: String, expected: String) {
         #expect(tree(markdown) == expected)
     }
 
@@ -727,7 +729,7 @@ struct ExtendedAutolinkDomainScanTests {
 }
 
 /// Links may not contain other links, at any level of nesting, and an autolink binds more tightly than the brackets of
-/// link text (Links), so the brackets around an autolink are literal text.
+/// link text (Links), so the brackets of a link around an autolink are literal text.
 @Suite("Autolinks in link text")
 struct AutolinkInLinkTextTests {
     private func tree(_ markdown: String) -> String {
