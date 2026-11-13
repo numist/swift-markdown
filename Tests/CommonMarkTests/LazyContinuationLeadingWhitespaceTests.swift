@@ -13,7 +13,7 @@ import CommonMark
 
 /// A paragraph's raw content drops each line's initial whitespace (Paragraphs), including that of a lazy continuation
 /// line, so a code span crossing onto one holds no whitespace from it.
-@Suite("Leading whitespace of a lazy continuation line in a code span")
+@Suite("Leading whitespace of a lazy continuation line")
 struct LazyContinuationLeadingWhitespaceTests {
 
     @Test("two leading spaces on a block quote's lazy continuation line are stripped")
