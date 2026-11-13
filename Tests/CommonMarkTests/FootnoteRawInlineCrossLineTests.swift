@@ -125,6 +125,22 @@ struct FootnoteRawInlineCrossLineTests {
                 text "]"
 
             """),
+        ("[^`\\\n]`]", """
+            document
+              paragraph
+                text "[^"
+                code "\\\\ ]"
+                text "]"
+
+            """),
+        ("[^<a b=\"\\\n]\">]", """
+            document
+              paragraph
+                text "[^"
+                html_inline "<a b=\\"\\\\\\n]\\">"
+                text "]"
+
+            """),
     ]
 
     @Test(arguments: cases)
