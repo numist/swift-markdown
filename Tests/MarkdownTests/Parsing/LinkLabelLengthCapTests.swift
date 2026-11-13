@@ -47,6 +47,7 @@ class LinkLabelLengthCapTests: XCTestCase {
     /// A NUL is one character, the U+FFFD that replaces it (Insecure characters).
     func testCountsNULAsOneCharacter() {
         let definition = "[x \u{0} y]: /u\n\n"
+        XCTAssertEqual(1, linkCount(definition + "[x \u{0}" + String(repeating: " ", count: 995) + "y]"))
         XCTAssertEqual(0, linkCount(definition + "[x \u{0}" + String(repeating: " ", count: 996) + "y]"))
     }
 
