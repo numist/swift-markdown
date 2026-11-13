@@ -1277,11 +1277,15 @@ extension BlockParser {
         var backtickCount: Int
     }
 
-    /// Matches a code span at the backtick run at `start`, or `nil` if no closing run of equal length follows.
+    /// Matches a code span at the backtick run at `start`, or `nil` if the run is longer than the opening backtick
+    /// limit or no closing run of equal length follows.
     private mutating func matchCodeSpan(start: Int, content: borrowing ContentSpan) -> CodeSpanMatch? {
         let end = content.endOffset
         let openEnd = scanBacktickRun(start: start, content: content)
         let runLength = openEnd - start
+        if runLength > storage.limits.maxCodeSpanOpeningBackticks {
+            return nil
+        }
         // Rescanning for every unmatched opener would make a paragraph of distinct-length runs quadratic.
         if backtickRunsSeen.rulesOutCloser(length: runLength, after: openEnd) {
             return nil
