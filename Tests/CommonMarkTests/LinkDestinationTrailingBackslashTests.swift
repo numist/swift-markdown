@@ -59,7 +59,7 @@ struct LinkDestinationTrailingBackslashTests {
             """)
     }
 
-    @Test("an inline link destination ending in a backslash forms no link, and the backslash is a hard line break")
+    @Test("an inline link destination ending in a backslash, followed by a line that is neither a title nor `)`, forms no link, and the backslash is a hard line break")
     func inlineTrailingBackslash() {
         // After the destination `/u\` and the whitespace that follows it, `x)` is neither a link title nor `)` (Links),
         // so no link forms and the backslash before the line ending is a hard line break (Hard line breaks).
