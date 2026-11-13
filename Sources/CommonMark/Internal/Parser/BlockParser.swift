@@ -1816,6 +1816,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if matchHTMLBlockStart(range: range, firstNonSpace: firstNonSpace, allowType7: !interruptsParagraph) != nil {
             return true
         }
+        // The line has opened no container yet, so a list marker or a footnote definition is recognized here unless the
+        // limit on containers opened before one is zero.
+        if storage.limits.maxContainersOpenedOnLineBeforeListMarker <= 0 {
+            return false
+        }
         // A footnote definition opener `[^label]:` interrupts a paragraph, so `[^a]: A\n[^b]: B` opens two
         // definitions rather than folding the second into the first definition's paragraph.
         if storage.options.contains(.footnotes),
@@ -1983,6 +1988,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var column = startColumn
         var lineColumns = LineColumns(lineStart: lineRange.lowerBound)
         var noThematicBreakBefore = startCursor
+        // The block quotes, list items and footnote definitions this line has opened; at the limit a list marker or a
+        // footnote definition is paragraph text.
+        var containersOpened = 0
+        let maxContainersBeforeListMarker = storage.limits.maxContainersOpenedOnLineBeforeListMarker
         while true {
             let firstNonSpace = indexOfFirstNonSpace(range: cursor..<lineRange.upperBound)
             let isBlank = firstNonSpace == lineRange.upperBound
@@ -2011,6 +2020,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                     markerEnd: firstNonSpace + 1,
                     advanced: advanced
                 )
+                containersOpened += 1
                 continue
             }
 
@@ -2028,6 +2038,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // A footnote definition is a container that takes the rest of the line.
             if storage.options.contains(.footnotes),
                indent < 4,
+               containersOpened < maxContainersBeforeListMarker,
                let fn = matchFootnoteDefinition(
                    range: cursor..<lineRange.upperBound,
                    firstNonSpace: firstNonSpace
@@ -2037,11 +2048,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 current = fnIdx
                 cursor = fn.consumedTo
                 column = lineColumns.column(at: cursor, in: sourceBytes)
+                containersOpened += 1
                 continue
             }
 
             // Indents are in columns, so a marker a tab pushes four columns in, though fewer bytes, is indented code.
-            if indent < 4, let marker = matchListMarker(
+            if indent < 4, containersOpened < maxContainersBeforeListMarker, let marker = matchListMarker(
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
                 markerColumn: firstNonSpaceColumn,
@@ -2051,6 +2063,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 cursor = marker.consumedTo
                 // Past `cursor`'s column when the marker's padding consumed part of a tab, which stays at `cursor` (Tabs).
                 column = marker.contentStartColumn
+                containersOpened += 1
                 continue
             }
 
