@@ -52,14 +52,17 @@ struct TableLonePipeLineTests {
 
     @Test("a leading+trailing pipe body row is one empty cell, kept as a table row")
     func doublePipeBodyRowStaysARow() {
-        #expect(TreeDump.dump("f\n|-\n||", options: [.tables, .sourcePosition], sourceRanges: true) == """
+        #expect(TreeDump.dump("a|b\n-|-\n||", options: [.tables, .sourcePosition], sourceRanges: true) == """
             document @1:1-3:3
               table @1:1-3:3
-                table_header @1:1-1:2
+                table_header @1:1-1:4
                   table_cell align=none colspan=1 rowspan=1 @1:1-1:2
-                    text "f" @1:1-1:2
+                    text "a" @1:1-1:2
+                  table_cell align=none colspan=1 rowspan=1 @1:3-1:4
+                    text "b" @1:3-1:4
                 table_row @3:1-3:3
                   table_cell align=none colspan=1 rowspan=1 @3:2-3:2
+                  table_cell align=none colspan=1 rowspan=1 @-
 
             """)
     }
