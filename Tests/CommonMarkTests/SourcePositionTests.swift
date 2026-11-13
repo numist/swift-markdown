@@ -94,7 +94,8 @@ struct SourcePositionTests {
     @Test("empty list item ends before a trailing whitespace-only line")
     func emptyItemWhitespaceLine() {
         // An item's range ends just past its last content byte, and a line of only spaces or tabs holds none, however
-        // far it is indented.
+        // far it is indented. An item whose first paragraph held only a definition continues onto such a line and still
+        // ends at the definition.
         #expect(TreeDump.dump("-\n\t", options: .sourcePosition, sourceRanges: true) == """
             document @1:1-2:2
               list bullet '-' tight @1:1-1:2
@@ -111,6 +112,18 @@ struct SourcePositionTests {
             document @1:1-2:2
               list bullet '-' tight @1:1-1:2
                 item @1:1-1:2
+
+            """)
+        #expect(TreeDump.dump("- [a]: b\n\t", options: .sourcePosition, sourceRanges: true) == """
+            document @1:1-2:2
+              list bullet '-' tight @1:1-1:9
+                item @1:1-1:9
+
+            """)
+        #expect(TreeDump.dump("- [a]: b\n ", options: .sourcePosition, sourceRanges: true) == """
+            document @1:1-2:2
+              list bullet '-' tight @1:1-1:9
+                item @1:1-1:9
 
             """)
     }
