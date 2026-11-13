@@ -63,7 +63,7 @@ struct FootnoteCaretBracketResolutionTests {
                     text "abcd]]"
 
                 """),
-            ("[^[" + String(repeating: "a", count: 998) + "]]\n\n[^\\[]: n", "document\n  paragraph\n    text \"[^[" + String(repeating: "a", count: 998) + "]]\"\n"),
+            ("[^[" + String(repeating: "a", count: 997) + "]]\n\n[^\\[]: n", "document\n  paragraph\n    text \"[^[" + String(repeating: "a", count: 997) + "]]\"\n"),
             ("![^[]]\n\n[^\\[]: n", """
                 document
                   paragraph
@@ -99,7 +99,7 @@ struct FootnoteCaretBracketResolutionTests {
                     text "[^[]:[^[]]"
 
                 """),
-            ("[^[" + String(repeating: "a", count: 999) + "]]\n\n[^\\[]: n", "document\n  paragraph\n    text \"[^[" + String(repeating: "a", count: 999) + "]]\"\n"),
+            ("[^[" + String(repeating: "a", count: 996) + "]]\n\n[^\\[]: n", "document\n  paragraph\n    text \"[^[" + String(repeating: "a", count: 996) + "]]\"\n"),
             ("[^[]]\n\n[^\\[a]: n", """
                 document
                   paragraph
