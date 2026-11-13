@@ -11,10 +11,10 @@
 import Testing
 import CommonMark
 
-/// A footnote-shaped bracket that crosses a line ending, beside a NUL (replaced by U+FFFD) or a multibyte character and
-/// a checkbox that does not begin its list item's first paragraph. The item is not a task list item (Task list items
-/// (extension)), and with no matching definition the bracket is literal text.
-@Suite("Cross-line footnote-shaped bracket beside replaced characters")
+/// A bracket whose text begins with `[^` and crosses a line ending, beside a NUL (replaced by U+FFFD) or a multibyte
+/// character and a checkbox that does not begin its list item's first paragraph. The item is not a task list item (Task
+/// list items (extension)), and the bracket is literal text.
+@Suite("Cross-line bracket beginning with [^ beside replaced characters")
 struct FootnoteBracketAcrossReplacedCharactersTests {
 
     private static let options: MarkdownDocument.ParseOptions = [
