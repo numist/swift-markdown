@@ -42,7 +42,7 @@ struct FootnoteDiscardedReferenceNumberingTests {
     /// The inner `[^a]` orders definition `a` first, and the later `[^a]` reuses its index.
     @Test
     func innerReferenceOrdersDefinitions() {
-        #expect(TreeDump.dump("[^ [^a]] [^b] [^a]\n\n[^a]: A\n\n[^b]: B\n", options: Self.options) == """
+        #expect(TreeDump.dump("[^ [^a]] [^b] [^a]\n\n[^b]: B\n\n[^a]: A\n", options: Self.options) == """
             document
               paragraph
                 text "[^ "
