@@ -67,8 +67,8 @@ struct FootnoteReferenceSourceRangeTests {
     /// bracket stays text.
     @Test("a bracket whose label spans a line break and matches no definition is text")
     func crossLineUnmatchedLabelIsText() {
-        #expect(tree("[^abcdef\nxxxxx]\n\n[^abc]: d") == """
-            document @1:1-4:10
+        #expect(tree("[^abcdef\nxxxxx]\n\n[^abcdef]: d") == """
+            document @1:1-4:13
               paragraph @1:1-2:7
                 text "[^abcdef" @1:1-1:9
                 softbreak @-
@@ -77,30 +77,26 @@ struct FootnoteReferenceSourceRangeTests {
             """)
     }
 
-    /// A backslash-escaped caret is a literal `^` (Backslash escapes), and `abcdef xxxxx` names no definition, so the
-    /// bracket is text.
+    /// A backslash-escaped caret is a literal `^` (Backslash escapes), so `[\^abc]` is no footnote reference although
+    /// `[^abc]` names a definition.
     @Test("an escaped-caret bracket is text")
     func escapedCaretBracketIsText() {
-        #expect(tree("[\\^abcdef\nxxxxx]\n\n[^abc]: d") == """
-            document @1:1-4:10
-              paragraph @1:1-2:7
-                text "[^abcdef" @1:1-1:10
-                softbreak @-
-                text "xxxxx]" @2:1-2:7
+        #expect(tree("[\\^abc]\n\n[^abc]: d") == """
+            document @1:1-3:10
+              paragraph @1:1-1:8
+                text "[^abc]" @1:1-1:8
 
             """)
     }
 
-    /// A backslash-escaped caret is a literal `^` (Backslash escapes), and `abcdef xxxxx` names no definition, so
-    /// `![\^…]` is no footnote reference, and with no matching link reference definition it is no image either.
+    /// A backslash-escaped caret is a literal `^` (Backslash escapes), so `![\^abc]` is no footnote reference although
+    /// `[^abc]` names a definition, and with no matching link reference definition it is no image either.
     @Test("an image-shaped escaped-caret bracket is text")
     func imageShapedEscapedCaretBracketIsText() {
-        #expect(tree("![\\^abcdef\nxxxxx]\n\n[^abc]: d") == """
-            document @1:1-4:10
-              paragraph @1:1-2:7
-                text "![^abcdef" @1:1-1:11
-                softbreak @-
-                text "xxxxx]" @2:1-2:7
+        #expect(tree("![\\^abc]\n\n[^abc]: d") == """
+            document @1:1-3:10
+              paragraph @1:1-1:9
+                text "![^abc]" @1:1-1:9
 
             """)
     }
