@@ -11,9 +11,9 @@
 import Markdown
 import XCTest
 
-/// Inline links and images that begin on an indented paragraph continuation line, with a link title that
-/// spans lines. A single-quoted title contains `'` only when backslash-escaped (Links), so it ends at the
-/// first unescaped `'`, which may be on a later line.
+/// Inline links and images that begin on an indented paragraph continuation line, with a link title or
+/// `<…>` destination that spans lines. A single-quoted title contains `'` only when backslash-escaped
+/// (Links), so it ends at the first unescaped `'`, which may be on a later line.
 class LinkTitleAcrossIndentedContinuationTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])
