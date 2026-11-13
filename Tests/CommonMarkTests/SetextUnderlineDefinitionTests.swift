@@ -268,7 +268,7 @@ struct SetextUnderlineDefinitionTests {
                 "document\n  heading 1\n    text \"===\"\n    softbreak\n    text \"x\"\n    softbreak\n    text \"\\\"\"\n"
                     + String(repeating: "  heading 1\n    text \"x\"\n    softbreak\n    text \"\\\"\"\n", count: count - 2)
             },
-            testDescription: "a title that closes at an escaped quote before each underline"
+            testDescription: "a title that closes at an escaped quote before the first underline, and an escaped quote before each later one"
         ),
         Shape(
             prefix: "[a]: /u \"t\n",
