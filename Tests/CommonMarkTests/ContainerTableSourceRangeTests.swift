@@ -222,7 +222,7 @@ struct ContainerTableSourceRangeTests {
     }
 
     /// A lazy continuation line's leading whitespace, including a partially consumed tab's remaining columns, is not
-    /// paragraph content, so the header row is a lone `|` with no cells and no table forms.
+    /// paragraph content, so the text starts at the `|`. A lone `|` header row has no cells, so no table forms.
     @Test("a lazy lone-pipe header after a split tab is paragraph text")
     func splitTabLonePipeHeaderIsParagraph() {
         #expect(tree("- >x\n \t|\n  >-|\n") == """
@@ -240,8 +240,8 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// A lazy continuation line's leading whitespace is not paragraph content, so the header row is a lone `|` with no
-    /// cells and no table forms.
+    /// A lazy continuation line's leading whitespace is not paragraph content, so the text starts at the `|`. A lone
+    /// `|` header row has no cells, so no table forms.
     @Test("a lazy lone-pipe header is paragraph text")
     func lazyLonePipeHeaderIsParagraph() {
         #expect(tree(">x\n  |\n>-|\n") == """
