@@ -88,9 +88,9 @@ struct FlankingUnicodePunctuationTests {
         #expect(render("\u{055E}'a'", options: .smart) == "\u{055E}\u{2018}a\u{2019}")
     }
 
-    @Test("letter-preceded quote run before Unicode punctuation stays two right curlies")
+    @Test("no quote in a letter-preceded run before Unicode punctuation opens")
     func letterPrecededQuoteRun() {
-        #expect(render("x''\u{055E}", options: .smart) == "x\u{2019}\u{2019}\u{055E}")
+        #expect(render("x''\u{055E}'", options: .smart) == "x\u{2019}\u{2019}\u{055E}\u{2019}")
     }
 
     @Test("quote run before ASCII punctuation across a space opens then closes")
@@ -118,14 +118,14 @@ struct FlankingUnicodePunctuationTests {
         #expect(render("_a_\u{055E}") == "<em>a</em>\u{055E}")
     }
 
-    @Test("emphasis forms around an em dash followed by a space")
+    @Test("underscore emphasis forms around an em dash between em dashes")
     func emphasisAroundEmDash() {
-        #expect(render("*\u{2014}* x") == "<em>\u{2014}</em> x")
+        #expect(render("\u{2014}_\u{2014}_\u{2014}") == "\u{2014}<em>\u{2014}</em>\u{2014}")
     }
 
-    @Test("strong forms around Unicode punctuation")
-    func strongAroundUnicodePunct() {
-        #expect(render("**\u{055E}**") == "<strong>\u{055E}</strong>")
+    @Test("strong emphasis opens after Unicode punctuation")
+    func strongAfterUnicodePunct() {
+        #expect(render("\u{055E}__a__") == "\u{055E}<strong>a</strong>")
     }
 
     @Test("emphasis does not form around ASCII punctuation with an outer letter")
