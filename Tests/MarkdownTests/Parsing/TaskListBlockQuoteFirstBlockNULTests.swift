@@ -11,9 +11,10 @@
 import Markdown
 import XCTest
 
-/// In a list item whose first block is a block quote, a line of `2`, a NUL and ` [x]` is not an ordered list item: a
-/// NUL is replaced by U+FFFD (Insecure characters), and an ordered list marker ends in `.` or `)` (List items). The
-/// line is a lazy continuation line of the block quote's paragraph (Block quotes), so `[x]` is text.
+/// In a list item whose first block is a block quote, a line of digits, then a NUL or a multi-byte character, then
+/// ` [x]` is not an ordered list item: a NUL is replaced by U+FFFD (Insecure characters), and an ordered list marker
+/// ends in `.` or `)` (List items). The line is a lazy continuation line of the block quote's paragraph (Block
+/// quotes), so `[x]` is text.
 class TaskListBlockQuoteFirstBlockNULTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])
