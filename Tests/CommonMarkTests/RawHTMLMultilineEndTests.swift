@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// Source ranges of raw HTML that spans a line ending, such as `<foo\nbar>`.
-@Suite("Source ranges of raw HTML across a line ending")
+/// Source ranges of raw HTML, which end just past the closing `>` whether the HTML lies within one line or spans a line ending, such as `<foo\nbar>`.
+@Suite("Source ranges of raw HTML within a line and across a line ending")
 struct RawHTMLMultilineEndTests {
 
     @Test("raw HTML across a line ending ends just past its `>`")
