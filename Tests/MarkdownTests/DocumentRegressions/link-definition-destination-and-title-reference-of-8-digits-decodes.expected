@@ -1,0 +1,4 @@
+Document @1:1-3:4
+└─ Paragraph @3:1-3:4
+   └─ Link @3:1-3:4 destination: "A"
+      └─ Text @3:2-3:3 "l"

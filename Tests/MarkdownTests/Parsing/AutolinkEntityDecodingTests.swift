@@ -54,9 +54,13 @@ class AutolinkEntityDecodingTests: XCTestCase {
         )
     }
 
-    func testEightDigitReferenceStaysLiteral() {
-        // A decimal numeric character reference has at most 7 digits.
-        XCTAssertEqual(Self.autolink("http://a&#12345678;b"), tree("<http://a&#12345678;b>"))
+    func testEightDigitReferenceAboveUnicodeRangeBecomesReplacementCharacter() {
+        XCTAssertEqual(Self.autolink("http://a\u{fffd}b"), tree("<http://a&#12345678;b>"))
+    }
+
+    func testNineDigitReferenceStaysLiteral() {
+        // A decimal numeric character reference has at most 8 digits.
+        XCTAssertEqual(Self.autolink("http://a&#123456789;b"), tree("<http://a&#123456789;b>"))
     }
 
     func testEmailAutolinkWithAmpersandKeepsItLiteral() {

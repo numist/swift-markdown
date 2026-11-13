@@ -55,7 +55,7 @@ struct DocumentRegressionTests {
     /// pairs.
     @Test
     func corpusHasEveryPair() {
-        #expect(Self.corpus.count == 568, "unexpected pair count in \(Self.corpusDir.path)")
+        #expect(Self.corpus.count == 583, "unexpected pair count in \(Self.corpusDir.path)")
     }
 
     @Test(arguments: corpus)
