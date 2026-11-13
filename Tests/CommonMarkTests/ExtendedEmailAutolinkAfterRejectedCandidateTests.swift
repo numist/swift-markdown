@@ -69,6 +69,18 @@ struct ExtendedEmailAutolinkAfterRejectedCandidateTests {
             """)
     }
 
+    @Test("`l@+@b.b`: the local part after the rejected `l@` is `+`")
+    func plusAtStart() {
+        #expect(TreeDump.dump("l@+@b.b", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "l@"
+                link "mailto:+@b.b" ""
+                  text "+@b.b"
+
+            """)
+    }
+
     // MARK: - `.`, `-`, `_` and alphanumerics continue a domain
 
     @Test("`l@o.p@b.b`: the second `@` restarts the address at `o.p`")
@@ -115,18 +127,6 @@ struct ExtendedEmailAutolinkAfterRejectedCandidateTests {
                 text "l@"
                 link "mailto:abc@b.b" ""
                   text "abc@b.b"
-
-            """)
-    }
-
-    @Test("`l@+@b.b`: the local part after the rejected `l@` is `+`")
-    func plusAtStart() {
-        #expect(TreeDump.dump("l@+@b.b", options: .gfmAutolink) == """
-            document
-              paragraph
-                text "l@"
-                link "mailto:+@b.b" ""
-                  text "+@b.b"
 
             """)
     }
