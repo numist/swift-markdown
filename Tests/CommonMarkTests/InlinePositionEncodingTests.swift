@@ -389,6 +389,14 @@ struct InlinePositionEncodingTests {
         #expect(n[2].range == range(1, 1, 1, 4))
         #expect(n[3].range == range(1, 4, 1, 10))
         #expect(n[4].range == range(1, 10, 1, 11))
+
+        // Interior é (2 bytes) in an attribute value: <span title="é"> (cols 2-18), b (col19).
+        n = nodes("a<span title=\"\u{E9}\">b")
+        try #require(n.map(\.kind) == [.document, .paragraph, .text, .htmlInline, .text])
+        try #require(n[2].literal == "a" && n[3].literal == "<span title=\"\u{E9}\">" && n[4].literal == "b")
+        #expect(n[2].range == range(1, 1, 1, 2))
+        #expect(n[3].range == range(1, 2, 1, 19))
+        #expect(n[4].range == range(1, 19, 1, 20))
     }
 
     // MARK: - Entity and numeric character references
