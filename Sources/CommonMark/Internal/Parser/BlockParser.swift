@@ -179,10 +179,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     var backtickRunsSeen = BacktickRunsSeen()
 
     /// Reset per `parseInline` pass and per `definitionsEnd` call.
-    var destinationParentheses = BalancedParenthesesScan()
+    var destinationParentheses: BalancedParenthesesScan
 
     /// Reset per `parseInline` pass.
-    var attributeParentheses = BalancedParenthesesScan()
+    var attributeParentheses: BalancedParenthesesScan
 
     /// The character references decoded in this `parseInline` pass with `.sourcePosition`, in arena order: each
     /// one's decoded arena range and its source range.
@@ -220,6 +220,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         self.storage = storage
         self.sourceBytes = source
         self.positionsEnabled = self.storage.options.contains(.sourcePosition)
+        self.destinationParentheses = BalancedParenthesesScan(maxNesting: self.storage.limits.maxLinkDestinationParenthesisNesting)
+        self.attributeParentheses = BalancedParenthesesScan(maxNesting: self.storage.limits.maxAttributeParenthesisNesting)
 
         // Reserve the append-only arenas in proportion to the input, so they regrow only for dense input.
         let byteCount = self.sourceBytes.count

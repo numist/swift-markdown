@@ -15,17 +15,27 @@ internal import BasicContainers
 /// the bytes.
 ///
 /// A scan stops at a `)` that closes no `(` it passed, at a byte that ends the run, or at the end, and its parentheses
-/// are balanced when it closed every `(` it passed. A scan starting just after a `(` the latest scan passed reads the
-/// same bytes: it stops at the `)` closing that `(`, or else where the latest scan stopped, balanced only when that
-/// `(` is the innermost one left open there.
+/// are balanced when it closed every `(` it passed and they nest no deeper than `maxNesting`. A scan starting just
+/// after a `(` the latest scan passed reads the same bytes: it stops at the `)` closing that `(`, or else where the
+/// latest scan stopped, balanced only when that `(` is the innermost one left open there, and its parentheses nest as
+/// deep as those inside that `(`.
 internal struct BalancedParenthesesScan {
+    /// The deepest nesting of parentheses a balanced scan may pass.
+    private let maxNesting: Int
     /// Each `(` the latest scan passed, in order, with where a scan starting just after it stops balanced, or nil when
     /// that scan stops unbalanced.
     private var openers: [(offset: Int, balancedEnd: Int?)] = []
-    /// During a scan, the indices in `openers` of the `(` not yet closed, innermost last.
-    private var unclosed: [Int] = []
+    /// During a scan, each `(` not yet closed, innermost last: its index in `openers`, and how deeply the parentheses
+    /// it has closed inside it so far nest.
+    private var unclosed: [(opener: Int, innerNesting: Int)] = []
     /// The first of `openers` a scan may start after. Scans start further on as inline parsing proceeds.
     private var nextOpener = 0
+
+    /// A scan whose parentheses are balanced only when they nest no deeper than `maxNesting`, or than 0 when it is
+    /// negative.
+    init(maxNesting: Int) {
+        self.maxNesting = max(maxNesting, 0)
+    }
 
     /// Forgets the latest scan, for scans of other bytes.
     mutating func reset() {
@@ -37,7 +47,7 @@ internal struct BalancedParenthesesScan {
     }
 
     /// Where a scan from `start` stops, at a `)` that closes no `(` it passed, at a byte `terminates` accepts, or at
-    /// `end`, if its parentheses are balanced there. Between resets every scan reads the same bytes up to the same
+    /// `end`, if its parentheses are balanced there and nest no deeper than `maxNesting`. Between resets every scan reads the same bytes up to the same
     /// `end` through `byte` and `terminates`.
     @inline(__always)
     mutating func balancedEnd(from start: Int, end: Int, byte: (Int) -> UInt8, terminates: (UInt8) -> Bool) -> Int? {
@@ -48,6 +58,8 @@ internal struct BalancedParenthesesScan {
             return openers[nextOpener].balancedEnd
         }
         reset()
+        // How deeply the parentheses this scan has closed outside every `(` it passed nest.
+        var outerNesting = 0
         var i = start
         while i < end {
             let c = byte(i)
@@ -57,22 +69,32 @@ internal struct BalancedParenthesesScan {
                 continue
             }
             if c == UInt8(ascii: "(") {
-                unclosed.append(openers.count)
+                unclosed.append((openers.count, 0))
                 openers.append((i, nil))
             } else if c == UInt8(ascii: ")") {
-                guard let opener = unclosed.popLast() else {
+                guard let closed = unclosed.popLast() else {
                     break
                 }
-                openers[opener].balancedEnd = i
+                if closed.innerNesting <= maxNesting {
+                    openers[closed.opener].balancedEnd = i
+                }
+                let nesting = closed.innerNesting + 1
+                if unclosed.isEmpty {
+                    outerNesting = max(outerNesting, nesting)
+                } else {
+                    unclosed[unclosed.count - 1].innerNesting = max(unclosed[unclosed.count - 1].innerNesting, nesting)
+                }
             } else if terminates(c) {
                 break
             }
             i += 1
         }
         guard let innermost = unclosed.last else {
-            return i
+            return outerNesting <= maxNesting ? i : nil
         }
-        openers[innermost].balancedEnd = i
+        if innermost.innerNesting <= maxNesting {
+            openers[innermost.opener].balancedEnd = i
+        }
         unclosed.removeAll(keepingCapacity: true)
         return nil
     }
