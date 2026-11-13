@@ -53,12 +53,15 @@ class RepeatedReferenceLinkTests: XCTestCase {
         let result = tree(markdown)
         XCTAssertEqual(1003, count("Link destination:", in: result))
         XCTAssertEqual(0, count("[a][b]", in: result))
+        XCTAssertEqual(1, count("Link destination: \"/" + String(repeating: "a", count: 2000) + "\"", in: result))
     }
 
     func testFullAndCollapsedFormsAllResolve() {
         let markdown = Self.definition("bar")
             + Self.uses("[bar]", 1000) + " " + Self.uses("[bar][]", 1000) + " " + Self.uses("[t][bar]", 1000)
-        XCTAssertEqual(3000, links(markdown))
+        let result = tree(markdown)
+        XCTAssertEqual(3000, count("Link destination:", in: result))
+        XCTAssertEqual(0, count("[]", in: result))
     }
 
     func testImageReferencesAllResolve() {
