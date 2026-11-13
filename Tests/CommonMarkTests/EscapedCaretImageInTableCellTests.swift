@@ -11,8 +11,8 @@
 import CommonMark
 import Testing
 
-/// An escaped-caret image `![\^…]` in or next to a table (Tables (extension)).
-@Suite("Escaped-caret image in or next to a table")
+/// An escaped-caret bracket `[\^…]` or image `![\^…]` in or next to a table (Tables (extension)).
+@Suite("Escaped-caret bracket or image in or next to a table")
 struct EscapedCaretImageInTableCellTests {
     private static let options: MarkdownDocument.ParseOptions = [
         .tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink, .footnotes,
