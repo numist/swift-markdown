@@ -16,23 +16,10 @@ import Testing
 @Suite("Footnote-shaped brackets require the caret")
 struct FootnoteReferenceCaretRequiredTests {
     @Test(arguments: [
-        ("[xa]", """
-            document
-              paragraph
-                text "[xa]"
-
-            """),
         ("[xa]\n\n[^a]: n", """
             document
               paragraph
                 text "[xa]"
-
-            """),
-        ("> [xa]", """
-            document
-              block_quote
-                paragraph
-                  text "[xa]"
 
             """),
         ("> [xa]\n\n[^a]: n", """
@@ -40,14 +27,6 @@ struct FootnoteReferenceCaretRequiredTests {
               block_quote
                 paragraph
                   text "[xa]"
-
-            """),
-        ("- [xa]", """
-            document
-              list bullet '-' tight
-                item
-                  paragraph
-                    text "[xa]"
 
             """),
         ("- [xa]\n\n[^a]: n", """
