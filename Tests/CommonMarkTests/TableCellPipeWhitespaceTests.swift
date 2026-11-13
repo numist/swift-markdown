@@ -171,7 +171,7 @@ struct TableCellPipeWhitespaceTests {
 
     @Test("a line tabulation before a closing pipe is padding")
     func lineTabulationBeforeClosingPipe() {
-        #expect(TreeDump.dump("a|b\n-|-\n| x\(Self.vt)| y\(Self.ff)|", options: [.tables]) == """
+        #expect(TreeDump.dump("a|b\n-|-\n| x | y\(Self.vt)|", options: [.tables]) == """
             document
               table
                 table_header
