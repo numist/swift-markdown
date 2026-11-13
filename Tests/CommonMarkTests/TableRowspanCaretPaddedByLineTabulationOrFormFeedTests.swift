@@ -133,7 +133,7 @@ struct TableRowspanCaretPaddedByLineTabulationOrFormFeedTests {
     }
 
     @Test func lineTabulationAfterCaret() {
-        #expect(TreeDump.dump("a\n|-\n|^\u{B}", options: Self.options) == """
+        #expect(TreeDump.dump("a\n|-\n|^\u{B}|", options: Self.options) == """
             document
               table
                 table_header
