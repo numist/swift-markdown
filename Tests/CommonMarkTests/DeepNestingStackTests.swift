@@ -27,7 +27,7 @@ struct DeepNestingStackTests {
         case "strong emphasis": String(repeating: "**a ", count: depth) + String(repeating: "b** ", count: depth)
         case "strikethrough": String(repeating: "~~a ", count: depth) + String(repeating: "b~~ ", count: depth)
         case "images": String(repeating: "![", count: depth) + "x" + String(repeating: "](u)", count: depth)
-        case "links in images": String(repeating: "![[", count: depth) + "x" + String(repeating: "](u)](v)", count: depth)
+        case "images around a link": String(repeating: "![[", count: depth) + "x" + String(repeating: "](u)](v)", count: depth)
         case "attributes": String(repeating: "^[", count: depth) + "x" + String(repeating: "](k: v)", count: depth)
         case "emphasis around an email": String(repeating: "*a ", count: depth) + "a@b.c" + String(repeating: " b*", count: depth)
         case "emphasis around smart quotes": String(repeating: "*a ", count: depth) + "'x' \"y\"" + String(repeating: " b*", count: depth)
@@ -44,14 +44,14 @@ struct DeepNestingStackTests {
              "emphasis around a footnote-shaped bracket across a line", "emphasis around caret brackets": .emphasis
         case "strong emphasis": .strong
         case "strikethrough": .strikethrough
-        case "images", "links in images": .image
+        case "images", "images around a link": .image
         case "attributes": .attribute
         default: preconditionFailure("unknown shape \(shape)")
         }
     }
 
     static let inlineShapes = [
-        "emphasis", "strong emphasis", "strikethrough", "images", "links in images", "attributes",
+        "emphasis", "strong emphasis", "strikethrough", "images", "images around a link", "attributes",
         "emphasis around an email", "emphasis around smart quotes",
         "emphasis around a footnote-shaped bracket across a line", "emphasis around caret brackets",
     ]
