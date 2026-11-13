@@ -91,7 +91,7 @@ struct InlineOnlyFinalLineEndRangeTests {
             """)
     }
 
-    /// The text stands for the whole carriage return and line feed, so it starts with the carriage return.
+    /// The text starts inside the final line ending, so its range is empty where that line ending starts.
     @Test("text holding only a final carriage return and line feed has an empty range at the carriage return", arguments: modes)
     func crlfOnlyText(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("*a*\r\n", mode) == """
