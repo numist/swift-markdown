@@ -128,7 +128,7 @@ struct TablePrecedingParagraphTests {
             """)
     }
 
-    @Test("a blank line before the header keeps two separate blocks")
+    @Test("a paragraph, a blank line, then a header and delimiter row give a paragraph and a table")
     func blankLineSeparates() {
         #expect(TreeDump.dump("x\n\na\n|-", options: .tables) == """
             document
