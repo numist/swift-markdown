@@ -54,11 +54,13 @@ struct HTMLBlockSplitTabStartTests {
         ),
         TreeDumpCase(
             "block quote, type 2, ending on its first line",
-            ">\t<!-- x -->\n",
+            ">\t<!-- x -->\n> x\n",
             """
-            document @1:1-2:1
-              block_quote @1:1-1:13
+            document @1:1-3:1
+              block_quote @1:1-2:4
                 html_block "  <!-- x -->\\n" @1:2-1:13
+                paragraph @2:3-2:4
+                  text "x" @2:3-2:4
 
             """
         ),
