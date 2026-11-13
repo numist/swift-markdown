@@ -133,14 +133,14 @@ Since it's very common for block directives to nest, you can indent the lines th
 }
 ```
 
-For the contents, indentation is established by the first non-blank line, assuming that indentation for the rest of a directive's contents. Runs of lines that don't make up the definition of a block directive are handed off to the cmark parser. For `@Inner`'s contents above, the cmark parser will see:
+For the contents, indentation is established by the first non-blank line, assuming that indentation for the rest of a directive's contents. Runs of lines that don't make up the definition of a block directive are handed off to the Markdown parser. For `@Inner`'s contents above, the parser will see:
 
 ```markdown
 - A
   - B
 ```
 
-Swift Markdown adjusts the source locations reported by cmark after parsing.
+Swift Markdown adjusts the source locations reported by the parser after parsing.
 
 ## Enabling Block Directive Syntax
 

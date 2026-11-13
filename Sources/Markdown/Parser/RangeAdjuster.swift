@@ -23,7 +23,7 @@ struct RangeAdjuster: MarkupWalker {
 
     mutating func defaultVisit(_ markup: Markup) {
         /// This should only be used in the parser where ranges are guaranteed
-        /// to be filled in from cmark.
+        /// to be filled in by the parser.
         let adjustedRange = markup.range.map { range -> SourceRange in
             // Add back the offset to the column as if the indentation weren't stripped.
             let start = SourceLocation(line: startLine + range.lowerBound.line - 1,
