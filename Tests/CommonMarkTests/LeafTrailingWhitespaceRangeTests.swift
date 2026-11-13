@@ -55,8 +55,8 @@ struct LeafTrailingWhitespaceRangeTests {
             """)
     }
 
-    /// A line holding only line tabulations and form feeds is not blank, but leaves the paragraph no raw content.
-    @Test("a paragraph of only line tabulations and form feeds has an empty range at its start", arguments: [
+    /// A line of whitespace that includes a line tabulation or form feed is not blank, but leaves the paragraph no raw content.
+    @Test("a paragraph of only whitespace including a line tabulation or form feed has an empty range at its start", arguments: [
         ("\u{0B}\n", "document @1:1-2:1\n  paragraph @1:1-1:1\n"),
         ("  \u{0B}\u{0C}  \n", "document @1:1-2:1\n  paragraph @1:3-1:3\n"),
         ("- \u{0B}\n", "document @1:1-2:1\n  list bullet '-' tight @1:1-1:3\n    item @1:1-1:3\n      paragraph @1:3-1:3\n"),
