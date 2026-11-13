@@ -11,10 +11,11 @@
 import Testing
 import CommonMark
 
-/// A container's continuation consumes part of a tab, a deeper container fails to continue, and the
-/// line starts a new block in the surviving container. The tab's unconsumed columns count toward that
-/// block's indentation (Tabs), deciding between an indented code block and a paragraph.
-@Suite("New block indentation after a partially consumed container tab")
+/// A line follows a fenced code block in a container nested in a block quote or list item, and the inner container
+/// fails to continue, so the line starts a new block. A tab that the surviving container's continuation consumes in
+/// part counts only its unconsumed columns toward that block's indentation (Tabs), deciding between an indented code
+/// block and a paragraph.
+@Suite("New block indentation where a nested container fails to continue")
 struct NewBlockIndentAfterPartialTabTests {
 
     // The outer `>` takes one column of the tab; its two other columns plus two spaces are the code
