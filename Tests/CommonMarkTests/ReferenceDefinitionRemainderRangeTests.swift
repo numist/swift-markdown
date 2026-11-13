@@ -120,15 +120,16 @@ struct ReferenceDefinitionRemainderRangeTests {
 
     @Test("a blank line between ref-def and content starts a separate paragraph")
     func blankSeparatorIsSeparateParagraph() throws {
-        let ranges = ranges(in: "[foo]: /url\n\nbar")
+        // In the definition's paragraph, the quoted line would be its title.
+        let ranges = ranges(in: "[foo]: /url\n\n'bar'")
         let texts = ranges.filter { $0.kind == .text }.map { $0.range }
         try #require(texts.count == 1)
 
         #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 3, column: 1))
-        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 3, column: 4))
+        #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 3, column: 6))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 3, column: 1))   // "bar"
-        #expect(texts[0]?.upperBound == Pos(line: 3, column: 4))
+        #expect(texts[0]?.lowerBound == Pos(line: 3, column: 1))   // "'bar'"
+        #expect(texts[0]?.upperBound == Pos(line: 3, column: 6))
     }
 
     @Test("indented remainder lines after a ref-def keep their own lines")
