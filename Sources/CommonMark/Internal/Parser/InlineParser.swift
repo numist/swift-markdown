@@ -602,8 +602,8 @@ extension BlockParser {
             }
         }
         if key.isEmpty, let textStart = bracketTextStart {
-            // A link label has at most 999 characters inside its brackets (Links).
-            if cursor > textStart, linkLabelFitsLengthCap(virtualRange: textStart..<cursor, in: content) {
+            // The bracket text is a link label only within the link label limits.
+            if cursor > textStart, labelFits(linkLabelLimit, virtualRange: textStart..<cursor, in: content) {
                 key = normalizeLabel(virtualRange: textStart..<cursor, in: content)
             }
         }
@@ -679,7 +679,7 @@ extension BlockParser {
     private mutating func footnoteDefinition(referencedFrom open: Int, closeBracket: Int, in content: borrowing ContentSpan) -> DocumentStorage.Index? {
         let labelStart = open + 2
         guard !storage.footnoteMap.isEmpty, labelStart < closeBracket, content[open + 1] == UInt8(ascii: "^"),
-              linkLabelFitsLengthCap(virtualRange: labelStart..<closeBracket, in: content) else {
+              labelFits(footnoteLabelLimit, virtualRange: labelStart..<closeBracket, in: content) else {
             return nil
         }
         return storage.footnoteMap[normalizeLabel(virtualRange: labelStart..<closeBracket, in: content)]

@@ -120,23 +120,30 @@ internal struct LinkTitleScan {
     }
 }
 
+/// The most characters and bytes a label can have inside its brackets.
+internal struct LabelLengthLimit {
+    var characters: Int
+    var bytes: Int
+}
+
 /// Scanners for link labels, destinations and titles, shared by link reference definitions and inline links, and for raw HTML tags.
 extension BlockParser {
 
     // MARK: - Link label
 
     /// Scans a link label through `byte`; a label may span line endings. Returns the interior's range and the offset
-    /// past `]`, or nil at an unescaped `[`, past `maxLinkLabelLength`, or at the end. With `crlfIsOneCharacter`, a
-    /// CRLF's LF doesn't count toward the length, since a CRLF is one line ending.
+    /// past `]`, or nil at an unescaped `[`, past `linkLabelLimit`, or at the end. With `crlfIsOneCharacter`, a CRLF's
+    /// LF doesn't count toward the length, since a CRLF is one line ending.
     @inline(__always)
     private func scanLinkLabel(from start: Int, end: Int, crlfIsOneCharacter: Bool, byte: (Int) -> UInt8) -> (interior: Range<Int>, afterEnd: Int)? {
         if start >= end || byte(start) != UInt8(ascii: "[") {
             return nil
         }
-        let maxLabelLength = Self.maxLinkLabelLength
+        let limit = linkLabelLimit
         let interiorStart = start + 1
         var i = interiorStart
-        var length = 0
+        var characters = 0
+        var bytes = 0
         while i < end {
             let b = byte(i)
             if b == UInt8(ascii: "[") {
@@ -147,19 +154,24 @@ extension BlockParser {
             }
             if b == UInt8(ascii: "\\") {
                 i += 1
-                length += 1
+                characters += 1
+                bytes += 1
                 if i < end {
-                    length += labelLengthWeight(byte(i))
+                    let escaped = byte(i)
+                    characters += labelCharacterWeight(escaped)
+                    bytes += labelByteWeight(escaped)
                     i += 1
                 }
             } else {
-                length += labelLengthWeight(b)
+                characters += labelCharacterWeight(b)
+                bytes += labelByteWeight(b)
                 if crlfIsOneCharacter, b == UInt8(ascii: "\n"), byte(i - 1) == UInt8(ascii: "\r") {
-                    length -= 1
+                    characters -= 1
+                    bytes -= 1
                 }
                 i += 1
             }
-            if length > maxLabelLength {
+            if characters > limit.characters || bytes > limit.bytes {
                 return nil
             }
         }
@@ -172,13 +184,13 @@ extension BlockParser {
         if let label = content.withForwardReader(from: start, { byte in scanLinkLabel(from: start, end: end, crlfIsOneCharacter: false, byte: byte) }) {
             return label
         }
-        // A label counted past `maxLinkLabelLength` with each CRLF as two characters may still fit. Only inline-only
+        // A label counted past `linkLabelLimit` with each CRLF as two characters may still fit. Only inline-only
         // content parsed in place holds a CR.
         return contentHoldsCR ? matchLinkLabelCountingCRLFOnce(from: start, end: end, in: content) : nil
     }
 
     /// Whether a link label that `matchLinkLabel` doesn't match from `start` can still close on a later line: up to `end`
-    /// and a line ending after it, it holds no unescaped `[` and fits `maxLinkLabelLength`.
+    /// and a line ending after it, it holds no unescaped `[` and fits `linkLabelLimit`.
     internal func linkLabelIsOpen(from start: Int, end: Int, in content: borrowing ContentSpan) -> Bool {
         content.withForwardReader(from: start) { byte in
             let label = scanLinkLabel(from: start, end: end + 2, crlfIsOneCharacter: contentHoldsCR) { i in
@@ -195,40 +207,57 @@ extension BlockParser {
         content.withForwardReader(from: start) { byte in scanLinkLabel(from: start, end: end, crlfIsOneCharacter: true, byte: byte) }
     }
 
-    /// Whether a label that `matchLinkLabel` didn't scan, such as a shortcut reference's link text or a footnote
-    /// reference's label, fits `maxLinkLabelLength` untrimmed. A longer label matches no definition.
-    internal func linkLabelFitsLengthCap(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> Bool {
-        let maxLabelLength = Self.maxLinkLabelLength
-        // A character takes one to four bytes, so a label of at most `maxLabelLength` bytes fits and one of more than
-        // four times that doesn't. Settling those without weighing each byte keeps a label that spans many nested
-        // brackets cheap.
-        if range.count <= maxLabelLength {
+    /// Whether a label that `matchLinkLabel` didn't scan, such as a shortcut reference's link text or a footnote's
+    /// label, fits `limit` untrimmed. A longer label matches no definition.
+    internal func labelFits(_ limit: LabelLengthLimit, virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> Bool {
+        // A content byte counts as at most one character and at most three bytes (a NUL), so a label of at most
+        // `limit.characters` content bytes and at most a third of `limit.bytes` fits. Four content bytes count as at
+        // least one character and two as at least one byte (a CRLF), so a label of more content bytes than four times
+        // `limit.characters` or twice `limit.bytes` doesn't. Settling those without weighing each byte keeps a label
+        // that spans many nested brackets cheap.
+        if range.count <= limit.characters && range.count <= limit.bytes / 3 {
             return true
         }
-        if range.count > 4 * maxLabelLength {
+        if (range.count + 3) / 4 > limit.characters || (range.count + 1) / 2 > limit.bytes {
             return false
         }
-        var length = 0
+        var characters = 0
+        var bytes = 0
         for i in range {
             let b = content[i]
-            length += labelLengthWeight(b)
+            characters += labelCharacterWeight(b)
+            bytes += labelByteWeight(b)
             // A CRLF is one line ending. Only inline-only content parsed in place holds a CR.
             if contentHoldsCR, b == UInt8(ascii: "\n"), content[i - 1] == UInt8(ascii: "\r") {
-                length -= 1
+                characters -= 1
+                bytes -= 1
             }
-            if length > maxLabelLength {
+            if characters > limit.characters || bytes > limit.bytes {
                 return false
             }
         }
         return true
     }
 
-    /// A link label has at most 999 characters (Links), counted by `labelLengthWeight`.
-    private static let maxLinkLabelLength = 999
+    /// The most characters and bytes a link label can have inside its brackets (Links).
+    internal var linkLabelLimit: LabelLengthLimit {
+        LabelLengthLimit(characters: storage.limits.maxLinkLabelCharacters, bytes: storage.limits.maxLinkLabelBytes)
+    }
+
+    /// The most characters and bytes a footnote label can have inside its brackets.
+    internal var footnoteLabelLimit: LabelLengthLimit {
+        LabelLengthLimit(characters: storage.limits.maxFootnoteLabelCharacters, bytes: storage.limits.maxFootnoteLabelBytes)
+    }
 
     /// Counts characters (code points): a UTF-8 continuation byte counts 0 and every other byte 1.
-    private func labelLengthWeight(_ byte: UInt8) -> Int {
+    private func labelCharacterWeight(_ byte: UInt8) -> Int {
         return byte & 0xC0 == 0x80 ? 0 : 1
+    }
+
+    /// Counts bytes: a NUL counts as the 3 bytes of the U+FFFD that replaces it (Insecure characters) and every other
+    /// byte 1.
+    private func labelByteWeight(_ byte: UInt8) -> Int {
+        return byte == 0 ? 3 : 1
     }
 
     // MARK: - Link destination
