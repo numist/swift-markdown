@@ -59,32 +59,31 @@ struct BasicTests {
 
     @Test("parent/sibling navigation links work")
     func navigation() {
-        let source = "abc"
+        let source = "a\n\nb"
         MarkdownDocument.withParsedDocument(source) { doc in
         let root = doc.root
 
-        var paragraphParentKind: MarkdownNode.Kind?
-        var textParentKind: MarkdownNode.Kind?
-        var textHasNext = true
-        var textHasPrev = true
+        var paragraphParentKinds: [MarkdownNode.Kind?] = []
+        var textParentKinds: [MarkdownNode.Kind?] = []
+        var nextLiterals: [String?] = []
+        var previousLiterals: [String?] = []
+        var textHasSibling = false
 
         root.children.forEach { paragraph in
-            if let parent = paragraph.parent {
-                paragraphParentKind = parent.kind
-            }
+            paragraphParentKinds.append(paragraph.parent?.kind)
+            nextLiterals.append(paragraph.next?.firstChild?.literal())
+            previousLiterals.append(paragraph.previous?.firstChild?.literal())
             paragraph.children.forEach { text in
-                if let parent = text.parent {
-                    textParentKind = parent.kind
-                }
-                textHasNext = text.next != nil
-                textHasPrev = text.previous != nil
+                textParentKinds.append(text.parent?.kind)
+                textHasSibling = textHasSibling || text.next != nil || text.previous != nil
             }
         }
 
-        #expect(paragraphParentKind == .document)
-        #expect(textParentKind == .paragraph)
-        #expect(!textHasNext)
-        #expect(!textHasPrev)
+        #expect(paragraphParentKinds == [.document, .document])
+        #expect(textParentKinds == [.paragraph, .paragraph])
+        #expect(nextLiterals == ["b", nil])
+        #expect(previousLiterals == [nil, "a"])
+        #expect(!textHasSibling)
         }
     }
 
