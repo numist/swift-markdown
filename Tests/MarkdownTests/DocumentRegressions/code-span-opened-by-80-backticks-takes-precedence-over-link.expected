@@ -1,0 +1,4 @@
+Document @1:1-1:167
+└─ Paragraph @1:1-1:167
+   ├─ InlineCode @1:1-1:163 `[a`
+   └─ Text @1:163-1:167 "](u)"
