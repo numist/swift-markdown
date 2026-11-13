@@ -11,11 +11,11 @@
 import CommonMark
 import Testing
 
-/// Paragraphs of backtick strings of distinct lengths (Code spans).
+/// Paragraphs of backtick strings (Code spans).
 ///
-/// A backtick string begins a code span only if a backtick string of equal length closes it, so none of these does and
-/// the paragraph is text. A paragraph of 3,000 such strings, about 4.5 MB of source, parses well within the time
-/// limit.
+/// A backtick string begins a code span only if a backtick string of equal length closes it, so a ladder of strings of
+/// distinct lengths is text, and an unmatched string leaves the strings after it free to pair with each other. A ladder
+/// of 3,000 strings, about 4.5 MB of source, parses well within the time limit.
 @Suite("Ladders of unmatched backtick strings")
 struct UnmatchedBacktickStringLadderTests {
     private static let options: [MarkdownDocument.ParseOptions] = [[], .inlineOnly]
