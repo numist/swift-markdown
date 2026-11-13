@@ -15,7 +15,7 @@ import Testing
 ///
 /// A `^` cell, or with ditto row spans a `"` cell instead, extends the nearest cell above it that is not itself a span
 /// marker, and a cell with nothing between its pipes extends the nearest cell to its left that is not itself such a
-/// cell. 40,000 rows of markers, or a row of 40,000 pipes after one cell, parse well within the time limit.
+/// cell. 160,000 rows of markers, or a row of 160,000 pipes after one cell, parse well within the time limit.
 @Suite("Runs of spanning table cells")
 struct SpanningTableCellRunTests {
     private static let spans: MarkdownDocument.ParseOptions = [.tables, .tableSpans]
@@ -135,19 +135,19 @@ struct SpanningTableCellRunTests {
 
     @Test(.timeLimit(.minutes(1)))
     func manyRowspanMarkerRows() {
-        let source = "|a|b|\n|-|-|\n|x|y|\n" + String(repeating: "|^|^|\n", count: 40_000)
-        #expect(TreeDump.dump(source, options: Self.spans) == Self.rowspanTree(rows: 40_000))
+        let source = "|a|b|\n|-|-|\n|x|y|\n" + String(repeating: "|^|^|\n", count: 160_000)
+        #expect(TreeDump.dump(source, options: Self.spans) == Self.rowspanTree(rows: 160_000))
     }
 
     @Test(.timeLimit(.minutes(1)))
     func manyDittoMarkerRows() {
-        let source = "|a|b|\n|-|-|\n|x|y|\n" + String(repeating: "|\"|\"|\n", count: 40_000)
-        #expect(TreeDump.dump(source, options: Self.spans.union(.tableRowspanDitto)) == Self.rowspanTree(rows: 40_000))
+        let source = "|a|b|\n|-|-|\n|x|y|\n" + String(repeating: "|\"|\"|\n", count: 160_000)
+        #expect(TreeDump.dump(source, options: Self.spans.union(.tableRowspanDitto)) == Self.rowspanTree(rows: 160_000))
     }
 
     @Test(.timeLimit(.minutes(1)))
     func manyEmptyCells() {
-        let source = "|a|b|\n|-|-|\n|x" + String(repeating: "|", count: 40_000) + "\n"
-        #expect(TreeDump.dump(source, options: Self.spans) == Self.colspanTree(pipes: 40_000))
+        let source = "|a|b|\n|-|-|\n|x" + String(repeating: "|", count: 160_000) + "\n"
+        #expect(TreeDump.dump(source, options: Self.spans) == Self.colspanTree(pipes: 160_000))
     }
 }
