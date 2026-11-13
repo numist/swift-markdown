@@ -71,10 +71,12 @@ struct TableSplitParagraphDefinitionTests {
     }
 
     @Test func lineTabulationSeparatedMarkerBeforeTable() {
-        #expect(tree("- [ ]\u{0B}\n  x|y\n  -|-") == """
+        #expect(tree("- [ ]\u{0B}foo\n  x|y\n  -|-") == """
             Document
             └─ UnorderedList
                └─ ListItem checkbox: [ ]
+                  ├─ Paragraph
+                  │  └─ Text "foo"
                   └─ Table alignments: |-|-|
                      ├─ Head
                      │  ├─ Cell
