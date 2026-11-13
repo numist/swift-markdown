@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// An extended email autolink may span a backslash escape; its URL is the address without the backslash, and the
-/// borrowed `content` API vends it as one `UTF8Span`.
+/// An extended email autolink may span a backslash escape; its URL is the address without the backslash, after `mailto:`
+/// when the address has no scheme, and the borrowed `content` API vends it as one `UTF8Span`.
 @Suite("Escaped email autolink URL content")
 struct EscapedEmailAutolinkURLContentTests {
 
