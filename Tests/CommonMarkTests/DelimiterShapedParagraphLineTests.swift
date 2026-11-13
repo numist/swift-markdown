@@ -11,7 +11,7 @@
 import CommonMark
 import Testing
 
-/// Paragraphs whose continuation lines all look like table delimiter rows but are not (Tables (extension)).
+/// Paragraph lines that look like table delimiter rows but are not (Tables (extension)).
 ///
 /// `-:-` is not a delimiter row, since a colon may only begin or end a cell's dashes, so each such line continues the
 /// paragraph, while `:-` would open a table under the paragraph's last line. A paragraph of 40,000 lines of `-:-`
