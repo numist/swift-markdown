@@ -79,7 +79,7 @@ struct SourceRangeCompletenessTests {
         for ex in try SpecParser.loadSpec() {
             let original = nodes(ex.markdown)
             let withNUL = nodes(ex.markdown.replacingOccurrences(of: "o", with: "\u{0}"))
-            // A NUL can change structure (an `o` in an entity or HTML tag name, U+FFFD's emphasis flanking), and then its ranges aren't comparable.
+            // A NUL can change structure (an `o` in an HTML tag or attribute name, an autolink or a link label), and then its ranges aren't comparable.
             guard ex.markdown.contains("o"), original.map(\.kind) == withNUL.map(\.kind) else { continue }
             compared += 1
             for (a, b) in zip(original, withNUL) where a.range != b.range {
@@ -159,10 +159,10 @@ struct SourceRangeCompletenessTests {
     /// A range runs from the first byte of a node's own content to just past its last content byte, so a range starts
     /// or ends on whitespace only where that whitespace is the node's content: the literal whitespace of text, a code
     /// block or an HTML block, or whitespace a child's range holds. A code block or HTML block whose last line is blank
-    /// ends at that line's start, not past a container's prefix on it, and inline-only parsing keeps the whole input as
-    /// the paragraph's content. The document covers the whole input. Each spec example runs with its line endings as
-    /// written, preceded by two spaces, a tab or a line tabulation, or replaced by CRLF, both at top level and nested
-    /// in each `Container`.
+    /// ends at that line's start, not past a container's prefix on it, and in inline-only parsing the paragraph ends where
+    /// the input's last line ends, trailing whitespace included. The document covers the whole input. Each spec example
+    /// runs with its line endings as written, preceded by two spaces, a tab or a line tabulation, or replaced by CRLF,
+    /// both at top level and nested in each `Container`.
     @Test("no range starts or ends on whitespace outside its content", arguments: ["\n", "  \n", "\t\n", "\u{0B}\n", "\r\n"])
     func rangesEndOnContent(lineEnding: String) throws {
         var checked = 0
