@@ -39,15 +39,15 @@ struct UnclosedInlineHTMLTests {
 
     @Test("unclosed openers of one kind all stay literal")
     func unclosedOpenersStayLiteral() {
-        #expect(htmlLiterals("x<!--a <!--b\n<!--c", options: []) == [])
-        #expect(htmlLiterals("x<?a <?b\n<?c", options: []) == [])
-        #expect(htmlLiterals("x<!A a <!B b\n<!C c", options: []) == [])
-        #expect(htmlLiterals("x<![CDATA[a <![CDATA[b\n<![CDATA[c", options: []) == [])
+        #expect(htmlLiterals("x<!--a <!--b\ny<!--c", options: []) == [])
+        #expect(htmlLiterals("x<?a <?b\ny<?c", options: []) == [])
+        #expect(htmlLiterals("x<!A a <!B b\ny<!C c", options: []) == [])
+        #expect(htmlLiterals("x<![CDATA[a <![CDATA[b\ny<![CDATA[c", options: []) == [])
     }
 
     @Test("`<!->` opens no comment")
     func dashGreaterThanOpensNoComment() {
-        #expect(htmlLiterals("x<!-> <!--a", options: []) == [])
+        #expect(htmlLiterals("x<!-> <!--a-->", options: []) == ["<!--a-->"])
     }
 
     // MARK: A closer that overlaps its own opener never closes it
