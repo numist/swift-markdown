@@ -16,8 +16,8 @@ import CommonMark
 @Suite("Inline CDATA section ending in a bracket")
 struct InlineCDATATrailingBracketTests {
 
-    @Test("`<![CDATA[]]]>` (empty content + trailing `]`) is inline HTML")
-    func emptyTrailingBracketRecognized() {
+    @Test("`<![CDATA[]]]>` (content `]`) is inline HTML")
+    func bracketOnlyContentRecognized() {
         #expect(TreeDump.dump("o<![CDATA[]]]>", options: []) == """
             document
               paragraph
