@@ -255,15 +255,21 @@ struct ReferenceExpansionBudgetTests {
     }
 
     @Test func imageCollapsedAndFullReferencesAreCharged() {
-        #expect(tree("[a]: <\(repeated("u", 50_000))>\n\n![a] [a][] [x][a]") == """
-            Document @1:1-3:18
-            └─ Paragraph @3:1-3:18
-               ├─ Image @3:1-3:5 source: "<u×50000>"
+        #expect(tree("[a]: <\(repeated("u", 25_000))>\n\n![a] [a][] [x][a] [a] [a]") == """
+            Document @1:1-3:26
+            └─ Paragraph @3:1-3:26
+               ├─ Image @3:1-3:5 source: "<u×25000>"
                │  └─ Text @3:3-3:4 "a"
                ├─ Text @3:5-3:6 " "
-               ├─ Link @3:6-3:11 destination: "<u×50000>"
+               ├─ Link @3:6-3:11 destination: "<u×25000>"
                │  └─ Text @3:7-3:8 "a"
-               └─ Text @3:11-3:18 " [x][a]"
+               ├─ Text @3:11-3:12 " "
+               ├─ Link @3:12-3:18 destination: "<u×25000>"
+               │  └─ Text @3:13-3:14 "x"
+               ├─ Text @3:18-3:19 " "
+               ├─ Link @3:19-3:22 destination: "<u×25000>"
+               │  └─ Text @3:20-3:21 "a"
+               └─ Text @3:22-3:26 " [a]"
             """)
     }
 
