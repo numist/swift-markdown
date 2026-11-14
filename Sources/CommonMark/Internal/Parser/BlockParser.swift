@@ -1413,7 +1413,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// The source range of `segs`' only segment, or `nil` when it holds more than one.
+    /// The source range of `segs`' only segment, or `nil` when it holds any other number of segments.
     private static func onlySegmentRange(_ segs: borrowing UniqueArray<Segment>) -> Range<Int>? {
         segs.count == 1 ? segs[0].chunk.range : nil
     }
