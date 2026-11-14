@@ -13,8 +13,9 @@ import CommonMark
 
 /// `maxContainersOpenedOnLineBeforeListMarker` bounds how many containers a line opens before a list marker or a
 /// footnote definition: once that many block quotes, list items and footnote definitions have opened earlier on the
-/// same line, a list marker or a footnote definition there is paragraph text. Block quotes count toward it but always
-/// open, containers a line continues don't count, and nesting built across lines is unbounded.
+/// same line, a list marker or a footnote definition there is not recognized and the rest of its line parses as other
+/// content, such as paragraph text or a link reference definition. Block quotes count toward it but always open,
+/// containers a line continues don't count, and nesting built across lines is unbounded.
 @Suite("Containers opened on a line before a list marker")
 struct ContainersOpenedOnLineLimitTests {
 
@@ -263,7 +264,7 @@ struct ContainersOpenedOnLineLimitTests {
             """)
     }
 
-    @Test("a limit of zero or less leaves every list marker and footnote definition as paragraph text", arguments: [0, -1, Int.min])
+    @Test("a limit of zero or less recognizes no list marker or footnote definition", arguments: [0, -1, Int.min])
     func limitOfZeroOrLess(_ maxContainers: Int) {
         #expect(TreeDump.dump("- x", options: [], limits: limits(maxContainers)) == """
             document
