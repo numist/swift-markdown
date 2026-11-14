@@ -116,7 +116,7 @@ struct TableRowCellLimitTests {
 
     @Test("a paragraph line past the limit keeps every later delimiter row of the paragraph from opening a table")
     func precedingLinePastLimitFarAbove() {
-        #expect(TreeDump.dump("w|w|w|w\nx\na|b\n-|-\nc\n-|-", options: .tables, limits: limits(3)) == """
+        #expect(TreeDump.dump("w|w|w|w\nx\na|b\n-|-\nc|d\n-|-", options: .tables, limits: limits(3)) == """
             document
               paragraph
                 text "w|w|w|w"
@@ -127,7 +127,7 @@ struct TableRowCellLimitTests {
                 softbreak
                 text "-|-"
                 softbreak
-                text "c"
+                text "c|d"
                 softbreak
                 text "-|-"
 
