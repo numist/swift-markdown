@@ -57,6 +57,27 @@ struct NestedBlockQuoteMarkerLineTests {
         }
     }
 
+    /// The root and each first child down to a leaf, one per line as `TreeDump` renders them with source ranges, each
+    /// marked `+sibling` when it has a next sibling. The walk does not recurse, so trees of any depth fit on the stack.
+    private static func chain(_ markdown: String) -> String {
+        MarkdownDocument.withParsedDocument(markdown, options: .sourcePosition) { doc in
+            var out = ""
+            var depth = 0
+            var current: MarkdownNode? = doc.root
+            while let node = current {
+                out += String(repeating: "  ", count: depth) + TreeDump.describe(node.kind)
+                    + (node.literal().map { " \"\($0)\"" } ?? "")
+                    + (node.sourceRange.map {
+                        " @\($0.lowerBound.line):\($0.lowerBound.column)-\($0.upperBound.line):\($0.upperBound.column)"
+                    } ?? " @-")
+                    + (node.next == nil ? "" : " +sibling") + "\n"
+                depth += 1
+                current = node.firstChild
+            }
+            return out
+        }
+    }
+
     @Test
     func markerThreeColumnsAfterTabIsBlockQuote() {
         #expect(TreeDump.dump(">>\t  > a", options: []) == """
@@ -85,6 +106,29 @@ struct NestedBlockQuoteMarkerLineTests {
         let nesting = Self.nesting(String(repeating: ">", count: 40_000) + " a", options: [])
         #expect(nesting.quotes == 40_000)
         #expect(nesting.innermost == [Node(kind: .blockQuote), Node(kind: .paragraph), Node(kind: .text, literal: "a")])
+    }
+
+    /// Each block quote begins at its marker and ends with the line.
+    @Test
+    func emptyBlockQuotesOpeningOnOneLineEndAtLineEnd() {
+        let blockQuoteLines = (1...300).map { level in
+            String(repeating: "  ", count: level) + "block_quote @1:\(level)-1:301\n"
+        }
+        #expect(Self.chain(String(repeating: ">", count: 300)) == "document @1:1-1:301\n" + blockQuoteLines.joined())
+    }
+
+    /// A `>` line continues only the outermost block quote, and as it is blank after its marker, the paragraph in the
+    /// innermost ends on the line before it.
+    @Test
+    func blankMarkerLineContinuesOnlyOutermostBlockQuote() {
+        let innerBlockQuoteLines = (2...255).map { level in
+            String(repeating: "  ", count: level) + "block_quote @1:\(level)-1:259\n"
+        }
+        #expect(Self.chain(String(repeating: ">", count: 255) + "  `\n>") == "document @1:1-2:2\n"
+            + "  block_quote @1:1-2:2\n"
+            + innerBlockQuoteLines.joined()
+            + String(repeating: "  ", count: 256) + "paragraph @1:258-1:259\n"
+            + String(repeating: "  ", count: 257) + "text \"`\" @1:258-1:259\n")
     }
 
     @Test(.timeLimit(.minutes(1)))
