@@ -35,7 +35,7 @@ struct ParseLimitsTests {
         #expect(limits.maxTableAutocompletedCells == Int.max)
     }
 
-    static let source = "# Title\n\nA paragraph with *emphasis*."
+    static let source = "# Title\n\nA paragraph with *emphasis* and ````a````."
 
     static let expected = """
         document
@@ -45,7 +45,7 @@ struct ParseLimitsTests {
             text "A paragraph with "
             emph
               text "emphasis"
-            text "."
+            text " and ````a````."
 
         """
 
