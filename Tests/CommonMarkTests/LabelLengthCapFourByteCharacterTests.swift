@@ -12,8 +12,8 @@ import CommonMark
 import Testing
 
 /// A label has at most 999 characters (Links), however many bytes each takes: 999 four-byte characters fit, and 1,000
-/// characters don't, whether all four-byte or ending in one-byte characters. A footnote definition's label is capped
-/// likewise, so a `[^label]:` whose label is longer begins no definition and stays paragraph text.
+/// characters don't, whether all four-byte or ending in one-byte characters. A footnote definition's label has no cap,
+/// so a reference with a longer label stays text and leaves its definition unreferenced.
 @Suite("Label length cap with four-byte characters")
 struct LabelLengthCapFourByteCharacterTests {
     private static let wideCharacter = "\u{1F600}"
@@ -37,13 +37,11 @@ struct LabelLengthCapFourByteCharacterTests {
     }
 
     @Test(arguments: [wide(1000), wide(999) + "a", wide(998) + "aa"])
-    func footnoteDefinitionOf1000CharactersIsText(_ label: String) {
+    func footnoteReferenceOf1000CharactersLeavesItsDefinitionUnreferenced(_ label: String) {
         #expect(TreeDump.dump("x[^\(label)]\n\n[^\(label)]: d", options: .footnotes) == """
             document
               paragraph
                 text "x[^\(label)]"
-              paragraph
-                text "[^\(label)]: d"
 
             """)
     }

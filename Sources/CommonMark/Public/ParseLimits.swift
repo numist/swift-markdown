@@ -27,10 +27,10 @@ extension MarkdownDocument {
         /// The bytes counted are those of the label's block content: container markers and indentation before each line are excluded, and a NUL counts as the 3 bytes of U+FFFD. The default is unlimited.
         public var maxLinkLabelBytes: Int = .max
 
-        /// The most characters a footnote label can have inside its brackets, for footnote references and footnote definitions. The default is 999.
+        /// The most characters a footnote reference's label can have inside its brackets. A footnote definition's label has no limit. The default is 999.
         public var maxFootnoteLabelCharacters: Int = 999
 
-        /// The most bytes a footnote label can have inside its brackets, for footnote references and footnote definitions, counted as for `maxLinkLabelBytes`. The default is unlimited.
+        /// The most bytes a footnote reference's label can have inside its brackets, counted as for `maxLinkLabelBytes`. A footnote definition's label has no limit. The default is unlimited.
         public var maxFootnoteLabelBytes: Int = .max
 
         /// The most digits a decimal numeric character reference (`&#…;`) can have, leading zeros included. The default is the spec's 7.

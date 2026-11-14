@@ -13,8 +13,9 @@ import CommonMark
 
 /// `maxLinkLabelCharacters` and `maxLinkLabelBytes` bound the label inside the brackets of a link reference definition,
 /// an attribute definition, a full reference, and the bracket text a collapsed or shortcut reference takes as its label.
-/// `maxFootnoteLabelCharacters` and `maxFootnoteLabelBytes` bound a footnote definition's and a footnote reference's
-/// label. A label past either of its limits is no label: a definition stays paragraph text and a reference stays text.
+/// `maxFootnoteLabelCharacters` and `maxFootnoteLabelBytes` bound a footnote reference's label; a footnote
+/// definition's label has no limit. A label past either of its limits is no label: a definition stays paragraph text
+/// and a reference stays text.
 ///
 /// Bytes are those of the label's block content: container prefixes are not counted, and a NUL counts as the three
 /// bytes of the U+FFFD that replaces it (Insecure characters).
@@ -293,7 +294,8 @@ struct LabelLengthLimitTests {
 
     // MARK: - Footnote labels
 
-    @Test("a footnote definition's label fits at the character limit but not past it")
+    /// `ẞ` case-folds to `ss`, so the 3-character reference `aaẞ` names the 4-character definition `aass`.
+    @Test("the character limit bounds a footnote reference's label but not a footnote definition's")
     func footnoteDefinitionCharacters() {
         let limits = footnoteLimits(characters: 3)
         #expect(TreeDump.dump("x[^aéc]\n\n[^aéc]: n", options: .footnotes, limits: limits) == """
@@ -306,13 +308,20 @@ struct LabelLengthLimitTests {
                   text "n"
 
             """)
-        // `[^aécd]: n` is then a link reference definition, with the label `^aécd`.
         #expect(TreeDump.dump("x[^aécd]\n\n[^aécd]: n", options: .footnotes, limits: limits) == """
             document
               paragraph
+                text "x[^aécd]"
+
+            """)
+        #expect(TreeDump.dump("x[^aaẞ]\n\n[^aass]: n", options: .footnotes, limits: limits) == """
+            document
+              paragraph
                 text "x"
-                link "n" ""
-                  text "^aécd"
+                footnote_reference "1"
+              footnote_definition "aass"
+                paragraph
+                  text "n"
 
             """)
     }
@@ -334,7 +343,9 @@ struct LabelLengthLimitTests {
             """)
     }
 
-    @Test("a footnote definition's label fits at the byte limit but not past it")
+    /// U+212A KELVIN SIGN takes 3 bytes and case-folds to `k`, so the 2-byte reference `kk` names the 6-byte
+    /// definition `KK`.
+    @Test("the byte limit bounds a footnote reference's label but not a footnote definition's")
     func footnoteDefinitionBytes() {
         let limits = footnoteLimits(bytes: 3)
         #expect(TreeDump.dump("x[^aé]\n\n[^aé]: n", options: .footnotes, limits: limits) == """
@@ -350,9 +361,17 @@ struct LabelLengthLimitTests {
         #expect(TreeDump.dump("x[^éé]\n\n[^éé]: n", options: .footnotes, limits: limits) == """
             document
               paragraph
+                text "x[^éé]"
+
+            """)
+        #expect(TreeDump.dump("x[^kk]\n\n[^\u{212A}\u{212A}]: n", options: .footnotes, limits: limits) == """
+            document
+              paragraph
                 text "x"
-                link "n" ""
-                  text "^éé"
+                footnote_reference "1"
+              footnote_definition "\u{212A}\u{212A}"
+                paragraph
+                  text "n"
 
             """)
     }

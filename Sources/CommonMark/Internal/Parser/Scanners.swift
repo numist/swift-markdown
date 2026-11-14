@@ -367,7 +367,7 @@ extension BlockParser {
         LabelLengthLimit(characters: limits.maxLinkLabelCharacters, bytes: limits.maxLinkLabelBytes)
     }
 
-    /// The most characters and bytes a footnote label can have inside its brackets.
+    /// The most characters and bytes a footnote reference's label can have inside its brackets.
     internal var footnoteLabelLimit: LabelLengthLimit {
         LabelLengthLimit(characters: limits.maxFootnoteLabelCharacters, bytes: limits.maxFootnoteLabelBytes)
     }

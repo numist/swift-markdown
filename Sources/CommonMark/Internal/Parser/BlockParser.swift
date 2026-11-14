@@ -3684,9 +3684,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         return between.isLineWhitespace ? false : nil
     }
 
-    /// Matches a footnote definition opener `[^label]:`, whose label holds no whitespace or unescaped bracket and fits
-    /// the footnote label limits, returning the label and where the definition's content begins, past any spaces and
-    /// tabs.
+    /// Matches a footnote definition opener `[^label]:`, whose label holds no whitespace or unescaped bracket, returning
+    /// the label and where the definition's content begins, past any spaces and tabs.
     private mutating func matchFootnoteDefinition(range: Range<Int>, firstNonSpace: Int) -> (label: Chunk, consumedTo: Int)? {
         let end = range.upperBound
         guard firstNonSpace + 1 < end,
@@ -3718,10 +3717,6 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         guard labelLen > 0,
               i < end, sourceBytes[i] == UInt8(ascii: "]"),
               i + 1 < end, sourceBytes[i + 1] == UInt8(ascii: ":") else {
-            return nil
-        }
-        let label = ContentSpan(span: sourceBytes.extracting(labelStart..<i), base: labelStart, inSource: true)
-        guard labelFits(footnoteLabelLimit, virtualRange: labelStart..<i, in: label) else {
             return nil
         }
         var contentStart = i + 2
