@@ -100,10 +100,10 @@ struct CharacterReferenceDigitLimitTests {
         let zeros = String(repeating: "0", count: 40)
         let nines = String(repeating: "9", count: 40)
         let effs = String(repeating: "f", count: 40)
-        #expect(TreeDump.dump("&#\(zeros)65; &#\(nines); &#x\(zeros)41; &#x\(effs);", options: [], limits: limits) == """
+        #expect(TreeDump.dump("&#\(zeros)65; &#\(nines); &#x\(zeros)41; &#x\(effs); &#4294967361; &#x100000041;", options: [], limits: limits) == """
             document
               paragraph
-                text "A \u{FFFD} A \u{FFFD}"
+                text "A \u{FFFD} A \u{FFFD} \u{FFFD} \u{FFFD}"
 
             """)
     }
