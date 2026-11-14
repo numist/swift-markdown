@@ -143,8 +143,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         /// `maxTableAutocompletedCells` only when that is limited.
         var tableAutocompletedCells = 0
 
-        /// Whether a line of the paragraph before its last line has more cells than `maxTableRowCells`, which keeps
-        /// every later delimiter row of the paragraph from opening a table.
+        /// Whether a table check found a line of the paragraph before the header line it checked with more cells than
+        /// `maxTableRowCells`, which keeps every later delimiter row of the paragraph from opening a table. Cleared when
+        /// definitions leave the paragraph's lines.
         var holdsLineOverRowCellLimit = false
 
         /// Whether an underline removed definitions from the start of the paragraph's lines (see
@@ -951,8 +952,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Whether a line of the open paragraph before its last line, which begins at `lastLineStart` (see
-    /// `lastLineStart(of:)`), has more cells than `maxTableRowCells`. The paragraph's lines are read for this at most
-    /// once: if none has, the table opens and ends the search, and if one has, that is recorded.
+    /// `lastLineStart(of:)`), has more cells than `maxTableRowCells`. If none has, the table opens; if one has, that is
+    /// recorded, so the paragraph's lines are read again only after definitions leave them.
     private mutating func lineBeforeLastExceedsRowCellLimit(pending: borrowing PendingLeaf, lastLineStart: Int) -> Bool {
         if openParagraphState!.holdsLineOverRowCellLimit {
             return true
@@ -2079,7 +2080,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var lineColumns = LineColumns(lineStart: lineRange.lowerBound)
         var noThematicBreakBefore = startCursor
         // The block quotes, list items and footnote definitions this line has opened; at the limit a list marker or a
-        // footnote definition is paragraph text.
+        // footnote definition is not recognized.
         var containersOpened = 0
         let maxContainersBeforeListMarker = limits.maxContainersOpenedOnLineBeforeListMarker
         while true {

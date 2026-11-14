@@ -61,10 +61,10 @@ extension BlockParser {
         storage.setSourceEnd(node, rowRange(lines[lines.count - 1]).upperBound)
     }
 
-    /// The column count of the table source lines `header` and `delimiter` open, or `nil` if they open none:
-    /// `delimiter` is a delimiter row of no more cells than `maxTableRowCells` and `header` has as many cells (Tables
-    /// (extension)). The block parser then marks the paragraph table-pending, so the table, not a paragraph, is the
-    /// open block for the next line.
+    /// The column count of the table source lines `header` and `delimiter` open by their own cells, or `nil` if they
+    /// open none: `delimiter` is a delimiter row of no more cells than `maxTableRowCells` and `header` has as many cells
+    /// (Tables (extension)). Unless an earlier line of the paragraph has more cells than `maxTableRowCells`, the block
+    /// parser then marks the paragraph table-pending, so the table, not a paragraph, is the open block for the next line.
     ///
     /// Every delimiter-shaped paragraph line asks this, so it counts cells without building arrays.
     internal mutating func opensTable(header: Range<Int>, delimiter: Range<Int>) -> Int? {

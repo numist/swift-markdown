@@ -11,7 +11,7 @@
 extension MarkdownDocument {
     /// Bounds on the size of constructs the parser recognizes.
     ///
-    /// A construct past a limit is not recognized, and its source parses as other content, usually text. The defaults follow GFM 0.29 where it states a limit and are otherwise unlimited (`Int.max`). A value below its meaningful range behaves as the nearest meaningful value.
+    /// A construct past a limit is not recognized, and its source parses as other content, usually text. The defaults follow GFM 0.29 where it states a limit, a footnote reference's label takes a link label's 999 characters, and the rest are unlimited (`Int.max`). A value below its meaningful range behaves as the nearest meaningful value.
     ///
     ///     var limits = MarkdownDocument.ParseLimits()
     ///     limits.maxCodeSpanOpeningBackticks = 80
@@ -24,10 +24,10 @@ extension MarkdownDocument {
 
         /// The most bytes a link label can have inside its brackets, for link references, link reference definitions and inline attribute labels.
         ///
-        /// The bytes counted are those of the label's block content: container markers and indentation before each line are excluded, and a NUL counts as the 3 bytes of U+FFFD. The default is unlimited.
+        /// The bytes counted are those of the label's block content: container markers, and the indentation of each line its containers continue, are excluded; a lazy continuation line's indentation counts, and a NUL counts as the 3 bytes of U+FFFD. The default is unlimited.
         public var maxLinkLabelBytes: Int = .max
 
-        /// The most characters a footnote reference's label can have inside its brackets. A footnote definition's label has no limit. The default is 999.
+        /// The most characters a footnote reference's label can have inside its brackets. A footnote definition's label has no limit. The default is 999, as for a link label.
         public var maxFootnoteLabelCharacters: Int = 999
 
         /// The most bytes a footnote reference's label can have inside its brackets, counted as for `maxLinkLabelBytes`. A footnote definition's label has no limit. The default is unlimited.
@@ -41,7 +41,7 @@ extension MarkdownDocument {
 
         /// The deepest nesting of unescaped parentheses a link destination not enclosed in `<` `>` can have. The default is unlimited.
         ///
-        /// The spec requires at least 3 levels to be supported, so a lower value is not spec-compliant.
+        /// The spec says at least 3 levels should be supported.
         public var maxLinkDestinationParenthesisNesting: Int = .max
 
         /// The deepest nesting of unescaped parentheses inside the outer parentheses of an inline attribute's `^[…](…)` attributes. The default is unlimited.
@@ -67,7 +67,7 @@ extension MarkdownDocument {
         /// The most cells a table row can have. Every cell a line splits into counts, empty cells and span fillers included, before a body row is cut to the header's width. A delimiter row past it opens no table, and neither does one below a paragraph line past it; a body row past it ends the table and starts a paragraph. The default is unlimited.
         public var maxTableRowCells: Int = .max
 
-        /// The most empty cells a table can add to pad its body rows to the header's width. A body row is not part of the table once the cells added to the rows before it exceed this: it ends the table and starts a paragraph. The default is unlimited.
+        /// The number of empty cells that padding body rows to the header's width can add to a table before it takes no further body row. A body row is not part of the table once the cells added to the rows before it exceed this: it ends the table and starts a paragraph. The default is unlimited.
         public var maxTableAutocompletedCells: Int = .max
 
         /// Creates the default limits.
