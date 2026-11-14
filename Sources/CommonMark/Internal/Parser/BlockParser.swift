@@ -1405,11 +1405,17 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .segments(let segs):
             let total = totalLength(of: segs)
             let rest = segments(segs, in: start..<total, total: total)
-            if rest.count == 1 {
-                return .lazy(range: rest[0].chunk.range)
+            // Reading the only segment through a borrowing parameter ends the read before `rest` is consumed below.
+            if let range = Self.onlySegmentRange(rest) {
+                return .lazy(range: range)
             }
             return .segments(rest)
         }
+    }
+
+    /// The source range of `segs`' only segment, or `nil` when it holds more than one.
+    private static func onlySegmentRange(_ segs: borrowing UniqueArray<Segment>) -> Range<Int>? {
+        segs.count == 1 ? segs[0].chunk.range : nil
     }
 
     /// Where `leaf`'s lines begin in its offsets: a `.lazy` range's source offset, or a segment list's virtual offset 0.
