@@ -14,7 +14,7 @@ import Testing
 /// Footnote-shaped brackets nested inside one another with no footnote label limit.
 ///
 /// A footnote definition's label holds no unescaped bracket, as a link label doesn't (Links), so a bracket holding
-/// another bracket references no footnote however long its label, and 16,000 nested brackets, about 64 KB of source,
+/// another bracket references no footnote however long its label, and 16,000 nested brackets, about 80 KB of source,
 /// parse within the time limit.
 @Suite("Nested footnote brackets with unlimited labels")
 struct UnlimitedFootnoteLabelNestingTests {
