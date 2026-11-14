@@ -86,7 +86,7 @@ extension BlockParser {
     }
 
     /// Whether a line of `sourceBytes[lines]`, lines joined by `\n`, has more cells than `maxTableRowCells`.
-    internal func holdsLineOverRowCellLimit(_ lines: Range<Int>) -> Bool {
+    internal mutating func holdsLineOverRowCellLimit(_ lines: Range<Int>) -> Bool {
         var lineStart = lines.lowerBound
         for i in lines where sourceBytes[i] == UInt8(ascii: "\n") {
             if exceedsRowCellLimit(line: lineStart..<i) {
@@ -100,7 +100,7 @@ extension BlockParser {
     /// Whether a table takes body-row candidate `sourceBytes[line]` as a row by the table limits: the rows before it
     /// inserted `autocompletedCells` cells, no more than `maxTableAutocompletedCells`, and it has no more cells than
     /// `maxTableRowCells`.
-    internal func tableLimitsAdmitRow(_ line: Range<Int>, autocompletedCells: Int) -> Bool {
+    internal mutating func tableLimitsAdmitRow(_ line: Range<Int>, autocompletedCells: Int) -> Bool {
         // No row inserts fewer than zero cells, so a negative limit is zero.
         autocompletedCells <= max(storage.limits.maxTableAutocompletedCells, 0) && !exceedsRowCellLimit(line: line)
     }
@@ -108,7 +108,7 @@ extension BlockParser {
     /// `autocompletedCells` plus the cells a table of `columns` columns inserts into body row `sourceBytes[line]`,
     /// those it is short of `columns`. Only counted while `maxTableAutocompletedCells` is limited; otherwise
     /// `autocompletedCells` is returned unchanged.
-    internal func autocompletedCells(_ autocompletedCells: Int, afterRow line: Range<Int>, columns: Int) -> Int {
+    internal mutating func autocompletedCells(_ autocompletedCells: Int, afterRow line: Range<Int>, columns: Int) -> Int {
         guard storage.limits.maxTableAutocompletedCells < .max else {
             return autocompletedCells
         }
@@ -119,7 +119,7 @@ extension BlockParser {
     }
 
     /// Whether source line `line` has more cells than `maxTableRowCells`.
-    private func exceedsRowCellLimit(line: Range<Int>) -> Bool {
+    private mutating func exceedsRowCellLimit(line: Range<Int>) -> Bool {
         let limit = storage.limits.maxTableRowCells
         // A line has no more cells than bytes, apart from an empty line's one cell.
         guard max(line.count, 1) > limit else {
