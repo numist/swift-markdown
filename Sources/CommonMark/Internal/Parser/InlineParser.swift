@@ -698,7 +698,8 @@ extension BlockParser {
     /// When the footnote-shaped bracket from `bracketStart` to the `]` at `closeBracket` names a footnote definition,
     /// replaces it with a footnote reference, pops its opener, and returns `true`. An image opener's `!` stays text.
     private mutating func emitFootnoteReferenceIfDefined(openerIdx: Int, bracketStart: Int, closeBracket: Int, content: borrowing ContentSpan) -> Bool {
-        guard storage.options.contains(.footnotes),
+        // A footnote definition's label holds no unescaped bracket, so a bracket pushed after the opener rules one out.
+        guard storage.options.contains(.footnotes), !brackets[openerIdx].bracketAfter,
               let defIdx = footnoteDefinition(referencedFrom: bracketStart, closeBracket: closeBracket, in: content) else {
             return false
         }
