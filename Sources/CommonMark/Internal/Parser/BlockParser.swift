@@ -120,6 +120,13 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         /// container.
         var tablePending = false
 
+        /// The pending table's column count, the header row's cells.
+        var tableColumns = 0
+
+        /// The cells the pending table inserts into the body rows it holds so far, counted against
+        /// `maxTableAutocompletedCells` only when that is limited.
+        var tableAutocompletedCells = 0
+
         /// Whether a line of the paragraph before its last line has more cells than `maxTableRowCells`, which keeps
         /// every later delimiter row of the paragraph from opening a table.
         var holdsLineOverRowCellLimit = false
@@ -887,9 +894,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
     }
 
-    /// Whether the open paragraph's last line, from `lastLineStart` (see `lastLineStart(of:)`), and the
-    /// delimiter-candidate line `sourceBytes[delimRange]` open a table (Tables (extension)).
-    private mutating func lastLineOpensTable(delimRange: Range<Int>, pending: borrowing PendingLeaf, lastLineStart: Int) -> Bool {
+    /// The column count of the table the open paragraph's last line, from `lastLineStart` (see `lastLineStart(of:)`),
+    /// and the delimiter-candidate line `sourceBytes[delimRange]` open, or `nil` if they open none (Tables (extension)).
+    private mutating func lastLineOpensTable(delimRange: Range<Int>, pending: borrowing PendingLeaf, lastLineStart: Int) -> Int? {
         let header: Range<Int>
         switch pending.content {
         case .lazy(let range, _):
@@ -910,11 +917,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func detectPendingTable(_ node: DocumentStorage.Index, delimRange: Range<Int>, pending: consuming PendingLeaf?) -> PendingLeaf? {
         precondition(pending != nil, "an open paragraph always holds its accumulated content")
         let headerStart = lastLineStart(of: pending!)
-        guard lastLineOpensTable(delimRange: delimRange, pending: pending!, lastLineStart: headerStart),
+        guard let columns = lastLineOpensTable(delimRange: delimRange, pending: pending!, lastLineStart: headerStart),
               !lineBeforeLastExceedsRowCellLimit(pending: pending!, lastLineStart: headerStart) else {
             return pending
         }
         openParagraphState!.tablePending = true
+        openParagraphState!.tableColumns = columns
         let leaf = pending!
         switch consume leaf.content {
         case .lazy(let range, _):
@@ -1620,7 +1628,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             && (!line.allMatched
                 || line.indent >= 4
                 || isLonePipeRow(range: rowRange)
-                || !tableLimitsAdmitRow(rowRange))
+                || !tableLimitsAdmitRow(rowRange, autocompletedCells: openParagraphState!.tableAutocompletedCells))
         if !line.openKind.isParagraph || breaksOutOfPendingTable {
             return false
         }
@@ -1643,7 +1651,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return false
         }
         // A continuation, matched or lazy, closes no containers.
-        if storage.options.contains(.tables) {
+        if tablePending {
+            openParagraphState!.tableAutocompletedCells = autocompletedCells(
+                openParagraphState!.tableAutocompletedCells, afterRow: rowRange, columns: openParagraphState!.tableColumns)
+        } else if storage.options.contains(.tables) {
             recordTableDelimiterCandidate(line: line, pending: &pending)
         }
         pending = appendNewline(to: current, pending: consume pending)

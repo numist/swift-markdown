@@ -67,7 +67,7 @@ extension MarkdownDocument {
         /// The most cells a table row can have. Every cell a line splits into counts, empty cells and span fillers included, before a body row is cut to the header's width. A delimiter row past it opens no table, and neither does one below a paragraph line past it; a body row past it ends the table and starts a paragraph. The default is unlimited.
         public var maxTableRowCells: Int = .max
 
-        /// The most empty cells a table can add to pad its body rows to the header's width. A body row is not part of the table once the cells added to the rows before it exceed this. The default is unlimited.
+        /// The most empty cells a table can add to pad its body rows to the header's width. A body row is not part of the table once the cells added to the rows before it exceed this: it ends the table and starts a paragraph. The default is unlimited.
         public var maxTableAutocompletedCells: Int = .max
 
         /// Creates the default limits.

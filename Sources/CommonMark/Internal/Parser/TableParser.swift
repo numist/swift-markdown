@@ -61,12 +61,13 @@ extension BlockParser {
         storage.setSourceEnd(node, rowRange(lines[lines.count - 1]).upperBound)
     }
 
-    /// Whether source lines `header` and `delimiter` open a table: `delimiter` is a delimiter row of no more cells than
-    /// `maxTableRowCells` and `header` has as many cells (Tables (extension)). The block parser then marks the paragraph
-    /// table-pending, so the table, not a paragraph, is the open block for the next line.
+    /// The column count of the table source lines `header` and `delimiter` open, or `nil` if they open none:
+    /// `delimiter` is a delimiter row of no more cells than `maxTableRowCells` and `header` has as many cells (Tables
+    /// (extension)). The block parser then marks the paragraph table-pending, so the table, not a paragraph, is the
+    /// open block for the next line.
     ///
     /// Every delimiter-shaped paragraph line asks this, so it counts cells without building arrays.
-    internal mutating func opensTable(header: Range<Int>, delimiter: Range<Int>) -> Bool {
+    internal mutating func opensTable(header: Range<Int>, delimiter: Range<Int>) -> Int? {
         var columns = 0
         var isDelimiterRow = true
         forEachCell(in: delimiter) { cell in
@@ -76,12 +77,12 @@ extension BlockParser {
             }
         }
         guard isDelimiterRow, columns <= storage.limits.maxTableRowCells else {
-            return false
+            return nil
         }
         precondition(columns > 0, "a delimiter-candidate line holds a `-`, so it splits into at least one cell")
         var headerCells = 0
         forEachCell(in: header) { _ in headerCells += 1 }
-        return headerCells == columns
+        return headerCells == columns ? columns : nil
     }
 
     /// Whether a line of `sourceBytes[lines]`, lines joined by `\n`, has more cells than `maxTableRowCells`.
@@ -96,10 +97,25 @@ extension BlockParser {
         return exceedsRowCellLimit(line: lineStart..<lines.upperBound)
     }
 
-    /// Whether a table takes body-row candidate `sourceBytes[line]` as a row by the table limits: it has no more cells
-    /// than `maxTableRowCells`.
-    internal func tableLimitsAdmitRow(_ line: Range<Int>) -> Bool {
-        !exceedsRowCellLimit(line: line)
+    /// Whether a table takes body-row candidate `sourceBytes[line]` as a row by the table limits: the rows before it
+    /// inserted `autocompletedCells` cells, no more than `maxTableAutocompletedCells`, and it has no more cells than
+    /// `maxTableRowCells`.
+    internal func tableLimitsAdmitRow(_ line: Range<Int>, autocompletedCells: Int) -> Bool {
+        // No row inserts fewer than zero cells, so a negative limit is zero.
+        autocompletedCells <= max(storage.limits.maxTableAutocompletedCells, 0) && !exceedsRowCellLimit(line: line)
+    }
+
+    /// `autocompletedCells` plus the cells a table of `columns` columns inserts into body row `sourceBytes[line]`,
+    /// those it is short of `columns`. Only counted while `maxTableAutocompletedCells` is limited; otherwise
+    /// `autocompletedCells` is returned unchanged.
+    internal func autocompletedCells(_ autocompletedCells: Int, afterRow line: Range<Int>, columns: Int) -> Int {
+        guard storage.limits.maxTableAutocompletedCells < .max else {
+            return autocompletedCells
+        }
+        var cells = 0
+        forEachCell(in: line) { _ in cells += 1 }
+        let (sum, overflow) = autocompletedCells.addingReportingOverflow(max(columns - cells, 0))
+        return overflow ? .max : sum
     }
 
     /// Whether source line `line` has more cells than `maxTableRowCells`.

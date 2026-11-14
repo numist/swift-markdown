@@ -11,8 +11,9 @@
 import Markdown
 import XCTest
 
-/// A table row has at most 65,534 cells. Tables (extension) set no limit on the number of empty cells inserted into
-/// rows shorter than the header row.
+/// A table row has at most 65,534 cells, and once a table has inserted more than 524,288 empty cells into body rows
+/// shorter than its header row, the next row ends the table. Below those limits, wide rows and rows missing cells keep
+/// their table.
 ///
 /// The large inputs assert structure through the `Markdown` API rather than a full `debugDescription`.
 class LargeTableTests: XCTestCase {
@@ -80,14 +81,16 @@ class LargeTableTests: XCTestCase {
 
     // MARK: - Empty cells inserted into short rows
 
-    /// Each of the thousand one-cell body rows of a thousand-column table gets 999 empty cells.
-    func testRowsMissingCellsInsertAMillionEmptyCells() {
+    /// Each one-cell body row of a thousand-column table gets 999 empty cells, so the table keeps 525 rows, which
+    /// insert 524,475 cells, and the other 475 lines are a paragraph.
+    func testRowsMissingCellsStopAfterInserting524475EmptyCells() {
         let markdown = "|" + String(repeating: "a|", count: 1000) + "\n|" + String(repeating: "-|", count: 1000) + "\n"
             + String(repeating: "x\n", count: 1000)
         let document = parse(markdown)
-        XCTAssertEqual(["Table"], blockKinds(document))
-        XCTAssertEqual(1000, table(document)?.body.childCount)
-        XCTAssertEqual(1000, table(document)?.body.child(at: 999)?.childCount)
+        XCTAssertEqual(["Table", "Paragraph"], blockKinds(document))
+        XCTAssertEqual(525, table(document)?.body.childCount)
+        XCTAssertEqual(1000, table(document)?.body.child(at: 524)?.childCount)
+        XCTAssertEqual(949, document.child(at: 1)?.childCount)
     }
 
     func testKeepsRowsAfterRowWiderThanTable() {
