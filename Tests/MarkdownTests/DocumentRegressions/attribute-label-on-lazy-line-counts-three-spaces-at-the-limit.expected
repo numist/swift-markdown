@@ -1,0 +1,5 @@
+Document @1:1-4:1004
+├─ BlockQuote @1:1-2:12
+└─ Paragraph @4:1-4:1004
+   └─ InlineAttributes @4:1-4:1004 attributes: `k: 1`
+      └─ Text @4:3-4:4 "t"
