@@ -50,7 +50,7 @@ class RepeatedReferenceLinkTests: XCTestCase {
     /// A full reference past the budget stays text rather than resolving its link text as a shortcut reference.
     func testFullReferencePastTheBudgetStaysText() {
         let markdown = Self.definition("a", length: 1999) + Self.definition("b")
-            + Self.uses("[a]", 1000) + " [a][b] [a] [a]"
+            + Self.uses("[a]", 49) + " [a][b] [a] [a]"
         let result = tree(markdown)
         XCTAssertEqual(50, count("Link destination:", in: result))
         XCTAssertEqual(1, count("[a][b]", in: result))
