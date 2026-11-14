@@ -550,8 +550,11 @@ extension BlockParser {
         } else if let inline = matchInlineLinkForm(cursor: cursor, content: content) {
             formed = inline
             literalEnd = afterBracket
+        } else if let reference = matchReferenceLinkForm(bracketTextStart: brackets[openerIdx].bracketAfter ? nil : openerStart + (openerKind == .image ? 2 : 1), cursor: cursor, content: content) {
+            formed = (.link(url: storage.intern(reference.definition.destination), title: storage.intern(reference.definition.title)), reference.end)
+            literalEnd = afterBracket
         } else {
-            formed = matchReferenceLinkForm(bracketTextStart: brackets[openerIdx].bracketAfter ? nil : openerStart + (openerKind == .image ? 2 : 1), cursor: cursor, content: content)
+            formed = nil
             literalEnd = afterBracket
         }
         if let formed {
@@ -581,13 +584,13 @@ extension BlockParser {
         return (.link(url: storage.intern(inline.url), title: storage.intern(inline.title)), inline.end)
     }
 
-    /// The link or image data for a full, collapsed or shortcut reference after the `]` at `cursor`, and the offset past it.
+    /// The definition of a full, collapsed or shortcut reference after the `]` at `cursor`, and the offset past it.
     ///
     /// `bracketTextStart` is where the bracket text begins, which collapsed and shortcut references take as their label, or `nil` when a bracket nested under the opener rules that out.
     ///
     /// A reference resolves only while its definition's destination and title bytes fit `referenceExpansionRemaining`, which it is then charged.
     @inline(__always)
-    private mutating func matchReferenceLinkForm(bracketTextStart: Int?, cursor: Int, content: borrowing ContentSpan) -> (data: NodeData, end: Int)? {
+    private mutating func matchReferenceLinkForm(bracketTextStart: Int?, cursor: Int, content: borrowing ContentSpan) -> (definition: ReferenceDefinition, end: Int)? {
         let pos = cursor + 1
         // A reference matches only a link reference definition, so without one no label is normalized.
         if storage.referenceMap.isEmpty {
@@ -617,7 +620,7 @@ extension BlockParser {
             return nil
         }
         referenceExpansionRemaining -= expansion
-        return (.link(url: storage.intern(definition.destination), title: storage.intern(definition.title)), afterReference)
+        return (definition, afterReference)
     }
 
     /// Matches an inline link's `destination "title")` after its `(`, returning the destination and title with backslash escapes and character references resolved, and the offset past the `)`.
