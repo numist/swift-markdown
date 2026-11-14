@@ -17,7 +17,7 @@ import Foundation
 /// converted into an owned `RawMarkup` tree before the borrow ends.
 struct MarkupParser {
 
-    // These reproduce the limits this module has always parsed documents with, so a document keeps its tree.
+    // The bounds on construct size that every Markdown document is parsed with.
     private static let shippingLimits: MarkdownDocument.ParseLimits = {
         var limits = MarkdownDocument.ParseLimits()
         limits.maxLinkLabelCharacters = .max
