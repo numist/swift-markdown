@@ -76,7 +76,7 @@ extension BlockParser {
                 isDelimiterRow = false
             }
         }
-        guard isDelimiterRow, columns <= storage.limits.maxTableRowCells else {
+        guard isDelimiterRow, columns <= limits.maxTableRowCells else {
             return nil
         }
         precondition(columns > 0, "a delimiter-candidate line holds a `-`, so it splits into at least one cell")
@@ -102,14 +102,14 @@ extension BlockParser {
     /// `maxTableRowCells`.
     internal mutating func tableLimitsAdmitRow(_ line: Range<Int>, autocompletedCells: Int) -> Bool {
         // No row inserts fewer than zero cells, so a negative limit is zero.
-        autocompletedCells <= max(storage.limits.maxTableAutocompletedCells, 0) && !exceedsRowCellLimit(line: line)
+        autocompletedCells <= max(limits.maxTableAutocompletedCells, 0) && !exceedsRowCellLimit(line: line)
     }
 
     /// `autocompletedCells` plus the cells a table of `columns` columns inserts into body row `sourceBytes[line]`,
     /// those it is short of `columns`. Only counted while `maxTableAutocompletedCells` is limited; otherwise
     /// `autocompletedCells` is returned unchanged.
     internal mutating func autocompletedCells(_ autocompletedCells: Int, afterRow line: Range<Int>, columns: Int) -> Int {
-        guard storage.limits.maxTableAutocompletedCells < .max else {
+        guard limits.maxTableAutocompletedCells < .max else {
             return autocompletedCells
         }
         var cells = 0
@@ -120,7 +120,7 @@ extension BlockParser {
 
     /// Whether source line `line` has more cells than `maxTableRowCells`.
     private mutating func exceedsRowCellLimit(line: Range<Int>) -> Bool {
-        let limit = storage.limits.maxTableRowCells
+        let limit = limits.maxTableRowCells
         // A line has no more cells than bytes, apart from an empty line's one cell.
         guard max(line.count, 1) > limit else {
             return false

@@ -774,7 +774,7 @@ extension BlockParser {
     /// returning it and the offset past the closing `)`.
     private mutating func matchAttributeAttributes(start: Int, content: borrowing ContentSpan) -> AttributeAttributesMatch? {
         let end = content.endOffset
-        let maxNesting = storage.limits.maxAttributeParenthesisNesting
+        let maxNesting = limits.maxAttributeParenthesisNesting
         // No byte ends the run, so a scan that stops before the end stops at the `)` closing the form.
         guard let close = attributeParentheses.balancedEnd(from: start, end: end, maxNesting: maxNesting, byte: { content[$0] }, terminates: { _ in false }),
               close < end else {
@@ -918,7 +918,7 @@ extension BlockParser {
     private mutating func handleDelimRun(char: UInt8, start: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         var end = content.endOffset
         if char == UInt8(ascii: "~") {
-            end = start + min(end - start, max(storage.limits.strikethroughTildeRunChunk, 1))
+            end = start + min(end - start, max(limits.strikethroughTildeRunChunk, 1))
         }
         var runEnd = start
         while runEnd < end, content[runEnd] == char {
@@ -1297,7 +1297,7 @@ extension BlockParser {
         let end = content.endOffset
         let openEnd = scanBacktickRun(start: start, content: content)
         let runLength = openEnd - start
-        if runLength > storage.limits.maxCodeSpanOpeningBackticks {
+        if runLength > limits.maxCodeSpanOpeningBackticks {
             return nil
         }
         // Rescanning for every unmatched opener would make a paragraph of distinct-length runs quadratic.

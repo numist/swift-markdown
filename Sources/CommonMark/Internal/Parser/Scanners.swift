@@ -275,12 +275,12 @@ extension BlockParser {
 
     /// The most characters and bytes a link label can have inside its brackets (Links).
     internal var linkLabelLimit: LabelLengthLimit {
-        LabelLengthLimit(characters: storage.limits.maxLinkLabelCharacters, bytes: storage.limits.maxLinkLabelBytes)
+        LabelLengthLimit(characters: limits.maxLinkLabelCharacters, bytes: limits.maxLinkLabelBytes)
     }
 
     /// The most characters and bytes a footnote label can have inside its brackets.
     internal var footnoteLabelLimit: LabelLengthLimit {
-        LabelLengthLimit(characters: storage.limits.maxFootnoteLabelCharacters, bytes: storage.limits.maxFootnoteLabelBytes)
+        LabelLengthLimit(characters: limits.maxFootnoteLabelCharacters, bytes: limits.maxFootnoteLabelBytes)
     }
 
     /// Counts characters (code points): a UTF-8 continuation byte counts 0 and every other byte 1.
@@ -342,7 +342,7 @@ extension BlockParser {
 
     /// Matches a link destination (Links) at virtual offset `start` of `content`.
     internal mutating func matchLinkDestination(from start: Int, end: Int, in content: borrowing ContentSpan) -> (destination: Range<Int>, afterEnd: Int)? {
-        let maxNesting = storage.limits.maxLinkDestinationParenthesisNesting
+        let maxNesting = limits.maxLinkDestinationParenthesisNesting
         return content.withForwardReader(from: start) { byte in
             Self.scanLinkDestination(from: start, end: end, parentheses: &destinationParentheses, maxNesting: maxNesting, byte: byte)
         }

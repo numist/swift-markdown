@@ -38,6 +38,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     internal var storage: DocumentStorage
     
     internal let sourceBytes: Span<UInt8>
+
+    /// The parse limits.
+    internal let limits: MarkdownDocument.ParseLimits
     
     /// The document node, index 0.
     let documentIndex: DocumentStorage.Index
@@ -231,11 +234,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     // MARK: - Init
     
     @_lifetime(copy source)
-    init(storage: consuming DocumentStorage, source: Span<UInt8>) {
+    init(storage: consuming DocumentStorage, source: Span<UInt8>, limits: MarkdownDocument.ParseLimits) {
         self.storage = storage
         self.sourceBytes = source
+        self.limits = limits
         self.positionsEnabled = self.storage.options.contains(.sourcePosition)
-        self.referenceExpansionRemaining = max(self.storage.limits.referenceExpansionBudget, source.count)
+        self.referenceExpansionRemaining = max(limits.referenceExpansionBudget, source.count)
 
         // Reserve the append-only arenas in proportion to the input, so they regrow only for dense input.
         let byteCount = self.sourceBytes.count
@@ -941,7 +945,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return true
         }
         // A line has no more cells than bytes, so no line exceeds a limit of the source's length.
-        guard storage.limits.maxTableRowCells < sourceBytes.count else {
+        guard limits.maxTableRowCells < sourceBytes.count else {
             return false
         }
         var found = false
@@ -1871,7 +1875,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         // The line has opened no container yet, so a list marker or a footnote definition is recognized here unless the
         // limit on containers opened before one is zero.
-        if storage.limits.maxContainersOpenedOnLineBeforeListMarker <= 0 {
+        if limits.maxContainersOpenedOnLineBeforeListMarker <= 0 {
             return false
         }
         // A footnote definition opener `[^label]:` interrupts a paragraph, so `[^a]: A\n[^b]: B` opens two
@@ -1939,7 +1943,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 indentColumns: closingFenceIndent,
                 expectedChar: info.fenceCharacter,
                 // A closing fence is a code fence, so it is at least 3 long whatever the clamp (Fenced code blocks).
-                minimumLength: min(info.fenceLength, max(storage.limits.fenceLengthClampForClosing, 3))
+                minimumLength: min(info.fenceLength, max(limits.fenceLengthClampForClosing, 3))
             ) {
                 pending = finalize(node: current, pending: pending, lineContentEnd: fenceEnd)
                 return LeafContinuation(consumedLine: true, pending: pending)
@@ -2044,7 +2048,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // The block quotes, list items and footnote definitions this line has opened; at the limit a list marker or a
         // footnote definition is paragraph text.
         var containersOpened = 0
-        let maxContainersBeforeListMarker = storage.limits.maxContainersOpenedOnLineBeforeListMarker
+        let maxContainersBeforeListMarker = limits.maxContainersOpenedOnLineBeforeListMarker
         while true {
             let firstNonSpace = indexOfFirstNonSpace(range: cursor..<lineRange.upperBound)
             let isBlank = firstNonSpace == lineRange.upperBound
@@ -4026,8 +4030,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     // though none holds an `&`.
     @inline(__always)
     func characterReference(at offset: Int, in chunk: Chunk) -> EntityParser.EntityMatch? {
-        let maxDecimalDigits = storage.limits.maxDecimalCharacterReferenceDigits
-        let maxHexadecimalDigits = storage.limits.maxHexadecimalCharacterReferenceDigits
+        let maxDecimalDigits = limits.maxDecimalCharacterReferenceDigits
+        let maxHexadecimalDigits = limits.maxHexadecimalCharacterReferenceDigits
         return if chunk.inSource {
             EntityParser.matchEntity(start: offset, end: chunk.range.upperBound, source: sourceBytes, maxDecimalDigits: maxDecimalDigits, maxHexadecimalDigits: maxHexadecimalDigits)
         } else {

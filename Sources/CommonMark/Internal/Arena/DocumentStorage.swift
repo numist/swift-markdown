@@ -54,17 +54,13 @@ internal struct DocumentStorage: ~Copyable {
     /// Parse options used to create this document.
     internal let options: MarkdownDocument.ParseOptions
 
-    /// Parse limits used to create this document.
-    internal let limits: MarkdownDocument.ParseLimits
-
     /// `true` when source-position tracking is on.
     internal var positionsEnabled: Bool {
         options.contains(.sourcePosition)
     }
 
-    internal init(options: MarkdownDocument.ParseOptions, limits: MarkdownDocument.ParseLimits) {
+    internal init(options: MarkdownDocument.ParseOptions) {
         self.options = options
-        self.limits = limits
         // Byte 0 is a shared `"\n"`, so multi-line content joins its lines without copying a `\n` per join.
         strings = UniqueArray(repeating: UInt8(ascii: "\n"), count: 1)
     }

@@ -25,8 +25,8 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
     /// Parses `source` in place. Internal because the public initializers accept only `String` and `UTF8Span`, which guarantee valid UTF-8.
     @_lifetime(copy source)
     internal init(parsing source: Span<UInt8>, options: MarkdownDocument.ParseOptions = [], limits: MarkdownDocument.ParseLimits = .init()) {
-        let storage = DocumentStorage(options: options, limits: limits)
-        let parser = BlockParser(storage: storage, source: source)
+        let storage = DocumentStorage(options: options)
+        let parser = BlockParser(storage: storage, source: source, limits: limits)
         self._storage = parser.parse()
         self._source = source
         assert(_storage.validateOutput(source: source))
