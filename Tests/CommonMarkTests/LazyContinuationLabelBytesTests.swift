@@ -18,9 +18,9 @@ import CommonMark
 ///
 /// With byte limits of 6, each label below is a line ending, the lazy line's whitespace, and enough letters to make 6
 /// bytes, then 7. The lazy line's whitespace counts 3 bytes for three spaces, 1 for a tab, and in a nested block quote
-/// 3 for four spaces and 2 for a tab after the outer `>`, whose optional space takes one column. A reference's
-/// definition writes its label on one line, so where the lazy line has no whitespace, the 7-byte label's definition is
-/// past the limit too.
+/// 3 for four spaces and 2 for a tab after the outer `>`, whose optional space takes one column. A link or attribute
+/// reference's definition writes its label on one line, so where the lazy line has no whitespace, the 7-byte label's
+/// definition is past the limit too.
 @Suite("Lazy continuation line whitespace in label bytes")
 struct LazyContinuationLabelBytesTests {
 
@@ -1416,13 +1416,13 @@ struct LazyContinuationLabelBytesTests {
                   text "abcde b"
 
             """)
-        #expect(TreeDump.dump("[ab b]: /u\n\n> > [ab\n>\tb] [t][ab\n>\tb]", options: []) == """
+        #expect(TreeDump.dump("[abc b]: /u\n\n> > [abc\n>\tb] [t][abc\n>\tb]", options: []) == """
             document
               block_quote
                 block_quote
                   paragraph
                     link "/u" ""
-                      text "ab"
+                      text "abc"
                       softbreak
                       text "b"
                     text " "
