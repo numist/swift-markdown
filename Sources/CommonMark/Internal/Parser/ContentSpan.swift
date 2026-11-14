@@ -215,6 +215,12 @@ internal struct ContentSpan: ~Escapable {
         return piece.offset + (k - pieceStart(i))
     }
 
+    /// The source offset of the multi-segment content byte at `offset`, which must lie inside the content, or `nil`
+    /// where a line join covers it.
+    func sourceOffset(ofMultiSegmentVirtual offset: Int) -> Int? {
+        sourcePiece(covering: offset).map { offset + $0.shift }
+    }
+
     /// A `Chunk` for a sub-range, which in multi-segment content must lie within one segment. A caller whose range can cross a line join copies it into the arena instead, as `materializedChunk` does.
     func chunk(offset: Int, length: Int) -> Chunk {
         if !isMultiSegment {

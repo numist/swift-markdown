@@ -112,6 +112,16 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Run maps for content that reaches the inline pass as one arena chunk (flattened, NUL-replaced or pipe-unescaped), keyed by node, so its inlines get source positions.
     var arenaSourceMaps = [DocumentStorage.Index: [ArenaRun]]()
 
+    /// The leading whitespace that each lazy continuation line holding some keeps in its paragraph's content for the
+    /// label byte limits (see `lazyLineWhitespaceBytes(afterLineJoinAt:in:)`), though the content itself holds none.
+    struct LazyLineWhitespace {
+        /// Keyed by the source offset of the line's first content byte.
+        var bySourceOffset: [Int: Int] = [:]
+        /// Keyed by the arena offset that byte is copied to when the paragraph's lines are flattened.
+        var byArenaOffset: [Int: Int] = [:]
+    }
+    var lazyLineWhitespace = LazyLineWhitespace()
+
     /// What the table check and setext underlines need to know about the open paragraph, recorded when either first
     /// needs it: the table check at the first continuation line it sees, with `.tables`, and the first underline.
     struct OpenParagraphState {
@@ -1659,9 +1669,26 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         } else if storage.options.contains(.tables) {
             recordTableDelimiterCandidate(line: line, pending: &pending)
         }
+        if !line.allMatched && line.firstNonSpace > line.cursor {
+            recordLazyLineWhitespace(line)
+        }
         pending = appendNewline(to: current, pending: consume pending)
         pending = addLine(range: line.firstNonSpace..<lineRange.upperBound, to: current, pending: consume pending)
         return true
+    }
+
+    /// Records the leading whitespace a lazy continuation line keeps for the label byte limits: each space and tab
+    /// past the prefixes of the containers it continues, a tab a prefix partly consumed counting the columns it has
+    /// left (Tabs).
+    @inline(never)
+    private mutating func recordLazyLineWhitespace(_ line: LineContext) {
+        var lineColumns = LineColumns(lineStart: line.lineRange.lowerBound)
+        var whitespace = line.firstNonSpace - line.cursor
+        let cursorColumn = lineColumns.column(at: line.cursor, in: sourceBytes)
+        if line.prefixColumns > cursorColumn {
+            whitespace += 3 - (line.prefixColumns & 3)
+        }
+        lazyLineWhitespace.bySourceOffset[line.firstNonSpace] = whitespace
     }
 
     /// Checks whether a continuation line opens a table with the paragraph's last line as its header (see
@@ -2429,7 +2456,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Flattens a paragraph's segment list into one arena chunk with each NUL replaced with U+FFFD (Insecure characters).
     /// With `.sourcePosition`, records its run map in `map`: a source segment images its range, each of a U+FFFD's three
     /// bytes images its NUL, and a line join is a gap. The map tiles the content from its first byte, so it survives a
-    /// later copy of the content.
+    /// later copy of the content. Records the arena offset of each lazy continuation line that keeps whitespace (see
+    /// `LazyLineWhitespace`).
     private mutating func flattenReplacingNUL(_ segs: borrowing UniqueArray<Segment>, map: inout [ArenaRun]) -> Chunk {
         let offset = storage.strings.count
         for i in 0..<segs.count {
@@ -2446,6 +2474,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
             var start = seg.offset
             let end = seg.offset + seg.length
+            if !lazyLineWhitespace.bySourceOffset.isEmpty, let whitespace = lazyLineWhitespace.bySourceOffset[start] {
+                lazyLineWhitespace.byArenaOffset[storage.strings.count] = whitespace
+            }
             while start < end {
                 let nul = start + Self.firstNUL(in: sourceBytes.extracting(start..<end))
                 storage.strings.append(copying: sourceBytes.extracting(start..<nul))

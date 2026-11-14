@@ -149,9 +149,10 @@ extension BlockParser {
 
     /// Scans a link label through `byte`; a label may span line endings. Returns the interior's range and the offset
     /// past `]`, or nil at an unescaped `[`, past `linkLabelLimit`, or at the end. With `crlfIsOneCharacter`, a CRLF's
-    /// LF doesn't count toward the length, since a CRLF is one line ending.
+    /// LF doesn't count toward the length, since a CRLF is one line ending. `lazyLineWhitespace` gives the bytes a line
+    /// join at an offset adds (see `lazyLineWhitespaceBytes(afterLineJoinAt:in:)`).
     @inline(__always)
-    private func scanLinkLabel(from start: Int, end: Int, crlfIsOneCharacter: Bool, byte: (Int) -> UInt8) -> (interior: Range<Int>, afterEnd: Int)? {
+    private func scanLinkLabel(from start: Int, end: Int, crlfIsOneCharacter: Bool, byte: (Int) -> UInt8, lazyLineWhitespace: (Int) -> Int) -> (interior: Range<Int>, afterEnd: Int)? {
         if start >= end || byte(start) != UInt8(ascii: "[") {
             return nil
         }
@@ -170,7 +171,7 @@ extension BlockParser {
             }
             if b == UInt8(ascii: "]") {
                 let interior = interiorStart..<i
-                return labelBytesFit(interior, maxBytes: maxBytes, crlfIsOneCharacter: crlfIsOneCharacter, byte: byte) ? (interior, i + 1) : nil
+                return labelBytesFit(interior, maxBytes: maxBytes, crlfIsOneCharacter: crlfIsOneCharacter, byte: byte, lazyLineWhitespace: lazyLineWhitespace) ? (interior, i + 1) : nil
             }
             if b == UInt8(ascii: "\\") {
                 i += 1
@@ -194,11 +195,13 @@ extension BlockParser {
     }
 
     /// Whether the label interior `interior`, read through `byte`, has at most `maxBytes` bytes, counted by
-    /// `labelByteWeight`, with a CRLF's LF not counted when `crlfIsOneCharacter`.
+    /// `labelByteWeight`, with a CRLF's LF not counted when `crlfIsOneCharacter`, and with the bytes
+    /// `lazyLineWhitespace` gives for each line join.
     @inline(__always)
-    private func labelBytesFit(_ interior: Range<Int>, maxBytes: Int, crlfIsOneCharacter: Bool, byte: (Int) -> UInt8) -> Bool {
+    private func labelBytesFit(_ interior: Range<Int>, maxBytes: Int, crlfIsOneCharacter: Bool, byte: (Int) -> UInt8, lazyLineWhitespace: (Int) -> Int) -> Bool {
+        let countsLazyLineWhitespace = !self.lazyLineWhitespace.bySourceOffset.isEmpty
         // A byte counts at most three bytes (a NUL).
-        if interior.count <= maxBytes / 3 {
+        if interior.count <= maxBytes / 3 && !countsLazyLineWhitespace {
             return true
         }
         var bytes = 0
@@ -208,14 +211,35 @@ extension BlockParser {
             if crlfIsOneCharacter, b == UInt8(ascii: "\n"), byte(i - 1) == UInt8(ascii: "\r") {
                 bytes -= 1
             }
+            if countsLazyLineWhitespace, b == UInt8(ascii: "\n") {
+                bytes += lazyLineWhitespace(i)
+            }
         }
         return bytes <= maxBytes
+    }
+
+    /// The bytes a label counts, past the line join at offset `offset` of `content`, for the leading whitespace of
+    /// the lazy continuation line the join begins, which `content` doesn't hold (see `LazyLineWhitespace`).
+    private func lazyLineWhitespaceBytes(afterLineJoinAt offset: Int, in content: borrowing ContentSpan) -> Int {
+        let next = offset + 1
+        guard next < content.endOffset else {
+            return 0
+        }
+        if content.isMultiSegment {
+            guard let source = content.sourceOffset(ofMultiSegmentVirtual: next) else {
+                return 0
+            }
+            return lazyLineWhitespace.bySourceOffset[source] ?? 0
+        }
+        return (content.inSource ? lazyLineWhitespace.bySourceOffset[next] : lazyLineWhitespace.byArenaOffset[next]) ?? 0
     }
 
     /// Matches a link label (Links) at virtual offset `start` of `content`, returning its interior and the offset past
     /// its `]`.
     internal func matchLinkLabel(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
-        if let label = content.withForwardReader(from: start, { byte in scanLinkLabel(from: start, end: end, crlfIsOneCharacter: false, byte: byte) }) {
+        if let label = content.withForwardReader(from: start, { byte in
+            scanLinkLabel(from: start, end: end, crlfIsOneCharacter: false, byte: byte) { lazyLineWhitespaceBytes(afterLineJoinAt: $0, in: content) }
+        }) {
             return label
         }
         // A label counted past `linkLabelLimit` with each CRLF as two characters may still fit. Only inline-only
@@ -224,12 +248,17 @@ extension BlockParser {
     }
 
     /// Whether a link label that `matchLinkLabel` doesn't match from `start` can still close on a later line: up to `end`
-    /// and a line ending after it, it holds no unescaped `[` and fits `linkLabelLimit`.
+    /// and a line ending after it, it holds no unescaped `[` and fits `linkLabelLimit`. Whitespace that a later lazy
+    /// continuation line keeps is not yet counted.
     internal func linkLabelIsOpen(from start: Int, end: Int, in content: borrowing ContentSpan) -> Bool {
         content.withForwardReader(from: start) { byte in
-            let label = scanLinkLabel(from: start, end: end + 2, crlfIsOneCharacter: contentHoldsCR) { i in
-                i == end ? UInt8(ascii: "\n") : i == end + 1 ? UInt8(ascii: "]") : byte(i)
-            }
+            let label = scanLinkLabel(
+                from: start,
+                end: end + 2,
+                crlfIsOneCharacter: contentHoldsCR,
+                byte: { i in i == end ? UInt8(ascii: "\n") : i == end + 1 ? UInt8(ascii: "]") : byte(i) },
+                lazyLineWhitespace: { i in i < end ? lazyLineWhitespaceBytes(afterLineJoinAt: i, in: content) : 0 }
+            )
             return label?.afterEnd == end + 2
         }
     }
@@ -238,18 +267,21 @@ extension BlockParser {
     // Out of line, as only content holding a CR calls it, so that its callers on every content's path stay small.
     @inline(never)
     private func matchLinkLabelCountingCRLFOnce(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
-        content.withForwardReader(from: start) { byte in scanLinkLabel(from: start, end: end, crlfIsOneCharacter: true, byte: byte) }
+        content.withForwardReader(from: start) { byte in
+            scanLinkLabel(from: start, end: end, crlfIsOneCharacter: true, byte: byte) { lazyLineWhitespaceBytes(afterLineJoinAt: $0, in: content) }
+        }
     }
 
     /// Whether a label that `matchLinkLabel` didn't scan, such as a shortcut reference's link text or a footnote's
     /// label, fits `limit` untrimmed. A longer label matches no definition.
     internal func labelFits(_ limit: LabelLengthLimit, virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> Bool {
+        let countsLazyLineWhitespace = !lazyLineWhitespace.bySourceOffset.isEmpty
         // A content byte counts as at most one character and at most three bytes (a NUL), so a label of at most
-        // `limit.characters` content bytes and at most a third of `limit.bytes` fits. Four content bytes count as at
-        // least one character and two as at least one byte (a CRLF), so a label of more content bytes than four times
-        // `limit.characters` or twice `limit.bytes` doesn't. Settling those without weighing each byte keeps a label
-        // that spans many nested brackets cheap.
-        if range.count <= limit.characters && range.count <= limit.bytes / 3 {
+        // `limit.characters` content bytes and at most a third of `limit.bytes` fits, unless a lazy continuation
+        // line's whitespace adds bytes. Four content bytes count as at least one character and two as at least one
+        // byte (a CRLF), so a label of more content bytes than four times `limit.characters` or twice `limit.bytes`
+        // doesn't. Settling those without weighing each byte keeps a label that spans many nested brackets cheap.
+        if range.count <= limit.characters && range.count <= limit.bytes / 3 && !countsLazyLineWhitespace {
             return true
         }
         if (range.count + 3) / 4 > limit.characters || (range.count + 1) / 2 > limit.bytes {
@@ -265,6 +297,9 @@ extension BlockParser {
             if contentHoldsCR, b == UInt8(ascii: "\n"), content[i - 1] == UInt8(ascii: "\r") {
                 characters -= 1
                 bytes -= 1
+            }
+            if countsLazyLineWhitespace, b == UInt8(ascii: "\n") {
+                bytes += lazyLineWhitespaceBytes(afterLineJoinAt: i, in: content)
             }
             if characters > limit.characters || bytes > limit.bytes {
                 return false
