@@ -4024,6 +4024,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// The character reference at the `&` at `offset` in `chunk`, or `nil` if none starts there.
+    // Out of line, it costs about 5% of the instructions of a parse of 200,000 one-line definitions `[aN]: /uN "tN"`,
+    // though none holds an `&`.
+    @inline(__always)
     func characterReference(at offset: Int, in chunk: Chunk) -> EntityParser.EntityMatch? {
         let maxDecimalDigits = storage.limits.maxDecimalCharacterReferenceDigits
         let maxHexadecimalDigits = storage.limits.maxHexadecimalCharacterReferenceDigits
