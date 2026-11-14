@@ -1942,8 +1942,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
                 firstNonSpace: firstNonSpace,
                 indentColumns: closingFenceIndent,
                 expectedChar: info.fenceCharacter,
-                // A closing fence is a code fence, so it is at least 3 long whatever the clamp (Fenced code blocks).
-                minimumLength: min(info.fenceLength, max(limits.fenceLengthClampForClosing, 3))
+                openingLength: info.fenceLength
             ) {
                 pending = finalize(node: current, pending: pending, lineContentEnd: fenceEnd)
                 return LeafContinuation(consumedLine: true, pending: pending)
@@ -3286,9 +3285,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         )
     }
 
-    /// Where the line's closing fence ends, if the line closes a fence of `expectedChar` at least `minimumLength` long
-    /// (Fenced code blocks). `indentColumns` is the fence's indent in columns past the container prefixes (Tabs).
-    private mutating func matchClosingFence(range: Range<Int>, firstNonSpace: Int, indentColumns: Int, expectedChar: MarkdownNode.CodeBlockInfo.FenceCharacter?, minimumLength: Int) -> Int? {
+    /// Where the line's closing fence ends, if the line closes a fence of `expectedChar` at least as long as the shorter
+    /// of `openingLength` and `fenceLengthClampForClosing` (Fenced code blocks). `indentColumns` is the fence's indent
+    /// in columns past the container prefixes (Tabs).
+    private mutating func matchClosingFence(range: Range<Int>, firstNonSpace: Int, indentColumns: Int, expectedChar: MarkdownNode.CodeBlockInfo.FenceCharacter?, openingLength: Int) -> Int? {
         guard let fenceByte = expectedChar?.character else {
             preconditionFailure("a fenced code block always records its fence character")
         }
@@ -3305,6 +3305,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         while i < range.upperBound && sourceBytes[i] == fenceByte {
             i += 1
         }
+        // A closing fence is a code fence, so it is at least 3 long whatever the clamp (Fenced code blocks).
+        let minimumLength = min(openingLength, max(limits.fenceLengthClampForClosing, 3))
         return i - firstNonSpace >= minimumLength && isSpaceOrTabOnly(i..<range.upperBound) ? i : nil
     }
 
