@@ -394,4 +394,30 @@ struct ReferenceExpansionBudgetTests {
 
             """)
     }
+
+    /// Attribute and link labels are separate namespaces, so an inline attribute label never reads or charges a link
+    /// definition of the same label.
+    @Test("an inline attribute label that matches a link definition is not charged")
+    func attributeLabelNamingLinkDefinition() {
+        let source = "[a]: uuuuuuuuuuuuuuuuuuuuuuuuuuuuuu\n\n[a] ^[x][a] [a]"
+        #expect(source.utf8.count == 52)
+        #expect(TreeDump.dump(source, options: .attributes, limits: limits(60)) == """
+            document
+              paragraph
+                link "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuu" ""
+                  text "a"
+                text " ^[x] "
+                link "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuu" ""
+                  text "a"
+
+            """)
+        #expect(TreeDump.dump(source, options: .attributes, limits: limits(59)) == """
+            document
+              paragraph
+                link "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuu" ""
+                  text "a"
+                text " ^[x] [a]"
+
+            """)
+    }
 }
