@@ -60,12 +60,12 @@ struct FenceClosingLengthClampTests {
 
     @Test("an opening fence no longer than the clamp needs a closing fence as long as itself")
     func openingWithinClamp() {
-        #expect(TreeDump.dump(source("`", opening: 4, closing: 3), options: [], limits: limits(4)) == """
+        #expect(TreeDump.dump(source("`", opening: 4, closing: 3), options: [], limits: limits(5)) == """
             document
               code_block "" "x\\n```\\ny\\n"
 
             """)
-        #expect(TreeDump.dump(source("`", opening: 4, closing: 4), options: [], limits: limits(4)) == """
+        #expect(TreeDump.dump(source("`", opening: 4, closing: 4), options: [], limits: limits(5)) == """
             document
               code_block "" "x\\n"
               paragraph
