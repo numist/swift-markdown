@@ -462,26 +462,61 @@ struct LabelLengthLimitTests {
                   text "a\u{FFFD}"
 
             """)
-        #expect(TreeDump.dump("^[abcd]: c\n\n^[x][abcd]", options: .attributes) == """
+        #expect(TreeDump.dump("[abcd]: /u\n\n[éé]: /v\n\n[ab\\*]: /w\n\n[a]: /x\n\n[a b]: /y\n\n[abcd] [éé] [ab\\*] [a] [t][a  b] [a  b][] [a  b]", options: []) == """
+            document
+              paragraph
+                link "/u" ""
+                  text "abcd"
+                text " "
+                link "/v" ""
+                  text "éé"
+                text " "
+                link "/w" ""
+                  text "ab*"
+                text " "
+                link "/x" ""
+                  text "a"
+                text " "
+                link "/y" ""
+                  text "t"
+                text " "
+                link "/y" ""
+                  text "a  b"
+                text " "
+                link "/y" ""
+                  text "a  b"
+
+            """)
+        #expect(TreeDump.dump("^[abcd]: c\n\n^[a b]: d\n\n^[x][abcd] ^[y][a  b]", options: .attributes) == """
             document
               paragraph
                 attribute "c"
                   text "x"
+                text " "
+                attribute "d"
+                  text "y"
 
             """)
-        #expect(TreeDump.dump("x[^aécd] y[^aẞ]\n\n[^aécd]: n\n\n[^ass]: m", options: .footnotes) == """
+        #expect(TreeDump.dump("x[^aécd] y[^aẞ] z[^ass] w[^éé]\n\n[^aécd]: n\n\n[^ass]: m\n\n[^éé]: o", options: .footnotes) == """
             document
               paragraph
                 text "x"
                 footnote_reference "1"
                 text " y"
                 footnote_reference "2"
+                text " z"
+                footnote_reference "2"
+                text " w"
+                footnote_reference "3"
               footnote_definition "aécd"
                 paragraph
                   text "n"
               footnote_definition "ass"
                 paragraph
                   text "m"
+              footnote_definition "éé"
+                paragraph
+                  text "o"
 
             """)
     }
