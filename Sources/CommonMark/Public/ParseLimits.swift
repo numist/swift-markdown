@@ -64,7 +64,7 @@ extension MarkdownDocument {
         /// The budget is the larger of this value and the source's byte count. Each resolved link reference, in document order, is charged the bytes of its definition's destination and title after unescaping and entity decoding; a reference whose charge would exceed the budget is not resolved. Footnote and inline attribute references are not charged. The default is unlimited.
         public var referenceExpansionBudget: Int = .max
 
-        /// The most cells a table row can have, counted before the row is cut to the header's width. A header row or delimiter row past it is not a table; a body row past it ends the table. The default is unlimited.
+        /// The most cells a table row can have. Every cell a line splits into counts, empty cells and span fillers included, before a body row is cut to the header's width. A delimiter row past it opens no table, and neither does one below a paragraph line past it; a body row past it ends the table and starts a paragraph. The default is unlimited.
         public var maxTableRowCells: Int = .max
 
         /// The most empty cells a table can add to pad its body rows to the header's width. A body row is not part of the table once the cells added to the rows before it exceed this. The default is unlimited.

@@ -120,6 +120,10 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         /// container.
         var tablePending = false
 
+        /// Whether a line of the paragraph before its last line has more cells than `maxTableRowCells`, which keeps
+        /// every later delimiter row of the paragraph from opening a table.
+        var holdsLineOverRowCellLimit = false
+
         /// Whether an underline removed definitions from the start of the paragraph's lines (see
         /// `commitLeadingDefinitions`). They are still the paragraph's content and its list item's first block, so
         /// the paragraph is removed when only whitespace follows them, and no task list item marker follows them.
@@ -906,7 +910,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     private mutating func detectPendingTable(_ node: DocumentStorage.Index, delimRange: Range<Int>, pending: consuming PendingLeaf?) -> PendingLeaf? {
         precondition(pending != nil, "an open paragraph always holds its accumulated content")
         let headerStart = lastLineStart(of: pending!)
-        guard lastLineOpensTable(delimRange: delimRange, pending: pending!, lastLineStart: headerStart) else {
+        guard lastLineOpensTable(delimRange: delimRange, pending: pending!, lastLineStart: headerStart),
+              !lineBeforeLastExceedsRowCellLimit(pending: pending!, lastLineStart: headerStart) else {
             return pending
         }
         openParagraphState!.tablePending = true
@@ -920,6 +925,35 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         case .segments(let segs):
             return splitSegmentHeader(node, segments: segs, lineJoin: headerStart - 1)
         }
+    }
+
+    /// Whether a line of the open paragraph before its last line, which begins at `lastLineStart` (see
+    /// `lastLineStart(of:)`), has more cells than `maxTableRowCells`. The paragraph's lines are read for this at most
+    /// once: if none has, the table opens and ends the search, and if one has, that is recorded.
+    private mutating func lineBeforeLastExceedsRowCellLimit(pending: borrowing PendingLeaf, lastLineStart: Int) -> Bool {
+        if openParagraphState!.holdsLineOverRowCellLimit {
+            return true
+        }
+        // A line has no more cells than bytes, so no line exceeds a limit of the source's length.
+        guard storage.limits.maxTableRowCells < sourceBytes.count else {
+            return false
+        }
+        var found = false
+        switch pending.content {
+        case .lazy(let range, _):
+            found = lastLineStart > range.lowerBound && holdsLineOverRowCellLimit(range.lowerBound..<(lastLineStart - 1))
+        case .segments(let segs):
+            let nl = storage.newlineSegment
+            for i in 0..<lastLineStart where segs[i] != nl {
+                precondition(segs[i].inSource, "a paragraph's lines are source segments joined by line joins")
+                if holdsLineOverRowCellLimit(segs[i].chunk.range) {
+                    found = true
+                    break
+                }
+            }
+        }
+        openParagraphState!.holdsLineOverRowCellLimit = found
+        return found
     }
 
     /// Splits a source-contiguous paragraph before its last line: the earlier lines become a paragraph before `node`,
@@ -1315,6 +1349,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         openParagraphState!.definitionsCommitted = true
         openParagraphState!.holdsWhitespaceOnlyLine = false
+        // The definitions' lines are no longer the paragraph's, so a line over the row cell limit may have gone.
+        openParagraphState!.holdsLineOverRowCellLimit = false
         var rest = definitions.end
         var content = definitions.contentStart..<lines.trimmed.upperBound
         if content.isEmpty {
@@ -1573,15 +1609,18 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// Whether the open paragraph absorbs the line as a continuation; otherwise the line starts a block that closes it.
     ///
     /// A table-pending paragraph is a table, so a line that can't be a row closes it: a lazy continuation line, which
-    /// also closes the containers whose prefix it fails, a lone `|`, which has no cells, or a line indented four or more
-    /// columns, which starts an indented code block because a table is not a paragraph (Indented code blocks).
+    /// also closes the containers whose prefix it fails, a lone `|`, which has no cells, a line indented four or more
+    /// columns, which starts an indented code block because a table is not a paragraph (Indented code blocks), or a
+    /// line the table limits refuse (see `tableLimitsAdmitRow`).
     private mutating func absorbParagraphLine(line: LineContext, pending: inout PendingLeaf?) -> Bool {
         let lineRange = line.lineRange
         let tablePending = openParagraphIsTablePending
+        let rowRange = line.firstNonSpace..<lineRange.upperBound
         let breaksOutOfPendingTable = tablePending
             && (!line.allMatched
                 || line.indent >= 4
-                || isLonePipeRow(range: line.firstNonSpace..<lineRange.upperBound))
+                || isLonePipeRow(range: rowRange)
+                || !tableLimitsAdmitRow(rowRange))
         if !line.openKind.isParagraph || breaksOutOfPendingTable {
             return false
         }

@@ -61,9 +61,9 @@ extension BlockParser {
         storage.setSourceEnd(node, rowRange(lines[lines.count - 1]).upperBound)
     }
 
-    /// Whether source lines `header` and `delimiter` open a table: `delimiter` is a delimiter row and `header` has as
-    /// many cells (Tables (extension)). The block parser then marks the paragraph table-pending, so the table, not a
-    /// paragraph, is the open block for the next line.
+    /// Whether source lines `header` and `delimiter` open a table: `delimiter` is a delimiter row of no more cells than
+    /// `maxTableRowCells` and `header` has as many cells (Tables (extension)). The block parser then marks the paragraph
+    /// table-pending, so the table, not a paragraph, is the open block for the next line.
     ///
     /// Every delimiter-shaped paragraph line asks this, so it counts cells without building arrays.
     internal mutating func opensTable(header: Range<Int>, delimiter: Range<Int>) -> Bool {
@@ -75,13 +75,43 @@ extension BlockParser {
                 isDelimiterRow = false
             }
         }
-        guard isDelimiterRow else {
+        guard isDelimiterRow, columns <= storage.limits.maxTableRowCells else {
             return false
         }
         precondition(columns > 0, "a delimiter-candidate line holds a `-`, so it splits into at least one cell")
         var headerCells = 0
         forEachCell(in: header) { _ in headerCells += 1 }
         return headerCells == columns
+    }
+
+    /// Whether a line of `sourceBytes[lines]`, lines joined by `\n`, has more cells than `maxTableRowCells`.
+    internal func holdsLineOverRowCellLimit(_ lines: Range<Int>) -> Bool {
+        var lineStart = lines.lowerBound
+        for i in lines where sourceBytes[i] == UInt8(ascii: "\n") {
+            if exceedsRowCellLimit(line: lineStart..<i) {
+                return true
+            }
+            lineStart = i + 1
+        }
+        return exceedsRowCellLimit(line: lineStart..<lines.upperBound)
+    }
+
+    /// Whether a table takes body-row candidate `sourceBytes[line]` as a row by the table limits: it has no more cells
+    /// than `maxTableRowCells`.
+    internal func tableLimitsAdmitRow(_ line: Range<Int>) -> Bool {
+        !exceedsRowCellLimit(line: line)
+    }
+
+    /// Whether source line `line` has more cells than `maxTableRowCells`.
+    private func exceedsRowCellLimit(line: Range<Int>) -> Bool {
+        let limit = storage.limits.maxTableRowCells
+        // A line has no more cells than bytes, apart from an empty line's one cell.
+        guard max(line.count, 1) > limit else {
+            return false
+        }
+        var cells = 0
+        forEachCell(in: line) { _ in cells += 1 }
+        return cells > limit
     }
 
     /// Whether `sourceBytes[range]` holds only `-`, `:`, `|` and padding, with at least one `-`.
