@@ -57,8 +57,9 @@ struct NestedBlockQuoteMarkerLineTests {
         }
     }
 
-    /// The root and each first child down to a leaf, one per line as `TreeDump` renders them with source ranges, each
-    /// marked `+sibling` when it has a next sibling. The walk does not recurse, so trees of any depth fit on the stack.
+    /// The root and each first child down to a leaf, one per line: its kind as `TreeDump.describe` names it, its
+    /// literal in quotes if it has one, its source range as `@line:column-line:column` (or `@-`), and `+sibling` when
+    /// it has a next sibling. The walk does not recurse, so trees of any depth fit on the stack.
     private static func chain(_ markdown: String) -> String {
         MarkdownDocument.withParsedDocument(markdown, options: .sourcePosition) { doc in
             var out = ""
