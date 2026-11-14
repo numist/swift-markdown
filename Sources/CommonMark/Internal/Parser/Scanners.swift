@@ -15,13 +15,11 @@ internal import BasicContainers
 /// the bytes.
 ///
 /// A scan stops at a `)` that closes no `(` it passed, at a byte that ends the run, or at the end, and its parentheses
-/// are balanced when it closed every `(` it passed and they nest no deeper than `maxNesting`. A scan starting just
-/// after a `(` the latest scan passed reads the same bytes: it stops at the `)` closing that `(`, or else where the
-/// latest scan stopped, balanced only when that `(` is the innermost one left open there, and its parentheses nest as
-/// deep as those inside that `(`.
+/// are balanced when it closed every `(` it passed and they nest no deeper than the scan's `maxNesting`. A scan
+/// starting just after a `(` the latest scan passed reads the same bytes: it stops at the `)` closing that `(`, or else
+/// where the latest scan stopped, balanced only when that `(` is the innermost one left open there, and its
+/// parentheses nest as deep as those inside that `(`.
 internal struct BalancedParenthesesScan {
-    /// The deepest nesting of parentheses a balanced scan may pass.
-    private let maxNesting: Int
     /// Each `(` the latest scan passed, in order, with where a scan starting just after it stops balanced, or nil when
     /// that scan stops unbalanced.
     private var openers: [(offset: Int, balancedEnd: Int?)] = []
@@ -30,12 +28,6 @@ internal struct BalancedParenthesesScan {
     private var unclosed: [(opener: Int, innerNesting: Int)] = []
     /// The first of `openers` a scan may start after. Scans start further on as inline parsing proceeds.
     private var nextOpener = 0
-
-    /// A scan whose parentheses are balanced only when they nest no deeper than `maxNesting`, or than 0 when it is
-    /// negative.
-    init(maxNesting: Int) {
-        self.maxNesting = max(maxNesting, 0)
-    }
 
     /// Forgets the latest scan, for scans of other bytes.
     mutating func reset() {
@@ -47,10 +39,11 @@ internal struct BalancedParenthesesScan {
     }
 
     /// Where a scan from `start` stops, at a `)` that closes no `(` it passed, at a byte `terminates` accepts, or at
-    /// `end`, if its parentheses are balanced there and nest no deeper than `maxNesting`. Between resets every scan reads the same bytes up to the same
-    /// `end` through `byte` and `terminates`.
+    /// `end`, if its parentheses are balanced there and nest no deeper than `maxNesting`, or than 0 when it is
+    /// negative. Between resets every scan reads the same bytes up to the same `end` through `byte` and `terminates`,
+    /// with the same `maxNesting`.
     @inline(__always)
-    mutating func balancedEnd(from start: Int, end: Int, byte: (Int) -> UInt8, terminates: (UInt8) -> Bool) -> Int? {
+    mutating func balancedEnd(from start: Int, end: Int, maxNesting: Int, byte: (Int) -> UInt8, terminates: (UInt8) -> Bool) -> Int? {
         while nextOpener < openers.count, openers[nextOpener].offset < start - 1 {
             nextOpener += 1
         }
@@ -58,6 +51,7 @@ internal struct BalancedParenthesesScan {
             return openers[nextOpener].balancedEnd
         }
         reset()
+        let maxNesting = max(maxNesting, 0)
         // How deeply the parentheses this scan has closed outside every `(` it passed nest.
         var outerNesting = 0
         var i = start
@@ -284,10 +278,10 @@ extension BlockParser {
 
     // MARK: - Link destination
 
-    /// Scans a link destination through `byte`, and a bare one's parentheses through `parentheses`. Returns the
-    /// destination's range, without any `<` `>`, and the offset past it.
+    /// Scans a link destination through `byte`, and a bare one's parentheses, nested at most `maxNesting` deep,
+    /// through `parentheses`. Returns the destination's range, without any `<` `>`, and the offset past it.
     @inline(__always)
-    private static func scanLinkDestination(from start: Int, end: Int, parentheses: inout BalancedParenthesesScan, byte: (Int) -> UInt8) -> (destination: Range<Int>, afterEnd: Int)? {
+    private static func scanLinkDestination(from start: Int, end: Int, parentheses: inout BalancedParenthesesScan, maxNesting: Int, byte: (Int) -> UInt8) -> (destination: Range<Int>, afterEnd: Int)? {
         if start >= end {
             return nil
         }
@@ -321,7 +315,7 @@ extension BlockParser {
             return nil
         }
         // A bare destination includes parentheses only when they are escaped or balanced (Links).
-        guard let destinationEnd = parentheses.balancedEnd(from: start, end: end, byte: byte, terminates: terminatesDestination) else {
+        guard let destinationEnd = parentheses.balancedEnd(from: start, end: end, maxNesting: maxNesting, byte: byte, terminates: terminatesDestination) else {
             return nil
         }
         // An inline link's destination may be empty: `[a]()`.
@@ -330,7 +324,10 @@ extension BlockParser {
 
     /// Matches a link destination (Links) at virtual offset `start` of `content`.
     internal mutating func matchLinkDestination(from start: Int, end: Int, in content: borrowing ContentSpan) -> (destination: Range<Int>, afterEnd: Int)? {
-        content.withForwardReader(from: start) { byte in Self.scanLinkDestination(from: start, end: end, parentheses: &destinationParentheses, byte: byte) }
+        let maxNesting = storage.limits.maxLinkDestinationParenthesisNesting
+        return content.withForwardReader(from: start) { byte in
+            Self.scanLinkDestination(from: start, end: end, parentheses: &destinationParentheses, maxNesting: maxNesting, byte: byte)
+        }
     }
 
     // MARK: - Link title

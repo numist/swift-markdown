@@ -771,8 +771,9 @@ extension BlockParser {
     /// returning it and the offset past the closing `)`.
     private mutating func matchAttributeAttributes(start: Int, content: borrowing ContentSpan) -> AttributeAttributesMatch? {
         let end = content.endOffset
+        let maxNesting = storage.limits.maxAttributeParenthesisNesting
         // No byte ends the run, so a scan that stops before the end stops at the `)` closing the form.
-        guard let close = attributeParentheses.balancedEnd(from: start, end: end, byte: { content[$0] }, terminates: { _ in false }),
+        guard let close = attributeParentheses.balancedEnd(from: start, end: end, maxNesting: maxNesting, byte: { content[$0] }, terminates: { _ in false }),
               close < end else {
             return nil
         }
