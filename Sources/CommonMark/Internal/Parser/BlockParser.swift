@@ -258,7 +258,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         // Reserve the append-only arenas in proportion to the input, so they regrow only for dense input.
         let byteCount = self.sourceBytes.count
         self.storage.nodes.reserveCapacity(byteCount / 16)
-        self.storage.segments.reserveCapacity(byteCount / 16)
+        self.storage.segments.reserveCapacity(byteCount / 8)
         self.storage.strings.reserveCapacity(byteCount / 4)
 
         documentIndex = self.storage.appendNode(NodeRecord(kind: .document))
