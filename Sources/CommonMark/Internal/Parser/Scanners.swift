@@ -157,41 +157,59 @@ extension BlockParser {
         }
         let limit = linkLabelLimit
         let interiorStart = start + 1
+        // A byte of the label counts at least half a byte (a CRLF's two count one), so a label of more than twice
+        // `limit.bytes` bytes doesn't fit and the scan stops there. The bytes are counted only once the label closes.
+        let maxBytes = max(limit.bytes, 0)
+        let scanEnd = maxBytes < (end - interiorStart) / 2 ? interiorStart + 2 * maxBytes + 1 : end
         var i = interiorStart
         var characters = 0
-        var bytes = 0
-        while i < end {
+        while i < scanEnd {
             let b = byte(i)
             if b == UInt8(ascii: "[") {
                 return nil
             }
             if b == UInt8(ascii: "]") {
-                return (interiorStart..<i, i + 1)
+                let interior = interiorStart..<i
+                return labelBytesFit(interior, maxBytes: maxBytes, crlfIsOneCharacter: crlfIsOneCharacter, byte: byte) ? (interior, i + 1) : nil
             }
             if b == UInt8(ascii: "\\") {
                 i += 1
                 characters += 1
-                bytes += 1
                 if i < end {
-                    let escaped = byte(i)
-                    characters += labelCharacterWeight(escaped)
-                    bytes += labelByteWeight(escaped)
+                    characters += labelCharacterWeight(byte(i))
                     i += 1
                 }
             } else {
                 characters += labelCharacterWeight(b)
-                bytes += labelByteWeight(b)
                 if crlfIsOneCharacter, b == UInt8(ascii: "\n"), byte(i - 1) == UInt8(ascii: "\r") {
                     characters -= 1
-                    bytes -= 1
                 }
                 i += 1
             }
-            if characters > limit.characters || bytes > limit.bytes {
+            if characters > limit.characters {
                 return nil
             }
         }
         return nil
+    }
+
+    /// Whether the label interior `interior`, read through `byte`, has at most `maxBytes` bytes, counted by
+    /// `labelByteWeight`, with a CRLF's LF not counted when `crlfIsOneCharacter`.
+    @inline(__always)
+    private func labelBytesFit(_ interior: Range<Int>, maxBytes: Int, crlfIsOneCharacter: Bool, byte: (Int) -> UInt8) -> Bool {
+        // A byte counts at most three bytes (a NUL).
+        if interior.count <= maxBytes / 3 {
+            return true
+        }
+        var bytes = 0
+        for i in interior {
+            let b = byte(i)
+            bytes += labelByteWeight(b)
+            if crlfIsOneCharacter, b == UInt8(ascii: "\n"), byte(i - 1) == UInt8(ascii: "\r") {
+                bytes -= 1
+            }
+        }
+        return bytes <= maxBytes
     }
 
     /// Matches a link label (Links) at virtual offset `start` of `content`, returning its interior and the offset past
