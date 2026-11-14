@@ -77,6 +77,14 @@ struct StrikethroughTildeRunChunkTests {
                   text "b"
 
             """)
+        #expect(TreeDump.dump("x~~~~~.b~~", options: .strikethrough, limits: limits(3)) == """
+            document
+              paragraph
+                text "x~~~"
+                strikethrough
+                  text ".b"
+
+            """)
     }
 
     @Test("a chunk before the last is flanking from the character before it and the tilde after it")
@@ -95,6 +103,15 @@ struct StrikethroughTildeRunChunkTests {
                 strikethrough
                   strikethrough
                     text "a"
+
+            """)
+        #expect(TreeDump.dump("x~~a~~", options: .strikethrough, limits: limits(1)) == """
+            document
+              paragraph
+                text "x~"
+                strikethrough
+                  text "a"
+                text "~"
 
             """)
     }
@@ -157,7 +174,7 @@ struct StrikethroughTildeRunChunkTests {
             """)
     }
 
-    @Test("a strikethrough closed by a chunk covers that chunk and not the literal chunk before it")
+    @Test("a strikethrough's range runs from the start of its opening chunk to the end of its closing chunk")
     func sourceRanges() {
         let tree = TreeDump.dump(
             "a ~~~~~b~~ ~c~~~~", options: [.strikethrough, .sourcePosition], limits: limits(3), sourceRanges: true)
