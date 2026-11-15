@@ -21,7 +21,7 @@ struct InlineOnlyFootnoteShapedBracketTests {
         [.sourcePosition, .footnotes, .preserveWhitespace],
     ]
 
-    static let definedCases: [(markdown: String, expected: String)] = [
+    static let definitionLineCases: [(markdown: String, expected: String)] = [
         ("[^x]:\n\n[^x]", """
             document
               paragraph
@@ -115,7 +115,7 @@ struct InlineOnlyFootnoteShapedBracketTests {
     ]
 
     /// A `[^label]:` line is not a footnote definition, so a later `[^label]` stays text.
-    @Test(arguments: definedCases, modes)
+    @Test(arguments: definitionLineCases, modes)
     func footnoteDefinitionLineIsText(_ testCase: (markdown: String, expected: String), _ options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump(testCase.markdown, options: options) == testCase.expected)
     }

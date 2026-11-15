@@ -44,7 +44,8 @@ internal struct LineReader: ~Escapable, ~Copyable {
 
     @_lifetime(copy self)
     internal mutating func next() -> Span<UInt8>? {
-        // The line starts just past the last line's line ending, or for line 1 at the input's first byte after any byte order mark (an offset into the original source).
+        // The line's content begins just past the last line's line ending, or for line 1 just past any byte order mark;
+        // `nextStart` is an offset into the original source.
         let start = nextStart
         let bytes = source
         let count = bytes.count
