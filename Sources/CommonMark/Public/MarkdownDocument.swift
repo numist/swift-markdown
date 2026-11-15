@@ -70,8 +70,14 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
             return try body(document)
         }
 #else
-        if #available(watchOS 26, *), let utf8 = source._utf8Span {
-            let document = MarkdownDocument(parsing: utf8, options: options, limits: limits)
+        if #available(watchOS 26, *) {
+            if let utf8 = source._utf8Span {
+                let document = MarkdownDocument(parsing: utf8, options: options, limits: limits)
+                return try body(document)
+            }
+            // Only a small string has no contiguous UTF-8 here, and `withUTF8` would copy all of its bytes too.
+            let bytes = ContiguousArray(source.utf8)
+            let document = MarkdownDocument(parsing: bytes.span, options: options, limits: limits)
             return try body(document)
         }
 #endif
@@ -79,7 +85,7 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
         var contiguous = copy source
         return try contiguous.withUTF8 { buffer in
             // SAFETY: `buffer` is valid for this closure, and the span over it backs a document that `body` borrows and can't escape, so no access outlives it.
-            //         Before anyAppleOS 26 no API vends a `Span` over a `String`'s UTF-8 (`String.UTF8View.span` and `String.utf8Span` are anyAppleOS 26), and on 32-bit watchOS `String._utf8Span` vends none for a small string whose bytes aren't stored contiguously. The safe spans available there, such as `ContiguousArray.span`, cover only storage the caller owns, so they require copying the whole source, which defeats parsing the source in place.
+            //         Before anyAppleOS 26 no API vends a `Span` over a `String`'s UTF-8 (`String.UTF8View.span` and `String.utf8Span` are anyAppleOS 26). The safe spans available there, such as `ContiguousArray.span`, cover only storage the caller owns, so they require copying the whole source, which defeats parsing the source in place.
             let document = MarkdownDocument(parsing: unsafe Span(_unsafeElements: buffer), options: options, limits: limits)
             return try body(document)
         }
