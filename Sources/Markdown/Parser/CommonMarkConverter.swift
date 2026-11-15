@@ -29,7 +29,7 @@ struct MarkupParser {
         limits.maxLinkDestinationParenthesisNesting = 32
         limits.maxAttributeParenthesisNesting = 32
         limits.maxCodeSpanOpeningBackticks = 80
-        limits.maxContainersOpenedOnLineBeforeListMarker = 99
+        limits.maxContainersOpenedOnLineBeforeListMarker = 98
         limits.fenceLengthClampForClosing = 255
         limits.strikethroughTildeRunChunk = 100
         limits.referenceExpansionBudget = 100_000

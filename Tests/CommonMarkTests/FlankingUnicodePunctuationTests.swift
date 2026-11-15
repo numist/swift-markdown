@@ -93,9 +93,9 @@ struct FlankingUnicodePunctuationTests {
         #expect(render("x''\u{055E}'", options: .smart) == "x\u{2019}\u{2019}\u{055E}\u{2019}")
     }
 
-    @Test("quote run before ASCII punctuation across a space opens then closes")
-    func quoteRunBeforeASCIIPunct() {
-        #expect(render("'' .", options: .smart) == "\u{2018}\u{2019} .")
+    @Test("quote run before a space opens then closes")
+    func quoteRunBeforeSpace() {
+        #expect(render("'' a", options: .smart) == "\u{2018}\u{2019} a")
     }
 
     // MARK: - Emphasis

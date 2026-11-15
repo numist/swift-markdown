@@ -109,6 +109,21 @@ struct NULReplacementTests {
             """)
     }
 
+    /// The `===` line follows a paragraph holding only an attribute definition, which it cannot
+    /// underline (Setext headings).
+    @Test("NUL in a reference-form `^[label]: ..` attribute followed by `===` becomes U+FFFD")
+    func setextStrippedReferenceAttribute() {
+        #expect(TreeDump.dump("^[label]: a\u{0}b\n===\n\n^[x][label]", options: [.attributes]) == """
+            document
+              paragraph
+                text "==="
+              paragraph
+                attribute "a\u{FFFD}b"
+                  text "x"
+
+            """)
+    }
+
     @Test("NUL in a footnote definition's content becomes U+FFFD")
     func footnoteDefinitionContent() {
         #expect(TreeDump.dump("[^a]: x\u{0}\n\n[^a]", options: [.footnotes]) == """
@@ -175,6 +190,20 @@ struct NULReplacementTests {
                 table_header
                   table_cell align=none colspan=1 rowspan=1
                     text "h\u{FFFD}"
+
+            """)
+    }
+
+    @Test("NUL in a paragraph line before a GFM table becomes U+FFFD")
+    func paragraphBeforeTable() {
+        #expect(TreeDump.dump("a\u{0}\nh\n|-", options: [.tables]) == """
+            document
+              paragraph
+                text "a\u{FFFD}"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "h"
 
             """)
     }

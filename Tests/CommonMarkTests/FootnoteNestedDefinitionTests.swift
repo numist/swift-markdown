@@ -33,7 +33,7 @@ struct FootnoteNestedDefinitionTests {
 
     @Test
     func threeLevelDuplicateOutermostWins() {
-        #expect(TreeDump.dump("[^b]\n[^b]:[^b]:[^b]:A", options: Self.options) == """
+        #expect(TreeDump.dump("[^b]\n[^b]:[^B]:[^b]:A", options: Self.options) == """
             document
               paragraph
                 footnote_reference "1"

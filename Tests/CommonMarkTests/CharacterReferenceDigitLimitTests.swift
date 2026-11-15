@@ -218,18 +218,35 @@ struct CharacterReferenceDigitLimitTests {
     /// The inputs past the small limits above decode at the default limits, so those cases test the limits alone.
     @Test("the default limits decode the references past the small limits")
     func defaultsDecodeOverLimitInputs() {
-        #expect(TreeDump.dump("&#0065;&#x0041;", options: []) == """
+        #expect(TreeDump.dump("&#0065;&#x0041;&#X0041;", options: []) == """
             document
               paragraph
-                text "AA"
+                text "AAA"
 
             """)
-        #expect(TreeDump.dump("[l](&#0065; \"&#x0041;\")\n\n```&#0065;\n```", options: []) == """
+        #expect(TreeDump.dump("[l](&#0065; \"&#x0041;\")", options: []) == """
             document
               paragraph
                 link "A" "A"
                   text "l"
-              code_block "A" ""
+
+            """)
+        #expect(TreeDump.dump("[l]: &#x0041; '&#0065;'\n\n[l]\n\n<http://a&#0065;>\n\n```&#0065;&#x0041;\n```", options: []) == """
+            document
+              paragraph
+                link "A" "A"
+                  text "l"
+              paragraph
+                link "http://aA" ""
+                  text "http://aA"
+              code_block "AA" ""
+
+            """)
+        #expect(TreeDump.dump("^[b]: &#0065;&#x0041;\n\n^[x][b]", options: [.attributes]) == """
+            document
+              paragraph
+                attribute "AA"
+                  text "x"
 
             """)
     }

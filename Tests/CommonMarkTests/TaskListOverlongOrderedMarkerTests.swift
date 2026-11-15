@@ -19,8 +19,8 @@ struct TaskListOverlongOrderedMarkerTests {
 
     private let source = "10.\n\t1234567890. [ ] x\n"
 
-    @Test("without tasklist, the item has no checkbox")
-    func plainItemWithoutTasklist() {
+    @Test("without tasklist, a ten-digit ordered marker is paragraph text")
+    func overlongMarkerIsParagraphTextWithoutTasklist() {
         #expect(TreeDump.dump(source, options: []) == """
             document
               list ordered start=10 delim=period tight

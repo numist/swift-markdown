@@ -574,8 +574,8 @@ extension BlockParser {
         return Self.normalizeLabel(span)
     }
 
-    /// A label within one segment is read from its chunk; one spanning a line ending is read through
-    /// `content`, whose line joins read as `\n`.
+    /// A label that one chunk of `content` holds, as any label of single-segment content is, is read from that chunk;
+    /// one spanning a line join of multi-segment content is read through `content`, which reads each join as `\n`.
     internal func normalizeLabel(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> String {
         if let chunk = content.contiguousChunk(fromVirtual: range.lowerBound, limit: range.upperBound),
            chunk.length == range.count {

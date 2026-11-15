@@ -10,7 +10,7 @@
 
 /// A parsed Markdown document.
 ///
-/// A document borrows its source's UTF-8 bytes rather than copying them, so the source must outlive it. `withParsedDocument(_:options:limits:_:)` works on every OS release; where `UTF8Span` is available, `init(parsing:options:limits:)` returns a document whose lifetime is tied to the source.
+/// A document borrows its source's UTF-8 bytes rather than copying them, so the source must outlive it. `withParsedDocument(_:options:limits:_:)` works on every OS release and platform; where `UTF8Span` is available, `init(parsing:options:limits:)` returns a document whose lifetime is tied to the source. On 32-bit watchOS, which has no `String.utf8Span`, `withParsedDocument(_:options:limits:_:)` is the way to parse a `String`.
 ///
 ///     let source = "# Hello\n\nworld"
 ///     MarkdownDocument.withParsedDocument(source) { document in
@@ -48,7 +48,7 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
 
     /// Parses a string as Markdown and passes the borrowed document to a closure.
     ///
-    /// This works on any supported OS release. Neither the document nor its nodes can escape `body`.
+    /// This works on any supported OS release and platform. Neither the document nor its nodes can escape `body`.
     ///
     /// - Parameters:
     ///   - source: The Markdown text to parse.
@@ -63,16 +63,18 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
         limits: MarkdownDocument.ParseLimits = .init(),
         _ body: (borrowing MarkdownDocument) throws -> R
     ) rethrows -> R {
+#if !(os(watchOS) && _pointerBitWidth(_32))
         if #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) {
             let utf8 = source.utf8Span
             let document = MarkdownDocument(parsing: utf8, options: options, limits: limits)
             return try body(document)
         }
+#endif
         // `withUTF8` copies the bytes only of a small or non-contiguous string.
         var contiguous = copy source
         return try contiguous.withUTF8 { buffer in
             // SAFETY: `buffer` is valid for this closure, and the span over it backs a document that `body` borrows and can't escape, so no access outlives it.
-            //         Before anyAppleOS 26 no API vends a `Span` over a `String`'s UTF-8 (`String.UTF8View.span` and `String.utf8Span` are anyAppleOS 26). The safe spans available there, such as `ContiguousArray.span`, cover only storage the caller owns, so they require copying the whole source, which defeats parsing the source in place.
+            //         Before anyAppleOS 26, and on 32-bit watchOS at any release, no API vends a `Span` over a `String`'s UTF-8 (`String.UTF8View.span` and `String.utf8Span` are anyAppleOS 26 and unavailable on 32-bit watchOS). The safe spans available there, such as `ContiguousArray.span`, cover only storage the caller owns, so they require copying the whole source, which defeats parsing the source in place.
             let document = MarkdownDocument(parsing: unsafe Span(_unsafeElements: buffer), options: options, limits: limits)
             return try body(document)
         }
@@ -119,10 +121,11 @@ public struct MarkdownDocument: ~Copyable, ~Escapable {
     }
 }
 
+#if !(os(watchOS) && _pointerBitWidth(_32))
 extension MarkdownDocument {
     /// Creates a document by parsing a string as Markdown.
     ///
-    /// The document borrows the string's UTF-8 bytes instead of copying them, so its lifetime is tied to `source`. To parse on an OS release that doesn't provide `UTF8Span`, use `withParsedDocument(_:options:limits:_:)` instead.
+    /// The document borrows the string's UTF-8 bytes instead of copying them, so its lifetime is tied to `source`. To parse on an OS release that doesn't provide `UTF8Span`, or on 32-bit watchOS, where this initializer is absent, use `withParsedDocument(_:options:limits:_:)` instead.
     ///
     /// - Parameters:
     ///   - source: The Markdown text to parse.
@@ -134,3 +137,4 @@ extension MarkdownDocument {
         self.init(parsing: source.utf8Span, options: options, limits: limits)
     }
 }
+#endif

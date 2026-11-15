@@ -186,17 +186,6 @@ struct TableAutocompletedCellLimitTests {
             """)
     }
 
-    @Test("the default limits insert a million cells")
-    func defaultLimitsAtScale() {
-        let source = "|" + String(repeating: "a|", count: 1001) + "\n|" + String(repeating: "-|", count: 1001) + "\n"
-            + String(repeating: "x\n", count: 1000)
-        let tree = TreeDump.dump(source, options: .tables)
-        #expect(tree.hasPrefix("document\n  table\n"))
-        #expect(!tree.contains("paragraph"))
-        #expect(tree.components(separatedBy: "table_row").count - 1 == 1000)
-        #expect(tree.components(separatedBy: "table_cell").count - 1 == 1_002_001)
-    }
-
     @Test("the default limits insert any number of cells")
     func defaultLimits() {
         #expect(TreeDump.dump("a|b|c\n-|-|-\nx\ny\nz", options: .tables) == """

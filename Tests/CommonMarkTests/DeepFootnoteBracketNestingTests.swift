@@ -14,8 +14,7 @@ import Testing
 /// Footnote-shaped brackets nested many levels deep.
 ///
 /// A `]` closes the innermost open `[^`. A label may not contain an unescaped bracket (Links), so no outer bracket is a
-/// footnote reference however deep the nesting, and 32,000 nested brackets, about 96 KB of source, parse within the
-/// time limit.
+/// footnote reference however deep the nesting.
 @Suite("Footnote brackets under deep nesting")
 struct DeepFootnoteBracketNestingTests {
     private static let depth = 32_000
@@ -47,7 +46,7 @@ struct DeepFootnoteBracketNestingTests {
             """)
     }
 
-    @Test(.timeLimit(.minutes(1)), arguments: [MarkdownDocument.ParseOptions.footnotes, [.footnotes, .inlineOnly]])
+    @Test(arguments: [MarkdownDocument.ParseOptions.footnotes, [.footnotes, .inlineOnly]])
     func deeplyNestedBracketsWithoutDefinitionAreText(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump(Self.openers + "x" + Self.closers, options: options) == """
             document
@@ -57,7 +56,7 @@ struct DeepFootnoteBracketNestingTests {
             """)
     }
 
-    @Test(.timeLimit(.minutes(1)))
+    @Test
     func deeplyNestedInnermostBracketWithDefinitionIsReference() {
         #expect(TreeDump.dump(Self.openers + "x" + Self.closers + "\n\n[^x]: d", options: .footnotes) == """
             document

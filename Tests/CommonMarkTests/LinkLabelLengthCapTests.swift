@@ -46,7 +46,7 @@ struct LinkLabelLengthCapTests {
         let half = label(499)
         let definition = "[\(half) \(half)]: /u\n\n"
 
-        #expect(TreeDump.dump(definition + ">[t][\(half)\n\(half)]", options: []) == """
+        #expect(TreeDump.dump(definition + ">[t][\(half)\n>\(half)]", options: []) == """
             document
               block_quote
                 paragraph
@@ -54,7 +54,7 @@ struct LinkLabelLengthCapTests {
                     text "t"
 
             """)
-        #expect(TreeDump.dump(definition + ">[t][\(half) \n\(half)]", options: []) == """
+        #expect(TreeDump.dump(definition + ">[t][\(half) \n>\(half)]", options: []) == """
             document
               block_quote
                 paragraph

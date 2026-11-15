@@ -11,8 +11,9 @@
 import CommonMark
 import Testing
 
-/// A delimiter run that is neither left- nor right-flanking can neither open nor close (Emphasis and strong emphasis,
-/// Strikethrough (extension)), so it is plain text within the text around it.
+/// A delimiter run that is neither left- nor right-flanking, or a `_` run that is both left- and right-flanking between
+/// alphanumerics, can neither open nor close (Emphasis and strong emphasis, Strikethrough (extension)), so it is plain
+/// text within the text around it.
 @Suite("A delimiter run that can neither open nor close is text in one segment with the text around it")
 struct InertDelimiterRunSegmentTests {
 
@@ -22,6 +23,8 @@ struct InertDelimiterRunSegmentTests {
         ("a ~~ b", "a ~~ b"),
         ("a ~ b", "a ~ b"),
         ("a ~~~ b", "a ~~~ b"),
+        ("a__b", "a__b"),
+        ("a_b", "a_b"),
     ])
     func inertRun(source: String, quoted: String) {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }

@@ -210,6 +210,42 @@ struct BlankLinesInOpenContainerChainTests {
 
             """
         ),
+        TreeDumpCase(
+            "block quote opened after blank lines in twelve footnote definitions, then a blank line",
+            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\n" + String(repeating: " ", count: 48) + "> q\n\n" + String(repeating: " ", count: 48) + "> r\n",
+            """
+            document @1:1-9:1
+              paragraph @1:1-1:5
+                footnote_reference "1" @1:1-1:5
+              footnote_definition "a" @3:56-8:52
+                paragraph @3:61-3:62
+                  text "x" @3:61-3:62
+                block_quote @6:49-6:52
+                  paragraph @6:51-6:52
+                    text "q" @6:51-6:52
+                block_quote @8:49-8:52
+                  paragraph @8:51-8:52
+                    text "r" @8:51-8:52
+
+            """
+        ),
+        TreeDumpCase(
+            "empty list item opened after blank lines in twelve footnote definitions, then a blank line",
+            "[^a]\n\n[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^b]:[^a]:x\n\n\n" + String(repeating: " ", count: 48) + "-\n\n" + String(repeating: " ", count: 50) + "r\n",
+            """
+            document @1:1-9:1
+              paragraph @1:1-1:5
+                footnote_reference "1" @1:1-1:5
+              footnote_definition "a" @3:56-8:52
+                paragraph @3:61-3:62
+                  text "x" @3:61-3:62
+                list bullet '-' tight @6:49-6:50
+                  item @6:49-6:50
+                paragraph @8:51-8:52
+                  text "r" @8:51-8:52
+
+            """
+        ),
     ]
 
     @Test(arguments: cases)

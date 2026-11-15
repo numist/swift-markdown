@@ -155,4 +155,24 @@ struct NestedContainerIndentTreeTests {
 
             """)
     }
+
+    @Test
+    func lineAfterBlankIndentedPastOuterFootnoteDefinition() {
+        let source = "[^a][^b]\n\n[^a]: a\n    [^b]: b\n\n       a2\n"
+        #expect(TreeDump.dump(source, options: Self.options, sourceRanges: true) == """
+            document @1:1-7:1
+              paragraph @1:1-1:9
+                footnote_reference "1" @1:1-1:5
+                footnote_reference "2" @1:5-1:9
+              footnote_definition "a" @3:1-6:10
+                paragraph @3:7-3:8
+                  text "a" @3:7-3:8
+                paragraph @6:8-6:10
+                  text "a2" @6:8-6:10
+              footnote_definition "b" @4:5-4:12
+                paragraph @4:11-4:12
+                  text "b" @4:11-4:12
+
+            """)
+    }
 }

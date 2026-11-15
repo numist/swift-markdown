@@ -70,6 +70,8 @@ struct NumericCharacterReferenceDigitLimitTests {
         // In-range values decode to their scalar.
         #expect(try text("&#65;", options: Self.options) == "A")
         #expect(try text("&#x41;", options: Self.options) == "A")
+        #expect(try text("&#9;", options: Self.options) == "\t")
+        #expect(try text("&#x9;", options: Self.options) == "\t")
         // The maximum scalar at the 7-decimal and 6-hex digit limits.
         #expect(try text("&#1114111;", options: Self.options) == Self.maxScalar)
         #expect(try text("&#x10FFFF;", options: Self.options) == Self.maxScalar)

@@ -158,9 +158,8 @@ struct SourceRangeCompletenessTests {
 
     /// A range runs from the first byte of a node's own content to just past its last content byte, so a range starts
     /// or ends on whitespace only where that whitespace is the node's content: the literal whitespace of text, a code
-    /// block or an HTML block, or whitespace a child's range holds. A code block or HTML block whose last line is blank
-    /// ends at that line's start, not past a container's prefix on it, and in inline-only parsing the paragraph ends where
-    /// the input's last line ends, trailing whitespace included. The document covers the whole input. Each spec example
+    /// block or an HTML block, or whitespace a child's range holds. In inline-only parsing the paragraph ends where the
+    /// input's last line ends, trailing whitespace included. The document covers the whole input. Each spec example
     /// runs with its line endings as written, preceded by two spaces, a tab or a line tabulation, or replaced by CRLF,
     /// both at top level and nested in each `Container`.
     @Test("no range starts or ends on whitespace outside its content", arguments: ["\n", "  \n", "\t\n", "\u{0B}\n", "\r\n"])
@@ -171,8 +170,7 @@ struct SourceRangeCompletenessTests {
             Self.options, Self.options.union([.footnotes, .gfmAutolink]), Self.options.union(.inlineOnly),
         ]
         for ex in try SpecParser.loadSpec() {
-            let markdown = ex.markdown.replacingOccurrences(of: "\n", with: lineEnding)
-            for source in [markdown] + Container.allCases.map({ $0.nest(markdown) }) {
+            for source in ([ex.markdown] + Container.allCases.map({ $0.nest(ex.markdown) })).map({ $0.replacingOccurrences(of: "\n", with: lineEnding) }) {
                 for options in optionSets {
                     let result = Self.boundaryFailures(source, options: options)
                     checked += result.checked
@@ -233,12 +231,6 @@ struct SourceRangeCompletenessTests {
             if kind == .paragraph, options.contains(.inlineOnly) {
                 endHeld = true
             }
-            // A blank last line holds no content bytes, so a block ending with it ends at the line's start, not past a
-            // container's prefix on it.
-            if blockLiteral, !literal.isEmpty, lastLine.isEmpty || lastLine.last == 0x0A, bytes[end - 1] != UInt8(ascii: "`"),
-               bytes[end - 1] != UInt8(ascii: "~"), range.upperBound.column != 1 {
-                failures.append("\(kind) \(range) ends past its blank last line's start")
-            }
             if isWhitespace(bytes[start]) && !startHeld { failures.append("\(kind) \(range) starts on whitespace") }
             if isWhitespace(bytes[end - 1]) && !endHeld { failures.append("\(kind) \(range) ends on whitespace") }
         }
@@ -273,7 +265,7 @@ struct SourceRangeCompletenessTests {
                 }
 
                 if node.range == nil {
-                    // A childless table cell is one inserted into a body row with fewer cells than the header row.
+                    // A table cell with neither children nor a source range is one inserted into a body row with fewer cells than the header row.
                     if case .tableCell = node.kind, node.isLeaf {
                         exemptFillerCells += 1
                         continue

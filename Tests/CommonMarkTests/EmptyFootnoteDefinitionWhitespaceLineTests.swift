@@ -29,18 +29,6 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
             """)
     }
 
-    @Test func topLevelSpaceOnlyLines() {
-        #expect(tree("[^a]:\n    \n    x\n\n[^a]") == """
-            document
-              paragraph
-                footnote_reference "1"
-              footnote_definition "a"
-                paragraph
-                  text "x"
-
-            """)
-    }
-
     @Test func underindentedLineAfterWhitespaceLineClosesDefinition() {
         #expect(tree("- [^a]: x\n \n  y") == """
             document
@@ -87,7 +75,7 @@ struct EmptyFootnoteDefinitionWhitespaceLineTests {
             """)
     }
 
-    @Test(arguments: 1...3)
+    @Test(arguments: 1...4)
     func topLevelDefinitionHoldsContentAfterSpacesLine(spaces: Int) {
         #expect(tree("[^a]:\n" + String(repeating: " ", count: spaces) + "\n    x\n\n[^a]") == """
             document

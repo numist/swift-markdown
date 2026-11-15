@@ -91,8 +91,8 @@ struct FootnoteDiscardedReferenceNumberingTests {
             """)
     }
 
-    /// A reference inside a definition that no reference resolves to is numbered, so the definition it resolves to
-    /// is kept, while the reference is dropped with the definition holding it.
+    /// A definition that only a reference inside a dropped definition resolves to is kept, while the reference is
+    /// dropped with the definition holding it.
     @Test
     func referenceInDroppedDefinitionKeepsItsDefinition() {
         #expect(TreeDump.dump("x [^c]\n\n[^a]: [^b]\n\n[^b]: B\n\n[^c]: C\n", options: Self.options) == """
@@ -106,6 +106,27 @@ struct FootnoteDiscardedReferenceNumberingTests {
               footnote_definition "b"
                 paragraph
                   text "B"
+
+            """)
+    }
+
+    /// A reference inside a definition that no reference resolves to is numbered at that definition's place in the
+    /// source, and is dropped with the definition holding it.
+    @Test
+    func referenceInDroppedDefinitionNumbersAtItsPlace() {
+        #expect(TreeDump.dump("[^a]: [^b]\n\nx [^c] [^b]\n\n[^b]: B\n\n[^c]: C\n", options: Self.options) == """
+            document
+              paragraph
+                text "x "
+                footnote_reference "2"
+                text " "
+                footnote_reference "1"
+              footnote_definition "b"
+                paragraph
+                  text "B"
+              footnote_definition "c"
+                paragraph
+                  text "C"
 
             """)
     }

@@ -87,12 +87,12 @@ struct StrikethroughDelimiterRunLengthTests {
                   text ")~~~~)"
 
             """),
-        ("**~~)~~~~)~~", """
+        ("**~~)~~~~~)~~", """
             document
               paragraph
                 text "**"
                 strikethrough
-                  text ")~~~~)"
+                  text ")~~~~~)"
 
             """),
     ])

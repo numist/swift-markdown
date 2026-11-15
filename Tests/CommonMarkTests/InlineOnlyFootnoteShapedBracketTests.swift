@@ -11,8 +11,8 @@
 import CommonMark
 import Testing
 
-/// Inline-only mode has no footnote definitions, so a footnote-shaped bracket with no matching link reference
-/// definition is text.
+/// Inline-only mode has no footnote definitions, so a footnote-shaped bracket is text unless a link reference
+/// definition matches it.
 @Suite("Footnote-shaped brackets in inline-only mode")
 struct InlineOnlyFootnoteShapedBracketTests {
 
@@ -21,13 +21,16 @@ struct InlineOnlyFootnoteShapedBracketTests {
         [.sourcePosition, .footnotes, .preserveWhitespace],
     ]
 
-    static let cases: [(markdown: String, expected: String)] = [
+    static let definedCases: [(markdown: String, expected: String)] = [
         ("[^x]:\n\n[^x]", """
             document
               paragraph
                 text "[^x]:\\n\\n[^x]"
 
             """),
+    ]
+
+    static let unmatchedCases: [(markdown: String, expected: String)] = [
         ("[^\n\u{FFFD}]", """
             document
               paragraph
@@ -111,8 +114,16 @@ struct InlineOnlyFootnoteShapedBracketTests {
             """),
     ]
 
-    @Test(arguments: cases, modes)
-    func bracketIsText(_ testCase: (markdown: String, expected: String), _ options: MarkdownDocument.ParseOptions) {
+    /// A `[^label]:` line is not a footnote definition, so a later `[^label]` stays text.
+    @Test(arguments: definedCases, modes)
+    func footnoteDefinitionLineIsText(_ testCase: (markdown: String, expected: String), _ options: MarkdownDocument.ParseOptions) {
+        #expect(TreeDump.dump(testCase.markdown, options: options) == testCase.expected)
+    }
+
+    /// A bracket with no matching definition is text, including one whose caret is backslash-escaped or that spans a
+    /// line ending.
+    @Test(arguments: unmatchedCases, modes)
+    func unmatchedBracketIsText(_ testCase: (markdown: String, expected: String), _ options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump(testCase.markdown, options: options) == testCase.expected)
     }
 }

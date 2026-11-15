@@ -89,14 +89,32 @@ struct BasicTests {
 
     @Test("MarkdownNode.Kind classifies block vs. inline correctly")
     func kindClassification() {
-        #expect(MarkdownNode.Kind.document.isBlock)
-        #expect(MarkdownNode.Kind.paragraph.isBlock)
-        #expect(MarkdownNode.Kind.heading(level: 1).isBlock)
-        #expect(MarkdownNode.Kind.table.isBlock)
-        #expect(MarkdownNode.Kind.text.isInline)
-        #expect(MarkdownNode.Kind.emphasis.isInline)
-        #expect(MarkdownNode.Kind.attribute.isInline)
-        #expect(MarkdownNode.Kind.strikethrough.isInline)
+        let source = "- a\n\n```\nx\n```"
+        let parsedKinds = MarkdownDocument.withParsedDocument(source) { doc in
+            var kinds: [MarkdownNode.Kind] = []
+            doc.root.children.forEach { block in
+                kinds.append(block.kind)
+            }
+            return kinds
+        }
+        guard parsedKinds.count == 2, case .list = parsedKinds[0], case .codeBlock = parsedKinds[1] else {
+            Issue.record("expected a list and a code block, got \(parsedKinds)")
+            return
+        }
+
+        let blocks: [MarkdownNode.Kind] = [
+            .document, .blockQuote, parsedKinds[0], .item(checked: nil), parsedKinds[1], .htmlBlock,
+            .paragraph, .heading(level: 1), .thematicBreak, .footnoteDefinition, .table,
+            .tableRow(isHeader: true), .tableCell(alignment: .none, columns: 1, rows: 1),
+        ]
+        let inlines: [MarkdownNode.Kind] = [
+            .text, .softBreak, .lineBreak, .codeInline(backtickCount: 1), .htmlInline, .emphasis,
+            .strong, .link, .image, .footnoteReference(index: 1), .strikethrough, .attribute,
+        ]
+        #expect(blocks.map(\.isBlock) == Array(repeating: true, count: 13))
+        #expect(blocks.map(\.isInline) == Array(repeating: false, count: 13))
+        #expect(inlines.map(\.isBlock) == Array(repeating: false, count: 12))
+        #expect(inlines.map(\.isInline) == Array(repeating: true, count: 12))
     }
 
     @Test("options are exposed on the parsed document")

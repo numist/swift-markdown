@@ -110,7 +110,7 @@ struct ExtendedAutolinkDomainTests {
             """)
     }
 
-    @Test(arguments: [
+    @Test("url autolink whose domain starts with a non-ASCII character that is neither punctuation nor whitespace links", arguments: [
         ("http://\u{00D7}", """
             document @1:1-1:10
               paragraph @1:1-1:10
@@ -140,7 +140,7 @@ struct ExtendedAutolinkDomainTests {
 
             """),
     ])
-    func urlDomainStartingWithNonASCIICharacterIsLink(markdown: String, expected: String) {
+    func urlDomainStartingWithNonASCIINonPunctuationCharacterIsLink(markdown: String, expected: String) {
         #expect(tree(markdown) == expected)
     }
 

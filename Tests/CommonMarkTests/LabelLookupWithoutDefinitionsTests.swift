@@ -80,6 +80,12 @@ struct LabelLookupWithoutDefinitionsTests {
 
     @Test("an attribute's label is dropped when only a link is defined with that label")
     func attributeLabelWithOnlyLinkDefinition() {
+        #expect(tree("[b]: /u\n\n^[c]: d\n\n^[x][b] y", options: [.attributes]) == """
+            document @1:1-5:10
+              paragraph @5:1-5:10
+                text "^[x] y" @5:1-5:10
+
+            """)
         #expect(tree("[b]: /u\n\n^[x][b] y", options: [.attributes]) == """
             document @1:1-3:10
               paragraph @3:1-3:10

@@ -123,4 +123,29 @@ struct LinksAcrossContainerLinesTests {
 
             """)
     }
+
+    @Test("cross-line full-reference label across a block quote's markers resolves")
+    func crossLineFullReferenceBlockQuoteMarkers() {
+        #expect(TreeDump.dump("[la bel]: /u\n\n> [t][la\n> bel]", options: []) == """
+            document
+              block_quote
+                paragraph
+                  link "/u" ""
+                    text "t"
+
+            """)
+    }
+
+    @Test("cross-line full-reference label across a list item's indentation resolves")
+    func crossLineFullReferenceListItemIndentation() {
+        #expect(TreeDump.dump("[la bel]: /u\n\n- [t][la\n  bel]", options: []) == """
+            document
+              list bullet '-' tight
+                item
+                  paragraph
+                    link "/u" ""
+                      text "t"
+
+            """)
+    }
 }

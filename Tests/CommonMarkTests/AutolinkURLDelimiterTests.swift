@@ -11,10 +11,10 @@
 import Testing
 import CommonMark
 
-/// After its domain, an extended url or www autolink runs to the first space or `<` (Autolinks (extension)), so `>` is
-/// part of it, as is an entity reference before its end. A trailing `?`, `!`, `.`, `,`, `:`, `*`, `_`, `~`, `'`, `"` or
-/// `;` is not part of it, nor is an unmatched trailing `)`, and a trailing `;` takes a preceding `&` and ASCII letters
-/// with it.
+/// After its domain, an extended url or www autolink runs to the first space, tab, line ending or `<` (Autolinks
+/// (extension)), so `>` is part of it, as is an entity reference before its end. A trailing `?`, `!`, `.`, `,`, `:`,
+/// `*`, `_`, `~`, `'`, `"` or `;` is not part of it, nor is an unmatched trailing `)`, and a trailing `;` takes a
+/// preceding `&` and ASCII letters with it.
 @Suite("Extended autolink end and trailing punctuation")
 struct AutolinkURLDelimiterTests {
 
@@ -220,6 +220,43 @@ struct AutolinkURLDelimiterTests {
                 link "http://a.l" ""
                   text "http://a.l"
                 text "<"
+
+            """)
+    }
+
+    @Test("a space ends the URL")
+    func spaceBoundary() {
+        #expect(tree("http://a.l b") == """
+            document
+              paragraph
+                link "http://a.l" ""
+                  text "http://a.l"
+                text " b"
+
+            """)
+    }
+
+    @Test("a tab ends the URL")
+    func tabBoundary() {
+        #expect(tree("http://a.l\tb") == """
+            document
+              paragraph
+                link "http://a.l" ""
+                  text "http://a.l"
+                text "\\tb"
+
+            """)
+    }
+
+    @Test("a line ending ends the URL")
+    func lineEndingBoundary() {
+        #expect(tree("http://a.l\nb") == """
+            document
+              paragraph
+                link "http://a.l" ""
+                  text "http://a.l"
+                softbreak
+                text "b"
 
             """)
     }

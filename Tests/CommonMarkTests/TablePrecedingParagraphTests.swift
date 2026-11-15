@@ -114,7 +114,7 @@ struct TablePrecedingParagraphTests {
             """)
     }
 
-    // MARK: - No earlier lines
+    // MARK: - No paragraph split off
 
     @Test("a header that is the paragraph's only line has no preceding paragraph")
     func bareTwoLineTable() {

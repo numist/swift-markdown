@@ -386,7 +386,7 @@ extension BlockParser {
         return cursor + 1
     }
 
-    /// A backslash escape (Backslash escapes). A backslash before a line ending is handled with the line ending; one before anything but ASCII punctuation is literal.
+    /// A backslash escape (Backslash escapes), or a hard line break when a CR follows (Hard line breaks). A backslash before an LF is left for the LF to form the break; one before anything else but ASCII punctuation is literal.
     private mutating func handleBackslash(at cursor: Int, content: borrowing ContentSpan, parent: DocumentStorage.Index, pendingTextStart: inout Int) -> Int {
         if cursor + 1 < content.endOffset {
             let next = content[cursor + 1]
@@ -1866,8 +1866,8 @@ extension BlockParser {
     /// linear on `@`-dense input.
     private mutating func matchGFMEmailAutolink(at: Int, localBound: Int, content: borrowing ContentSpan, resumeAt: inout Int) -> GFMAutolinkMatch? {
         let end = content.endOffset
-        // A second `@` in the domain restarts the trial there, the run between becoming the local part. The
-        // scheme state and the period flag carry across the restart.
+        // A second `@` in the domain restarts the trial there, with the local part scanned back from it over
+        // local-part characters. The scheme state and the period flag carry across the restart.
         var atSign = at
         var schemeFolded = false
         var isXmpp = false
@@ -2099,7 +2099,7 @@ extension BlockParser {
     private static let ftpScheme = Array("ftp".utf8)
     private static let wwwPrefix = Array("www.".utf8)
 
-    /// Whether `target` is at `start`, ignoring ASCII case if `ignoringASCIICase`.
+    /// Whether `target` is at `start`. With `ignoringASCIICase`, which requires `target` to hold only ASCII letters, letters match regardless of case.
     private static func bytesEqual(at start: Int, target: some Collection<UInt8>, content: borrowing ContentSpan, ignoringASCIICase: Bool = false) -> Bool {
         let mask: UInt8 = ignoringASCIICase ? 0x20 : 0
         for (k, targetByte) in target.enumerated() {
@@ -2532,9 +2532,23 @@ extension BlockParser {
         precondition(ref.count > 0 && ref.totalLength > 0, "an email address holds at least one byte")
         let firstSeg = storage.segments[ref.first]
         let lastSeg = storage.segments[ref.first + ref.count - 1]
-        let first = sourceRange(of: firstSeg, local: 0, image: image)
+        let first = escapeSource(endingAt: sourceRange(of: firstSeg, local: 0, image: image))
         let last = sourceRange(of: lastSeg, local: lastSeg.length - 1, image: image)
         return (first.lowerBound, last.upperBound)
+    }
+
+    /// The source bytes of the backslash escape (Backslash escapes) whose escaped character is `bytes`, or `bytes`
+    /// when no escape produced it. Only ASCII punctuation is escaped, and the backslashes before it pair off from the
+    /// first, so an odd run ends in the escape's backslash.
+    private func escapeSource(endingAt bytes: Range<Int>) -> Range<Int> {
+        guard sourceBytes[bytes.lowerBound].isASCIIPunct else {
+            return bytes
+        }
+        var runStart = bytes.lowerBound
+        while runStart > 0 && sourceBytes[runStart - 1] == UInt8(ascii: "\\") {
+            runStart -= 1
+        }
+        return (bytes.lowerBound - runStart) % 2 == 1 ? (bytes.lowerBound - 1)..<bytes.upperBound : bytes
     }
 
     /// The source bytes that byte `local` of an address's segment `seg` stands for: a source byte, an arena byte

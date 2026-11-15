@@ -61,13 +61,12 @@ struct CodeSpanTests {
 
     @Test("mismatched fence lengths leave the line as text")
     func mismatchedLength() {
-        let source = "`` foo `"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        let inlines = paragraphInlines(doc)
-        // No close of length 2 → entire line stays as text.
-        let kinds = inlines.map { $0.kind }
-        #expect(!kinds.contains { if case .codeInline = $0 { return true } else { return false } })
-        }
+        #expect(TreeDump.dump("`` foo `", options: []) == """
+            document
+              paragraph
+                text "`` foo `"
+
+            """)
     }
 
     @Test("single space stripped from both ends when content is bracketed by spaces")
@@ -667,20 +666,22 @@ struct InlineHTMLTests {
 
     @Test("invalid: unclosed tag stays as text")
     func unclosedTag() {
-        let source = "<a"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        let kinds = paragraphInlines(doc).map { $0.kind }
-        #expect(!kinds.contains(.htmlInline))
-        }
+        #expect(TreeDump.dump("<a", options: []) == """
+            document
+              paragraph
+                text "<a"
+
+            """)
     }
 
     @Test("invalid: unterminated comment stays as text")
     func unterminatedComment() {
-        let source = "<!-- never closed"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        let kinds = paragraphInlines(doc).map { $0.kind }
-        #expect(!kinds.contains(.htmlInline))
-        }
+        #expect(TreeDump.dump("x <!-- never closed", options: []) == """
+            document
+              paragraph
+                text "x <!-- never closed"
+
+            """)
     }
 
     @Test("text + html + text mixes correctly")
@@ -838,12 +839,12 @@ struct EmphasisTests {
 
     @Test("unmatched single * stays as text")
     func unmatchedStar() {
-        let source = "*foo"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        let inlines = Self.dfsInlines(doc)
-        #expect(!inlines.map(\.0).contains(.emphasis))
-        #expect(!inlines.map(\.0).contains(.strong))
-        }
+        #expect(TreeDump.dump("*foo", options: []) == """
+            document
+              paragraph
+                text "*foo"
+
+            """)
     }
 
     @Test("asymmetric run: ***foo* bar**")
@@ -1049,30 +1050,32 @@ struct LinkImageTests {
 
     @Test("unmatched [ stays as text")
     func unmatchedOpenBracket() {
-        let source = "[foo"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        // No link/image; the [ remains in the inline tree as text.
-        let kinds = paragraphInlines(doc).map(\.kind)
-        #expect(!kinds.contains(.link))
-        }
+        #expect(TreeDump.dump("[foo", options: []) == """
+            document
+              paragraph
+                text "[foo"
+
+            """)
     }
 
     @Test("unmatched ] stays as text")
     func unmatchedCloseBracket() {
-        let source = "foo]"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        let kinds = paragraphInlines(doc).map(\.kind)
-        #expect(!kinds.contains(.link))
-        }
+        #expect(TreeDump.dump("foo]", options: []) == """
+            document
+              paragraph
+                text "foo]"
+
+            """)
     }
 
     @Test("[foo] without a link reference definition stays as text")
     func shortcutNoMatch() {
-        let source = "[foo]"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        let kinds = paragraphInlines(doc).map(\.kind)
-        #expect(!kinds.contains(.link))
-        }
+        #expect(TreeDump.dump("[foo]", options: []) == """
+            document
+              paragraph
+                text "[foo]"
+
+            """)
     }
 
     @Test("emphasis inside link text")
@@ -1100,7 +1103,7 @@ struct LinkImageTests {
         }
     }
 
-    @Test("link with no title, simple")
+    @Test("two inline links in one paragraph keep their own destinations")
     func multipleLinks() {
         let source = "[a](/1) and [b](/2)"
         MarkdownDocument.withParsedDocument(source) { doc in
@@ -1295,31 +1298,26 @@ struct ExtendedAttributeTests {
 
     @Test("attribute ref defs do not collide with link ref defs")
     func separateRefMaps() {
-        let source = "[foo]: /url\n^[foo]: color: red\n\n[foo] and ^[content][foo]"
-        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
-        // Inline parsing should produce both a .link and a .attribute.
-        var hasLink = false
-        var hasAttr = false
-        let root = doc.root
-        root.children.forEach { block in
-            block.children.forEach { inline in
-                if inline.kind == .link { hasLink = true }
-                if inline.kind == .attribute { hasAttr = true }
-            }
-        }
-        #expect(hasLink)
-        #expect(hasAttr)
-        }
+        #expect(TreeDump.dump("[foo]: /url\n^[foo]: color: red\n\n[foo] and ^[content][foo]", options: .attributes) == """
+            document
+              paragraph
+                link "/url" ""
+                  text "foo"
+                text " and "
+                attribute "color: red"
+                  text "content"
+
+            """)
     }
 
     @Test("invalid: ^[content] without (...) or [label] stays as text")
     func invalidNoFollowup() {
-        let source = "^[content]"
-        MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
-        // No `.attribute` should be emitted.
-        let info = Self.firstAttribute(doc)
-        #expect(info.attrs == nil)
-        }
+        #expect(TreeDump.dump("^[content]", options: .attributes) == """
+            document
+              paragraph
+                text "^[content]"
+
+            """)
     }
 
     @Test("invalid: unknown reference label fails")
@@ -1388,10 +1386,12 @@ struct StrikethroughTests {
 
     @Test("default-disabled: ~text~ stays as text")
     func defaultDisabled() {
-        let source = "~foo~"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        #expect(Self.firstStrikethrough(doc) == nil)
-        }
+        #expect(TreeDump.dump("~foo~", options: []) == """
+            document
+              paragraph
+                text "~foo~"
+
+            """)
     }
 
     @Test("single tilde with strikethrough enabled")
@@ -1648,11 +1648,12 @@ struct GFMAutolinkTests {
 
     @Test("default-disabled: bare URL stays as text")
     func defaultDisabled() {
-        let source = "visit http://example.com today"
-        MarkdownDocument.withParsedDocument(source) { doc in
-        let info = Self.firstLink(doc)
-        #expect(info.url == nil)
-        }
+        #expect(TreeDump.dump("visit http://example.com today", options: []) == """
+            document
+              paragraph
+                text "visit http://example.com today"
+
+            """)
     }
 
     @Test("http URL")
@@ -1797,7 +1798,7 @@ struct FootnoteTests {
         }
     }
 
-    @Test("default-disabled: [^x] stays as text")
+    @Test("`[^x]:` is a link reference definition and `[^x]` a link to it")
     func defaultDisabled() {
         let source = "[^x]: body\n\nref [^x]"
         MarkdownDocument.withParsedDocument(source) { doc in

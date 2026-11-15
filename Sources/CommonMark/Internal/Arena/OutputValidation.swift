@@ -71,8 +71,8 @@ private struct RangeValidator: ~Escapable {
     }
 
     /// Every node has a range within the source and within its parent's, starting and ending on scalar boundaries and
-    /// starting no earlier than its previous sibling ends. Line breaks, cells inserted into a short body row, and the
-    /// document of empty input have none.
+    /// starting no earlier than the nearest previous sibling with a range ends. Line breaks, cells inserted into a short
+    /// body row, and the document of empty input have none.
     private func validateRange(_ node: DocumentStorage.Index) -> Bool {
         let record = view.nodes[node]
         let range = rangeIfSet(node)
@@ -104,8 +104,15 @@ private struct RangeValidator: ~Escapable {
             }
         }
         // Footnote definitions move to the document's end in reference order, so their ranges are out of source order.
-        if record.kind != .footnoteDefinition, let previous = record.previous, let previousRange = rangeIfSet(previous) {
-            return previousRange.end <= range.start
+        guard record.kind != .footnoteDefinition else {
+            return true
+        }
+        var previous = record.previous
+        while let sibling = previous {
+            if let previousRange = rangeIfSet(sibling) {
+                return previousRange.end <= range.start
+            }
+            previous = view.nodes[sibling].previous
         }
         return true
     }

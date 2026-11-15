@@ -11,9 +11,10 @@
 import Testing
 import CommonMark
 
-/// A delimiter row turns the open paragraph into a table before any link reference definition is
-/// extracted from it (Tables (extension), Link reference definitions), so text shaped like a link
-/// reference definition becomes table content.
+/// A delimiter row makes the paragraph line before it a table's header row, and the table takes the
+/// paragraph from that line on before any link reference definition is extracted from it (Tables
+/// (extension), Link reference definitions), so text from the header row on that is shaped like a
+/// link reference definition becomes table content.
 @Suite("GFM table vs link reference definition precedence")
 struct TableVsReferenceDefinitionTests {
 

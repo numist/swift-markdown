@@ -14,7 +14,7 @@ extension MarkdownNode {
     ///
     /// Because the cases carry spans that point into the document's storage, a `Content` value can't escape the node's borrow scope or be stored - read it in place. For an owned `String` form that you can store, and that reads content on any OS release, use `stringContent`.
     ///
-    /// Textual content is always a `Segments` sequence. Inline literals are usually a single segment, but code- and HTML-block bodies can span several - their lines are stored non-contiguously - so iterate the segments rather than assuming one contiguous span.
+    /// Inline literals and code- and HTML-block bodies are `Segments` sequences; a code block's info string, a link's URL and title, an attribute string and a footnote label are each a single `UTF8Span`. Inline literals are usually a single segment, but code- and HTML-block bodies can span several - their lines are stored non-contiguously - so iterate the segments rather than assuming one contiguous span.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     public enum Content: ~Copyable, ~Escapable {
         /// No content (structural nodes: document, list, item, table, breaks, emphasis, …).

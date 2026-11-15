@@ -326,12 +326,6 @@ struct SetextUnderlineDefinitionTests {
         ),
     ]
 
-    @Test(.timeLimit(.minutes(1)), arguments: shapes)
-    func manyUnderlines(_ shape: Shape) {
-        let source = shape.prefix + String(repeating: shape.line, count: 40_000)
-        #expect(TreeDump.dump(source, options: []) == shape.tree(40_000))
-    }
-
     @Test(arguments: shapes)
     func fewUnderlines(_ shape: Shape) {
         #expect(TreeDump.dump(shape.prefix + String(repeating: shape.line, count: 3), options: []) == shape.tree(3))

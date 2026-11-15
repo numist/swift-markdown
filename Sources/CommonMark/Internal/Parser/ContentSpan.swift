@@ -69,7 +69,7 @@ internal struct ContentSpan: ~Escapable {
         self.multiIdentity = 0
     }
 
-    /// Multi-segment content: `segmentEnds` holds the running ends of `segments`, and `virtualLength` their total.
+    /// Multi-segment content: `segmentEnds` holds the running ends of `segments`, and `virtualLength` is the content's length, which can end before the last segment does.
     @_lifetime(copy source, copy segments, copy segmentEnds)
     init(source: Span<UInt8>, segments: Span<Segment>, segmentEnds: Span<Int>, virtualLength: Int, hint: PieceHint) {
         self.span = source

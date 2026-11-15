@@ -18,7 +18,7 @@ import Testing
 struct FootnoteDefinitionLabelLengthTests {
     private static let kelvinSign = "\u{212A}"
 
-    /// Footnote labels of up to 1,000 bytes, with no character limit.
+    /// Footnote reference labels of up to 1,000 bytes, with no character limit.
     private static var thousandByteLimits: MarkdownDocument.ParseLimits {
         var limits = MarkdownDocument.ParseLimits()
         limits.maxFootnoteLabelCharacters = .max

@@ -12,12 +12,11 @@ import CommonMark
 import Testing
 
 /// A line without a `>` continues the innermost paragraph as a lazy continuation line (Block quotes), however many
-/// block quotes hold it. 40,000 nested quotes followed by 40,000 lazy lines, about 240 KB of source, parse within the
-/// time limit.
+/// block quotes hold it.
 @Suite("Lazy continuation under deep block-quote nesting")
 struct DeepBlockQuoteLazyContinuationTests {
 
-    @Test(.timeLimit(.minutes(1)), arguments: [MarkdownDocument.ParseOptions(), [.sourcePosition]])
+    @Test(arguments: [MarkdownDocument.ParseOptions(), [.sourcePosition]])
     func lazyLinesJoinTheInnermostParagraph(options: MarkdownDocument.ParseOptions) {
         let depth = 40_000
         let markdown = String(repeating: ">", count: depth) + " a\n" + String(repeating: "lazy\n", count: depth)

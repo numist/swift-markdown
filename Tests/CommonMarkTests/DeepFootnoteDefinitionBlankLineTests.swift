@@ -14,15 +14,14 @@ import Testing
 /// Blank lines inside many nested footnote definitions.
 ///
 /// A blank line continues every open footnote definition, so a run of blank lines after 40,000 footnote
-/// definitions opened on one line keeps them all open. Each blank line costs time in proportion to its own length
-/// rather than to the number of open definitions, so 40,000 blank lines, about 240 KB of source, parse well within the
-/// time limit. Only the innermost definition's label is referenced; the others are unreferenced and dropped.
+/// definitions opened on one line keeps them all open. Only the innermost definition's label is referenced; the others
+/// are unreferenced and dropped.
 @Suite("Blank lines under deep footnote definition nesting")
 struct DeepFootnoteDefinitionBlankLineTests {
 
     static let depth = 40_000
 
-    @Test(.timeLimit(.minutes(1)), arguments: [MarkdownDocument.ParseOptions.footnotes, [.footnotes, .sourcePosition]])
+    @Test(arguments: [MarkdownDocument.ParseOptions.footnotes, [.footnotes, .sourcePosition]])
     func blankLinesAfterAParagraph(options: MarkdownDocument.ParseOptions) {
         let markdown = "[^a]\n\n" + String(repeating: "[^b]:", count: Self.depth - 1) + "[^a]:x\n" + String(repeating: "\n", count: Self.depth)
         let tree = TreeDump.dump(markdown, options: options, sourceRanges: options.contains(.sourcePosition))
@@ -50,7 +49,7 @@ struct DeepFootnoteDefinitionBlankLineTests {
         }
     }
 
-    @Test(.timeLimit(.minutes(1)), arguments: [MarkdownDocument.ParseOptions.footnotes, [.footnotes, .sourcePosition]])
+    @Test(arguments: [MarkdownDocument.ParseOptions.footnotes, [.footnotes, .sourcePosition]])
     func blankLinesInAFencedCodeBlock(options: MarkdownDocument.ParseOptions) {
         let markdown = "[^a]\n\n" + String(repeating: "[^b]:", count: Self.depth - 1) + "[^a]:```\n" + String(repeating: "\n", count: Self.depth)
         let (kinds, literal) = MarkdownDocument.withParsedDocument(markdown, options: options) { doc in

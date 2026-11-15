@@ -113,17 +113,19 @@ struct FootnoteDefinitionEmptyOpeningLineTightnessTests {
             """)
     }
 
-    @Test("a definition with an empty opening line before a list")
-    func outsideList() {
-        #expect(TreeDump.dump("[^b]:\n\n- a\n- c\n", options: [.footnotes]) == """
+    @Test("a definition with an empty opening line, followed by a nested list in the same item")
+    func beforeNestedList() {
+        #expect(TreeDump.dump("- [^b]:\n  - a\n  - c\n", options: [.footnotes]) == """
             document
               list bullet '-' tight
                 item
-                  paragraph
-                    text "a"
-                item
-                  paragraph
-                    text "c"
+                  list bullet '-' tight
+                    item
+                      paragraph
+                        text "a"
+                    item
+                      paragraph
+                        text "c"
 
             """)
     }

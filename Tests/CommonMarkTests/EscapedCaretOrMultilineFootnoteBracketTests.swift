@@ -12,10 +12,13 @@ import CommonMark
 import Testing
 
 /// A footnote reference's caret directly follows its `[`, and a footnote definition's label holds no whitespace, so
-/// neither a bracket whose caret is backslash-escaped nor one that spans a line ending is a footnote reference; with only
-/// footnote definitions to match, it is literal text.
-@Suite("Footnote-shaped bracket across a line ending")
-struct EscapedCaretMultilineFootnoteResolutionTests {
+/// neither a bracket whose caret is backslash-escaped nor one that spans a line ending is a footnote reference. A
+/// definition matches only the bracket's whole label: not a label that is only its start, such as its first line or the
+/// start of that line, and not one with U+FFFD where the bracket has another character. A bracket whose label is longer
+/// than 999 characters matches no definition. With only footnote definitions to match, each bracket, including one of
+/// multi-byte characters around a line ending, is literal text.
+@Suite("Footnote-shaped bracket with an escaped caret or a line ending")
+struct EscapedCaretOrMultilineFootnoteBracketTests {
     private static let long = String(repeating: "a", count: 998)
 
     static let cases: [(markdown: String, expected: String)] = [
@@ -134,7 +137,7 @@ struct EscapedCaretMultilineFootnoteResolutionTests {
                 text "[^a x]: note text"
 
             """),
-        ("![\\^\u{07F9}\n\u{FFFD}]", """
+        ("![\\^\u{07F9}\n\u{FFFD}]\n\n[^\u{07F9}]: note", """
             document
               paragraph
                 text "![^\u{07F9}"
@@ -142,7 +145,7 @@ struct EscapedCaretMultilineFootnoteResolutionTests {
                 text "\u{FFFD}]"
 
             """),
-        ("[\\^\u{1F600}\n\u{FFFD}]", """
+        ("[\\^\u{1F600}\n\u{FFFD}]\n\n[^\u{1F600}]: note", """
             document
               paragraph
                 text "[^\u{1F600}"

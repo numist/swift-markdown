@@ -14,7 +14,7 @@ import CommonMark
 /// Extended email autolinks are recognized left to right. When a candidate address is rejected, the next address's
 /// local part starts no earlier than the character that ended the candidate's domain: `+`, or a `.` not followed by
 /// an alphanumeric, ends a domain, while `-`, `_`, alphanumerics and a `.` followed by an alphanumeric continue it.
-/// A second `@` in a domain restarts the address just past the first `@`.
+/// A second `@` in a domain restarts the address there; its local part reaches back no further than just past the first `@`.
 @Suite("Extended email autolink local part after a rejected candidate")
 struct ExtendedEmailAutolinkAfterRejectedCandidateTests {
 
@@ -65,18 +65,6 @@ struct ExtendedEmailAutolinkAfterRejectedCandidateTests {
                 text "a@b_"
                 link "mailto:+c@d.e" ""
                   text "+c@d.e"
-
-            """)
-    }
-
-    @Test("`l@+@b.b`: the local part after the rejected `l@` is `+`")
-    func plusAtStart() {
-        #expect(TreeDump.dump("l@+@b.b", options: .gfmAutolink) == """
-            document
-              paragraph
-                text "l@"
-                link "mailto:+@b.b" ""
-                  text "+@b.b"
 
             """)
     }
@@ -177,6 +165,20 @@ struct ExtendedEmailAutolinkAfterRejectedCandidateTests {
                 text "a@b"
                 link "mailto:..c@d.d" ""
                   text "..c@d.d"
+
+            """)
+    }
+
+    // MARK: - An `@` with no domain
+
+    @Test("`l@+@b.b`: an `@` with no domain is rejected and the next local part starts right after it")
+    func emptyDomainRejected() {
+        #expect(TreeDump.dump("l@+@b.b", options: .gfmAutolink) == """
+            document
+              paragraph
+                text "l@"
+                link "mailto:+@b.b" ""
+                  text "+@b.b"
 
             """)
     }

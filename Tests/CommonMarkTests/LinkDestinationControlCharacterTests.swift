@@ -63,6 +63,11 @@ struct LinkDestinationControlCharacterTests {
         #expect(linkURL("[](a\u{0C}b)", options: Self.options) == nil)
     }
 
+    @Test("`[](a\\u{0C})` has the destination `a`")
+    func inlineTrailingFF() {
+        #expect(linkURL("[](a\u{0C})", options: Self.options) == "a")
+    }
+
     // MARK: Link reference definitions
 
     /// A link reference definition needs a destination, and the paragraph's final whitespace, here a line

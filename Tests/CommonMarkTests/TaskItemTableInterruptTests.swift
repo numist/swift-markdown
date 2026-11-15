@@ -183,7 +183,7 @@ struct TaskItemTableInterruptTests {
 
     /// `[x] [a]: /u` does not begin with a link reference definition, so `===` underlines it as a heading,
     /// and a heading is not the paragraph a task list item must begin with (Task list items (extension)).
-    @Test func setextHeadingAfterTaskItemRefDef() {
+    @Test func refDefShapedTaskItemLineIsSetextHeadingText() {
         #expect(TreeDump.dump("- [x] [a]: /u\n  b\n  ===", options: Self.options) == """
             document
               list bullet '-' tight
@@ -278,7 +278,7 @@ struct TaskItemTableInterruptTests {
     }
 
     /// `[x] [a]: /u` does not begin with a link reference definition, so `[a]: /u` is the paragraph's text.
-    @Test func refDefOnlyTaskItem() {
+    @Test func refDefShapedTaskItemContentStaysText() {
         #expect(TreeDump.dump("- [x] [a]: /u", options: Self.options) == """
             document
               list bullet '-' tight

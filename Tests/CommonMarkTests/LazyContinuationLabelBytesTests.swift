@@ -18,9 +18,9 @@ import CommonMark
 ///
 /// With byte limits of 6, each label below is a line ending, the lazy line's whitespace, and enough letters to make 6
 /// bytes, then 7. The lazy line's whitespace counts 3 bytes for three spaces, 1 for a tab, and in a nested block quote
-/// 3 for four spaces and 2 for a tab after the outer `>`, whose optional space takes one column. A link or attribute
-/// reference's definition writes its label on one line, so where the lazy line has no whitespace, the 7-byte label's
-/// definition is past the limit too.
+/// 3 for four spaces and 2 for a tab after the outer `>`, whose optional space takes one column, or 1 when that `>` is
+/// indented one space. A link or attribute reference's definition writes its label on one line, so where the lazy line
+/// has no whitespace, the 7-byte label's definition is past the limit too.
 @Suite("Lazy continuation line whitespace in label bytes")
 struct LazyContinuationLabelBytesTests {
 
@@ -151,6 +151,27 @@ struct LazyContinuationLabelBytesTests {
                     text "b]: /u"
               paragraph
                 text "[abc b]"
+
+            """),
+        (" > > [abc\n >\tb]: /u\n\n[abc b]", [], """
+            document
+              block_quote
+                block_quote
+              paragraph
+                link "/u" ""
+                  text "abc b"
+
+            """),
+        (" > > [abcd\n >\tb]: /u\n\n[abcd b]", [], """
+            document
+              block_quote
+                block_quote
+                  paragraph
+                    text "[abcd"
+                    softbreak
+                    text "b]: /u"
+              paragraph
+                text "[abcd b]"
 
             """),
         ("100. [abcd\nb]: /u\n\n[abcd b]", [], """
@@ -1381,8 +1402,8 @@ struct LazyContinuationLabelBytesTests {
             """)
     }
 
-    /// A NUL makes the paragraph's content a copy with the NUL replaced, which keeps the whitespace count of its lazy
-    /// lines, with and without source positions.
+    /// A NUL, which is replaced with U+FFFD (Insecure characters), leaves unchanged the bytes its paragraph's lazy
+    /// continuation lines count in a label, with and without source positions.
     @Test("a lazy continuation line's whitespace counts in a paragraph holding a NUL", arguments: [[], MarkdownDocument.ParseOptions.sourcePosition])
     func paragraphHoldingNUL(_ options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("[a b]: /u\n[ab b]: /u\n\n> \0 [a\n   b] [ab\n   b] [t][a\n   b] [t][ab\n   b]", options: options, limits: Self.limits) == """

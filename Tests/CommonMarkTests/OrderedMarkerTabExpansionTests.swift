@@ -66,10 +66,10 @@ struct OrderedMarkerTabExpansionTests {
             """)
     }
 
-    // The tab after `12.` spans one column, so the indentation is three columns.
-    @Test("wide marker: tab plus two spaces stays a paragraph")
+    // The tab after `12.` spans one column, so the indentation is four columns.
+    @Test("wide marker: tab plus three spaces stays a paragraph")
     func wideMarkerTabStaysParagraph() {
-        #expect(TreeDump.dump("12.\t  z", options: []) == """
+        #expect(TreeDump.dump("12.\t   z", options: []) == """
             document
               list ordered start=12 delim=period tight
                 item

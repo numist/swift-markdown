@@ -344,7 +344,7 @@ struct LabelLengthLimitTests {
     }
 
     /// U+212A KELVIN SIGN takes 3 bytes and case-folds to `k`, so the 2-byte reference `kk` names the 6-byte
-    /// definition `KK`.
+    /// definition `\u{212A}\u{212A}`.
     @Test("the byte limit bounds a footnote reference's label but not a footnote definition's")
     func footnoteDefinitionBytes() {
         let limits = footnoteLimits(bytes: 3)
@@ -430,6 +430,26 @@ struct LabelLengthLimitTests {
                 text "[a]: /u"
               paragraph
                 text "[a]"
+
+            """)
+        #expect(TreeDump.dump("[a]: /u\n\n[a]", options: [], limits: linkLimits(characters: -1)) == """
+            document
+              paragraph
+                text "[a]: /u"
+              paragraph
+                text "[a]"
+
+            """)
+        #expect(TreeDump.dump("x[^a]\n\n[^a]: n", options: .footnotes, limits: footnoteLimits(characters: -1)) == """
+            document
+              paragraph
+                text "x[^a]"
+
+            """)
+        #expect(TreeDump.dump("x[^a]\n\n[^a]: n", options: .footnotes, limits: footnoteLimits(bytes: -1)) == """
+            document
+              paragraph
+                text "x[^a]"
 
             """)
     }

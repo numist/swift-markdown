@@ -29,6 +29,60 @@ struct LabelNULReplacementTests {
             """)
     }
 
+    @Test func referenceLabelsMatchBeforeSetextUnderline() {
+        #expect(TreeDump.dump("[a\u{0}]: /u\n===\n\n[a\u{FFFD}]", options: []) == """
+            document
+              paragraph
+                text "==="
+              paragraph
+                link "/u" ""
+                  text "a\u{FFFD}"
+
+            """)
+    }
+
+    @Test func referenceLabelsMatchInSetextHeadingContent() {
+        #expect(TreeDump.dump("[a\u{0}]: /u\nx\n===\n\n[a\u{FFFD}]", options: []) == """
+            document
+              heading 1
+                text "x"
+              paragraph
+                link "/u" ""
+                  text "a\u{FFFD}"
+
+            """)
+    }
+
+    @Test func referenceLabelsMatchBeforeTable() {
+        #expect(TreeDump.dump("[a\u{0}]: /u\n| x |\n| - |\n\n[a\u{FFFD}]", options: [.tables]) == """
+            document
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "x"
+              paragraph
+                link "/u" ""
+                  text "a\u{FFFD}"
+
+            """)
+    }
+
+    @Test func referenceLabelsMatchInParagraphBeforeTable() {
+        #expect(TreeDump.dump("[a\u{0}]: /u\nb\n| x |\n| - |\n\n[a\u{FFFD}]", options: [.tables]) == """
+            document
+              paragraph
+                text "b"
+              table
+                table_header
+                  table_cell align=none colspan=1 rowspan=1
+                    text "x"
+              paragraph
+                link "/u" ""
+                  text "a\u{FFFD}"
+
+            """)
+    }
+
     @Test(arguments: differentPairs)
     func referenceLabelsDoNotMatch(_ definition: String, _ use: String) {
         #expect(TreeDump.dump("[\(definition)]: /u\n\n[\(use)]", options: []) == """

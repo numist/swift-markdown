@@ -9,73 +9,35 @@
 */
 
 import Testing
-import BasicContainers
-@testable import CommonMark
+import CommonMark
 
-@Suite("Line Reader Tests")
+@Suite("Line endings and tabs")
 struct LineReaderTests {
-    func collectRangesAndStrings(_ str: String) -> ([Range<Int>], [String]) {
-        let utf8 = UniqueArray<UInt8>(copying: str.utf8)
-        var reader = LineReader(source: utf8.span)
-        var lineRangeOutput: [Range<Int>] = []
-        var lineOutput: [String] = []
 
-        while let line = reader.next() {
-            lineRangeOutput.append(reader.lineRange)
-            var bytes: [UInt8] = []
-            for i in 0..<line.count {
-                bytes.append(line[i])
-            }
-            lineOutput.append(String(decoding: bytes, as: UTF8.self))
-        }
+    private func tree(_ source: String) -> String {
+        TreeDump.dump(source, options: [.sourcePosition], sourceRanges: true)
+    }
 
-        return (lineRangeOutput, lineOutput)
+    @Test(arguments: ["aa\nbb\ncc", "aa\r\nbb\rcc"])
+    func lineEndings(_ source: String) {
+        #expect(tree(source) == """
+            document @1:1-3:3
+              paragraph @1:1-3:3
+                text "aa" @1:1-1:3
+                softbreak @-
+                text "bb" @2:1-2:3
+                softbreak @-
+                text "cc" @3:1-3:3
+
+            """)
     }
-    
-    @Test("Line counting")
-    func lineCounting() {
-        let str = "aa\nbb\ncc"
-        let expectedRange = [
-            0..<2,
-            3..<5,
-            6..<8
-        ]
-        
-        let expectedLines = ["aa", "bb", "cc"]
-        
-        let (lineRangeOutput, lineOutput) = collectRangesAndStrings(str)
-        #expect(expectedRange == lineRangeOutput)
-        #expect(expectedLines == lineOutput)
-    }
-    
-    @Test("CRLF handling")
-    func crlfHandling() {
-        let str = "aa\r\nbb\rcc"
-        let expectedRange = [
-            0..<2,
-            4..<6,
-            7..<9
-        ]
-        
-        let expectedLines = ["aa", "bb", "cc"]
-        
-        let (lineRangeOutput, lineOutput) = collectRangesAndStrings(str)
-        #expect(expectedRange == lineRangeOutput)
-        #expect(expectedLines == lineOutput)
-    }
-    
-    @Test("Leading tab")
-    func leadingTab() {
-        let str = "\tfoo\tbaz\t\tbim\n"
-        let expectedRange = [
-            0..<13
-        ]
-        let expectedLines = [
-            "\tfoo\tbaz\t\tbim"
-        ]
-        
-        let (lineRangeOutput, lineOutput) = collectRangesAndStrings(str)
-        #expect(expectedRange == lineRangeOutput)
-        #expect(expectedLines == lineOutput)
+
+    @Test
+    func tabsInsideALineAreKept() {
+        #expect(tree("\tfoo\tbaz\t\tbim\n") == """
+            document @1:1-2:1
+              code_block "" "foo\\tbaz\\t\\tbim\\n" @1:2-1:14
+
+            """)
     }
 }

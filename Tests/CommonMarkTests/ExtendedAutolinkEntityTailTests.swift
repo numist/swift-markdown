@@ -11,8 +11,8 @@
 import CommonMark
 import Testing
 
-/// An extended autolink ending in `;` excludes a trailing `&`, one or more ASCII letters and the `;`; otherwise it
-/// excludes only the `;`.
+/// At a trailing `;`, an extended autolink's trailing-punctuation trim excludes a preceding `&` and one or more ASCII
+/// letters along with the `;`, or else the `;` alone, and then continues trimming.
 @Suite("Entity-like tail of an extended autolink")
 struct ExtendedAutolinkEntityTailTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .gfmAutolink]
@@ -28,6 +28,39 @@ struct ExtendedAutolinkEntityTailTests {
                 link "http://www.a.b/x" "" @1:1-1:10
                   text "www.a.b/x" @1:1-1:10
                 text "&ab;" @1:10-1:14
+
+            """)
+    }
+
+    @Test func punctuationBeforeLetterTailIsExcluded() {
+        #expect(tree("www.a.b/x.&ab;") == """
+            document @1:1-1:15
+              paragraph @1:1-1:15
+                link "http://www.a.b/x" "" @1:1-1:10
+                  text "www.a.b/x" @1:1-1:10
+                text ".&ab;" @1:10-1:15
+
+            """)
+    }
+
+    @Test func punctuationBeforeSemicolonIsExcluded() {
+        #expect(tree("www.a.b/x?;") == """
+            document @1:1-1:12
+              paragraph @1:1-1:12
+                link "http://www.a.b/x" "" @1:1-1:10
+                  text "www.a.b/x" @1:1-1:10
+                text "?;" @1:10-1:12
+
+            """)
+    }
+
+    @Test func bareAmpersandTailExcludesOnlySemicolon() {
+        #expect(tree("www.a.b/x&;") == """
+            document @1:1-1:12
+              paragraph @1:1-1:12
+                link "http://www.a.b/x&" "" @1:1-1:11
+                  text "www.a.b/x&" @1:1-1:11
+                text ";" @1:11-1:12
 
             """)
     }

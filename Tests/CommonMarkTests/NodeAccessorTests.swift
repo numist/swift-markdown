@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// The node accessors a tree walk with `children` alone doesn't reach: `content` for HTML blocks, attributes and
-/// footnotes, `Segments.byteCount`, `parent` at the root and `previous` past the first child.
+/// The node accessors: `content` for HTML blocks, attributes and footnotes, `Segments.byteCount` across several
+/// segments, `parent` at the root and `previous` on the second child.
 @Suite("Node accessors")
 struct NodeAccessorTests {
 

@@ -11,9 +11,10 @@
 import CommonMark
 import Testing
 
-/// Footnote labels follow the link label rules (Links): unescaped square brackets are not
-/// allowed inside them, and a reference matches a definition when their labels are equal after
-/// normalization, which strips and collapses whitespace, line endings included.
+/// As in a link label (Links), unescaped square brackets are not allowed inside a footnote label,
+/// and a definition's label also holds no whitespace. A reference matches a definition when their
+/// labels are equal after link label normalization (Links), so whitespace around a reference's
+/// label, line endings included, is ignored.
 @Suite("Footnote labels")
 struct FootnoteLabelTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes]

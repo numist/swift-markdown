@@ -21,7 +21,7 @@ struct FootnoteCrossLineBracketLookupTests {
     }
 
     @Test(arguments: [
-            ("[^\u{2003}\nxxxx]\n\n[^\u{FFFD}\u{FFFD}]: n", """
+            ("[^\u{2003}\nxxxx]\n\n[^\u{2003}]: n", """
                 document
                   paragraph
                     text "[^\u{2003}"
@@ -29,7 +29,7 @@ struct FootnoteCrossLineBracketLookupTests {
                     text "xxxx]"
 
                 """),
-            ("[^\u{2003}\nxxxx]\n\n[^\u{FFFD}]: n", """
+            ("[^\u{2003}\nxxxx]\n\n[^\u{2003}xxxx]: n", """
                 document
                   paragraph
                     text "[^\u{2003}"
@@ -37,7 +37,7 @@ struct FootnoteCrossLineBracketLookupTests {
                     text "xxxx]"
 
                 """),
-            ("[^\u{1F600}\nxxxxx]\n\n[^\u{FFFD}\u{FFFD}\u{FFFD}]: n", """
+            ("[^\u{1F600}\nxxxxx]\n\n[^\u{1F600}]: n", """
                 document
                   paragraph
                     text "[^😀"
@@ -45,7 +45,7 @@ struct FootnoteCrossLineBracketLookupTests {
                     text "xxxxx]"
 
                 """),
-            ("[^a\u{20AC}\nxxxxx]\n\n[^a\u{FFFD}\u{FFFD}]: n", """
+            ("[^a\u{20AC}\nxxxxx]\n\n[^a\u{20AC}]: n", """
                 document
                   paragraph
                     text "[^a€"

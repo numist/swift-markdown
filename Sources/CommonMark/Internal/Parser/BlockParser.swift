@@ -178,6 +178,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     enum IncompleteDefinition {
         /// No later line completes it.
         case cannotComplete
+        /// Its label is still open at the end of the lines, so it can complete only at a later unescaped `]`. The
+        /// lines up to the source offset `readEnd` hold none.
+        case openLabel(readEnd: Int)
         /// Its title, on its destination's line, is still open, so it completes only at a closer that whitespace alone
         /// follows on its line. `title` has read the lines up to the source offset `readEnd`.
         case openTitle(LinkTitleScan, readEnd: Int)
@@ -1509,7 +1512,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         }
         guard let (label, contentStart) = matchDefinitionLabel(from: labelStart, in: content) else {
             // A label holds no unescaped `[` and fits the link label limits.
-            return linkLabelIsOpen(from: labelStart, end: end, in: content) ? nil : .cannotComplete
+            return linkLabelIsOpen(from: labelStart, end: end, in: content) ? .openLabel(readEnd: readEnd) : .cannotComplete
         }
         if normalizeLabel(virtualRange: label, in: content).isEmpty {
             return .cannotComplete
@@ -1540,14 +1543,20 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     }
 
     /// Whether the definition that begins the open paragraph's lines in `leaf`, which an earlier underline found
-    /// incomplete (see `IncompleteDefinition`), may complete now, so that the lines must be read again. An open title
-    /// reads the lines added since.
+    /// incomplete (see `IncompleteDefinition`), may complete now, so that the lines must be read again. An open label
+    /// or title reads the lines added since.
     private mutating func incompleteDefinitionMayComplete(_ leaf: borrowing PendingLeaf) -> Bool {
         let recorded = openParagraphState!.incompleteDefinition
         switch recorded {
         case nil:
             return true
         case .cannotComplete?:
+            return false
+        case .openLabel(let readEnd)?:
+            guard let end = linesEndBeforeLabelCloser(from: readEnd, in: leaf) else {
+                return true
+            }
+            openParagraphState!.incompleteDefinition = .openLabel(readEnd: end)
             return false
         case .openTitle(var title, let readEnd)?:
             let read = readTitle(&title, from: readEnd, in: leaf)
@@ -1564,26 +1573,12 @@ internal struct BlockParser : ~Copyable, ~Escapable {
     /// and the source offset where the lines end.
     private func readTitle(_ title: inout LinkTitleScan, from start: Int, in leaf: borrowing PendingLeaf) -> (closes: Bool, end: Int) {
         var closer: (end: Int, lineEnd: Int)? = nil
-        let end: Int
-        switch leaf.content {
-        case .lazy(let range, _):
-            readTitle(&title, sourceBytes: start..<range.upperBound, lastCloser: &closer)
-            end = range.upperBound
-        case .segments(let segs):
-            // The lines lie in source order, so the segment that holds the byte before `start` is found from the last.
-            var first = segs.count - 1
-            while !(segs[first].inSource && segs[first].offset < start) {
-                first -= 1
+        let end = forEachLineRun(from: start, in: leaf) { run in
+            if let run {
+                readTitle(&title, sourceBytes: run, lastCloser: &closer)
+            } else if title.canContinue {
+                _ = title.read(UInt8(ascii: "\n"))
             }
-            readTitle(&title, sourceBytes: start..<(segs[first].offset + segs[first].length), lastCloser: &closer)
-            for i in (first + 1)..<segs.count {
-                if segs[i].inSource {
-                    readTitle(&title, sourceBytes: segs[i].chunk.range, lastCloser: &closer)
-                } else if title.canContinue {
-                    _ = title.read(UInt8(ascii: "\n"))
-                }
-            }
-            end = segmentsSourceSpan(segs).end
         }
         guard let closer else {
             return (false, end)
@@ -1596,6 +1591,56 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             i += 1
         }
         return (true, end)
+    }
+
+    /// Reads the open paragraph's lines in `leaf` from the source offset `start`, where the lines read before end or
+    /// only whitespace follows them, for an unescaped `]` that may close a link label still open there (Link reference
+    /// definitions). Returns the source offset where the lines end, or `nil` when it reads such a `]`.
+    private func linesEndBeforeLabelCloser(from start: Int, in leaf: borrowing PendingLeaf) -> Int? {
+        var closerFound = false
+        var escaped = false
+        let end = forEachLineRun(from: start, in: leaf) { run in
+            // A backslash escapes nothing across a line ending (Backslash escapes).
+            guard let run else {
+                escaped = false
+                return
+            }
+            var i = run.lowerBound
+            while i < run.upperBound, !closerFound {
+                let b = sourceBytes[i]
+                if escaped {
+                    escaped = false
+                } else if b == UInt8(ascii: "\\") {
+                    escaped = true
+                } else if b == UInt8(ascii: "]") {
+                    closerFound = true
+                }
+                i += 1
+            }
+        }
+        return closerFound ? nil : end
+    }
+
+    /// Calls `body` with each run of the open paragraph's lines in `leaf` from the source offset `start`, just past a
+    /// byte read before, in order: a range of source bytes, or `nil` for a line join. Returns the source offset where
+    /// the lines end.
+    private func forEachLineRun(from start: Int, in leaf: borrowing PendingLeaf, _ body: (Range<Int>?) -> Void) -> Int {
+        switch leaf.content {
+        case .lazy(let range, _):
+            body(start..<range.upperBound)
+            return range.upperBound
+        case .segments(let segs):
+            // The lines lie in source order, so the segment that holds the byte before `start` is found from the last.
+            var first = segs.count - 1
+            while !(segs[first].inSource && segs[first].offset < start) {
+                first -= 1
+            }
+            body(start..<(segs[first].offset + segs[first].length))
+            for i in (first + 1)..<segs.count {
+                body(segs[i].inSource ? segs[i].chunk.range : nil)
+            }
+            return segmentsSourceSpan(segs).end
+        }
     }
 
     /// Reads `title` on through source bytes `range`, which end at a line ending or the end of a paragraph's lines,
@@ -1915,8 +1960,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             return true
         }
         // The line has opened no container yet, so a list marker or a footnote definition is recognized here unless the
-        // limit on containers opened before one is zero.
-        if limits.maxContainersOpenedOnLineBeforeListMarker <= 0 {
+        // limit on containers opened before one is negative.
+        if limits.maxContainersOpenedOnLineBeforeListMarker < 0 {
             return false
         }
         // A footnote definition opener `[^label]:` interrupts a paragraph, so `[^a]: A\n[^b]: B` opens two
@@ -2085,7 +2130,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var column = startColumn
         var lineColumns = LineColumns(lineStart: lineRange.lowerBound)
         var noThematicBreakBefore = startCursor
-        // The block quotes, list items and footnote definitions this line has opened; at the limit a list marker or a
+        // The block quotes, list items and footnote definitions this line has opened; past the limit a list marker or a
         // footnote definition is not recognized.
         var containersOpened = 0
         let maxContainersBeforeListMarker = limits.maxContainersOpenedOnLineBeforeListMarker
@@ -2135,7 +2180,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             // A footnote definition is a container that takes the rest of the line.
             if storage.options.contains(.footnotes),
                indent < 4,
-               containersOpened < maxContainersBeforeListMarker,
+               containersOpened <= maxContainersBeforeListMarker,
                let fn = matchFootnoteDefinition(
                    range: cursor..<lineRange.upperBound,
                    firstNonSpace: firstNonSpace
@@ -2150,7 +2195,7 @@ internal struct BlockParser : ~Copyable, ~Escapable {
             }
 
             // Indents are in columns, so a marker a tab pushes four columns in, though fewer bytes, is indented code.
-            if indent < 4, containersOpened < maxContainersBeforeListMarker, let marker = matchListMarker(
+            if indent < 4, containersOpened <= maxContainersBeforeListMarker, let marker = matchListMarker(
                 range: cursor..<lineRange.upperBound,
                 firstNonSpace: firstNonSpace,
                 markerColumn: firstNonSpaceColumn,

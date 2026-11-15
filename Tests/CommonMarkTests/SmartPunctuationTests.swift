@@ -72,6 +72,7 @@ struct SmartPunctuationTests {
         #expect(smart("a---b") == "a\u{2014}b")       // em
         #expect(smart("a----b") == "a\u{2013}\u{2013}b")        // en en
         #expect(smart("a-----b") == "a\u{2014}\u{2013}b")       // em en
+        #expect(smart("a-------b") == "a\u{2014}\u{2013}\u{2013}b")       // em en en
     }
 
     @Test("a lone hyphen is left untouched")
@@ -96,6 +97,6 @@ struct SmartPunctuationTests {
 
     @Test("without .smart, punctuation is left as-is")
     func smartDisabled() {
-        #expect(plain(#"He said "hello"--..."#) == #"He said "hello"--..."#)
+        #expect(plain(#"He said "hello" -- it's a 'quote'---wait..."#) == #"He said "hello" -- it's a 'quote'---wait..."#)
     }
 }

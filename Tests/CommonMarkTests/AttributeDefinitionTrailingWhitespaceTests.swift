@@ -172,7 +172,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
             """)
     }
 
-    /// A definition that doesn't start a paragraph is paragraph text.
+    /// A definition that follows paragraph text is paragraph text.
     @Test
     func definitionAfterParagraphTextIsLiteral() {
         #expect(TreeDump.dump("^[][$]\n^[$]:l \n", options: Self.options) == """

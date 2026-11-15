@@ -46,7 +46,7 @@ struct TableSpanTests {
     // MARK: - colspan beyond the column count
 
     // Excess cells are ignored (Tables (extension)), but a `||` filler adds to the colspan of the nearest
-    // non-empty cell to its left, and when that cell is kept its colspan is not capped at the column count.
+    // cell to its left that is not a `||` filler, and when that cell is kept its colspan is not capped at the column count.
 
     @Test("one `||` filler grows a single-column cell's colspan past the column count")
     func colspanExceedsColumnCountByOne() {
@@ -165,10 +165,11 @@ struct TableSpanTests {
         | a | b | c |
         |---|---|---|
         | x || y |
+        | ^ | z | w |
         """
         let rows = firstTableCells(source, options: .tables)
-        for row in rows {
-            #expect(row.allSatisfy { $0.columns == 1 && $0.rows == 1 })
-        }
+        #expect(rows.map { $0.map(\.columns) } == [[1, 1, 1], [1, 1, 1], [1, 1, 1]])
+        #expect(rows.map { $0.map(\.rows) } == [[1, 1, 1], [1, 1, 1], [1, 1, 1]])
+        #expect(rows.map { $0.map(\.text) } == [["a", "b", "c"], ["x", "", "y"], ["^", "z", "w"]])
     }
 }

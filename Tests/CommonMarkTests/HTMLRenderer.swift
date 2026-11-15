@@ -219,7 +219,7 @@ internal enum HTMLRenderer {
     ) {
         out += "<pre><code"
         if let info = node.codeBlockInfoString(), !info.isEmpty {
-            // Take the first whitespace-separated word as the language.
+            // The language is the info string up to its first space or tab.
             var lang = ""
             for ch in info {
                 if ch == " " || ch == "\t" {
@@ -325,7 +325,9 @@ internal enum HTMLRenderer {
                     let c = bytes[j]
                     let isLetter = (c >= UInt8(ascii: "a") && c <= UInt8(ascii: "z"))
                         || (c >= UInt8(ascii: "A") && c <= UInt8(ascii: "Z"))
-                    if !isLetter {
+                    let isDigitOrHyphen = (c >= UInt8(ascii: "0") && c <= UInt8(ascii: "9"))
+                        || c == UInt8(ascii: "-")
+                    if !(isLetter || (j > nameStart && isDigitOrHyphen)) {
                         break
                     }
                     j += 1

@@ -33,6 +33,7 @@ struct DeepNestingStackTests {
         case "emphasis around smart quotes": String(repeating: "*a ", count: depth) + "'x' \"y\"" + String(repeating: " b*", count: depth)
         case "emphasis around a footnote-shaped bracket across a line": String(repeating: "*a ", count: depth) + "[^x\ny]" + String(repeating: " b*", count: depth)
         case "emphasis around caret brackets": String(repeating: "*a ", count: depth) + "x[^[]]y" + String(repeating: " b*", count: depth)
+        case "emphasis around a CRLF": String(repeating: "*a ", count: depth) + "x\r\ny" + String(repeating: " b*", count: depth)
         default: preconditionFailure("unknown shape \(shape)")
         }
     }
@@ -41,7 +42,8 @@ struct DeepNestingStackTests {
     static func nestedKind(_ shape: String) -> MarkdownNode.Kind {
         switch shape {
         case "emphasis", "emphasis around an email", "emphasis around smart quotes",
-             "emphasis around a footnote-shaped bracket across a line", "emphasis around caret brackets": .emphasis
+             "emphasis around a footnote-shaped bracket across a line", "emphasis around caret brackets",
+             "emphasis around a CRLF": .emphasis
         case "strong emphasis": .strong
         case "strikethrough": .strikethrough
         case "images", "images around a link": .image
@@ -54,6 +56,7 @@ struct DeepNestingStackTests {
         "emphasis", "strong emphasis", "strikethrough", "images", "images around a link", "attributes",
         "emphasis around an email", "emphasis around smart quotes",
         "emphasis around a footnote-shaped bracket across a line", "emphasis around caret brackets",
+        "emphasis around a CRLF",
     ]
 
     @available(macOS 15, iOS 18, tvOS 18, watchOS 11, visionOS 2, *)

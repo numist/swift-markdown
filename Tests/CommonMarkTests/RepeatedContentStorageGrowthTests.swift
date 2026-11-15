@@ -62,7 +62,7 @@ struct RepeatedContentStorageGrowthTests {
         Shape("nested smart quotes", blockAndInlineOnly(.smart)) { repeated("\"", $0) + "a" + repeated("\"", $0) },
         Shape("entities", blockAndInlineOnly([])) { repeated("&amp;", $0) },
         Shape("an entity before brackets", blockAndInlineOnly([])) { "&amp;" + repeated("[a]", $0) },
-        Shape("a numeric entity before emphasis openers", blockAndInlineOnly([])) { "&#65;" + repeated("*a", $0) },
+        Shape("a numeric entity before emphasis between letters", blockAndInlineOnly([])) { "&#65;" + repeated("*a", $0) },
         Shape("backslash escapes", blockAndInlineOnly([])) { repeated("\\*a", $0) },
         Shape("NULs", blockAndInlineOnly([])) { repeated("a\u{0}", $0) },
         Shape("a NUL before brackets", blockAndInlineOnly([])) { "\u{0}" + repeated("[a]", $0) },

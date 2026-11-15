@@ -13,10 +13,13 @@ import Testing
 
 /// An extended email autolink's local part is the run of ASCII alphanumerics, `.`, `+`, `-` and `_` before the `@`.
 /// A lowercase `mailto:` or `xmpp:` directly before the local part, and not directly after an ASCII letter or digit, is
-/// part of the autolink, as are the local-part characters before it, and the destination is then the link text with
-/// no `mailto:` added. With such a scheme the local part may be empty, and after `xmpp:` the domain may hold `/`,
-/// though not as its last character. A second `@` in the domain restarts the address after the first `@`; a scheme
-/// before the first `@`, and a period in the domain before the second, still count for the restarted address.
+/// part of the autolink, and the scan continues before it as it does before the local part, so local-part characters
+/// and further such schemes before it join the autolink too. The destination is then the link text with no `mailto:`
+/// added. With such a scheme the local part may be empty, and after `xmpp:` the domain may hold `/`,
+/// though not as its last character. A second `@` in the domain restarts the address at the second `@`, its local
+/// part the local-part characters before it, which must not be empty; a scheme before the first `@` still counts for
+/// the restarted address's destination and domain, and a period in the domain before the second `@` still counts for
+/// its domain.
 @Suite("Extended email autolink scan")
 struct ExtendedEmailAutolinkScanTests {
     private static let options: MarkdownDocument.ParseOptions = [.gfmAutolink]
@@ -62,6 +65,32 @@ struct ExtendedEmailAutolinkScanTests {
             """)
     }
 
+    @Test func restartedAddressAfterXmppDomainHoldsSlash() {
+        #expect(tree("xmpp:a@b@c.d/e") == """
+            document
+              paragraph
+                text "xmpp:a@"
+                link "b@c.d/e" ""
+                  text "b@c.d/e"
+
+            """)
+    }
+
+    @Test func restartedAddressLocalPartStopsAtXmppDomainSlash() {
+        #expect(tree("xmpp:a@b/c@d.e") == """
+            document
+              paragraph
+                text "xmpp:a@b/"
+                link "c@d.e" ""
+                  text "c@d.e"
+
+            """)
+    }
+
+    @Test func restartedAddressNeedsLocalPartAfterScheme() {
+        #expect(tree("mailto:a@@b.c") == text("mailto:a@@b.c"))
+    }
+
     @Test func periodBeforeSecondAtSignCountsForRestartedAddress() {
         #expect(tree("a@b.c@d") == """
             document
@@ -97,6 +126,17 @@ struct ExtendedEmailAutolinkScanTests {
               paragraph
                 link "mailto:x@a.b" ""
                   text "mailto:x@a.b"
+
+            """)
+    }
+
+    @Test func mailtoDomainEndsAtSlash() {
+        #expect(tree("mailto:x@a.b/c") == """
+            document
+              paragraph
+                link "mailto:x@a.b" ""
+                  text "mailto:x@a.b"
+                text "/c"
 
             """)
     }
@@ -167,6 +207,16 @@ struct ExtendedEmailAutolinkScanTests {
             """)
     }
 
+    @Test func schemeBeforeSchemeJoinsLink() {
+        #expect(tree("mailto:mailto:x@a.b") == """
+            document
+              paragraph
+                link "mailto:mailto:x@a.b" ""
+                  text "mailto:mailto:x@a.b"
+
+            """)
+    }
+
     @Test func schemeAfterPunctuationJoinsLocalPart() {
         #expect(tree("a.mailto:x@b.c") == """
             document
@@ -204,6 +254,17 @@ struct ExtendedEmailAutolinkScanTests {
             document
               paragraph
                 text "amailto:"
+                link "mailto:x@a.b" ""
+                  text "x@a.b"
+
+            """)
+    }
+
+    @Test func schemeAfterDigitEndsLocalPart() {
+        #expect(tree("1mailto:x@a.b") == """
+            document
+              paragraph
+                text "1mailto:"
                 link "mailto:x@a.b" ""
                   text "x@a.b"
 

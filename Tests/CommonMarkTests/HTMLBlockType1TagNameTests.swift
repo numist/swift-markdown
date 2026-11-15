@@ -132,20 +132,13 @@ struct HTMLBlockType1TagNameTests {
         #expect(TreeDump.dump(source, options: .sourcePosition, sourceRanges: true) == tree)
     }
 
-    @Test("`<textarea>` and `<textarea/>` open HTML blocks (type 7)", arguments: [
-        ("<textarea>", """
-            document
-              html_block "<textarea>\\n"
-
-            """),
-        ("<textarea/>", """
+    @Test("`<textarea/>` opens an HTML block (type 7)")
+    func selfClosingTextareaMeetsType7StartCondition() {
+        #expect(TreeDump.dump("<textarea/>", options: []) == """
             document
               html_block "<textarea/>\\n"
 
-            """),
-    ])
-    func textareaMeetsType7StartCondition(_ source: String, _ tree: String) {
-        #expect(TreeDump.dump(source, options: []) == tree)
+            """)
     }
 
     @Test("a `<textarea>` HTML block ends at a blank line (type 7)")

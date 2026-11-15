@@ -29,6 +29,30 @@ struct TaskListMarkerAfterDefinitionsTests {
             """)
     }
 
+    @Test("a marker on a lazy continuation line after the definitions is text")
+    func markerOnLazyContinuationLine() {
+        #expect(TreeDump.dump("- [a]: /u\n[ ] foo\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
+            document @1:1-3:1
+              list bullet '-' tight @1:1-2:8
+                item @1:1-2:8
+                  paragraph @2:1-2:8
+                    text "[ ] foo" @2:1-2:8
+
+            """)
+    }
+
+    @Test("a marker after the definitions in a paragraph holding a NUL is text")
+    func markerInParagraphHoldingNUL() {
+        #expect(TreeDump.dump("- [a]: /u\n  [ ] f\0\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """
+            document @1:1-3:1
+              list bullet '-' tight @1:1-2:9
+                item @1:1-2:9
+                  paragraph @2:3-2:9
+                    text "[ ] f\u{FFFD}" @2:3-2:9
+
+            """)
+    }
+
     @Test("a marker after a line tabulation is text")
     func markerAfterLineTabulation() {
         #expect(TreeDump.dump("- [a]: /u\n  \u{0B}[ ] b\n", options: [.tasklist, .sourcePosition], sourceRanges: true) == """

@@ -89,6 +89,12 @@ struct AttributeUnresolvedLabelTests {
                 text "^[x]" @1:1-1:8
 
             """)
+        #expect(tree("^[c]: d\n\n^[x][ ]") == """
+            document @1:1-3:8
+              paragraph @3:1-3:8
+                text "^[x]" @3:1-3:8
+
+            """)
     }
 
     /// An inline attribute has no shortcut form, so bracket text naming a definition is still text.
@@ -282,6 +288,12 @@ struct AttributeUnresolvedLabelTests {
     /// Attribute definitions and link reference definitions are looked up separately.
     @Test("a label naming only a link definition is dropped")
     func labelNamingLinkDefinition() {
+        #expect(tree("[b]: /u\n\n^[c]: d\n\n^[x][b]") == """
+            document @1:1-5:8
+              paragraph @5:1-5:8
+                text "^[x]" @5:1-5:8
+
+            """)
         #expect(tree("[b]: /u\n\n^[x][b]") == """
             document @1:1-3:8
               paragraph @3:1-3:8

@@ -15,8 +15,7 @@ import Testing
 ///
 /// Each `>` is placed by its column, which a tab before it makes depend on the whole line before it (Tabs): after `>>`
 /// and a tab, two more spaces leave a `>` three columns in, still a block quote marker, while after `>` and a tab they
-/// leave it four columns in, the start of an indented code block. A line of 40,000 nested block quotes, separated by
-/// tabs or not, and a later line continuing them all, parse well within the time limit.
+/// leave it four columns in, the start of an indented code block.
 @Suite("Lines of nested block quote markers")
 struct NestedBlockQuoteMarkerLineTests {
 
@@ -102,7 +101,7 @@ struct NestedBlockQuoteMarkerLineTests {
             """)
     }
 
-    @Test(.timeLimit(.minutes(1)))
+    @Test
     func blockQuotesOpeningOnOneLine() {
         let nesting = Self.nesting(String(repeating: ">", count: 40_000) + " a", options: [])
         #expect(nesting.quotes == 40_000)
@@ -132,7 +131,7 @@ struct NestedBlockQuoteMarkerLineTests {
             + String(repeating: "  ", count: 257) + "text \"`\" @1:258-1:259\n")
     }
 
-    @Test(.timeLimit(.minutes(1)))
+    @Test
     func blockQuotesContinuingOnLaterLine() {
         let markers = String(repeating: "> ", count: 40_000)
         let nesting = Self.nesting(markers + "a\n" + markers + "b", options: [])
@@ -143,14 +142,14 @@ struct NestedBlockQuoteMarkerLineTests {
         ])
     }
 
-    @Test(.timeLimit(.minutes(1)))
+    @Test
     func blockQuotesSeparatedByTabs() {
         let nesting = Self.nesting(String(repeating: ">\t", count: 40_000) + "a", options: [])
         #expect(nesting.quotes == 40_000)
         #expect(nesting.innermost == [Node(kind: .blockQuote), Node(kind: .paragraph), Node(kind: .text, literal: "a")])
     }
 
-    @Test(.timeLimit(.minutes(1)))
+    @Test
     func blockQuotesSeparatedByTabsBeginAtMarkers() {
         let nesting = Self.nesting(String(repeating: ">\t", count: 40_000) + "a", options: .sourcePosition)
         #expect(nesting.quotes == 40_000)

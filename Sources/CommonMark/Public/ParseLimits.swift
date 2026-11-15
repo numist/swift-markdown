@@ -9,9 +9,9 @@
 */
 
 extension MarkdownDocument {
-    /// Bounds on the size of constructs the parser recognizes.
+    /// Bounds and settings that control which constructs the parser recognizes.
     ///
-    /// A construct past a limit is not recognized, and its source parses as other content, usually text. The defaults follow GFM 0.29 where it states a limit, a footnote reference's label takes a link label's 999 characters, and the rest are unlimited (`Int.max`). A value below its meaningful range behaves as the nearest meaningful value.
+    /// A construct past one of the `max…` limits, or a reference past `referenceExpansionBudget`, is not recognized, and its source parses as other content, usually text. The defaults follow GFM 0.29 where it states a limit, a footnote reference's label takes a link label's 999 characters, and the rest are unlimited (`Int.max`). A value below its meaningful range behaves as the nearest meaningful value.
     ///
     ///     var limits = MarkdownDocument.ParseLimits()
     ///     limits.maxCodeSpanOpeningBackticks = 80
@@ -50,7 +50,7 @@ extension MarkdownDocument {
         /// The longest backtick string that can open a code span. The default is unlimited.
         public var maxCodeSpanOpeningBackticks: Int = .max
 
-        /// The number of containers opened earlier on the same line at which a list marker or a footnote definition is no longer recognized. Block quotes count toward it but are always recognized. The default is unlimited.
+        /// The most containers a line can open before a list marker or a footnote definition on it is still recognized; past it, a list marker or a footnote definition is not recognized. Block quotes count toward it but are always recognized. The default is unlimited.
         public var maxContainersOpenedOnLineBeforeListMarker: Int = .max
 
         /// The longest opening code fence length a closing fence has to match: a closing fence closes the block when its length is at least the smaller of the opening fence's length and this value. The default is unlimited.

@@ -49,7 +49,6 @@ struct ContainerParagraphSourceContentTests {
         "- a\n  b\n  c\n",
         "> a b\n> c d\n> e f\n\n- x y\n  z w\n",
         "> a\n> b\n> c\n> d\n",
-        "> a\n> |-\n",
         "> a | b | c\n> --|--\n",
     ])
     func noMaterializedCopy(_ source: String) {
