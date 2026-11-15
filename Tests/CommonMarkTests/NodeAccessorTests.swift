@@ -12,7 +12,8 @@ import Testing
 import CommonMark
 
 /// The node accessors: `content` for HTML blocks, attributes and footnotes, `Segments.byteCount` across several
-/// segments, `parent` at the root and `previous` on the second child.
+/// segments, `Segments.isEmpty` for an empty and a non-empty body, `parent` at the root and `previous` on the second
+/// child.
 @Suite("Node accessors")
 struct NodeAccessorTests {
 
@@ -87,6 +88,25 @@ struct NodeAccessorTests {
         }
         #expect(counts?.0 == 5)
         #expect(counts?.1 == 5)
+    }
+
+    @Test("a code block body is empty only when the block holds no lines", arguments: [
+        ("```\n```\n", true),
+        ("```\na\n```\n", false),
+    ])
+    func segmentsIsEmpty(markdown: String, isEmpty: Bool) {
+        guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
+        let result = MarkdownDocument.withParsedDocument(markdown) { document -> Bool? in
+            var result: Bool?
+            document.root.children.forEach { block in
+                switch block.content {
+                case .codeBlock(_, let body): result = body.isEmpty
+                default: break
+                }
+            }
+            return result
+        }
+        #expect(result == isEmpty)
     }
 
     @Test("the root has no parent, and a second child's previous sibling is the first")
