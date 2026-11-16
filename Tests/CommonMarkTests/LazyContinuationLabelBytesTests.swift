@@ -1385,6 +1385,41 @@ struct LazyContinuationLabelBytesTests {
             """)
     }
 
+    /// The first block quote's lazy line keeps whitespace. In the second, `abcd`, a line ending and `b` are 6 bytes
+    /// when the line its block quote continues adds none, and `abcde` makes 7.
+    @Test("a continuation line its block quote continues adds no bytes in a document with a lazy line")
+    func continuedLineAfterLazyLine() {
+        #expect(TreeDump.dump("> a\n   b\n\n> [abcd\n> b]: /u\n\n[abcd b]", options: [], limits: Self.limits) == """
+            document
+              block_quote
+                paragraph
+                  text "a"
+                  softbreak
+                  text "b"
+              block_quote
+              paragraph
+                link "/u" ""
+                  text "abcd b"
+
+            """)
+        #expect(TreeDump.dump("> a\n   b\n\n> [abcde\n> b]: /u\n\n[abcde b]", options: [], limits: Self.limits) == """
+            document
+              block_quote
+                paragraph
+                  text "a"
+                  softbreak
+                  text "b"
+              block_quote
+                paragraph
+                  text "[abcde"
+                  softbreak
+                  text "b]: /u"
+              paragraph
+                text "[abcde b]"
+
+            """)
+    }
+
     @Test("a lazy continuation line's whitespace counts in a setext heading's label")
     func setextHeading() {
         #expect(TreeDump.dump("[a b]: /u\n[ab b]: /u\n\n> [a\n   b] [ab\n   b]\n> ===", options: [], limits: Self.limits) == """
