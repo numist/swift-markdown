@@ -279,18 +279,9 @@ extension BlockParser {
         in content: borrowing ContentSpan,
         recorded: LazyLineWhitespace
     ) -> (interior: Range<Int>, afterEnd: Int)? {
-        if let label = content.withForwardReader(from: start, { byte in
+        // Only inline-only content parsed in place holds a CR, and it has no lazy continuation lines.
+        content.withForwardReader(from: start) { byte in
             scanLinkLabel(from: start, end: end, crlfIsOneCharacter: false, byte: byte, countsLazyLineWhitespace: true) {
-                lazyLineWhitespaceBytes(afterLineJoinAt: $0, in: content, recorded: recorded)
-            }
-        }) {
-            return label
-        }
-        guard contentHoldsCR else {
-            return nil
-        }
-        return content.withForwardReader(from: start) { byte in
-            scanLinkLabel(from: start, end: end, crlfIsOneCharacter: true, byte: byte, countsLazyLineWhitespace: true) {
                 lazyLineWhitespaceBytes(afterLineJoinAt: $0, in: content, recorded: recorded)
             }
         }
