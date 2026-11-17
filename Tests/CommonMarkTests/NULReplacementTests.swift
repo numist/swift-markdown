@@ -109,6 +109,21 @@ struct NULReplacementTests {
             """)
     }
 
+    /// The `===` line follows a paragraph holding only a link reference definition, which it cannot
+    /// underline (Setext headings).
+    @Test("NUL in a link reference definition title followed by `===` becomes U+FFFD")
+    func setextStrippedReferenceDefinitionTitle() {
+        #expect(TreeDump.dump("[a]: /u \"t\u{0}\"\n===\n\n[a]", options: []) == """
+            document
+              paragraph
+                text "==="
+              paragraph
+                link "/u" "t\u{FFFD}"
+                  text "a"
+
+            """)
+    }
+
     /// The `===` line follows a paragraph holding only an attribute definition, which it cannot
     /// underline (Setext headings).
     @Test("NUL in a reference-form `^[label]: ..` attribute followed by `===` becomes U+FFFD")

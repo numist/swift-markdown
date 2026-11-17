@@ -3801,8 +3801,8 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         storage.setSourceEnd(fnIdx, rawLabel.offset + rawLabel.length + 2)
         storage.footnoteDefinitionOrder.append(fnIdx)
         let key = normalizeLabel(chunk: label)
-        if !key.isEmpty && storage.footnoteMap[key] == nil {
-            storage.footnoteMap[key] = fnIdx
+        if !key.isEmpty {
+            storage.footnoteMap.storeIfAbsent(fnIdx, forKey: key)
         }
         return fnIdx
     }
@@ -3994,14 +3994,11 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if key.isEmpty {
             return nil
         }
-        if storage.referenceMap[key] == nil {
-            // A NUL becomes U+FFFD (Insecure characters). The content may not be NUL-replaced yet, so it is done
-            // here, where every stored definition passes.
-            storage.referenceMap[key] = ReferenceDefinition(
-                destination: replacingNUL(unescapedChunk(destination.destination, in: content)),
-                title: replacingNUL(unescapedTitle(title, in: content))
-            )
-        }
+        let definition = ReferenceDefinition(
+            destination: replacingNUL(unescapedChunk(destination.destination, in: content)),
+            title: replacingNUL(unescapedTitle(title, in: content))
+        )
+        storage.referenceMap.storeIfAbsent(definition, forKey: key)
         return afterAll
     }
 
@@ -4038,10 +4035,9 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         if key.isEmpty {
             return nil
         }
-        if storage.attributeReferenceMap[key] == nil {
-            let attributesChunk = materializedChunk(start: attributesStart, end: attributesEnd, content: content)
-            storage.attributeReferenceMap[key] = replacingNUL(unescapedChunk(attributesChunk.trimming(using: self)))
-        }
+        let attributesChunk = materializedChunk(start: attributesStart, end: attributesEnd, content: content)
+        let attributes = replacingNUL(unescapedChunk(attributesChunk.trimming(using: self)))
+        storage.attributeReferenceMap.storeIfAbsent(attributes, forKey: key)
         return skipLineEndOrEOF(from: attributesEnd, in: content)
     }
 

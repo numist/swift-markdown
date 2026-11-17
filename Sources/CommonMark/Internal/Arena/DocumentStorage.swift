@@ -229,3 +229,12 @@ internal struct DocumentStorage: ~Copyable {
         }
     }
 }
+
+extension Dictionary {
+    /// Stores `value` under `key` unless `key` has a value, so the first value stored under a key wins.
+    internal mutating func storeIfAbsent(_ value: Value, forKey key: Key) {
+        // A write access through the defaulting subscript stores the default only when `key` has no value.
+        func access(_: inout Value) {}
+        access(&self[key, default: value])
+    }
+}
