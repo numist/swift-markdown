@@ -11,13 +11,14 @@
 import CommonMark
 import Testing
 
-/// Labels match when their Unicode case folds are canonically equivalent. Precomposed `é` (U+00E9) matches `e` followed
-/// by a combining acute accent (U+0301), the compatibility ideograph U+F900 matches U+8C48, its canonical decomposition,
-/// the Greek question mark U+037E matches `;`, and U+1F80 matches `α` U+0313 U+0345, whose folds U+1F00 U+03B9 and `α`
-/// U+0313 U+03B9 are canonically equivalent. Pairs whose folds are identical match too.
-@Suite("Canonically equivalent labels")
-struct CanonicallyEquivalentLabelTests {
-    static let equivalentPairs = [
+/// Labels match when their Unicode case folds are equal (Links), that is, when the folds are the same sequence of code
+/// points. Canonically equivalent labels whose folds are different code points do not match: precomposed `é` (U+00E9)
+/// and `e` followed by a combining acute accent (U+0301), the compatibility ideograph U+F900 and U+8C48, its canonical
+/// decomposition, the Greek question mark U+037E and `;`, and U+1F80 and `α` U+0313 U+0345, whose folds U+1F00 U+03B9
+/// and `α` U+0313 U+03B9 differ. Pairs whose folds are identical match.
+@Suite("Labels match by the code points of their case folds")
+struct LabelFoldCodePointTests {
+    static let canonicallyEquivalentPairs = [
         ("\u{E9}", "e\u{301}"), ("e\u{301}", "\u{E9}"), ("\u{F900}", "\u{8C48}"), ("\u{8C48}", "\u{F900}"),
         ("\u{37E}", ";"), (";", "\u{37E}"), ("\u{1F80}", "\u{3B1}\u{313}\u{345}"), ("\u{3B1}\u{313}\u{345}", "\u{1F80}"),
     ]
@@ -29,13 +30,12 @@ struct CanonicallyEquivalentLabelTests {
         ("\u{3B1}\u{313}\u{3B9}", "\u{3B1}\u{313}\u{345}"), ("\u{1F88}", "\u{1F80}"), ("\u{1F80}", "\u{1F88}"),
     ]
 
-    @Test(arguments: equivalentPairs)
-    func canonicallyEquivalentReferenceLabelsMatch(_ definition: String, _ use: String) {
+    @Test(arguments: canonicallyEquivalentPairs)
+    func canonicallyEquivalentReferenceLabelsDoNotMatch(_ definition: String, _ use: String) {
         #expect(TreeDump.dump("[\(definition)]: /u\n\n[\(use)]", options: []) == """
             document
               paragraph
-                link "/u" ""
-                  text "\(use)"
+                text "[\(use)]"
 
             """)
     }
@@ -62,15 +62,12 @@ struct CanonicallyEquivalentLabelTests {
             """)
     }
 
-    @Test(arguments: equivalentPairs)
-    func canonicallyEquivalentFootnoteLabelsMatch(_ definition: String, _ use: String) {
+    @Test(arguments: canonicallyEquivalentPairs)
+    func canonicallyEquivalentFootnoteLabelsDoNotMatch(_ definition: String, _ use: String) {
         #expect(TreeDump.dump("[^\(definition)]: d\n\n[^\(use)]", options: [.footnotes]) == """
             document
               paragraph
-                footnote_reference "1"
-              footnote_definition "\(definition)"
-                paragraph
-                  text "d"
+                text "[^\(use)]"
 
             """)
     }
@@ -101,13 +98,12 @@ struct CanonicallyEquivalentLabelTests {
             """)
     }
 
-    @Test(arguments: equivalentPairs)
-    func canonicallyEquivalentAttributeLabelsMatch(_ definition: String, _ use: String) {
+    @Test(arguments: canonicallyEquivalentPairs)
+    func canonicallyEquivalentAttributeLabelsDoNotMatch(_ definition: String, _ use: String) {
         #expect(TreeDump.dump("^[\(definition)]: c\n\n^[x][\(use)]", options: [.attributes]) == """
             document
               paragraph
-                attribute "c"
-                  text "x"
+                text "^[x]"
 
             """)
     }

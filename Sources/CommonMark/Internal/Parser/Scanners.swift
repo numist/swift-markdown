@@ -142,6 +142,46 @@ internal struct LabelLengthLimit {
     var bytes: Int
 }
 
+/// A stand-in for the case fold of a normalized label, which keys the definition maps (Links). Each case fold has one
+/// stand-in, held in one form, so two keys are equal exactly when the labels' case folds are the same code points.
+internal enum NormalizedLabel: Hashable {
+    /// A stand-in whose bytes are all ASCII.
+    case ascii(String)
+    /// The UTF-8 bytes of a stand-in with a non-ASCII byte.
+    case utf8([UInt8])
+
+    static let empty = NormalizedLabel.ascii("")
+
+    var isEmpty: Bool {
+        if case .ascii(let label) = self {
+            return label.isEmpty
+        }
+        return false
+    }
+
+    // An ASCII key and a UTF-8 key are never equal, so their hashes need not be told apart by case. A UTF-8 key's bytes
+    // are combined eight to a word rather than one at a time.
+    func hash(into hasher: inout Hasher) {
+        switch self {
+        case .ascii(let label):
+            hasher.combine(label)
+        case .utf8(let bytes):
+            hasher.combine(bytes.count)
+            var word: UInt64 = 0
+            for (i, byte) in bytes.enumerated() {
+                word |= UInt64(byte) << (UInt64(i & 7) * 8)
+                if i & 7 == 7 {
+                    hasher.combine(word)
+                    word = 0
+                }
+            }
+            if bytes.count & 7 != 0 {
+                hasher.combine(word)
+            }
+        }
+    }
+}
+
 /// Scanners for link labels, destinations and titles, shared by link reference definitions and inline links, and for raw HTML tags.
 extension BlockParser {
 
@@ -555,7 +595,7 @@ extension BlockParser {
     // MARK: - Label normalization
 
     /// Normalizes a link label for matching (Links): trims whitespace (Characters and lines), collapses interior runs to one space, and applies the Unicode case fold.
-    internal func normalizeLabel(chunk: Chunk) -> String {
+    internal func normalizeLabel(chunk: Chunk) -> NormalizedLabel {
         let span = if chunk.inSource {
             sourceBytes.extracting(chunk.range)
         } else {
@@ -567,7 +607,7 @@ extension BlockParser {
 
     /// A label that one chunk of `content` holds, as any label of single-segment content is, is read from that chunk;
     /// one spanning a line join of multi-segment content is read through `content`, which reads each join as `\n`.
-    internal func normalizeLabel(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> String {
+    internal func normalizeLabel(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> NormalizedLabel {
         if let chunk = content.contiguousChunk(fromVirtual: range.lowerBound, limit: range.upperBound),
            chunk.length == range.count {
             return normalizeLabel(chunk: chunk)
@@ -586,7 +626,7 @@ extension BlockParser {
     /// Sizing the buffer to that, rather than to three bytes per source byte, stores a short label inline instead of in a
     /// heap allocation. ASCII letters are lowercased in the same pass, which completes the case fold of a label with no
     /// non-ASCII bytes.
-    private static func normalizeLabel(_ span: Span<UInt8>) -> String {
+    private static func normalizeLabel(_ span: Span<UInt8>) -> NormalizedLabel {
         var hasNonASCII = false
         var nulCount = 0
         for i in 0..<span.count where span[i] == 0 {
@@ -611,6 +651,7 @@ extension BlockParser {
                     pendingSpace = false
                 }
                 if b == 0 {
+                    hasNonASCII = true
                     output.append(0xEF)
                     output.append(0xBF)
                     output.append(0xBD)
@@ -624,19 +665,21 @@ extension BlockParser {
 
             return unsafe output.finalize(for: buffer)
         }
-        // The spec matches labels by their case folds alone (Links). Labels are compared as `String`s, whose equality is
-        // canonical equivalence, so labels whose case folds are canonically equivalent but differ in their bytes, such as
-        // precomposed `é` and `e` followed by U+0301, also match.
-        return hasNonASCII ? caseFold(label) : label
+        // The spec matches labels by the code points of their case folds (Links), so labels are compared by the bytes of
+        // stand-ins for their folds.
+        return hasNonASCII ? caseFold(label) : .ascii(label)
     }
 
-    /// `label` with each scalar replaced by a stand-in for its Unicode case fold, so two labels' results are equal
-    /// exactly when their case folds are. Lowercasing a scalar, then uppercasing and lowercasing again each scalar of
-    /// the result, yields one stand-in for each case fold, except for dotless `ı`: it folds to itself, but uppercases to
-    /// the `I` that `i` folds with, so it stands for itself.
-    private static func caseFold(_ label: String) -> String {
+    /// The key of `label`, whose ASCII letters are lowercased, with each scalar replaced by a stand-in for its Unicode
+    /// case fold, so two labels' keys are equal exactly when their case folds are the same code points. Lowercasing a
+    /// scalar, then uppercasing and lowercasing again each scalar of the result, yields one stand-in for each case fold,
+    /// except for dotless `ı`: it folds to itself, but uppercases to the `I` that `i` folds with, so it stands for itself.
+    private static func caseFold(_ label: String) -> NormalizedLabel {
         let scalars = label.unicodeScalars
         var folded = ""
+        // Some non-ASCII scalars stand in as ASCII, such as the Kelvin sign as `k`, so whether the key is ASCII is
+        // known only once every scalar is replaced.
+        var keyIsASCII = true
         // The scalars from `unchangedStart` up to the current one are their own stand-ins, so they are appended as a run.
         var unchangedStart = scalars.startIndex
         // Labels repeat scalars, so the last non-ASCII one found to be its own stand-in is remembered.
@@ -653,23 +696,28 @@ extension BlockParser {
                     for lower in scalar.properties.lowercaseMapping.unicodeScalars {
                         if lower == "ı" {
                             folded.unicodeScalars.append(lower)
+                            keyIsASCII = false
                         } else {
                             for upper in lower.properties.uppercaseMapping.unicodeScalars {
-                                folded += upper.properties.lowercaseMapping
+                                let standIn = upper.properties.lowercaseMapping
+                                keyIsASCII = keyIsASCII && standIn.utf8.allSatisfy { $0 < 0x80 }
+                                folded += standIn
                             }
                         }
                     }
                     unchangedStart = next
                 } else {
                     lastUnchanged = scalar
+                    keyIsASCII = false
                 }
             }
             i = next
         }
         if unchangedStart == scalars.startIndex {
-            return label
+            folded = label
+        } else {
+            folded.append(contentsOf: Substring(scalars[unchangedStart...]))
         }
-        folded.append(contentsOf: Substring(scalars[unchangedStart...]))
-        return folded
+        return keyIsASCII ? .ascii(folded) : .utf8(Array(folded.utf8))
     }
 }

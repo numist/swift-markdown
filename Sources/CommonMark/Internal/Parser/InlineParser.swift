@@ -596,7 +596,7 @@ extension BlockParser {
         if storage.referenceMap.isEmpty {
             return nil
         }
-        var key = ""
+        var key = NormalizedLabel.empty
         var afterReference = pos
         if let label = matchLabelKey(from: pos, content: content) {
             key = label.key
@@ -653,12 +653,12 @@ extension BlockParser {
     }
 
     /// The normalized key of the label at `pos`, empty for a blank one, and the offset past its `]`.
-    private mutating func matchLabelKey(from pos: Int, content: borrowing ContentSpan) -> (key: String, afterEnd: Int)? {
+    private mutating func matchLabelKey(from pos: Int, content: borrowing ContentSpan) -> (key: NormalizedLabel, afterEnd: Int)? {
         let end = content.endOffset
         guard let label = matchLinkLabel(from: pos, end: end, in: content) else {
             return nil
         }
-        return (label.interior.isEmpty ? "" : normalizeLabel(virtualRange: label.interior, in: content), label.afterEnd)
+        return (label.interior.isEmpty ? .empty : normalizeLabel(virtualRange: label.interior, in: content), label.afterEnd)
     }
 
     /// Appends a text node holding the `]` at `cursor`, spanning `cursor..<end`.
