@@ -52,9 +52,6 @@ let package = Package(
             swiftSettings: commonMarkSwiftSettings + [
                 .strictMemorySafety(),
                 // Built with library evolution so a separate package does not see the BasicContainers dependency.
-                // XXX: Under library evolution, Swift 6.4.4 accepts client code that lets a `MarkdownNode` from
-                // `MarkdownDocument.root` escape the document through an Optional, a use-after-free with no
-                // `unsafe` in the client. Without this flag the compiler rejects that code.
                 .unsafeFlags(["-enable-library-evolution"]),
             ]
         ),
