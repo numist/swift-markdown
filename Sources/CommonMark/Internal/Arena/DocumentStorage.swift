@@ -10,34 +10,48 @@
 
 internal import BasicContainers
 
-/// The parse result: nodes, materialized bytes, and options. `MarkdownDocument` owns it and borrows the source.
+/// Owning storage for parser-produced AST data.
+///
+/// Holds only the values produced by parsing - nodes, materialized strings, and parse options. The source bytes are *borrowed* by the owning `MarkdownDocument` (as a `Span`), not owned here.
+///
+/// `~Copyable` so the storage can never be silently duplicated. `MarkdownDocument` owns one of these.
 internal struct DocumentStorage: ~Copyable {
     typealias Index = Int
     
-    /// All nodes in creation order; the document is index 0. The initial capacity fits a typical inline-only document.
+    /// All nodes in order of creation.
+    ///
+    /// The root document is always index 0. We know we're going to need some space here, so we pick a small enough size to hold nodes for the inline case.
     internal var nodes: UniqueArray<NodeRecord> = UniqueArray(minimumCapacity: 16)
 
-    /// Arena for content that isn't one contiguous range of the source, such as decoded entities, autolink URLs with an added scheme, and text whose NULs became U+FFFD.
+    /// Bump-allocated arena for synthetic/materialized bytes (entity-decoded text, normalized link references, autolink scheme prefixes) that don't exist as contiguous regions of the source.
     internal var strings: UniqueArray<UInt8>
 
-    /// The pool that `ContentRef`s slice; it only grows, though `trimLiteral` narrows a segment in place.
+    /// Append-only pool of content segments. A node's content (`NodeData`) is a `ContentRef` slice `[first, first + count)` of this pool. Single-segment refs (the common case) append exactly one entry here.
     internal var segments: UniqueArray<Segment> = UniqueArray(minimumCapacity: 16)
 
-    /// Link reference definitions by normalized label. The first definition of a label wins.
+    /// Link reference definitions discovered while finalizing paragraphs.
+    ///
+    /// Keys are normalized labels (CommonMark §4.7 normalization: case-folded, internal whitespace runs collapsed to a single space). First definition for any given label wins.
     internal var referenceMap = [NormalizedLabel: ReferenceDefinition]()
 
-    /// `^[label]: attrs` definitions, keyed like `referenceMap` but kept apart so `[foo]` and `^[foo]` don't collide. The first definition wins.
+    /// Extended-attribute reference definitions of the form `^[label]: attrs`.
+    ///
+    /// Keyed by the same normalized label form as `referenceMap` but stored separately so `[foo]` (link) and `^[foo]` (attribute) lookups don't collide. First definition wins.
     internal var attributeReferenceMap = [NormalizedLabel: Chunk]()
 
-    /// Footnote definition nodes by normalized label. The first definition in the document wins.
+    /// GFM footnote definitions.
+    ///
+    /// Keyed by normalized label, value is the index of the `.footnoteDefinition` node in `nodes`. First definition wins.
     internal var footnoteMap = [NormalizedLabel: Index]()
 
-    /// Every `.footnoteDefinition` node in document order, so unreferenced ones can be dropped.
     internal var footnoteDefinitionOrder: [Index] = []
 
+    /// Number of lines in the document.
     internal var lineCount = 0
 
-    /// A node's source bytes `[start, end)`; `start == -1` marks a node without a position.
+    /// Half-open source byte range `[start, end)` for one node, in original-source coordinates.
+    ///
+    /// `start == -1` marks an unstamped node (a node never assigned a position).
     internal struct SourceByteRange: Equatable {
         internal var start: Int
         internal var end: Int
@@ -45,10 +59,14 @@ internal struct DocumentStorage: ~Copyable {
         internal static let unset = SourceByteRange(start: -1, end: -1)
     }
 
-    /// The source offset at which each line begins; index `i` is line `i + 1`. Built only with `.sourcePosition`.
+    /// Byte offset (into the original source) at which each line begins.
+    ///
+    /// Index `i` holds the start of line `i+1`. Built during `parse()` ONLY when `.sourcePosition` is set; empty otherwise. Used to convert a node's byte range into 1-based (line, column) positions.
     internal var lineStarts: UniqueArray<Int> = UniqueArray()
 
-    /// Each node's source range, index-aligned with `nodes`. Built only with `.sourcePosition`.
+    /// Per-node source byte range, parallel to `nodes` (index `i` is node `i`'s range).
+    ///
+    /// Populated ONLY when `.sourcePosition` is set.`appendNode` pushes a default `.unset` entry in lockstep so the array stays index-aligned with `nodes`. `.start == -1` means the node was never stamped.
     internal var sourceRanges: UniqueArray<SourceByteRange> = UniqueArray()
 
     /// Parse options used to create this document.
@@ -61,7 +79,7 @@ internal struct DocumentStorage: ~Copyable {
 
     internal init(options: MarkdownDocument.ParseOptions) {
         self.options = options
-        // Byte 0 is a shared `"\n"`, so multi-line content joins its lines without copying a `\n` per join.
+        // Reserve byte 0 of the additions arena as a shared `"\n"`. Multi-line code/HTML block bodies (and any future multi-segment join) reference this single byte via `newlineSegment` for their line separators instead of copying a `\n` into the arena per join.
         strings = UniqueArray(repeating: UInt8(ascii: "\n"), count: 1)
     }
 
@@ -80,12 +98,13 @@ internal struct DocumentStorage: ~Copyable {
         let idx = Index(nodes.count)
         nodes.append(record)
         if positionsEnabled {
+            // Keep `sourceRanges` index-aligned with `nodes`; stamped later via `setSourceStart/End`.
             sourceRanges.append(.unset)
         }
         return idx
     }
 
-    /// No-op when positions are off or `offset` is `nil`, as is `setSourceEnd`.
+    /// Record the source byte offset (into the original source) where `node`'s content begins.
     internal mutating func setSourceStart(_ node: Index, _ offset: Int?) {
         if let offset, positionsEnabled {
             sourceRanges[node].start = offset
@@ -99,6 +118,7 @@ internal struct DocumentStorage: ~Copyable {
         }
     }
 
+    /// Intern a single `Chunk` as a one-segment `ContentRef`. The bridge used by parser code that produces content in the single-buffer `Chunk` vocabulary. Appends one entry to `segments`.
     internal mutating func intern(_ chunk: Chunk) -> ContentRef {
         if chunk.isEmpty {
             return .empty
@@ -108,6 +128,7 @@ internal struct DocumentStorage: ~Copyable {
         return ContentRef(first: first, count: 1, totalLength: chunk.length)
     }
 
+    /// Append a run of segments as a single `ContentRef`. Used for multi-segment content (multi-line joins).
     internal mutating func intern(_ pieces: consuming UniqueArray<Segment>) -> ContentRef {
         let first = segments.count
         var total = 0
@@ -123,13 +144,15 @@ internal struct DocumentStorage: ~Copyable {
         return ContentRef(first: first, count: count, totalLength: total)
     }
 
-    /// The chunk of a footnote label, which is always one non-empty segment.
+    /// Read a single-segment `ContentRef` back as a `Chunk`.
     internal func chunk(of ref: ContentRef) -> Chunk {
         precondition(ref.count == 1, "a footnote label is a single non-empty segment")
         return segments[ref.first].chunk
     }
 
-    /// Trims a single-segment literal in place, dropping `trimStart` bytes and keeping `newLength`. Each leaf owns its segment, so no other node changes.
+    /// Trim a leaf node's single-segment literal in place.
+    ///
+    /// Drop `trimStart` bytes off the front and set the byte length to `newLength`. Allocation-free - each leaf owns a unique pooled segment, so mutating it doesn't alias another node. Used by emphasis/strong resolution, which trims delimiter runs off the surrounding text nodes.
     internal mutating func trimLiteral(of node: Index, trimStart: Int, newLength: Int) {
         guard case .literal(let ref) = nodes[node].data, ref.count == 1 else {
             preconditionFailure("a delimiter run's or an image opener's text node is a single-segment literal")
@@ -140,6 +163,7 @@ internal struct DocumentStorage: ~Copyable {
         nodes[node].data = .literal(ContentRef(first: ref.first, count: 1, totalLength: newLength))
     }
 
+    /// Read access to a node by index. Internal helpers only - public access goes through `MarkdownNode`.
     internal subscript(index: Index) -> NodeRecord {
         get { nodes[index] }
         set { nodes[index] = newValue }
@@ -157,9 +181,7 @@ internal struct DocumentStorage: ~Copyable {
         nodes[parentIndex].lastChild = childIndex
     }
 
-    /// Steps a pre-order walk of `root`'s subtree out of a finished `parent`: `child` becomes its next sibling and `parent` its parent. Returns `false`, changing nothing, at `root`.
-    ///
-    /// Tree passes walk links instead of recursing, so any nesting depth runs in constant stack.
+    // Tree passes walk links instead of recursing, so no nesting depth can overflow the stack.
     internal func ascend(from parent: inout Index, resumingAt child: inout Index?, within root: Index) -> Bool {
         if parent == root {
             return false
@@ -172,7 +194,11 @@ internal struct DocumentStorage: ~Copyable {
         return true
     }
 
-    /// Removes `childIndex` from its parent's children. It keeps its `parent`, so paragraph finalization can climb out of a paragraph it removes.
+    /// Detach `childIndex` from its current parent's child list.
+    ///
+    /// The node itself remains in `nodes` (so other indices stay stable) but is orphaned - DFS traversals will not visit it. Used when ref-def parsing consumes an entire paragraph's content.
+    ///
+    /// The detached node's `parent` pointer is preserved so that paragraph finalize can still bubble `current` back up via `parent` after dropping the empty paragraph.
     internal mutating func unlinkChild(_ childIndex: Index) {
         guard let parent = nodes[childIndex].parent else {
             preconditionFailure("only the document node has no parent, and it is never unlinked")
@@ -231,7 +257,6 @@ internal struct DocumentStorage: ~Copyable {
 }
 
 extension Dictionary {
-    /// Stores `value` under `key` unless `key` has a value, so the first value stored under a key wins.
     internal mutating func storeIfAbsent(_ value: Value, forKey key: Key) {
         // A write access through the defaulting subscript stores the default only when `key` has no value.
         func access(_: inout Value) {}

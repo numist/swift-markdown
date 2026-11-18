@@ -8,11 +8,9 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// One piece of a node's content: a byte range in the source (`inSource`) or the string arena.
+/// One piece of a node's content: a byte range that lives in either the borrowed source `Span` (`inSource == true`) or `DocumentStorage`'s additions arena (`inSource == false`).
 ///
-/// A run of segments (`ContentRef`) represents content that spans several source ranges or mixes in synthetic bytes, without copying the source.
-///
-/// `inSource` is stored in the top bit of the length word, which a byte length never reaches, so a segment is two words.
+/// A `Segment` is the N-way generalization of `Chunk`'s `inSource` two-buffer scheme. Nodes reference an ordered run of these (see `ContentRef`) so that content spanning multiple source ranges (a multi-line paragraph) or mixing source with synthetic bytes (a joined newline, a decoded entity) can be represented without copying the source bytes into an intermediate buffer.
 internal struct Segment: Equatable {
     internal var offset: Int
     private var lengthAndInSource: UInt
@@ -37,14 +35,12 @@ internal struct Segment: Equatable {
         self.init(offset: chunk.offset, length: chunk.length, inSource: chunk.inSource)
     }
 
+    /// Reconstruct a `Chunk` view of this segment. Used by internal parser code that still works in the single-buffer `Chunk` vocabulary.
     internal var chunk: Chunk {
         Chunk(offset: offset, length: length, inSource: inSource)
     }
 }
 
-/// One run of an arena chunk's map to the source: `length` content bytes that image the source from `sourceOffset`.
-///
-/// A negative `sourceOffset` marks a `"\n"` line join, which has no source position. Runs tile the content in order, so inline positions resolve through arena content such as text with a NUL replaced by U+FFFD or a `\|`-unescaped table cell.
 internal struct ArenaRun {
     internal var length: Int
     internal var sourceOffset: Int
@@ -55,11 +51,9 @@ internal struct ArenaRun {
     }
 }
 
-/// An arena chunk's run map, for the chunk starting at arena offset `base`.
 internal struct ContentImage {
     internal let base: Int
     internal let runs: [ArenaRun]
-    /// `runEnds[i]` is the content-relative offset just past run `i`.
     private let runEnds: [Int]
 
     internal init(base: Int, runs: [ArenaRun]) {
@@ -72,7 +66,6 @@ internal struct ContentImage {
         }
     }
 
-    /// The source offset imaged by arena byte `offset`, or `nil` outside the chunk. `offset` must not be a line join.
     internal func sourceOffset(ofArenaByte offset: Int) -> Int? {
         let k = offset - base
         guard k >= 0, let total = runEnds.last, k < total else {
@@ -83,7 +76,6 @@ internal struct ContentImage {
         return runs[i].sourceOffset + (k - runStart(i))
     }
 
-    /// The index of the first run ending past content-relative offset `k`, or `runs.count` when none does.
     private func firstRun(endingAfter k: Int) -> Int {
         var lo = 0
         var hi = runEnds.count
@@ -98,13 +90,14 @@ internal struct ContentImage {
         return lo
     }
 
-    /// The content-relative offset of run `i`'s first byte.
     private func runStart(_ i: Int) -> Int {
         i == 0 ? 0 : runEnds[i - 1]
     }
 }
 
-/// A node's content: the slice `[first, first + count)` of `DocumentStorage.segments`. `totalLength` is the byte length summed over the segments.
+/// A node's content, expressed as a contiguous slice `[first, first + count)` of `DocumentStorage.segments`.
+///
+/// The overwhelmingly common case is `count == 1` (a single source range - most text runs, URLs, and labels), which costs the same as a single inline `Chunk`. `totalLength` caches the total byte length across the segments so length queries don't have to walk the pool.
 internal struct ContentRef {
     internal var first: Int
     internal var count: Int

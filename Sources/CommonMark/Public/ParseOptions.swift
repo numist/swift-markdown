@@ -11,7 +11,7 @@
 extension MarkdownDocument {
     /// Options that control how a `MarkdownDocument` parses its source.
     ///
-    /// Options enable GitHub Flavored Markdown extensions, inline attributes, smart punctuation, source positions, or inline-only parsing. The empty set parses CommonMark.
+    /// Pass a set of options when creating a document to enable GitHub Flavored Markdown extensions (tables, strikethrough, autolinks, task lists, and footnotes), to turn on source-position tracking, or to select an inline-only parsing mode. The default value (an empty set) parses plain CommonMark.
     ///
     ///     let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .footnotes]
     ///     MarkdownDocument.withParsedDocument(source, options: options) { doc in
@@ -32,7 +32,7 @@ extension MarkdownDocument {
 
         /// Tracks a source range for each node, which you read with `MarkdownNode.sourceRange`.
         ///
-        /// Without this option, `MarkdownNode.sourceRange` returns `nil`.
+        /// Without this option, the parser does no position bookkeeping and `MarkdownNode.sourceRange` returns `nil`.
         public static let sourcePosition = MarkdownDocument.ParseOptions(rawValue: 1 << 1)
 
         /// Converts straight quotes to curly quotes, `--` to an en dash, `---` to an em dash, and `...` to an ellipsis.
@@ -41,7 +41,7 @@ extension MarkdownDocument {
         /// Parses footnote references and definitions, written as `[^label]` and `[^label]:`.
         public static let footnotes = MarkdownDocument.ParseOptions(rawValue: 1 << 13)
 
-        /// With `strikethrough`, requires two tildes for strikethrough, as in `~~text~~`, and rejects a single tilde.
+        /// Requires two tildes for strikethrough, as in `~~text~~`, and rejects a single tilde.
         public static let strikethroughDoubleTilde = MarkdownDocument.ParseOptions(rawValue: 1 << 14)
 
         /// Parses only inline content, ignoring block structure.
@@ -56,7 +56,7 @@ extension MarkdownDocument {
         /// Allows row and column spans in GFM tables.
         public static let tableSpans = MarkdownDocument.ParseOptions(rawValue: 1 << 20)
 
-        /// With `tableSpans`, makes a cell holding only `"`, rather than `^`, the rowspan marker (see `MarkdownNode.Kind.tableCell`).
+        /// With `tableSpans`, treats a GFM table cell holding only `"` as a ditto mark that extends the cell above into its row.
         public static let tableRowspanDitto = MarkdownDocument.ParseOptions(rawValue: 1 << 21)
 
         /// Enables GFM strikethrough, written as `~text~` or `~~text~~`.
@@ -66,7 +66,7 @@ extension MarkdownDocument {
 
         /// Enables GFM task list items.
         ///
-        /// A list item whose first block is a paragraph beginning with `[ ]`, `[x]`, or `[X]`, followed by whitespace or the end of the line, becomes an unchecked or checked task list item. Any whitespace character other than a line ending can stand in for the space between the brackets.
+        /// A list item whose first block is a paragraph beginning with `[ ]`, `[x]`, or `[X]` followed by whitespace or the end of the paragraph becomes an unchecked or checked task item. Without this option, the brackets stay as ordinary text in the item's first paragraph.
         public static let tasklist = MarkdownDocument.ParseOptions(rawValue: 1 << 23)
 
         /// Enables GFM extended autolinks.
@@ -75,13 +75,11 @@ extension MarkdownDocument {
         public static let gfmAutolink = MarkdownDocument.ParseOptions(rawValue: 1 << 24)
 
         /// Enables GFM tables.
-        ///
-        /// A paragraph line becomes the header row of a table when the next line is a delimiter row, such as `| --- | :---: |`, with as many cells. Any lines of the paragraph before it remain a paragraph.
         public static let tables = MarkdownDocument.ParseOptions(rawValue: 1 << 25)
 
         /// Enables inline attributes, written as `^[text](key: value)`, and attribute definitions, written as `^[label]: key: value`.
         ///
-        /// An inline attribute becomes an `.attribute` node whose children are the bracketed text; `^[text][label]` takes its attributes from the definition with that label. Without this option, `^[` has no special meaning.
+        /// `^[text][label]` takes its attributes from the definition with that label.
         public static let attributes = MarkdownDocument.ParseOptions(rawValue: 1 << 28)
     }
 }

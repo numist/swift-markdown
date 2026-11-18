@@ -8,40 +8,38 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// A block's inline content.
+/// A read-only view over a single block's inline content.
 ///
-/// Single-segment content is one region of the source or of the arena, addressed by that buffer's offsets, or a copy of a text node's content addressed from 0; arena content is read from a copy, since the arena grows during inline parsing. Multi-segment content is a list of source line ranges joined by the interned `"\n"`, addressed by virtual offsets from 0, so lines that aren't contiguous in the source are read without copying.
+/// Two modes, distinguished by `isMultiSegment`:
+///
+/// - **Single-segment (the overwhelmingly common case).** The content is one contiguous buffer region - a zero-copy slice of the source (`inSource == true`) or of a scratch copy (`inSource == false`). Bytes are addressed by *global* offsets (`startOffset..<endOffset`) via a branchless `span[offset - base]`, identical in cost to a plain single-buffer read. For source-backed content the global offset IS the original-source byte offset.
+///
+/// - **Multi-segment.** The content is an ordered list of `Segment`s - source-line ranges (zero-copy into `sourceBytes`) joined by the shared interned `"\n"` - addressed by flat *virtual* offsets (`0..<virtualLength`). Used for multi-line paragraph/heading bodies whose lines aren't source-contiguous (block-quote/list continuation, CRLF) so no source bytes are copied. The input never contains arena-only bytes (decoded entities / synthesized runs are produced *during* inline parsing, not present in the raw block content), so reads come only from `sourceBytes` plus the literal `\n` - `storage.strings` is never held across the inline loop's appends.
+///
+/// `sourceOffset(ofVirtual:)` maps a (virtual) offset back to its original-source byte offset, which is how inline nodes get stamped with source ranges.
 internal struct ContentSpan: ~Escapable {
-    /// Single-segment: the content bytes. Multi-segment: the whole source.
+    /// Single-segment: the content bytes (0-based via `base`). Multi-segment: `sourceBytes` (the whole source), indexed directly by a segment's absolute source offset.
     let span: Span<UInt8>
 
-    /// Single-segment: the offset of `span[0]`. Multi-segment: 0.
+    /// Single-segment: the global offset of `span[0]` (subtracted from a global offset to index `span`). Multi-segment: unused (0).
     let base: Int
 
-    /// Single-segment: whether `span` is in the source.
+    /// Single-segment: which buffer `span` is (`true` = source, `false` = scratch). Multi-segment: unused.
     let inSource: Bool
 
-    /// Multi-segment: the segment list. Single-segment arena content: its run map to the source, whose non-source pieces are line joins. Empty where no offset is resolved through it.
-    ///
-    /// Held apart from `storage.segments`, which grows during inline parsing.
     let pieces: Span<Segment>
 
-    /// `pieceEnds[i]` is the content-relative offset just past piece `i`.
     let pieceEnds: Span<Int>
 
-    /// The parse's shared lookup state (see `PieceHint`), `nil` only where `pieces` is empty.
-    ///
-    /// Content has a piece per line and is scanned a byte at a time, so most lookups land in the piece the last lookup found or one a few pieces away, where `pieceIndex(covering:)` searches first. Multi-segment content also keeps there the source piece it last read (`sourcePiece(covering:)`).
     let pieceHint: PieceHint?
 
     let isMultiSegment: Bool
 
     let multiVirtualLength: Int
 
-    /// Multi-segment: which of the multi-segment contents made with `pieceHint` this is, counting from 1.
     let multiIdentity: Int
 
-    /// Single-segment content without a run map, so only source content resolves source offsets.
+    /// Single-segment initializer (zero-copy source slice or scratch).
     @_lifetime(copy span)
     init(span: Span<UInt8>, base: Int, inSource: Bool) {
         self.span = span
@@ -55,7 +53,6 @@ internal struct ContentSpan: ~Escapable {
         self.multiIdentity = 0
     }
 
-    /// Single-segment arena content with its run map (see `pieces`).
     @_lifetime(copy span, copy runs, copy runEnds)
     init(span: Span<UInt8>, base: Int, runs: Span<Segment>, runEnds: Span<Int>, hint: PieceHint) {
         self.span = span
@@ -69,7 +66,7 @@ internal struct ContentSpan: ~Escapable {
         self.multiIdentity = 0
     }
 
-    /// Multi-segment content: `segmentEnds` holds the running ends of `segments`, and `virtualLength` is the content's length, which can end before the last segment does.
+    // `virtualLength` isn't derived from `segmentEnds`: content trimmed of trailing whitespace ends before its last segment does.
     @_lifetime(copy source, copy segments, copy segmentEnds)
     init(source: Span<UInt8>, segments: Span<Segment>, segmentEnds: Span<Int>, virtualLength: Int, hint: PieceHint) {
         self.span = source
@@ -84,11 +81,12 @@ internal struct ContentSpan: ~Escapable {
         self.multiIdentity = hint.multiSegmentContentsMade
     }
 
+    /// Global/virtual offset of the first content byte.
     var startOffset: Int { isMultiSegment ? 0 : base }
+    /// Global/virtual offset just past the last content byte.
     var endOffset: Int { isMultiSegment ? multiVirtualLength : base + span.count }
     var isEmpty: Bool { isMultiSegment ? multiVirtualLength == 0 : span.count == 0 }
 
-    /// The index of the first entry of `pieceEnds[lo..<hi]` past `offset`, or `hi` if none is: the piece covering `offset`, never a zero-length one, when it lies in that range.
     private func firstIndex(endingAfter offset: Int, from lo: Int, to hi: Int) -> Int {
         var lo = lo
         var hi = hi
@@ -103,9 +101,6 @@ internal struct ContentSpan: ~Escapable {
         return lo
     }
 
-    /// The index of the piece covering content-relative `offset`, or `pieces.count` when `offset` is at or past the end.
-    ///
-    /// The search widens from `pieceHint`, doubling its step, so a piece `d` pieces away costs O(log d) and a scan costs O(1) per byte.
     private func pieceIndex(covering offset: Int) -> Int {
         var lo = 0
         var hi = pieceEnds.count
@@ -142,11 +137,11 @@ internal struct ContentSpan: ~Escapable {
         return found
     }
 
-    /// The content-relative offset of piece `i`'s first byte.
     private func pieceStart(_ i: Int) -> Int {
         i == 0 ? 0 : pieceEnds[i - 1]
     }
 
+    /// Read the byte at `offset` (global for single-segment, virtual for multi-segment).
     subscript(_ offset: Int) -> UInt8 {
         if isMultiSegment {
             return multiByte(at: offset)
@@ -154,33 +149,27 @@ internal struct ContentSpan: ~Escapable {
         return span[offset - base]
     }
 
-    /// Calls `body` with a reader of the content byte at any offset from `offset` on.
-    ///
-    /// In multi-segment content the reader takes the bytes of the piece covering `offset` straight from the source, without the checks the subscript makes on every byte to find its source piece, and later pieces through the subscript.
+    // Reading the starting piece straight from the source spares each of its bytes the subscript's piece lookup.
     @inline(__always)
     func withForwardReader<Result>(from offset: Int, _ body: ((Int) -> UInt8) -> Result) -> Result {
         guard isMultiSegment else {
             return body { span[$0 - base] }
         }
-        // At the end or at a line join no source piece covers `offset`, so every byte is read through the subscript.
         guard offset < multiVirtualLength, let piece = sourcePiece(covering: offset) else {
             return body { multiByte(at: $0) }
         }
         return body { $0 < piece.range.upperBound ? span[$0 + piece.shift] : multiByte(at: $0) }
     }
 
+    /// Multi-segment byte resolution: find the segment covering virtual `offset` and read it. Source segments read `span` (== `sourceBytes`); the interned newline segment yields `\n`.
     private func multiByte(at offset: Int) -> UInt8 {
         guard let piece = sourcePiece(covering: offset) else {
-            // The only non-source segment is the shared interned `"\n"`.
+            // The only non-source segment in inline content is the shared interned `"\n"`.
             return UInt8(ascii: "\n")
         }
         return span[offset + piece.shift]
     }
 
-    /// The virtual range of the multi-segment content's source piece covering `offset`, and the distance from its offsets to their source offsets, or `nil` where a line join covers `offset`.
-    ///
-    /// The piece is cached in `pieceHint` with the identity of the content it belongs to, since a scan reads a piece's
-    /// bytes one after another; a piece another content cached is never used.
     private func sourcePiece(covering offset: Int) -> (range: Range<Int>, shift: Int)? {
         if let hint = pieceHint, hint.sourcePieceOwner == multiIdentity, hint.sourcePiece.contains(offset) {
             return (hint.sourcePiece, hint.sourcePieceShift)
@@ -201,12 +190,10 @@ internal struct ContentSpan: ~Escapable {
         return (range, shift)
     }
 
-    /// The source offset of the content byte at `offset`, which must image a source byte. Callers resolve only an inline node's first and last bytes, which are never a line join.
     func sourceOffset(ofVirtual offset: Int) -> Int {
         if !isMultiSegment && inSource {
             return offset
         }
-        // Multi-segment content resolves through its segments, and arena content, which reaches here only with `.sourcePosition`, through the run map that tiles it.
         let k = offset - base
         let i = pieceIndex(covering: k)
         precondition(i < pieces.count, "an inline node's source range lies inside its content's pieces")
@@ -215,13 +202,11 @@ internal struct ContentSpan: ~Escapable {
         return piece.offset + (k - pieceStart(i))
     }
 
-    /// The source offset of the multi-segment content byte at `offset`, which must lie inside the content, or `nil`
-    /// where a line join covers it.
     func sourceOffset(ofMultiSegmentVirtual offset: Int) -> Int? {
         sourcePiece(covering: offset).map { offset + $0.shift }
     }
 
-    /// A `Chunk` for a sub-range, which in multi-segment content must lie within one segment. A caller whose range can cross a line join copies it into the arena instead, as `materializedChunk` does.
+    /// Build a `Chunk` for a sub-range of this content. Single-segment: a direct sub-chunk. Multi-segment: valid only when the range lies within one segment (the common case - inline nodes don't straddle a line join); callers that can straddle (code spans) handle materialization themselves.
     func chunk(offset: Int, length: Int) -> Chunk {
         if !isMultiSegment {
             return Chunk(offset: offset, length: length, inSource: inSource)
@@ -233,9 +218,6 @@ internal struct ContentSpan: ~Escapable {
         return Chunk(offset: seg.offset + local, length: length, inSource: seg.inSource)
     }
 
-    /// A `Chunk` for scanning forward from `offset`, bounded by `limit` and, in multi-segment content, by the end of the segment containing `offset`.
-    ///
-    /// Chunk readers such as `EntityParser.matchEntity` index a single buffer, which virtual offsets don't address, so in multi-segment content they see only the rest of `offset`'s line. Returns `nil` when `offset >= limit` or `offset` is a line join. A scanner's buffer offset `b` maps back to `offset + (b - chunk.offset)`.
     func contiguousChunk(fromVirtual offset: Int, limit: Int) -> Chunk? {
         if offset >= limit {
             return nil
@@ -249,9 +231,9 @@ internal struct ContentSpan: ~Escapable {
         return Chunk(offset: offset + piece.shift, length: min(limit, piece.range.upperBound) - offset, inSource: true)
     }
 
-    /// The offset of the next byte at or after `globalCursor` that the inline dispatch acts on, or `endOffset`, so the dispatch skips plain text 16 bytes at a time.
+    /// Global offset of the next inline-significant byte at or after `globalCursor`, or `endOffset` if none remain. Used to skip plain-text runs in the inline dispatch loop without stepping byte by byte: a `SIMD16` scan compares 16 bytes at once against the significant set, recovering the first matching lane; a sub-16 tail is scanned scalar.
     ///
-    /// The set must include every byte the dispatch switch acts on. `~`, `:`, `w` and the smart punctuation bytes are included only with their options, since the switch otherwise treats them as text; `^`, which only `.attributes` acts on, is always included as part of the `[`–`` ` `` range. `@` is never included, because email autolinks are found in a later pass (`gfmEmailAutolinkPass`).
+    /// The significant set must be a superset of the bytes the dispatch switch acts on. `~` and the GFM autolink triggers (`:` `w`) are included only when their option is on - when off, the switch's case for them is a no-op (the byte becomes plain text), so skipping over them is equivalent. The contiguous cluster `[ \ ] ^ _ \``` (91...96) is one range compare.
     func nextSignificant(from globalCursor: Int, strikethrough: Bool, gfmAutolink: Bool, smart: Bool) -> Int {
         if isMultiSegment {
             return multiNextSignificant(from: globalCursor, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
@@ -262,6 +244,7 @@ internal struct ContentSpan: ~Escapable {
         return base + found
     }
 
+    /// Multi-segment `nextSignificant`: walk the segment list, SIMD-scanning each source segment's contiguous source sub-range via `scanSignificant`. The interned `"\n"` joining two lines is itself in the significant set (the dispatch emits a soft/hard break for it), so a newline segment's first byte is reported immediately without scanning. Cost is `SIMD(content bytes)` plus a tiny per-segment fixed cost - the same order as the single-segment fast path, not an O(bytes × segments) scalar walk.
     private func multiNextSignificant(from globalCursor: Int, strikethrough: Bool, gfmAutolink: Bool, smart: Bool) -> Int {
         let end = multiVirtualLength
         let count = pieces.count
@@ -274,7 +257,7 @@ internal struct ContentSpan: ~Escapable {
             let seg = pieces[i]
             let len = seg.length
             if seg.inSource {
-                let local = cursor - vStart
+                let local = cursor - vStart                 // 0 once we advance past the entry segment
                 let absLo = seg.offset + local
                 let absHi = seg.offset + len
                 let foundAbs = Self.scanSignificant(span, from: absLo, to: absHi, strikethrough: strikethrough, gfmAutolink: gfmAutolink, smart: smart)
@@ -282,7 +265,7 @@ internal struct ContentSpan: ~Escapable {
                     return vStart + (foundAbs - seg.offset)
                 }
             } else {
-                // A line join is always significant: it becomes a soft or hard line break.
+                // The only non-source segment in inline content is the shared interned "\n", which is always inline-significant - report its position directly.
                 return cursor
             }
             vStart += len
@@ -292,7 +275,7 @@ internal struct ContentSpan: ~Escapable {
         return end
     }
 
-    /// The index of the first significant byte in `span[lo..<hi]`, or `hi`; see `nextSignificant`.
+    /// SIMD16 scan of `span[lo..<hi]` for the first inline-significant byte; returns that index, or `hi` if none. Shared by the single-segment and per-segment (multi) scan paths so both get the vector fast path. The significant set must stay a superset of the dispatch switch's cases - see `nextSignificant`.
     @inline(__always)
     private static func scanSignificant(_ span: Span<UInt8>, from lo: Int, to hi: Int, strikethrough: Bool, gfmAutolink: Bool, smart: Bool) -> Int {
         let clusterLo = SIMD16<UInt8>(repeating: UInt8(ascii: "["))
@@ -305,6 +288,7 @@ internal struct ContentSpan: ~Escapable {
         let tilde = SIMD16<UInt8>(repeating: UInt8(ascii: "~"))
         let colon = SIMD16<UInt8>(repeating: UInt8(ascii: ":"))
         let w = SIMD16<UInt8>(repeating: UInt8(ascii: "w"))
+        // Smart-punctuation triggers: straight quotes (`'` `"`), `-` (dashes), `.` (ellipsis).
         let squote = SIMD16<UInt8>(repeating: UInt8(ascii: "'"))
         let dquote = SIMD16<UInt8>(repeating: UInt8(ascii: "\""))
         let hyphen = SIMD16<UInt8>(repeating: UInt8(ascii: "-"))
@@ -338,19 +322,17 @@ internal struct ContentSpan: ~Escapable {
     }
 }
 
-/// The piece a `ContentSpan` offset lookup last found, and the source piece a multi-segment content last read, held by reference so that lookups through a borrowed `ContentSpan` update them.
-///
-/// One is shared by every `ContentSpan` of a parse. An index left by another content is still a valid hint, since a lookup bounds-checks it and only starts its search there.
+// A class, so that a lookup through a borrowed `ContentSpan` can record the piece it found: scans read content a
+// byte at a time, so the next lookup usually lands in or near that piece. One hint is shared by every `ContentSpan`
+// of a parse that has pieces, so a lookup bounds-checks `index` and uses `sourcePiece` only for the content that
+// owns it.
 internal final class PieceHint {
     var index = 0
 
-    /// How many multi-segment contents have been made with this hint.
     var multiSegmentContentsMade = 0
 
-    /// The `multiIdentity` of the multi-segment content whose source piece `sourcePiece` is.
     var sourcePieceOwner = 0
 
-    /// That content's source piece that a lookup last found: its virtual range, and the distance from its offsets to their source offsets.
     var sourcePiece: Range<Int> = 0..<0
     var sourcePieceShift = 0
 }

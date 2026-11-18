@@ -9,10 +9,6 @@
 */
 
 extension DocumentStorage {
-    /// Checks this parse of `source` for source ranges that are present, in bounds, on scalar boundaries, within their
-    /// parent's, and in order among their siblings.
-    ///
-    /// Returns `false` at the first violation, and `true` if there is none.
     internal func validateOutput(source: Span<UInt8>) -> Bool {
         RangeValidator(view: StorageView(storage: self, source: source), lineCount: lineCount).validate()
     }
@@ -22,7 +18,6 @@ private struct RangeValidator: ~Escapable {
     private let view: StorageView
     private let lineCount: Int
 
-    /// Where the first line's content begins, past any byte order mark; no range but the document's starts before it.
     private let contentStart: Int
 
     @_lifetime(copy view)
@@ -33,8 +28,7 @@ private struct RangeValidator: ~Escapable {
         self.contentStart = source.count >= 3 && source[0] == 0xEF && source[1] == 0xBB && source[2] == 0xBF ? 3 : 0
     }
 
-    /// Visits every node reachable from the document in pre-order, following child and sibling links, so any depth runs
-    /// in constant stack.
+    // Iterating over child and sibling links, rather than recursing, validates any nesting depth in constant stack.
     func validate() -> Bool {
         guard view.options.contains(.sourcePosition) else {
             return view.sourceRanges.isEmpty
@@ -70,9 +64,6 @@ private struct RangeValidator: ~Escapable {
         return range == .unset ? nil : range
     }
 
-    /// Every node has a range within the source and within its parent's, starting and ending on scalar boundaries and
-    /// starting no earlier than the nearest previous sibling with a range ends. Line breaks, cells inserted into a short
-    /// body row, and the document of empty input have none.
     private func validateRange(_ node: DocumentStorage.Index) -> Bool {
         let record = view.nodes[node]
         let range = rangeIfSet(node)
@@ -81,6 +72,7 @@ private struct RangeValidator: ~Escapable {
             return range == nil
         case .document where lineCount == 0:
             return range == nil
+        // A body row with fewer cells than the header row gets empty cells inserted (Tables (extension)), which have no source.
         case .tableCell where range == nil:
             guard let row = record.parent, case .tableRow(isHeader: false) = view.nodes[row].kind else {
                 return false

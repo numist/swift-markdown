@@ -8,22 +8,20 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// Reads the source line by line, past a leading byte order mark.
+/// Enumerate a UTF8-containing `Span` by lines.
 internal struct LineReader: ~Escapable, ~Copyable {
-    /// The unread rest of the source.
+    /// The unconsumed remainder of the source, as a byte `Span`. Shrinks as lines are read.
     internal var source: Span<UInt8>
     internal var lineNumber = 0
 
-    /// The source offsets of the most recently returned line.
+    /// Byte range of the most recently returned line, in the *original* (pre-shrink, post-BOM) source coordinate space - what the block parser indexes its cached `sourceBytes` with.
     internal var lineRange: Range<Int>
 
-    /// Where the most recently returned line starts: at its first byte, or for line 1 at the input's first byte, so a
-    /// byte order mark counts in line 1's columns.
+    // A byte order mark counts in line 1's columns.
     internal var lineStart: Int {
         lineNumber == 1 ? 0 : lineRange.lowerBound
     }
 
-    /// The source offset of the most recently returned line's first NUL, or the line's end when it holds none.
     internal var lineFirstNUL = 0
     var nextStart: Int
 
@@ -44,8 +42,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
 
     @_lifetime(copy self)
     internal mutating func next() -> Span<UInt8>? {
-        // The line's content begins just past the last line's line ending, or for line 1 just past any byte order mark;
-        // `nextStart` is an offset into the original source.
+        // Start the next line at the last line's end (offset into the original source).
         let start = nextStart
         let bytes = source
         let count = bytes.count
@@ -61,8 +58,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
 
         lineNumber += 1
 
-        // `\n` and `\r` never occur inside a multi-byte UTF-8 sequence, so a byte scan finds line endings, and the
-        // line's first NUL with them.
+        // Find the next line terminator (`\n` 0x0A or `\r` 0x0D). In valid UTF-8 these bytes only ever appear as standalone ASCII scalars - never inside a multi-byte sequence - so a raw byte scan finds boundaries correctly. The scan is vectorized (16 bytes per step) since it touches every source byte exactly once and is a measurable slice of parse time.
         var i = Self.firstLineTerminatorOrNUL(in: bytes)
         lineFirstNUL = start + i
         if i < count, bytes[i] == 0 {
@@ -73,7 +69,7 @@ internal struct LineReader: ~Escapable, ~Copyable {
             let line = bytes.extracting(0..<i)
             lineRange = start..<(start + i)
 
-            // A `\r` immediately followed by `\n` is a single line ending.
+            // Consume the terminator. A `\r` immediately followed by `\n` is a single CRLF terminator.
             let b = bytes[i]
             var terminatorEnd = i + 1
             if b == UInt8(ascii: "\r"), terminatorEnd < count, bytes[terminatorEnd] == UInt8(ascii: "\n") {
@@ -88,11 +84,10 @@ internal struct LineReader: ~Escapable, ~Copyable {
         lineRange = start..<(start + count)
         nextStart = lineRange.upperBound
         let result = source
-        source = bytes.extracting(count..<count)
+        source = bytes.extracting(count..<count) // Empty
         return result
     }
 
-    /// The index of the first `\n`, `\r` or NUL in `span`, or `span.count` if there is none.
     @inline(__always)
     internal static func firstLineTerminatorOrNUL(in span: Span<UInt8>) -> Int {
         let nl = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
@@ -104,7 +99,9 @@ internal struct LineReader: ~Escapable, ~Copyable {
         )
     }
 
-    /// The index of the first `\n` or `\r` in `span`, or `span.count` if there is none.
+    /// Index of the first `\n` or `\r` in `span`, or `span.count` if neither is present.
+    ///
+    /// Scans 16 bytes at a time with a SIMD compare against both terminators, recovering the first matching lane via a per-lane index reduce; the sub-16-byte remainder is scanned scalar.
     @inline(__always)
     internal static func firstLineTerminator(in span: Span<UInt8>) -> Int {
         let nl = SIMD16<UInt8>(repeating: UInt8(ascii: "\n"))
@@ -117,18 +114,16 @@ internal struct LineReader: ~Escapable, ~Copyable {
 }
 
 extension Span where Element == UInt8 {
-    /// The index of the first byte that `matches` flags among each 16 bytes, or that `isMatch` accepts among the
-    /// fewer than 16 after them, or `count` if there is none. The two must accept the same bytes.
+    // `matches` tests each 16-byte chunk and `isMatch` the fewer than 16 bytes after the last one, so the two must accept the same bytes.
     @inline(__always)
     internal func firstIndex(matching matches: (SIMD16<UInt8>) -> SIMDMask<SIMD16<Int8>>, or isMatch: (UInt8) -> Bool) -> Int {
         firstIndex(from: 0, to: count, matching: matches, or: isMatch)
     }
 
-    /// As `firstIndex(matching:or:)`, within `self[lo..<hi]`, or `hi` if there is none.
     @inline(__always)
     internal func firstIndex(from lo: Int, to hi: Int, matching matches: (SIMD16<UInt8>) -> SIMDMask<SIMD16<Int8>>, or isMatch: (UInt8) -> Bool) -> Int {
         let bytes = self.bytes
-        // Non-matching lanes become 16, so `.min()` is the first matching lane.
+        // Lane index for matching lanes; non-matching lanes are forced to 16 so `.min()` yields the first matching lane (or 16 = "no match in this chunk").
         let lanes = SIMD16<UInt8>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15)
         let noMatch = SIMD16<UInt8>(repeating: 16)
 
@@ -141,6 +136,7 @@ extension Span where Element == UInt8 {
             }
             i += 16
         }
+        // Scalar tail (< 16 bytes).
         while i < hi {
             if isMatch(self[i]) {
                 return i
@@ -152,7 +148,6 @@ extension Span where Element == UInt8 {
 }
 
 extension RawSpan {
-    /// The 16 bytes at `offset`, which must lie within the span.
     @inline(__always)
     internal func loadSIMD16(fromByteOffset offset: Int) -> SIMD16<UInt8> {
         #if compiler(>=6.4)

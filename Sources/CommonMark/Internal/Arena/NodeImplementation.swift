@@ -10,30 +10,30 @@
 
 /// Per-kind storage variant for a node.
 internal enum NodeData {
-    /// Inline literal content: text, code spans, raw HTML.
+    /// Inline literal content (text, code spans, raw HTML inlines).
     case literal(ContentRef)
 
-    /// Code block info string and body. Fence metadata lives on the node's `kind`.
+    /// Code block content - info string (language tag) and the literal body. Fence metadata (`isFenced`, fence character/length/offset) lives on the node's `kind` as `CodeBlockInfo`.
     case codeBlock(info: ContentRef, literal: ContentRef)
 
+    /// Link or image destination + title.
     case link(url: ContentRef, title: ContentRef)
 
-    /// The HTML block's start condition (HTML blocks), 1–7, and its body.
+    /// Raw HTML block - type id (1..7 per CommonMark spec) + body literal.
     case htmlBlock(type: UInt8, literal: ContentRef)
 
-    /// `^[…]` inline attribute: its attribute string, as written for `^[text](…)`, or with backslash escapes and character references decoded when it comes from a definition.
+    /// `^[..]` extended attribute node.
     case attribute(ContentRef)
 
-    /// Footnote reference label. The assigned index lives on the node's `kind`.
+    /// Footnote reference - the original label (used for resolution and rendering). The assigned 1-based index lives on the node's `kind`.
     case footnoteReference(label: ContentRef)
 
     case footnoteDefinition(label: ContentRef)
 
-    /// `padding` is the indent, in columns past the enclosing containers' prefixes, that a continuation line needs to belong to the item (List items).
+    /// List item - `padding` is the column at which the item's content starts, relative to the line position where the parent list/item walk began - used by the per-line container walk to strip leading indentation on continuation lines. The tasklist checked state lives on the node's `kind`.
     case item(padding: Int)
 }
 
-/// A link to a node, or to none, stored in one word. None is `-1`, which is no index in `DocumentStorage.nodes`.
 @propertyWrapper
 internal struct NodeLink {
     private var index = -1
@@ -51,7 +51,7 @@ internal struct NodeLink {
     }
 }
 
-/// One node, stored contiguously in `DocumentStorage.nodes`.
+/// Fixed-size record for one AST node. Stored contiguously in `DocumentStorage.nodes`.
 internal struct NodeRecord {
     internal var kind: MarkdownNode.Kind
     @NodeLink internal var firstChild: DocumentStorage.Index?
@@ -61,7 +61,7 @@ internal struct NodeRecord {
     @NodeLink internal var parent: DocumentStorage.Index?
     internal var data: NodeData?
 
-    /// Whether a blank line ends this node, for tight/loose list detection; `handleBlankLine` sets it on the deepest container the blank line continues, unless that is a block quote, and on that container's last block. Each line of an indented code block sets the block's own to whether that line is blank.
+    /// Drives CommonMark tight/loose list detection (`detectLooseList` / `endsWithBlankLine`). Stored inline here rather than in a side `Set<Index>` so set/clear/test are O(1) array-field accesses with no hashing.
     internal var lastLineBlank: Bool = false
 
     internal init(

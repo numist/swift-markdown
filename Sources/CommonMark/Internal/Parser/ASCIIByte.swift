@@ -44,14 +44,13 @@ extension UInt8 {
             || self == UInt8(ascii: "\n") || self == UInt8(ascii: "\r")
     }
 
-    /// A whitespace character (Characters and lines) other than a line ending.
     @inline(__always)
     var isLineWhitespace: Bool {
         self == UInt8(ascii: " ") || self == UInt8(ascii: "\t")
             || self == 0x0B || self == 0x0C
     }
 
-    /// A whitespace character (Characters and lines).
+    /// ASCII whitespace: space, tab, newline, carriage return, vertical tab, or form feed.
     @inline(__always)
     var isWhitespaceCharacter: Bool {
         switch self {
@@ -63,9 +62,8 @@ extension UInt8 {
         }
     }
 
-    /// An ASCII Unicode whitespace character (Characters and lines), for classifying a delimiter run as
-    /// left- or right-flanking. Unlike a whitespace character, it excludes line tabulation. Callers classify
-    /// multi-byte Unicode whitespace themselves.
+    // Flanking tests the spec's Unicode whitespace (Emphasis and strong emphasis), which unlike
+    // `isWhitespaceCharacter` excludes line tabulation (Characters and lines).
     @inline(__always)
     var isFlankingSpace: Bool {
         switch self {
@@ -77,7 +75,7 @@ extension UInt8 {
         }
     }
 
-    /// An ASCII punctuation character (Characters and lines).
+    /// ASCII punctuation: the 32 ASCII punctuation marks per CommonMark §2.1.
     @inline(__always)
     var isASCIIPunct: Bool {
         switch self {

@@ -39,7 +39,7 @@ public struct MarkdownNode: ~Escapable {
         }
     }
 
-    /// The node's children, in order.
+    /// A sequence over the node's children, in document order.
     public var children: Children {
         @_lifetime(borrow self)
         borrowing get {
@@ -96,10 +96,14 @@ public struct MarkdownNode: ~Escapable {
             return MarkdownNode(view: _view, index: p)
         }
     }
+
+    // MARK: - Content
+    //
+    // A node's content is read through the single `content` property (see `NodeContent.swift`), which exposes borrowed spans and segment sequences in one switchable value.
 }
 
 extension MarkdownNode {
-    /// A node's children, returned by `MarkdownNode.children`.
+    /// A sequence of a node's children, returned by `MarkdownNode.children`.
     ///
     /// Iterate the children with `forEach(_:)`. Iteration doesn't allocate.
     public struct Children: ~Copyable, ~Escapable {
@@ -114,9 +118,9 @@ extension MarkdownNode {
             self._first = first
         }
 
-        /// Calls `body` with each child node, in order.
+        /// Calls `body` with each child node, in document order.
         ///
-        /// A `MarkdownNode` is nonescapable, so iteration takes a closure rather than using `for`-`in`.
+        /// Iteration uses a closure rather than `for`-`in` because a `MarkdownNode` is nonescapable and can't be produced by a standard iterator. The node passed to `body` must not escape the call.
         ///
         /// - Parameter body: A closure that receives each child node.
         public borrowing func forEach<E: Swift.Error>(_ body: (borrowing MarkdownNode) throws(E) -> Void) throws(E) {
@@ -163,7 +167,7 @@ extension MarkdownNode {
 
         /// Calls `body` with each segment, in order.
         ///
-        /// A `UTF8Span` is nonescapable, so iteration takes a closure rather than using `for`-`in`.
+        /// Iteration uses a closure because a `UTF8Span` is nonescapable and can't be produced by a standard iterator. The span passed to `body` must not escape the call. For an owned `String` form, or to read content on an OS release without `UTF8Span`, use `MarkdownNode.stringContent`.
         ///
         /// - Parameter body: A closure that receives each segment.
         @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
@@ -212,19 +216,19 @@ extension MarkdownNode {
         /// A table cell, carrying its column `alignment` and the number of `columns` and `rows` it spans.
         ///
         /// Both are `1` for an ordinary cell. With `MarkdownDocument.ParseOptions.tableSpans`:
-        /// - An empty cell, with nothing between its pipes (`||`) or alone in a row of only padding, reports `columns: 0`. The nearest cell to its left that isn't empty, if there is one, counts it in `columns`, so a non-empty cell's `columns` is one plus the number of empty cells directly after it, including empty cells past the table's last column, which the row doesn't hold.
-        /// - A cell holding only the rowspan marker, `^` (`"` in its place with `.tableRowspanDitto`), reports `rows: 0`. The nearest cell above it that isn't a marker cell counts it in `rows`, and the marker cell's text is dropped. A marker cell with no such cell above it, such as one in the header row, keeps its marker text.
+        /// - An empty cell, with nothing between its pipes (`||`) or alone in a row of only padding, reports `columns: 0` and adds one to the `columns` of the nearest non-empty cell to its left, if there is one. Empty cells past the table's last column count too, though the row doesn't hold them.
+        /// - A cell holding only the rowspan marker, `^` (`"` with `.tableRowspanDitto`), reports `rows: 0` and adds one to the `rows` of the nearest non-marker cell above it, and its text is dropped. A marker cell with no such cell above it, such as one in the header row, keeps its text.
         case tableCell(alignment: TableAlignment, columns: Int, rows: Int)
 
         // Inline kinds
 
         /// A run of literal text.
         case text
-        /// A soft line break (a line ending in inline content, outside a code span or raw HTML, that isn't a hard line break). With `.inlineOnly`, such a line ending stays in the text around it.
+        /// A soft line break (a newline within a paragraph that renders as a space).
         case softBreak
         /// A hard line break (a line ending after a backslash, or, without `.inlineOnly`, after two or more spaces).
         case lineBreak
-        /// An inline code span. `backtickCount` is the length of its opening and closing backtick strings.
+        /// Inline code span. `backtickCount` is the number of backticks in the opening/closing delimiter run (`1` for `` `x` ``, `2` for ``` ``x`` ```, …).
         case codeInline(backtickCount: Int)
         /// An inline span of raw HTML.
         case htmlInline
@@ -236,11 +240,11 @@ extension MarkdownNode {
         case link
         /// An image. The source URL and title are available through the node's content.
         case image
-        /// A footnote reference (`[^label]`), produced when parsing with `MarkdownDocument.ParseOptions.footnotes`. `index` numbers labels from 1 in order of first reference; repeated references reuse it. A reference inside a dropped footnote definition takes part in the numbering, so a kept definition can have an index whose first reference is not in the tree.
+        /// A footnote reference (`[^label]`). `index` is the 1-based number assigned to the label in order of first reference - the first distinct label is `1`, the next `2`, and repeated references to the same label reuse its number. Produced when parsing with `MarkdownDocument.ParseOptions.footnotes`. A reference inside a dropped footnote definition takes part in the numbering, so a kept definition can have an index whose first reference is not in the tree.
         case footnoteReference(index: Int)
         /// Struck-through text (`~text~` or `~~text~~`), produced when parsing with `MarkdownDocument.ParseOptions.strikethrough`.
         case strikethrough
-        /// An inline attribute (`^[…]`), produced when parsing with `MarkdownDocument.ParseOptions.attributes`. Its attribute string is available through the node's content.
+        /// An extended-attribute span (`^[…]`). The raw attribute string is available through the node's content. Produced when parsing with `MarkdownDocument.ParseOptions.attributes`.
         case attribute
         
         /// A Boolean value that indicates whether this is a block-level kind.
@@ -260,7 +264,7 @@ extension MarkdownNode {
             !isBlock
         }
 
-        /// Whether this kind is a leaf block that accumulates text lines.
+        /// `true` for the two leaf blocks that lazily accumulate inline text (`.paragraph`, `.heading`).
         internal var canAccumulateText: Bool {
             switch self {
             case .paragraph, .heading:
@@ -310,13 +314,13 @@ extension MarkdownNode {
 
     /// Column alignment for a GFM table cell.
     public enum TableAlignment: UInt8, Sendable, Hashable {
-        /// No explicit alignment (a `---` delimiter row cell).
+        /// No explicit alignment (the delimiter row was `---`).
         case none
-        /// Left-aligned (a `:---` delimiter row cell).
+        /// Left-aligned (the delimiter row was `:---`).
         case left
-        /// Center-aligned (a `:---:` delimiter row cell).
+        /// Center-aligned (the delimiter row was `:---:`).
         case center
-        /// Right-aligned (a `---:` delimiter row cell).
+        /// Right-aligned (the delimiter row was `---:`).
         case right
     }
 
@@ -350,13 +354,13 @@ extension MarkdownNode {
 
         /// Whether the list is a bullet or an ordered list.
         public var kind: Kind
-        /// The start number of an ordered list; `1` for a bullet list.
+        /// Start number for ordered lists; ignored for bullet lists.
         public var start: Int
-        /// A Boolean value that indicates whether the list is tight: no blank line separates two of its items, or two blocks that one of its items directly contains.
+        /// A Boolean value that indicates whether the list is tight, with no blank lines between items or between the blocks an item directly contains.
         public var tight: Bool
-        /// The delimiter of an ordered list's markers; `.period` for a bullet list.
+        /// Delimiter style for ordered lists.
         public var orderedDelimiter: OrderedDelimiter
-        /// The marker character of a bullet list's items; `.hyphen` for an ordered list.
+        /// Marker character for bullet lists.
         public var bulletMarker: BulletMarker
     }
 
@@ -368,7 +372,7 @@ extension MarkdownNode {
         public var fenceCharacter: FenceCharacter?
         /// Number of fence characters used (3 or more); zero for indented blocks.
         public var fenceLength: Int
-        /// Indentation of the opening fence, in columns from its container's content column; each content line loses up to this many columns of indentation. Zero for indented blocks.
+        /// Indentation of the opening fence, in columns from its container's content column; zero for indented blocks.
         public var fenceOffset: Int
         
         /// Fence character for a code block.
@@ -399,7 +403,7 @@ extension MarkdownNode {
 }
 
 extension MarkdownNode {
-    /// A position in the source: a 1-based line and a 1-based UTF-8 byte column within it.
+    /// A 1-based position in the source: `line` counts from 1, `column` is the 1-based UTF-8 **byte** offset within that line (so a leading multi-byte scalar advances the column by its byte count).
     public struct SourcePosition: Comparable, Hashable, Sendable {
         /// The 1-based line number.
         public var line: Int
@@ -424,11 +428,13 @@ extension MarkdownNode {
 }
 
 extension MarkdownNode {
-    /// The node's source range, or `nil` without `MarkdownDocument.ParseOptions.sourcePosition` or for a node that has no source range: a soft or hard line break, a cell inserted into a body row that has fewer cells than the header row, and the document of empty input.
+    /// The node's source position range, or `nil` if the document was parsed without `.sourcePosition` or this node carries no tracked position.
     ///
-    /// The range runs from the first byte of the node's own content to just past its last content byte. The node's own syntax counts as content: a list item's marker and checkbox, a block quote's marker, a footnote definition's `[^label]:`, a code block's fences, an ATX heading's `#`s, a setext heading's underline, a code span's backticks, emphasis and strikethrough delimiters, a link's or image's brackets with its destination and title, an autolink's `<` and `>`, a table's delimiter row, and a table row's leading and closing pipes. Whitespace, line endings, blank lines, table cell padding and the pipes between cells never begin or end a node's range unless they are part of its content, such as whitespace in a code block's text. So a container ends where its last child, its own syntax, or a link reference, attribute or footnote definition it held ends, whichever is latest, the definition counting even after it leaves the container; and a node with no content bytes, such as an empty table cell or a paragraph of only line tabulations, has an empty range at its start, which for a cell is just past its opening pipe, if it has one. The line ending that ends a node's last line is outside it, even where the node's text holds it.
+    /// `lowerBound` is the position of the node's first content byte. `upperBound` is the position just past its last content byte (half-open) - i.e. the column equals the last byte's 1-based column **plus one**.
     ///
-    /// The document's range covers the whole input, any byte order mark included. For input that ends in a line ending, it ends at column 1 of the line after the last.
+    /// The node's own syntax counts as content: a list item's marker and checkbox, a block quote's marker, a footnote definition's `[^label]:`, a code block's fences, an ATX heading's `#`s, a setext heading's underline, a code span's backticks, emphasis and strikethrough delimiters, a link's or image's brackets with its destination and title, an autolink's `<` and `>`, a table's delimiter row, and a table row's leading and closing pipes. Whitespace, line endings, blank lines, table cell padding and the pipes between cells never begin or end a node's range unless they are part of its content, such as whitespace in a code block's text. The line ending that ends a node's last line is outside it, even where the node's text holds it. A container's range also covers any link reference, attribute or footnote definition in it, including a footnote definition that moves to the end of the document. Soft and hard line breaks, cells inserted into a body row that has fewer cells than the header row, and the document of empty input have no range. Any other node with no content bytes, such as an empty table cell, has an empty range at its start.
+    ///
+    /// The document's range covers the whole input, any byte order mark included.
     public var sourceRange: Range<SourcePosition>? {
         _view.sourceRange(of: _index)
     }

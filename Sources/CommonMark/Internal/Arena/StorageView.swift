@@ -8,7 +8,11 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// A view of a `DocumentStorage`'s buffers and the borrowed source, carried by `MarkdownNode`, `Children` and `Segments`.
+/// A lightweight, copyable view over a `DocumentStorage`'s heap-backed buffers plus the borrowed source bytes.
+///
+/// `~Escapable, Copyable` - the same shape as `Span<T>`. Used as the carrier in `MarkdownNode` and `Children` so each accessor reaches into stable heap memory (for storage-owned buffers) or the borrowed source (`Span<UInt8>`) without re-extracting pointers.
+///
+/// Construction is tied to both the storage's borrow scope and the source's lifetime.
 internal struct StorageView: ~Escapable, Copyable {
     internal let nodes: Span<NodeRecord>
     internal let strings: Span<UInt8>
@@ -29,8 +33,11 @@ internal struct StorageView: ~Escapable, Copyable {
         self.options = storage.options
     }
 
-    /// The 1-based line and byte column of a source byte. Requires a populated `lineStarts`.
+    /// Convert a source byte offset to a 1-based (line, column) position.
+    ///
+    /// `column` is the 1-based UTF-8 byte offset within the line. Requires a populated `lineStarts`.
     internal func position(ofByte offset: Int) -> MarkdownNode.SourcePosition {
+        // Largest line index `i` with lineStarts[i] <= offset (binary search; lineStarts is ascending).
         var lo = 0
         var hi = lineStarts.count
         while lo < hi {
@@ -47,7 +54,7 @@ internal struct StorageView: ~Escapable, Copyable {
         return MarkdownNode.SourcePosition(line: lineIndex + 1, column: offset - lineStart + 1)
     }
 
-    /// The node's source range, or `nil` if positions are off or the node has none.
+    /// The 1-based source position range for a node, or `nil` if positions are off or the node was never stamped.
     internal func sourceRange(of index: DocumentStorage.Index) -> Range<MarkdownNode.SourcePosition>? {
         guard sourceRanges.count > index else { return nil }
         let r = sourceRanges[index]
@@ -58,6 +65,7 @@ internal struct StorageView: ~Escapable, Copyable {
         return start..<end
     }
 
+    /// Read a node record by index.
     internal func record(at index: DocumentStorage.Index) -> NodeRecord {
         nodes[index]
     }
@@ -77,6 +85,7 @@ internal struct StorageView: ~Escapable, Copyable {
 
     // MARK: - Content as String (always available)
     
+    /// Concatenate a (possibly multi-segment) `ContentRef` into one `String`.
     internal func string(of ref: ContentRef) -> String {
         if ref.count == 0 {
             return ""
@@ -85,8 +94,8 @@ internal struct StorageView: ~Escapable, Copyable {
             return String(copying: utf8Span(of: segments[ref.first]))
         }
         return String(unsafeUninitializedCapacity: ref.totalLength) { buffer in
-            // SAFETY: The `OutputSpan` starts with none of `buffer` initialized, every append is capacity-checked against `ref.totalLength` (the sum of the segment lengths), `finalize(for:)` verifies `buffer` before reporting the initialized count, and the initializer repairs invalid UTF-8.
-            //         No String initializer fills its UTF-8 storage through an `OutputSpan`. Building the bytes with `Array(capacity:initializingWith:)` and copying them with `String(decoding:as:)` measured 4.8% more instructions to parse spec.txt and read every node's `stringContent`. Building them in `withTemporaryAllocation(of:capacity:_:)` and copying them with `String(copying:)` after `UTF8Span(validating:)` exists only on anyAppleOS 26 and measured 0.7% more.
+            // SAFETY: `output` starts with none of `buffer` initialized, and `finalize(for:)` checks that it is given that same `buffer` before reporting the initialized count.
+            //         No String initializer fills its UTF-8 storage through an `OutputSpan`, so safe code would need an intermediate copy of the bytes.
             var output = unsafe OutputSpan(buffer: buffer, initializedCount: 0)
             for i in 0..<ref.count {
                 let span = bytes(of: segments[ref.first + i].chunk)
@@ -100,17 +109,17 @@ internal struct StorageView: ~Escapable, Copyable {
 
     // MARK: - Content as UTF8Span (anyAppleOS 26 only)
 
+    /// Returns a `UTF8Span` from the raw byte span for the `UTF8Span`-vending public content API.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @_lifetime(borrow self)
     internal func utf8Span(of segment: Segment) -> UTF8Span {
         utf8Span(of: segment.chunk)
     }
 
+    /// Returns a `UTF8Span` from the raw byte span for the `UTF8Span`-vending public content API.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @_lifetime(borrow self)
     internal func utf8Span(of ref: ContentRef) -> UTF8Span {
-        // Single-span content (link URL and title, code info, attribute, footnote label) is stored as one segment;
-        // a longer ref would be cut to its first segment here, while `stringContent` joins them all.
         assert(ref.count <= 1, "single-span content stored as \(ref.count) segments")
         if ref.count == 0 {
             return utf8Span(of: Chunk(offset: 0, length: 0, inSource: false))
@@ -121,8 +130,9 @@ internal struct StorageView: ~Escapable, Copyable {
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @_lifetime(borrow self)
     internal func utf8Span(of chunk: Chunk) -> UTF8Span {
-        // SAFETY: A source chunk lies within source text that a `String` or `UTF8Span` validated, and the parser cuts it only at ASCII bytes or just past a leading byte-order mark, so it starts and ends on scalar boundaries; an arena chunk holds bytes the parser writes as whole scalars. Either way the bytes are valid UTF-8, which is `UTF8Span(unchecked:)`'s precondition.
-        //         A stored property can't have a type newer than the deployment target, so this view can carry the validated source only as an existential `UTF8Span` holder. Copying that holder with every node, deriving each source chunk from it with `UTF8Span.UnicodeScalarIterator.reset(roundingBackwardsFrom:)` and `prefix()`/`suffix()`, and validating arena chunks measured up to 8.4% more instructions to parse a document and read every node's content, and 19% more where the arena is half the size of the source. Calling `UTF8Span(validating:)` on every chunk instead measured up to 3.7% more, and 24% more where the arena is half the size of the source.
+        // Content bytes are already known-valid UTF-8 (source-derived from validated input, or valid arena bytes) and cut on scalar boundaries, so skip re-validation.
+        // SAFETY: Those bytes are valid UTF-8, which `UTF8Span(unchecked:)` requires.
+        //         `UTF8Span(validating:)` would re-validate them on every content read.
         unsafe UTF8Span(unchecked: bytes(of: chunk))
     }
 }

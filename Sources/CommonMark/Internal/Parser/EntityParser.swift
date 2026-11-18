@@ -8,8 +8,11 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// A fixed 8-byte inline buffer. It wraps `SIMD8` because `InlineArray` requires the anyAppleOS 26 runtime.
+/// A fixed 8-byte inline buffer.
+///
+/// Indices are `0..<8`.
 internal struct Bytes8 {
+    // Not `InlineArray<8, UInt8>`, which requires the anyAppleOS 26 runtime.
     private var storage = SIMD8<UInt8>()
 
     internal init() {}
@@ -21,6 +24,8 @@ internal struct Bytes8 {
 }
 
 internal enum EntityParser {
+    // MARK: - HTML entities
+
     internal struct EntityMatch {
         /// Decoded UTF-8 bytes, stored inline (no heap allocation). Named-entity values are at most 6 bytes (the longest entry in `HTMLEntities.entityValueBuffer`) and numeric entities at most 4, so 8 is a safely oversized fixed capacity. `count` is the number of leading bytes that are valid.
         var bytes: Bytes8
@@ -28,9 +33,9 @@ internal enum EntityParser {
         var afterSemi: Int
     }
 
-    /// Matches a reference at the `&` at `start`, returning its decoded bytes and the offset past its `;` (Entity and numeric character references).
+    /// Try to match an HTML entity beginning at `start` (which points at `&`).
     ///
-    /// A numeric reference has at most `maxDecimalDigits` decimal or `maxHexadecimalDigits` hexadecimal digits, leading zeros included.
+    /// Returns the decoded codepoints and the offset just past the trailing `;` (Entity and numeric character references).
     internal static func matchEntity(start: Int, end: Int, source: Span<UInt8>, maxDecimalDigits: Int, maxHexadecimalDigits: Int) -> EntityMatch? {
         let after = start + 1
         if after >= end {
@@ -43,9 +48,9 @@ internal enum EntityParser {
         return matchNamedEntity(start: start, end: end, source: source)
     }
 
-    /// Match `&#NNN;` (decimal, 1 to `maxDecimalDigits` digits) or `&#xHHH;` / `&#XHHH;` (hex, 1 to `maxHexadecimalDigits` digits).
+    /// Match `&#NNN;` (decimal, 1–`maxDecimalDigits` digits) or `&#xHHH;` / `&#XHHH;` (hex, 1–`maxHexadecimalDigits` digits).
     private static func matchNumericEntity(start: Int, end: Int, source: Span<UInt8>, maxDecimalDigits: Int, maxHexadecimalDigits: Int) -> EntityMatch? {
-        var i = start + 2
+        var i = start + 2 // past `&#`
         if i >= end {
             return nil
         }
@@ -115,6 +120,7 @@ internal enum EntityParser {
         let afterSemi = i + 1
         if let idx = lookupEntity(range: nameRange, source: source) {
             let off = HTMLEntities.entityValueOffsets[idx]
+            // Length is derived from the next offset: values are packed contiguously in index order, and a trailing sentinel offset (== buffer count) gives the final entry its end.
             let len = HTMLEntities.entityValueOffsets[idx + 1] - off
             var bytes = Bytes8()
             for k in 0..<len {
@@ -149,7 +155,9 @@ internal enum EntityParser {
         return nil
     }
 
-    /// Negative if `entityNames[index]` sorts before the bytes in `range`, 0 if equal, positive otherwise.
+    /// Compare entityNames[index] against the bytes in `range`.
+    ///
+    /// Returns negative if the table entry is less, 0 if equal, positive otherwise.
     private static func compareEntityName(index: Int, range: Range<Int>, source: Span<UInt8>) -> Int {
         let name = HTMLEntities.entityNames[index].utf8
         let nameLen = name.count

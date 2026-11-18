@@ -8,12 +8,9 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// Tables (extension): turns a table-pending paragraph into a `.table` with `.tableRow` and `.tableCell` descendants.
+/// GFM-tables detection and transformation.
 extension BlockParser {
 
-    /// Turns table-pending `node` into a `.table` and queues its cells for inline parsing. A paragraph is table-pending
-    /// only once `opensTable` held for its header and delimiter row, and its pending content then holds just those
-    /// rows and its body rows.
     internal mutating func parseTable(node: DocumentStorage.Index, pending: consuming PendingLeaf?) {
         precondition(pending != nil, "an open paragraph always holds its accumulated content")
         let leaf = pending!
@@ -43,10 +40,11 @@ extension BlockParser {
         let alignments = parseDelimRow(line: lines[1])
         precondition(splitCells(line: lines[0]).count == alignments.count, "a table-pending paragraph's header has the delimiter row's column count")
         let columnCount = alignments.count
+        // Mutate the paragraph node in place.
         storage[node].kind = .table
-        // Per column, the cell a rowspan filler in the next row grows: the nearest cell above that isn't a rowspan filler. It is kept rather than searched for, so a long column of markers stays linear. Empty without `.tableSpans`.
+        // Each column's owner is kept rather than found by scanning up the rows, so a long column of rowspan fillers
+        // stays linear.
         var rowspanOwners: [DocumentStorage.Index?] = storage.options.contains(.tableSpans) ? Array(repeating: nil, count: columnCount) : []
-        // The delimiter row (line 1) makes no `.tableRow`.
         for k in lines.indices where k != 1 {
             appendRow(
                 parent: node,
@@ -56,17 +54,11 @@ extension BlockParser {
                 rowspanOwners: &rowspanOwners
             )
         }
-        // The table runs from its header row to its last line, the delimiter row when it has no body.
         storage.setSourceStart(node, rowRange(lines[0]).lowerBound)
         storage.setSourceEnd(node, rowRange(lines[lines.count - 1]).upperBound)
     }
 
-    /// The column count of the table source lines `header` and `delimiter` open by their own cells, or `nil` if they
-    /// open none: `delimiter` is a delimiter row of no more cells than `maxTableRowCells` and `header` has as many cells
-    /// (Tables (extension)). Unless an earlier line of the paragraph has more cells than `maxTableRowCells`, the block
-    /// parser then marks the paragraph table-pending, so the table, not a paragraph, is the open block for the next line.
-    ///
-    /// Every delimiter-shaped paragraph line asks this, so it counts cells without building arrays.
+    // Every delimiter-candidate paragraph line asks this, so it counts cells without building arrays.
     internal mutating func opensTable(header: Range<Int>, delimiter: Range<Int>) -> Int? {
         var columns = 0
         var isDelimiterRow = true
@@ -80,12 +72,12 @@ extension BlockParser {
             return nil
         }
         precondition(columns > 0, "a delimiter-candidate line holds a `-`, so it splits into at least one cell")
+        // GFM: header column count must equal delimiter column count, else not a table - leave the paragraph alone.
         var headerCells = 0
         forEachCell(in: header) { _ in headerCells += 1 }
         return headerCells == columns ? columns : nil
     }
 
-    /// Whether a line of `sourceBytes[lines]`, lines joined by `\n`, has more cells than `maxTableRowCells`.
     internal mutating func holdsLineOverRowCellLimit(_ lines: Range<Int>) -> Bool {
         var lineStart = lines.lowerBound
         for i in lines where sourceBytes[i] == UInt8(ascii: "\n") {
@@ -97,17 +89,11 @@ extension BlockParser {
         return exceedsRowCellLimit(line: lineStart..<lines.upperBound)
     }
 
-    /// Whether a table takes body-row candidate `sourceBytes[line]` as a row by the table limits: the rows before it
-    /// inserted `autocompletedCells` cells, no more than `maxTableAutocompletedCells`, and it has no more cells than
-    /// `maxTableRowCells`.
     internal mutating func tableLimitsAdmitRow(_ line: Range<Int>, autocompletedCells: Int) -> Bool {
-        // No row inserts fewer than zero cells, so a negative limit is zero.
+        // A negative limit behaves as zero, the nearest meaningful value (`ParseLimits`).
         autocompletedCells <= max(limits.maxTableAutocompletedCells, 0) && !exceedsRowCellLimit(line: line)
     }
 
-    /// `autocompletedCells` plus the cells a table of `columns` columns inserts into body row `sourceBytes[line]`,
-    /// those it is short of `columns`. Only counted while `maxTableAutocompletedCells` is limited; otherwise
-    /// `autocompletedCells` is returned unchanged.
     internal mutating func autocompletedCells(_ autocompletedCells: Int, afterRow line: Range<Int>, columns: Int) -> Int {
         guard limits.maxTableAutocompletedCells < .max else {
             return autocompletedCells
@@ -118,7 +104,6 @@ extension BlockParser {
         return overflow ? .max : sum
     }
 
-    /// Whether source line `line` has more cells than `maxTableRowCells`.
     private mutating func exceedsRowCellLimit(line: Range<Int>) -> Bool {
         let limit = limits.maxTableRowCells
         // A line has no more cells than bytes, apart from an empty line's one cell.
@@ -130,8 +115,6 @@ extension BlockParser {
         return cells > limit
     }
 
-    /// Whether `sourceBytes[range]` holds only `-`, `:`, `|` and padding, with at least one `-`.
-    /// This necessary condition for a delimiter row lets the block parser skip ordinary prose.
     internal func couldBeDelimiterRow(range: Range<Int>) -> Bool {
         var sawDash = false
         for i in range {
@@ -149,8 +132,6 @@ extension BlockParser {
         return sawDash
     }
 
-    /// Whether body-row candidate `sourceBytes[range]` is a lone `|` amid padding. Such a row has no cells
-    /// (`forEachCell`), so it closes the table.
     internal func isLonePipeRow(range: Range<Int>) -> Bool {
         var i = range.lowerBound
         while i < range.upperBound && sourceBytes[i].isLineWhitespace {
@@ -168,9 +149,9 @@ extension BlockParser {
 
     // MARK: - Row construction
 
-    /// Appends a `.tableRow` and its cells under `parent`, inserting missing cells and dropping extras.
+    /// Build a `.tableRow` node + its cells under `parent`. Missing trailing cells are emitted as empty; extras beyond `columnCount` are dropped.
     ///
-    /// With `.tableSpans`, a zero-width `||` cell is a colspan filler (`columns: 0`) that grows the nearest cell to its left that isn't one, and a cell holding only the rowspan marker (`^`, or `"` with `.tableRowspanDitto`) is a rowspan filler (`rows: 0`) that, when its column has an owner above, grows that owner and drops its text. Every cell that isn't a rowspan filler, colspan fillers and inserted cells included, becomes its column's owner.
+    /// When `spansEnabled`, each cell carries `.tableCell` span data: an empty `||` cell becomes a colspan filler (colspan 0) and grows the preceding cell's colspan; a cell whose content is the lone rowspan marker (`^`, or `"` when `.tableRowspanDitto`) becomes a rowspan filler (rowspan 0) and grows the matching cell in the nearest non-filler row above, with its marker text suppressed.
     private mutating func appendRow(
         parent: DocumentStorage.Index,
         line: Range<Int>,
@@ -190,22 +171,21 @@ extension BlockParser {
         let cells = splitCells(line: line)
         let columnCount = alignments.count
 
-        // Empty without `.tableSpans`, so the common path does not allocate.
+        // Span bookkeeping is only allocated/computed when `.tableSpans` is on. With spans off these stay empty (the empty `Array` is a non-allocating singleton) and every per-cell read below is guarded by `spansEnabled`, so the common table path does no extra allocation or work.
         let spansEnabled = storage.options.contains(.tableSpans)
         var colspans: [Int] = []
         var rowspans: [Int] = []
         var skipContent: [Bool] = []
         if spansEnabled {
-            // Colspan accumulates over every cell, so colspan fillers past `columnCount`, which are dropped, still
-            // grow the nearest cell to their left that isn't one, uncapped.
+            // Sized to every cell, not just the columns kept: a colspan filler past the last column is dropped but
+            // still grows the cell to its left, even past the table's width.
             colspans = [Int](repeating: 1, count: max(columnCount, cells.count))
             rowspans = [Int](repeating: 1, count: columnCount)
             skipContent = [Bool](repeating: false, count: columnCount)
             let markerByte = storage.options.contains(.tableRowspanDitto) ? UInt8(ascii: "\"") : UInt8(ascii: "^")
-            // The nearest cell to the left that isn't a colspan filler, kept so a long run of fillers stays linear.
+            // Kept rather than found by scanning left, so a long run of colspan fillers stays linear.
             var lastRealCell: Int? = nil
             for col in 0..<cells.count {
-                // A zero-width cell (`||`) in any column is a colspan filler; a leading one has no cell to grow.
                 if cells[col].isEmpty {
                     colspans[col] = 0
                     if let lastRealCell {
@@ -214,7 +194,7 @@ extension BlockParser {
                 } else {
                     lastRealCell = col
                 }
-                // A cell whose content is exactly the marker byte is a rowspan filler.
+                // Rowspan marker: the trimmed cell is exactly the marker byte.
                 if col < columnCount {
                     let content = trimmingPadding(cells[col])
                     if content.count == 1 && sourceBytes[content.lowerBound] == markerByte {
@@ -222,7 +202,6 @@ extension BlockParser {
                     }
                 }
             }
-            // The header has no row above to grow.
             if !isHeader {
                 for col in 0..<columnCount where rowspans[col] == 0 {
                     if let spanning = rowspanOwners[col] {
@@ -248,8 +227,6 @@ extension BlockParser {
                 rowspanOwners[col] = cellIdx
             }
             guard col < cells.count else { continue }
-            // A cell covers its content, without the padding between it and the pipes; a cell with no content has an
-            // empty range just past its opening pipe, if it has one.
             let content = trimmingPadding(cells[col])
             storage.setSourceStart(cellIdx, content.isEmpty ? cells[col].lowerBound : content.lowerBound)
             storage.setSourceEnd(cellIdx, content.isEmpty ? cells[col].lowerBound : content.upperBound)
@@ -265,12 +242,8 @@ extension BlockParser {
         storage[idx].kind = .tableCell(alignment: alignment, columns: colspan, rows: rowspan + 1)
     }
 
-    /// Queues source bytes `content` as `cell`'s content for inline parsing after the block pass, so a reference in a
-    /// cell resolves against definitions anywhere in the document. `\|` includes a pipe in a cell's content, even inside
-    /// a code span (Tables (extension)), and a NUL is replaced with U+FFFD (Insecure characters), so content holding
-    /// either is copied with each `\|` replaced by `|` and each NUL by U+FFFD.
+    // Pre-process: replace `\|` with `|` so that whatever pipe-escaping the writer used to keep the cell intact is invisible to inline parsing - even inside a code span.
     private mutating func queueInlines(of cell: DocumentStorage.Index, content: Range<Int>) {
-        // The number of bytes each source byte becomes.
         func copies(_ i: Int) -> Int {
             if sourceBytes[i] == 0 {
                 return 3
@@ -296,15 +269,14 @@ extension BlockParser {
         pendingInlines.append((cell, storage.intern(arenaChunk(from: offset))))
     }
 
-    /// Whether `sourceBytes[i]` is a `|` directly after a backslash at or after `start`. Such a pipe is cell content,
-    /// not a cell boundary, however many backslashes precede it.
+    // A pipe directly after a backslash is cell content however many backslashes precede it, so `\\|` ends no cell.
     private func isEscapedPipe(at i: Int, from start: Int) -> Bool {
         sourceBytes[i] == UInt8(ascii: "|") && i > start && sourceBytes[i - 1] == UInt8(ascii: "\\")
     }
 
     // MARK: - Cell splitting
 
-    /// Delimiter row `line`'s column alignments.
+    /// Parse the delimiter row into per-column alignments. Each cell must match `\s*:?-+:?\s*` after pipe splitting, with at least one column.
     private mutating func parseDelimRow(line: Range<Int>) -> [MarkdownNode.TableAlignment] {
         let cells = splitCells(line: line)
         precondition(!cells.isEmpty, "a delimiter-candidate line holds a `-`, so it splits into at least one cell")
@@ -316,7 +288,6 @@ extension BlockParser {
         }
     }
 
-    /// A delimiter-row cell's alignment, or nil if `cell` isn't one: `:?-+:?` amid padding.
     private func delimiterAlignment(of cell: Range<Int>) -> MarkdownNode.TableAlignment? {
         let marker = trimmingPadding(cell)
         guard !marker.isEmpty else {
@@ -339,17 +310,13 @@ extension BlockParser {
         }
     }
 
-    /// `forEachCell`'s cells of `line`, collected.
+    /// Split `line` into cells on unescaped `|`. Strips a single leading and trailing `|` if present (with optional surrounding whitespace).
     private func splitCells(line: Range<Int>) -> [Range<Int>] {
         var cells: [Range<Int>] = []
         forEachCell(in: line) { cells.append($0) }
         return cells
     }
 
-    /// Calls `body` with each cell of source line `line`, in order. Cells split on each `|` that doesn't directly follow
-    /// a backslash (`isEscapedPipe`). Padding may precede a leading `|` and follow a closing one; both pipes and that
-    /// padding are stripped.
-    // Out of line, a table-heavy parse costs 0.7% more.
     @inline(__always)
     private func forEachCell(in line: Range<Int>, _ body: (Range<Int>) -> Void) {
         var s = line.lowerBound
@@ -367,6 +334,7 @@ extension BlockParser {
             hadLeadingPipe = true
         }
         var hadClosingPipe = false
+        // Don't strip a backslash-escaped pipe.
         if e > s && sourceBytes[e - 1] == UInt8(ascii: "|") && !isEscapedPipe(at: e - 1, from: line.lowerBound) {
             e -= 1
             hadClosingPipe = true
@@ -384,15 +352,13 @@ extension BlockParser {
         body(cellStart..<e)
     }
 
-    /// Source line `line`'s range as a row, from its leading pipe or first cell's content to its closing pipe or last
-    /// cell's content, without padding: empty at its start when it holds only padding, as its one empty cell is.
     private mutating func rowRange(_ line: Range<Int>) -> Range<Int> {
         let content = trimmingPadding(line)
         return content.isEmpty ? line.lowerBound..<line.lowerBound : content
     }
 
-    /// `range` without its leading and trailing padding: every whitespace character other than a line ending, as
-    /// the spec trims spaces between pipes and cell content (Tables (extension)).
+    // Tab, line tabulation and form feed are whitespace characters (Characters and lines), so they pad a cell as
+    // spaces do (Tables (extension)).
     private func trimmingPadding(_ range: Range<Int>) -> Range<Int> {
         var s = range.lowerBound
         var e = range.upperBound

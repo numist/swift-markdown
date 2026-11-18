@@ -10,26 +10,14 @@
 
 internal import BasicContainers
 
-/// Remembers each unescaped `(` that the latest scan for balanced parentheses passed, in a bare link destination
-/// (Links) or an attribute form's `(…)`, so that a scan starting just after one of them reads its result rather than
-/// the bytes.
-///
-/// A scan stops at a `)` that closes no `(` it passed, at a byte that ends the run, or at the end, and its parentheses
-/// are balanced when it closed every `(` it passed and they nest no deeper than the scan's `maxNesting`. A scan
-/// starting just after a `(` the latest scan passed reads the same bytes: it stops at the `)` closing that `(`, or else
-/// where the latest scan stopped, balanced only when that `(` is the innermost one left open there, and its
-/// parentheses nest as deep as those inside that `(`.
+// A scan starts at each `](` and each attribute form's `(`, so without this record a run of unclosed `(` is rescanned
+// by every scan starting inside it. A recorded result holds only while every scan between resets reads the same bytes
+// up to the same `end` through the same `byte` and `terminates`, with the same `maxNesting`.
 internal struct BalancedParenthesesScan {
-    /// Each `(` the latest scan passed, in order, with where a scan starting just after it stops balanced, or nil when
-    /// that scan stops unbalanced.
     private var openers: [(offset: Int, balancedEnd: Int?)] = []
-    /// During a scan, each `(` not yet closed, innermost last: its index in `openers`, and how deeply the parentheses
-    /// it has closed inside it so far nest.
     private var unclosed: [(opener: Int, innerNesting: Int)] = []
-    /// The first of `openers` a scan may start after. Scans start further on as inline parsing proceeds.
     private var nextOpener = 0
 
-    /// Forgets the latest scan, for scans of other bytes.
     mutating func reset() {
         if openers.isEmpty {
             return
@@ -38,10 +26,6 @@ internal struct BalancedParenthesesScan {
         nextOpener = 0
     }
 
-    /// Where a scan from `start` stops, at a `)` that closes no `(` it passed, at a byte `terminates` accepts, or at
-    /// `end`, if its parentheses are balanced there and nest no deeper than `maxNesting`, or than 0 when it is
-    /// negative. Between resets every scan reads the same bytes up to the same `end` through `byte` and `terminates`,
-    /// with the same `maxNesting`.
     @inline(__always)
     mutating func balancedEnd(from start: Int, end: Int, maxNesting: Int, byte: (Int) -> UInt8, terminates: (UInt8) -> Bool) -> Int? {
         while nextOpener < openers.count, openers[nextOpener].offset < start - 1 {
@@ -52,12 +36,10 @@ internal struct BalancedParenthesesScan {
         }
         reset()
         let maxNesting = max(maxNesting, 0)
-        // How deeply the parentheses this scan has closed outside every `(` it passed nest.
         var outerNesting = 0
         var i = start
         while i < end {
             let c = byte(i)
-            // Only ASCII punctuation can be escaped, so a `\` before a line ending is literal.
             if c == UInt8(ascii: "\\") && i + 1 < end && byte(i + 1).isASCIIPunct {
                 i += 2
                 continue
@@ -94,20 +76,14 @@ internal struct BalancedParenthesesScan {
     }
 }
 
-/// A link title (Links) read a byte at a time from just past its opener, so that a scan can stop at the end of the bytes
-/// it has and go on from there when more follow.
-///
-/// A `\` in the body may begin a backslash escape or be literal, and the title closes at the furthest closer either
-/// reading reaches: `'\')` has the title `\`, since no later `'` completes the escape.
+// A `\` before a closer may begin a backslash escape or be literal, so a title closes at the furthest closer either
+// reading reaches: `'\')` has the title `\`, since no later `'` completes the escape.
 internal struct LinkTitleScan {
     private let opener: UInt8
     private let closer: UInt8
-    /// Whether the next byte may be a content byte (any byte but a delimiter), begin an escape, or close.
     private var inBody = true
-    /// Whether the next byte completes an escape if it is ASCII punctuation.
     private var afterBackslash = false
 
-    /// The scan of a title that `opener` begins, or nil when it begins none.
     @inline(__always)
     init?(opener: UInt8) {
         switch opener {
@@ -121,13 +97,10 @@ internal struct LinkTitleScan {
         self.opener = opener
     }
 
-    /// Whether a later byte may still close the title, or close it past a closer already read.
     var canContinue: Bool {
         inBody
     }
 
-    /// Reads the title's next byte, while `canContinue`, returning whether it is a closer, which the title ends after
-    /// unless a later one closes it.
     @inline(__always)
     mutating func read(_ c: UInt8) -> Bool {
         inBody = (c != opener && c != closer) || (afterBackslash && c.isASCIIPunct)
@@ -136,18 +109,16 @@ internal struct LinkTitleScan {
     }
 }
 
-/// The most characters and bytes a label can have inside its brackets.
 internal struct LabelLengthLimit {
     var characters: Int
     var bytes: Int
 }
 
-/// A stand-in for the case fold of a normalized label, which keys the definition maps (Links). Each case fold has one
-/// stand-in, held in one form, so two keys are equal exactly when the labels' case folds are the same code points.
+// The spec matches labels by the code points of their case folds (Links), so a key holds a stand-in for the fold, and
+// a non-ASCII one as bytes, since a String compares canonically equivalent strings as equal. A key is `.ascii` exactly
+// when its stand-in's bytes are all ASCII, so that equal stand-ins are equal keys.
 internal enum NormalizedLabel: Hashable {
-    /// A stand-in whose bytes are all ASCII.
     case ascii(String)
-    /// The UTF-8 bytes of a stand-in with a non-ASCII byte.
     case utf8([UInt8])
 
     static let empty = NormalizedLabel.ascii("")
@@ -159,8 +130,6 @@ internal enum NormalizedLabel: Hashable {
         return false
     }
 
-    // An ASCII key and a UTF-8 key are never equal, so their hashes need not be told apart by case. A UTF-8 key's bytes
-    // are combined eight to a word rather than one at a time.
     func hash(into hasher: inout Hasher) {
         switch self {
         case .ascii(let label):
@@ -182,16 +151,13 @@ internal enum NormalizedLabel: Hashable {
     }
 }
 
-/// Scanners for link labels, destinations and titles, shared by link reference definitions and inline links, and for raw HTML tags.
+/// Byte-level scanners for link labels, destinations, and titles.
+///
+/// They're used by both block-level reference-definition parsing (`BlockParser`) and inline link parsing (the InlineParser extensions).
 extension BlockParser {
 
     // MARK: - Link label
 
-    /// Scans a link label through `byte`; a label may span line endings. Returns the interior's range and the offset
-    /// past `]`, or nil at an unescaped `[`, past `linkLabelLimit`, or at the end. With `crlfIsOneCharacter`, a CRLF's
-    /// LF doesn't count toward the length, since a CRLF is one line ending. With `countsLazyLineWhitespace`,
-    /// `lazyLineWhitespace` gives the bytes a line join at an offset adds (see
-    /// `lazyLineWhitespaceBytes(afterLineJoinAt:in:recorded:)`).
     @inline(__always)
     private func scanLinkLabel(
         from start: Int,
@@ -206,8 +172,8 @@ extension BlockParser {
         }
         let limit = linkLabelLimit
         let interiorStart = start + 1
-        // A byte of the label counts at least half a byte (a CRLF's two count one), so a label of more than twice
-        // `limit.bytes` bytes doesn't fit and the scan stops there. The bytes are counted only once the label closes.
+        // A content byte counts at least half a byte (a CRLF's two count one), so a label of more than twice
+        // `limit.bytes` content bytes doesn't fit and the scan can stop there.
         let maxBytes = max(limit.bytes, 0)
         let scanEnd = maxBytes < (end - interiorStart) / 2 ? interiorStart + 2 * maxBytes + 1 : end
         var i = interiorStart
@@ -250,9 +216,6 @@ extension BlockParser {
         return nil
     }
 
-    /// Whether the label interior `interior`, read through `byte`, has at most `maxBytes` bytes, counted by
-    /// `labelByteWeight`, with a CRLF's LF not counted when `crlfIsOneCharacter`, and with `countsLazyLineWhitespace`,
-    /// with the bytes `lazyLineWhitespace` gives for each line join.
     @inline(__always)
     private func labelBytesFit(
         _ interior: Range<Int>,
@@ -262,7 +225,7 @@ extension BlockParser {
         countsLazyLineWhitespace: Bool,
         lazyLineWhitespace: (Int) -> Int
     ) -> Bool {
-        // A byte counts at most three bytes (a NUL).
+        // Without a lazy continuation line's whitespace, a content byte counts at most three bytes (a NUL).
         if interior.count <= maxBytes / 3 && !countsLazyLineWhitespace {
             return true
         }
@@ -280,8 +243,6 @@ extension BlockParser {
         return bytes <= maxBytes
     }
 
-    /// The bytes a label counts, past the line join at offset `offset` of `content`, for the leading whitespace of
-    /// the lazy continuation line the join begins, which `content` doesn't hold, as `recorded` holds it.
     private func lazyLineWhitespaceBytes(afterLineJoinAt offset: Int, in content: borrowing ContentSpan, recorded: LazyLineWhitespace) -> Int {
         let next = offset + 1
         guard next < content.endOffset else {
@@ -296,8 +257,6 @@ extension BlockParser {
         return (content.inSource ? recorded.bySourceOffset[next] : recorded.byArenaOffset[next]) ?? 0
     }
 
-    /// Matches a link label (Links) at virtual offset `start` of `content`, returning its interior and the offset past
-    /// its `]`.
     internal func matchLinkLabel(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
         if let recorded = lazyLineWhitespace {
             return matchLinkLabelCountingLazyLineWhitespace(from: start, end: end, in: content, recorded: recorded)
@@ -305,13 +264,9 @@ extension BlockParser {
         if let label = content.withForwardReader(from: start, { byte in scanLinkLabel(from: start, end: end, crlfIsOneCharacter: false, byte: byte) }) {
             return label
         }
-        // A label counted past `linkLabelLimit` with each CRLF as two characters may still fit. Only inline-only
-        // content parsed in place holds a CR.
         return contentHoldsCR ? matchLinkLabelCountingCRLFOnce(from: start, end: end, in: content) : nil
     }
 
-    /// `matchLinkLabel` counting the whitespace of each lazy continuation line that keeps some, as `recorded` holds it.
-    // Out of line, as only a document with such a line calls it, so that `matchLinkLabel` stays small.
     @inline(never)
     private func matchLinkLabelCountingLazyLineWhitespace(
         from start: Int,
@@ -327,9 +282,8 @@ extension BlockParser {
         }
     }
 
-    /// Whether a link label that `matchLinkLabel` doesn't match from `start` can still close on a later line: up to `end`
-    /// and a line ending after it, it holds no unescaped `[` and fits `linkLabelLimit`. Whitespace that a later lazy
-    /// continuation line keeps is not yet counted.
+    // A label that closes on a later line also holds the line ending before that line, so the scan reads a line ending
+    // and then a `]` past `end`.
     internal func linkLabelIsOpen(from start: Int, end: Int, in content: borrowing ContentSpan) -> Bool {
         let recorded = lazyLineWhitespace
         return content.withForwardReader(from: start) { byte in
@@ -350,22 +304,17 @@ extension BlockParser {
         }
     }
 
-    /// `matchLinkLabel` counting a CRLF as one character.
-    // Out of line, as only content holding a CR calls it, so that its callers on every content's path stay small.
     @inline(never)
     private func matchLinkLabelCountingCRLFOnce(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
         content.withForwardReader(from: start) { byte in scanLinkLabel(from: start, end: end, crlfIsOneCharacter: true, byte: byte) }
     }
 
-    /// Whether a label that `matchLinkLabel` didn't scan, such as a shortcut reference's link text or a footnote's
-    /// label, fits `limit` untrimmed. A longer label matches no definition.
     internal func labelFits(_ limit: LabelLengthLimit, virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> Bool {
         let recorded = lazyLineWhitespace
-        // A content byte counts as at most one character and at most three bytes (a NUL), so a label of at most
-        // `limit.characters` content bytes and at most a third of `limit.bytes` fits, unless a lazy continuation
-        // line's whitespace adds bytes. Four content bytes count as at least one character and two as at least one
-        // byte (a CRLF), so a label of more content bytes than four times `limit.characters` or twice `limit.bytes`
-        // doesn't. Settling those without weighing each byte keeps a label that spans many nested brackets cheap.
+        // A content byte counts at most one character and three bytes (a NUL, as U+FFFD), plus the leading
+        // whitespace of a lazy continuation line it begins. UTF-8 encodes a character in at most four bytes and a CRLF
+        // counts one byte, so four content bytes count at least one character and two at least one byte. Settling a
+        // label by these bounds, without weighing each byte, keeps a label that spans many nested brackets cheap.
         if range.count <= limit.characters && range.count <= limit.bytes / 3 && recorded == nil {
             return true
         }
@@ -378,7 +327,6 @@ extension BlockParser {
             let b = content[i]
             characters += labelCharacterWeight(b)
             bytes += labelByteWeight(b)
-            // A CRLF is one line ending. Only inline-only content parsed in place holds a CR.
             if contentHoldsCR, b == UInt8(ascii: "\n"), content[i - 1] == UInt8(ascii: "\r") {
                 characters -= 1
                 bytes -= 1
@@ -393,31 +341,25 @@ extension BlockParser {
         return true
     }
 
-    /// The most characters and bytes a link label can have inside its brackets (Links).
     internal var linkLabelLimit: LabelLengthLimit {
         LabelLengthLimit(characters: limits.maxLinkLabelCharacters, bytes: limits.maxLinkLabelBytes)
     }
 
-    /// The most characters and bytes a footnote reference's label can have inside its brackets.
     internal var footnoteLabelLimit: LabelLengthLimit {
         LabelLengthLimit(characters: limits.maxFootnoteLabelCharacters, bytes: limits.maxFootnoteLabelBytes)
     }
 
-    /// Counts characters (code points): a UTF-8 continuation byte counts 0 and every other byte 1.
     private func labelCharacterWeight(_ byte: UInt8) -> Int {
         return byte & 0xC0 == 0x80 ? 0 : 1
     }
 
-    /// Counts bytes: a NUL counts as the 3 bytes of the U+FFFD that replaces it (Insecure characters) and every other
-    /// byte 1.
+    // A NUL counts the three bytes of the U+FFFD that replaces it (Insecure characters).
     private func labelByteWeight(_ byte: UInt8) -> Int {
         return byte == 0 ? 3 : 1
     }
 
     // MARK: - Link destination
 
-    /// Scans a link destination through `byte`, and a bare one's parentheses, nested at most `maxNesting` deep,
-    /// through `parentheses`. Returns the destination's range, without any `<` `>`, and the offset past it.
     @inline(__always)
     private static func scanLinkDestination(from start: Int, end: Int, parentheses: inout BalancedParenthesesScan, maxNesting: Int, byte: (Int) -> UInt8) -> (destination: Range<Int>, afterEnd: Int)? {
         if start >= end {
@@ -431,8 +373,6 @@ extension BlockParser {
                 if c == UInt8(ascii: ">") {
                     return ((start + 1)..<i, i + 1)
                 }
-                // Only ASCII punctuation can be escaped (Backslash escapes), so a `\` before a line ending leaves it in
-                // the destination, which a `<…>` destination may not contain (Links).
                 if c == UInt8(ascii: "\\") && i + 1 < end && byte(i + 1).isASCIIPunct {
                     i += 2
                     continue
@@ -444,23 +384,20 @@ extension BlockParser {
             }
             return nil
         }
-        // A bare destination contains no ASCII space or control character (Links). A NUL stands for
-        // U+FFFD (Insecure characters), so it is destination content.
+        // A NUL stands for U+FFFD (Insecure characters), so it is destination content.
         func terminatesDestination(_ b: UInt8) -> Bool {
             b == UInt8(ascii: " ") || (b != 0 && b < 0x20) || b == 0x7F
         }
         if terminatesDestination(first) {
             return nil
         }
-        // A bare destination includes parentheses only when they are escaped or balanced (Links).
         guard let destinationEnd = parentheses.balancedEnd(from: start, end: end, maxNesting: maxNesting, byte: byte, terminates: terminatesDestination) else {
             return nil
         }
-        // An inline link's destination may be empty: `[a]()`.
+        // Empty bare URL is allowed for inline links - `[a]()` should match with an empty destination.
         return (start..<destinationEnd, destinationEnd)
     }
 
-    /// Matches a link destination (Links) at virtual offset `start` of `content`.
     internal mutating func matchLinkDestination(from start: Int, end: Int, in content: borrowing ContentSpan) -> (destination: Range<Int>, afterEnd: Int)? {
         let maxNesting = limits.maxLinkDestinationParenthesisNesting
         return content.withForwardReader(from: start) { byte in
@@ -470,8 +407,6 @@ extension BlockParser {
 
     // MARK: - Link title
 
-    /// Scans a link title through `byte`. A title may span a line ending, and its furthest closer may lie past one that
-    /// ends the first line (`'\'` LF `'`). Returns the interior's range and the offset past the closer.
     @inline(__always)
     private func scanLinkTitle(from start: Int, end: Int, byte: (Int) -> UInt8) -> (interior: Range<Int>, afterEnd: Int)? {
         if start >= end {
@@ -494,15 +429,10 @@ extension BlockParser {
         return ((start + 1)..<(closeAfterEnd - 1), closeAfterEnd)
     }
 
-    /// Matches a link title (Links) at virtual offset `start` of `content`.
     internal func matchLinkTitle(from start: Int, end: Int, in content: borrowing ContentSpan) -> (interior: Range<Int>, afterEnd: Int)? {
         content.withForwardReader(from: start) { byte in scanLinkTitle(from: start, end: end, byte: byte) }
     }
 
-    // MARK: - HTML tags
-
-    /// The offset past an HTML tag name (Raw HTML) at `start`, read through `byte` up to `end`, or nil when no ASCII
-    /// letter starts one.
     @inline(__always)
     internal func htmlTagNameEnd(from start: Int, end: Int, byte: (Int) -> UInt8) -> Int? {
         guard start < end, byte(start).isASCIILetter else {
@@ -515,9 +445,6 @@ extension BlockParser {
         return i
     }
 
-    /// The offset past the rest of an open or closing tag (Raw HTML) whose name ends at `nameEnd`: an open tag's
-    /// attributes, each after whitespace, then optional whitespace and `/>` or `>`, or a closing tag's optional
-    /// whitespace and `>`. nil when the rest forms no tag.
     @inline(__always)
     internal func htmlTagEnd(afterName nameEnd: Int, isClosing: Bool, end: Int, byte: (Int) -> UInt8) -> Int? {
         func skipWhitespace(from start: Int) -> Int {
@@ -575,7 +502,6 @@ extension BlockParser {
                     }
                     k += 1
                 }
-                // An unquoted value is nonempty, so `<a b=>` is no tag.
                 guard k > valueStart else {
                     return nil
                 }
@@ -594,7 +520,7 @@ extension BlockParser {
 
     // MARK: - Label normalization
 
-    /// Normalizes a link label for matching (Links): trims whitespace (Characters and lines), collapses interior runs to one space, and applies the Unicode case fold.
+    /// Link label normalization (Links): trim outer whitespace, collapse interior whitespace runs to a single space, then full Unicode case-fold so labels match across scripts - `[ΑΓΩ]` and `[αγω]` resolve to the same key.
     internal func normalizeLabel(chunk: Chunk) -> NormalizedLabel {
         let span = if chunk.inSource {
             sourceBytes.extracting(chunk.range)
@@ -605,8 +531,6 @@ extension BlockParser {
         return Self.normalizeLabel(span)
     }
 
-    /// A label that one chunk of `content` holds, as any label of single-segment content is, is read from that chunk;
-    /// one spanning a line join of multi-segment content is read through `content`, which reads each join as `\n`.
     internal func normalizeLabel(virtualRange range: Range<Int>, in content: borrowing ContentSpan) -> NormalizedLabel {
         if let chunk = content.contiguousChunk(fromVirtual: range.lowerBound, limit: range.upperBound),
            chunk.length == range.count {
@@ -620,21 +544,18 @@ extension BlockParser {
         return Self.normalizeLabel(bytes.span)
     }
 
-    /// `span` normalized as `normalizeLabel(chunk:)` describes, with each NUL replaced with U+FFFD (Insecure characters).
-    ///
-    /// Each NUL takes three bytes, and every other byte at most one, since a whitespace run becomes at most one space.
-    /// Sizing the buffer to that, rather than to three bytes per source byte, stores a short label inline instead of in a
-    /// heap allocation. ASCII letters are lowercased in the same pass, which completes the case fold of a label with no
-    /// non-ASCII bytes.
+    /// Link label normalization (Links) over an already-resolved span. The byte-level worker behind `normalizeLabel(chunk:)`; `static` because it touches no parser state.
     private static func normalizeLabel(_ span: Span<UInt8>) -> NormalizedLabel {
         var hasNonASCII = false
         var nulCount = 0
         for i in 0..<span.count where span[i] == 0 {
             nulCount += 1
         }
+        // Sizing the buffer to `span.count + 2 * nulCount`, rather than to three bytes per source byte, stores a short
+        // label inline instead of in a heap allocation.
         let label = String(unsafeUninitializedCapacity: span.count + 2 * nulCount) { buffer in
-            // SAFETY: The `OutputSpan` starts with none of `buffer` initialized, every append is capacity-checked against `span.count + 2 * nulCount` (the most the label can need), `finalize(for:)` verifies `buffer` before reporting the initialized count, and the initializer repairs invalid UTF-8.
-            //         No String initializer fills its UTF-8 storage through an `OutputSpan`. Building the bytes with `Array(capacity:initializingWith:)` and copying them with `String(decoding:as:)` measured up to 21% more parse instructions on reference- and footnote-heavy input. Building them in `withTemporaryAllocation(of:capacity:_:)` and copying them with `String(copying:)` after `UTF8Span(validating:)` exists only on anyAppleOS 26 and measured up to 0.95% more.
+            // SAFETY: Every append to `output` is capacity-checked, and `finalize(for:)` checks `buffer` before reporting how many bytes `output` initialized.
+            //         No String initializer fills its storage through an `OutputSpan`, and building the bytes elsewhere first would copy them.
             var output = unsafe OutputSpan(buffer: buffer, initializedCount: 0)
             var pendingSpace = false
 
@@ -665,31 +586,24 @@ extension BlockParser {
 
             return unsafe output.finalize(for: buffer)
         }
-        // The spec matches labels by the code points of their case folds (Links), so labels are compared by the bytes of
-        // stand-ins for their folds.
         return hasNonASCII ? caseFold(label) : .ascii(label)
     }
 
-    /// The key of `label`, whose ASCII letters are lowercased, with each scalar replaced by a stand-in for its Unicode
-    /// case fold, so two labels' keys are equal exactly when their case folds are the same code points. Lowercasing a
-    /// scalar, then uppercasing and lowercasing again each scalar of the result, yields one stand-in for each case fold,
-    /// except for dotless `ı`: it folds to itself, but uppercases to the `I` that `i` folds with, so it stands for itself.
+    // Lowercasing a scalar, then uppercasing and lowercasing each scalar of the result, gives every case fold one
+    // stand-in. Dotless `ı` folds to itself but uppercases to the `I` that `i` folds with, so it stands for itself.
     private static func caseFold(_ label: String) -> NormalizedLabel {
         let scalars = label.unicodeScalars
         var folded = ""
         // Some non-ASCII scalars stand in as ASCII, such as the Kelvin sign as `k`, so whether the key is ASCII is
         // known only once every scalar is replaced.
         var keyIsASCII = true
-        // The scalars from `unchangedStart` up to the current one are their own stand-ins, so they are appended as a run.
         var unchangedStart = scalars.startIndex
-        // Labels repeat scalars, so the last non-ASCII one found to be its own stand-in is remembered.
         var lastUnchanged: Unicode.Scalar = "a"
         var i = scalars.startIndex
         while i != scalars.endIndex {
             let scalar = scalars[i]
             let next = scalars.index(after: i)
-            // A scalar that doesn't change when case mapped is its own stand-in, as is an ASCII scalar once
-            // `normalizeLabel` has lowercased it.
+            // An ASCII scalar is its own stand-in once `normalizeLabel` has lowercased it.
             if !scalar.isASCII && scalar != lastUnchanged {
                 if scalar.properties.changesWhenCaseMapped {
                     folded.append(contentsOf: Substring(scalars[unchangedStart..<i]))

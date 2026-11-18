@@ -8,7 +8,9 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-/// A byte range in either the source (`inSource`) or `DocumentStorage`'s string arena, which holds bytes the parser materializes, such as decoded entities.
+/// A byte-range reference into either the original source buffer or `DocumentStorage`'s string arena.
+///
+/// Two-buffer scheme because some node content (text spans, URLs) points directly into the source while other content (entity-decoded text, normalized link references) is materialized into the string arena during parsing.
 internal struct Chunk {
     internal var offset: Int
     internal var length: Int
@@ -28,17 +30,18 @@ internal struct Chunk {
         offset..<(offset + length)
     }
 
-    /// Narrows to `bounds`, which is relative to this chunk's first byte.
+    /// Narrow to `bounds`, a range of indices relative to this chunk's own content (0-based, like `Span.extracting(_:)`), preserving `inSource`.
     internal func extracting(_ bounds: Range<Int>) -> Chunk {
         Chunk(offset: offset + bounds.lowerBound, length: bounds.count, inSource: inSource)
     }
 
-    /// Drops leading and trailing spaces, tabs, and line endings.
+    /// Return a copy narrowed to drop leading and trailing ASCII whitespace (space, tab, `\n`, `\r`), reading bytes through `parser` (which resolves this chunk's buffer via `inSource`).
     internal func trimming(using parser: borrowing BlockParser) -> Chunk {
         trimming(using: parser, where: \.isSpaceTabOrLineEnding)
     }
 
-    /// Drops initial and final whitespace (Characters and lines), as forming a paragraph's or setext heading's raw content does (Paragraphs, Setext headings).
+    // A paragraph's or setext heading's raw content drops initial and final whitespace (Paragraphs, Setext headings),
+    // which unlike `trimming`'s set includes line tabulation and form feed (Characters and lines).
     internal func trimmingWhitespace(using parser: borrowing BlockParser) -> Chunk {
         trimming(using: parser, where: \.isWhitespaceCharacter)
     }
@@ -57,7 +60,9 @@ internal struct Chunk {
     }
 }
 
-/// A link reference definition, stored in `DocumentStorage.referenceMap` under its normalized label.
+/// A registered link reference definition.
+///
+/// Each successful `[label]: dest "title"` parsed at the start of a paragraph populates one of these in `DocumentStorage.referenceMap`, keyed by the label's normalized form (CommonMark 0.31 §4.7).
 internal struct ReferenceDefinition {
     internal var destination: Chunk
     internal var title: Chunk
