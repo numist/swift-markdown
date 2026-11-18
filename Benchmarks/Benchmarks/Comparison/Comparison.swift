@@ -74,14 +74,11 @@ let inlineFiles = inlineSamples.map { content in
     )
 }
 
-let inlineOnlySwiftOptions: MarkdownDocument.ParseOptions = [.inlineOnly, .attributes]
-
 // MARK: - GFM-feature corpus
 //
 // A markdown document that deliberately exercises every AST-affecting parse option enabled in the
-// GFM configuration below except `.attributes` — so the "GFM feature sample" benchmarks measure the
-// table-span, smart-punctuation, footnote, strikethrough, task-list, and autolink code paths rather
-// than plain prose.
+// GFM configuration below — so the "GFM feature sample" benchmarks measure the table-span, smart-
+// punctuation, footnote, strikethrough, task-list, and autolink code paths rather than plain prose.
 // Note the table spans use the `"` ("ditto") rowspan marker and `||` colspan filler, matching
 // `.tableRowspanDitto` + `.tableSpans`; and the prose uses straight quotes, `--`/`---`, and `...`
 // so `.smart` has work to do.
@@ -121,8 +118,8 @@ let gfmFeatureFile = PreparedFile(
 //
 // The GitHub-Flavored Markdown feature set plus the other AST-affecting parse options, applied
 // identically to both parsers so the comparison stays apples-to-apples. The two option sets below
-// MUST stay in lockstep — every cmark-swift `ParseOption` has a matching cmark-gfm extension,
-// `CMARK_OPT_*` bit, or always-on cmark-gfm behaviour, and vice versa:
+// MUST stay in lockstep — every cmark-swift `ParseOption` has a matching cmark-gfm extension or
+// `CMARK_OPT_*` bit, and vice versa:
 //
 //   feature              cmark-swift ParseOption     cmark-gfm
 //   tables               .tables                     "table" extension
@@ -133,18 +130,17 @@ let gfmFeatureFile = PreparedFile(
 //   smart punctuation    .smart                      CMARK_OPT_SMART
 //   table col/row spans  .tableSpans                 CMARK_OPT_TABLE_SPANS
 //   ditto rowspan marker .tableRowspanDitto          CMARK_OPT_TABLE_ROWSPAN_DITTO
-//   inline attributes    .attributes                 always on
 //
 // The `tagfilter` extension is intentionally omitted: it's a render-time HTML sanitizer with
 // no effect on the parse tree, and these benchmarks only parse.
 
 let gfmSwiftOptions: MarkdownDocument.ParseOptions = [
     .tables, .strikethrough, .gfmAutolink, .tasklist, .footnotes,
-    .smart, .tableSpans, .tableRowspanDitto, .attributes,
+    .smart, .tableSpans, .tableRowspanDitto,
 ]
 
 // The cmark-gfm core/parser options that are NOT syntax extensions (those are attached separately
-// below). Mirror of the non-extension entries in `gfmSwiftOptions` other than `.attributes`.
+// below). Mirror of the non-extension entries in `gfmSwiftOptions`.
 let gfmCParseOptions: Int32 =
     CMARK_OPT_FOOTNOTES | CMARK_OPT_SMART | CMARK_OPT_TABLE_SPANS | CMARK_OPT_TABLE_ROWSPAN_DITTO
 
@@ -184,7 +180,7 @@ let benchmarks: @Sendable () -> Void = {
 
     Benchmark("Parse small markdown sample (cmark-swift)") { benchmark in
         for _ in benchmark.scaledIterations {
-            MarkdownDocument.withParsedDocument(sample, options: .attributes) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(sample) { document in blackHole(document.root.kind) }
         }
     }
 
@@ -203,7 +199,7 @@ let benchmarks: @Sendable () -> Void = {
     
     Benchmark("Parse 1 KB files (cmark-swift)") { benchmark in
         for file in files1KB {
-            MarkdownDocument.withParsedDocument(file.content, options: .attributes) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(file.content) { document in blackHole(document.root.kind) }
         }
     }
     
@@ -219,7 +215,7 @@ let benchmarks: @Sendable () -> Void = {
     
     Benchmark("Parse 100 KB files (cmark-swift)") { benchmark in
         for file in files100KB {
-            MarkdownDocument.withParsedDocument(file.content, options: .attributes) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(file.content) { document in blackHole(document.root.kind) }
         }
     }
     
@@ -235,7 +231,7 @@ let benchmarks: @Sendable () -> Void = {
     
     Benchmark("Parse 1 MB files (cmark-swift)") { benchmark in
         for file in files1MB {
-            MarkdownDocument.withParsedDocument(file.content, options: .attributes) { document in blackHole(document.root.kind) }
+            MarkdownDocument.withParsedDocument(file.content) { document in blackHole(document.root.kind) }
         }
     }
     
@@ -254,7 +250,7 @@ let benchmarks: @Sendable () -> Void = {
     Benchmark("Parse inline strings (cmark-swift, inline-only)") { benchmark in
         for _ in benchmark.scaledIterations {
             for file in inlineFiles {
-                MarkdownDocument.withParsedDocument(file.content, options: inlineOnlySwiftOptions) { document in blackHole(document.root.kind) }
+                MarkdownDocument.withParsedDocument(file.content, options: .inlineOnly) { document in blackHole(document.root.kind) }
             }
         }
     }
