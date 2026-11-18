@@ -144,7 +144,7 @@ let gfmSwiftOptions: MarkdownDocument.ParseOptions = [
 ]
 
 // The cmark-gfm core/parser options that are NOT syntax extensions (those are attached separately
-// below). Mirror of the non-extension entries in `gfmSwiftOptions`.
+// below). Mirror of the non-extension entries in `gfmSwiftOptions` other than `.attributes`.
 let gfmCParseOptions: Int32 =
     CMARK_OPT_FOOTNOTES | CMARK_OPT_SMART | CMARK_OPT_TABLE_SPANS | CMARK_OPT_TABLE_ROWSPAN_DITTO
 

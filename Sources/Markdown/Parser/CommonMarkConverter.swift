@@ -13,11 +13,12 @@ import Foundation
 
 /// Parses markup source and returns a `Markdown.Document` representing the parsed source.
 ///
-/// Parsing is done by the `CommonMark` module, whose `MarkdownNode` tree borrows the source; it is
-/// converted into an owned `RawMarkup` tree before the borrow ends.
+/// This drives the pure-Swift `CommonMark` parser: it parses, then converts the borrowed,
+/// non-copyable `MarkdownNode` tree into an owned `RawMarkup` tree. All traversal happens inside
+/// the parsed document's source-borrow scope; only fully-owned `RawMarkup` (with `String`s copied
+/// out) escapes.
 struct MarkupParser {
 
-    // The bounds on construct size that every Markdown document is parsed with.
     private static let shippingLimits: MarkdownDocument.ParseLimits = {
         var limits = MarkdownDocument.ParseLimits()
         limits.maxLinkLabelCharacters = .max
@@ -44,8 +45,12 @@ struct MarkupParser {
         if !options.contains(.disableSmartOpts) {
             cmOptions.insert(.smart)
         }
+        // `.disableSourcePosOpts` concerns a rendered `data-sourcepos` attribute, which a `Document`
+        // never has, so ranges are always recorded.
         cmOptions.insert(.sourcePosition)
 
+        // cmark-swift borrows the source for the document's lifetime, so conversion happens inside
+        // the nonescaping `withParsedDocument` closure; only the fully-owned `RawMarkup` tree escapes.
         let raw = MarkdownDocument.withParsedDocument(string, options: cmOptions, limits: shippingLimits) { document in
             convert(document.root, source: source, options: options)
         }
@@ -58,8 +63,9 @@ struct MarkupParser {
 
     /// Map a `MarkdownNode`'s source range to swift-markdown's `SourceRange`.
     ///
-    /// Both use 1-based lines and 1-based UTF-8 byte columns with an exclusive `upperBound`, so only
-    /// the source `URL` is added.
+    /// cmark-swift already reports 1-based lines, 1-based UTF-8 **byte** columns, and an `upperBound`
+    /// positioned just past the node's last byte. Inline code-span ranges likewise already span their
+    /// backticks. So this is a straight pass-through; the only thing added is the source `URL`.
     private static func range(_ node: borrowing MarkdownNode, source: URL?) -> SourceRange? {
         guard let r = node.sourceRange else { return nil }
         let start = SourceLocation(line: r.lowerBound.line, column: r.lowerBound.column, source: source)
@@ -107,16 +113,17 @@ struct MarkupParser {
 
     /// Convert the subtree rooted at `root` into `RawMarkup`.
     ///
-    /// Iterative rather than recursive, because blocks and inlines can nest deeply enough to
-    /// overflow the call stack. `accStack[d]` holds the converted children accumulated for the open
-    /// ancestor at depth `d`; a node is built once all its children are collected (post-order). Tables
-    /// are built whole by `convertTable` and not descended into, since grouping their rows into head
-    /// and body needs the original node structure.
+    /// Iterative (explicit heap stack) rather than recursive: documents can nest thousands of levels
+    /// deep (e.g. 15k nested block quotes), which would overflow the call stack. `accStack[d]` holds
+    /// the converted children accumulated for the open ancestor at depth `d`; a node is built once all
+    /// its children are collected (post-order). Tables are built atomically by `convertTable` and not
+    /// descended into, since their head/body regrouping needs the original node structure.
     private static func convert(_ root: borrowing MarkdownNode, source: URL?, options: ParseOptions) -> RawMarkup {
         var accStack: [[RawMarkup]] = [[]]
         var node = copy root
 
         while true {
+            // Descend into the first child (but never into a table — it's built atomically below).
             if !isTable(node.kind), let firstChild = node.firstChild {
                 accStack.append([])
                 node = firstChild
@@ -227,6 +234,7 @@ struct MarkupParser {
             return .strikethrough(parsedRange: parsedRange, children)
         case .attribute:
             return .inlineAttributes(attributes: attributeString(node), parsedRange: parsedRange, children)
+        // Not produced by the option set used here (footnotes are never enabled).
         case .footnoteReference, .footnoteDefinition:
             fatalError("the parse options never enable footnotes, so no footnote node is produced")
         @unknown default:
@@ -241,8 +249,8 @@ struct MarkupParser {
         var header: RawMarkup?
         var bodyRows: [RawMarkup] = []
         var columnAlignments: [Table.ColumnAlignment?] = []
-        // The parser has no table body node, so the body's source range runs from the first body row's
-        // start to the table's end, or is nil when there are no body rows.
+        // The body has no node of its own, so its range is synthesized: from the first body row's
+        // start to the table's end, or nil when there are no body rows.
         var firstBodyRowStart: SourceLocation?
 
         node.children.forEach { row in

@@ -22,7 +22,6 @@ struct RangeAdjuster: MarkupWalker {
     var trimmedIndentationPerLine: [Int]
 
     mutating func defaultVisit(_ markup: Markup) {
-        // Nodes without a source range, such as the body of a table with no body rows, keep a nil range.
         let adjustedRange = markup.range.map { range -> SourceRange in
             // Add back the offset to the column as if the indentation weren't stripped.
             let start = SourceLocation(line: startLine + range.lowerBound.line - 1,
