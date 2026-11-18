@@ -11,10 +11,9 @@
 import CommonMark
 import Testing
 
-/// Outside an open `[`, an extended www autolink comes at the start of the inline content, or after a space, tab, line
-/// ending, `*`, `_`, `~` or `(`, and an extended url autolink, whose scheme is the whole run of ASCII letters before
-/// `://`, may follow any character but an ASCII letter. An extended email autolink's local part is the run of
-/// local-part characters before the `@`, so the autolink may follow any other character.
+// Outside an open `[`, an extended www autolink must start the inline content or follow a space, tab, line ending,
+// `*`, `_`, `~` or `(`, and an extended url autolink may follow any character but an ASCII letter. An extended email
+// autolink may follow any character that can't be in its local part, even inside an open `[`.
 @Suite("Character before an extended autolink")
 struct ExtendedAutolinkPrecedingCharacterTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .attributes, .gfmAutolink]
@@ -22,8 +21,6 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: Self.options)
     }
-
-    // MARK: - Extended url autolinks
 
     @Test func urlAfterQuotationMarkIsLink() {
         #expect(tree("\"https://a.b\" in quotes;") == """
@@ -153,7 +150,6 @@ struct ExtendedAutolinkPrecedingCharacterTests {
         #expect(tree(markdown) == expected)
     }
 
-    /// A NUL is replaced with U+FFFD (Insecure characters), which is not a letter.
     @Test func urlAfterNULIsLink() {
         #expect(tree("\0http://e.e") == """
             document
@@ -165,7 +161,6 @@ struct ExtendedAutolinkPrecedingCharacterTests {
             """)
     }
 
-    /// The `x` is part of the scheme `xhttp`.
     @Test func urlAfterASCIILetterOfLowercaseSchemeIsText() {
         #expect(tree("xhttp://e.e") == """
             document
@@ -175,7 +170,6 @@ struct ExtendedAutolinkPrecedingCharacterTests {
             """)
     }
 
-    /// A paragraph's initial spaces are stripped (Paragraphs).
     @Test func urlStartingParagraphAfterLeadingSpaceIsLink() {
         #expect(tree(" http://e.e") == """
             document
@@ -207,8 +201,6 @@ struct ExtendedAutolinkPrecedingCharacterTests {
     func urlAfterLineTabulationOrFormFeedIsLink(markdown: String, expected: String) {
         #expect(tree(markdown) == expected)
     }
-
-    // MARK: - Extended www autolinks
 
     @Test(arguments: [
         ("x\u{0B}www.a.b", """
@@ -280,8 +272,6 @@ struct ExtendedAutolinkPrecedingCharacterTests {
         #expect(tree(markdown) == expected)
     }
 
-    // MARK: - Extended email autolinks
-
     @Test(arguments: [
         ("x\u{0B}foo@b.cd", """
             document
@@ -339,7 +329,6 @@ struct ExtendedAutolinkPrecedingCharacterTests {
             """)
     }
 
-    /// `MAILTO:` is not the lowercase `mailto:` scheme, so the `:` ends the local part.
     @Test func emailAfterUppercaseSchemeIsLink() {
         #expect(tree("MAILTO:x@a.b.") == """
             document
@@ -352,7 +341,6 @@ struct ExtendedAutolinkPrecedingCharacterTests {
             """)
     }
 
-    /// A `mailto:` scheme right after a letter is not a scheme, so the `:` ends the local part.
     @Test func emailAfterLetterAndSchemeIsLink() {
         #expect(tree("amailto:foo@b.cd") == """
             document
@@ -538,7 +526,6 @@ struct ExtendedAutolinkPrecedingCharacterTests {
 
     @Test("email autolinks after a leading `<`")
     func emailAfterAngle() {
-        // Without a `>`, the `<` is literal text.
         #expect(tree("<o@e.e") == """
             document
               paragraph
@@ -583,11 +570,6 @@ struct ExtendedAutolinkPrecedingCharacterTests {
 
             """)
     }
-
-    // MARK: - Local-part characters
-
-    // An extended email autolink's local part holds only alphanumerics, `.`, `-`, `_` and `+`, unlike the email
-    // address of an email autolink (Autolinks), which admits characters such as `!`.
 
     @Test("`<a!@e.e` is text: `!` is not a local-part character")
     func bangBeforeAtNoLink() {

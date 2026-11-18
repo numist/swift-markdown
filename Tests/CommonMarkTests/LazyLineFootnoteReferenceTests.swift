@@ -11,7 +11,6 @@
 import CommonMark
 import Testing
 
-/// A lazy continuation line (Block quotes) of a block quote inside a list item, holding a NUL and a footnote reference.
 @Suite("Footnote reference on a lazy continuation line")
 struct LazyLineFootnoteReferenceTests {
 
@@ -19,8 +18,6 @@ struct LazyLineFootnoteReferenceTests {
         .tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes,
     ]
 
-    /// The `[x]` does not begin a list item's first paragraph, so it is text (Task list items (extension)). The NUL
-    /// becomes U+FFFD (Insecure characters) and the footnote reference resolves.
     @Test func footnoteReferenceResolves() {
         #expect(TreeDump.dump("- > a\n  2\u{0} [x] [^n]\n\n[^n]: z\n", options: Self.options) == """
             document

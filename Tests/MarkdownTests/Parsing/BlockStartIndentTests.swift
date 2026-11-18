@@ -11,11 +11,7 @@
 import Markdown
 import XCTest
 
-/// An ATX heading, thematic break or HTML block start may be indented by up to three spaces; a line indented
-/// by four or more columns is an indented code block. A tab advances to the next tab stop of 4 columns (Tabs),
-/// so a tab-indented line after a block quote's fenced code block is indented code.
 class BlockStartIndentTests: XCTestCase {
-    // MARK: ATX heading
 
     func testThreeSpaceIndentedATXOpensHeading() {
         let expectedDump = """
@@ -38,8 +34,6 @@ class BlockStartIndentTests: XCTestCase {
         XCTAssertEqual(expectedDump, Document(parsing: ">~~~\n\t# x").debugDescription(options: .printSourceLocations))
     }
 
-    // MARK: Thematic break
-
     func testThreeSpaceIndentedThematicBreakOpens() {
         let expectedDump = """
         Document @1:1-1:7
@@ -59,8 +53,6 @@ class BlockStartIndentTests: XCTestCase {
         """
         XCTAssertEqual(expectedDump, Document(parsing: ">~~~\n\t***").debugDescription(options: .printSourceLocations))
     }
-
-    // MARK: HTML block
 
     func testThreeSpaceIndentedHTMLBlockOpens() {
         let expectedDump = """

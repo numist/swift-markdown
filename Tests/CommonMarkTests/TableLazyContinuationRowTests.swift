@@ -11,16 +11,8 @@
 import Testing
 import CommonMark
 
-/// Tables in containers whose rows are lazy continuation lines.
-///
-/// Per Block quotes and List items, a line that lacks an open container's continuation prefix can still continue a
-/// paragraph in that container as a lazy continuation line, and a footnote definition's paragraph continues the same
-/// way. The spec does not say whether a table's header row may be such a line. It may be one here, and the
-/// paragraph's earlier lines stay a paragraph before the table in the container. The delimiter row and the data rows
-/// cannot be lazy: a lazy delimiter row is paragraph text, and a lazy data row closes the table and its container and
-/// starts a paragraph outside them. A row with only an enclosing container's prefix is lazy for the container inside
-/// it. A line without a container's prefix that continues no paragraph opens its block outside the container, where
-/// it can begin a table.
+// The header row is a line of the paragraph above the delimiter row, so like any paragraph line it may be a lazy
+// continuation line (Block quotes, List items).
 @Suite("A table's header row may be a lazy continuation line, but its delimiter and data rows may not")
 struct TableLazyContinuationRowTests {
 

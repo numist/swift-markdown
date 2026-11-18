@@ -11,15 +11,10 @@
 import CommonMark
 import Testing
 
-/// Paragraphs of backtick strings (Code spans).
-///
-/// A backtick string begins a code span only if a backtick string of equal length closes it, so a ladder of strings of
-/// distinct lengths is text, and an unmatched string leaves the strings after it free to pair with each other.
 @Suite("Ladders of unmatched backtick strings")
 struct UnmatchedBacktickStringLadderTests {
     private static let options: [MarkdownDocument.ParseOptions] = [[], .inlineOnly]
 
-    /// `count` backtick strings of lengths 1 through `count`, each after an `a`.
     private static func ladder(count: Int) -> String {
         (1...count).map { "a" + String(repeating: "`", count: $0) }.joined()
     }

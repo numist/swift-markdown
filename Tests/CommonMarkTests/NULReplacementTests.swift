@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// Every U+0000 in the input is replaced with U+FFFD (Insecure characters), in every kind of content.
-/// Other control characters are kept.
 @Suite("NUL replacement (U+0000 -> U+FFFD)")
 struct NULReplacementTests {
 
@@ -94,8 +92,8 @@ struct NULReplacementTests {
             """)
     }
 
-    /// The `===` line follows a paragraph holding only a link reference definition, which it cannot
-    /// underline (Setext headings).
+    // The `===` line follows a paragraph holding only a link reference definition, which it cannot
+    // underline (Setext headings).
     @Test("NUL in a link reference definition destination followed by `===` becomes U+FFFD")
     func setextStrippedReferenceDefinition() {
         #expect(TreeDump.dump("[a]: /u\u{0}\n===\n\n[a]", options: []) == """
@@ -109,8 +107,8 @@ struct NULReplacementTests {
             """)
     }
 
-    /// The `===` line follows a paragraph holding only a link reference definition, which it cannot
-    /// underline (Setext headings).
+    // The `===` line follows a paragraph holding only a link reference definition, which it cannot
+    // underline (Setext headings).
     @Test("NUL in a link reference definition title followed by `===` becomes U+FFFD")
     func setextStrippedReferenceDefinitionTitle() {
         #expect(TreeDump.dump("[a]: /u \"t\u{0}\"\n===\n\n[a]", options: []) == """
@@ -124,8 +122,8 @@ struct NULReplacementTests {
             """)
     }
 
-    /// The `===` line follows a paragraph holding only an attribute definition, which it cannot
-    /// underline (Setext headings).
+    // The `===` line follows a paragraph holding only an attribute definition, which it cannot
+    // underline (Setext headings).
     @Test("NUL in a reference-form `^[label]: ..` attribute followed by `===` becomes U+FFFD")
     func setextStrippedReferenceAttribute() {
         #expect(TreeDump.dump("^[label]: a\u{0}b\n===\n\n^[x][label]", options: [.attributes]) == """
@@ -185,7 +183,7 @@ struct NULReplacementTests {
             """)
     }
 
-    /// A URI autolink (Autolinks) excludes ASCII control characters; U+FFFD is not one.
+    // A URI autolink (Autolinks) excludes ASCII control characters; U+FFFD is not one.
     @Test("NUL inside an angle-bracket autolink body forms a link with a U+FFFD destination")
     func angleAutolinkBody() {
         #expect(TreeDump.dump("<http://a\u{0}b>", options: []) == """

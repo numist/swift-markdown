@@ -11,9 +11,8 @@
 import Markdown
 import XCTest
 
-/// A list item whose first block is a list or thematic break is not a task list item, so `[x]` beginning a later
-/// paragraph of the item is text (Task list items (extension)). A later line beginning with `2-` or `22` starts no list
-/// item, so it is paragraph text too.
+// A list item whose first block is a list or thematic break is not a task list item, so `[x]` beginning a later
+// paragraph of the item is text (Task list items (extension)).
 class TaskListNonParagraphFirstBlockTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: [])

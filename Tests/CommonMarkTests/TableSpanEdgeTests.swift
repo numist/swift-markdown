@@ -11,10 +11,8 @@
 import CommonMark
 import Testing
 
-/// A rowspan marker cell extends the nearest cell above it that isn't a marker cell. A header marker cell has no row
-/// above, so it and the marker cells directly below it extend nothing: each keeps its marker text with rowspan 0. Empty
-/// cells count toward the colspan of the nearest non-empty cell to their left, even when that cell is past the last
-/// column, and the ditto marker needs table spans.
+// A header marker cell has no row above to extend, so it and the marker cells directly below it extend nothing
+// and keep their marker text with rowspan 0.
 @Suite("Table span cells at the table's edges")
 struct TableSpanEdgeTests {
     private static let spans: MarkdownDocument.ParseOptions = [.tables, .tableSpans]

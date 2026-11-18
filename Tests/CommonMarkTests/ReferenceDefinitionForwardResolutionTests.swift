@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// A link reference definition applies to the whole document (Link reference definitions): a
-/// reference resolves against a definition that appears later, including one inside a list item, and
-/// the reference's label may span a line ending.
 @Suite("Forward / nested link reference definition resolution")
 struct ReferenceDefinitionForwardResolutionTests {
 

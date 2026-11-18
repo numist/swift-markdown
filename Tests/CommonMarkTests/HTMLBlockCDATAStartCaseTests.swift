@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// The start condition of an HTML block of type 5 (HTML blocks) is the string `<![CDATA[`, matched case-sensitively.
-/// `<![cdata[` and `<![CDAtA[` meet no start condition, since type 4 needs an uppercase ASCII letter after `<!`, so
-/// they are paragraphs.
 @Suite("HTML block CDATA start condition case")
 struct HTMLBlockCDATAStartCaseTests {
 

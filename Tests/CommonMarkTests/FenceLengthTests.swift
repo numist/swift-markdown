@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// Long code fences (Fenced code blocks).
-///
-/// A code fence has no upper bound on its length, and the closing fence must be at least as long as the opening one.
 @Suite("Code fence length")
 struct FenceLengthTests {
 
@@ -40,7 +37,6 @@ struct FenceLengthTests {
         Case(opening: 1000, closing: 999, closes: false),
     ]
 
-    /// A closed fence leaves `y` as a paragraph after the code block; an unclosed one holds every later line.
     @Test("a fence of any length is closed only by a fence at least as long", arguments: cases, ["`", "~"])
     func fence(_ testCase: Case, _ character: String) {
         let opening = String(repeating: character, count: testCase.opening)

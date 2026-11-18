@@ -11,11 +11,6 @@
 import Testing
 import CommonMark
 
-/// Source ranges of a GFM table nested in a block quote or list item.
-///
-/// A nested table's lines aren't contiguous in the source (each carries its container's prefix), yet every row, cell
-/// and cell inline has the source range of its own bytes. A short row's filler cell has no source text, so it has no
-/// source range.
 @Suite("Source ranges of tables nested in containers")
 struct ContainerTableSourceRangeTests {
 
@@ -89,7 +84,6 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// The `>` prefix and the tab after it are each one byte, so every row's content starts at byte column 3.
     @Test("a table in a block quote whose prefix ends in a tab")
     func tabAfterBlockQuoteMarker() {
         #expect(tree(">\tb|c\n>\t-|-\n>\td|e") == """
@@ -110,7 +104,6 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// The body row `\td|e` is indented by one tab byte, so `d` is at byte column 2.
     @Test("a table in a list item whose continuation lines are indented by a tab")
     func tabIndentedListItem() {
         #expect(tree("-\tb|c\n\t-|-\n\td|e") == """
@@ -132,7 +125,6 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// The header `b|c` is a lazy continuation line of the block quote's paragraph, so it starts at column 1 of line 2.
     @Test("a table in a block quote whose header is a lazy continuation line")
     func lazyHeader() {
         #expect(tree("> a\nb|c\n> -|-") == """
@@ -150,7 +142,6 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// The paragraph line before the header row stays a paragraph, and the table starts on the header row's line.
     @Test("a table in a list item after a paragraph line")
     func listItemWithPrecedingParagraph() {
         #expect(tree("- a\n  b|c\n  -|-") == """
@@ -169,8 +160,6 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// The cell spans its source bytes `b\|x`. Its text `b|x` drops the backslash, but the text's source range still
-    /// runs from `b` to `x`, so it matches the cell's.
     @Test("a table in a block quote with an escaped pipe in a cell")
     func escapedPipe() {
         #expect(tree("> b\\|x|c\n> -|-") == """
@@ -186,7 +175,6 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// The NUL is one source byte, so the U+FFFD that replaces it in the text maps back onto that byte.
     @Test("a table in a block quote with a NUL in a cell")
     func nulInCell() {
         #expect(tree("> b\u{0}|c\n> -|-") == """
@@ -221,8 +209,8 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// A lazy continuation line's leading whitespace, including a partially consumed tab's remaining columns, is not
-    /// paragraph content, so the text starts at the `|`. A lone `|` header row has no cells, so no table forms.
+    // A split tab's remaining columns are leading whitespace, which is not paragraph content (Paragraphs). A lone `|`
+    // header row has no cells, so it does not match the delimiter row and no table forms (Tables (extension)).
     @Test("a lazy lone-pipe header after a split tab is paragraph text")
     func splitTabLonePipeHeaderIsParagraph() {
         #expect(tree("- >x\n \t|\n  >-|\n") == """
@@ -240,8 +228,8 @@ struct ContainerTableSourceRangeTests {
             """)
     }
 
-    /// A lazy continuation line's leading whitespace is not paragraph content, so the text starts at the `|`. A lone
-    /// `|` header row has no cells, so no table forms.
+    // A lone `|` header row has no cells, so it does not match the delimiter row and no table forms (Tables
+    // (extension)).
     @Test("a lazy lone-pipe header is paragraph text")
     func lazyLonePipeHeaderIsParagraph() {
         #expect(tree(">x\n  |\n>-|\n") == """

@@ -11,13 +11,8 @@
 import Testing
 import CommonMark
 
-/// Adjacent text in a table cell, including bracket literals, decoded entity references and smart
-/// punctuation, forms a single `.text` node. Its literal is the concatenation of the runs, and its source
-/// range spans from the first run's start to the last run's end.
 @Suite("Table cell text consolidation")
 struct TableCellTextConsolidationTests {
-
-    // MARK: - Merged runs
 
     @Test("a bracket literal merges with adjacent text in a cell")
     func bracketMergesWithText() {
@@ -31,7 +26,6 @@ struct TableCellTextConsolidationTests {
             """)
     }
 
-    /// The source range covers the entity reference's five source bytes, not its one-byte decoded form.
     @Test("a decoded entity merges with the text before it in a cell")
     func entityMergesWithText() {
         #expect(TreeDump.dump("a&amp;\n|-", options: [.tables, .sourcePosition], sourceRanges: true) == """
@@ -55,8 +49,6 @@ struct TableCellTextConsolidationTests {
 
             """)
     }
-
-    // MARK: - Boundaries
 
     @Test("plain cell text is a single node")
     func plainCellTextSingleNode() {
@@ -84,8 +76,6 @@ struct TableCellTextConsolidationTests {
 
             """)
     }
-
-    // MARK: - Rows and escaped pipes
 
     @Test("each row's cells consolidate independently")
     func multiRowConsolidation() {
@@ -123,7 +113,6 @@ struct TableCellTextConsolidationTests {
             """)
     }
 
-    /// Leading whitespace is trimmed from the cell, so the merged node starts at column 2.
     @Test("a cell with leading whitespace merges its text runs")
     func leadingWhitespaceCellConsolidates() {
         #expect(TreeDump.dump("a|b\n-|-\n [x|y", options: [.tables, .sourcePosition], sourceRanges: true) == """

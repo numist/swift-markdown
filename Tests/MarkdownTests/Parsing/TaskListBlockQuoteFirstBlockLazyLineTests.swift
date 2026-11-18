@@ -11,9 +11,8 @@
 import Markdown
 import XCTest
 
-/// A list item whose first block is a block quote is not a task list item, so `[x]` beginning a later paragraph of the
-/// item is text (Task list items (extension)). Without a blank line, a later line of the item that starts no other
-/// block is a lazy continuation line of the block quote's paragraph (Block quotes).
+// A list item whose first block is a block quote is not a task list item, so `[x]` beginning a later paragraph of the
+// item is text (Task list items (extension)).
 class TaskListBlockQuoteFirstBlockLazyLineTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: [])

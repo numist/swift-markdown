@@ -11,10 +11,8 @@
 import CommonMark
 import Testing
 
-/// Footnote-shaped brackets nested inside one another with no footnote label limit.
-///
-/// A footnote definition's label holds no unescaped bracket, as a link label doesn't (Links), so a bracket holding
-/// another bracket references no footnote however long its label or deep its nesting.
+// A footnote label, like a link label, holds no unescaped bracket (Links), so a bracket holding another bracket
+// references no footnote.
 @Suite("Nested footnote brackets with unlimited labels")
 struct UnlimitedFootnoteLabelNestingTests {
     private static let unlimited: MarkdownDocument.ParseLimits = {

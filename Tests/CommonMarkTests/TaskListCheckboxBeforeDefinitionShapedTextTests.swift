@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// Without `.tasklist`, `[ ] [a]: /u` does not begin with a link reference definition (Link reference
-/// definitions), so it is the item's first paragraph and a later `[x]` is text.
 @Suite("List item whose opening line is a checkbox before definition-shaped text")
 struct TaskListCheckboxBeforeDefinitionShapedTextTests {
 
@@ -61,8 +59,8 @@ struct TaskListCheckboxBeforeDefinitionShapedTextTests {
     @Test(
         "without tasklist, a later checkbox line before a table stays a paragraph",
         arguments: [
-            "- [ ] [a]: /u\n\n  [x]\nh|h\n  -|-\n",     // lazy header line
-            "- [ ] [a]: /u\n\n  [x]\n  h|h\n  -|-\n",   // indented header line
+            "- [ ] [a]: /u\n\n  [x]\nh|h\n  -|-\n",
+            "- [ ] [a]: /u\n\n  [x]\n  h|h\n  -|-\n",
         ]
     )
     func laterCheckboxBeforeTableWithoutTasklist(source: String) {
@@ -85,9 +83,8 @@ struct TaskListCheckboxBeforeDefinitionShapedTextTests {
     }
 }
 
-/// `[ ] [a]: /u` does not begin with a link reference definition, so it is the item's first paragraph,
-/// which begins with a task list item marker (Task list items (extension)); the later paragraph's
-/// `[x]` is text.
+// `[ ] [a]: /u` does not begin with a link reference definition, so `[a]: /u` is the text of the item's first
+// paragraph.
 @Suite("Task list item whose first paragraph holds a definition-shaped remainder")
 struct TaskListDefinitionShapedRemainderTests {
     @Test("a later paragraph's leading checkbox is text")

@@ -11,23 +11,16 @@
 import Testing
 import CommonMark
 
-/// Indented code blocks whose four columns of indentation end inside a tab, across containers, positions of the split
-/// tab, and preceding lines.
-///
-/// Per Tabs, a tab advances to the next multiple of four columns, and when a block's indentation consumes only part of
-/// a tab, the tab's remaining columns become spaces in the content: `>→→foo` and `-→→foo` both give `  foo`. Those
-/// spaces stand for the split tab, so the block starts at that tab's byte.
-///
-/// Case names label the split: `A`, the tab holding a block quote or list marker's optional space is partly consumed
-/// and the next tab split; `B`, a tab after the marker's space is split; `C`, a tab after spaces is split; `D`, the
-/// indentation takes the rest of the marker's tab and ends among spaces, so no tab straddles its end. An indented code
-/// block cannot interrupt a paragraph, so after a paragraph in the same container the line continues it. Continuation
-/// lines of one block split their tabs by the same rule.
-///
-/// A two-digit ordered list marker followed by five or more columns of whitespace has its content at column four, a tab
-/// stop, so a split arises only on its continuation lines, here an item with two spaces of padding. A footnote
-/// definition consumes all whitespace after its label on its first line, so a split arises only on its continuation
-/// lines, here in a block quote. At the top level the four-column strip always ends on a tab stop, so no tab is split.
+// A tab that a block's indentation consumes only part of leaves its remaining columns as spaces (Tabs), so `>→→foo`
+// gives `  foo`.
+//
+// Case names label the split: `A`, the tab holding a block quote or list marker's optional space is partly consumed
+// and the next tab split; `B`, a tab after the marker's space is split; `C`, a tab after spaces is split; `D`, the
+// indentation takes the rest of the marker's tab and ends among spaces, so no tab straddles its end.
+//
+// A two-digit ordered marker followed by five or more columns of whitespace has its content at a tab stop, and a
+// footnote definition consumes all whitespace after its label, so neither splits a tab on its first line.
+// At the top level the indentation ends on a tab stop, so no tab splits.
 @Suite("Indented code after a split tab")
 struct IndentedCodeSplitTabTests {
 

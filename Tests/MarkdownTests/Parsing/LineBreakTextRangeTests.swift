@@ -11,8 +11,6 @@
 import Markdown
 import Testing
 
-/// The spaces and tabs removed before a soft or hard line break are not part of the preceding text
-/// node, so its source range ends at its last content byte.
 struct LineBreakTextRangeTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)

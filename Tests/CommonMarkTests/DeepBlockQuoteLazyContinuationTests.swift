@@ -11,8 +11,6 @@
 import CommonMark
 import Testing
 
-/// A line without a `>` continues the innermost paragraph as a lazy continuation line (Block quotes), however many
-/// block quotes hold it.
 @Suite("Lazy continuation under deep block-quote nesting")
 struct DeepBlockQuoteLazyContinuationTests {
 

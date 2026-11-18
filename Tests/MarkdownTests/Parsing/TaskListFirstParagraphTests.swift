@@ -11,11 +11,6 @@
 import Markdown
 import Testing
 
-/// A task list item is a list item whose first block is a paragraph that begins with a task list item
-/// marker and at least one whitespace character before any other content (Task list items
-/// (extension)); the end of the paragraph's content counts as that whitespace. The marker is
-/// recognized on the paragraph, whatever line the paragraph starts on and whatever precedes the list
-/// marker on its line.
 struct TaskListFirstParagraphTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)
@@ -41,7 +36,6 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    /// A heading is not a paragraph, so an item whose first block is a setext heading is not a task list item.
     @Test func setextHeadingFirstBlockIsNoTaskItem() {
         #expect(tree("- [x] v\n  -") == """
             Document @1:1-2:4
@@ -85,7 +79,7 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    /// The marker line is not blank, so it opens the item's paragraph, which the next line continues.
+    // The marker line is not blank, so it opens the item's paragraph, which the next line continues.
     @Test func markerOnlyLineIsContinuedLazily() {
         #expect(tree("- [ ] \nfoo") == """
             Document @1:1-2:4
@@ -104,8 +98,7 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    /// A line ending is a whitespace character, so it can be the whitespace after the marker, and the lazy
-    /// continuation line is the paragraph's content.
+    // A line ending is a whitespace character, so it can be the whitespace after the marker.
     @Test func markerBeforeLineEnding() {
         #expect(tree("- [ ]\nx") == """
             Document @1:1-2:2
@@ -116,8 +109,8 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    /// The paragraph's initial whitespace, a line tabulation here, is removed (Paragraphs), so
-    /// the paragraph begins with the marker.
+    // The paragraph's initial whitespace, a line tabulation here, is removed (Paragraphs), so
+    // the paragraph begins with the marker.
     @Test func lineTabulationBeforeMarker() {
         #expect(tree("- \u{0B}[x] \n`") == """
             Document @1:1-2:2
@@ -138,8 +131,8 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    /// Link reference definitions are removed from the paragraph's raw content before its marker is
-    /// considered; `[x] [a]: /u` does not begin with a definition.
+    // Link reference definitions are removed from the paragraph's raw content before its marker is
+    // considered; `[x] [a]: /u` does not begin with a definition.
     @Test func definitionAfterMarkerIsText() {
         #expect(tree("- [x] [a]: /u") == """
             Document @1:1-1:14
@@ -150,7 +143,7 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    /// A definition counts as a block of its list item, so a marker after one doesn't begin the item's first block.
+    // A definition counts as a block of its list item, so a marker after one doesn't begin the item's first block.
     @Test func markerAfterDefinitionIsText() {
         #expect(tree("- [a]: /u\n  [x] foo") == """
             Document @1:1-2:10
@@ -161,7 +154,6 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    /// A table is not a paragraph, so an item whose first block is a table is not a task list item.
     @Test func tableFirstBlockIsNoTaskItem() {
         #expect(tree("- [ ] a|b\n  -|-") == """
             Document @1:1-2:6
@@ -177,8 +169,8 @@ struct TaskListFirstParagraphTests {
             """)
     }
 
-    /// The table takes `a|b` as its header row, so the paragraph before it holds only the checkbox, and the item is a
-    /// task list item.
+    // The table takes `a|b` as its header row, so the paragraph before it holds only the marker, and the item is a
+    // task list item.
     @Test func checkboxLineBeforeTableMakesTaskItem() {
         #expect(tree("- [ ] \n  a|b\n  -|-") == """
             Document @1:1-3:6

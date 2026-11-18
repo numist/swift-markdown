@@ -10,7 +10,7 @@
 
 import CommonMark
 
-/// A minimal HTML renderer for the parser's node tree, for checking the parser against the spec examples. It lives in the test target so the library stays parser-only.
+/// Minimal HTML renderer for cmark-swift's AST, used by the spec-parity test suite. Lives in the test target so the library stays parser-only; it's not a public API.
 internal enum HTMLRenderer {
 
     internal static func render(_ doc: borrowing MarkdownDocument, tagfilter: Bool = false) -> String {
@@ -152,7 +152,7 @@ internal enum HTMLRenderer {
                 out += "<sup class=\"footnote-ref\"><a href=\"#fn-\(escapedLabel)\" id=\"fnref-\(escapedLabel)\" data-footnote-ref>\(index)</a></sup>"
             }
         case .footnoteDefinition:
-            // No spec example has a footnote definition, so it renders in place rather than in a footnote section at the end of the document.
+            // Footnote defs are typically gathered into a footnote section at the end of the document; for spec-test parity we render them inline (the spec tests rarely exercise footnotes).
             renderChildren(node, into: &out, tight: false, tagfilter: tagfilter)
         case .attribute:
             renderChildren(node, into: &out, tight: false, tagfilter: tagfilter)
@@ -186,12 +186,12 @@ internal enum HTMLRenderer {
         tagfilter: Bool
     ) {
         var firstChild = true
-        // Every block but a tight paragraph ends in its own `\n`.
+        // Tracks whether the previous emitted child was a tight-rendered paragraph (text only, no trailing `\n`). If so, the next block sibling needs a separating `\n`. Other block children already end with their own `\n`, so an extra one would produce a stray blank line in the output.
         var prevWasTightParagraph = false
         item.children.forEach { child in
             let isParagraph = child.kind == .paragraph
             if tight && isParagraph {
-                // A tight list renders its items' paragraphs without `<p>` tags (Lists), so a paragraph after another paragraph needs its own separating `\n`.
+                // In a tight list item, EVERY paragraph is unwrapped.
                 if !firstChild && prevWasTightParagraph {
                     out += "\n"
                 }
@@ -199,9 +199,10 @@ internal enum HTMLRenderer {
                 prevWasTightParagraph = true
             } else {
                 if firstChild {
-                    // Any first child other than a tight paragraph starts on the line after `<li>`.
+                    // Loose item - opener gets a newline before any block child. Tight item with a non-paragraph first child (e.g., a code block) also wants the newline.
                     out += "\n"
                 } else if prevWasTightParagraph {
+                    // Tight paragraph emitted (no `<p>`, no trailing `\n`), followed by a block sibling - separate with `\n`.
                     out += "\n"
                 }
                 renderNode(child, into: &out, tight: tight, tagfilter: tagfilter)
@@ -219,7 +220,7 @@ internal enum HTMLRenderer {
     ) {
         out += "<pre><code"
         if let info = node.codeBlockInfoString(), !info.isEmpty {
-            // The language is the info string up to its first space or tab.
+            // Take the first whitespace-separated word as the language.
             var lang = ""
             for ch in info {
                 if ch == " " || ch == "\t" {
@@ -302,7 +303,7 @@ internal enum HTMLRenderer {
 
     // MARK: - Helpers
 
-    /// The tag names whose raw HTML `<` renders as `&lt;` when `tagfilter` is set, matched case-insensitively (Disallowed Raw HTML (extension)).
+    /// GFM tagfilter extension: replace `<` with `&lt;` for a fixed set of "disallowed" raw HTML tags so that potentially dangerous tags don't render. Match is case-insensitive on the tag name. Only invoked when the test enables the `tagfilter` extension.
     private static let disallowedTags: [String] = [
         "title", "textarea", "style", "xmp", "iframe",
         "noembed", "noframes", "script", "plaintext"
@@ -361,7 +362,7 @@ internal enum HTMLRenderer {
         }
     }
 
-    /// HTML-escapes `&`, `<`, `>` and `"`. All other bytes, including non-ASCII ones, pass through unchanged.
+    /// HTML-escape `&`, `<`, `>`, `"`. Non-ASCII bytes pass through unchanged so the resulting String preserves the source's UTF-8 encoding.
     internal static func htmlEscape(_ s: String) -> String {
         var out: [UInt8] = []
         out.reserveCapacity(s.utf8.count)
@@ -377,7 +378,7 @@ internal enum HTMLRenderer {
         return String(decoding: out, as: UTF8.self)
     }
 
-    /// Escapes a URL for an HTML attribute. Control characters, space, DEL, non-ASCII bytes and `"`, `<`, `>`, `[`, `\`, `]`, `^`, `` ` ``, `{`, `|`, `}` are percent-encoded. `&` becomes `&amp;`. A `%` followed by two hex digits passes through; any other `%` is percent-encoded.
+    /// Percent-encode characters in a URL. Bytes that need escaping: control chars, space, `<`, `>`, `"`, `[`, `\\`, `]`, `` ` ``, `^`, `{`, `|`, `}`, DEL, plus all non-ASCII. `&` becomes `&amp;` (HTML-escaped, not percent-encoded). `%` is preserved if followed by 2 hex digits (already-encoded sequences); otherwise percent-encoded.
     internal static func escapeURL(_ s: String) -> String {
         var out: [UInt8] = []
         out.reserveCapacity(s.utf8.count)

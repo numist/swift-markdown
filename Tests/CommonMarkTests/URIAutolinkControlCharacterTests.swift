@@ -11,8 +11,7 @@
 import Testing
 import CommonMark
 
-/// An absolute URI excludes ASCII control characters (Autolinks), including DEL (U+007F), so a `<…>` containing
-/// one is literal text.
+// The ASCII control characters an absolute URI excludes (Autolinks) include U+007F.
 @Suite("URI autolink control characters")
 struct URIAutolinkControlCharacterTests {
 

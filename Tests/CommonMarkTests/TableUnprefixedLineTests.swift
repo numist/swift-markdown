@@ -11,13 +11,10 @@
 import Testing
 import CommonMark
 
-/// Laziness applies only to paragraph continuation text (Block quotes, List items). Once a table opens in a
-/// container, a following line without the container's prefix is not a lazy continuation line: it closes
-/// the table and the container and starts a new paragraph.
+// Laziness applies only to paragraph continuation text (Block quotes, List items), so a line without the container's
+// prefix does not continue a table.
 @Suite("Table followed by a line without its container's prefix")
 struct TableUnprefixedLineTests {
-
-    // MARK: - Unprefixed lines close the table and its container
 
     @Test("an unprefixed row closes the table and block quote and starts a paragraph")
     func unprefixedRowClosesTableAndBlockQuote() {
@@ -89,8 +86,6 @@ struct TableUnprefixedLineTests {
 
             """)
     }
-
-    // MARK: - Prefixed body rows
 
     @Test("a prefixed body row stays in the table; a following unprefixed line starts a paragraph")
     func prefixedBodyRowThenUnprefixedLineClosesTable() {

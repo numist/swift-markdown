@@ -11,12 +11,8 @@
 import Testing
 import CommonMark
 
-/// When a delimiter row follows a paragraph of several lines, the paragraph's last line is the header
-/// row and the earlier lines remain a paragraph (Tables (extension)).
 @Suite("Table takes a paragraph's last line as its header row")
 struct TablePrecedingParagraphTests {
-
-    // MARK: - Earlier lines remain a paragraph
 
     @Test("one preceding line splits off, header is the last line")
     func singlePrecedingLine() {
@@ -95,8 +91,6 @@ struct TablePrecedingParagraphTests {
             """)
     }
 
-    // MARK: - Closing the table
-
     @Test("a lone-pipe line after the delimiter closes the table")
     func lonePipeClosesTable() {
         // A lone `|` has no cells, so it is not a body row.
@@ -113,8 +107,6 @@ struct TablePrecedingParagraphTests {
 
             """)
     }
-
-    // MARK: - No paragraph split off
 
     @Test("a header that is the paragraph's only line has no preceding paragraph")
     func bareTwoLineTable() {
@@ -144,8 +136,6 @@ struct TablePrecedingParagraphTests {
 
     @Test("a dash-only line after preceding text is a setext heading, not a table")
     func setextNotTable() {
-        // A line of only dashes is a setext heading underline, which takes the whole paragraph
-        // (Setext headings).
         #expect(TreeDump.dump("x\na\n-", options: .tables) == """
             document
               heading 2
@@ -177,8 +167,6 @@ struct TablePrecedingParagraphTests {
 
             """)
     }
-
-    // MARK: - Source ranges
 
     @Test("split-off paragraph and table carry source ranges", arguments: [
         ("x\na\n|-", """

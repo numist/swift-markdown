@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// A bracket whose text begins with `[^` and crosses a line ending, beside a NUL (replaced by U+FFFD) or a multibyte
-/// character and a checkbox that does not begin its list item's first paragraph. The item is not a task list item (Task
-/// list items (extension)), and the bracket is literal text.
 @Suite("Cross-line bracket beginning with [^ beside replaced characters")
 struct FootnoteBracketAcrossReplacedCharactersTests {
 

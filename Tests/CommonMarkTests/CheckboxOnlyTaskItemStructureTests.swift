@@ -11,14 +11,8 @@
 import Testing
 import CommonMark
 
-/// Block structure of a task list item whose first line holds only the checkbox and trailing
-/// whitespace (`- [ ] ` / `- [x]\t`).
-///
-/// The line is not blank, so it opens the item's paragraph (List items), which a following line
-/// continues as paragraph continuation text, indented or as a lazy continuation line. The paragraph
-/// begins with a task list item marker followed by whitespace, so the item is a task list item (Task
-/// list items (extension)); the marker becomes the checkbox, and a paragraph left with no content is
-/// removed.
+// A checkbox-only line is not blank, so it opens the item's paragraph (List items), which a following line continues,
+// lazily or indented. Once the task list item marker becomes the checkbox, a paragraph left with no content is removed.
 @Suite("Checkbox-only task list item block structure")
 struct CheckboxOnlyTaskItemStructureTests {
 

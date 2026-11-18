@@ -11,8 +11,6 @@
 import Markdown
 import XCTest
 
-/// A tab before a line ending makes a soft line break: a hard line break needs two or more spaces or a
-/// backslash before the line ending (Hard line breaks).
 class TabBeforeLineEndingSoftBreakTests: XCTestCase {
     private static let source = "[\u{FFFD}\r ]:\u{FFFD}\n=\n*\t\r*"
     private static let options: ParseOptions = [.parseBlockDirectives, .parseMinimalDoxygen]

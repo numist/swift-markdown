@@ -12,12 +12,6 @@ import Foundation
 import Markdown
 import Testing
 
-/// Replays the document regression pairs in `DocumentRegressions/`, one test case per pair.
-///
-/// Each pair is two files:
-///   - `<name>.input`: the Markdown source bytes followed by one final byte, the `ParseOptions` raw value
-///     to parse with. Invalid UTF-8 in the source decodes to U+FFFD.
-///   - `<name>.expected`: the parsed document's expected `debugDescription(options: .printSourceLocations)`.
 struct DocumentRegressionTests {
 
     static let corpusDir: URL = {
@@ -27,7 +21,6 @@ struct DocumentRegressionTests {
             .appendingPathComponent("DocumentRegressions")
     }()
 
-    /// Basenames of every `<name>.input` file, sorted.
     static let corpus: [String] = {
         guard let contents = try? FileManager.default.contentsOfDirectory(
             at: corpusDir, includingPropertiesForKeys: nil
@@ -39,23 +32,20 @@ struct DocumentRegressionTests {
             .sorted()
     }()
 
-    /// Splits a pair's input into its Markdown source and the `ParseOptions` in its final byte.
     static func splitInput(_ bytes: [UInt8]) -> (markdown: String, options: ParseOptions)? {
         guard let optionBits = bytes.last else { return nil }
         let markdown = String(decoding: bytes.dropLast(), as: UTF8.self)
         return (markdown, ParseOptions(rawValue: UInt(optionBits)))
     }
 
-    /// The parsed document's debug description, with source locations.
     static func tree(_ markdown: String, options: ParseOptions) -> String {
         return Document(parsing: markdown, options: options).debugDescription(options: .printSourceLocations)
     }
 
-    /// Pairs whose tree is deeper than the recursive tree dumper's stack allows.
     static let deepTreePairs: Set<String> = ["deepnest-empty-doc"]
 
-    /// A `@Test(arguments:)` over an empty collection runs zero cases and reports success, so this pins the number of
-    /// pairs.
+    // A `@Test(arguments:)` over an empty collection runs zero cases and reports success, so this pins the number of
+    // pairs.
     @Test
     func corpusHasEveryPair() {
         #expect(Self.corpus.count == 677, "unexpected pair count in \(Self.corpusDir.path)")

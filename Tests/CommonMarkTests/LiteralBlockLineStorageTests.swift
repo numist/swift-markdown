@@ -11,11 +11,8 @@
 import CommonMark
 import Testing
 
-/// Storage for a code or HTML block line whose stripped indentation splits a tab or that holds a NUL.
-///
-/// Only the bytes that differ from the source are copied into the materialized string buffer: the tab's leftover
-/// columns as spaces (Tabs) and each NUL's U+FFFD (Insecure characters). The rest of the line stays in the source. The
-/// buffer also holds the line ending that joins lines.
+// Each expected size is the line feed the materialized string buffer starts with plus the bytes that differ from the
+// source: a split tab's leftover columns as spaces (Tabs) and each NUL's U+FFFD (Insecure characters).
 @Suite("Code and HTML block lines copy only the bytes that differ from the source")
 struct LiteralBlockLineStorageTests {
 

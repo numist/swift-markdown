@@ -11,14 +11,14 @@
 import Markdown
 import XCTest
 
-/// A numeric character reference in a link title has at most 8 decimal or 8 hexadecimal digits, leading zeros
-/// included; a longer one is literal.
+// `MarkupParser.shippingLimits` reads up to 8 digits in a decimal or hexadecimal numeric character reference,
+// leading zeros included, more than the spec's 7 and 6 (Entity and numeric character references).
 class CharacterReferenceDigitLimitTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])
     }
 
-    // Images, because the debug description prints an Image's title but not a Link's.
+    // The tests parse images because the debug description prints an Image's title but not a Link's.
 
     func testInlineTitleReferenceOfEightDigitsDecodes() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Image source: \"A\" title: \"A\"\n      └─ Text \"l\"", tree("![l](&#00000065; \"&#x00000041;\")"))

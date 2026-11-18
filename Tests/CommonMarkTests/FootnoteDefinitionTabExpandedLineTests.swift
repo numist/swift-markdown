@@ -11,7 +11,6 @@
 import Testing
 import CommonMark
 
-/// A footnote definition opened after a block quote marker and a tab (Tabs), with and without source positions.
 @Suite("Footnote definition on a tab-expanded line")
 struct FootnoteDefinitionTabExpandedLineTests {
 

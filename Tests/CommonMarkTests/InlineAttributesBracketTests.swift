@@ -11,7 +11,6 @@
 import Testing
 import CommonMark
 
-/// Appends each node's kind, literal and attribute string to `out` in document order.
 private func dfsAttributeNodes(
     _ node: borrowing MarkdownNode,
     into out: inout [(kind: MarkdownNode.Kind, text: String?, attrs: String?)]
@@ -94,7 +93,6 @@ struct InlineAttributesBracketTests {
         #expect(ns.compactMap(\.text) == ["^[]x"])
     }
 
-    /// The inline form completes the attribute, so a following label naming an attribute definition is text.
     @Test("a label following an inline form is text")
     func labelAfterInlineAttributeIsText() {
         let ns = nodes(in: "^[lbl]: color: blue\n\n^[](x)[lbl]", options: Self.options)

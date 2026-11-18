@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// A type 6 HTML block (HTML blocks) starts with `<` or `</` and one of its listed tag names, followed by whitespace,
-/// `>`, `/>` or the end of the line, and it may interrupt a paragraph. `source` and `search` are not on the list, so a
-/// complete tag with either name, such as `<source>`, can start only a type 7 block, which can't interrupt a paragraph.
 @Suite("HTML block type 6 tag name list")
 struct HTMLBlockType6TagNameListTests {
 
@@ -138,7 +135,6 @@ struct HTMLBlockType6TagNameListTests {
             """)
     }
 
-    /// `<source` is paragraph text, so `next` is a lazy continuation line of the list item's paragraph.
     @Test("`<source` is paragraph text inside a list item")
     func sourceInListItem() {
         #expect(TreeDump.dump("- <source\nnext\n", options: Self.options, sourceRanges: true) == """

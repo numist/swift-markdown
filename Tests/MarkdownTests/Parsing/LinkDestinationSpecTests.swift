@@ -11,8 +11,6 @@
 import Markdown
 import Testing
 
-/// A bare link destination contains no ASCII control character and includes parentheses only when they
-/// are backslash-escaped or balanced, and a `<…>` destination contains no line ending (Links).
 struct LinkDestinationSpecTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)
@@ -55,8 +53,8 @@ struct LinkDestinationSpecTests {
             """)
     }
 
-    /// A NUL is replaced with U+FFFD (Insecure characters). A paragraph's leading link reference
-    /// definitions are removed before a setext heading underline is considered (Setext headings).
+    // A paragraph's leading link reference definitions are removed before a setext heading underline is considered
+    // (Link reference definitions), so `===` is paragraph text.
     @Test func nulIsReplacementCharacterInDefinitionDestination() {
         #expect(tree("[a]: b\u{0}c\n===\n\n[a]") == """
             Document @1:1-4:4

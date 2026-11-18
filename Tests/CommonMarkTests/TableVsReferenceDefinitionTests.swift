@@ -11,14 +11,11 @@
 import Testing
 import CommonMark
 
-/// A delimiter row makes the paragraph line before it a table's header row, and the table takes the
-/// paragraph from that line on before any link reference definition is extracted from it (Tables
-/// (extension), Link reference definitions), so text from the header row on that is shaped like a
-/// link reference definition becomes table content.
+// A table takes the paragraph from its header row on before link reference definitions are extracted from it (Tables
+// (extension), Link reference definitions).
 @Suite("GFM table vs link reference definition precedence")
 struct TableVsReferenceDefinitionTests {
 
-    /// Read as a whole, `[\n|-\n]:/` is a link reference definition with label `\n|-\n`.
     @Test("a delimiter-row second line forms a table even when the paragraph reads as a link reference definition")
     func delimiterRowBeatsReferenceDefinition() {
         #expect(TreeDump.dump("[\n|-\n]:/", options: [.tables]) == """
@@ -49,7 +46,6 @@ struct TableVsReferenceDefinitionTests {
             """)
     }
 
-    /// No definition exists, so a later `[foo]` stays literal.
     @Test("a complete first-line link reference definition becomes the header cell when a delimiter row follows")
     func firstLineReferenceDefinitionAbsorbedAsHeader() {
         #expect(TreeDump.dump("[foo]: /bar\n|-\n|x", options: [.tables]) == """
@@ -89,11 +85,9 @@ struct TableVsReferenceDefinitionTests {
             """)
     }
 
-    // MARK: - Delimiter row after a complete link reference definition
-
-    /// A pipe-less `-` is a setext heading underline rather than a delimiter row, but it underlines no setext heading,
-    /// since the paragraph before it holds only a link reference definition (Setext headings), and an empty list item
-    /// cannot interrupt a paragraph (List items), so the `-` is paragraph text.
+    // A pipe-less `-` is a setext heading underline rather than a delimiter row, but the paragraph before it holds only
+    // a link reference definition, so it underlines nothing (Setext headings). An empty list item cannot interrupt a
+    // paragraph (List items), so the `-` is paragraph text.
     @Test("a bare `-` after a complete single-line link reference definition is paragraph text", arguments: [
         ("[o]:o\n-", """
             document

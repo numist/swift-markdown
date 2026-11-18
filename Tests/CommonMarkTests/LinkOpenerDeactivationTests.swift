@@ -11,8 +11,7 @@
 import Testing
 import CommonMark
 
-/// Links may not contain other links (Links), so once a link or autolink forms, no `[` opened before it forms a link,
-/// whatever brackets open between them. Image and attribute openers still form around it.
+// Links may not contain other links, at any level of nesting (Links).
 @Suite("Link openers before a link or autolink")
 struct LinkOpenerDeactivationTests {
 

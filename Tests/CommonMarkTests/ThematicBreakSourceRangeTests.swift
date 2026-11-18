@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// Source ranges of thematic breaks. A thematic break runs from its first marker character to just past its last
-/// marker character on its own line, so trailing spaces or tabs and any following lines are outside it.
 @Suite("Thematic break source ranges")
 struct ThematicBreakSourceRangeTests {
 

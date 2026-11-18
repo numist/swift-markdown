@@ -11,15 +11,12 @@
 import CommonMark
 import Testing
 
-/// A footnote definition opener followed on the same line by another opener nests the second
-/// definition inside the first. The first definition of a label in the document wins, so an enclosing
-/// definition wins over a same-label one nested in it. A referenced definition moves to the document root
-/// out of whatever encloses it; every other definition is dropped with its remaining content.
+// An opener after another on the same line nests a definition in the first. The first definition of a label wins;
+// a winning, referenced definition moves to the document root, and every other is dropped with its remaining content.
 @Suite("Nested footnote definitions")
 struct FootnoteNestedDefinitionTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes]
 
-    /// The outer definition wins, so the definition in the document has its label, `b`, not `B`.
     @Test
     func outerDuplicateDefinitionSuppliesLabel() {
         #expect(TreeDump.dump("[^b]\n[^b]:[^B]:A", options: Self.options) == """
@@ -42,7 +39,6 @@ struct FootnoteNestedDefinitionTests {
             """)
     }
 
-    /// A differently labeled inner definition moves out of the outer one when referenced.
     @Test
     func differentInnerLabelBothReferenced() {
         #expect(TreeDump.dump("[^a][^b]\n[^a]:[^b]:A", options: Self.options) == """
@@ -58,7 +54,6 @@ struct FootnoteNestedDefinitionTests {
             """)
     }
 
-    /// An unreferenced inner definition is dropped from inside the referenced outer one.
     @Test
     func differentInnerLabelOnlyOuterReferenced() {
         #expect(TreeDump.dump("[^a]\n[^a]:[^b]:A", options: Self.options) == """
@@ -70,8 +65,7 @@ struct FootnoteNestedDefinitionTests {
             """)
     }
 
-    /// The indented line continues only the outer definition, so its paragraph stays with the
-    /// winning outer duplicate.
+    // Four columns of indentation continue only the outer definition, so `C` stays with the winning outer duplicate.
     @Test
     func outerDuplicateKeepsContentAfterBlankLine() {
         #expect(TreeDump.dump("[^b]\n[^b]:[^b]:A\n\n    C\n", options: Self.options) == """
@@ -85,8 +79,6 @@ struct FootnoteNestedDefinitionTests {
             """)
     }
 
-    /// A lazy continuation line extends the inner definition's paragraph, which is dropped with
-    /// the losing inner duplicate.
     @Test
     func innerDuplicateLazyContinuationIsDropped() {
         #expect(TreeDump.dump("[^b]\n[^b]:[^b]:A\nB\n", options: Self.options) == """
@@ -111,8 +103,6 @@ struct FootnoteNestedDefinitionTests {
             """)
     }
 
-    /// A same-label definition nested through a block quote loses to the outer definition, which
-    /// keeps the emptied block quote.
     @Test
     func outerDuplicateThroughBlockQuote() {
         #expect(TreeDump.dump("[^b]\n[^b]:> [^b]:A\n", options: Self.options) == """

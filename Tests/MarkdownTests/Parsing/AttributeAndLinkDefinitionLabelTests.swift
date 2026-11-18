@@ -11,15 +11,12 @@
 import Markdown
 import XCTest
 
-/// Link reference definitions and inline attribute definitions have separate labels, so a definition of one
-/// kind never hides a same-label definition of the other, whatever their order.
 class AttributeAndLinkDefinitionLabelTests: XCTestCase {
     func testInlineFormAlongsideBothDefinitionKinds() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ InlineAttributes attributes: `b`\n      └─ Text \"t\"", tree("[foo]: /u\n^[foo]: attrs\n\n^[t](b)"))
     }
 
-    /// Inline attributes have no collapsed or shortcut reference form: an empty `[]` label names no definition and is
-    /// dropped, and a bare `^[foo]` never looks up its content.
+    // An empty `[]` label names no definition and is dropped.
     func testNoCollapsedOrShortcutForm() {
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", tree("[foo]: /u\n^[foo]: attrs\n\n^[foo][]"))
         XCTAssertEqual("Document\n└─ Paragraph\n   └─ Text \"^[foo]\"", tree("[foo]: /u\n^[foo]: attrs\n\n^[foo]"))
@@ -49,7 +46,6 @@ class AttributeAndLinkDefinitionLabelTests: XCTestCase {
         XCTAssertEqual("Document\n└─ Paragraph\n   ├─ InlineAttributes attributes: `attrs`\n   │  └─ Text \"t\"\n   └─ Link destination: \"/u\"\n      └─ Text \"foo\"", tree("[foo]: /u\n^[foo]: attrs\n\n^[t][foo][foo]"))
     }
 
-    /// The inline `(attributes)` form completes the inline attribute, so the label after it is a link reference.
     func testLabelAfterInlineAttributesIsLink() {
         XCTAssertEqual("Document\n└─ Paragraph\n   ├─ InlineAttributes attributes: `b`\n   │  └─ Text \"t\"\n   └─ Link destination: \"/u\"\n      └─ Text \"foo\"", tree("[foo]: /u\n^[foo]: attrs\n\n^[t](b)[foo]"))
     }

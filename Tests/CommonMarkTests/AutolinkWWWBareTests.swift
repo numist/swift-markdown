@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// `www.` followed by a space is an extended www autolink with an empty domain; its final `.` is trailing punctuation,
-/// so the link is `www`. `www.` at the end of the input and `www._` are text.
+// `www.` followed by a space is an extended www autolink with an empty domain; its final `.` is trailing punctuation,
+// so the link is `www`.
 @Suite("Extended www autolink without a domain")
 struct AutolinkWWWBareTests {
 

@@ -11,11 +11,6 @@
 import Testing
 import CommonMark
 
-/// A paragraph's raw content has its final whitespace removed (Paragraphs), as does a setext heading's (Setext
-/// headings), so a paragraph ends just past its last content byte and a setext heading just past its underline's last
-/// `=` or `-`, before any trailing whitespace. An ATX heading's content excludes trailing spaces and tabs (ATX
-/// headings), so it ends just past its closing sequence when it has one, otherwise just past its content, or past its
-/// opening sequence when it has neither.
 @Suite("Paragraph and heading ranges before trailing whitespace")
 struct LeafTrailingWhitespaceRangeTests {
 
@@ -55,7 +50,8 @@ struct LeafTrailingWhitespaceRangeTests {
             """)
     }
 
-    /// A line of whitespace that includes a line tabulation or form feed is not blank, but leaves the paragraph no raw content.
+    // A line tabulation or form feed keeps a line from being blank, but as whitespace (Characters and lines) it is
+    // removed from the paragraph's raw content (Paragraphs).
     @Test("a paragraph of only whitespace including a line tabulation or form feed has an empty range at its start", arguments: [
         ("\u{0B}\n", "document @1:1-2:1\n  paragraph @1:1-1:1\n"),
         ("  \u{0B}\u{0C}  \n", "document @1:1-2:1\n  paragraph @1:3-1:3\n"),

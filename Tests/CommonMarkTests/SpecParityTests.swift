@@ -91,8 +91,7 @@ internal enum SpecParser {
 @Suite("Spec parity")
 struct SpecParityTests {
 
-    /// The parse options for an example's extension annotations (e.g. `autolink`, `table`, `strikethrough`),
-    /// plus task list items and footnotes, which the spec doesn't annotate.
+    /// Map a per-example extension annotation (e.g. `autolink`, `table`, `strikethrough`, `tagfilter`) to the corresponding `MarkdownDocument.ParseOptions` bits.
     private static func options(forExtensions extensions: [String]) -> MarkdownDocument.ParseOptions {
         var opts: MarkdownDocument.ParseOptions = []
         for ext in extensions {
@@ -100,10 +99,11 @@ struct SpecParityTests {
             case "autolink":      opts.formUnion(.gfmAutolink)
             case "strikethrough": opts.formUnion(.strikethrough)
             case "table":         opts.formUnion(.tables)
-            case "tagfilter":     break // Applied by `HTMLRenderer`.
+            case "tagfilter":     break // not implemented
             default: break
             }
         }
+        // Tasklist and footnotes aren't gated by per-example annotations in the spec, so always include them.
         opts.formUnion([.tasklist, .footnotes])
         return opts
     }

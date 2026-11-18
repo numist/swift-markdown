@@ -14,7 +14,6 @@ import Testing
 @Suite("Footnote references beside link references")
 struct FootnoteReferencesBesideLinkReferencesTests {
 
-    /// The number of dumped nodes whose type name is `kind`.
     private func count(_ kind: String, in dump: String) -> Int {
         dump.split(separator: "\n").filter { $0.drop(while: { $0 == " " }).hasPrefix(kind + " ") }.count
     }

@@ -11,15 +11,13 @@
 import Testing
 import CommonMark
 
-/// A byte order mark at the start of a document is not content, so a list item on the first line is a task list item
-/// exactly when it would be without the mark (Task list items (extension)). Line 1's columns count the mark's three
-/// bytes, so with the mark a range on line 1 lies three columns later, and the document still starts at 1:1.
+// Line 1's columns count the byte order mark's three bytes, so with the mark each position on line 1 lies three columns
+// later, and the document still starts at 1:1.
 @Suite("Task list items on the first line after a byte order mark")
 struct ByteOrderMarkTaskItemTreeTests {
 
     static let options: MarkdownDocument.ParseOptions = [.tasklist, .sourcePosition]
 
-    /// A document without the mark, its tree, and its tree with the mark.
     static let cases: [(markdown: String, tree: String, treeWithMark: String)] = [
         ("- [x] a", """
             document @1:1-1:8

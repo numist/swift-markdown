@@ -11,9 +11,8 @@
 import CommonMark
 import Testing
 
-/// When a table interrupts a paragraph, the lines before the header row form an ordinary paragraph (Paragraphs).
-/// Only a cell's content unescapes `\|` (Tables (extension)), so in those lines a `\|` is a backslash escape (Backslash
-/// escapes) and a code span keeps its backslash escapes literal (Code spans).
+// The lines before the header row are an ordinary paragraph, not table cells, so a code span there keeps `\|`
+// literal (Code spans), unlike one in a cell (Tables (extension)).
 @Suite("Escaped pipe in the paragraph before a table")
 struct TablePrecedingParagraphPipeEscapeTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .sourcePosition]

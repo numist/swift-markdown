@@ -10,10 +10,6 @@
 
 import CommonMark
 
-/// Reports, for every segment of each node whose content is text (text, code spans and inline HTML) in document order,
-/// whether the segment's bytes lie inside the parsed source or in a copy the document made.
-///
-/// Each line is a segment's text in quotes followed by `source` or `copy`.
 internal enum SourceBackedText {
 
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)

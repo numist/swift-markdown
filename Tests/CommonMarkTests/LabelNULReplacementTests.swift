@@ -11,8 +11,6 @@
 import CommonMark
 import Testing
 
-/// A NUL is replaced by U+FFFD (Insecure characters), so a label holding a NUL matches the same label written with
-/// U+FFFD, and neither matches the label without it.
 @Suite("Labels holding a NUL or U+FFFD")
 struct LabelNULReplacementTests {
     static let replacedPairs = [("a\u{0}", "a\u{FFFD}"), ("a\u{FFFD}", "a\u{0}")]

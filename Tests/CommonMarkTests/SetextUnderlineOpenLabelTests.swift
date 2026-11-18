@@ -11,10 +11,8 @@
 import CommonMark
 import Testing
 
-/// A link label still open at a setext underline that a line of only whitespace keeps from forming a heading closes at
-/// a later unescaped `]` that no unescaped `[` precedes (Link reference definitions, Backslash escapes), and until it
-/// does, each `=` line continues the paragraph (Setext headings). With no limit on a label's characters, the label
-/// grows with every such line.
+// While a link label is open, its line of only whitespace keeps an underline from forming a heading (Setext headings),
+// so each `=` line continues the paragraph and the label until a `]` closes it (Link reference definitions).
 @Suite("Setext underlines below an open link label")
 struct SetextUnderlineOpenLabelTests {
 

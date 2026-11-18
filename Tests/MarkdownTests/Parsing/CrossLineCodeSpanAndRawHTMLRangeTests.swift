@@ -11,8 +11,7 @@
 import Markdown
 import XCTest
 
-/// A code span or raw HTML that contains a line ending has a source range that ends on the line of its
-/// closing delimiter. `.disableSourcePosOpts` does not affect source ranges.
+// `.disableSourcePosOpts` does not affect source ranges.
 class CrossLineCodeSpanAndRawHTMLRangeTests: XCTestCase {
     func testMultilineCodeSpanEndsOnPhysicalLine() {
         let text = "`a\nb`"

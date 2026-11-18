@@ -11,10 +11,6 @@
 import Testing
 import CommonMark
 
-/// `maxDecimalCharacterReferenceDigits` and `maxHexadecimalCharacterReferenceDigits` bound the digits of a numeric
-/// character reference, leading zeros included, wherever references decode: text, link destinations and titles, code
-/// fence info strings and attribute definitions. A reference past its limit is literal text. A reference within its
-/// limit whose code point is invalid decodes to U+FFFD.
 @Suite("Numeric character reference digit limits")
 struct CharacterReferenceDigitLimitTests {
 
@@ -24,8 +20,6 @@ struct CharacterReferenceDigitLimitTests {
         limits.maxHexadecimalCharacterReferenceDigits = hexadecimal
         return limits
     }
-
-    // MARK: - Text
 
     @Test("a decimal reference in text decodes at the digit limit but not past it")
     func decimalText() {
@@ -118,8 +112,6 @@ struct CharacterReferenceDigitLimitTests {
             """)
     }
 
-    // MARK: - Destinations and titles
-
     @Test("an inline link's destination and title decode references at the digit limit but not past it")
     func inlineLink() {
         let limits = limits(decimal: 3, hexadecimal: 3)
@@ -177,8 +169,6 @@ struct CharacterReferenceDigitLimitTests {
             """)
     }
 
-    // MARK: - Info strings and attributes
-
     @Test("a code fence's info string decodes references at the digit limit but not past it")
     func infoString() {
         let limits = limits(decimal: 3, hexadecimal: 3)
@@ -213,9 +203,6 @@ struct CharacterReferenceDigitLimitTests {
             """)
     }
 
-    // MARK: - Defaults
-
-    /// The inputs past the small limits above decode at the default limits, so those cases test the limits alone.
     @Test("the default limits decode the references past the small limits")
     func defaultsDecodeOverLimitInputs() {
         #expect(TreeDump.dump("&#0065;&#x0041;&#X0041;", options: []) == """

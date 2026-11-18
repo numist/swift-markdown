@@ -11,18 +11,13 @@
 import Testing
 import CommonMark
 
-/// Storage growth for a paragraph whose text is one run made of many separate pieces - unmatched brackets, image
-/// openers, emphasis delimiters, apostrophes, link openers, unresolved footnote references - most of them after a
-/// pair of smart quotes. The run's segment count grows in proportion to the input.
 @Suite("Text runs merged from many pieces have a linear segment count")
 struct MergedTextRunStorageGrowthTests {
 
-    /// A source of `prefix` followed by `count` copies of `unit`.
     struct RepeatedSource: Sendable, CustomTestStringConvertible {
         let prefix: String
         let unit: String
         let options: MarkdownDocument.ParseOptions
-        /// The paragraph's text for three copies of `unit`.
         let text: String
 
         func source(count: Int) -> String {
@@ -60,7 +55,6 @@ struct MergedTextRunStorageGrowthTests {
     func linearSegments(_ repeated: RepeatedSource) {
         let source = repeated.source(count: 2000)
         let segments = MarkdownDocument.withParsedDocument(source, options: repeated.options) { $0._segmentCount }
-        // A linear parse stores at most about two segments per byte for these inputs; the bound leaves headroom.
         #expect(segments <= 4 * source.utf8.count, "\(segments) segments for \(source.utf8.count) bytes")
     }
 }

@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// Link labels (Links) and inline-attribute strings in a block quote or list item paragraph, on lines that carry the
-/// container's markers or indentation and on lazy continuation lines. A label or attribute string may span a line
-/// ending.
 @Suite("Links across the lines of a container's paragraph")
 struct LinksAcrossContainerLinesTests {
 
@@ -72,7 +69,6 @@ struct LinksAcrossContainerLinesTests {
             """)
     }
 
-    /// An inline attribute's `(…)` may span a line ending, which is part of the attribute string.
     @Test("an attribute form across a block quote's line ending holds the line ending")
     func crossLineAttributeBlockQuote() {
         #expect(TreeDump.dump("> ^[a](\n> b)", options: [.attributes]) == """
@@ -98,7 +94,6 @@ struct LinksAcrossContainerLinesTests {
             """)
     }
 
-    /// A link label may span a line ending; matching normalizes `la\nbel` to `la bel` (Links).
     @Test("cross-line full-reference label resolves and consumes the trailing bracket")
     func crossLineFullReferenceResolves() {
         #expect(TreeDump.dump("[la bel]: /u\n\n>[t][la\nbel]", options: []) == """

@@ -11,10 +11,6 @@
 import Testing
 import CommonMark
 
-/// Tables whose delimiter row has one column, such as `|-`, `-|`, `|-|` or `:-` (Tables (extension)).
-/// The header row needs no pipe when its cell count matches the delimiter row's. A pipe-less line of
-/// dashes under a paragraph that can be a setext heading is its underline (Setext headings) rather than a
-/// delimiter row.
 @Suite("Single-column GFM tables")
 struct SingleColumnTableTests {
 
@@ -54,7 +50,7 @@ struct SingleColumnTableTests {
             """)
     }
 
-    /// `:-` is not a setext heading underline, so it can be a delimiter row without a pipe.
+    // `:-` is not a setext heading underline, so it can be a delimiter row without a pipe.
     @Test("a pipe-less colon single-column delimiter row forms a left-aligned table")
     func pipelessColonLeft() {
         #expect(TreeDump.dump("a\n:-", options: [.tables]) == """
@@ -200,8 +196,6 @@ struct SingleColumnTableTests {
             """)
     }
 
-    /// Like a setext heading underline, a delimiter row may be indented at most 3 columns; a more indented one is
-    /// paragraph continuation text. A leading tab is 4 columns (Tabs).
     @Test("a delimiter row indented 4+ columns is not a table", arguments: [
         ("o\n\t-", """
             document

@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// A list item that begins with a blank line cannot interrupt a paragraph (List items), so a list marker with
-/// nothing after it, on a line that would otherwise be paragraph continuation text, stays paragraph text. Where the
-/// paragraph's container does not continue onto that line, the marker opens a list.
 @Suite("Empty list marker paragraph interruption")
 struct EmptyListMarkerInterruptTests {
 

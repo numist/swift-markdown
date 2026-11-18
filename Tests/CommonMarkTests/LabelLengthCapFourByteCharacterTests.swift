@@ -11,9 +11,6 @@
 import CommonMark
 import Testing
 
-/// A label has at most 999 characters (Links), however many bytes each takes: 999 four-byte characters fit, and 1,000
-/// characters don't, whether all four-byte or ending in one-byte characters. A footnote definition's label has no cap,
-/// so a reference with a longer label stays text and leaves its definition unreferenced.
 @Suite("Label length cap with four-byte characters")
 struct LabelLengthCapFourByteCharacterTests {
     private static let wideCharacter = "\u{1F600}"
@@ -36,6 +33,8 @@ struct LabelLengthCapFourByteCharacterTests {
             """)
     }
 
+    // A footnote definition's label has no length cap, so the definition is not paragraph text, and as nothing
+    // references it, it is not in the tree.
     @Test(arguments: [wide(1000), wide(999) + "a", wide(998) + "aa"])
     func footnoteReferenceOf1000CharactersLeavesItsDefinitionUnreferenced(_ label: String) {
         #expect(TreeDump.dump("x[^\(label)]\n\n[^\(label)]: d", options: .footnotes) == """
@@ -46,8 +45,8 @@ struct LabelLengthCapFourByteCharacterTests {
             """)
     }
 
-    /// The reference's label normalizes to the defined 999-character label, so only its own length keeps it from
-    /// resolving.
+    // The reference's label normalizes to the defined 999-character label, so only its own length keeps it from
+    // resolving.
     @Test
     func footnoteReferenceOf1000CharactersMatchingADefinitionIsText() {
         #expect(TreeDump.dump("x[^\(Self.wide(999)) ]\n\n[^\(Self.wide(999))]: d", options: .footnotes) == """
@@ -81,8 +80,8 @@ struct LabelLengthCapFourByteCharacterTests {
             """)
     }
 
-    /// The reference's label normalizes to the defined 999-character label, so only its own length keeps it from
-    /// resolving.
+    // The reference's label normalizes to the defined 999-character label, so only its own length keeps it from
+    // resolving.
     @Test
     func shortcutReferenceOf1000CharactersMatchingADefinitionIsText() {
         #expect(TreeDump.dump("[\(Self.wide(999)) ]\n\n[\(Self.wide(999))]: /u", options: []) == """

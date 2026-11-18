@@ -12,9 +12,6 @@ import CommonMark
 import Foundation
 import Testing
 
-/// Whole-tree regression cases, one per pair of files in `TreeRegressions/`:
-///   - `<name>.input`    — the markdown followed by one byte that selects the parse options (see `splitInput`).
-///   - `<name>.expected` — the `TreeDump` of the parsed tree, with source ranges.
 @Suite("Tree regressions")
 struct TreeRegressionTests {
 
@@ -22,7 +19,6 @@ struct TreeRegressionTests {
         .deletingLastPathComponent()
         .appendingPathComponent("TreeRegressions")
 
-    /// Basenames of every `<name>.input` fixture, sorted.
     static let corpus: [String] = {
         guard let contents = try? FileManager.default.contentsOfDirectory(
             at: corpusDir, includingPropertiesForKeys: nil
@@ -34,11 +30,6 @@ struct TreeRegressionTests {
             .sorted()
     }()
 
-    /// Splits an input file into its markdown (invalid UTF-8 becomes U+FFFD) and parse options.
-    ///
-    /// Every case parses with tables, strikethrough, task lists, table spans, inline attributes and source positions,
-    /// and with smart punctuation unless bit 2 of the final byte is set. Bit 5 of that byte selects `inlineOnly` (or
-    /// `preserveWhitespace` when bit 4 is also set), bit 6 enables `gfmAutolink` and bit 7 enables `footnotes`.
     static func splitInput(_ bytes: [UInt8]) -> (markdown: String, options: MarkdownDocument.ParseOptions)? {
         guard let optionBits = bytes.last else { return nil }
         let markdown = String(decoding: bytes.dropLast(), as: UTF8.self)
@@ -60,8 +51,8 @@ struct TreeRegressionTests {
         return (markdown, options)
     }
 
-    /// A `@Test(arguments:)` over an empty collection runs zero cases and reports success, so this pins the number of
-    /// pairs.
+    // A `@Test(arguments:)` over an empty collection runs zero cases and reports success, so this pins the number of
+    // pairs.
     @Test
     func corpusHasEveryPair() {
         #expect(Self.corpus.count == 118, "unexpected pair count in \(Self.corpusDir.path)")

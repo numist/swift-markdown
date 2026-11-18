@@ -11,9 +11,6 @@
 import Markdown
 import XCTest
 
-/// A setext heading whose text continues on an indented line, after either a link reference definition, which is
-/// removed from the heading's lines, or a first line of heading text. As with a paragraph, the heading's content has
-/// its initial whitespace removed (Paragraphs, Setext headings).
 class SetextHeadingContinuationIndentTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: [])
@@ -57,8 +54,8 @@ class SetextHeadingContinuationIndentTests: XCTestCase {
             tree(">>[a]:u\n>  b\n>>=\n"))
     }
 
-    /// `[ ] [a]:u` does not begin with a link reference definition, so it is heading text, and a heading is
-    /// not the paragraph a task list item must begin with (Task list items (extension)).
+    // `[ ] [a]:u` does not begin with a link reference definition, so it is heading text, and a task list item marker
+    // must begin a paragraph, not a heading (Task list items (extension)).
     func testTaskCheckboxThenDefinitionShapedText() {
         XCTAssertEqual(
             "Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Heading level: 1\n         ├─ Text \"[ ] [a]:u\"\n         ├─ SoftBreak\n         └─ Text \"b\"",

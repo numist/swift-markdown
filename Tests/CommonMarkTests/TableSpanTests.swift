@@ -43,10 +43,8 @@ struct TableSpanTests {
         #expect(rows[1].map(\.columns) == [1, 1, 1])
     }
 
-    // MARK: - colspan beyond the column count
-
-    // Excess cells are ignored (Tables (extension)), but a `||` filler adds to the colspan of the nearest
-    // cell to its left that is not a `||` filler, and when that cell is kept its colspan is not capped at the column count.
+    // Excess cells are ignored (Tables (extension)), but the `||` fillers after a kept cell add to its colspan even
+    // past the column count.
 
     @Test("one `||` filler grows a single-column cell's colspan past the column count")
     func colspanExceedsColumnCountByOne() {
@@ -84,8 +82,6 @@ struct TableSpanTests {
         #expect(rows[1].map(\.columns) == [4, 0])
     }
 
-    // MARK: - colspan within the column count
-
     @Test("a single-column cell with a trailing pipe has no colspan")
     func singleColumnNoColspan() {
         let rows = firstTableCells("o\n|-\no|", options: [.tables, .tableSpans])
@@ -121,7 +117,7 @@ struct TableSpanTests {
         | ^ | z |
         """
         let rows = firstTableCells(source, options: [.tables, .tableSpans])
-        // First body row: `x` spans two rows.
+        // First body row: `x` now spans two rows.
         #expect(rows[1].map(\.rows) == [2, 1])
         #expect(rows[1].map(\.text) == ["x", "y"])
         // Second body row: the `^` cell is a 0-row filler with its marker text suppressed.
@@ -138,6 +134,7 @@ struct TableSpanTests {
         | " | z |
         """
         let rows = firstTableCells(source, options: [.tables, .tableSpans])
+        // `"` is ordinary content (curly-quote smart is off): no span, text preserved.
         #expect(rows[1].map(\.rows) == [1, 1])
         #expect(rows[2].map(\.rows) == [1, 1])
         #expect(rows[2][0].text == "\"")

@@ -11,21 +11,15 @@
 import Markdown
 import Testing
 
-/// A table row has at most 65,534 cells, every cell its line splits into counted, empty cells and span fillers
-/// included, before a body row is cut to the header's width. A delimiter row past that opens no table, and neither does
-/// one below a paragraph line past it; a body row past it ends the table and starts a paragraph. A table inserts empty
-/// cells into body rows shorter than its header row, and once the rows before a body row inserted more than 524,288,
-/// that row ends the table and starts a paragraph.
-///
-/// The trees are too large to write out, so each is written as `tableSummary` writes it.
+// A table row holds at most 65,534 cells, counting every cell its line splits into, empty cells and span fillers
+// included, before a body row is cut to the header's width. Once the body rows before a row have had more than 524,288
+// empty cells inserted, that row ends the table.
 struct TableLimitTests {
 
-    /// A row of `cells` cells holding `text`, between leading and closing pipes.
     private func row(_ cells: Int, _ text: String) -> String {
         "|" + Array(repeating: text, count: cells).joined(separator: "|") + "|"
     }
 
-    /// A header row of `columns` `a` cells and its delimiter row, each ending in a line feed.
     private func header(_ columns: Int) -> String {
         row(columns, "a") + "\n" + row(columns, "-") + "\n"
     }
@@ -463,7 +457,6 @@ struct TableLimitTests {
 
 }
 
-/// `markup`'s tree as `debugDescription()` writes it, with these differences: two spaces of indentation per level, a run of `n` consecutive siblings whose subtrees are alike written once with `×n` after its first line, text longer than 20 characters written as its first 10 and its byte count, the alignments of a table of more than 8 columns written as runs, and the document's children followed by their source range.
 private func tableSummary(_ markup: Markup) -> String {
     var lines: [String] = []
     appendSummary(of: markup, depth: 0, into: &lines)

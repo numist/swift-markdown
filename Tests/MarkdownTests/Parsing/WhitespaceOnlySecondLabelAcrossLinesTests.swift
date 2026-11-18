@@ -11,9 +11,8 @@
 import Markdown
 import Testing
 
-/// A link label holds at least one non-whitespace character (Links), so a whitespace-only `[ ]` after a
-/// shortcut reference whose text spans a line ending is not a link label: the shortcut reference forms and
-/// `[ ]` stays text, in a paragraph, a block quote and a list item alike.
+// A link label must contain at least one non-whitespace character (Links), so a whitespace-only `[ ]` is not a
+// link label: the shortcut reference before it forms and `[ ]` stays text.
 struct WhitespaceOnlySecondLabelAcrossLinesTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)

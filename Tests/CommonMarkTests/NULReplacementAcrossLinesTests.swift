@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// Every U+0000 is replaced with U+FFFD (Insecure characters), on any line of a block and next to any kind of line
-/// ending.
 @Suite("NUL replacement across lines")
 struct NULReplacementAcrossLinesTests {
 

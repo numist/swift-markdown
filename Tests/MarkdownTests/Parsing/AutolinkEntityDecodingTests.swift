@@ -11,8 +11,6 @@
 import Markdown
 import XCTest
 
-/// Character references inside an autolink decode in its destination and text (Entity and numeric character
-/// references).
 class AutolinkEntityDecodingTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: [])
@@ -54,12 +52,13 @@ class AutolinkEntityDecodingTests: XCTestCase {
         )
     }
 
+    // `MarkupParser.shippingLimits` reads up to 8 digits in a decimal numeric character reference, one more than the
+    // spec's 7 (Entity and numeric character references).
     func testEightDigitReferenceAboveUnicodeRangeBecomesReplacementCharacter() {
         XCTAssertEqual(Self.autolink("http://a\u{fffd}b"), tree("<http://a&#12345678;b>"))
     }
 
     func testNineDigitReferenceStaysLiteral() {
-        // A decimal numeric character reference has at most 8 digits.
         XCTAssertEqual(Self.autolink("http://a&#123456789;b"), tree("<http://a&#123456789;b>"))
     }
 

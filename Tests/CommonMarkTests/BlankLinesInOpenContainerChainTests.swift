@@ -11,11 +11,9 @@
 import Testing
 import CommonMark
 
-/// Blank lines in a long chain of open list items or footnote definitions.
-///
-/// A blank line continues a footnote definition and a list item that holds a block, and closes a list item without a
-/// block (List items) and a block quote (Block quotes), so a run of blank lines keeps the chain open down to the first
-/// block it closes.
+// A blank line continues a footnote definition and a list item that holds a block, and closes a list item without a
+// block (List items) and a block quote (Block quotes), so a run of blank lines keeps the chain open down to the first
+// block it closes.
 @Suite("Blank lines in a long chain of open containers")
 struct BlankLinesInOpenContainerChainTests {
 

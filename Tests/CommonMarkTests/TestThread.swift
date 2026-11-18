@@ -11,8 +11,6 @@
 import Foundation
 import Synchronization
 
-/// Runs `body` on a new thread with a stack of `stackSize` bytes and waits for its result, or returns `nil` without
-/// running it on an OS release without `Synchronization.Mutex`.
 internal func onThread<R: Sendable>(
     stackSize: Int,
     _ body: @escaping @Sendable () -> R

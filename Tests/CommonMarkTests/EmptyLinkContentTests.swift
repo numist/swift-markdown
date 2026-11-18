@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A link with an empty destination and no title, `[a]()`, vends empty URL and title spans through the borrowed
-/// `content` API.
 @Suite("Empty link destination content")
 struct EmptyLinkContentTests {
 

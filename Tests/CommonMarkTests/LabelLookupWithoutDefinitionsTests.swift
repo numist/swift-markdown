@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// Link references, footnote references and attribute labels each match only definitions of their own kind, so a
-/// document that defines only other kinds resolves none of them. An unresolved link or footnote reference stays text,
-/// and an unresolved attribute label is dropped.
 @Suite("Label lookups in documents without definitions of that kind")
 struct LabelLookupWithoutDefinitionsTests {
 

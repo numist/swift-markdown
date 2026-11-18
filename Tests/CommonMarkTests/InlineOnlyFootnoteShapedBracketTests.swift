@@ -11,8 +11,7 @@
 import CommonMark
 import Testing
 
-/// Inline-only mode has no footnote definitions, so a footnote-shaped bracket is text unless a link reference
-/// definition matches it.
+// Inline-only mode has no footnote definitions, so with `.footnotes` these footnote-shaped brackets are text.
 @Suite("Footnote-shaped brackets in inline-only mode")
 struct InlineOnlyFootnoteShapedBracketTests {
 
@@ -114,14 +113,11 @@ struct InlineOnlyFootnoteShapedBracketTests {
             """),
     ]
 
-    /// A `[^label]:` line is not a footnote definition, so a later `[^label]` stays text.
     @Test(arguments: definitionLineCases, modes)
     func footnoteDefinitionLineIsText(_ testCase: (markdown: String, expected: String), _ options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump(testCase.markdown, options: options) == testCase.expected)
     }
 
-    /// A bracket with no matching definition is text, including one whose caret is backslash-escaped or that spans a
-    /// line ending.
     @Test(arguments: unmatchedCases, modes)
     func unmatchedBracketIsText(_ testCase: (markdown: String, expected: String), _ options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump(testCase.markdown, options: options) == testCase.expected)

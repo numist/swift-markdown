@@ -11,14 +11,9 @@
 import Markdown
 import XCTest
 
-/// When the opening code fence is indented N columns, up to N columns of indentation are removed from each
-/// content line (Fenced code blocks). A tab counts to the next tab stop (Tabs): when the removed columns end
-/// inside a tab, the tab's remaining columns become spaces, and the rest of the line, later tabs included,
-/// is kept as is.
+// A fence indented N columns removes up to N columns of indentation from each content line (Fenced code blocks), and
+// removing part of a tab leaves its remaining columns as spaces (Tabs).
 class FencedCodeTabExpansionTests: XCTestCase {
-    /// Assert the parsed document is a single top-level fenced code block with the expected content
-    /// bytes and dump. `contentDisplay` is the code line as `debugDescription` renders it: the raw
-    /// code content prefixed by the dumper's 3-space display indent for a top-level code block.
     private func check(
         input: String,
         docRange: String,
@@ -28,12 +23,10 @@ class FencedCodeTabExpansionTests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        // Fixture sanity: the body must actually contain a tab, or the case proves nothing.
         XCTAssertTrue(input.utf8.contains(0x09), "fixture must contain a tab", file: file, line: line)
 
         let document = Document(parsing: input)
 
-        // Fixture sanity: the input must parse to exactly one top-level fenced code block.
         let codeBlocks = document.children.compactMap { $0 as? CodeBlock }
         XCTAssertEqual(codeBlocks.count, 1, "expected exactly one top-level code block", file: file, line: line)
         guard let codeBlock = codeBlocks.first else { return }
@@ -45,8 +38,6 @@ class FencedCodeTabExpansionTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations), file: file, line: line)
     }
 
-    /// 1-space fence, body is one tab: the tab spans columns [0,4); the 1-column strip consumes one of
-    /// them, leaving 3 spaces of content.
     func testOneSpaceFenceSingleTab() {
         check(
             input: " ```\n\t",
@@ -57,7 +48,6 @@ class FencedCodeTabExpansionTests: XCTestCase {
         )
     }
 
-    /// 2-space fence, body is one tab: 2 columns stripped, 2 spaces of content remain.
     func testTwoSpaceFenceSingleTab() {
         check(
             input: "  ```\n\t",
@@ -68,7 +58,6 @@ class FencedCodeTabExpansionTests: XCTestCase {
         )
     }
 
-    /// 3-space fence, body is one tab: 3 columns stripped, 1 space of content remains.
     func testThreeSpaceFenceSingleTab() {
         check(
             input: "   ```\n\t",
@@ -79,8 +68,6 @@ class FencedCodeTabExpansionTests: XCTestCase {
         )
     }
 
-    /// 1-space fence, body is a tab followed by `x`: the tab's 3 leftover columns become spaces, then
-    /// `x` is copied verbatim.
     func testOneSpaceFenceTabThenChar() {
         check(
             input: " ```\n\tx",
@@ -91,8 +78,6 @@ class FencedCodeTabExpansionTests: XCTestCase {
         )
     }
 
-    /// Two leading tabs, 1-space fence: the FIRST tab straddles the 1-column strip (3 leftover spaces);
-    /// the SECOND tab is entirely past the boundary and stays a literal content tab, copied verbatim.
     func testOneSpaceFenceTwoTabsThenChar() {
         check(
             input: " ```\n\t\tx",
@@ -103,8 +88,8 @@ class FencedCodeTabExpansionTests: XCTestCase {
         )
     }
 
-    /// In a block quote, the tab starts at column 2, so it spans two columns and removing one leaves one
-    /// space.
+    // Two columns precede the tab, so it spans two columns, and removing the fence's one column of indentation leaves
+    // one space.
     func testNestedBlockQuoteFenceStraddlingTab() {
         let input = ">  ```\n> \tx"
         XCTAssertTrue(input.utf8.contains(0x09), "fixture must contain a tab")
@@ -127,7 +112,6 @@ class FencedCodeTabExpansionTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// An unindented fence removes no indentation, so the tab is kept.
     func testZeroIndentFenceKeepsLiteralTab() {
         check(
             input: "```\n\t",
@@ -138,22 +122,19 @@ class FencedCodeTabExpansionTests: XCTestCase {
         )
     }
 
-    /// A line indented by a tab to four columns ends the block quote and its unclosed fenced code block and
-    /// opens an indented code block (Indented code blocks), so `~~~` is code content, not a code fence.
+    // Only paragraph continuation text can be lazy (Block quotes), so this line ends the block quote and its
+    // fenced code block and, indented four columns, opens an indented code block.
     func testTabIndentedCodeAfterBlockQuoteCloses() {
         let input = ">~~~\n\t~~~"
         XCTAssertTrue(input.utf8.contains(0x09), "fixture must contain a tab")
 
         let document = Document(parsing: input)
 
-        // Top level: a block quote (holding the empty fenced code block) followed by an indented code block.
         let blockQuotes = document.children.compactMap { $0 as? BlockQuote }
         XCTAssertEqual(blockQuotes.count, 1, "expected exactly one top-level block quote")
         let topLevelCodeBlocks = document.children.compactMap { $0 as? CodeBlock }
         XCTAssertEqual(topLevelCodeBlocks.count, 1, "expected exactly one top-level code block")
 
-        // The block quote's fenced code block opened on `>~~~` has no content lines before the block quote ends, so it
-        // is empty.
         let nestedCodeBlocks = blockQuotes.first?.children.compactMap { $0 as? CodeBlock } ?? []
         XCTAssertEqual(nestedCodeBlocks.count, 1, "expected exactly one code block inside the block quote")
         XCTAssertEqual(nestedCodeBlocks.first?.code, "")

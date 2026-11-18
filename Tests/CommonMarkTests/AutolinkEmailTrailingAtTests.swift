@@ -11,11 +11,8 @@
 import Testing
 import CommonMark
 
-/// Text holding two `@`s, where an extended email autolink's domain would run into the second `@`, and addresses with
-/// one `@` to compare against.
-///
-/// An address can't span both `@`s, so the run between them is the local part of an address after the first `@`. A
-/// period between the two `@`s counts as the period that address's domain needs.
+// An address can't span both `@`s, so the run between them is the local part of an address after the first `@`. A
+// period between the two `@`s counts as the period that address's domain needs.
 @Suite("Extended email autolink candidate with a second `@`")
 struct AutolinkEmailTrailingAtTests {
 
@@ -50,7 +47,6 @@ struct AutolinkEmailTrailingAtTests {
 
     @Test("`o@e.e `: the email links with no text after it")
     func emailTrailingSpaceLinks() {
-        // A paragraph's final spaces are stripped before inline parsing (Paragraphs).
         #expect(TreeDump.dump("o@e.e ", options: Self.options) == """
             document
               paragraph
@@ -60,9 +56,7 @@ struct AutolinkEmailTrailingAtTests {
             """)
     }
 
-    // MARK: - Nothing follows the last `@`
-
-    /// The address after the first `@` has an empty domain.
+    // The address after the first `@` has an empty domain.
     @Test("a run ending in `@` is text", arguments: [
         ("o@.e@", """
             document
@@ -92,8 +86,6 @@ struct AutolinkEmailTrailingAtTests {
     func trailingAtIsText(_ source: String, _ tree: String) {
         #expect(TreeDump.dump(source, options: Self.options) == tree)
     }
-
-    // MARK: - The address after the first `@`
 
     @Test("`o@.e@b`: `.e@b` links, using the period of `.e`")
     func addressAfterFirstAtUsesLocalPartPeriod() {
@@ -152,8 +144,6 @@ struct AutolinkEmailTrailingAtTests {
 
             """)
     }
-
-    // MARK: - Addresses whose domain has no period
 
     @Test("an address alone whose domain has no period is text", arguments: [
         (".e@b", """

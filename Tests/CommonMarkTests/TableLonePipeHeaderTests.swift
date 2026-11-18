@@ -11,12 +11,8 @@
 import Testing
 import CommonMark
 
-/// A header row holding only a leading pipe (Tables (extension)), optionally with whitespace, has no
-/// cells, so it never matches the delimiter row's cell count and no table forms.
 @Suite("Lone-pipe table row column count")
 struct TableLonePipeHeaderTests {
-
-    // MARK: - Lone pipe
 
     @Test("lone-pipe header vs a 1-column delimiter is not a table")
     func lonePipeHeaderTrailingDelim() {
@@ -65,8 +61,6 @@ struct TableLonePipeHeaderTests {
 
             """)
     }
-
-    // MARK: - Headers with cells
 
     @Test("a 1-column header with a 1-column delimiter forms a table")
     func oneColumnTable() {

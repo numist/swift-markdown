@@ -11,13 +11,9 @@
 import Testing
 import CommonMark
 
-/// Indentation after an ordered list marker is counted in columns with tab stops of 4 (Tabs), as after a
-/// bullet list marker. When it reaches five columns, the item starts with an indented code block (List
-/// items).
 @Suite("Ordered-list marker followed by a tab")
 struct OrderedMarkerTabExpansionTests {
 
-    // The tab after `1.` spans two columns; the three spaces bring the indentation to five.
     @Test("period marker: tab then spaces reaching the code threshold is a code block")
     func periodMarkerTabIsCodeBlock() {
         #expect(TreeDump.dump("1.\t   z", options: []) == """
@@ -105,7 +101,6 @@ struct OrderedMarkerTabExpansionTests {
             """)
     }
 
-    // Columns count source bytes, so the tab occupies column 3 alone and `z` is at column 7.
     @Test("positions: an ordered item after a tab maps content back to source bytes")
     func positionsMapBackToSource() {
         #expect(TreeDump.dump("1.\t   z", options: [.sourcePosition], sourceRanges: true) == """

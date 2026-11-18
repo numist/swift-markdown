@@ -11,11 +11,9 @@
 import CommonMark
 import Testing
 
-/// Each line of a setext heading holds a non-whitespace character (Setext headings), and line tabulations and form
-/// feeds are whitespace, which keep a line from being blank (Characters and lines). The heading's lines are the
-/// paragraph's lines less its leading definitions, so a line of only whitespace inside a definition's label or title
-/// doesn't keep the rest from being a heading. A paragraph whose other lines include one of only whitespace is no
-/// heading, so a `=` line continues it and a `-` line that is a thematic break interrupts it.
+// Each line of a setext heading holds a non-whitespace character (Setext headings), and a line of only line
+// tabulations or form feeds holds none yet isn't blank (Characters and lines). The heading's lines are the
+// paragraph's lines less its leading definitions.
 @Suite("Setext underlines after a line of only whitespace")
 struct SetextHeadingWhitespaceOnlyLineTests {
 

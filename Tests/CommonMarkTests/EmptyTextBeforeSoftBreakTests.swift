@@ -11,15 +11,12 @@
 import Testing
 import CommonMark
 
-/// Spaces at the end of a line before a soft line break are removed (Soft line breaks), so a trailing
-/// space after a link, emphasis or a code span produces no text node.
 @Suite("Trailing space before a soft line break")
 struct EmptyTextBeforeSoftBreakTests {
 
     private static let options: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
-    /// The `(kind, literal)` of every node, in depth-first order.
     private func nodes(in src: String) -> [(kind: MarkdownNode.Kind, literal: String?)] {
         MarkdownDocument.withParsedDocument(src, options: Self.options) { dfs($0) }
     }
@@ -35,7 +32,6 @@ struct EmptyTextBeforeSoftBreakTests {
     func codeSpan() {
         let ns = nodes(in: "`c` \ny")
         #expect(ns.map(\.kind) == [.document, .paragraph, .codeInline(backtickCount: 1), .softBreak, .text])
-        // `literal()` also returns a code span's content.
         #expect(ns.compactMap(\.literal) == ["c", "y"])
     }
 

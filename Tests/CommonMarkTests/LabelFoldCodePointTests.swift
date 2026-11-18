@@ -11,11 +11,6 @@
 import CommonMark
 import Testing
 
-/// Labels match when their Unicode case folds are equal (Links), that is, when the folds are the same sequence of code
-/// points. Canonically equivalent labels whose folds are different code points do not match: precomposed `é` (U+00E9)
-/// and `e` followed by a combining acute accent (U+0301), the compatibility ideograph U+F900 and U+8C48, its canonical
-/// decomposition, the Greek question mark U+037E and `;`, and U+1F80 and `α` U+0313 U+0345, whose folds U+1F00 U+03B9
-/// and `α` U+0313 U+03B9 differ. Pairs whose folds are identical match.
 @Suite("Labels match by the code points of their case folds")
 struct LabelFoldCodePointTests {
     static let canonicallyEquivalentPairs = [

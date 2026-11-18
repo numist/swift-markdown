@@ -11,14 +11,10 @@
 import Testing
 import CommonMark
 
-/// A list marker followed by tabs, on the line after a fenced code block in a list item. Under the
-/// rule for an item starting with indented code (List items), indentation after the marker is counted
-/// in columns with tab stops of 4: when it reaches five columns, the item's content begins one column
-/// after the marker and the rest begins an indented code block.
 @Suite("List-marker padding tab feeding an indented code body")
 struct ListMarkerTabPaddingFencedContinuationTests {
 
-    // One column of the first tab is the space after the marker; the six remaining columns exceed the
+    // One column of the first tab is the space after the marker (List items); the six remaining columns exceed the
     // code indent by two, which the partially consumed second tab contributes as two spaces.
     @Test("double-tab list continuation opens a sibling item with indented code")
     func doubleTabSiblingIndentedCode() {

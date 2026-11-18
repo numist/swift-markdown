@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// Links may not contain other links (Links), so an email address in link text is not an extended email
-/// autolink.
 @Suite("Extended email autolinks in link text")
 struct AutolinkEmailInLinkTextTests {
 

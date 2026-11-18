@@ -11,12 +11,9 @@
 import CommonMark
 import Testing
 
-/// Adjacent text produced by character escapes, entities and smart punctuation is merged into one text node whose
-/// content is a run of the stored segments, with no new segments when the pieces are already adjacent.
 @Suite("Merging adjacent text adds a constant number of segments per copy")
 struct TextMergeSegmentCountTests {
 
-    /// How many segments each further copy of `source` adds to a paragraph of one to five copies separated by spaces.
     private static func segmentsAddedPerCopy(_ source: String, options: MarkdownDocument.ParseOptions) -> [Int] {
         let counts = (1...5).map { copies in
             MarkdownDocument.withParsedDocument(Array(repeating: source, count: copies).joined(separator: " "), options: options) { $0._segmentCount }
@@ -24,8 +21,6 @@ struct TextMergeSegmentCountTests {
         return zip(counts.dropFirst(), counts).map { $0 - $1 }
     }
 
-    /// For one to five copies of `source` in a paragraph, separated by spaces: the number of text nodes, and the number
-    /// of stored segments that no text node holds.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     private static func textNodesAndUnheldSegments(_ source: String, options: MarkdownDocument.ParseOptions) -> (textNodes: [Int], unheld: [Int]) {
         var textNodes: [Int] = []
@@ -72,7 +67,6 @@ struct TextMergeSegmentCountTests {
         #expect(Self.segmentsAddedPerCopy(source, options: [.smart]) == added)
     }
 
-    /// Copies that merge into one text node add segments only to that node.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @Test(arguments: [
         ("a &amp; b &lt; c", []),

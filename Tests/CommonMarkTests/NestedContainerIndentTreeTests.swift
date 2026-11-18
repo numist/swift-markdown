@@ -11,10 +11,6 @@
 import Testing
 import CommonMark
 
-/// Items nested one level inside the previous one by indentation alone, and footnote definitions indented by four spaces.
-///
-/// A line is tested against every open container in turn, each consuming its own content column from the line's
-/// leading whitespace, so the tree for these shapes depends on how that whitespace is shared out among the containers.
 @Suite("Nested container indentation")
 struct NestedContainerIndentTreeTests {
 

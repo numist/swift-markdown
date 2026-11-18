@@ -11,14 +11,11 @@
 import Testing
 import CommonMark
 
-/// Backtick openers after a backslash-escaped backtick (Backslash escapes, Code spans).
-///
-/// An escaped backtick is literal, and the rest of its backtick string is a backtick string of its own, which may
-/// open a code span.
+// An escaped backtick is literal, and the rest of its backtick string is a backtick string of its own, which may open
+// a code span (Backslash escapes, Code spans).
 @Suite("Code span openers around an escaped backtick")
 struct CodeSpanEscapedBacktickTests {
 
-    /// The first opener finds no single backtick after it, and the backtick after the escaped one finds none either.
     @Test("no code span forms when the only later run is longer")
     func literalBackticks() {
         #expect(TreeDump.dump("`\\``", options: []) == """
@@ -29,8 +26,6 @@ struct CodeSpanEscapedBacktickTests {
             """)
     }
 
-    /// The first opener finds no single backtick after it; the two backticks after the escaped one open a span that the
-    /// final two close.
     @Test("the rest of an escaped run opens a span that closes later")
     func restOfEscapedRunOpens() {
         #expect(TreeDump.dump("` \\```x``", options: []) == """

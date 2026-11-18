@@ -11,14 +11,11 @@
 import Testing
 import CommonMark
 
-/// A task list item marker must be followed by at least one whitespace character (Task list items
-/// (extension)); all of that whitespace is removed from the item's content.
 @Suite("Task list item marker whitespace")
 struct TaskListMarkerWhitespaceTests {
 
     private static let opts: MarkdownDocument.ParseOptions = [.tasklist]
 
-    /// (found a list item?, its checked state — nil without a checkbox, first text literal in DFS order).
     private func parse(_ source: String) -> (foundItem: Bool, checked: Bool?, firstText: String?) {
         MarkdownDocument.withParsedDocument(source, options: Self.opts) { doc -> (Bool, Bool?, String?) in
             var foundItem = false
@@ -38,8 +35,6 @@ struct TaskListMarkerWhitespaceTests {
             return (foundItem, checked, firstText)
         }
     }
-
-    // MARK: - Whitespace after the checkbox
 
     @Test("two spaces after the checkbox are all stripped")
     func twoSpaces() {
@@ -79,11 +74,9 @@ struct TaskListMarkerWhitespaceTests {
     @Test("no whitespace after the checkbox is not a task list item")
     func noSeparatorIsLiteral() {
         let (found, checked, text) = parse("- [x]a")
-        #expect(found && checked == nil)      // no checkbox
+        #expect(found && checked == nil)
         #expect(text == "[x]a")
     }
-
-    // MARK: - A line ending or the end of input after the checkbox
 
     // A line ending is a whitespace character (Characters and lines), and the end of the paragraph's content counts
     // as one after a checkbox that fills it.
@@ -159,10 +152,8 @@ struct TaskListMarkerWhitespaceTests {
         #expect(texts == ["a", "b"])
     }
 
-    // MARK: - Whitespace before the checkbox
-
     // The paragraph's initial whitespace, which includes line tabulation and form feed, is removed
-    // (Paragraphs), so the paragraph begins with the checkbox and its content is what follows it.
+    // (Paragraphs), so the paragraph begins with the checkbox.
 
     @Test("a line tabulation gap before an unchecked checkbox is recognized")
     func lineTabulationGapUnchecked() {
@@ -188,7 +179,7 @@ struct TaskListMarkerWhitespaceTests {
     @Test("a non-whitespace char before the checkbox is not a task list item")
     func nonWhitespaceBeforeCheckboxIsLiteral() {
         let (found, checked, text) = parse("- a[ ] b")
-        #expect(found && checked == nil)     // no checkbox
+        #expect(found && checked == nil)
         #expect(text == "a[ ] b")
     }
 

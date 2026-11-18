@@ -11,7 +11,6 @@
 import Markdown
 import Testing
 
-/// A setext heading's source range ends just past its underline's last `=` or `-`, whatever line follows it.
 struct SetextHeadingEndRangeTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)

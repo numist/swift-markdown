@@ -11,8 +11,8 @@
 import Markdown
 import XCTest
 
-/// A CDATA section begins with the string `<![CDATA[` (Raw HTML), so a keyword in any other case is text. The leading
-/// `-` keeps the line from starting an HTML block.
+// A CDATA section begins with the string `<![CDATA[` (Raw HTML), so a keyword in any other case is text. The leading
+// `-` keeps the line from starting an HTML block.
 class CdataInlineHtmlCaseSensitivityTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: [])

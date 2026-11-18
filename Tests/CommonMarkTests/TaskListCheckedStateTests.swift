@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A task list item's checked state comes from its leading checkbox alone (Task list items (extension)); a
-/// later `[x]` on the same line is paragraph text.
 @Suite("Task list item checked state")
 struct TaskListCheckedStateTests {
 

@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// A paragraph's raw content drops each line's initial whitespace (Paragraphs), including that of a lazy continuation
-/// line, so a code span crossing onto one holds no whitespace from it.
+// A paragraph's raw content has each line's initial whitespace removed (Paragraphs), including that of a lazy
+// continuation line, so a code span crossing onto one holds no whitespace from it.
 @Suite("Leading whitespace of a lazy continuation line")
 struct LazyContinuationLeadingWhitespaceTests {
 

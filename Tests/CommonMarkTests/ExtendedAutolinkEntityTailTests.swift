@@ -11,8 +11,7 @@
 import CommonMark
 import Testing
 
-/// At a trailing `;`, an extended autolink's trailing-punctuation trim excludes a preceding `&` and one or more ASCII
-/// letters along with the `;`, or else the `;` alone, and then continues trimming.
+// Only ASCII letters between `&` and `;` make an entity-like tail, so `&a1;` and `&2;` lose only their `;`.
 @Suite("Entity-like tail of an extended autolink")
 struct ExtendedAutolinkEntityTailTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .gfmAutolink]

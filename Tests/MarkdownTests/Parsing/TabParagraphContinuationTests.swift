@@ -11,8 +11,6 @@
 import Markdown
 import XCTest
 
-/// A paragraph continuation line that begins with tabs loses them as initial whitespace (Paragraphs), and its
-/// text follows a single soft line break. Columns count a tab as one byte.
 class TabParagraphContinuationTests: XCTestCase {
     func testSingleTabContinuation() {
         let text = "foo\n\tbar"

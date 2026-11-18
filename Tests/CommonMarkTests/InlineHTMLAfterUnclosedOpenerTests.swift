@@ -11,8 +11,7 @@
 import Testing
 import CommonMark
 
-/// Each raw HTML construct (Raw HTML) is recognized independently, so an unclosed opener of one kind doesn't keep a
-/// later construct from matching. Every input starts with `x` so the construct is inline rather than an HTML block.
+// Every input starts with `x` so its HTML is inline rather than an HTML block.
 @Suite("Inline raw HTML after an unclosed opener")
 struct InlineHTMLAfterUnclosedOpenerTests {
 

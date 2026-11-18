@@ -11,10 +11,8 @@
 import Testing
 import CommonMark
 
-/// Tabs at the start of HTML block continuation content, inside, after or without a container prefix.
-///
-/// Per Tabs, a tab that a block quote marker's optional space or a list item's content indentation consumes only part
-/// of leaves its remaining columns as spaces in the line's content, while a tab that no prefix touches stays literal.
+// A tab that a container's prefix consumes only part of leaves its remaining columns as spaces (Tabs); a tab no
+// prefix touches stays literal.
 @Suite("Tabs at the start of HTML block continuation content")
 struct HTMLBlockContinuationPartialTabTests {
 

@@ -11,8 +11,6 @@
 import Markdown
 import Testing
 
-/// An inline attribute's `(attributes)` may contain a line ending. In a block quote or list item, the
-/// attributes keep the line ending and omit the next line's container prefix.
 @Suite("Inline attributes across a line ending")
 struct CrossLineInlineAttributeTests {
     private static func tree(_ markdown: String) -> String {
@@ -59,9 +57,6 @@ struct CrossLineInlineAttributeTests {
         #expect(Self.tree(markdown) == expected)
     }
 
-    /// An inline attribute's `(attributes)` form completes it, so a following `[label]` is not part of it; with no
-    /// link reference definition for that label it stays text, also when the label spans a line ending in a block
-    /// quote.
     @Test func trailingBracketAfterAttributeIsText() {
         #expect(Document(parsing: "^[](x)[y]").debugDescription() == """
             Document
@@ -79,6 +74,8 @@ struct CrossLineInlineAttributeTests {
                   ├─ SoftBreak
                   └─ Text "c]"
             """)
+        // `(ignore)` completes the inline attribute, so `[a b]` can only be a link reference, and no link reference
+        // definition names `a b`.
         #expect(Document(parsing: "^[a b]: color: red\n\n>x^[](ignore)[a\n>b]").debugDescription() == """
             Document
             └─ BlockQuote

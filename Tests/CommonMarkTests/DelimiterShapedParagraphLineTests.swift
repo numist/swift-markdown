@@ -11,22 +11,14 @@
 import CommonMark
 import Testing
 
-/// Paragraph lines that look like table delimiter rows but are not (Tables (extension)).
-///
-/// `-:-` is not a delimiter row, since a colon may only begin or end a cell's dashes, so each such line continues the
-/// paragraph, while `:-` would open a table under the paragraph's last line.
 @Suite("Paragraph lines shaped like delimiter rows")
 struct DelimiterShapedParagraphLineTests {
     struct Shape: Sendable, CustomTestStringConvertible {
         let prefix: String
         let line: String
-        /// `line` with `:-`, a delimiter row, in place of `-:-`.
         let delimiterRow: String
-        /// The tree of `prefix` followed by two lines.
         let twoLines: String
-        /// The tree of `prefix` followed by `delimiterRow`.
         let table: String
-        /// The tree of `prefix` alone, which each line extends by `continuation`.
         let paragraph: String
         let continuation: String
         let testDescription: String

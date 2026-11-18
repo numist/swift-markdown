@@ -11,19 +11,13 @@
 import Testing
 import CommonMark
 
-/// A lazy continuation line of a nested block quote whose outer `>` and its optional following space consume only part
-/// of a tab (Tabs; Block quotes). The tab's remaining columns are leading whitespace of the paragraph line, which the
-/// paragraph's raw content drops (Paragraphs), so neither the line's text nor a code span crossing onto it holds any of
-/// it.
+// The columns of a tab that the line's `>` markers and their optional spaces leave are initial whitespace of the
+// paragraph line, which the paragraph's raw content drops (Paragraphs).
 @Suite("Partially consumed tab on a lazy continuation line")
 struct NestedBlockQuoteLazyLineSplitTabTests {
 
-    // MARK: - Partially consumed tab
-
     @Test("every partially consumed tab shape strips to the line ending's space")
     func partiallyConsumedTabIsStripped() {
-        // Line 2 of each shape is a lazy continuation line whose outer block quote marker consumes part of a tab:
-        // after `> >`, after a tight `>>`, after longer content, before a second tab, and at depth 3.
         #expect(TreeDump.dump("> > `x\n>\ty`", options: [.sourcePosition]) == """
             document
               block_quote
@@ -67,8 +61,6 @@ struct NestedBlockQuoteLazyLineSplitTabTests {
             """)
     }
 
-    // MARK: - No partially consumed tab
-
     @Test("no tab yields just the line ending's space")
     func noTab() {
         #expect(TreeDump.dump("> > `x\n>y`", options: [.sourcePosition]) == """
@@ -92,8 +84,6 @@ struct NestedBlockQuoteLazyLineSplitTabTests {
 
             """)
     }
-
-    // MARK: - Text
 
     @Test("text after a soft line break drops the tab's remaining columns")
     func textAfterSoftBreak() {

@@ -15,9 +15,8 @@ import Testing
 struct FootnoteContinuationIndentAfterTabTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes]
 
-    /// A footnote definition's continuation lines need four columns of indentation, counted from the column the
-    /// enclosing block quote marker or list item indent reaches. A tab partly consumed there extends only to its tab
-    /// stop (Tabs), so ` x` after it is three columns in and the definition closes.
+    // The partly consumed tab reaches only its tab stop (Tabs), so `x` is three columns past the container's content,
+    // short of the four a footnote definition's continuation line needs.
     @Test func footnoteContinuationIndentAfterPartiallyConsumedTab() {
         #expect(TreeDump.dump("[^a]\n\n> [^a]: ```\n>\t x", options: Self.options) == """
             document

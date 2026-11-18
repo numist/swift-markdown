@@ -11,8 +11,6 @@
 import CommonMark
 import Testing
 
-/// Adjacent text nodes merge, so a delimiter or bracket that matches nothing, an entity reference and a backslash
-/// escape join the text around them.
 @Suite("Inline-only text consolidation")
 struct InlineOnlyTextConsolidationTests {
 

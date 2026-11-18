@@ -11,15 +11,13 @@
 import Markdown
 import XCTest
 
-/// No further non-whitespace characters may follow a link reference definition's title on its line (Link
-/// reference definitions). In `[f]:&` / `"title"![f]`, the definition ends at its destination, the second
-/// line is paragraph text, and its `![f]` is an image without a title.
+// Non-whitespace after the title on its line keeps the title out of the definition (Link reference definitions), so the
+// definition ends at its destination and the second line is paragraph text.
 class MultilineRefDefTitleTrailingContentTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: [])
     }
 
-    /// The NUL is replaced by U+FFFD (Insecure characters).
     func testNulTitleWithTrailingImage() {
         XCTAssertEqual(
             "Document\n└─ Paragraph\n   ├─ Text \"“\u{FFFD}”\"\n   └─ Image source: \"&\"\n      └─ Text \"f\"",

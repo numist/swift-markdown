@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// `strikethroughTildeRunChunk` splits a run of `~` from its start into chunks of that length and a shorter
-/// remainder. Each chunk is classified on its own, from the characters before and after it: a flanking chunk of one or
-/// two tildes is a strikethrough delimiter, and a longer chunk is literal text.
 @Suite("Strikethrough tilde run chunk")
 struct StrikethroughTildeRunChunkTests {
 

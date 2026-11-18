@@ -11,10 +11,9 @@
 import Markdown
 import XCTest
 
-/// Numeric character references to noncharacters decode to the noncharacter itself, since each is a valid
-/// code point (Entity and numeric character references).
+// Noncharacters are valid code points, so references to them decode to themselves rather than U+FFFD (Entity and
+// numeric character references).
 class NoncharacterEntityTests: XCTestCase {
-    // Swift string literals reject the escape `\u{FDD0}`, so it is built from its scalar.
     private static let uFDD0 = String(Unicode.Scalar(0xFDD0 as UInt32)!)
 
     private func tree(_ markdown: String) -> String {

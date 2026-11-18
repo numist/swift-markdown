@@ -11,10 +11,6 @@
 import CommonMark
 import Testing
 
-/// Labels match when their Unicode case folds are equal (Links), and so do footnote and attribute labels. The full case
-/// fold maps `ß` and `ẞ` to `ss`, the ligature `ﬃ` to `ffi`, `ŉ` to U+02BC `n`, `µ` to `μ`, `ſ` to `s`, `ς` to `σ`, the
-/// Kelvin sign to `k`, Georgian Mtavruli U+1C90 to U+10D0 and U+A7CE to U+A7CF. Dotless `ı` folds to itself, so it
-/// matches neither `I` nor `i`.
 @Suite("Link and footnote labels under the Unicode case fold")
 struct LabelCaseFoldTests {
     static let pairsWithEqualFolds = [
@@ -24,15 +20,15 @@ struct LabelCaseFoldTests {
         ("\u{1C90}", "\u{10D0}"), ("\u{10D0}", "\u{1C90}"), ("\u{A7CE}", "\u{A7CF}"), ("\u{A7CF}", "\u{A7CE}"),
     ]
 
+    // Labels match by Unicode case fold (Links), under which dotless `ı` folds to itself, so it matches neither `I` nor
+    // `i`.
     static let pairsWithDifferentFolds = [("ı", "I"), ("ı", "i"), ("I", "ı"), ("i", "ı")]
 
-    /// Labels whose folds are 7, 8, 9, 16 and 17 bytes of UTF-8, each paired with a label of the same fold.
     static let foldLengthPairs = [
         ("\u{C9}abcde", "\u{E9}ABCDE"), ("\u{C9}abcdef", "\u{E9}ABCDEF"), ("\u{C9}abcdefg", "\u{E9}ABCDEFG"),
         ("\u{C9}abcdefghijklmn", "\u{E9}ABCDEFGHIJKLMN"), ("\u{C9}abcdefghijklmno", "\u{E9}ABCDEFGHIJKLMNO"),
     ]
 
-    /// The labels of `foldLengthPairs`, each paired with a label whose fold differs from theirs in the last byte.
     static let lastByteDifferencePairs = [
         ("\u{C9}abcde", "\u{C9}abcdf"), ("\u{C9}abcdef", "\u{C9}abcdeg"), ("\u{C9}abcdefg", "\u{C9}abcdefh"),
         ("\u{C9}abcdefghijklmn", "\u{C9}abcdefghijklmo"), ("\u{C9}abcdefghijklmno", "\u{C9}abcdefghijklmnp"),

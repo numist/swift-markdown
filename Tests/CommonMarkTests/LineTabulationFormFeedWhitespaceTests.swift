@@ -11,9 +11,6 @@
 import CommonMark
 import Testing
 
-/// Whitespace (Characters and lines) includes line tabulation and form feed, so they count wherever the spec speaks
-/// of whitespace: in link label matching and blank labels (Links), and in trimming an info string (Fenced code
-/// blocks).
 @Suite("Line tabulation and form feed as whitespace")
 struct LineTabulationFormFeedWhitespaceTests {
     private func tree(_ markdown: String) -> String {
@@ -62,8 +59,8 @@ struct LineTabulationFormFeedWhitespaceTests {
             """)
     }
 
-    /// A footnote definition's label holds no whitespace, so, as with a space, `[^\u{B}]: x` is a link reference
-    /// definition whose label is `^` and a line tabulation.
+    // A footnote definition's label holds no whitespace, so, as with a space, `[^\u{B}]: x` is a link reference
+    // definition whose label is `^` and a line tabulation.
     @Test(arguments: [("\u{0B}", "\\u{B}"), ("\u{0C}", "\\u{C}")])
     func footnoteDefinitionLabelWithWhitespaceIsLinkReferenceDefinition(_ whitespace: String, _ escaped: String) {
         #expect(TreeDump.dump("[^\(whitespace)]: x\n\n[^\(whitespace)]", options: [.footnotes]) == """

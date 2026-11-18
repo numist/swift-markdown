@@ -11,12 +11,8 @@
 import Testing
 import CommonMark
 
-/// A delimiter row on a lazy continuation line (Block quotes, List items) is paragraph text, just as a
-/// lazy `--` is not a setext heading underline, so no table forms.
 @Suite("Table delimiter row on a lazy continuation line")
 struct TableLazyDelimiterTests {
-
-    // MARK: - Lazy continuation lines
 
     @Test("lazy `--` continuation in a block quote is paragraph text")
     func lazyDashDash() {
@@ -70,8 +66,6 @@ struct TableLazyDelimiterTests {
 
             """)
     }
-
-    // MARK: - Prefixed and top-level lines
 
     @Test("a prefixed pipe delimiter in a block quote forms a table")
     func prefixedPipeFormsTable() {

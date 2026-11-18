@@ -11,9 +11,9 @@
 import Testing
 import CommonMark
 
-/// An HTML block of types 1 to 5 holds the blank lines before its end condition (HTML blocks). A blank last line that
-/// holds only a container's prefix has no content bytes, so the block ends at the start of that line, while whitespace
-/// left after the prefix is content.
+// An HTML block of types 1 to 5 holds the blank lines before its end condition (HTML blocks). A last line holding
+// only a container's prefix has no content, so the block ends at that line's start; whitespace after the prefix is
+// content.
 @Suite("HTML block ranges ending in a blank line")
 struct HTMLBlockBlankLastLineRangeTests {
 

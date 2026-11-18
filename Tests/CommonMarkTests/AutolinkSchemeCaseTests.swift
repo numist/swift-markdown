@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// The scheme of an extended url autolink (Autolinks (extension)) matches `http://`, `https://` or `ftp://` in any
-/// case, and the destination and link text keep the source's case.
 @Suite("Extended url autolink scheme case")
 struct AutolinkSchemeCaseTests {
 

@@ -11,10 +11,6 @@
 import Testing
 import CommonMark
 
-/// `maxTableRowCells` bounds the cells a table row can have, every cell a line splits into counted, empty cells and
-/// span fillers included, before a body row is cut to the header's width (Tables (extension)). A delimiter row past it
-/// opens no table, and neither does one below a paragraph line past it. A body row past it ends the table and starts a
-/// paragraph.
 @Suite("Table row cell limit")
 struct TableRowCellLimitTests {
 
@@ -23,8 +19,6 @@ struct TableRowCellLimitTests {
         limits.maxTableRowCells = cells
         return limits
     }
-
-    // MARK: - Header and delimiter rows
 
     @Test("a header and delimiter row of as many cells as the limit open a table")
     func headerAtLimit() {
@@ -81,8 +75,6 @@ struct TableRowCellLimitTests {
 
             """)
     }
-
-    // MARK: - Paragraph lines above the delimiter row
 
     @Test("a paragraph line above the header with as many cells as the limit leaves the table")
     func precedingLineAtLimit() {
@@ -242,8 +234,6 @@ struct TableRowCellLimitTests {
             """)
     }
 
-    // MARK: - Body rows
-
     @Test("a body row of as many cells as the limit is a row, cut to the header's width")
     func bodyRowAtLimit() {
         #expect(TreeDump.dump("a\n|-\nb|b|b\nc", options: .tables, limits: limits(3)) == """
@@ -361,8 +351,6 @@ struct TableRowCellLimitTests {
 
             """)
     }
-
-    // MARK: - Default limits
 
     @Test("the default limits keep a header row, a paragraph line above it and a body row of 100,000 cells")
     func defaultLimitsAtScale() {

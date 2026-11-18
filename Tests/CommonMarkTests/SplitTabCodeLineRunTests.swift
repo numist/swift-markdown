@@ -11,10 +11,8 @@
 import CommonMark
 import Testing
 
-/// Indented code lines in a list item whose indent splits a tab.
-///
-/// The list item's content is indented two columns, so the second tab of each `\t\tx` line contributes two columns of
-/// the four an indented code block strips and leaves two spaces of content (Tabs).
+// The item's content starts two columns into the first tab, so the code block's four-column indent ends two
+// columns into the second tab and leaves two spaces of content (Tabs).
 @Suite("Runs of indented code lines whose indent splits a tab")
 struct SplitTabCodeLineRunTests {
 

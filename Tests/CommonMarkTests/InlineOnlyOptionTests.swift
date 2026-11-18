@@ -11,16 +11,19 @@
 import Testing
 import CommonMark
 
-/// The parse options `.inlineOnly` and `.preserveWhitespace`.
+/// Tests for the extended parse options `.inlineOnly` and `.preserveWhitespace`.
 ///
-/// Neither recognizes block structure other than link reference definitions at the start of the input: the rest of the
-/// input is one paragraph, so block markers such as `#`, `* `, `> `, `---` and a 4-space indent are text, and line
-/// endings, blank lines and leading and trailing whitespace stay in the paragraph's text, except that a line ending
-/// after a backslash is a hard line break. Inline syntax is parsed. The two options produce the same tree.
+/// Ground-truth behavior at the parser / AST level:
+///  - No block containers are ever opened. Markers like `#`, `* `, `> `, `---`, ` ``` ` and 4-space indents stay literal text rather than producing headings / lists / quotes / thematic breaks / code blocks.
+///  - Inline syntax is still parsed (emphasis, code spans, links, …).
+///  - Leading and trailing whitespace is preserved.
+///  - At the parser level `.inlineOnly` and `.preserveWhitespace` produce an identical tree; the whitespace *collapsing* that distinguishes the two modes happens in a higher rendering layer, not in the parser.
 @Suite("Parse options - inlineOnly / preserveWhitespace")
 struct InlineOnlyOptionTests {
 
     private static let inlineOnlyOptions: [MarkdownDocument.ParseOptions] = [.inlineOnly, .preserveWhitespace]
+
+    // MARK: - inlineOnly
 
     @Test("inline-only parsing keeps heading and list item markers as text in one paragraph", arguments: inlineOnlyOptions)
     func suppressesBlocks(options: MarkdownDocument.ParseOptions) {
@@ -103,8 +106,11 @@ struct InlineOnlyOptionTests {
             """)
     }
 
+    // MARK: - preserveWhitespace
+
     @Test("preserveWhitespace is a superset that includes inlineOnly")
     func preserveWhitespaceImpliesInlineOnly() {
+        // Pure option-set composition - independent of the parser implementation.
         #expect(MarkdownDocument.ParseOptions.preserveWhitespace.contains(.inlineOnly))
     }
 }

@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// An extended autolink's sibling text nodes hold the text around it, with no empty text node where nothing
-/// precedes or follows it.
 @Suite("Text around extended autolinks")
 struct AutolinkEmptySiblingTests {
 

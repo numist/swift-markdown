@@ -11,9 +11,8 @@
 import CommonMark
 import Testing
 
-/// A `^` row-span cell grows the cell above it, whether that cell is parsed from the source (non-empty,
-/// whitespace-only, or a zero-width `||` colspan filler) or is an empty cell padded into a row with fewer
-/// cells than the header row (Tables (extension)).
+// A row with fewer cells than the header row has empty cells inserted (Tables (extension)), and a `^` below grows
+// them like any other cell.
 @Suite("Row span into a padded cell")
 struct TableRowspanIntoPaddedCellTests {
 
@@ -21,7 +20,6 @@ struct TableRowspanIntoPaddedCellTests {
         .tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink,
     ]
 
-    /// The cell padded in after `x|`'s trailing pipe grows.
     @Test func paddedCellAfterTrailingPipeGrows() {
         #expect(TreeDump.dump("a|b\n-|-\nx|\ny|^", options: Self.options) == """
             document
@@ -156,7 +154,7 @@ struct TableRowspanIntoPaddedCellTests {
             """)
     }
 
-    /// A `^` grows the nearest cell above it, so a padded cell between two spans ends the earlier one.
+    // A `^` grows the nearest cell above it that is not a `^`, so a padded cell between two spans ends the earlier one.
     @Test func paddedCellInterruptsEarlierSpan() {
         #expect(TreeDump.dump("a|b\n-|-\nx|z\ny|^\nw\nv|^", options: Self.options) == """
             document

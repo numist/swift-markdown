@@ -11,16 +11,12 @@
 import Testing
 import CommonMark
 
-/// A paragraph's raw content strips each line's initial whitespace (Paragraphs), including a tab that begins a lazy
-/// continuation line (Block quotes), so a code span or raw HTML that crosses the line ending holds no tab. Line 2 of
-/// each input begins with a tab; in a block quote it is a lazy continuation line, and at the top level an ordinary
-/// paragraph continuation line.
+// A paragraph's raw content has each line's initial whitespace removed (Paragraphs), so a code span or raw HTML that
+// crosses a line ending holds no tab from the next line.
 @Suite("Leading tab of a lazy continuation line in literal inlines")
 struct LazyContinuationLeadingTabTests {
 
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition]
-
-    // MARK: - Lazy continuation lines
 
     @Test("a code span across a lazy continuation line drops the leading tab")
     func codeSpanAcrossLazyLineDropsTab() {
@@ -56,8 +52,6 @@ struct LazyContinuationLeadingTabTests {
             """)
     }
 
-    // MARK: - Top-level continuation lines
-
     @Test("a top-level code span across a line ending drops the leading tab")
     func codeSpanTopLevelDropsTab() {
         #expect(TreeDump.dump("`\n\t`", options: Self.options, sourceRanges: true) == """
@@ -88,8 +82,6 @@ struct LazyContinuationLeadingTabTests {
 
             """)
     }
-
-    // MARK: - Text
 
     @Test("text on a lazy continuation line drops the leading tab")
     func plainTextLazyBlockquoteTabDropped() {

@@ -11,18 +11,14 @@
 import Testing
 import CommonMark
 
-/// Extended email autolinks are recognized left to right. When a candidate address is rejected, the next address's
-/// local part starts no earlier than the character that ended the candidate's domain: `+`, or a `.` not followed by
-/// an alphanumeric, ends a domain, while `-`, `_`, alphanumerics and a `.` followed by an alphanumeric continue it.
-/// A second `@` in a domain restarts the address there; its local part reaches back no further than just past the first `@`.
+// A rejected candidate address is consumed through the end of its domain, so the next address's local part starts
+// no earlier than the character that ends that domain. A second `@` in a domain instead restarts the address, its
+// local part reaching back no further than just past the first `@`.
 @Suite("Extended email autolink local part after a rejected candidate")
 struct ExtendedEmailAutolinkAfterRejectedCandidateTests {
 
-    // MARK: - `+` ends a domain
-
     @Test("`l@o+@b.b`: the `+` bounds the second local part")
     func plusBoundsLocalPart() {
-        // `l@o` is rejected (its domain has no period), and its domain ends at `+`.
         #expect(TreeDump.dump("l@o+@b.b", options: .gfmAutolink) == """
             document
               paragraph
@@ -68,8 +64,6 @@ struct ExtendedEmailAutolinkAfterRejectedCandidateTests {
 
             """)
     }
-
-    // MARK: - `.`, `-`, `_` and alphanumerics continue a domain
 
     @Test("`l@o.p@b.b`: the second `@` restarts the address at `o.p`")
     func dotContinuesDomain() {
@@ -131,8 +125,6 @@ struct ExtendedEmailAutolinkAfterRejectedCandidateTests {
             """)
     }
 
-    // MARK: - A `.` not followed by an alphanumeric ends a domain
-
     @Test("`a@b.+@c.c`: the local part after the rejected `a@b` is `.+`")
     func dotThenPlusBoundary() {
         #expect(TreeDump.dump("a@b.+@c.c", options: .gfmAutolink) == """
@@ -168,8 +160,6 @@ struct ExtendedEmailAutolinkAfterRejectedCandidateTests {
 
             """)
     }
-
-    // MARK: - An `@` with no domain
 
     @Test("`l@+@b.b`: an `@` with no domain is rejected and the next local part starts right after it")
     func emptyDomainRejected() {

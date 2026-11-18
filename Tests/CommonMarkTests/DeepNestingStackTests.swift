@@ -11,16 +11,14 @@
 import Testing
 import CommonMark
 
-/// Parsing deeply nested constructs on a thread with a small stack.
-///
-/// Parsing must not crash on any input. Nesting tens of thousands deep fits in a few tens of kilobytes of source, so
-/// parsing must not use stack in proportion to nesting depth: a 512 KB secondary-thread stack has to suffice.
+// Nesting tens of thousands deep fits in a few tens of kilobytes of source, so parsing must not use stack in
+// proportion to nesting depth: a 512 KB secondary-thread stack has to suffice.
 @Suite("Deep nesting parses on a small stack")
 struct DeepNestingStackTests {
 
     static let depth = 20_000
 
-    /// A shape's source, from its name (the test arguments are names, so failure output stays readable).
+    // The test arguments are shape names rather than sources so that failure output stays readable.
     static func inlineSource(_ shape: String) -> String {
         switch shape {
         case "emphasis": String(repeating: "*a ", count: depth) + String(repeating: "b* ", count: depth)
@@ -38,7 +36,6 @@ struct DeepNestingStackTests {
         }
     }
 
-    /// The kind of node a shape nests `depth` deep, from its name.
     static func nestedKind(_ shape: String) -> MarkdownNode.Kind {
         switch shape {
         case "emphasis", "emphasis around an email", "emphasis around smart quotes",
@@ -73,7 +70,6 @@ struct DeepNestingStackTests {
         #expect(nesting.nested == Self.depth, "\(shape)")
     }
 
-    /// The reference sits at the bottom of the quotes; its definition, at the top level, follows them.
     @available(macOS 15, iOS 18, tvOS 18, watchOS 11, visionOS 2, *)
     @Test("a footnote reference in deeply nested block quotes parses without exhausting a 512 KB stack", arguments: [
         MarkdownDocument.ParseOptions.footnotes,
@@ -86,7 +82,6 @@ struct DeepNestingStackTests {
         #expect(nesting.nested == Self.depth)
     }
 
-    /// The reference sits in the innermost item; its definition, at the top level, follows the lists.
     @available(macOS 15, iOS 18, tvOS 18, watchOS 11, visionOS 2, *)
     @Test("a footnote reference in deeply nested lists parses without exhausting a 512 KB stack", arguments: [
         MarkdownDocument.ParseOptions.footnotes,
@@ -101,8 +96,8 @@ struct DeepNestingStackTests {
         #expect(nesting.nested == Self.depth)
     }
 
-    /// Each definition opens inside the one before it; the outermost and the innermost are referenced, and move to the
-    /// document's end.
+    // The outermost `[^a]` and the innermost `[^b]` are the only definitions the references resolve to, so they alone
+    // remain, after the paragraph.
     @available(macOS 15, iOS 18, tvOS 18, watchOS 11, visionOS 2, *)
     @Test("deeply nested footnote definitions parse without exhausting a 512 KB stack", arguments: [
         MarkdownDocument.ParseOptions.footnotes,
@@ -115,8 +110,7 @@ struct DeepNestingStackTests {
         #expect(nesting.nested == 2)
     }
 
-    /// The number of top-level blocks and of nodes whose kind `isNested` accepts, or `nil` where no small-stack thread
-    /// can run the parse. The count walks the tree without recursion, so it fits on the same stack.
+    // The count walks the tree without recursion so that it fits on the same small stack as the parse.
     private static func nestingOnSmallStack(
         _ source: String,
         options: MarkdownDocument.ParseOptions,

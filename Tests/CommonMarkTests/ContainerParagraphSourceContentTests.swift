@@ -11,8 +11,6 @@
 import CommonMark
 import Testing
 
-/// A plain paragraph that continues across container prefixes (`> `, list indentation) is stored as one source
-/// segment per line, with no copy of its text.
 @Suite("Multi-line container paragraphs keep source content")
 struct ContainerParagraphSourceContentTests {
 
@@ -52,7 +50,8 @@ struct ContainerParagraphSourceContentTests {
         "> a | b | c\n> --|--\n",
     ])
     func noMaterializedCopy(_ source: String) {
-        // The materialized string buffer holds only the shared newline.
+        // Every document's materialized string buffer starts with one shared newline, so a size of 1 means nothing was
+        // copied.
         #expect(MarkdownDocument.withParsedDocument(source, options: []) { $0._materializedStringSize } == 1)
         #expect(MarkdownDocument.withParsedDocument(source, options: [.tables]) { $0._materializedStringSize } == 1)
     }

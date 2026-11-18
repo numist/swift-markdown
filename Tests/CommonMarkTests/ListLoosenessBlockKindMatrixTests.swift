@@ -11,11 +11,8 @@
 import Testing
 import CommonMark
 
-/// List tightness when a blank line follows each kind of block inside a list item, in several list layouts.
-///
-/// A list is loose if its items, or two blocks of one item, are separated by a blank line (Lists). A blank line that
-/// is part of a block, such as one inside a fenced code block or a type 1-5 HTML block, separates nothing. Each
-/// expected value is the tightness of every list in the document, in document order.
+// A blank line inside a block, such as an unclosed fenced code block or a type 1-5 HTML block, separates nothing
+// (Lists).
 @Suite("List looseness after each block kind")
 struct ListLoosenessBlockKindMatrixTests {
 

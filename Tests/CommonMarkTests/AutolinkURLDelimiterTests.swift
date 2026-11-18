@@ -11,10 +11,6 @@
 import Testing
 import CommonMark
 
-/// After its domain, an extended url or www autolink runs to the first space, tab, line ending or `<` (Autolinks
-/// (extension)), so `>` is part of it, as is an entity reference before its end. A trailing `?`, `!`, `.`, `,`, `:`,
-/// `*`, `_`, `~`, `'`, `"` or `;` is not part of it, nor is an unmatched trailing `)`, and a trailing `;` takes a
-/// preceding `&` and ASCII letters with it.
 @Suite("Extended autolink end and trailing punctuation")
 struct AutolinkURLDelimiterTests {
 
@@ -32,8 +28,6 @@ struct AutolinkURLDelimiterTests {
 
             """)
     }
-
-    // MARK: - Trailing characters
 
     @Test("trailing `'` is trimmed")
     func apostropheTrimmed() {
@@ -71,11 +65,8 @@ struct AutolinkURLDelimiterTests {
             """)
     }
 
-    // MARK: - Entity-like `;` tails
-
     @Test("a trailing `&` + ASCII letters + `;` is removed whole")
     func semicolonEntityStripped() {
-        // `&zq;` is not an entity reference, so the trailing text is literal.
         #expect(tree("http://a.x/&zq;") == """
             document
               paragraph
@@ -108,8 +99,6 @@ struct AutolinkURLDelimiterTests {
 
             """)
     }
-
-    // MARK: - Multi-trailing sequences
 
     @Test("`http://a.l');` removes `;`, then the unbalanced `)`, then `'`")
     func multiTrailingApostropheParenSemicolon() {
@@ -146,8 +135,6 @@ struct AutolinkURLDelimiterTests {
             """)
     }
 
-    // MARK: - Whitespace at the end of a paragraph
-
     // The paragraph's raw content has its final whitespace removed (Paragraphs), and whitespace includes line
     // tabulation and form feed (Characters and lines).
 
@@ -173,8 +160,6 @@ struct AutolinkURLDelimiterTests {
 
             """)
     }
-
-    // MARK: - Trailing punctuation and parentheses
 
     @Test("trailing `.` is trimmed")
     func dotTrimmed() {
@@ -295,8 +280,6 @@ struct AutolinkURLDelimiterTests {
 
             """)
     }
-
-    // MARK: - Extended www autolinks
 
     @Test("www: trailing `'` is trimmed")
     func wwwApostropheTrimmed() {

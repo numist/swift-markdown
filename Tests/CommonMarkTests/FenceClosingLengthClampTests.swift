@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// `fenceLengthClampForClosing` bounds the length a closing code fence has to reach: a closing fence closes the block
-/// when it is at least as long as the shorter of the opening fence and the clamp (Fenced code blocks). The opening
-/// fence's recorded length is its full length.
 @Suite("Code fence closing length clamp")
 struct FenceClosingLengthClampTests {
 

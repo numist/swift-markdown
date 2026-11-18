@@ -11,9 +11,7 @@
 import Testing
 import CommonMark
 
-/// A code or HTML block's body holds a segment for each nonempty line's content, split around a segment of `U+FFFD`s
-/// at each run of NULs, and a `\n` segment for each line ending, CRLF included. A line whose stripped indentation
-/// splits a tab holds the tab's leftover columns as a segment of spaces before its content's segment.
+/// Code and HTML block bodies are stored as zero-copy segment lists (source ranges joined by a shared interned `"\n"`), not materialized byte buffers.
 @Suite("Code/HTML block segment content")
 struct CodeBlockSegmentTests {
 
@@ -52,6 +50,7 @@ struct CodeBlockSegmentTests {
     @Test("fenced body preserves a trailing blank line")
     func fencedTrailingBlank() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
+        // Fenced code keeps trailing blanks (unlike indented).
         #expect(TreeDump.dumpSegments("```\ncode\n\n```\n") == """
             document
               code_block "" "code\\n\\n" ["code", "\\n", "\\n"]
@@ -84,6 +83,7 @@ struct CodeBlockSegmentTests {
     @Test("indented code strips trailing blank lines")
     func indentedStripsTrailingBlanks() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
+        // The blank lines after the indented line must be stripped (CommonMark §4.4).
         #expect(TreeDump.dumpSegments("    code\n\n\nmore text\n") == """
             document
               code_block "" "code\\n" ["code", "\\n"]
@@ -105,12 +105,11 @@ struct CodeBlockSegmentTests {
             """)
     }
 
-    // MARK: - Tabs
+    // MARK: - Tab-expanded lines
 
     @Test("tab-indented code body")
     func tabIndentedCode() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        // The tab is each line's four columns of indentation (Tabs), so the content starts after it.
         #expect(TreeDump.dumpSegments("\tcode line one\n\tcode line two\n") == """
             document
               code_block "" "code line one\\ncode line two\\n" ["code line one", "\\n", "code line two", "\\n"]
@@ -121,7 +120,6 @@ struct CodeBlockSegmentTests {
     @Test("content tab beyond the code indent is preserved literally")
     func tabPreservedBeyondCodeIndent() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        // The first tab is the code block's four columns of indentation; the second is content (Tabs).
         #expect(TreeDump.dumpSegments("\t\tfoo\n") == """
             document
               code_block "" "\\tfoo\\n" ["\\tfoo", "\\n"]
@@ -132,7 +130,6 @@ struct CodeBlockSegmentTests {
     @Test("bullet-like content and its trailing tab stay literal in indented code")
     func tabAfterBulletContent() {
         guard #available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *) else { return }
-        // The leading tab is four columns of indentation, so the line is indented code and `-` is content.
         #expect(TreeDump.dumpSegments("\t-\t\n") == """
             document
               code_block "" "-\\t\\n" ["-\\t", "\\n"]

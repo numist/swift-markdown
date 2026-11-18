@@ -11,11 +11,6 @@
 import CommonMark
 import Testing
 
-/// Lines that open or continue many nested block quotes (Block quotes).
-///
-/// Each `>` is placed by its column, which a tab before it makes depend on the whole line before it (Tabs): after `>>`
-/// and a tab, two more spaces leave a `>` three columns in, still a block quote marker, while after `>` and a tab they
-/// leave it four columns in, the start of an indented code block.
 @Suite("Lines of nested block quote markers")
 struct NestedBlockQuoteMarkerLineTests {
 
@@ -29,8 +24,6 @@ struct NestedBlockQuoteMarkerLineTests {
         }
     }
 
-    /// The number of block quotes nested from the root's first child, then the innermost block quote, its first child
-    /// and that child's children.
     private static func nesting(_ markdown: String, options: MarkdownDocument.ParseOptions) -> (quotes: Int, innermost: [Node]) {
         MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
             func node(_ node: borrowing MarkdownNode) -> Node {
@@ -56,9 +49,6 @@ struct NestedBlockQuoteMarkerLineTests {
         }
     }
 
-    /// The root and each first child down to a leaf, one per line: its kind as `TreeDump.describe` names it, its
-    /// literal in quotes if it has one, its source range as `@line:column-line:column` (or `@-`), and `+sibling` when
-    /// it has a next sibling. The walk does not recurse, so trees of any depth fit on the stack.
     private static func chain(_ markdown: String) -> String {
         MarkdownDocument.withParsedDocument(markdown, options: .sourcePosition) { doc in
             var out = ""
@@ -108,7 +98,6 @@ struct NestedBlockQuoteMarkerLineTests {
         #expect(nesting.innermost == [Node(kind: .blockQuote), Node(kind: .paragraph), Node(kind: .text, literal: "a")])
     }
 
-    /// Each block quote begins at its marker and ends with the line.
     @Test
     func emptyBlockQuotesOpeningOnOneLineEndAtLineEnd() {
         let blockQuoteLines = (1...300).map { level in
@@ -117,8 +106,6 @@ struct NestedBlockQuoteMarkerLineTests {
         #expect(Self.chain(String(repeating: ">", count: 300)) == "document @1:1-1:301\n" + blockQuoteLines.joined())
     }
 
-    /// A `>` line continues only the outermost block quote, and as it is blank after its marker, the paragraph in the
-    /// innermost ends on the line before it.
     @Test
     func blankMarkerLineContinuesOnlyOutermostBlockQuote() {
         let innerBlockQuoteLines = (2...255).map { level in

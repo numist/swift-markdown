@@ -18,8 +18,6 @@ struct FootnoteNestedBracketLinkTests {
         TreeDump.dump(markdown, options: [.sourcePosition, .footnotes, .attributes])
     }
 
-    // MARK: - `]()` closes a link
-
     @Test("`[^[]]()` forms a link whose text is `^[]`")
     func caretBracketImmediateParensFormsLink() {
         #expect(tree("[^[]]()") == """
@@ -43,8 +41,6 @@ struct FootnoteNestedBracketLinkTests {
             """)
     }
 
-    // MARK: - Unclosed and single-close shapes
-
     @Test("`[^[]` stays literal `[^[]`")
     func caretBracketUnclosedStaysLiteral() {
         #expect(tree("[^[]") == """
@@ -65,8 +61,6 @@ struct FootnoteNestedBracketLinkTests {
 
             """)
     }
-
-    // MARK: - An inner `^[…](…)` is an inline attribute
 
     @Test("`[^[]()]`: the inner `^[]()` is an empty attribute, so `[` + attribute + `]`")
     func caretBracketAttributeInsideOuterBracket() {
@@ -92,10 +86,6 @@ struct FootnoteNestedBracketLinkTests {
 
             """)
     }
-
-    // MARK: - `[^[…]` is literal text
-
-    // No footnote definition exists, so `[^[` opens no footnote reference.
 
     @Test("`[[^[]]]()` is a link whose text is `[^[]]`")
     func nestedCaretBracketFormsLink() {

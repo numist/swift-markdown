@@ -11,9 +11,8 @@
 import CommonMark
 import Testing
 
-/// An attribute definition's `:` may be followed by whitespace and at most one line ending before its
-/// attributes, read as for a link reference definition (Link reference definitions), where line
-/// tabulation and form feed are whitespace.
+// Whitespace after the `:` is read as in a link reference definition (Link reference definitions), and line
+// tabulation and form feed are whitespace characters (Characters and lines).
 @Suite("Attribute definition whitespace after the colon")
 struct AttributeDefinitionLineWhitespaceTests {
 

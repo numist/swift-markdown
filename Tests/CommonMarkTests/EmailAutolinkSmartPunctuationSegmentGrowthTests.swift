@@ -11,12 +11,8 @@
 import Testing
 import CommonMark
 
-/// Storage growth for many email addresses interleaved with smart punctuation: ellipses, dashes, single quotes, double
-/// quotes paired around a word, and lone double quotes.
-///
-/// Each of these glyphs is stored apart from the text around it, so a paragraph of addresses separated by them is one
-/// text run of many pieces. Splitting that run into email links must store content in proportion to the input, so
-/// doubling the addresses doubles the segments and the materialized bytes, give or take a constant.
+// Each smart punctuation glyph is stored apart from the text around it, so a paragraph of addresses separated by them
+// is one text node of many segments.
 @Suite("Email autolinks among smart punctuation store linear content")
 struct EmailAutolinkSmartPunctuationSegmentGrowthTests {
 

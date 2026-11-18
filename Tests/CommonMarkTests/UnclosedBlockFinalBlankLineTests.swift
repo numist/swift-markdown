@@ -11,9 +11,8 @@
 import Testing
 import CommonMark
 
-/// A fenced code block keeps every line inside its fences, blank ones included, and one left unclosed runs to the end
-/// of its container (Fenced code blocks). An HTML block whose end condition never matches also runs to the end of its
-/// container (HTML blocks), so a final blank line belongs to its content.
+// An unclosed fenced code block, or an HTML block whose end condition never matches, runs to the end of its
+// container, so a final blank line is part of its content (Fenced code blocks, HTML blocks).
 @Suite("Final blank line of a fenced code or HTML block")
 struct UnclosedBlockFinalBlankLineTests {
 

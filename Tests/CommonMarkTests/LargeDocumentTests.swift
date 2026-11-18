@@ -12,23 +12,18 @@ import CommonMark
 import Foundation
 import Testing
 
-/// Documents whose source offsets, content lengths or materialized byte offsets exceed 2 GiB.
-///
-/// Each large document has a small twin with the same blocks. The large documents need up to 9 GB of memory and take
-/// seconds to parse in an optimized build, so they run only when the environment variable
-/// `COMMONMARK_LARGE_DOCUMENT_TESTS` is set.
 @Suite("Documents whose offsets or lengths exceed 2 GiB")
 struct LargeDocumentTests {
 
+    // The large documents need several gigabytes of memory, so they run only when this variable is set.
     static let largeDocumentsEnabled = ProcessInfo.processInfo.environment["COMMONMARK_LARGE_DOCUMENT_TESTS"] != nil
 
     static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .tables]
 
-    /// Blocks after the first: a setext heading whose lines a block quote's markers separate, read from the source in
-    /// pieces, and a table whose escaped pipe and entity are copied and whose code span is not.
+    // The heading is read from the source in pieces between block quote markers, and the table's escaped pipe and
+    // entity are copied, so the tail checks both borrowed and copied content at offsets past the first block's.
     static let tail = "> c\n> d\n> ===\n\n| x | y\\|z |\n| - | - |\n| &amp; | `q` |\n"
 
-    /// `prefix`, `count` copies of `byte`, and `suffix`.
     static func document(_ prefix: String, _ byte: Character, count: Int, _ suffix: String) -> String {
         var markdown = prefix
         markdown.reserveCapacity(prefix.utf8.count + count + suffix.utf8.count)
@@ -41,9 +36,6 @@ struct LargeDocumentTests {
         return markdown
     }
 
-    /// The first top-level block's subtree, one node per line with two spaces of indent per depth: the kind as
-    /// `TreeDump.describe` writes it, the segment and byte counts of its text or code block content, and its source
-    /// range.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     static func dumpSizesOfFirstBlock(_ document: borrowing MarkdownDocument) -> String {
         var out = ""
@@ -68,7 +60,6 @@ struct LargeDocumentTests {
         node.children.forEach { dumpSizes($0, depth: depth + 1, into: &out) }
     }
 
-    /// The top-level blocks after the first, as `TreeDump` renders them with source ranges.
     static func dumpAfterFirstBlock(_ document: borrowing MarkdownDocument) -> String {
         var out = ""
         var block = document.root.firstChild?.next
@@ -79,7 +70,6 @@ struct LargeDocumentTests {
         return out
     }
 
-    /// `tail`'s blocks, starting on line 3.
     static let tailTree = """
         block_quote @3:1-5:6
           heading 1 @3:3-5:6
@@ -100,15 +90,12 @@ struct LargeDocumentTests {
 
         """
 
-    /// The first block of `markdown` as `dumpSizesOfFirstBlock` renders it, and the rest as `dumpAfterFirstBlock` does.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     static func dumpBlocks(_ markdown: String) -> (first: String, rest: String) {
         MarkdownDocument.withParsedDocument(markdown, options: options) { document in
             (dumpSizesOfFirstBlock(document), dumpAfterFirstBlock(document))
         }
     }
-
-    // MARK: - A paragraph longer than 2 GiB
 
     @Test
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
@@ -137,8 +124,6 @@ struct LargeDocumentTests {
             """)
         #expect(rest == Self.tailTree)
     }
-
-    // MARK: - More than 2 GiB of materialized content
 
     @Test
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)

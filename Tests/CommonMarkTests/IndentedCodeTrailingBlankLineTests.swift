@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// Blank lines following an indented code block are not part of it (Indented code blocks), so a final line holding only
-/// whitespace beyond the code indent is dropped from the block's content.
 @Suite("Indented code trailing whitespace-only line")
 struct IndentedCodeTrailingBlankLineTests {
 

@@ -11,8 +11,7 @@
 import Testing
 import CommonMark
 
-/// A task list item's first block must be a paragraph (Task list items (extension)), so an item whose
-/// first block is a setext heading has no checkbox and the heading keeps `[ ]` as text.
+// A task list item's first block must be a paragraph (Task list items (extension)), and a setext heading is not one.
 @Suite("Task list item marker in a setext heading")
 struct TaskListSetextHeadingRecognitionTests {
 
@@ -27,8 +26,6 @@ struct TaskListSetextHeadingRecognitionTests {
 
             """)
     }
-
-    // MARK: - Without an underline, or without a checkbox
 
     @Test("`- [ ] v` (no underline) is an unchecked task list item with a paragraph `v`")
     func openingLineOnlyIsTaskListItem() {

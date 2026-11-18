@@ -11,11 +11,7 @@
 import CommonMark
 import Testing
 
-/// Storage for a paragraph or setext heading whose lines aren't contiguous in the source and hold a NUL.
-///
-/// Its content, including the line feed that joins its lines, is copied into the materialized string buffer once, with
-/// each NUL replaced by U+FFFD (Insecure characters). A document's buffer starts with one byte, a line feed, so
-/// `> a\0b` and `> c` take 1 + 7 bytes.
+// 1 is the line feed the materialized string buffer starts with; 7 is `a`, U+FFFD, `b`, the line feed joining the lines, and `c`.
 @Suite("A non-contiguous paragraph holding a NUL is copied once")
 struct NULNoncontiguousLeafStorageTests {
 

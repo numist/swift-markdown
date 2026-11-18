@@ -11,14 +11,10 @@
 import Testing
 import CommonMark
 
-/// A delimiter row cell may be padded with any whitespace character other than a line ending (Characters
-/// and lines), including form feed (U+000C) and line tabulation (U+000B) (Tables (extension)).
-///
-/// Alignment comes from colons at the ends of the cell after trimming that padding.
+// Line tabulation and form feed are whitespace characters (Characters and lines), so they pad a delimiter cell as
+// spaces do.
 @Suite("Form feed and line tabulation in a table delimiter row")
 struct TableDelimiterWhitespaceTests {
-
-    // MARK: - Form feed and line tabulation pad a delimiter cell
 
     @Test("a trailing form feed in the delimiter cell forms a table")
     func trailingFormFeed() {
@@ -93,8 +89,6 @@ struct TableDelimiterWhitespaceTests {
             """)
     }
 
-    // MARK: - Alignment
-
     @Test("a colon before a trailing form feed sets right alignment")
     func trailingFormFeedRightColon() {
         #expect(TreeDump.dump("d\n-:\u{0C}", options: [.tables]) == """
@@ -130,8 +124,6 @@ struct TableDelimiterWhitespaceTests {
 
             """)
     }
-
-    // MARK: - Not tables
 
     @Test("a carriage return after the dash is a line ending, so the line is a setext heading underline")
     func trailingCarriageReturnStaysHeading() {

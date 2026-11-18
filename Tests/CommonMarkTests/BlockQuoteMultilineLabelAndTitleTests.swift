@@ -11,13 +11,9 @@
 import CommonMark
 import Testing
 
-/// Inline constructs whose label or title continues onto the next line of a block quote paragraph, past the
-/// continuation line's `>` marker.
 @Suite("Labels and titles across a block quote line")
 struct BlockQuoteMultilineLabelAndTitleTests {
 
-    /// A link label may contain a line ending (Links), so an inline attribute's reference label continues
-    /// onto the next line and matches the definition whose label is the same after normalization.
     @Test("an inline attribute's reference label continues onto the next line")
     func attributeReferenceLabel() {
         #expect(TreeDump.dump("> x ^[a][b\n> c]\n\n^[b c]: k", options: [.attributes, .sourcePosition], sourceRanges: true) == """
@@ -31,8 +27,6 @@ struct BlockQuoteMultilineLabelAndTitleTests {
             """)
     }
 
-    /// A link title may span lines (Links), and a backslash before punctuation in it is an escape
-    /// (Backslash escapes).
     @Test("a link title with an escaped quote continues onto the next line")
     func linkTitleWithEscape() {
         #expect(TreeDump.dump("> x [a](b \"c\n> d\\\"e\")", options: [.sourcePosition], sourceRanges: true) == """
@@ -46,7 +40,6 @@ struct BlockQuoteMultilineLabelAndTitleTests {
             """)
     }
 
-    /// A link title that is never closed is no title (Links), so the bracket and parenthesis stay text.
     @Test("an unclosed link title continuing onto the next line forms no link")
     func unclosedLinkTitle() {
         #expect(TreeDump.dump("> x [a](b \"c\n> d)", options: [.sourcePosition], sourceRanges: true) == """

@@ -11,13 +11,11 @@
 import Testing
 import CommonMark
 
-/// A single-quoted link title (Links) holds a `'` only when it is backslash-escaped. The spec does not say whether `\'`
-/// is an escape when that `'` would otherwise close the title. It is one only when a later quote can close the title;
-/// otherwise the `\` is a literal backslash and the quote closes the title.
+// The spec leaves open whether `\'` escapes a `'` that could close a single-quoted link title (Links). It does only
+// when a later quote can close the title; otherwise the `\` is a literal backslash and the quote closes the title.
 @Suite("Link title backslash longest match")
 struct LinkTitleBackslashLongestMatchTests {
 
-    /// The destination ends at the line ending, which then separates it from the title `'\'`.
     @Test("empty-text link whose title backslash precedes the closing quote")
     func backslashBeforeCloseQuote() {
         #expect(TreeDump.dump("[](a\n'\\')", options: []) == """

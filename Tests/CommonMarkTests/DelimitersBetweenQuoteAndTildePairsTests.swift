@@ -11,9 +11,8 @@
 import CommonMark
 import Testing
 
-/// Delimiters between a pair of smart quotes, or between `~` runs of unequal length, which form no node that could
-/// hold them, so they stay on the delimiter stack for later closers (Emphasis and strong emphasis, Strikethrough
-/// (extension)).
+// A pair of smart quotes, or of `~` runs of unequal length, forms no node, so the delimiters between them stay on the
+// delimiter stack for later closers (Emphasis and strong emphasis, Strikethrough (extension)).
 @Suite("Delimiters between quote pairs and unequal tilde pairs")
 struct DelimitersBetweenQuoteAndTildePairsTests {
     @Test func tildeCloserPairsPastUnequalPair() {

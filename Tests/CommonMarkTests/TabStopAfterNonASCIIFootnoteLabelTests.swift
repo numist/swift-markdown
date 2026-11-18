@@ -11,8 +11,8 @@
 import CommonMark
 import Testing
 
-/// A tab stop comes every four characters (Tabs), so a footnote definition's label counts one column per character,
-/// however many bytes it takes, toward the tab stops of a tab later on its line.
+// A tab stop comes every four characters (Tabs), so `é` in a label counts one column toward the tab stops after it,
+// though it takes two bytes.
 @Suite("Tab stops after a non-ASCII footnote label")
 struct TabStopAfterNonASCIIFootnoteLabelTests {
 

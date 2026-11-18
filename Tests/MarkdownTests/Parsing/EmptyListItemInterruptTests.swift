@@ -11,8 +11,6 @@
 import Markdown
 import XCTest
 
-/// An empty list item cannot interrupt a paragraph (List items). A list marker followed only by
-/// whitespace opens an empty item, however much whitespace follows it.
 class EmptyListItemInterruptTests: XCTestCase {
     func testEmptyItemWithTrailingSpacesDoesNotInterruptParagraph() {
         let text = "a\n*  "
@@ -61,8 +59,6 @@ class EmptyListItemInterruptTests: XCTestCase {
         XCTAssertEqual(expectedDump, document.debugDescription(options: .printSourceLocations))
     }
 
-    /// Five or more spaces before content start the item with an indented code block (List items), so
-    /// the item is not empty.
     func testFivePlusSpacesThenContentInterruptsAsCodeBlock() {
         let text = "a\n*      x"
 

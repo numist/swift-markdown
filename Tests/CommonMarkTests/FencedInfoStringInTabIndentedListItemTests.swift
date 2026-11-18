@@ -11,13 +11,11 @@
 import CommonMark
 import Testing
 
-/// A fenced code block that opens a list item whose marker is followed by a tab. The tab advances to the next tab stop
-/// (Tabs), so the item's content starts at the fence, one byte but three columns past the end of the marker (List
-/// items), and the info string follows the fence.
+// The tab after the list marker is one byte but three columns (Tabs), so the fence's byte offset differs from its
+// column.
 @Suite("Info string of a fence opening a tab-indented list item")
 struct FencedInfoStringInTabIndentedListItemTests {
 
-    /// The unindented ``` line opens a second, top-level fence with an empty info string.
     @Test func infoString() {
         #expect(TreeDump.dump("*\t```n\na\n```", options: []) == """
             document
@@ -41,7 +39,6 @@ struct FencedInfoStringInTabIndentedListItemTests {
             """)
     }
 
-    /// `\+` in the info string is `+` (Backslash escapes).
     @Test func escapedInfoString() {
         #expect(TreeDump.dump("*\t```foo\\+bar\nx\n```", options: []) == """
             document

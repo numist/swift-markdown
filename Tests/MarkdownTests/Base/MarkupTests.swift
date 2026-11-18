@@ -49,7 +49,7 @@ final class MarkupTests: XCTestCase {
 
     /// Because markup trees aren't "full fidelity" (e.g. block quote markers
     /// nor indentation is tracked), modifying a tree should destroy what limited
-    /// source range mapping the parser provided.
+    /// source range mapping was provided.
     func testRangesRemovedOnModify() {
         let source = "***OK***"
         let document = Document(parsing: source)

@@ -11,14 +11,10 @@
 import Testing
 import CommonMark
 
-/// With `.strikethrough`, a run of one or two tildes delimits strikethrough and closes only an opener of the same
-/// length. A run of three or more tildes is literal text, whatever its length.
 @Suite("Strikethrough delimiter run length")
 struct StrikethroughDelimiterRunLengthTests {
 
     private static let longRun = String(repeating: "~", count: 10_000)
-
-    // The opener is followed by the punctuation `)`, so the `**` before it, also punctuation, makes it left-flanking.
 
     @Test("one- and two-tilde runs pair with a run of the same length; three-tilde runs stay literal", arguments: [
         ("~x~", """
@@ -128,7 +124,6 @@ struct StrikethroughDelimiterRunLengthTests {
             """)
     }
 
-    /// With `.strikethroughDoubleTilde`, only a two-tilde run delimits strikethrough.
     @Test("with double-tilde strikethrough, only a two-tilde run closes a two-tilde opener", arguments: [
         ("**~~)~~", """
             document

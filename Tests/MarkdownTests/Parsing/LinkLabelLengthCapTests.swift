@@ -11,16 +11,14 @@
 import Markdown
 import XCTest
 
-/// A link label holds at most 1000 bytes of its block's content inside its brackets, counting a NUL as the three bytes
-/// of the U+FFFD that replaces it (Insecure characters); a longer bracketed span is not a link label, in a link
-/// reference definition or in any form of reference link.
+// A link label holds at most 1000 bytes inside its brackets, counting a NUL as the three bytes of the U+FFFD that
+// replaces it.
 class LinkLabelLengthCapTests: XCTestCase {
     private func linkCount(_ markdown: String) -> Int {
         Document(parsing: markdown, options: []).debugDescription(options: [])
             .components(separatedBy: "Link destination:").count - 1
     }
 
-    /// A use whose label content is `length` characters: `x`, then spaces, then `y`.
     private func label(_ length: Int) -> String {
         "[x" + String(repeating: " ", count: length - 2) + "y]"
     }
@@ -35,7 +33,6 @@ class LinkLabelLengthCapTests: XCTestCase {
         XCTAssertEqual(1, linkCount(label(999) + ": /u\n\n[x y]"))
     }
 
-    /// 500 `é` (1000 bytes) is a link label; 501 is not.
     func testCountsBytesNotCharacters() {
         let e500 = "[" + String(repeating: "\u{E9}", count: 500) + "]"
         let e501 = "[" + String(repeating: "\u{E9}", count: 501) + "]"
@@ -46,14 +43,11 @@ class LinkLabelLengthCapTests: XCTestCase {
         XCTAssertEqual(0, linkCount(definition + "[\u{20AC}" + String(repeating: " ", count: 997) + "y]"))
     }
 
-    /// A NUL is three bytes, the U+FFFD that replaces it (Insecure characters).
     func testCountsNULAsThreeBytes() {
         let definition = "[x \u{0} y]: /u\n\n"
         XCTAssertEqual(1, linkCount(definition + "[x \u{0}" + String(repeating: " ", count: 994) + "y]"))
         XCTAssertEqual(0, linkCount(definition + "[x \u{0}" + String(repeating: " ", count: 995) + "y]"))
     }
-
-    // MARK: Full trees
 
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])
@@ -106,8 +100,8 @@ class LinkLabelLengthCapTests: XCTestCase {
         XCTAssertEqual(literalParagraph("!" + label(1002)), tree("[x y]: /u\n\n!" + label(1002)))
     }
 
-    /// Counting its line ending as one byte, and no block quote marker, the label fits with 997 spaces before the line
-    /// ending and is over the limit with 998. The spaces before the line ending make a hard line break.
+    // A line ending counts as one byte, and the block quote marker and the continuation line's initial whitespace count
+    // for nothing, so the label fits with 997 spaces before the line ending and not with 998.
     func testMultilineShortcutAtAndOverCap() {
         let spaces = { String(repeating: " ", count: $0) }
         let quotedLink = "Document\n└─ BlockQuote\n   └─ Paragraph\n      └─ Link destination: \"/u\"\n         ├─ Text \"x\"\n         ├─ LineBreak\n         └─ Text \"y\""
@@ -120,7 +114,6 @@ class LinkLabelLengthCapTests: XCTestCase {
         XCTAssertEqual(plain, tree("[x y]: /u\r\n\r\n[x" + spaces(998) + "\r\ny]"))
     }
 
-    /// A blank `[ ]` is not a link label, so the label before it is a shortcut reference held to the same limit.
     func testBlankFullLabelFallbackOverCapStaysLiteral() {
         XCTAssertEqual(literalParagraph(label(1001) + "[ ]"), tree("[x y]: /u\n\n" + label(1001) + "[ ]"))
         XCTAssertEqual(literalParagraph(label(1002) + "[ ]"), tree("[x y]: /u\n\n" + label(1002) + "[ ]"))

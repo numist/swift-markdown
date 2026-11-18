@@ -11,16 +11,12 @@
 import Testing
 import CommonMark
 
-/// Under Tables (extension), spaces between pipes and cell content are trimmed. Every whitespace character (Characters
-/// and lines) except a line ending, including line tabulation (U+000B) and form feed (U+000C), is such padding: it is
-/// trimmed from both edges of a cell, and may precede a row's leading pipe or follow its closing pipe.
+// Line tabulation and form feed are whitespace characters (Characters and lines), so they pad a cell as spaces do.
 @Suite("Table cell pipe-boundary whitespace")
 struct TableCellPipeWhitespaceTests {
 
-    private static let ff = "\u{0C}"  // form feed
-    private static let vt = "\u{0B}"  // line tabulation
-
-    // MARK: - Whitespace after a pipe
+    private static let ff = "\u{0C}"
+    private static let vt = "\u{0B}"
 
     @Test("a form feed after an interior header pipe is not part of the next cell")
     func interiorHeaderFormFeed() {
@@ -81,7 +77,6 @@ struct TableCellPipeWhitespaceTests {
 
     @Test("a trailing pipe then a form feed closes the header row, so a three-cell delimiter row forms no table")
     func trailingHeaderPipeFormFeedMismatch() {
-        // The header row and delimiter row must have the same number of cells.
         #expect(TreeDump.dump("a|b|\(Self.ff)\n-|-|-", options: [.tables]) == """
             document
               paragraph
@@ -91,8 +86,6 @@ struct TableCellPipeWhitespaceTests {
 
             """)
     }
-
-    // MARK: - Other cell edges
 
     @Test("a form feed before a pipe is padding")
     func formFeedBeforePipe() {
@@ -252,7 +245,6 @@ struct TableCellPipeWhitespaceTests {
 
     @Test("an escaped pipe is not a cell separator")
     func escapedPipeNotSeparator() {
-        // A one-cell header row doesn't match a two-cell delimiter row.
         #expect(TreeDump.dump("a\\|b\n-|-", options: [.tables]) == """
             document
               paragraph

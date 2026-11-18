@@ -11,11 +11,6 @@
 import Testing
 import CommonMark
 
-/// Link titles holding `&`, with and without a backslash before it.
-///
-/// A backslash before `&` escapes it, so what follows is literal text rather than a character reference (Backslash
-/// escapes, Entity and numeric character references). An escaped backslash, like no backslash at all, leaves a
-/// character reference after it to be decoded.
 @Suite("Link titles holding & with and without a backslash")
 struct LinkTitleEscapedCharacterReferenceTests {
 

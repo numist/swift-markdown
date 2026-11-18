@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// An extended email autolink may span a backslash escape; its URL is the address without the backslash, after `mailto:`
-/// when the address has no scheme, and the borrowed `content` API vends it as one `UTF8Span`.
 @Suite("Escaped email autolink URL content")
 struct EscapedEmailAutolinkURLContentTests {
 
@@ -67,7 +65,6 @@ struct EscapedEmailAutolinkURLContentTests {
         #expect(linkURLSpans("a\\.b@c.d") == ["mailto:a.b@c.d"])
     }
 
-    /// Each link's URL span from `content`, in document order.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     private func linkURLSpans(_ markdown: String) -> [String] {
         MarkdownDocument.withParsedDocument(markdown, options: [.gfmAutolink]) { doc in

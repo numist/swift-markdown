@@ -11,10 +11,8 @@
 import Markdown
 import XCTest
 
-/// Each NUL in a link label is replaced by U+FFFD (Insecure characters) and counts as its three bytes toward the
-/// label's limit of 1000 bytes. With 333 NULs (999 bytes) the label is valid, the link reference definition forms,
-/// and `=` is a paragraph rather than a setext heading underline; with 334 (1002 bytes) the line is paragraph text,
-/// which `=` underlines.
+// Each NUL counts as the three bytes of the U+FFFD that replaces it toward a link label's 1000-byte limit, and a
+// definition leaves no paragraph text for `=` to underline (Link reference definitions).
 class LinkLabelNulLengthCapTests: XCTestCase {
     private func tree(nulCount: Int) -> String {
         Document(parsing: "[" + String(repeating: "\u{0}", count: nulCount) + "]:/l\n=").debugDescription(options: [])

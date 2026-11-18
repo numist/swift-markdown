@@ -11,9 +11,6 @@
 import Markdown
 import Testing
 
-/// Link reference definitions and attribute definitions at the start of a paragraph are removed from
-/// it, so the paragraph or setext heading made of the remaining lines starts at its first remaining
-/// content byte.
 struct DefinitionRemainderBlockRangeTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)

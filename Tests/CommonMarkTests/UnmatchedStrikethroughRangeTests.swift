@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A `~` or `~~` run that closes no strikethrough is literal text (Strikethrough (extension)), and its
-/// source range covers its bytes like any other text.
 @Suite("Unmatched strikethrough source ranges")
 struct UnmatchedStrikethroughRangeTests {
 
@@ -21,7 +19,6 @@ struct UnmatchedStrikethroughRangeTests {
     private static let options: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
-    /// The source range of the first text node, in DFS order.
     private func firstTextRange(in src: String) -> Range<Pos>? {
         let ranges = MarkdownDocument.withParsedDocument(src, options: Self.options) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in

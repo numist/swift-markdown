@@ -11,7 +11,6 @@
 import Testing
 import CommonMark
 
-/// The literals of every raw HTML node in the tree, in document order.
 private func inlineHTMLLiterals(_ node: borrowing MarkdownNode) -> [String] {
     var literals: [String] = []
     if case .htmlInline = node.kind {
@@ -23,9 +22,6 @@ private func inlineHTMLLiterals(_ node: borrowing MarkdownNode) -> [String] {
     return literals
 }
 
-/// A raw HTML opener (`<!--`, `<?`, `<!X `, `<![CDATA[`) with no closer later in its paragraph is literal text
-/// (Raw HTML). The empty comments, a closer that overlaps a later opener, constructs of other kinds and constructs
-/// in later paragraphs still match.
 @Suite("Unclosed inline raw HTML openers")
 struct UnclosedInlineHTMLTests {
 
@@ -34,8 +30,6 @@ struct UnclosedInlineHTMLTests {
             inlineHTMLLiterals(doc.root)
         }
     }
-
-    // MARK: Every unclosed opener stays literal
 
     @Test("unclosed openers of one kind all stay literal")
     func unclosedOpenersStayLiteral() {
@@ -49,8 +43,6 @@ struct UnclosedInlineHTMLTests {
     func dashGreaterThanOpensNoComment() {
         #expect(htmlLiterals("x<!-> <!--a-->", options: []) == ["<!--a-->"])
     }
-
-    // MARK: A closer that overlaps its own opener never closes it
 
     @Test("a later `<!-->` closes an earlier comment at its `-->`")
     func laterEmptyCommentClosesEarlierComment() {
@@ -75,8 +67,6 @@ struct UnclosedInlineHTMLTests {
         #expect(htmlLiterals("x<?a <?b ?>", options: []) == ["<?a <?b ?>"])
     }
 
-    // MARK: A construct's body may hold an opener of its kind
-
     @Test("a CDATA section's body may hold `<![CDATA[`")
     func cdataBodyHoldsCDATAOpener() {
         #expect(htmlLiterals("x<![CDATA[a <![CDATA[]]>", options: []) == ["<![CDATA[a <![CDATA[]]>"])
@@ -84,16 +74,9 @@ struct UnclosedInlineHTMLTests {
 
     @Test("a declaration's body may hold `<!B`")
     func declarationBodyHoldsBangName() {
-        // In the first input the later `<!B` has no whitespace after its name, so it is no declaration. In both, the
-        // first `>` closes the first declaration, whose body holds the later `<!B`.
         #expect(htmlLiterals("x<!A a <!B>", options: []) == ["<!A a <!B>"])
         #expect(htmlLiterals("x<!A a\nb<!B c>", options: []) == ["<!A a\nb<!B c>"])
     }
-
-    // MARK: An unclosed opener of one kind does not affect another kind
-
-    // A declaration ends at the first `>`, and every raw HTML construct ends in `>`, so nothing after an unclosed
-    // declaration in the paragraph can match.
 
     @Test("a failed processing instruction leaves later comments, CDATA, and declarations matchable")
     func failedProcessingInstructionLeavesOtherKinds() {
@@ -119,8 +102,6 @@ struct UnclosedInlineHTMLTests {
         #expect(htmlLiterals("x<!--a <!B b>", options: []) == ["<!B b>"])
     }
 
-    // MARK: A matched construct does not affect later openers of its kind
-
     @Test("closed openers after a matched construct of the same kind match")
     func closedOpenersAfterMatchMatch() {
         #expect(htmlLiterals("x<!--a--> <!--b--> <!--c", options: []) == ["<!--a-->", "<!--b-->"])
@@ -129,10 +110,6 @@ struct UnclosedInlineHTMLTests {
         #expect(htmlLiterals("x<![CDATA[a]]> <![CDATA[b]]> <![CDATA[c", options: []) == ["<![CDATA[a]]>", "<![CDATA[b]]>"])
     }
 
-    // MARK: NUL
-
-    // A NUL is replaced with U+FFFD (Insecure characters), which is ordinary content inside a raw HTML construct.
-
     @Test("a NUL in a construct's body is replaced and does not end the closer search")
     func nulDoesNotEndCloserSearch() {
         #expect(htmlLiterals("x<!--a\u{0}<!--b-->", options: []) == ["<!--a\u{FFFD}<!--b-->"])
@@ -140,8 +117,6 @@ struct UnclosedInlineHTMLTests {
         #expect(htmlLiterals("x<!A a\u{0}<!B b>", options: []) == ["<!A a\u{FFFD}<!B b>"])
         #expect(htmlLiterals("x<![CDATA[a\u{0}<![CDATA[b]]>", options: []) == ["<![CDATA[a\u{FFFD}<![CDATA[b]]>"])
     }
-
-    // MARK: Each paragraph is independent
 
     @Test("a failed scan in one paragraph does not suppress a match in the next")
     func failedScanDoesNotCrossParagraphs() {

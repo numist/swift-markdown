@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// Source ranges of footnote references. A reference spans the bracketed text it replaces, from its opener to just
-/// past its `]`.
 @Suite("Source ranges of footnote references")
 struct FootnoteReferenceSourceRangeTests {
 
@@ -37,7 +35,6 @@ struct FootnoteReferenceSourceRangeTests {
             """)
     }
 
-    /// `[^a]` names a footnote definition, so `![^a]` is a `!` followed by a reference spanning `[^a]`.
     @Test("an image-shaped reference spans its brackets after the `!`")
     func imageShapedReference() {
         #expect(tree("![^a]\n\n[^a]: z") == """
@@ -63,8 +60,6 @@ struct FootnoteReferenceSourceRangeTests {
             """)
     }
 
-    /// A footnote reference's label is all the text after its `^`, so `abcdef xxxxx` matches no definition and the
-    /// bracket stays text.
     @Test("a bracket whose label spans a line break and matches no definition is text")
     func crossLineUnmatchedLabelIsText() {
         #expect(tree("[^abcdef\nxxxxx]\n\n[^abcdef]: d") == """
@@ -77,8 +72,6 @@ struct FootnoteReferenceSourceRangeTests {
             """)
     }
 
-    /// A backslash-escaped caret is a literal `^` (Backslash escapes), so `[\^abc]` is no footnote reference although
-    /// `[^abc]` names a definition.
     @Test("an escaped-caret bracket is text")
     func escapedCaretBracketIsText() {
         #expect(tree("[\\^abc]\n\n[^abc]: d") == """
@@ -89,8 +82,6 @@ struct FootnoteReferenceSourceRangeTests {
             """)
     }
 
-    /// A backslash-escaped caret is a literal `^` (Backslash escapes), so `![\^abc]` is no footnote reference although
-    /// `[^abc]` names a definition, and with no matching link reference definition it is no image either.
     @Test("an image-shaped escaped-caret bracket is text")
     func imageShapedEscapedCaretBracketIsText() {
         #expect(tree("![\\^abc]\n\n[^abc]: d") == """

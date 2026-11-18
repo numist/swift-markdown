@@ -11,11 +11,8 @@
 import Testing
 import CommonMark
 
-/// HTML blocks whose first line begins with the remaining columns of a tab that a container's prefix partly consumes.
-///
-/// Per Tabs, when a container's prefix consumes only part of a tab, the tab's remaining columns are indentation, and an
-/// HTML block keeps its line's indentation as content, so those columns become leading spaces: `>→<div>` gives
-/// `  <div>`. Those spaces stand for the split tab, so the block starts at the tab's byte.
+// A tab that a container's prefix consumes only part of leaves its remaining columns as spaces (Tabs), which an HTML
+// block keeps as content.
 @Suite("An HTML block that begins with a split tab's columns starts at the tab")
 struct HTMLBlockSplitTabStartTests {
 

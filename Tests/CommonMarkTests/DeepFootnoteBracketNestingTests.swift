@@ -11,10 +11,6 @@
 import CommonMark
 import Testing
 
-/// Footnote-shaped brackets nested many levels deep.
-///
-/// A `]` closes the innermost open `[^`. A label may not contain an unescaped bracket (Links), so no outer bracket is a
-/// footnote reference however deep the nesting.
 @Suite("Footnote brackets under deep nesting")
 struct DeepFootnoteBracketNestingTests {
     private static let depth = 32_000

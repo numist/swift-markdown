@@ -11,12 +11,8 @@
 import Testing
 import CommonMark
 
-/// A line holding only a leading pipe (Tables (extension)), optionally with whitespace, has no cells. It
-/// is not a body row, so it closes the table and starts a paragraph.
 @Suite("A lone-pipe line ends the table")
 struct TableLonePipeLineTests {
-
-    // MARK: - Lone pipe
 
     @Test("a lone-pipe line after a single-column header row is not a body row")
     func lonePipeLineSingleColumn() {
@@ -47,8 +43,6 @@ struct TableLonePipeLineTests {
 
             """)
     }
-
-    // MARK: - Rows with cells
 
     @Test("a leading+trailing pipe body row is one empty cell, kept as a table row")
     func doublePipeBodyRowStaysARow() {

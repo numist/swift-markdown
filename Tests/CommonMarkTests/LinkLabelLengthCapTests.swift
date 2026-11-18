@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A link label has at most 999 characters inside its brackets (Links). This holds for the label of a link reference
-/// definition and for the label of a reference link, including one that spans a line ending.
 @Suite("Link label length cap")
 struct LinkLabelLengthCapTests {
 
@@ -37,10 +35,8 @@ struct LinkLabelLengthCapTests {
             """)
     }
 
-    // MARK: - Full reference links across a line ending
-
-    /// The definition's 999-character label and the reference's label, which spans a line ending in a block quote,
-    /// normalize to the same label (Links). The reference's label resolves at 999 characters and is no label at 1000.
+    // Both references' labels normalize to the defined label (Links), but the space before the second's line ending
+    // makes it 1,000 characters.
     @Test("a full reference label across a line ending resolves at the cap but not one past it")
     func multiSegmentReferenceLabelCap() {
         let half = label(499)
@@ -64,8 +60,6 @@ struct LinkLabelLengthCapTests {
 
             """)
     }
-
-    // MARK: - Labels past the cap
 
     @Test("1000- and 1001-character labels neither define nor resolve", arguments: [1000, 1001])
     func overCapLabelsNeitherDefineNorResolve(_ length: Int) {

@@ -11,15 +11,6 @@
 import CommonMark
 import Testing
 
-/// An extended email autolink's local part is the run of ASCII alphanumerics, `.`, `+`, `-` and `_` before the `@`.
-/// A lowercase `mailto:` or `xmpp:` directly before the local part, and not directly after an ASCII letter or digit, is
-/// part of the autolink, and the scan continues before it as it does before the local part, so local-part characters
-/// and further such schemes before it join the autolink too. The destination is then the link text with no `mailto:`
-/// added. With such a scheme the local part may be empty, and after `xmpp:` the domain may hold `/`,
-/// though not as its last character. A second `@` in the domain restarts the address at the second `@`, its local
-/// part the local-part characters before it, which must not be empty; a scheme before the first `@` still counts for
-/// the restarted address's destination and domain, and a period in the domain before the second `@` still counts for
-/// its domain.
 @Suite("Extended email autolink scan")
 struct ExtendedEmailAutolinkScanTests {
     private static let options: MarkdownDocument.ParseOptions = [.gfmAutolink]
@@ -117,8 +108,6 @@ struct ExtendedEmailAutolinkScanTests {
     @Test func domainSegmentStartingWithHyphenAfterPeriodIsText() {
         #expect(tree("a@b.-c") == text("a@b.-c"))
     }
-
-    // MARK: - Schemes
 
     @Test func mailtoSchemeIsPartOfLink() {
         #expect(tree("mailto:x@a.b") == """

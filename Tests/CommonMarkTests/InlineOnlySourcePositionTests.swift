@@ -11,7 +11,6 @@
 import CommonMark
 import Testing
 
-/// Inline-only parsing reports line-aware source positions, like block parsing does.
 @Suite("Inline-only source positions")
 struct InlineOnlySourcePositionTests {
 
@@ -43,7 +42,6 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// A CRLF is one `\n` in the content and two source bytes, so line 2 starts after both.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func crlfLineEnding(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("a\r\nb *c*", options: options, sourceRanges: true) == """
@@ -54,7 +52,6 @@ struct InlineOnlySourcePositionTests {
                   text "c" @2:4-2:5
 
             """)
-        // The `\n` stands for the CRLF, so text ending at a CRLF covers both bytes and ends at the next line's start...
         #expect(TreeDump.dump("a\r\n*b*", options: options, sourceRanges: true) == """
             document @1:1-2:4
               paragraph @1:1-2:4
@@ -63,7 +60,6 @@ struct InlineOnlySourcePositionTests {
                   text "b" @2:2-2:3
 
             """)
-        // ...and text starting at a CRLF starts at its CR.
         #expect(TreeDump.dump("*a*\r\nb", options: options, sourceRanges: true) == """
             document @1:1-2:2
               paragraph @1:1-2:2
@@ -84,7 +80,6 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// A lone CR ends a line just like LF does.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func loneCRLineEnding(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("a\rb *c*", options: options, sourceRanges: true) == """
@@ -97,7 +92,7 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// A NUL is one source byte even though it surfaces as the three-byte U+FFFD.
+    // A NUL is one source byte even though it surfaces as the three-byte U+FFFD.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func nul(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("a\u{0}b *c*", options: options, sourceRanges: true) == """
@@ -110,7 +105,6 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// A NUL ending the input, after a CRLF: the U+FFFD text ends just past the source's last byte.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func trailingNULAfterCRLF(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("a\r\n*b*\u{0}", options: options, sourceRanges: true) == """
@@ -124,7 +118,6 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// A node starting at a CRLF starts at its CR, including in content that holds a NUL.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func nodeStartingAtCRLFWithNUL(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("*a*\r\nb\u{0}", options: options, sourceRanges: true) == """
@@ -146,7 +139,7 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// A leading byte order mark is not content, but it is part of line 1, whose columns count its three bytes.
+    // A leading byte order mark is not content, but its three bytes count toward line 1's columns.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func leadingByteOrderMark(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("\u{FEFF}a\nb", options: options, sourceRanges: true) == """
@@ -163,7 +156,6 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// A BOM-only input's empty paragraph sits just past the BOM, which the document spans; a blank line after the BOM ends where its line ending starts, so the ranges are empty.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func byteOrderMarkWithoutContent(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("\u{FEFF}", options: options, sourceRanges: true) == """
@@ -179,7 +171,6 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// Blank lines and a trailing line ending are literal paragraph content. The paragraph spans the blank lines but, like its text, ends where the final line ending starts, at the end of the last line. The document covers the whole input.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func blankLinesAndTrailingLineEnding(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("a\n\n  b\n", options: options, sourceRanges: true) == """
@@ -190,7 +181,6 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// Columns are UTF-8 byte offsets, so a two-byte scalar on line 2 advances the column by two.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func multibyteScalarOnSecondLine(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("a\né *c*", options: options, sourceRanges: true) == """
@@ -203,7 +193,6 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// Leading link reference definitions are consumed across CRLF line endings, and the remaining text keeps its source positions.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func leadingReferenceDefinitionWithCRLF(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("[a]: /u\r\n\r\n[a]", options: options, sourceRanges: true) == """
@@ -216,8 +205,6 @@ struct InlineOnlySourcePositionTests {
             """)
     }
 
-    /// Leading link reference definitions are not paragraph content, so the paragraph starts at the first byte after
-    /// them, and with nothing left before the end of the last line its range is empty there.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func paragraphStartsAfterLeadingDefinitions(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("[a]: /u\nb", options: options, sourceRanges: true) == """

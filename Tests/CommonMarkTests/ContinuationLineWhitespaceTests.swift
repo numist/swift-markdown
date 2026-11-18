@@ -11,16 +11,13 @@
 import CommonMark
 import Testing
 
-/// Every line of a paragraph after its first has its leading whitespace stripped (Paragraphs), including inside a
-/// code span, link text or link title that crosses the line ending. Each paragraph here begins in a list item,
-/// holds a NUL, which is replaced by U+FFFD (Insecure characters), or a multibyte character, and holds a `[x]` that
-/// does not begin the paragraph and so is text (Task list items (extension)).
+// A continuation line's leading whitespace is not paragraph content (Paragraphs), even inside a code span, link text
+// or link title that crosses onto it.
 @Suite("Leading whitespace of a paragraph's continuation lines")
 struct ContinuationLineWhitespaceTests {
 
     private static let options: MarkdownDocument.ParseOptions = [.tasklist, .sourcePosition]
 
-    /// The U+FFFD that replaces the NUL spans the NUL's one source byte.
     @Test func textEndingInNULBeforeEmphasis() {
         #expect(TreeDump.dump("+\n  2 [x] \u{0}*u*", options: Self.options, sourceRanges: true) == """
             document @1:1-2:13
@@ -58,8 +55,6 @@ struct ContinuationLineWhitespaceTests {
             """)
     }
 
-    /// The item's first block is a block quote, so the item has no checkbox, and line 2 is a lazy continuation line
-    /// of the block quote's paragraph.
     @Test func lazyBlockQuoteLineCodeSpan() {
         #expect(TreeDump.dump("- > a\n  2\u{0} [x] `\n `", options: Self.options) == """
             document

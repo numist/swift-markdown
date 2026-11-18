@@ -11,8 +11,6 @@
 import Markdown
 import XCTest
 
-/// A list item whose paragraph begins with a digit-led word before `[x]` or `[X]` has no checkbox: the
-/// paragraph does not begin with a task list item marker (Task list items (extension)).
 class TaskListDigitPrefixUppercaseCheckboxTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])

@@ -130,6 +130,7 @@ struct BasicTests {
     
     @Test("the benchmarks' sample document parses to its full tree")
     func benchmarkSampleDocument() {
+        // This is the basic markdown doc from the performance tests. We have a test here that parses it as well, for easy debugging when looking into performance improvements.
         let sample = """
         # Hello, World
 

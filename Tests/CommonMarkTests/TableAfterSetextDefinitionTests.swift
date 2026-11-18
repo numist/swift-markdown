@@ -11,9 +11,8 @@
 import Testing
 import CommonMark
 
-/// A link reference definition followed by a `=` line, then table rows. As under Link reference definitions, the `=`
-/// line follows no paragraph content, so it is paragraph text rather than a setext heading underline; with `.tables`,
-/// the table takes its header row from that paragraph's last line (Tables (extension)).
+// A `=` line after a paragraph holding only a link reference definition is paragraph text, not a setext heading
+// underline (Link reference definitions).
 @Suite("Table after a definition-only setext paragraph")
 struct TableAfterSetextDefinitionTests {
 
@@ -54,8 +53,6 @@ struct TableAfterSetextDefinitionTests {
             """)
     }
 
-    /// The `=` line cannot underline a paragraph holding only a link reference definition (Setext headings), so
-    /// it stays paragraph text, and the delimiter row `-|` makes it the header row of a table starting on line 3.
     @Test("a table whose header row follows a link reference definition starts at the header row")
     func tableAfterDefinitionStartsAtHeaderRow() {
         #expect(TreeDump.dump("[b\n ]:o\n=\n-|\na", options: [.sourcePosition, .tables], sourceRanges: true) == """

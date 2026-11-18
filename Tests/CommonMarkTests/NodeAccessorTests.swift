@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// The node accessors: `content` for HTML blocks, attributes and footnotes, `Segments.byteCount` across several
-/// segments, `Segments.isEmpty` for an empty and a non-empty body, `parent` at the root and `previous` on the second
-/// child.
 @Suite("Node accessors")
 struct NodeAccessorTests {
 

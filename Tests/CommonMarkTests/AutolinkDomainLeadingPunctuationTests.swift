@@ -11,9 +11,6 @@
 import CommonMark
 import Testing
 
-/// An extended url autolink's domain begins with a character that is neither Unicode whitespace nor Unicode
-/// punctuation, so a domain that begins with a non-ASCII punctuation or whitespace character is not an extended url
-/// autolink.
 @Suite("Extended url autolink domain beginning with punctuation")
 struct AutolinkDomainLeadingPunctuationTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .gfmAutolink]
@@ -57,8 +54,6 @@ struct AutolinkDomainLeadingPunctuationTests {
     @Test func leftQuotationMarkDomainIsText() {
         #expect(tree("http://\u{201C}x") == text("http://\u{201C}x"))
     }
-
-    // MARK: - Unicode general categories
 
     @Test(arguments: [
         ("Pd hyphen", "\u{2010}"), ("Pd em dash", "\u{2014}"),

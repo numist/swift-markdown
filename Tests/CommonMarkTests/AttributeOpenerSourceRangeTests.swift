@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// Source ranges of text holding an inline-attribute opener `^[` that never closes. The opener stays literal text,
-/// and the text spans it.
 @Suite("Source ranges of an unclosed inline-attribute opener")
 struct AttributeOpenerSourceRangeTests {
 
@@ -40,7 +38,7 @@ struct AttributeOpenerSourceRangeTests {
             """)
     }
 
-    /// The opener is not a link bracket, so a GFM extended autolink after it is recognized.
+    // `^[` is an attribute opener, not a link opener, so it doesn't suppress the extended autolink after it.
     @Test("a URL after an opener autolinks")
     func urlAfterOpener() {
         #expect(TreeDump.dump("^[ http://t.t", options: [.sourcePosition, .gfmAutolink, .attributes], sourceRanges: true) == """

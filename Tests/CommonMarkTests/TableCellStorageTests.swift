@@ -11,14 +11,12 @@
 import CommonMark
 import Testing
 
-/// A table's cells are stored as their own source bytes, whether or not the table's lines are contiguous in the
-/// source. Only a cell whose text differs from its source, because it holds `\|` or a NUL, is copied.
 @Suite("Table cells store only the text that differs from the source")
 struct TableCellStorageTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .sourcePosition]
 
-    /// The stored strings hold one shared line ending, plus the text of each copied cell: `\|` becomes `|`, and a NUL
-    /// becomes U+FFFD (Insecure characters), which takes three bytes.
+    // The stored size is one shared line ending plus the text of each copied cell, in which `\|` is `|` and a NUL is
+    // the three-byte U+FFFD (Insecure characters).
     @Test(arguments: [
         ("| a | b |\n|---|---|\n| c | d |\n", 1),
         ("> | a | b |\n> |---|---|\n> | c | d |\n", 1),

@@ -11,8 +11,6 @@
 import CommonMark
 import Testing
 
-/// Inline-only parsing extracts leading link reference definitions and turns a backslash before a line ending into a
-/// hard line break.
 @Suite("Inline-only link reference definitions and hard line breaks")
 struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
@@ -134,7 +132,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
                   text "a"
 
             """)
-        // A next-line title with trailing content is rejected; the definition ends after its destination.
+        // `(t) x` is not a title, since only whitespace may follow a title on its line (Link reference definitions).
         #expect(TreeDump.dump("[a]: /u\n(t) x\n[a]", options: options) == """
             document
               paragraph
@@ -145,7 +143,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
             """)
     }
 
-    /// The paragraph remains after every definition is extracted, empty or holding only whitespace.
+    // Inline-only input keeps its paragraph even when definitions leave it empty.
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func definitionFollowedOnlyByWhitespace(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("[a]: /u\n", options: options) == """
@@ -193,7 +191,6 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
 
     @Test(arguments: [inlineOnly, preserveWhitespace])
     func backslashHardBreakEdges(options: MarkdownDocument.ParseOptions) {
-        // At end of input the backslash is literal.
         #expect(TreeDump.dump("a\\", options: options) == """
             document
               paragraph
@@ -215,7 +212,7 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
                 linebreak
 
             """)
-        // The next line's leading spaces stay literal.
+        // Inline-only mode keeps leading whitespace, including after a hard line break.
         #expect(TreeDump.dump("a\\\n  b", options: options) == """
             document
               paragraph
@@ -224,7 +221,6 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
                 text "  b"
 
             """)
-        // An escaped backslash does not break.
         #expect(TreeDump.dump("a\\\\\nb", options: options) == """
             document
               paragraph
@@ -252,7 +248,6 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
               paragraph
 
             """)
-        // Attribute definitions are consumed too.
         #expect(TreeDump.dump("^[x]: a\ny", options: options) == """
             document
               paragraph
@@ -264,7 +259,6 @@ struct InlineOnlyReferenceDefinitionAndHardBreakTests {
               paragraph
 
             """)
-        // The NUL becomes U+FFFD (Insecure characters) and doesn't stop the definition being consumed.
         #expect(TreeDump.dump("[a]: /u\n\u{0}[a]", options: options) == """
             document
               paragraph

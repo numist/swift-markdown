@@ -11,15 +11,9 @@
 import Testing
 import CommonMark
 
-/// A line follows a fenced code block in a container nested in a block quote or list item, and the inner container
-/// fails to continue, so the line starts a new block. A tab that the surviving container's continuation consumes in
-/// part counts only its unconsumed columns toward that block's indentation (Tabs), deciding between an indented code
-/// block and a paragraph.
 @Suite("New block indentation where a nested container fails to continue")
 struct NewBlockIndentAfterPartialTabTests {
 
-    // The outer `>` takes one column of the tab; its two other columns plus two spaces are the code
-    // indent.
     @Test("block quote: the tab's leftover columns and two spaces reach the code indent")
     func blockQuoteStraddleTwoSpaces() {
         #expect(TreeDump.dump(">>```\n>\t  x", options: []) == """
@@ -46,8 +40,6 @@ struct NewBlockIndentAfterPartialTabTests {
         #expect(codeBlockKinds(">>```\n>\t   x") == ["code_block fenced fence='`' length=3 offset=0", "code_block indented fence=none length=0 offset=0"])
     }
 
-    // The code indent takes the first tab's two leftover columns and two of the second tab's four;
-    // the second tab's other two columns are content spaces.
     @Test("block quote: the code indent splits a second tab, leaving two spaces of code content")
     func blockQuoteStraddleSplitTab() {
         #expect(TreeDump.dump(">>```\n>\t\tx", options: []) == """
@@ -61,7 +53,6 @@ struct NewBlockIndentAfterPartialTabTests {
         #expect(codeBlockKinds(">>```\n>\t\tx") == ["code_block fenced fence='`' length=3 offset=0", "code_block indented fence=none length=0 offset=0"])
     }
 
-    // The list item takes two of the tab's four columns; the other two fall short of the code indent.
     @Test("list item: a tab's leftover columns fall short of the code indent")
     func listItemStraddleBareTab() {
         #expect(TreeDump.dump("- >```\n\tx", options: []) == """

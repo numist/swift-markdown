@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// `maxCodeSpanOpeningBackticks` bounds the length of a backtick string that opens a code span. A longer backtick
-/// string never begins a code span and stays literal text (Code spans).
 @Suite("Code span opening backtick limit")
 struct CodeSpanOpeningBacktickLimitTests {
 

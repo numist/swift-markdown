@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// An `@` decoded from a character reference is text like any other, so the merged text around it can hold an
-/// extended email autolink (Autolinks (extension)).
+// An `@` decoded from a character reference is text like any other, so the text around it can hold an extended email
+// autolink (Autolinks (extension)).
 @Suite("Extended email autolinks around a decoded `@`")
 struct EntityDecodedEmailAutolinkTests {
 

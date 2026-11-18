@@ -11,11 +11,6 @@
 import Testing
 import CommonMark
 
-/// `referenceExpansionBudget` bounds the bytes of destination and title that link references expand to. The budget
-/// is the larger of the limit and the source's byte count. Each resolved link reference, in document order, is charged
-/// its definition's destination and title bytes after backslash escapes and character references are resolved, and a
-/// reference whose charge would exceed what is left of the budget stays text. Footnote and inline attribute
-/// references are not charged.
 @Suite("Reference expansion budget")
 struct ReferenceExpansionBudgetTests {
 
@@ -395,8 +390,6 @@ struct ReferenceExpansionBudgetTests {
             """)
     }
 
-    /// Attribute and link labels are separate namespaces, so an inline attribute label never reads or charges a link
-    /// definition of the same label.
     @Test("an inline attribute label that matches a link definition is not charged")
     func attributeLabelNamingLinkDefinition() {
         let source = "[a]: uuuuuuuuuuuuuuuuuuuuuuuuuuuuuu\n\n[a] ^[x][a] [a]"

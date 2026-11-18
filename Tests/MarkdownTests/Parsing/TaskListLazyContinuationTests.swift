@@ -11,9 +11,8 @@
 import Markdown
 import XCTest
 
-/// In `- [ ] |` / `  -|` / `z`, the item's first block is a one-column table, so the item is not a task list
-/// item (Task list items (extension)). A table has no lazy continuation lines, so `z` is a paragraph after
-/// the list.
+// Only paragraph continuation text can be a lazy continuation line (List items), so `z` ends the list instead of
+// becoming a row of the item's table.
 class TaskListLazyContinuationTests: XCTestCase {
     func testUnindentedLineAfterTableInItemIsParagraphAfterList() {
         XCTAssertEqual(

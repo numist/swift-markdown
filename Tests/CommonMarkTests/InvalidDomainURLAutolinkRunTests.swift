@@ -11,8 +11,6 @@
 import CommonMark
 import Testing
 
-/// An extended URL autolink candidate whose domain is not valid stays text (Autolinks (extension)), and the candidates
-/// after it are recognized as if it were absent.
 @Suite("Runs of extended URL autolink candidates with invalid domains")
 struct InvalidDomainURLAutolinkRunTests {
     private static let options: [MarkdownDocument.ParseOptions] = [.gfmAutolink, [.gfmAutolink, .inlineOnly]]
@@ -50,8 +48,9 @@ struct InvalidDomainURLAutolinkRunTests {
             """)
     }
 
-    /// Each candidate but the last has the domain `a_http`, which is not valid. The final `_` ends the paragraph, so
-    /// the last candidate's domain is `a` and the `_`, as trailing punctuation, stays outside its link.
+    // Every candidate but the last has the domain `a_http`, whose last segment holds an underscore, so it is not valid
+    // (Autolinks (extension)). The domain check never examines the paragraph's last character, so the final `_` leaves
+    // the last candidate's domain valid and, as trailing punctuation, stays outside the link.
     @Test(arguments: options)
     func longRunOfCandidatesWithUnderscoreDomainsLinksOnlyTheLast(options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump(String(repeating: "http://a_", count: 100), options: options) == """

@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// An extended url or www autolink (Autolinks (extension)) doesn't form while an unclosed `[` or `![` opener
-/// precedes it in the same inline content.
 @Suite("Extended autolinks after an unclosed bracket")
 struct AutolinkBracketOpenerTests {
 

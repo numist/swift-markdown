@@ -11,8 +11,6 @@
 import Markdown
 import XCTest
 
-/// The tree dumper prints a block directive's argument text segments without source locations when
-/// `.printSourceLocations` is off.
 class TreeDumperDirectiveArgumentsWithoutPositionsTests: XCTestCase {
     func testDirectiveArgumentsPrintedWithoutPositions() {
         XCTAssertEqual(

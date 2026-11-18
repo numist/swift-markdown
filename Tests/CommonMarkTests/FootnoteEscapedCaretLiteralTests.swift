@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A footnote-shaped bracket whose caret is backslash-escaped, `[\^…]`, is not a footnote reference; it is
-/// literal text with the backslash removed (Backslash escapes).
 @Suite("Backslash-escaped footnote caret `[\\^…]`")
 struct FootnoteEscapedCaretLiteralTests {
 

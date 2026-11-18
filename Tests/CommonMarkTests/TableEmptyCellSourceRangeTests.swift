@@ -11,11 +11,6 @@
 import Testing
 import CommonMark
 
-/// The spaces between pipes and cell content are not part of the cell (Tables (extension)), so a cell's source range
-/// covers just its content, and a cell with no content, empty or holding only whitespace, has an empty range just past
-/// its opening pipe, or at the row's start in a row of only whitespace, which has no opening pipe. Under `.tableSpans`,
-/// a zero-width `||` cell and the first cell of a row of only whitespace have colspan 0. A row runs from its first byte
-/// to its closing pipe, or to its last cell's content when it has none, so trailing whitespace is outside it.
 @Suite("Table cell and row source ranges")
 struct TableEmptyCellSourceRangeTests {
 
@@ -35,7 +30,6 @@ struct TableEmptyCellSourceRangeTests {
         #expect((plainRow.cells[0].range.lowerBound.column, plainRow.cells[0].range.upperBound.column, plainRow.cells[0].text) == (1, 2, "x"))
         #expect((plainRow.cells[1].range.lowerBound.column, plainRow.cells[1].range.upperBound.column, plainRow.cells[1].text) == (3, 4, "y"))
 
-        // Indenting the header row shifts only the header row's cells.
         let hdr = firstTableRows(" a|b\n-|-\nx|y", options: Self.options)
         try #require(hdr.count == 2, "fixture: expected a header row and a body row")
         try #require(hdr[0].cells.count == 2 && hdr[1].cells.count == 2, "fixture: two cells per row")
@@ -47,7 +41,6 @@ struct TableEmptyCellSourceRangeTests {
 
     @Test("a whitespace-only cell has an empty range just past its opening pipe")
     func whitespaceCellEndColumn() throws {
-        // `|x| |y`: x at col 2, the whitespace-only cell's opening pipe at col 3.
         let rows = firstTableRows("a|b|c\n-|-|-\n|x| |y", options: Self.options)
         let body = try #require(rows.last, "expected a body row")
         try #require(body.cells.count == 3, "expected three body cells, got \(body.cells.count)")

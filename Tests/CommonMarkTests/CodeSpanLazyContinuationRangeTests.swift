@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A code span spanning lines whose opening backtick string is on a lazy continuation line starts at that
-/// backtick's own column.
 @Suite("Multi-line code span opening on a lazy continuation line")
 struct CodeSpanLazyContinuationRangeTests {
 

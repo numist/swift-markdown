@@ -11,10 +11,8 @@
 import Testing
 import CommonMark
 
-/// Every U+0000 becomes U+FFFD (Insecure characters), at any offset in a line and however many NULs the line holds.
 @Suite("NUL replacement in long lines")
 struct NULReplacementInLongLinesTests {
-    /// 40-byte lines with NULs at various offsets, each with its replaced form.
     private static let lines: [(line: String, replaced: String)] = [
         ("\u{0}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
          "\u{FFFD}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"),
@@ -36,7 +34,6 @@ struct NULReplacementInLongLinesTests {
          "xxxxxxxxxxxxxx\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}xxxxxxxxxxxxxxxxxxxxx"),
     ]
 
-    /// The literal of each code block in `source`.
     private func codeBlockLiterals(_ source: String, options: MarkdownDocument.ParseOptions = []) -> [String] {
         MarkdownDocument.withParsedDocument(source, options: options) { doc in
             var out: [String] = []
@@ -79,8 +76,8 @@ struct NULReplacementInLongLinesTests {
         #expect(codeBlockLiterals("    " + line + "\n") == [replaced + "\n"])
     }
 
-    /// The list item's content is indented two columns, so the second tab of each `\t\t` line supplies the last two of
-    /// the four columns an indented code block strips and leaves two spaces of content (Tabs).
+    // The item strips two columns of the first tab and the code block four more, so two columns of the second tab
+    // remain as spaces (Tabs).
     @Test("NULs in an indented code line whose indent splits a tab", arguments: lines)
     func splitTabCodeLine(line: String, replaced: String) {
         #expect(codeBlockLiterals("- foo\n\n\t\t" + line + "\n") == ["  " + replaced + "\n"])

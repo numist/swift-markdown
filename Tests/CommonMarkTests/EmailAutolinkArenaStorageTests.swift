@@ -11,9 +11,8 @@
 import Testing
 import CommonMark
 
-/// Splitting a text node at an extended email autolink stores the link's `mailto:` destination and none of the text
-/// around the address, however long it is. The stored strings of a document start with one byte, a line feed, so each
-/// expected size is one more than the bytes the document's values add.
+// Every document's materialized string buffer starts with one shared newline, so each expected size is one more than
+// the bytes the parse stores.
 @Suite("Extended email autolinks store only their destination")
 struct EmailAutolinkArenaStorageTests {
 

@@ -11,11 +11,6 @@
 import CommonMark
 import Testing
 
-/// Blank lines inside many nested footnote definitions.
-///
-/// A blank line continues every open footnote definition, so a run of blank lines after 40,000 footnote
-/// definitions opened on one line keeps them all open. Only the innermost definition's label is referenced; the others
-/// are unreferenced and dropped.
 @Suite("Blank lines under deep footnote definition nesting")
 struct DeepFootnoteDefinitionBlankLineTests {
 

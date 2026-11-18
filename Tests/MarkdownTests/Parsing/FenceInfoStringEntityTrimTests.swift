@@ -11,8 +11,8 @@
 import Markdown
 import XCTest
 
-/// A fenced code block's info string is trimmed of leading and trailing whitespace (Fenced code blocks)
-/// before its character references are decoded, so characters that references decode to are kept.
+// The info string is trimmed of leading and trailing whitespace before its character references are decoded
+// (Fenced code blocks), so whitespace that a reference decodes to is kept.
 class FenceInfoStringEntityTrimTests: XCTestCase {
     private func language(_ markdown: String) -> String? {
         let document = Document(parsing: markdown, options: [])
@@ -45,7 +45,6 @@ class FenceInfoStringEntityTrimTests: XCTestCase {
         XCTAssertEqual(" +x", language("```&#32;\\+x"))
     }
 
-    /// A backslash escapes the `&` that follows it (Backslash escapes), so the reference is literal text.
     func testBackslashEscapesReferenceAmpersand() {
         XCTAssertEqual("x&#32;", language("```x\\&#32;"))
         XCTAssertEqual("&#9;x", language("```\\&#9;x"))

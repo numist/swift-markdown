@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// An image is `!` followed by a link (Images), whatever its text begins with. With footnotes, a bracket whose
-/// `[^label]` names a footnote definition is a footnote reference only when it forms neither an inline nor a
-/// reference link or image; an image's `!` then stays text.
 @Suite("Images whose text begins with a caret")
 struct ImageCaretTextTests {
 

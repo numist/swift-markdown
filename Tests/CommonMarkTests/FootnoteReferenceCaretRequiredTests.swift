@@ -11,8 +11,6 @@
 import CommonMark
 import Testing
 
-/// A bracket whose text does not begin with `^` is not a footnote reference, even when the rest of its text is a
-/// footnote definition's label.
 @Suite("Footnote-shaped brackets require the caret")
 struct FootnoteReferenceCaretRequiredTests {
     @Test(arguments: [

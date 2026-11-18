@@ -11,10 +11,8 @@
 import Testing
 import CommonMark
 
-/// Source ranges in the inline-only modes (`.inlineOnly`, `.preserveWhitespace`) of input that ends in a line ending.
-/// The paragraph and any node holding the final line ending end where that line ending starts, so their ranges stay on
-/// the input's last line, as in block mode, while the document covers the whole input. A line ending before the last
-/// one ends a node at the start of the next line.
+// Below the document, a node holding the final line ending ends where that line ending starts, so its range stays on
+// the input's last line, as in block mode.
 @Suite("Source ranges of inline-only input that ends in a line ending")
 struct InlineOnlyFinalLineEndRangeTests {
 
@@ -54,7 +52,6 @@ struct InlineOnlyFinalLineEndRangeTests {
             """)
     }
 
-    /// A blank last line is a line of the input, so the ranges end at its start.
     @Test("a final blank line ends the text at the start of that line", arguments: modes)
     func finalBlankLine(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("a\n\n", mode) == """
@@ -78,7 +75,6 @@ struct InlineOnlyFinalLineEndRangeTests {
             """)
     }
 
-    /// The text holds only the final line ending, so its range is empty where the line ending starts.
     @Test("text holding only the final line feed has an empty range", arguments: modes)
     func lineFeedOnlyText(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("*a*\n", mode) == """
@@ -91,7 +87,6 @@ struct InlineOnlyFinalLineEndRangeTests {
             """)
     }
 
-    /// The text starts inside the final line ending, so its range is empty where that line ending starts.
     @Test("text holding only a final carriage return and line feed has an empty range at the carriage return", arguments: modes)
     func crlfOnlyText(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("*a*\r\n", mode) == """
@@ -114,7 +109,6 @@ struct InlineOnlyFinalLineEndRangeTests {
             """)
     }
 
-    /// The line break has no range, so the paragraph's end comes from the final line ending, not from any inline node.
     @Test("a backslash hard line break before the final line feed leaves the paragraph ending at the line feed", arguments: modes)
     func backslashHardBreak(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("a\\\n", mode) == """
@@ -135,7 +129,7 @@ struct InlineOnlyFinalLineEndRangeTests {
             """)
     }
 
-    /// The U+FFFD that replaces the NUL stands for the NUL's one byte at column 2.
+    // The U+FFFD stands for the NUL's one source byte.
     @Test("text with a replaced NUL ends where the final line feed starts", arguments: modes)
     func replacedNUL(_ mode: MarkdownDocument.ParseOptions) {
         #expect(tree("a\u{0}\n", mode) == """

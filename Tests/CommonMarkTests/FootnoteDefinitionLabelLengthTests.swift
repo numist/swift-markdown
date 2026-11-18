@@ -11,22 +11,18 @@
 import CommonMark
 import Testing
 
-/// The footnote label limits bound footnote references, not footnote definitions: a `[^label]:` opener begins a
-/// definition however long its label, and a definition that no reference resolves to is dropped, as every unreferenced
-/// definition is.
+// The footnote label limits bound references, not definitions: a `[^label]:` opener begins a definition however long
+// its label, and the definition is dropped when no reference resolves to it.
 @Suite("Footnote definition label length")
 struct FootnoteDefinitionLabelLengthTests {
     private static let kelvinSign = "\u{212A}"
 
-    /// Footnote reference labels of up to 1,000 bytes, with no character limit.
     private static var thousandByteLimits: MarkdownDocument.ParseLimits {
         var limits = MarkdownDocument.ParseLimits()
         limits.maxFootnoteLabelCharacters = .max
         limits.maxFootnoteLabelBytes = 1000
         return limits
     }
-
-    // MARK: - Default limits
 
     @Test("a definition whose label has 1,000 characters is dropped when unreferenced")
     func unreferencedDefinitionOverCharacterLimitIsDropped() {
@@ -74,7 +70,7 @@ struct FootnoteDefinitionLabelLengthTests {
             """)
     }
 
-    /// `ß` case-folds to `ss`, so a 500-character reference names a 1,000-character definition.
+    // `ß` case-folds to `ss`, so a 500-character reference names a 1,000-character definition.
     @Test("a reference within the character limit resolves to a definition over it")
     func referenceResolvesToDefinitionOverCharacterLimit() {
         let reference = String(repeating: "ß", count: 500)
@@ -90,8 +86,6 @@ struct FootnoteDefinitionLabelLengthTests {
 
             """)
     }
-
-    // MARK: - A 1,000-byte limit
 
     @Test("a definition whose label has 1,001 bytes is dropped when unreferenced")
     func unreferencedDefinitionOverByteLimitIsDropped() {
@@ -124,7 +118,7 @@ struct FootnoteDefinitionLabelLengthTests {
             """)
     }
 
-    /// U+212A KELVIN SIGN takes 3 bytes and case-folds to `k`, so a 334-byte reference names a 1,002-byte definition.
+    // U+212A KELVIN SIGN takes 3 bytes and case-folds to `k`, so a 334-byte reference names a 1,002-byte definition.
     @Test("a reference within the byte limit resolves to a definition over it")
     func referenceResolvesToDefinitionOverByteLimit() {
         let reference = String(repeating: "k", count: 334)
@@ -166,8 +160,8 @@ struct FootnoteDefinitionLabelLengthTests {
             """)
     }
 
-    /// The opener begins a footnote definition, not a link reference definition with the label `^…`, though the link
-    /// label limits admit that label.
+    // The link label limits admit the label `^…`, so only the footnote definition rule keeps this from being a link
+    // reference definition.
     @Test("an opener over the byte limit whose content looks like a link destination begins a footnote definition")
     func openerOverByteLimitIsNoLinkReferenceDefinition() {
         let label = String(repeating: Self.kelvinSign, count: 334)

@@ -11,12 +11,8 @@
 import Testing
 import CommonMark
 
-/// Once a header row and delimiter row form a table, the paragraph is gone, so a following `-` or `=` line
-/// is not a setext heading underline (Setext headings): `-` starts a list and `=` is a body row.
 @Suite("Table followed by a setext heading underline")
 struct TableVsSetextTests {
-
-    // MARK: - After a table
 
     @Test("dash underline after a table delimiter forms a table + a bullet list, not a heading")
     func dashAfterDelimiter() {
@@ -64,8 +60,6 @@ struct TableVsSetextTests {
 
             """)
     }
-
-    // MARK: - Without a table
 
     @Test("a dash underline with no delimiter row is a setext heading")
     func plainSetextHeading() {

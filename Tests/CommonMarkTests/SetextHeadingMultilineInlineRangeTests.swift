@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// Source ranges of emphasis, strong emphasis and links that span a soft line break inside a
-/// multi-line setext heading with an indented first line. Each ends just past its closing delimiter on
-/// that delimiter's own line, before the underline.
 @Suite("Source ranges of emphasis and links across the lines of a setext heading")
 struct SetextHeadingMultilineInlineRangeTests {
 

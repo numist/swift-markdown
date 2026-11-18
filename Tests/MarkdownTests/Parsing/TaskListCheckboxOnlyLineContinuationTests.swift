@@ -11,8 +11,6 @@
 import Markdown
 import XCTest
 
-/// When a task list item's first line holds only its task list item marker, a `[x]` on the next line is
-/// paragraph text (Task list items (extension)).
 class TaskListCheckboxOnlyLineContinuationTests: XCTestCase {
     func testBracketContinuationKeptAsParagraph() {
         let expected = "Document\n└─ UnorderedList\n   └─ ListItem checkbox: [x]\n      └─ Paragraph\n         └─ Text \"[x]\""

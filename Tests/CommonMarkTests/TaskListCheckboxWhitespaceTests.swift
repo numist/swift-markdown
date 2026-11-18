@@ -11,8 +11,8 @@
 import Testing
 import CommonMark
 
-/// A task list item marker holds a whitespace character or an `x` or `X` between its brackets, and a whitespace
-/// character makes the checkbox unchecked (Task list items (extension)).
+// The whitespace character a task list item marker may hold between its brackets (Task list items (extension))
+// includes line tabulation and form feed (Characters and lines).
 @Suite("Task list item checkbox holding a whitespace character")
 struct TaskListCheckboxWhitespaceTests {
 

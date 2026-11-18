@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A node's kind, with a list's or code block's metadata as the values of its public fields, so expected trees can be
-/// written as literals.
 private enum NodeShape: Equatable {
     case other(MarkdownNode.Kind)
     case list(
@@ -73,7 +71,6 @@ private enum NodeShape: Equatable {
     }
 }
 
-/// The shape of every node in the document, depth-first.
 private func shapes(_ doc: borrowing MarkdownDocument) -> [NodeShape] {
     dfs(doc).map { NodeShape($0.kind) }
 }
@@ -141,7 +138,7 @@ struct ParagraphTests {
         let source = "one\r\ntwo\rthree"
         MarkdownDocument.withParsedDocument(source) { doc in
         let texts = dfs(doc).compactMap { $0.literal }
-        // One paragraph with a soft line break between each line.
+        // Whole input is one paragraph with softbreaks between each line.
         #expect(texts == ["one", "two", "three"])
         }
     }
@@ -354,7 +351,7 @@ struct ThematicBreakTests {
         let source = "-*-"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
-        // The `*` delimiter run has no matching closer, so the line is a single text node.
+        // The `*` delimiter run has no matching closer, so the pieces stay as text - and adjacent text is coalesced into one node.
         #expect(kinds == [.document, .paragraph, .text])
         }
     }
@@ -687,6 +684,7 @@ struct FencedCodeTests {
 
     @Test("backtick fence info may not contain backticks")
     func backticksInInfoRejected() {
+        // The opening fence with a backtick in its info is rejected; line is paragraph text. (A bare `` ``` `` on a later line would still start a fresh fence - that's why this test uses a single line with no follow-up.)
         let source = "```foo`bar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
@@ -1292,8 +1290,7 @@ struct HTMLBlockTests {
         let source = "<foo>\nbar"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = dfs(doc).map { $0.kind }
-        // `<foo>` is a complete open tag alone on its line, so it starts a type 7 HTML block, which ends at a blank
-        // line and so includes `bar`.
+        // With type-7 HTML block detection, `<foo>` at column 0 starts an HTML block (type 7) rather than a paragraph. The block ends on the next blank line, so `bar` is absorbed into the same block.
         #expect(kinds == [.document, .htmlBlock])
         }
         // A type 7 HTML block cannot interrupt a paragraph.
@@ -1326,13 +1323,11 @@ struct HTMLBlockTests {
 @Suite("Reference link definitions")
 struct ReferenceDefinitionTests {
 
-    /// The destination and title of a link.
     private struct LinkTarget: Equatable {
         var url: String?
         var title: String?
     }
 
-    /// The destination and title of every link in the document, depth-first.
     private static func links(_ doc: borrowing MarkdownDocument) -> [LinkTarget] {
         var out: [LinkTarget] = []
         func visit(_ node: borrowing MarkdownNode) {
@@ -1470,10 +1465,10 @@ struct ReferenceDefinitionTests {
 
     @Test("text after the title on its line leaves no definition")
     func titleWithTrailingJunk() {
-        // Per Link reference definitions, no non-whitespace character may follow the title on its line. Without the
-        // title, the destination is followed by other text on its line, so there is no definition.
+        // If a title is found but the line doesn't end cleanly afterwards, the parser rewinds to the no-title commit. The dest's line must then end cleanly itself.
         let source = "[foo]: /url \"title\" extra\n\n[foo]"
         MarkdownDocument.withParsedDocument(source) { doc in
+        // Without title fallback, the def line "[foo]: /url \"title\" extra" doesn't end cleanly after the dest either ("\"title\" extra" is junk). So no def is registered and the whole thing is a paragraph.
         #expect(dfs(doc).map(\.kind) == [.document, .paragraph, .text, .paragraph, .text])
         #expect(dfs(doc).compactMap(\.literal) == ["[foo]: /url \"title\" extra", "[foo]"])
         }
@@ -1530,6 +1525,7 @@ struct TasklistTests {
         let source = "- [ ] foo"
         MarkdownDocument.withParsedDocument(source) { doc in
         let info = Self.firstItem(doc)
+        // `[` is a bracket, no ref-def, falls back to text - but the parser emits it as raw text. Either way isChecked should be nil.
         #expect(info.checked == nil)
         #expect(info.text == "[ ] foo")
         }
@@ -1603,10 +1599,11 @@ struct TasklistTests {
 
     @Test("non-first paragraph in item is not a task marker")
     func nonFirstParagraphIsNotMarker() {
-        // Per Task list items (extension), only the item's first block can begin with the marker.
+        // The second paragraph in the same item shouldn't be treated as a task marker even if it starts with [ ] .
         let source = "- foo\n\n  [ ] bar"
         MarkdownDocument.withParsedDocument(source, options: .tasklist) { doc in
         let info = Self.firstItem(doc)
+        // First paragraph is "foo" - no marker - item is not a task item.
         #expect(info.checked == nil)
         }
     }
@@ -1615,7 +1612,7 @@ struct TasklistTests {
 @Suite("GFM extensions - tables")
 struct TableTests {
 
-    /// The cells of the document's first top-level table, row by row, as each cell's alignment and the literal of its first inline that has one.
+    /// Walks the doc and pulls (kind, alignment-or-text) for the first table found. Returns rows of cells: each row is an array of `(alignment: TableAlignment?, text: String?)`.
     private static func firstTable(_ doc: borrowing MarkdownDocument) -> [[(MarkdownNode.TableAlignment?, String?)]] {
         var rows: [[(MarkdownNode.TableAlignment?, String?)]] = []
         var foundTable = false

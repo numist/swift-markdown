@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// The two or more spaces before a hard line break belong to the break (Hard line breaks), so they
-/// produce no text node and are not part of a preceding text node's source range.
 @Suite("Trailing spaces before a hard line break")
 struct EmptyTextBeforeHardBreakTests {
 

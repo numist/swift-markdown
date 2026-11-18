@@ -11,7 +11,6 @@
 import CommonMark
 import Testing
 
-/// A `^` row-span cell padded by a line tabulation or form feed is a row-span marker.
 @Suite("Row-span marker padded by a line tabulation or form feed")
 struct TableRowspanCaretPaddedByLineTabulationOrFormFeedTests {
 
@@ -103,7 +102,7 @@ struct TableRowspanCaretPaddedByLineTabulationOrFormFeedTests {
             """)
     }
 
-    /// A header cell has no row above to span into, so it keeps its `^` text while carrying rowspan 0.
+    // A header cell has no row above to span into, so it keeps its `^` text while carrying rowspan 0.
     @Test func lineTabulationBeforeCaretInHeader() {
         #expect(TreeDump.dump("|\u{B}^|\n|-|", options: Self.options) == """
             document

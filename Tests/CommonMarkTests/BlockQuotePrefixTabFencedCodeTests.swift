@@ -11,11 +11,8 @@
 import Testing
 import CommonMark
 
-/// A block quote marker is `>` plus an optional following space (Block quotes). When a tab follows the `>`, the
-/// marker takes one of the tab's columns and the rest are indentation (Tabs), so on a fenced code block's
-/// content line they become leading spaces of the content.
-/// A fence's own indentation and a list item's content indentation take columns from a content line's tab in the same
-/// way, and a paragraph or heading strips the columns left after `>` as leading whitespace.
+// When a tab follows `>`, the block quote marker's optional space takes one of the tab's columns and the rest are
+// indentation (Tabs), which a fenced code block's content line keeps as leading spaces.
 @Suite("Tabs after a block quote marker and in fenced code block indentation")
 struct BlockQuotePrefixTabFencedCodeTests {
 
@@ -66,8 +63,8 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // Per Fenced code blocks, a fence indented one space removes one space of indentation from each content
-    // line; the remaining three columns of the tab stay.
+    // The fence's one space of indentation is removed from each content line (Fenced code blocks), which takes one of
+    // the tab's columns (Tabs).
     @Test("a content line tab under a one-space-indented fence leaves three spaces")
     func indentedFenceBodyTab() {
         MarkdownDocument.withParsedDocument(" ```\n\tx") { doc in
@@ -104,9 +101,7 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // Without the inner `>`, the inner block quote and its code block close. The two leftover columns of the
-    // tab are fewer than the four an indented code block needs, so `x` starts a paragraph in the outer block
-    // quote.
+    // The tab's two leftover columns are fewer than the four an indented code block needs.
     @Test("a missing inner `>` leaves the rest of the line a paragraph, not indented code")
     func nestedInnerMarkerAbsentOpensParagraph() {
         MarkdownDocument.withParsedDocument(">>```\n>\tx") { doc in
@@ -127,8 +122,8 @@ struct BlockQuotePrefixTabFencedCodeTests {
         }
     }
 
-    // The opening fence is indented by the tab's two columns that the marker leaves, so a content line loses them
-    // all: the marker takes one of its tab's columns and the fence indentation the other two.
+    // The opening fence is indented by the two columns of its tab that the marker leaves, so each content line loses
+    // the two columns its own tab has left.
     @Test("tab after `>` on the opening fence line leaves no content spaces")
     func openingLineTabFenceOffsetLeavesNoSpace() {
         MarkdownDocument.withParsedDocument(">\t```\n>\t") { doc in

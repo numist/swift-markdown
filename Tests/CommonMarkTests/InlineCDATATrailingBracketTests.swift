@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A CDATA section (Raw HTML) runs to the first `]]>`, so content ending in `]` before the closer, as in
-/// `<![CDATA[x]]]>`, is part of the section.
 @Suite("Inline CDATA section ending in a bracket")
 struct InlineCDATATrailingBracketTests {
 

@@ -11,10 +11,8 @@
 import Markdown
 import XCTest
 
-/// A line of nested block quote markers ends the preceding ordered list item and its unclosed fenced code
-/// block. A tab after a block quote marker counts in columns (Tabs): one column is the marker's optional space and
-/// the rest count toward the indentation of what follows, so a following `>` opens a further block quote, and two
-/// more spaces before it make an indented code block.
+// A tab after a block quote marker gives one column to the marker's optional space and the rest to the indentation
+// of what follows (Tabs), so two more spaces before `>` make an indented code block.
 class NestedBlockQuoteTabAfterListFenceTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])

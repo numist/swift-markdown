@@ -15,7 +15,6 @@ import Testing
 struct DeepBlockQuoteFootnoteTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .footnotes]
 
-    /// A footnote reference 2,000 block quotes deep resolves to its definition.
     @Test func deepBlockQuoteFootnoteReferenceResolves() {
         let depth = 2_000
         let markdown = String(repeating: ">", count: depth) + " x[^a]\n\n[^a]: y\n"

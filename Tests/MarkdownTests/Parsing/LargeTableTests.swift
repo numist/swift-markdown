@@ -11,17 +11,13 @@
 import Markdown
 import XCTest
 
-/// A table row has at most 65,534 cells, and once a table has inserted more than 524,288 empty cells into body rows
-/// shorter than its header row, the next row ends the table. Below those limits, wide rows and rows missing cells keep
-/// their table.
-///
-/// The large inputs assert structure through the `Markdown` API rather than a full `debugDescription`.
+// A table row holds at most 65,534 cells, and once a table has inserted more than 524,288 empty cells into body rows
+// shorter than its header row, the next row ends the table.
 class LargeTableTests: XCTestCase {
     private func parse(_ markdown: String) -> Document {
         Document(parsing: markdown, options: [])
     }
 
-    /// The kinds of the document's top-level blocks, e.g. `["Table", "Paragraph"]`.
     private func blockKinds(_ document: Document) -> [String] {
         document.children.map { String(describing: type(of: $0)) }
     }
@@ -30,7 +26,6 @@ class LargeTableTests: XCTestCase {
         document.children.lazy.compactMap { $0 as? Table }.first
     }
 
-    /// The text of the first `Text` child of the document's first top-level paragraph, truncated to `count` characters.
     private func paragraphPrefix(_ document: Document, _ count: Int) -> String? {
         guard let paragraph = document.children.lazy.compactMap({ $0 as? Paragraph }).first,
               let text = paragraph.child(at: 0) as? Text else {
@@ -39,9 +34,6 @@ class LargeTableTests: XCTestCase {
         return String(text.string.prefix(count))
     }
 
-    // MARK: - Cells per row
-
-    /// The row ends the table and starts a paragraph.
     func testBodyRowOf100000CellsEndsTable() {
         let document = parse("a|b\n-|-\n|" + String(repeating: "c|", count: 100_000) + "\n")
         XCTAssertEqual(["Table", "Paragraph"], blockKinds(document))
@@ -56,13 +48,11 @@ class LargeTableTests: XCTestCase {
         XCTAssertEqual("|a|a|", paragraphPrefix(document, 5))
     }
 
-    /// A delimiter row whose cell count differs from the header row's opens no table.
     func testDelimiterOf100000ColumnsUnderTwoColumnHeaderIsNotATable() {
         let markdown = "a|b\n|" + String(repeating: "-|", count: 100_000) + "\n"
         XCTAssertEqual(["Paragraph"], blockKinds(parse(markdown)))
     }
 
-    /// The paragraph keeps the header row and delimiter row as lines.
     func testParagraphLineOf100000CellsAboveHeaderKeepsTableFromOpening() {
         let document = parse(String(repeating: "x|", count: 100_000) + "\nb\n:-\n")
         XCTAssertEqual(["Paragraph"], blockKinds(document))
@@ -70,7 +60,6 @@ class LargeTableTests: XCTestCase {
         XCTAssertEqual(5, document.child(at: 0)?.childCount)
     }
 
-    /// The block quote's paragraph keeps its wide line, the header row and the delimiter row.
     func testQuotedParagraphLineOf100000CellsAboveHeaderKeepsTableFromOpening() {
         let markdown = "> " + String(repeating: "x|", count: 100_000) + "\n> b\n> :-\n"
         let document = parse(markdown)
@@ -79,10 +68,8 @@ class LargeTableTests: XCTestCase {
         XCTAssertEqual(5, document.child(at: 0)?.child(at: 0)?.childCount)
     }
 
-    // MARK: - Empty cells inserted into short rows
-
-    /// Each one-cell body row of a thousand-column table gets 999 empty cells, so the table keeps 525 rows, which
-    /// insert 524,475 cells, and the other 475 lines are a paragraph.
+    // Each one-cell row gets 999 empty cells, so the first 525 rows insert 524,475, and the other 475 lines are a
+    // paragraph.
     func testRowsMissingCellsStopAfterInserting524475EmptyCells() {
         let markdown = "|" + String(repeating: "a|", count: 1000) + "\n|" + String(repeating: "-|", count: 1000) + "\n"
             + String(repeating: "x\n", count: 1000)
@@ -125,7 +112,6 @@ class LargeTableTests: XCTestCase {
             """, parse("|a|a|a|\n|-|-|-|\ny|y|y|y|y|\nx\nx\n").debugDescription())
     }
 
-    /// Every quoted line, `:-` and `z` included, is a row of one table.
     func testQuotedRowsMissingCellsStayInTable() {
         XCTAssertEqual("""
             Document
@@ -162,7 +148,6 @@ class LargeTableTests: XCTestCase {
             """, parse("> |a|a|a|\n> |-|-|-|\n> x\n> x\n> :-\n> z\n").debugDescription())
     }
 
-    /// `:-` and `z` are rows of the table.
     func testDelimiterShapedRowStaysInTable() {
         XCTAssertEqual("""
             Document
@@ -198,7 +183,6 @@ class LargeTableTests: XCTestCase {
             """, parse("|a|a|a|\n|-|-|-|\nx\nx\n:-\nz\n").debugDescription())
     }
 
-    /// A header row that ends a multi-line paragraph heads a table that keeps every row.
     func testMultiLineHeaderTableKeepsRows() {
         XCTAssertEqual("""
             Document

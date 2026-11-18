@@ -11,8 +11,6 @@
 import CommonMark
 import Testing
 
-/// An attribute definition's value is trimmed, even when more paragraph content follows it, and its backslash
-/// escapes and entity references are decoded.
 @Suite("Attribute definition value trimming")
 struct AttributeDefinitionTrailingWhitespaceTests {
     private static let options: MarkdownDocument.ParseOptions = [.attributes, .sourcePosition]
@@ -107,8 +105,7 @@ struct AttributeDefinitionTrailingWhitespaceTests {
             """)
     }
 
-    /// The whitespace after the `:` may include one line ending, so a whitespace-only value line takes its value
-    /// from the next line.
+    // Whitespace after the `:` may include one line ending, as in a link reference definition.
     @Test
     func whitespaceOnlyValueLineTakesNextLine() {
         #expect(TreeDump.dump("^[][$]\n\n^[$]: \t \nx \nz", options: Self.options) == """
@@ -145,7 +142,6 @@ struct AttributeDefinitionTrailingWhitespaceTests {
             """)
     }
 
-    /// `\&` escapes the `&`, so `amp;` is literal.
     @Test
     func escapeBeforeEntity() {
         #expect(TreeDump.dump("^[][$]\n\n^[$]:\\&amp; \nx", options: Self.options) == """
@@ -172,7 +168,6 @@ struct AttributeDefinitionTrailingWhitespaceTests {
             """)
     }
 
-    /// A definition that follows paragraph text is paragraph text.
     @Test
     func definitionAfterParagraphTextIsLiteral() {
         #expect(TreeDump.dump("^[][$]\n^[$]:l \n", options: Self.options) == """

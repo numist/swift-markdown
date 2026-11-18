@@ -11,9 +11,8 @@
 import Markdown
 import Testing
 
-/// The lines before a table's header row form a paragraph of their own, so link reference definitions at its
-/// start are removed (Link reference definitions), and in a list item it is the paragraph a task list
-/// item marker begins (Task list items (extension)).
+// The lines before a table's header row form a paragraph of their own, so definitions at its start are removed (Link
+// reference definitions) and in a list item a task list item marker can begin it (Task list items (extension)).
 struct TableSplitParagraphDefinitionTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription()
@@ -52,7 +51,7 @@ struct TableSplitParagraphDefinitionTests {
             """)
     }
 
-    /// A definition counts as a block of its list item, so a marker after one doesn't begin the item's first block.
+    // A definition counts as a block of its list item, so a marker after one doesn't begin the item's first block.
     @Test func taskMarkerAfterDefinitionBeforeTableIsText() {
         #expect(tree("- [a]: /u\n  [ ] foo\n  x|y\n  -|-") == """
             Document

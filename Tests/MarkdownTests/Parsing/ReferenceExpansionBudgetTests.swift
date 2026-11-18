@@ -11,14 +11,10 @@
 import Markdown
 import Testing
 
-/// Link references expand to at most the larger of 100,000 bytes and the document's byte count of destination and
-/// title, charged per resolved reference in document order after backslash escapes and character references are
-/// resolved. A reference past that stays text. The trees hold destinations too long to write out, so each run of ten or
-/// more of one character other than a space is written `<c×n>`.
+// Link references expand to at most 100,000 bytes of destination and title, or the document's byte count if larger,
+// charged per resolved reference in document order after backslash escapes and character references are resolved.
 struct ReferenceExpansionBudgetTests {
 
-    /// The document's debug description with source locations, with each run of ten or more of one character other
-    /// than a space written `<c×n>`.
     private func tree(_ markdown: String) -> String {
         let description = Document(parsing: markdown).debugDescription(options: .printSourceLocations)
         var result = ""
@@ -306,8 +302,8 @@ struct ReferenceExpansionBudgetTests {
             """)
     }
 
-    /// Attribute and link labels are separate namespaces, so an inline attribute label never reads or charges a link
-    /// definition of the same label, and the 100 references fit the budget exactly.
+    // Attribute and link labels are separate namespaces, so `^[x][a]` charges nothing, and the 100 references fit the
+    // budget exactly.
     @Test func inlineAttributeLabelsThatMatchLinkDefinitionsAreNotCharged() {
         let markdown = "[a]: \(repeated("u", 1000))\n\n^[x][a]\(repeated(" [a]", 100))"
         #expect(markdown.utf8.count == 1414)

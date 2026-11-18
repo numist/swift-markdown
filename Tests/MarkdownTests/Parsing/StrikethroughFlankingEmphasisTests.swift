@@ -11,8 +11,8 @@
 import Markdown
 import Testing
 
-/// A `~` is a punctuation character (Characters and lines), so a delimiter run beside a `~` run is classified
-/// against the `~`, not against the character past it.
+// A `~` is a punctuation character (Characters and lines), so a delimiter run beside a `~` run is classified
+// against the `~`, not against the character past it.
 @Suite struct StrikethroughFlankingEmphasisTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)

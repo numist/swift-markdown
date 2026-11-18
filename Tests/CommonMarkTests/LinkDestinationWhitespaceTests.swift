@@ -11,12 +11,8 @@
 import Testing
 import CommonMark
 
-/// A link destination between `<` and `>` keeps its leading, trailing and interior spaces and tabs, in an inline link
-/// and in a link reference definition (Links, Link reference definitions). A link title on one line keeps the spaces and tabs at its ends.
 @Suite("Whitespace in link destinations")
 struct LinkDestinationWhitespaceTests {
-
-    // MARK: - Inline link destinations
 
     @Test("a single-space angle destination is a space")
     func inlineSingleSpace() {
@@ -78,8 +74,6 @@ struct LinkDestinationWhitespaceTests {
             """)
     }
 
-    // MARK: - Link reference definition destinations
-
     @Test("a leading space is part of a link reference definition's angle destination")
     func refDefLeadingSpace() {
         #expect(TreeDump.dump("[x]: < a>\n\n[x]", options: []) == """
@@ -102,8 +96,6 @@ struct LinkDestinationWhitespaceTests {
             """)
     }
 
-    // MARK: - Interior whitespace
-
     @Test("interior whitespace in an inline destination is kept")
     func inlineInteriorKept() {
         #expect(TreeDump.dump("[](<a b>)", options: []) == """
@@ -125,8 +117,6 @@ struct LinkDestinationWhitespaceTests {
             """)
     }
 
-    // MARK: - Backslash escapes
-
     @Test("a backslash escape in an angle destination resolves")
     func angleEscapeRemoval() {
         #expect(TreeDump.dump("[](<a\\>b>)", options: []) == """
@@ -146,8 +136,6 @@ struct LinkDestinationWhitespaceTests {
 
             """)
     }
-
-    // MARK: - Link titles
 
     @Test("a title with no surrounding space is kept as is")
     func titleNoSpaceUnaffected() {

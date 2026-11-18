@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A code span that crosses a line ending ends just past its closing backtick string, on the line that
-/// holds it.
 @Suite("Code span across a line ending: end of source range")
 struct CrossLineCodeSpanEndRangeTests {
 
@@ -36,8 +34,6 @@ struct CrossLineCodeSpanEndRangeTests {
 
             """)
     }
-
-    // MARK: - Text after the code span
 
     @Test("text after a two-line code span starts on the closing line")
     func followingTextOnClosingLine() {

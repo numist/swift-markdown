@@ -11,14 +11,11 @@
 import Testing
 import CommonMark
 
-/// The delimiters a partially paired run leaves unused remain text (Emphasis and strong emphasis), and that text's
-/// source range covers only those delimiters, so it doesn't overlap the emphasis or strong emphasis beside it.
 @Suite("Leftover delimiter text source ranges")
 struct PartialPairingLeftoverDelimiterRangeTests {
 
     private typealias Pos = MarkdownNode.SourcePosition
 
-    /// Every node's kind, literal text and source range, depth-first.
     private func nodes(in src: String) -> [String] {
         MarkdownDocument.withParsedDocument(src, options: [.sourcePosition]) { doc -> [String] in
             let out = dfs(doc)
@@ -80,7 +77,6 @@ struct PartialPairingLeftoverDelimiterRangeTests {
         ])
     }
 
-    /// The strong emphasis uses the inner two delimiters of each run, the emphasis the outer one.
     @Test("runs of three paired twice leave no delimiter text")
     func bothRunsPairedTwice() {
         #expect(nodes(in: "***o***") == [
@@ -92,7 +88,6 @@ struct PartialPairingLeftoverDelimiterRangeTests {
         ])
     }
 
-    /// The run of three closes the first emphasis with its first delimiter and opens the second with its last.
     @Test("a run paired as a closer and then as an opener")
     func closerThenOpener() {
         #expect(nodes(in: "*a***b*") == [
@@ -118,7 +113,6 @@ struct PartialPairingLeftoverDelimiterRangeTests {
         ])
     }
 
-    /// Leftover delimiter text merges with the text beside it, and the merged node runs from the first part's start to the last part's end.
     @Test("leftover delimiters merged with adjacent text")
     func leftoverMergedWithText() {
         #expect(nodes(in: "a **o*") == [

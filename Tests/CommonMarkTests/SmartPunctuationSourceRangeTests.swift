@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// Source ranges of the text that `.smart` replaces: an ellipsis, en and em dashes, and curly quotes each span the
-/// source bytes they replace, so the text they merge into keeps those bytes' columns.
 @Suite("Source ranges of smart punctuation")
 struct SmartPunctuationSourceRangeTests {
 
@@ -192,7 +190,7 @@ struct SmartPunctuationSourceRangeTests {
             """)
     }
 
-    /// The second line is a block-quote continuation, so the paragraph's lines are not contiguous in the source.
+    // The block quote's `> ` prefixes keep the paragraph's lines from being contiguous in the source.
     @Test("a continuation line's text that starts with an ellipsis starts at its first dot")
     func ellipsisOnContinuationLine() {
         #expect(tree("> a\n> ...b") == """
@@ -206,7 +204,7 @@ struct SmartPunctuationSourceRangeTests {
             """)
     }
 
-    /// The NUL is replaced by U+FFFD (Insecure characters), and ranges count its one source byte.
+    // The NUL is replaced by U+FFFD (Insecure characters), and ranges count its one source byte.
     @Test("an ellipsis in content holding a NUL spans its three dots")
     func ellipsisAfterNUL() {
         #expect(tree("\u{0} *...*") == """

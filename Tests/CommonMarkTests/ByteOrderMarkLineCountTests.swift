@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A leading byte order mark is not part of the document's content, but the line it begins is still a line, so a
-/// document holding only a byte order mark has one line.
 @Suite("Line count of an empty document and of a document beginning with a byte order mark")
 struct ByteOrderMarkLineCountTests {
 

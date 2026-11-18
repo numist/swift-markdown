@@ -11,9 +11,9 @@
 import Testing
 import CommonMark
 
-/// A link reference definition counts as a block of its list item, as it does for list looseness (Lists), so a task
-/// list item marker after an item's leading definitions doesn't begin the item's first block, and the item is no
-/// task list item (Task list items (extension)).
+// A link reference definition counts as a block of its list item, as it does for list looseness (Lists), so a task
+// list item marker after an item's leading definitions does not begin the item's first block (Task list items
+// (extension)).
 @Suite("Task list item marker after a list item's definitions")
 struct TaskListMarkerAfterDefinitionsTests {
 

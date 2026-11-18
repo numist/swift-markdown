@@ -11,9 +11,7 @@
 import Markdown
 import Testing
 
-/// A list marker after 99 containers opened on the same line is paragraph text, while block quotes open on a line
-/// past that count and list items nest without bound across lines. These trees are deeper than a document dump
-/// reaches, so they are walked node by node.
+// These trees are too deep for the recursive tree dumper, so the tests walk them node by node.
 struct ContainersOpenedOnLineTests {
 
     @Test func blockQuotesOnOneLineNest300Deep() {
@@ -33,8 +31,6 @@ struct ContainersOpenedOnLineTests {
         #expect((paragraph?.child(at: 0) as? Text)?.string == "x")
     }
 
-    /// Line `i` is `i` levels of two-space indentation and the item `- a<i>`, so each line continues every item
-    /// above it and opens one more.
     @Test func listItemsOpenedOnePerLineNest150Deep() {
         let markdown = (0..<150).map { String(repeating: "  ", count: $0) + "- a\($0)" }.joined(separator: "\n")
         let document = Document(parsing: markdown)

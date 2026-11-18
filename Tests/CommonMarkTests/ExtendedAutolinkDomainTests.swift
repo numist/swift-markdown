@@ -13,23 +13,16 @@ import Testing
 
 private let autolinkOptions: MarkdownDocument.ParseOptions = [.tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .smart, .gfmAutolink]
 
-/// An extended www autolink's domain runs from `www.` to the first non-ASCII character, Unicode whitespace character,
-/// or ASCII punctuation character other than `.`, `-` and `_`, and holds a period.
-/// An extended url autolink's domain begins with a character that is neither a punctuation character nor a Unicode
-/// whitespace character; a non-ASCII first character ends it, and an ASCII one continues it as a www domain does.
-/// An underscore in either of the last two period-separated segments rejects a www or url domain unless the domain
-/// holds more than ten periods; the domain scan never examines the inline content's last character, and a backslash
-/// makes it examine the character after it in its place.
-/// An extended email autolink's domain is a run of ASCII alphanumerics, `-`, `_`, periods each followed by an
-/// alphanumeric, and, after `xmpp:`, `/`; it ends in a letter, and it holds a period unless a second `@` restarted the
-/// address after a domain that held one.
+// A www or url domain runs to the first non-ASCII character, Unicode whitespace character, or ASCII punctuation
+// character other than `.`, `-` and `_`; a url domain needs no period, and its first character may be any character
+// that is neither punctuation nor Unicode whitespace, though a non-ASCII first character is the whole domain.
+// An email domain is a run of ASCII alphanumerics, `-`, `_` and periods each followed by an alphanumeric; it ends in a
+// letter, and it holds a period unless a second `@` restarted the address after a domain that held one.
 @Suite("Extended autolink domains")
 struct ExtendedAutolinkDomainTests {
     private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: autolinkOptions, sourceRanges: true)
     }
-
-    // MARK: - Extended url autolink domains
 
     @Test func urlDomainWithoutPeriodIsLink() {
         #expect(tree("http://e") == """
@@ -155,8 +148,6 @@ struct ExtendedAutolinkDomainTests {
 
     @Test("url autolink with a U+FFFD before an underscore links")
     func urlReplacementCharacterInDomainAutolinks() {
-        // U+FFFD is not a domain character, so the domain ends before it and the underscore is outside its last two
-        // segments.
         #expect(tree("http://a\u{FFFD}_b") == """
             document @1:1-1:14
               paragraph @1:1-1:14
@@ -165,8 +156,6 @@ struct ExtendedAutolinkDomainTests {
 
             """)
     }
-
-    // MARK: - Extended www autolink domains
 
     @Test func wwwDomainWithoutSecondPeriodIsLink() {
         #expect(tree("www.foo") == """
@@ -188,7 +177,6 @@ struct ExtendedAutolinkDomainTests {
             """)
     }
 
-    /// The domain scan stops at the first character outside a domain, so a www domain keeps the period before it.
     @Test(arguments: [
         ("www.\u{00D7}", """
             document @1:1-1:7
@@ -287,8 +275,6 @@ struct ExtendedAutolinkDomainTests {
 
     @Test("www autolink with a U+FFFD after `www.`")
     func wwwReplacementCharacterDomainAutolinks() {
-        // U+FFFD is not a domain character, so the domain ends before it and the underscores are outside its last two
-        // segments. As trailing punctuation, they are not part of the autolink.
         #expect(tree("www.\u{FFFD}__") == """
             document @1:1-1:10
               paragraph @1:1-1:10
@@ -298,8 +284,6 @@ struct ExtendedAutolinkDomainTests {
 
             """)
     }
-
-    // MARK: - Underscores in domains
 
     @Test("url autolink with underscores in its last two domain segments is text")
     func urlUnderscoreInLastTwoSegmentsIsText() {
@@ -377,8 +361,6 @@ struct ExtendedAutolinkDomainTests {
             """)
     }
 
-    // MARK: - Extended email autolink domains
-
     @Test("email with a non-empty last segment autolinks")
     func emailNonEmptyLastSegmentAutolinks() {
         #expect(tree("o@b.c") == """
@@ -433,8 +415,6 @@ struct ExtendedAutolinkDomainTests {
             """)
     }
 
-    /// A second `@` in the domain restarts the address just past the first `@`; the periods the first domain held still
-    /// count.
     @Test func emailRestartedAtSecondAtSignKeepsFirstDomainPeriod() {
         #expect(tree("o@.e@b") == """
             document @1:1-1:7
@@ -448,7 +428,6 @@ struct ExtendedAutolinkDomainTests {
 
     @Test("email whose domain ends in a period is text")
     func emailDomainEndingInPeriodIsText() {
-        // A final period is not part of the address, which leaves the domain `b` with no period.
         #expect(tree("o@b.") == """
             document @1:1-1:5
               paragraph @1:1-1:5
@@ -484,7 +463,6 @@ struct ExtendedAutolinkDomainTests {
 
     @Test("email whose domain has an empty first segment and a final period is text")
     func emailDomainEndingInDigitAndFinalPeriodIsText() {
-        // A final period is not part of the address, which leaves the domain `.0` ending in a digit.
         #expect(tree("a@.0.") == """
             document @1:1-1:6
               paragraph @1:1-1:6
@@ -525,10 +503,9 @@ struct ExtendedAutolinkDomainTests {
     }
 }
 
-/// The domain scan of an extended www or url autolink runs to the first character outside a domain and never examines
-/// the inline content's final character, whatever the trailing punctuation trim later leaves of the link. A backslash
-/// makes the scan examine the character after it in its place. An underscore in the last two segments rejects the
-/// domain only while the scan has passed ten periods or fewer.
+// The www and url domain scan never examines the inline content's last character, and a backslash makes it examine the
+// character after the backslash in its place. An underscore in the scanned domain's last two segments rejects it only
+// when the scan counted ten periods or fewer, and trailing punctuation is trimmed from the link afterwards.
 @Suite("Extended www and url autolink domain scan")
 struct ExtendedAutolinkDomainScanTests {
     private func tree(_ markdown: String) -> String {
@@ -650,7 +627,6 @@ struct ExtendedAutolinkDomainScanTests {
             """)
     }
 
-    /// The final candidate's underscore is the inline content's last character, which the domain scan does not examine.
     @Test("a url candidate after a rejected one in the same word links",
           arguments: [.gfmAutolink, [.gfmAutolink, .inlineOnly]] as [MarkdownDocument.ParseOptions])
     func candidateAfterRejectedCandidateIsLink(_ options: MarkdownDocument.ParseOptions) {
@@ -716,7 +692,8 @@ struct ExtendedAutolinkDomainScanTests {
         #expect(tree(markdown) == expected)
     }
 
-    /// Line tabulation is not whitespace that ends an extended autolink.
+    // Line tabulation is a whitespace character but not Unicode whitespace (Characters and lines), so it does not end
+    // an extended autolink.
     @Test func urlDomainStartingWithLineTabulationIsLink() {
         #expect(tree("http://\u{0B}x") == """
             document
@@ -728,8 +705,8 @@ struct ExtendedAutolinkDomainScanTests {
     }
 }
 
-/// Links may not contain other links, at any level of nesting, and an autolink binds more tightly than the brackets of
-/// link text (Links), so the brackets of a link around an autolink are literal text.
+// Autolinks bind more tightly than the brackets of link text, and links may not contain other links (Links), so the
+// brackets around an autolink are literal text.
 @Suite("Autolinks in link text")
 struct AutolinkInLinkTextTests {
     private func tree(_ markdown: String) -> String {
@@ -748,7 +725,7 @@ struct AutolinkInLinkTextTests {
             """)
     }
 
-    /// Image descriptions may contain links (Images).
+    // Image descriptions may contain links (Images).
     @Test func autolinkInImageDescription() {
         #expect(tree("![<http://a.b>](/u)") == """
             document @1:1-1:20

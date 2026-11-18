@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// Appends each link, image and attribute node in document order with its destination or attribute string, each soft
-/// line break, and each run of text, in document order with no link, image, attribute or soft line break between, as
-/// one literal.
 private func outline(_ node: borrowing MarkdownNode, into out: inout [String]) {
     switch node.kind {
     case .link:
@@ -39,8 +36,8 @@ private func outline(_ node: borrowing MarkdownNode, into out: inout [String]) {
     }
 }
 
-/// A bare link destination includes parentheses that are part of a balanced pair of unescaped parentheses (Links), and
-/// an attribute form's `(…)` holds balanced parentheses, nested to any depth.
+// Destinations and attribute `(…)` hold balanced parentheses nested to any depth, though the spec allows a parser to
+// limit the nesting (Links).
 @Suite("Nested parentheses in link destinations and attributes")
 struct NestedParenthesesTests {
 
@@ -53,8 +50,6 @@ struct NestedParenthesesTests {
             return out
         }
     }
-
-    // MARK: Depth
 
     @Test("an inline link's destination holds nested pairs")
     func inlineLink() {
@@ -126,8 +121,6 @@ struct NestedParenthesesTests {
         #expect(nodes("> ^[a]((((x))))") == ["attribute (((x)))", "text a"])
     }
 
-    // MARK: Deep nesting
-
     private static let depth = 250_000
     private static let openers = String(repeating: "(", count: depth)
     private static let closers = String(repeating: ")", count: depth)
@@ -168,8 +161,6 @@ struct NestedParenthesesTests {
         let openers = String(repeating: "^[](", count: 100)
         #expect(nodes(openers + "x") == ["text \(openers)x"])
     }
-
-    // MARK: Several destinations in one paragraph
 
     @Test("`[](` five times, then `x [b](c)`: only `[b](c)` is a link")
     func failedDestinationsThenLink() {
@@ -240,8 +231,6 @@ struct NestedParenthesesTests {
             "text b",
         ])
     }
-
-    // MARK: Attributes and links in one paragraph
 
     @Test("`^[a]([b](c)) [d](e)` is an attribute holding `[b](c)` and a link to `e`")
     func attributeHoldingLinkThenLink() {

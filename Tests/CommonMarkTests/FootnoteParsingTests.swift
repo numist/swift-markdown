@@ -29,8 +29,6 @@ struct FootnoteParsingTests {
             """)
     }
 
-    /// A footnote definition is a container block, so its paragraph takes a following unindented line as a
-    /// lazy continuation line.
     @Test
     func definitionLazyContinuation() {
         #expect(TreeDump.dump("[^a]: text\nlazy line\n\nsee [^a]\n", options: Self.options) == """

@@ -11,9 +11,7 @@
 import Markdown
 import XCTest
 
-/// A NUL is replaced with U+FFFD (Insecure characters), and source positions count it as its one source byte.
-/// Each expected tree is the tree for the same input with every NUL replaced by a one-byte letter, apart from
-/// that text.
+// Source positions count a NUL as its one source byte, not the three bytes of the U+FFFD that replaces it.
 class NULParagraphSourcePositionTests: XCTestCase {
     private func positions(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)
@@ -91,7 +89,6 @@ class NULParagraphSourcePositionTests: XCTestCase {
         XCTAssertEqual("Document @1:1-3:4\n├─ Paragraph @1:1-1:6\n│  └─ Text @1:1-1:6 \"x|\u{fffd}y\"\n└─ Table @2:1-3:4 alignments: |-|\n   ├─ Head @2:1-2:6\n   │  └─ Cell @2:3-2:4\n   │     └─ Text @2:3-2:4 \"a\"\n   └─ Body", positions("x\\|\u{0}y\n| a |\n|-|"))
     }
 
-    /// A `\|` leaves the source columns of the text after it unchanged, on its own line and the next.
     func testTablePrecedingParagraphEscapeKeepsColumns() {
         XCTAssertEqual("Document @1:1-4:4\n├─ Paragraph @1:1-2:3\n│  ├─ Text @1:1-1:5 \"x|y\"\n│  ├─ SoftBreak\n│  └─ Text @2:1-2:3 \"zz\"\n└─ Table @3:1-4:4 alignments: |-|\n   ├─ Head @3:1-3:6\n   │  └─ Cell @3:3-3:4\n   │     └─ Text @3:3-3:4 \"a\"\n   └─ Body", positions("x\\|y\nzz\n| a |\n|-|"))
     }

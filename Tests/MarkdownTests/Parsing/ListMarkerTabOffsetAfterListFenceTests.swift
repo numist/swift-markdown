@@ -11,10 +11,8 @@
 import Markdown
 import XCTest
 
-/// A list item in a block quote whose marker follows `>` TAB, on a line that ends a list item holding an
-/// unclosed fenced code block. The tab counts in columns (Tabs): one column is the block quote marker's
-/// optional space and the other two indent the list marker, so they count toward the item's content column
-/// (List items).
+// After `>`, the tab's first column is the block quote marker's optional space and its other two indent the list
+// marker (Tabs), so they count toward the item's content column (List items).
 class ListMarkerTabOffsetAfterListFenceTests: XCTestCase {
     private static let listFence = "Document\n├─ UnorderedList\n│  └─ ListItem\n│     └─ CodeBlock language: none\n\n"
 
@@ -28,15 +26,13 @@ class ListMarkerTabOffsetAfterListFenceTests: XCTestCase {
         assertTree(siblings, "- ```\n>\t- x\n>    - y")
     }
 
-    /// Four columns in, one short of the ordered item's content column (2 + 3 = 5): the item does not
-    /// continue, and a four-column indent can't open a marker at the quote, so the line is a lazy
-    /// continuation of `x`'s paragraph.
+    // Four columns of indentation fall one short of the item's content column (2 + 3 = 5) and are too many to open a
+    // list item, so the line is a lazy continuation of `x`'s paragraph.
     func testOrderedAfterQuoteTabShortOfContentColumnIsLazy() {
         let lazy = Self.listFence + "└─ BlockQuote\n   └─ OrderedList\n      └─ ListItem\n         └─ Paragraph\n            ├─ Text \"x\"\n            ├─ SoftBreak\n            └─ Text \"1. y\""
         assertTree(lazy, "- ```\n>\t1. x\n>     1. y")
     }
 
-    /// Indented to the item's content column: the second marker nests.
     func testBulletAtContentColumnNests() {
         let nested = Self.listFence + "└─ BlockQuote\n   └─ UnorderedList\n      └─ ListItem\n         ├─ Paragraph\n         │  └─ Text \"x\"\n         └─ UnorderedList\n            └─ ListItem\n               └─ Paragraph\n                  └─ Text \"y\""
         assertTree(nested, "- ```\n>\t- x\n>     - y")

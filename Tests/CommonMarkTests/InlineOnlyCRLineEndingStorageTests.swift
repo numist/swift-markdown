@@ -11,13 +11,8 @@
 import CommonMark
 import Testing
 
-/// Storage for inline-only content whose lines end in a CRLF or a lone CR.
-///
-/// Every line ending is `\n` in the content. The content is parsed in place, and only what differs from the source is
-/// copied into the materialized string buffer: a text node, raw HTML or a link title that holds a CRLF or a lone CR,
-/// with each line ending as `\n`, and a code span's line endings as spaces (Code spans). Content holding a NUL is copied
-/// whole, with each NUL replaced by U+FFFD (Insecure characters). The buffer also holds the line ending that joins
-/// lines.
+// The materialized string buffer starts with a one-byte shared line feed, so each size is 1 plus the bytes of
+// content that differs from the source.
 @Suite("Inline-only content with CR line endings is copied only where a literal holds one")
 struct InlineOnlyCRLineEndingStorageTests {
 
@@ -44,7 +39,6 @@ struct InlineOnlyCRLineEndingStorageTests {
     @Test("CRLF line endings", arguments: modes)
     func crlf(_ options: MarkdownDocument.ParseOptions) {
         let source = "Some *text,\r\nmore* text\r\n"
-        // "text,\nmore" and " text\n"
         #expect(materializedSize(source, options) == 1 + 10 + 6)
         #expect(tree(source, options) == """
             document @1:1-3:1
@@ -71,7 +65,6 @@ struct InlineOnlyCRLineEndingStorageTests {
     @Test("lone CR line endings", arguments: modes)
     func loneCR(_ options: MarkdownDocument.ParseOptions) {
         let source = "a\r\r*b*\rc\r"
-        // "a\n\n" and "\nc\n"
         #expect(materializedSize(source, options) == 1 + 3 + 3)
         #expect(tree(source, options) == """
             document @1:1-5:1
@@ -98,7 +91,6 @@ struct InlineOnlyCRLineEndingStorageTests {
     @Test("mixed line endings", arguments: modes)
     func mixed(_ options: MarkdownDocument.ParseOptions) {
         let source = "a\r\nb\rc\nd\r\n\re"
-        // "a\nb\nc\nd\n\ne"
         #expect(materializedSize(source, options) == 1 + 10)
         #expect(tree(source, options) == """
             document @1:1-6:2
@@ -147,7 +139,6 @@ struct InlineOnlyCRLineEndingStorageTests {
     @Test("a definition whose title spans a CRLF", arguments: modes)
     func definitionTitleAcrossCRLF(_ options: MarkdownDocument.ParseOptions) {
         let source = "[a]: /u \"t\r\nu\"\r\n[a]\r\n"
-        // "t\nu" and "\n"
         #expect(materializedSize(source, options) == 1 + 3 + 1)
         #expect(tree(source, options) == """
             document @1:1-4:1
@@ -172,7 +163,6 @@ struct InlineOnlyCRLineEndingStorageTests {
     @Test("content after a definition starting at a lone CR", arguments: modes)
     func contentStartingAtLoneCR(_ options: MarkdownDocument.ParseOptions) {
         let source = "[a]: /u\r\r[a]"
-        // "\n"
         #expect(materializedSize(source, options) == 1 + 1)
         #expect(tree(source, options) == """
             document @1:1-3:4
@@ -197,7 +187,6 @@ struct InlineOnlyCRLineEndingStorageTests {
     @Test("a code span and raw HTML across line endings", arguments: modes)
     func codeSpanAndRawHTML(_ options: MarkdownDocument.ParseOptions) {
         let source = "`c\r\nd` <b\rc>"
-        // "c d" and "<b\nc>"
         #expect(materializedSize(source, options) == 1 + 3 + 5)
         #expect(tree(source, options) == """
             document @1:1-3:3
@@ -223,7 +212,6 @@ struct InlineOnlyCRLineEndingStorageTests {
     func emailAutolinks(_ options: MarkdownDocument.ParseOptions) {
         let options = options.union(.gfmAutolink)
         let source = "x a@b.c\r\nd\re@f.g"
-        // "mailto:a@b.c", "mailto:e@f.g" and "\nd\n"
         #expect(materializedSize(source, options) == 1 + 12 + 12 + 3)
         #expect(tree(source, options) == """
             document @1:1-3:6
@@ -254,7 +242,6 @@ struct InlineOnlyCRLineEndingStorageTests {
     @Test("content holding a NUL", arguments: modes)
     func nul(_ options: MarkdownDocument.ParseOptions) {
         let source = "a\u{0}\r\nb\rc"
-        // "a\u{FFFD}\nb\nc"
         #expect(materializedSize(source, options) == 1 + 8)
         #expect(tree(source, options) == """
             document @1:1-3:2

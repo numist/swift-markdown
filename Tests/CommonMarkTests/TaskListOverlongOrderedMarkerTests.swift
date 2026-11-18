@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// An ordered list marker has at most nine digits (List items), so in the item `10.`, which starts with a blank line, the
-/// tab-indented line `1234567890. [ ] x` is paragraph text. That paragraph begins with `1234567890.`, not a task list item
-/// marker, so the item has no checkbox (Task list items (extension)).
 @Suite("Over-long ordered marker before a checkbox")
 struct TaskListOverlongOrderedMarkerTests {
 

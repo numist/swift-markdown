@@ -11,11 +11,8 @@
 import Testing
 import CommonMark
 
-/// A task list item whose first paragraph holds only its task list item marker.
-///
-/// The marker's line is not blank, so it opens a paragraph, the item's first block (List items), and the item does
-/// not begin with a blank line. Blank lines after it keep the item open for a following line indented to its content
-/// column, and a blank line between that paragraph and the next block makes the list loose (Lists).
+// The checkbox's line is not blank, so it opens the item's first paragraph and the item does not begin with a blank
+// line (List items). A blank line between that paragraph and the next block makes the list loose (Lists).
 @Suite("Task list item whose first paragraph is only its checkbox")
 struct TaskItemCheckboxOnlyFirstBlockTests {
 

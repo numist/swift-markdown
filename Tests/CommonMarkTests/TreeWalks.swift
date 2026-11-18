@@ -10,7 +10,7 @@
 
 import CommonMark
 
-/// Walks a document and returns a compact `(kind, optional-literal)` sequence in DFS order.
+/// Walks a document and returns a compact `(kind, optional-literal)` sequence in DFS order. Useful for asserting the shape of parsed trees in tests without writing nested forEach blocks.
 internal func dfs(_ doc: borrowing MarkdownDocument) -> [(kind: MarkdownNode.Kind, literal: String?)] {
     var out: [(MarkdownNode.Kind, String?)] = []
     visit(doc.root, into: &out)
@@ -24,7 +24,7 @@ private func visit(_ node: borrowing MarkdownNode, into out: inout [(MarkdownNod
     }
 }
 
-/// Collects each node's kind and source range, depth-first.
+// DFS-collect each node's kind and source range. File-scope + `borrowing MarkdownNode` to satisfy the noncopyable-borrow rules (see code-conventions: bind docs to locals, use file-scope helpers).
 internal func dfsRanges(
     _ node: borrowing MarkdownNode,
     into out: inout [(kind: MarkdownNode.Kind, range: Range<MarkdownNode.SourcePosition>?)]
@@ -35,7 +35,6 @@ internal func dfsRanges(
     }
 }
 
-/// The tightness of every list in `markdown` parsed with `options`, in document order.
 internal func listTightness(_ markdown: String, options: MarkdownDocument.ParseOptions) -> [Bool] {
     MarkdownDocument.withParsedDocument(markdown, options: options) { document in
         var tight: [Bool] = []
@@ -53,7 +52,6 @@ private func collectTightness(_ node: borrowing MarkdownNode, into tight: inout 
     }
 }
 
-/// Collects `(info, literal)` for every code block in the document in DFS order.
 internal func codeBlocks(_ doc: borrowing MarkdownDocument) -> [(info: String, literal: String)] {
     var out: [(String, String)] = []
     collectCodeBlocks(doc.root, into: &out)
@@ -69,8 +67,6 @@ private func collectCodeBlocks(_ node: borrowing MarkdownNode, into out: inout [
     }
 }
 
-/// The kind of every code block in `markdown`, depth-first, as `TreeDump.describe` gives it, which tells a fenced code
-/// block from an indented one.
 internal func codeBlockKinds(_ markdown: String, options: MarkdownDocument.ParseOptions = []) -> [String] {
     MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
         var kinds: [String] = []
@@ -85,7 +81,7 @@ internal func codeBlockKinds(_ markdown: String, options: MarkdownDocument.Parse
     }
 }
 
-/// Walks the inline children of every top-level paragraph and heading in the document, returning a compact `(kind, literal)` list.
+/// Useful for asserting inline parser output.
 internal func paragraphInlines(_ doc: borrowing MarkdownDocument) -> [(kind: MarkdownNode.Kind, literal: String?)] {
     var out: [(MarkdownNode.Kind, String?)] = []
     let root = doc.root
@@ -102,7 +98,6 @@ internal func paragraphInlines(_ doc: borrowing MarkdownDocument) -> [(kind: Mar
     return out.map { ($0.0, $0.1) }
 }
 
-/// `(columns, rows, text)` for each cell of each row of the first top-level table in `markdown`.
 internal func firstTableCells(
     _ markdown: String, options: MarkdownDocument.ParseOptions
 ) -> [[(columns: Int, rows: Int, text: String)]] {
@@ -130,7 +125,6 @@ internal func firstTableCells(
     }
 }
 
-/// A row of a table that has a source range, with the cells of it that have one.
 internal struct PositionedTableRow {
     let isHeader: Bool
     let range: Range<MarkdownNode.SourcePosition>
@@ -140,15 +134,11 @@ internal struct PositionedTableRow {
         let alignment: MarkdownNode.TableAlignment
         let colspan: Int
         let range: Range<MarkdownNode.SourcePosition>
-        /// The concatenated literal text of the cell's inline children.
         let text: String
-        /// The source range of the cell's first inline child that has one.
         let textRange: Range<MarkdownNode.SourcePosition>?
     }
 }
 
-/// The rows of the first top-level table in `markdown`, header first, then body rows in order. Rows and cells with no
-/// source range are omitted.
 internal func firstTableRows(_ markdown: String, options: MarkdownDocument.ParseOptions) -> [PositionedTableRow] {
     MarkdownDocument.withParsedDocument(markdown, options: options) { doc in
         var rows: [PositionedTableRow] = []

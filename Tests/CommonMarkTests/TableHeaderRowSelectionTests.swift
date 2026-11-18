@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A table's header row is the line immediately before its delimiter row, and the header and delimiter rows must have
-/// the same number of cells (Tables (extension)). The lines before the header remain a paragraph.
 @Suite("A table takes the line before its delimiter row as its header row")
 struct TableHeaderRowSelectionTests {
 
@@ -688,8 +686,6 @@ struct TableHeaderRowSelectionTests {
             """)
     }
 
-    // MARK: - Earlier lines remain a paragraph
-
     @Test("block quote: preceding line splits off, header is the last line")
     func blockQuote() {
         #expect(TreeDump.dump("> x\n> a\n> |-", options: [.tables]) == """
@@ -825,8 +821,6 @@ struct TableHeaderRowSelectionTests {
             """)
     }
 
-    // MARK: - No earlier lines
-
     @Test("bare block-quote header: no preceding paragraph")
     func bareBlockQuoteTable() {
         #expect(TreeDump.dump("> a\n> |-", options: [.tables]) == """
@@ -854,11 +848,8 @@ struct TableHeaderRowSelectionTests {
             """)
     }
 
-    // MARK: - No table
-
     @Test("lazy block-quote continuation: the delimiter is lazy, so no table and no split")
     func lazyBlockQuoteNoSplit() {
-        // A delimiter row on a lazy continuation line is paragraph text (Block quotes).
         #expect(TreeDump.dump("> x\na\n|-", options: [.tables]) == """
             document
               block_quote
@@ -902,10 +893,6 @@ struct TableHeaderRowSelectionTests {
             """)
     }
 
-    // MARK: - An indented or lazy header row line does not prevent the table
-
-    /// An indented paragraph continuation line is paragraph text (Paragraphs) and becomes the header row;
-    /// only an indented delimiter row would prevent the table.
     @Test("an indented header row line does not prevent the table")
     func indentedEarlierLineFormsTable() {
         #expect(TreeDump.dump("x\n    a\n|-", options: [.tables]) == """

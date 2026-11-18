@@ -11,9 +11,8 @@
 import Markdown
 import Testing
 
-/// A paragraph's or setext heading's raw content has its initial and final whitespace removed (Paragraphs,
-/// Setext headings), and the spec's whitespace characters include line tabulation (U+000B) and form feed
-/// (U+000C).
+// Line tabulation (U+000B) and form feed (U+000C) are whitespace (Characters and lines), so they are among the initial
+// and final whitespace removed from a paragraph's or setext heading's raw content (Paragraphs, Setext headings).
 struct LeafContentControlWhitespaceTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)
@@ -43,7 +42,7 @@ struct LeafContentControlWhitespaceTests {
             """)
     }
 
-    /// The line ending after an initial run of whitespace is itself whitespace, so it is removed too.
+    // The line ending after an initial run of whitespace is itself whitespace, so it is removed too.
     @Test func initialWhitespaceLineIsRemoved() {
         #expect(tree("\u{0B}\nfoo") == """
             Document @1:1-2:4
@@ -71,8 +70,8 @@ struct LeafContentControlWhitespaceTests {
             """)
     }
 
-    /// A line holding only a line tabulation is not blank (Characters and lines: only spaces or tabs), so it
-    /// is a paragraph, whose raw content is empty once its whitespace is removed, as is its range.
+    // A line holding only a line tabulation is not blank (Characters and lines), so it is a paragraph, whose raw
+    // content and range are empty once its whitespace is removed.
     @Test func lineTabulationOnlyLineIsEmptyParagraph() {
         #expect(tree("\u{0B}") == """
             Document @1:1-1:2

@@ -11,15 +11,12 @@
 import Testing
 import CommonMark
 
-/// An `![` that opens no image, having neither an inline destination nor a matching link reference
-/// definition, is literal text whose source range starts at the `!`.
 @Suite("Unmatched image opener source range")
 struct UnmatchedImageOpenerRangeTests {
 
     private static let options: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
-    /// The text of every text node's segments, in depth-first order.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     private func segmentTexts(_ node: borrowing MarkdownNode) -> [String] {
         var out: [String] = []

@@ -11,18 +11,6 @@
 import Testing
 import CommonMark
 
-/// Renders a parsed tree one node per line, two spaces of indent per depth, so a test can compare the whole tree
-/// with a literal.
-///
-/// Each line is a snake_case name for the node's kind (`block_quote`, `table_header`, `tasklist`, ...) followed by
-/// the node's defining values: the literal of text-like nodes, the info string and body of a code block, the URL and
-/// title of a link or image, the attributes of an inline attribute, the heading level, a list's marker, start,
-/// delimiter and tightness, the checkbox state of a task list item, the alignment and span of a table cell, and the
-/// label of a footnote definition or the number of a footnote reference. Quoted values escape `\`, `"`, line feed and tab, and write any other C0 control character or
-/// DEL as `\u{…}` in uppercase hexadecimal.
-///
-/// With `sourceRanges`, each line ends with the node's source range as `@line:column-line:column` (the end is
-/// half-open), or `@-` for a node without one.
 internal enum TreeDump {
 
     internal static func dump(_ source: String, options: MarkdownDocument.ParseOptions, limits: MarkdownDocument.ParseLimits = .init(), sourceRanges: Bool = false) -> String {
@@ -33,15 +21,12 @@ internal enum TreeDump {
         }
     }
 
-    /// The subtree rooted at `node` as `dump` renders a document, with `node` at depth 0.
     internal static func dump(_ node: borrowing MarkdownNode, sourceRanges: Bool) -> String {
         var out = ""
         dump(node, depth: 0, sourceRanges: sourceRanges, segments: false, into: &out)
         return out
     }
 
-    /// The tree as `dump` renders it, with each line of a node whose `content` is text, a code block or an HTML block
-    /// followed by the text of every segment of that content, in order, as a bracketed list of quoted values.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     internal static func dumpSegments(_ source: String, options: MarkdownDocument.ParseOptions = []) -> String {
         MarkdownDocument.withParsedDocument(source, options: options) { doc in
@@ -85,11 +70,6 @@ internal enum TreeDump {
         return texts
     }
 
-    /// The snake_case name of `kind` followed by every value that applies to it, so a test can compare a node's kind
-    /// with a literal: a bullet list's marker or an ordered list's start and delimiter, a list's tightness, the
-    /// checkbox state of a task list item, whether a code block is fenced with its fence character, length and offset,
-    /// the heading level, the alignment and span of a table cell, the backtick count of a code span, and the number of
-    /// a footnote reference.
     internal static func describe(_ kind: MarkdownNode.Kind) -> String {
         switch kind {
         case .document: return "document"
@@ -196,7 +176,6 @@ internal enum TreeDump {
     }
 }
 
-/// A named source and the `TreeDump` rendering a parameterized test expects for it.
 internal struct TreeDumpCase: CustomTestStringConvertible, Sendable {
     let name: String
     let source: String

@@ -11,8 +11,6 @@
 import Markdown
 import XCTest
 
-/// A link or image whose destination or title is on a later line has a source range that ends just past
-/// its closing `)` on that line.
 class MultilineLinkEndColumnTests: XCTestCase {
     func testMultilineLinkDestinationEndsOnPhysicalLine() {
         let text = "[a](\n/u)"

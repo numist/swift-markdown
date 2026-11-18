@@ -11,14 +11,6 @@
 import Testing
 import CommonMark
 
-/// `maxLinkLabelCharacters` and `maxLinkLabelBytes` bound the label inside the brackets of a link reference definition,
-/// an attribute definition, a full reference, and the bracket text a collapsed or shortcut reference takes as its label.
-/// `maxFootnoteLabelCharacters` and `maxFootnoteLabelBytes` bound a footnote reference's label; a footnote
-/// definition's label has no limit. A label past either of its limits is no label: a definition stays paragraph text
-/// and a reference stays text.
-///
-/// Bytes are those of the label's block content: container prefixes are not counted, and a NUL counts as the three
-/// bytes of the U+FFFD that replaces it (Insecure characters).
 @Suite("Label length limits")
 struct LabelLengthLimitTests {
 
@@ -36,8 +28,6 @@ struct LabelLengthLimitTests {
         return limits
     }
 
-    // MARK: - Link label characters
-
     @Test("a link reference definition's label fits at the character limit but not past it")
     func definitionCharacters() {
         let limits = linkLimits(characters: 3)
@@ -53,7 +43,7 @@ struct LabelLengthLimitTests {
             """)
     }
 
-    /// The reference's label normalizes to the defined `a b`, so only its own length keeps it from resolving.
+    // The reference's label normalizes to the defined `a b`, so only its own length keeps it from resolving.
     @Test("a full reference's label resolves at the character limit but not past it")
     func fullReferenceCharacters() {
         let limits = linkLimits(characters: 3)
@@ -166,8 +156,6 @@ struct LabelLengthLimitTests {
             """)
     }
 
-    // MARK: - Link label bytes
-
     @Test("a link reference definition's label fits at the byte limit but not past it")
     func definitionBytes() {
         let limits = linkLimits(bytes: 3)
@@ -243,7 +231,6 @@ struct LabelLengthLimitTests {
             """)
     }
 
-    /// The label `a`, line ending, `b` is three bytes of the block quote's content.
     @Test("a label across a line ending in a block quote counts no block quote marker")
     func containerPrefixBytes() {
         let limits = linkLimits(bytes: 3)
@@ -292,9 +279,7 @@ struct LabelLengthLimitTests {
             """)
     }
 
-    // MARK: - Footnote labels
-
-    /// `ẞ` case-folds to `ss`, so the 3-character reference `aaẞ` names the 4-character definition `aass`.
+    // `ẞ` case-folds to `ss`, so the 3-character reference `aaẞ` names the 4-character definition `aass`.
     @Test("the character limit bounds a footnote reference's label but not a footnote definition's")
     func footnoteDefinitionCharacters() {
         let limits = footnoteLimits(characters: 3)
@@ -326,7 +311,7 @@ struct LabelLengthLimitTests {
             """)
     }
 
-    /// `ẞ` case-folds to `ss`, so both references name the definition.
+    // `ẞ` case-folds to `ss`, so `[^ass]` names the definition and only its length keeps it from resolving.
     @Test("a footnote reference's label resolves at the character limit but not past it")
     func footnoteReferenceCharacters() {
         let limits = footnoteLimits(characters: 2)
@@ -343,8 +328,8 @@ struct LabelLengthLimitTests {
             """)
     }
 
-    /// U+212A KELVIN SIGN takes 3 bytes and case-folds to `k`, so the 2-byte reference `kk` names the 6-byte
-    /// definition `\u{212A}\u{212A}`.
+    // U+212A KELVIN SIGN takes 3 bytes and case-folds to `k`, so the 2-byte reference `kk` names the 6-byte
+    // definition `\u{212A}\u{212A}`.
     @Test("the byte limit bounds a footnote reference's label but not a footnote definition's")
     func footnoteDefinitionBytes() {
         let limits = footnoteLimits(bytes: 3)
@@ -376,7 +361,7 @@ struct LabelLengthLimitTests {
             """)
     }
 
-    /// `ẞ` case-folds to `ss`, so both references name the definition.
+    // `ẞ` case-folds to `ss`, so `[^aẞ]` names the definition and only its length keeps it from resolving.
     @Test("a footnote reference's label resolves at the byte limit but not past it")
     func footnoteReferenceBytes() {
         let limits = footnoteLimits(bytes: 3)
@@ -420,8 +405,6 @@ struct LabelLengthLimitTests {
             """)
     }
 
-    // MARK: - Out-of-range values
-
     @Test("a negative limit admits no label")
     func negativeLimit() {
         #expect(TreeDump.dump("[a]: /u\n\n[a]", options: [], limits: linkLimits(bytes: -1)) == """
@@ -453,8 +436,6 @@ struct LabelLengthLimitTests {
 
             """)
     }
-
-    // MARK: - Defaults
 
     @Test("the default limits admit the labels the tests above refuse")
     func defaultsAdmitOverLimitLabels() {

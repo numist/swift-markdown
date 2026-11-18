@@ -11,11 +11,6 @@
 import Testing
 import CommonMark
 
-/// `maxContainersOpenedOnLineBeforeListMarker` bounds how many containers a line opens before a list marker or a
-/// footnote definition: once more than that many block quotes, list items and footnote definitions have opened
-/// earlier on the same line, a list marker or a footnote definition there is not recognized and the rest of its line
-/// parses as other content, such as paragraph text or a link reference definition. Block quotes count toward it but
-/// always open, containers a line continues don't count, and nesting built across lines is unbounded.
 @Suite("Containers opened on a line before a list marker")
 struct ContainersOpenedOnLineLimitTests {
 

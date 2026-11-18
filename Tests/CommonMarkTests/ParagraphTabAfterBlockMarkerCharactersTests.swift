@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// A paragraph line that begins with characters that can start a block (`*`, `-`, `+`, `>`, digits, `.`, `)`)
-/// followed by a tab. Tabs in lines are not expanded to spaces (Tabs), so the paragraph's text keeps the tab as
-/// written, except a tab that ends a line, which is dropped before the soft line break.
 @Suite("Paragraph text keeps a tab after block marker characters")
 struct ParagraphTabAfterBlockMarkerCharactersTests {
 
@@ -84,7 +81,8 @@ struct ParagraphTabAfterBlockMarkerCharactersTests {
             """)
     }
 
-    /// The `=` line follows only a link reference definition, so it is paragraph text rather than a setext heading underline.
+    // The `=` line follows a paragraph holding only a link reference definition, which it cannot
+    // underline (Setext headings).
     @Test("a line after an `=` line that is paragraph text keeps its tab", arguments: positionModes)
     func afterUnderlineLeftAsText(mode: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("[a\n ]:b\n=\n**\tx", options: mode) == """

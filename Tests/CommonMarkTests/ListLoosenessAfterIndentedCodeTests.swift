@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// Blank lines following an indented code block are not part of it (Indented code blocks), so a blank line after a
-/// list item's indented code block separates it from the item's next block or from the next item, and the list is
-/// loose (Lists). A blank line followed by more code lines is inside the block and separates nothing.
 @Suite("List looseness after an indented code block")
 struct ListLoosenessAfterIndentedCodeTests {
 

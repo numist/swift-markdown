@@ -11,7 +11,6 @@
 import Testing
 import CommonMark
 
-/// The literal content of the first raw HTML node in document order, or nil if the tree has none.
 private func firstInlineHTML(_ node: borrowing MarkdownNode) -> String? {
     if case .htmlInline = node.kind, case .text(let s) = node.stringContent {
         return s
@@ -25,7 +24,6 @@ private func firstInlineHTML(_ node: borrowing MarkdownNode) -> String? {
     return found
 }
 
-/// The content of the first HTML block in document order, or nil if the tree has none.
 private func firstHTMLBlock(_ node: borrowing MarkdownNode) -> String? {
     if case .htmlBlock = node.kind, case .htmlBlock(let body) = node.stringContent {
         return body
@@ -39,7 +37,6 @@ private func firstHTMLBlock(_ node: borrowing MarkdownNode) -> String? {
     return found
 }
 
-/// The concatenated literal content of every text node in document order.
 private func collectText(_ node: borrowing MarkdownNode) -> String {
     var result = ""
     if case .text = node.kind, case .text(let s) = node.stringContent {
@@ -51,8 +48,6 @@ private func collectText(_ node: borrowing MarkdownNode) -> String {
     return result
 }
 
-/// A processing instruction (Raw HTML) is `<?`, a string not containing `?>`, and `?>`, so `<???>` is a processing
-/// instruction whose content is `?`.
 @Suite("Inline processing instructions made of question marks")
 struct InlineProcessingInstructionQuestionMarkTests {
 

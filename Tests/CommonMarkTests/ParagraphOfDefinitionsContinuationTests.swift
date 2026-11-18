@@ -11,16 +11,11 @@
 import Testing
 import CommonMark
 
-/// A paragraph whose content is only link reference definitions is still a paragraph while the next line is read, so
-/// a line of `=` or `-` that cannot interrupt a paragraph continues it and a following line continues it again
-/// (Link reference definitions, Setext headings, Paragraphs). A table takes the last line before its delimiter row as
-/// its header row, and the earlier lines stay a paragraph (Tables (extension)). A setext heading takes the lines that
-/// remain after the definitions.
+// A paragraph of only link reference definitions is still open when the next line is read, so an `=` or `-` line
+// that cannot interrupt it continues it as text, as do the lines after (Link reference definitions, Setext headings).
 @Suite("A paragraph holding only definitions continues")
 struct ParagraphOfDefinitionsContinuationTests {
 
-    /// Checks the tree of `source` with source positions against `tree`, and without them against `tree` with each
-    /// line's ` @…` range removed.
     private func expectTree(_ source: String, _ tree: String, sourceLocation: SourceLocation = #_sourceLocation) {
         #expect(
             TreeDump.dump(source, options: [.tables, .sourcePosition], sourceRanges: true) == tree,

@@ -11,10 +11,9 @@
 import CommonMark
 import Testing
 
-/// A footnote reference label holds at most 999 characters, as a link label does (Links); a longer one stays
-/// literal text. A multibyte character counts as one character, and so does a NUL, which is replaced by U+FFFD
-/// (Insecure characters). Each over-cap reference here whose label holds no whitespace has a footnote definition within
-/// the cap whose label matches it after case folding, which turns each `ß` into `ss` (Links).
+// A footnote reference label holds at most 999 characters, as a link label does (Links). Each over-cap reference
+// without whitespace has a definition within the cap that matches it once case folding turns `ß` into `ss`, so only
+// the cap keeps it literal.
 @Suite("Footnote reference label length cap")
 struct FootnoteReferenceLabelLengthCapTests {
     private func tree(_ markdown: String) -> String {
@@ -29,7 +28,6 @@ struct FootnoteReferenceLabelLengthCapTests {
         "document\n  paragraph\n    text \"\(text)\"\n"
     }
 
-    /// The tree of `referenceAndDefinition` when the reference resolves to the definition labeled `label`.
     private func resolvedReference(_ label: String) -> String {
         "document\n  paragraph\n    text \"x\"\n    footnote_reference \"1\"\n  footnote_definition \"\(label)\"\n    paragraph\n      text \"note\"\n"
     }
@@ -69,7 +67,6 @@ struct FootnoteReferenceLabelLengthCapTests {
         #expect(tree("x[^\(label)]\n\n[^\(definitionLabel)]: note") == literalParagraph("x[^\(replaced)]"))
     }
 
-    /// A bracket whose label is over the cap is ordinary paragraph text, so its entity reference decodes.
     @Test func overCapDecodesEntity() {
         let label = String(repeating: "s", count: 996) + "&amp;"
         let definitionLabel = String(repeating: "\u{DF}", count: 498) + "&amp;"
@@ -101,10 +98,9 @@ struct FootnoteReferenceLabelLengthCapTests {
         #expect(tree("x[^\(label)] y[^\(label)]\n\n[^\(definitionLabel)]: note") == literalParagraph("x[^\(label)] y[^\(label)]"))
     }
 
-    /// A footnote definition's label holds no whitespace, so a footnote-shaped bracket with a line ending between two
-    /// non-whitespace characters after its caret is a link label, and the cap counts its characters before whitespace
-    /// is collapsed for matching: `^`, 499 `a`, a line ending and 498 `b` are 999 characters, and a space before the
-    /// line ending makes 1000.
+    // A footnote label holds no whitespace, so these brackets can only be link labels. The cap counts characters before
+    // whitespace collapses: `^`, 499 `a`, a line ending and 498 `b` are 999, and the space before `x`'s line ending
+    // makes 1000.
     @Test func crossLineLabelIsLinkLabelUpToCap() {
         let first = String(repeating: "a", count: 499)
         let second = String(repeating: "b", count: 498)
@@ -124,8 +120,7 @@ struct FootnoteReferenceLabelLengthCapTests {
             """)
     }
 
-    /// `^`, 498 `a` and `é` are 500 characters but 501 bytes, so with a line ending and 498 `b` the label holds 999
-    /// characters in 1000 bytes.
+    // `^`, 498 `a`, `é`, a line ending and 498 `b` are 999 characters in 1000 bytes.
     @Test func crossLineLabelCountsMultibyteCharacterOnce() {
         let first = String(repeating: "a", count: 498) + "\u{E9}"
         let second = String(repeating: "b", count: 498)
@@ -141,7 +136,6 @@ struct FootnoteReferenceLabelLengthCapTests {
             """)
     }
 
-    /// A footnote definition label cannot hold an unescaped `[` (Links), so `[^a[b]: note` is paragraph text.
     @Test func caretBracketStaysLiteral() {
         #expect(tree("x[^a[b]\n\n[^a[b]: note") == literalParagraph("x[^a[b]") + "  paragraph\n    text \"[^a[b]: note\"\n")
     }

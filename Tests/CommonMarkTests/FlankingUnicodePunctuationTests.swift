@@ -11,15 +11,9 @@
 import Testing
 import CommonMark
 
-/// A non-ASCII character in the Unicode `P` categories, such as U+055E, U+00A1 or U+2014, is a punctuation
-/// character (Characters and lines) when deciding whether a delimiter run is left- or right-flanking (Emphasis and
-/// strong emphasis). With `.smart`, `'` and `"` runs become opening or closing quotes by the same flanking rules.
 @Suite("Inline flanking - Unicode punctuation neighbours")
 struct FlankingUnicodePunctuationTests {
 
-    /// The document's text, with emphasis wrapped in `<em>...</em>` and strong emphasis in
-    /// `<strong>...</strong>`. Delimiters that pair are absent from the text, so the output tells a
-    /// paired run from a literal one.
     private func render(_ doc: borrowing MarkdownDocument) -> String {
         var out = ""
         func walk(_ node: borrowing MarkdownNode) {
@@ -48,8 +42,6 @@ struct FlankingUnicodePunctuationTests {
         }
     }
 
-    /// Fixture sanity: the renderer must actually distinguish a paired emphasis run from literal text
-    /// and a smart quote from a straight one, or every assertion below could pass vacuously.
     @Test("renderer distinguishes structure and smart quotes")
     func rendererSanity() {
         #expect(render("*a*") == "<em>a</em>")
@@ -57,12 +49,8 @@ struct FlankingUnicodePunctuationTests {
         #expect(render("'x'", options: .smart) == "\u{2018}x\u{2019}")
     }
 
-    // MARK: - Smart quotes
-
-    /// The second quote is preceded and followed by punctuation, so it is right-flanking and closes the first.
     @Test("single-quote run before Unicode punctuation opens then closes")
     func singleQuoteBeforeUnicodePunct() {
-        // U+055E (Armenian question mark, Po), U+00A1 (inverted exclamation, Po), U+2014 (em dash, Pd).
         #expect(render("''\u{055E}", options: .smart) == "\u{2018}\u{2019}\u{055E}")
         #expect(render("''\u{00A1}", options: .smart) == "\u{2018}\u{2019}\u{00A1}")
         #expect(render("''\u{2014}", options: .smart) == "\u{2018}\u{2019}\u{2014}")
@@ -98,10 +86,6 @@ struct FlankingUnicodePunctuationTests {
         #expect(render("'' a", options: .smart) == "\u{2018}\u{2019} a")
     }
 
-    // MARK: - Emphasis
-
-    /// The inner `*` has punctuation on one side and a letter on the other, so it is flanking only
-    /// toward the letter: before `a` it cannot close, and after `a` it cannot open.
     @Test("emphasis does not form around Unicode punctuation with an outer letter")
     func emphasisAroundUnicodePunctNoPair() {
         #expect(render("*\u{055E}*a") == "*\u{055E}*a")
@@ -133,7 +117,6 @@ struct FlankingUnicodePunctuationTests {
         #expect(render("*.*a") == "*.*a")
     }
 
-    /// U+2E43 (dash with left upturn) and U+1E95E (Adlam initial exclamation mark) are in category Po.
     @Test("emphasis does not form around other Unicode punctuation with an outer letter")
     func emphasisAroundOtherUnicodePunctNoPair() {
         #expect(TreeDump.dump("*\u{2E43}*a", options: []) == """
@@ -150,7 +133,7 @@ struct FlankingUnicodePunctuationTests {
             """)
     }
 
-    /// U+166D (Canadian syllabics chi sign) is in category So, so it is not a punctuation character.
+    // U+166D is in category So, so it is not a punctuation character (Characters and lines).
     @Test("emphasis forms around a symbol with an outer letter")
     func emphasisAroundSymbol() {
         #expect(TreeDump.dump("*\u{166D}*a", options: []) == """

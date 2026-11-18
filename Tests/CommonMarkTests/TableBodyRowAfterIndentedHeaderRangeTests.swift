@@ -11,7 +11,6 @@
 import Testing
 import CommonMark
 
-/// A body row's source range covers its own line, independent of the header row's indentation.
 @Suite("Table body row source range after an indented header row")
 struct TableBodyRowAfterIndentedHeaderRangeTests {
 

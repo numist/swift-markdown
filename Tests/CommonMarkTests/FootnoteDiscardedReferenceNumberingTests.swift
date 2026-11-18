@@ -11,15 +11,11 @@
 import CommonMark
 import Testing
 
-/// Footnote references are numbered in document order, a reference inside a footnote definition at the definition's
-/// place in the source, and a bracket that is not a footnote reference takes no number. Definitions are appended in
-/// that index order.
 @Suite("Footnote reference numbering")
 struct FootnoteDiscardedReferenceNumberingTests {
     private static let options: MarkdownDocument.ParseOptions = [.sourcePosition, .footnotes]
 
-    /// `[^ [^a]]` is not a footnote reference, since its label holds unescaped brackets (Links), so the
-    /// inner `[^a]` takes index 1 ahead of `[^b]`.
+    // `[^ [^a]]` is no footnote reference, since its label holds unescaped brackets (Links).
     @Test
     func innerReferenceTakesFirstIndex() {
         #expect(TreeDump.dump("[^ [^a]] [^b]\n\n[^a]: A\n\n[^b]: B\n", options: Self.options) == """
@@ -39,7 +35,6 @@ struct FootnoteDiscardedReferenceNumberingTests {
             """)
     }
 
-    /// The inner `[^a]` orders definition `a` first, and the later `[^a]` reuses its index.
     @Test
     func innerReferenceOrdersDefinitions() {
         #expect(TreeDump.dump("[^ [^a]] [^b] [^a]\n\n[^b]: B\n\n[^a]: A\n", options: Self.options) == """
@@ -61,7 +56,7 @@ struct FootnoteDiscardedReferenceNumberingTests {
             """)
     }
 
-    /// A reference inside a footnote definition is numbered at the definition's place in the source.
+    // A reference inside a footnote definition is numbered at the definition's place in the source.
     @Test
     func referencesNumberInDocumentPreOrder() {
         #expect(TreeDump.dump("[^a]: see [^b]\n\n> - q [^c] [^b]\n\n[^b]: x\n\n[^c]: y\n\ntext [^a]\n", options: Self.options) == """
@@ -91,8 +86,6 @@ struct FootnoteDiscardedReferenceNumberingTests {
             """)
     }
 
-    /// A definition that only a reference inside a dropped definition resolves to is kept, while the reference is
-    /// dropped with the definition holding it.
     @Test
     func referenceInDroppedDefinitionKeepsItsDefinition() {
         #expect(TreeDump.dump("x [^c]\n\n[^a]: [^b]\n\n[^b]: B\n\n[^c]: C\n", options: Self.options) == """
@@ -110,8 +103,6 @@ struct FootnoteDiscardedReferenceNumberingTests {
             """)
     }
 
-    /// A reference inside a definition that no reference resolves to is numbered at that definition's place in the
-    /// source, and is dropped with the definition holding it.
     @Test
     func referenceInDroppedDefinitionNumbersAtItsPlace() {
         #expect(TreeDump.dump("[^a]: [^b]\n\nx [^c] [^b]\n\n[^b]: B\n\n[^c]: C\n", options: Self.options) == """

@@ -11,12 +11,6 @@
 import Testing
 import CommonMark
 
-/// Paragraph lines after a header row and delimiter row whose cell counts differ.
-///
-/// The header row must match the delimiter row in the number of cells, or a table is not recognized there (Tables
-/// (extension)), and both lines continue the paragraph. A later line pair that is a valid header row and delimiter row
-/// still opens a table, taking the line before the delimiter row as its header row, and the lines before it stay a
-/// paragraph. A setext heading underline still makes the whole paragraph a heading.
 @Suite("A table after a header row and delimiter row that differ in cell count")
 struct TableAfterHeaderCellCountMismatchTests {
 

@@ -11,8 +11,6 @@
 import CommonMark
 import Testing
 
-/// A character without case, such as a CJK ideograph, an emoji or U+FFFD, is its own Unicode case fold, so labels
-/// holding such characters match when those characters are equal and the cased characters fold alike (Links).
 @Suite("Labels holding characters without case")
 struct UncasedLabelCaseFoldTests {
 

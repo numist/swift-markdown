@@ -11,16 +11,9 @@
 import Testing
 import CommonMark
 
-/// A label's bytes are those of its block content, and a paragraph continuation line that its containers don't continue
-/// (a lazy continuation line) keeps its leading whitespace in that content: each space and each tab counts one byte,
-/// and the columns left of a tab that a container's prefix partly consumed count one byte each (Tabs). A continuation
-/// line its containers continue keeps no leading whitespace. A footnote reference's label counts the same bytes.
-///
-/// With byte limits of 6, each label below is a line ending, the lazy line's whitespace, and enough letters to make 6
-/// bytes, then 7. The lazy line's whitespace counts 3 bytes for three spaces, 1 for a tab, and in a nested block quote
-/// 3 for four spaces and 2 for a tab after the outer `>`, whose optional space takes one column, or 1 when that `>` is
-/// indented one space. A link or attribute reference's definition writes its label on one line, so where the lazy line
-/// has no whitespace, the 7-byte label's definition is past the limit too.
+// A lazy line's spaces and tabs count one byte each, as does each remaining column of a tab that a container's prefix
+// partly consumes (Tabs). A link or attribute reference's definition has its label on one line, so where the lazy line
+// has no whitespace, the 7-byte label's definition is past the limit as well.
 @Suite("Lazy continuation line whitespace in label bytes")
 struct LazyContinuationLabelBytesTests {
 
@@ -32,7 +25,6 @@ struct LazyContinuationLabelBytesTests {
     }()
 
     static let cases: [(markdown: String, options: MarkdownDocument.ParseOptions, expected: String)] = [
-        // MARK: definition
         ("> [abcd\nb]: /u\n\n[abcd b]", [], """
             document
               block_quote
@@ -237,7 +229,6 @@ struct LazyContinuationLabelBytesTests {
                 text "[abcd b]"
 
             """),
-        // MARK: full reference
         ("[abcd b]: /u\n\n> [t][abcd\nb]", [], """
             document
               block_quote
@@ -409,7 +400,6 @@ struct LazyContinuationLabelBytesTests {
                     text "b]"
 
             """),
-        // MARK: collapsed reference
         ("[abcd b]: /u\n\n> [abcd\nb][]", [], """
             document
               block_quote
@@ -599,7 +589,6 @@ struct LazyContinuationLabelBytesTests {
                     text "b][]"
 
             """),
-        // MARK: shortcut reference
         ("[abcd b]: /u\n\n> [abcd\nb]", [], """
             document
               block_quote
@@ -789,7 +778,6 @@ struct LazyContinuationLabelBytesTests {
                     text "b]"
 
             """),
-        // MARK: attribute definition
         ("> ^[abcd\nb]: k: 1\n\n^[t][abcd b]", .attributes, """
             document
               block_quote
@@ -973,7 +961,6 @@ struct LazyContinuationLabelBytesTests {
                 text "^[t]"
 
             """),
-        // MARK: attribute reference
         ("^[abcd b]: k: 1\n\n> ^[t][abcd\nb]", .attributes, """
             document
               block_quote
@@ -1145,7 +1132,6 @@ struct LazyContinuationLabelBytesTests {
                     text "b]"
 
             """),
-        // MARK: footnote reference
         ("> x[^abcde\n]\n\n[^abcde]: n", .footnotes, """
             document
               block_quote
@@ -1357,7 +1343,6 @@ struct LazyContinuationLabelBytesTests {
             """)
     }
 
-    /// `a`, a line ending, a space, `b`, a line ending, a space and `c` are 7 bytes.
     @Test("each lazy continuation line's whitespace counts")
     func severalLazyLines() {
         var limits = Self.limits
@@ -1385,8 +1370,6 @@ struct LazyContinuationLabelBytesTests {
             """)
     }
 
-    /// The first block quote's lazy line keeps whitespace. In the second, `abcd`, a line ending and `b` are 6 bytes
-    /// when the line its block quote continues adds none, and `abcde` makes 7.
     @Test("a continuation line its block quote continues adds no bytes in a document with a lazy line")
     func continuedLineAfterLazyLine() {
         #expect(TreeDump.dump("> a\n   b\n\n> [abcd\n> b]: /u\n\n[abcd b]", options: [], limits: Self.limits) == """
@@ -1437,8 +1420,6 @@ struct LazyContinuationLabelBytesTests {
             """)
     }
 
-    /// A NUL, which is replaced with U+FFFD (Insecure characters), leaves unchanged the bytes its paragraph's lazy
-    /// continuation lines count in a label, with and without source positions.
     @Test("a lazy continuation line's whitespace counts in a paragraph holding a NUL", arguments: [[], MarkdownDocument.ParseOptions.sourcePosition])
     func paragraphHoldingNUL(_ options: MarkdownDocument.ParseOptions) {
         #expect(TreeDump.dump("[a b]: /u\n[ab b]: /u\n\n> \0 [a\n   b] [ab\n   b] [t][a\n   b] [t][ab\n   b]", options: options, limits: Self.limits) == """

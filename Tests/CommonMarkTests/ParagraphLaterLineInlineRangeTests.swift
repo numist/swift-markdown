@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// Each inline on a later line of a paragraph has the source range of its own bytes, whether or not a line's initial
-/// whitespace is stripped (Paragraphs).
 @Suite("Inline source ranges on the later lines of a paragraph")
 struct ParagraphLaterLineInlineRangeTests {
 

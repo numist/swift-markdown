@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// Source ranges of extended autolinks (Autolinks (extension)): a bare URL, a `www.` domain, and an email address. The
-/// link and its text span the matched bytes.
 @Suite("Source ranges of extended autolinks")
 struct GFMAutolinkSourceRangeTests {
 
@@ -58,8 +56,6 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// The text before the address spans the NUL, which is replaced by U+FFFD (Insecure characters), and the space.
-    /// The address spans its own bytes.
     @Test("an email autolink after a NUL spans the address")
     func emailAfterNUL() {
         #expect(tree("\u{0} a@b.co") == """
@@ -72,7 +68,6 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// The text before the address spans the `'`, which is replaced by a curly quote, and the space.
     @Test("the text before an email autolink spans a smart quote")
     func smartQuoteBeforeEmail() {
         #expect(tree("' a@b.co", options: Self.opts.union(.smart)) == """
@@ -85,8 +80,6 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// The first address's last character comes from the character reference `&#111;`, so that address ends just
-    /// past the reference's `;`.
     @Test("an email autolink ending in a character reference ends past the reference")
     func emailEndingInCharacterReferenceBeforeAnotherEmail() {
         #expect(tree("\u{0} a@b.c&#111; x@y.zz") == """
@@ -124,7 +117,6 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// The U+FFFD that replaces a NUL spans the NUL, and no text precedes the link.
     @Test("the text after an email autolink spans a NUL")
     func nulAfterEmailWithoutEmptyText() {
         #expect(tree("a@b.co\u{0}") == """
@@ -137,8 +129,6 @@ struct GFMAutolinkSourceRangeTests {
             """)
     }
 
-    /// A backslash before a line ending is a hard line break (Hard line breaks), and with no matching link reference
-    /// definition the bracket is no image, so it is text spanning its own bytes on either side of the email autolink.
     @Test("an email in an undefined footnote-shaped bracket across a hard line break spans the address")
     func emailInUndefinedFootnoteBracket() {
         #expect(tree("![^*b@b.B\\\n]", options: Self.opts.union(.footnotes)) == """

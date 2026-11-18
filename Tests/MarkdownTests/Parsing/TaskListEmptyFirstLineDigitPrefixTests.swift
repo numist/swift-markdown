@@ -11,9 +11,6 @@
 import Markdown
 import XCTest
 
-/// A list item that begins with an empty line, and whose paragraph begins on a later line with a digit-led
-/// word, has no checkbox: the paragraph does not begin with a task list item marker (Task list items
-/// (extension)). Each NUL is replaced by U+FFFD (Insecure characters).
 class TaskListEmptyFirstLineDigitPrefixTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])
@@ -87,8 +84,6 @@ class TaskListEmptyFirstLineDigitPrefixTests: XCTestCase {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         └─ Text \"22\u{E9} [x] a\"", tree("+\n  22\u{E9} [x] a"))
     }
 
-    /// A paragraph that begins with `22é` does not begin with a task list item marker, so `[x]` is a shortcut
-    /// reference link.
     func testShortcutReferenceOnDigitLine() {
         XCTAssertEqual("Document\n└─ UnorderedList\n   └─ ListItem\n      └─ Paragraph\n         ├─ Text \"22\u{E9} \"\n         └─ Link destination: \"/u\"\n            └─ Text \"x\"", tree("+\n  22\u{E9} [x] \n\n[x]: /u\n"))
     }

@@ -11,9 +11,7 @@
 import Testing
 import CommonMark
 
-/// The opening line of a footnote definition with nothing after its label is not a blank line, so a list item holding
-/// such a definition leaves its list tight when no blank line separates its items or blocks (Lists). An unreferenced
-/// definition does not appear in the tree.
+// An unreferenced definition is dropped from the tree. Its opening line is not a blank line, so the list stays tight.
 @Suite("List tightness around a footnote definition with an empty opening line")
 struct FootnoteDefinitionEmptyOpeningLineTightnessTests {
 

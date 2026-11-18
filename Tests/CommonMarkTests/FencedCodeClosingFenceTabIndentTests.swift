@@ -11,12 +11,9 @@
 import Testing
 import CommonMark
 
-/// A closing code fence may be indented up to three spaces (Fenced code blocks), and a leading tab is four columns of
-/// indentation (Tabs), so a tab-indented fence line is code content, not a closing fence.
 @Suite("Fenced code block closing fence indentation")
 struct FencedCodeClosingFenceTabIndentTests {
 
-    // The opening fence is unindented, so no indentation is removed from content lines and the tab is kept.
     @Test("tab-led fence line is code content, not a closing fence")
     func tabLedLineIsContent() {
         #expect(TreeDump.dump("```\n\t```", options: []) == """

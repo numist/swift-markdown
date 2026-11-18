@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// With tables enabled, a paragraph line holding `|` could be a table's header row (Tables). When no delimiter row
-/// follows, the lines stay a paragraph and each line's text has the source range of its own line.
 @Suite("Source ranges of the lines of a paragraph holding a pipe")
 struct PipeParagraphLineRangeTests {
 
@@ -32,7 +30,6 @@ struct PipeParagraphLineRangeTests {
             """)
     }
 
-    /// A `|` on line 1 has no delimiter row after it, so the paragraph continues.
     @Test("an interior line after a first-line pipe spans 2:1-2:4")
     func interiorLineAfterFirstLinePipe() {
         #expect(TreeDump.dump("|foo\nbar\n baz", options: Self.options, sourceRanges: true) == """

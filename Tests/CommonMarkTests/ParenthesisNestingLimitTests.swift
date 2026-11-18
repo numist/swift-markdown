@@ -11,10 +11,6 @@
 import Testing
 import CommonMark
 
-/// `maxLinkDestinationParenthesisNesting` bounds how deeply the unescaped parentheses of a bare link destination nest,
-/// in an inline link or image and in a link reference definition. `maxAttributeParenthesisNesting` bounds how deeply the
-/// unescaped parentheses inside an attribute form's outer `(…)` nest. Past its limit a destination or an attribute form
-/// is not recognized: an inline link stays text and a definition stays paragraph text.
 @Suite("Parenthesis nesting limits")
 struct ParenthesisNestingLimitTests {
 
@@ -24,8 +20,6 @@ struct ParenthesisNestingLimitTests {
         limits.maxAttributeParenthesisNesting = attribute
         return limits
     }
-
-    // MARK: - Link destinations
 
     @Test("an inline link's destination fits at the nesting limit but not past it")
     func inlineLink() {
@@ -107,7 +101,6 @@ struct ParenthesisNestingLimitTests {
 
     @Test("a destination starting inside an earlier destination's parentheses counts its own nesting")
     func destinationInsideEarlierDestination() {
-        // The destination `x[b](((c)))` nests 3 deep and `((c))` 2 deep.
         #expect(TreeDump.dump("[a](x[b](((c))))", options: [], limits: limits(destination: 2)) == """
             document
               paragraph
@@ -127,7 +120,6 @@ struct ParenthesisNestingLimitTests {
 
     @Test("a destination starting inside an earlier unbalanced destination's parentheses counts its own nesting")
     func destinationInsideEarlierUnbalancedDestination() {
-        // `b[c](((d))` ends unbalanced at the space, and `((d))` nests 2 deep.
         #expect(TreeDump.dump("[a](b[c](((d)) )", options: [], limits: limits(destination: 2)) == """
             document
               paragraph
@@ -157,8 +149,6 @@ struct ParenthesisNestingLimitTests {
                 """)
         }
     }
-
-    // MARK: - Attributes
 
     @Test("an attribute form's parentheses fit at the nesting limit but not past it")
     func attribute() {
@@ -209,8 +199,6 @@ struct ParenthesisNestingLimitTests {
                 """)
         }
     }
-
-    // MARK: - Independence and defaults
 
     @Test("each limit bounds only its own form")
     func limitsAreIndependent() {

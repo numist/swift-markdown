@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A `~` closer and a `~` opener of different lengths form no strikethrough and stay text, so emphasis whose
-/// delimiters lie on either side of the tilde closer still forms.
 @Suite("Emphasis across a strikethrough length mismatch")
 struct StrikethroughLengthMismatchEmphasisTests {
 

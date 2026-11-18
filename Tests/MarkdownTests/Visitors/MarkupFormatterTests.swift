@@ -651,7 +651,7 @@ class MarkupFormatterSimpleRoundTripTests: XCTestCase {
         checkRoundTrip(for: Document(Paragraph(Text("OK"))))
         checkRoundTrip(for: Document(Paragraph(Emphasis(Strong(Text("emphasized and strong"))))))
         checkRoundTrip(for: Document(Paragraph(InlineCode("foo"))))
-        // `***...***` always parses as Emphasis(Strong(...)) (Emphasis and strong emphasis, rule 14).
+        // ***...*** is always Emphasis(Strong(...)).
     }
 
     func testRoundTripBlockQuote() {

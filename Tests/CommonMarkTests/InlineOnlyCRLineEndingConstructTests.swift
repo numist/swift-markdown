@@ -11,7 +11,6 @@
 import CommonMark
 import Testing
 
-/// Inline-only constructs across a CRLF or a lone CR, each of which is one line ending (Characters and lines).
 @Suite("Inline-only constructs across CR line endings")
 struct InlineOnlyCRLineEndingConstructTests {
 
@@ -21,7 +20,8 @@ struct InlineOnlyCRLineEndingConstructTests {
         TreeDump.dump(source, options: options.union(.sourcePosition), sourceRanges: true)
     }
 
-    /// A link label has at most 999 characters (Links), and a CRLF in it is one.
+    // A CRLF is one line ending (Characters and lines), so 997 `a`, a CRLF and `b` are 999 characters, the most a
+    // link label holds (Links).
     @Test("a 999-character link label holding a CRLF", arguments: modes)
     func linkLabelLengthCap(_ options: MarkdownDocument.ParseOptions) {
         let a = String(repeating: "a", count: 997)
@@ -40,7 +40,7 @@ struct InlineOnlyCRLineEndingConstructTests {
             """)
     }
 
-    /// A link destination in `<` `>` holds no line ending (Links).
+    // A link destination in `<` `>` holds no line ending (Links), so neither the definition nor the link forms.
     @Test("a pointy link destination across a lone CR and a CRLF", arguments: modes)
     func pointyDestination(_ options: MarkdownDocument.ParseOptions) {
         #expect(tree("[d]: <e\r\nf>\r\n[d] [a](<b\rc>)", options) == """
@@ -55,7 +55,7 @@ struct InlineOnlyCRLineEndingConstructTests {
             """)
     }
 
-    /// A code span's line endings become spaces before one space is stripped from each end (Code spans).
+    // A code span's line endings become spaces before one space is stripped from each end (Code spans).
     @Test("code spans across a CRLF and lone CRs", arguments: modes)
     func codeSpans(_ options: MarkdownDocument.ParseOptions) {
         #expect(tree("` \r\na ` `\ra\r`", options) == """
@@ -68,7 +68,6 @@ struct InlineOnlyCRLineEndingConstructTests {
             """)
     }
 
-    /// A definition's destination and title may each follow a line ending (Link reference definitions).
     @Test("a definition with CRLFs before its destination and title", arguments: modes)
     func definitionAcrossLines(_ options: MarkdownDocument.ParseOptions) {
         #expect(tree("[a]:\r\n/u\r\n\"t\"\r\n[a]", options) == """
@@ -80,7 +79,6 @@ struct InlineOnlyCRLineEndingConstructTests {
             """)
     }
 
-    /// A character reference to U+000D is a CR in the text, not a line ending.
     @Test("a character reference to a CR before a CRLF", arguments: modes)
     func carriageReturnReference(_ options: MarkdownDocument.ParseOptions) {
         #expect(tree("&#13;\r\n[a](/u \"&#13;\r\nb\")", options) == """
@@ -93,7 +91,6 @@ struct InlineOnlyCRLineEndingConstructTests {
             """)
     }
 
-    /// An escaped backslash before a line ending forms no hard line break (Backslash escapes, Hard line breaks).
     @Test("an escaped backslash before a CRLF", arguments: modes)
     func escapedBackslash(_ options: MarkdownDocument.ParseOptions) {
         #expect(tree("\\\\\r\nb", options) == """
@@ -104,7 +101,6 @@ struct InlineOnlyCRLineEndingConstructTests {
             """)
     }
 
-    /// An attribute definition's attributes end at its line ending.
     @Test("an attribute definition before a lone CR, and attributes across a CRLF", arguments: modes)
     func attributes(_ options: MarkdownDocument.ParseOptions) {
         #expect(tree("^[a]: class=x\r^[t][a] ^[u](y\r\nz)", options.union(.attributes)) == """

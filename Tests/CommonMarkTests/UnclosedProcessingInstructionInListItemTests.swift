@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// A processing instruction needs a closing `?>` (Raw HTML), so an unclosed `<?` in a block quote paragraph in a list
-/// item is text. The paragraph's lazy continuation line holds a NUL, which is replaced by U+FFFD (Insecure
-/// characters), and a `[x]` that does not begin the paragraph and so is text (Task list items (extension)).
 @Suite("Unclosed processing instruction in a list item's block quote")
 struct UnclosedProcessingInstructionInListItemTests {
 

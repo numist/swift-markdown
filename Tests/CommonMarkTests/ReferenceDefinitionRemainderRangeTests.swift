@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// Source ranges of the content that follows link reference definitions at the start of a paragraph.
-/// The remaining text keeps its own lines, and the paragraph or setext heading starts at its first byte.
 @Suite("Reference-definition remainder source ranges")
 struct ReferenceDefinitionRemainderRangeTests {
 
@@ -21,7 +19,6 @@ struct ReferenceDefinitionRemainderRangeTests {
     private static let options: MarkdownDocument.ParseOptions =
         [.tables, .strikethrough, .tasklist, .tableSpans, .sourcePosition, .smart]
 
-    /// DFS-collect every node's kind and source range.
     private func ranges(in src: String) -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] {
         MarkdownDocument.withParsedDocument(src, options: Self.options) {
             doc -> [(kind: MarkdownNode.Kind, range: Range<Pos>?)] in
@@ -31,7 +28,6 @@ struct ReferenceDefinitionRemainderRangeTests {
         }
     }
 
-    /// The source range of the first node of kind `kind`, in DFS order.
     private func firstRange(
         _ kind: MarkdownNode.Kind,
         in ranges: [(kind: MarkdownNode.Kind, range: Range<Pos>?)]
@@ -50,7 +46,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 2, column: 1))
         #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 4))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))   // "bar"
+        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))
         #expect(texts[0]?.upperBound == Pos(line: 2, column: 4))
     }
 
@@ -63,7 +59,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.heading(level: 1), in: ranges)?.lowerBound == Pos(line: 2, column: 1))
         #expect(firstRange(.heading(level: 1), in: ranges)?.upperBound == Pos(line: 3, column: 4))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))   // "bar"
+        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))
         #expect(texts[0]?.upperBound == Pos(line: 2, column: 4))
     }
 
@@ -78,7 +74,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 4, column: 1))
         #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 4, column: 4))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 4, column: 1))   // "bar"
+        #expect(texts[0]?.lowerBound == Pos(line: 4, column: 1))
         #expect(texts[0]?.upperBound == Pos(line: 4, column: 4))
     }
 
@@ -93,9 +89,9 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 2, column: 1))
         #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 3, column: 4))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))   // "bar"
+        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))
         #expect(texts[0]?.upperBound == Pos(line: 2, column: 4))
-        #expect(texts[1]?.lowerBound == Pos(line: 3, column: 1))   // "baz"
+        #expect(texts[1]?.lowerBound == Pos(line: 3, column: 1))
         #expect(texts[1]?.upperBound == Pos(line: 3, column: 4))
     }
 
@@ -108,13 +104,13 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 2, column: 1))
         #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 2, column: 8))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))   // "a "
+        #expect(texts[0]?.lowerBound == Pos(line: 2, column: 1))
         #expect(texts[0]?.upperBound == Pos(line: 2, column: 3))
-        #expect(firstRange(.emphasis, in: ranges)?.lowerBound == Pos(line: 2, column: 3))   // "*b*"
+        #expect(firstRange(.emphasis, in: ranges)?.lowerBound == Pos(line: 2, column: 3))
         #expect(firstRange(.emphasis, in: ranges)?.upperBound == Pos(line: 2, column: 6))
-        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 4))   // inner "b"
+        #expect(texts[1]?.lowerBound == Pos(line: 2, column: 4))
         #expect(texts[1]?.upperBound == Pos(line: 2, column: 5))
-        #expect(texts[2]?.lowerBound == Pos(line: 2, column: 6))   // " c"
+        #expect(texts[2]?.lowerBound == Pos(line: 2, column: 6))
         #expect(texts[2]?.upperBound == Pos(line: 2, column: 8))
     }
 
@@ -128,7 +124,7 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 3, column: 1))
         #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 3, column: 6))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 3, column: 1))   // "'bar'"
+        #expect(texts[0]?.lowerBound == Pos(line: 3, column: 1))
         #expect(texts[0]?.upperBound == Pos(line: 3, column: 6))
     }
 
@@ -143,9 +139,9 @@ struct ReferenceDefinitionRemainderRangeTests {
         #expect(firstRange(.paragraph, in: ranges)?.lowerBound == Pos(line: 3, column: 2))
         #expect(firstRange(.paragraph, in: ranges)?.upperBound == Pos(line: 4, column: 3))
 
-        #expect(texts[0]?.lowerBound == Pos(line: 3, column: 2))   // "c"
+        #expect(texts[0]?.lowerBound == Pos(line: 3, column: 2))
         #expect(texts[0]?.upperBound == Pos(line: 3, column: 3))
-        #expect(texts[1]?.lowerBound == Pos(line: 4, column: 2))   // "d"
+        #expect(texts[1]?.lowerBound == Pos(line: 4, column: 2))
         #expect(texts[1]?.upperBound == Pos(line: 4, column: 3))
     }
 }

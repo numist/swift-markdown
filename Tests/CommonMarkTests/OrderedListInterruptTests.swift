@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// An ordered list can interrupt a paragraph only when its start number is 1 (List items); otherwise the
-/// marker is paragraph continuation text. The rule applies at every nesting level.
 @Suite("Ordered list paragraph interruption")
 struct OrderedListInterruptTests {
 
@@ -56,8 +54,6 @@ struct OrderedListInterruptTests {
         #expect(TreeDump.dump(markdown, options: []) == tree)
     }
 
-    /// `2. b` is not indented into the first item, so it starts a sibling item rather than
-    /// interrupting the item's paragraph.
     @Test("a sibling ordered marker (start != 1) at the list level opens a new item")
     func siblingOrderedMarkerOpensNewItem() {
         #expect(TreeDump.dump("1. a\n2. b", options: []) == """

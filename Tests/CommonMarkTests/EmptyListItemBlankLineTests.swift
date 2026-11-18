@@ -11,9 +11,8 @@
 import Testing
 import CommonMark
 
-/// A list item can begin with at most one blank line (List items), and a line holding only spaces or tabs is a blank
-/// line (Characters and lines), however far it is indented. So an item whose first line is empty ends at the next
-/// such line, and indented content after it is a paragraph outside the list.
+// A line holding only spaces or tabs is a blank line however far it is indented (Characters and lines), and a list
+// item can begin with at most one blank line (List items).
 @Suite("Empty list item followed by a blank line")
 struct EmptyListItemBlankLineTests {
 

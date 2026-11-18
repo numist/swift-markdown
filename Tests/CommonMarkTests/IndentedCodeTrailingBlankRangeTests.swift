@@ -11,10 +11,6 @@
 import Testing
 import CommonMark
 
-/// Indented code blocks followed by blank lines.
-///
-/// Blank lines following an indented code block are not included in it (Indented code blocks), so the block ends at the
-/// end of its last line that is not blank. Blank lines between its lines are part of it.
 @Suite("An indented code block ends at its last line that is not blank")
 struct IndentedCodeTrailingBlankRangeTests {
 

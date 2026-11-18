@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A paragraph continuation line's text starts at the line's first non-whitespace byte, wherever that falls relative to
-/// the paragraph's first line, since the line's initial whitespace is not part of the paragraph's content (Paragraphs).
 @Suite("Paragraph continuation line source ranges")
 struct ParagraphContinuationSourceRangeTests {
 
@@ -31,8 +29,6 @@ struct ParagraphContinuationSourceRangeTests {
             """)
     }
 
-    /// The block quote marker takes `>` and one space, and the remaining three spaces are the paragraph line's
-    /// initial whitespace, so `bar` starts at column 6.
     @Test("block quote continuation line text starts after its leading whitespace")
     func blockquoteContinuation() {
         #expect(TreeDump.dump("> foo\n>    bar", options: Self.options, sourceRanges: true) == """
@@ -87,7 +83,6 @@ struct ParagraphContinuationSourceRangeTests {
             """)
     }
 
-    /// One space is less than the item's content indent of two, so ` bar` is a lazy continuation line (List items).
     @Test("lazy continuation line in a list item starts after its leading whitespace")
     func lazyListContinuation() {
         #expect(TreeDump.dump("- foo\n bar", options: Self.options, sourceRanges: true) == """
@@ -102,8 +97,6 @@ struct ParagraphContinuationSourceRangeTests {
             """)
     }
 
-    /// Line 2 matches the outer block quote marker only, so `baz` is a lazy continuation line of the inner block
-    /// quote's paragraph.
     @Test("lazy continuation line in a nested block quote starts after its leading whitespace")
     func lazyNestedBlockquoteContinuation() {
         #expect(TreeDump.dump("> > foo\n>  baz", options: Self.options, sourceRanges: true) == """

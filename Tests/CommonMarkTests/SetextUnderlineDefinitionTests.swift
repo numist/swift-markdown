@@ -11,10 +11,10 @@
 import CommonMark
 import Testing
 
-/// The lines before a setext heading underline are read as the paragraph they would be without it (Setext headings),
-/// so the link reference definitions that paragraph begins with end at the underline and are final there. A later
-/// underline, or the paragraph's close, reads only the lines past them. They still count as the paragraph's content,
-/// and as its list item's first block (Task list items (extension)).
+// The lines before a setext heading underline are read as the paragraph they would be without it (Setext headings),
+// so the link reference definitions that paragraph begins with end at the underline, and a later underline or the
+// paragraph's close reads only the lines past them. Those definitions still count as the paragraph's content, and as
+// its list item's first block (Task list items (extension)).
 @Suite("Leading definitions at a setext underline")
 struct SetextUnderlineDefinitionTests {
 
@@ -251,11 +251,9 @@ struct SetextUnderlineDefinitionTests {
             """)
     }
 
-    /// Lines that many underlines follow.
     struct Shape: Sendable, CustomTestStringConvertible {
         let prefix: String
         let line: String
-        /// The tree of `prefix` followed by `count` copies of `line`.
         let tree: @Sendable (_ count: Int) -> String
         let testDescription: String
     }

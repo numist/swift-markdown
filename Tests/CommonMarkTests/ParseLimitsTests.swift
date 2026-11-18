@@ -11,7 +11,6 @@
 import Testing
 import CommonMark
 
-/// The default parse limits, and parsing with limits set.
 @Suite("Parse limits")
 struct ParseLimitsTests {
 

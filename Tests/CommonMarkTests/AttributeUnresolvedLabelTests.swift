@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// A link label (Links) directly after the `]` that closes an `^[` opener belongs to the inline attribute, and so do
-/// `[]` and a blank `[ ]`. When the label names an attribute definition the attribute takes that definition's
-/// attributes. Otherwise `^[…]` stays text and the label is dropped; the text's source range spans the dropped label.
 @Suite("Inline attributes with a label")
 struct AttributeUnresolvedLabelTests {
 
@@ -64,7 +61,7 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    /// An inline attribute has no collapsed form, so `[]` names no definition even when the bracket text does.
+    // An inline attribute has no collapsed form, so `[]` names no definition even when the bracket text does.
     @Test("a collapsed label is dropped")
     func collapsedLabel() {
         #expect(tree("^[x][]") == """
@@ -97,7 +94,7 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    /// An inline attribute has no shortcut form, so bracket text naming a definition is still text.
+    // An inline attribute has no shortcut form, so bracket text naming a definition is still text.
     @Test("bracket text with no label after it stays text")
     func noLabel() {
         #expect(tree("^[x]: c\n\n^[x]") == """
@@ -119,7 +116,6 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    /// A label's content is not parsed as inlines.
     @Test("an unresolved label holding inline syntax is dropped")
     func unresolvedLabelWithInlineSyntax() {
         #expect(tree("^[x][*b*]") == """
@@ -167,7 +163,7 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    /// A link label has at most 999 characters inside its brackets (Links), so a longer bracket pair is no label.
+    // A link label has at most 999 characters inside its brackets (Links).
     @Test("an unresolved label at the length cap is dropped, and a longer bracket pair stays text")
     func labelLengthCap() {
         let atCap = String(repeating: "a", count: 999)
@@ -196,7 +192,7 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    /// A link label may span a line ending, so the dropped label takes the line ending with it.
+    // A link label may span a line ending, so the dropped label takes the line ending with it.
     @Test("an unresolved label spanning a line ending is dropped")
     func unresolvedLabelSpanningLineEnding() {
         #expect(tree("^[x][b\nc] y") == """
@@ -285,7 +281,6 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    /// Attribute definitions and link reference definitions are looked up separately.
     @Test("a label naming only a link definition is dropped")
     func labelNamingLinkDefinition() {
         #expect(tree("[b]: /u\n\n^[c]: d\n\n^[x][b]") == """
@@ -342,7 +337,6 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    /// A label after an attribute's text is not a footnote reference, even when it names a footnote definition.
     @Test("an unresolved label shaped as a footnote reference is dropped")
     func unresolvedFootnoteShapedLabel() {
         #expect(TreeDump.dump("^[x][^fn]\n\n[^fn]: n", options: [.sourcePosition, .attributes, .footnotes], sourceRanges: true) == """
@@ -518,7 +512,7 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    /// Labels match under the Unicode case fold (Links): `ß` folds to `ss`, and dotless `ı` folds to itself.
+    // Labels match under the Unicode case fold (Links), so `ß` matches `SS`.
     @Test("a label matching a definition under the case fold forms an attribute")
     func labelMatchingUnderCaseFold() {
         #expect(tree("^[ß]: c\n\n^[x][SS]") == """
@@ -530,6 +524,7 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
+    // Dotless `ı` folds to itself, not to the `i` that `I` folds to.
     @Test("a label differing from a definition under the case fold is dropped")
     func labelDifferingUnderCaseFold() {
         #expect(tree("^[ı]: c\n\n^[x][I]") == """
@@ -540,7 +535,6 @@ struct AttributeUnresolvedLabelTests {
             """)
     }
 
-    /// An inline attribute's `(attributes)` form takes no label, so a bracket after it is ordinary inline content.
     @Test("a bracket after the attributes form is ordinary inline content")
     func bracketAfterAttributesForm() {
         #expect(tree("^[](x)[undef]") == """

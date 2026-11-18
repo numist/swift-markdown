@@ -11,8 +11,6 @@
 import CommonMark
 import Testing
 
-/// A cell's content may include a pipe escaped as `\|` (Tables (extension)). The backslash is part of the cell but not
-/// of its text, and every other byte keeps its own source column.
 @Suite("Source ranges around an escaped pipe in a table")
 struct TablePipeEscapeSourceRangeTests {
     private static let options: MarkdownDocument.ParseOptions = [.tables, .sourcePosition]

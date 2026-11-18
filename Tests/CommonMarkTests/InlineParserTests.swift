@@ -130,8 +130,6 @@ struct CodeSpanTests {
 
     @Test("an unmatched two-backtick run is text, and the single backticks after it form code spans")
     func codeSpansAfterUnmatchedLongerRun() throws {
-        // The opening two-backtick run has no closing run of equal length, so it is text (Code spans) and the
-        // single backticks after it pair into two code spans.
         let source = "``a`b`c`d`"
         try MarkdownDocument.withParsedDocument(source) { doc in
             let inlines = paragraphInlines(doc)
@@ -162,8 +160,7 @@ struct CodeSpanTests {
 
     @Test("a code span across a line ending turns it into a space and drops the next line's leading whitespace")
     func codeSpanAcrossLineEnding() {
-        // A paragraph's raw content strips each line's initial whitespace (Paragraphs), so the content is `x\ny`,
-        // and the code span turns the line ending into a space (Code spans).
+        // A paragraph's raw content strips each line's initial whitespace (Paragraphs).
         let source = "`x\n y`"
         MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
@@ -337,6 +334,7 @@ struct EntityTests {
 
     @Test("numeric for non-ASCII codepoint")
     func numericNonASCII() {
+        // &#x2026; → … (U+2026)
         let source = "&#x2026;"
         MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = paragraphInlines(doc)
@@ -392,8 +390,8 @@ struct EntityTests {
         }
     }
 
-    /// A paragraph's raw content strips each line's initial whitespace (Paragraphs), so its lines are not contiguous in
-    /// the source.
+    // A paragraph's raw content strips each line's initial whitespace (Paragraphs), so its lines are not contiguous in
+    // the source.
     @Test("valid entity decodes on an indented continuation line")
     func entityDecodesOnIndentedContinuation() {
         let source = "k\n &amp;x"
@@ -418,8 +416,6 @@ struct EntityTests {
 @Suite("Inline parser - autolinks")
 struct AutolinkTests {
 
-    /// The URL of the first link among the inline children of the top-level blocks, and the literal of that link's
-    /// first text child; each is nil if there is none.
     private static func firstLink(_ doc: borrowing MarkdownDocument) -> (url: String?, text: String?) {
         var url: String?
         var text: String?
@@ -551,8 +547,6 @@ struct AutolinkTests {
 @Suite("Inline parser - raw inline HTML")
 struct InlineHTMLTests {
 
-    /// The literal of the first `.htmlInline` node among the inline children of the top-level blocks, or nil if there
-    /// is none.
     private static func firstHTMLInline(_ doc: borrowing MarkdownDocument) -> String? {
         var out: String?
         let root = doc.root
@@ -698,8 +692,7 @@ struct InlineHTMLTests {
 
     @Test("an open tag across a line ending drops the continuation line's leading whitespace")
     func multiLineTagStripsContinuationIndent() {
-        // An open tag may contain a line ending (Raw HTML), and a paragraph's raw content strips each line's initial
-        // whitespace (Paragraphs), so the literal is `<e\ne="">`.
+        // A paragraph's raw content strips each line's initial whitespace (Paragraphs).
         let source = "<e\n e=\"\">"
         MarkdownDocument.withParsedDocument(source) { doc in
         let kinds = paragraphInlines(doc).map { $0.kind }
@@ -712,8 +705,6 @@ struct InlineHTMLTests {
 @Suite("Inline parser - emphasis / strong")
 struct EmphasisTests {
 
-    /// The inline descendants of every top-level paragraph and heading as `(kind, literal-or-empty)` pairs, in
-    /// depth-first order.
     private static func dfsInlines(_ doc: borrowing MarkdownDocument) -> [(MarkdownNode.Kind, String)] {
         var out: [(MarkdownNode.Kind, String)] = []
         let root = doc.root
@@ -865,7 +856,6 @@ struct EmphasisTests {
         let source = "*\"foo\"*"
         MarkdownDocument.withParsedDocument(source) { doc in
         let inlines = Self.dfsInlines(doc)
-        // emph(text(`"foo"`))
         #expect(inlines.map(\.0) == [.emphasis, .text])
         #expect(inlines[1].1 == "\"foo\"")
         }
@@ -898,7 +888,6 @@ struct EmphasisTests {
 @Suite("Inline parser - links and images")
 struct LinkImageTests {
 
-    /// The kind, URL, title and first child literal of the first link or image among the inline children of the top-level blocks, or `(.text, nil, nil, nil)` if there is none.
     private static func firstLinkOrImage(
         _ doc: borrowing MarkdownDocument
     ) -> (kind: MarkdownNode.Kind, url: String?, title: String?, text: String?) {
@@ -1124,7 +1113,7 @@ struct LinkImageTests {
     func nestedLinksDisallowed() {
         let source = "[outer [inner](/i)](/o)"
         MarkdownDocument.withParsedDocument(source) { doc in
-        // Links may not contain other links (Links), so the inner link matches and the outer `[` is text.
+        // Inner link matches; outer doesn't.
         var linkUrls: [String] = []
         let root = doc.root
         root.children.forEach { block in
@@ -1142,7 +1131,7 @@ struct LinkImageTests {
     func imageContainsLink() {
         let source = "![alt with [link](/i)](/img.png)"
         MarkdownDocument.withParsedDocument(source) { doc in
-        // An image description may contain a link (Images).
+        // Image matches; the inner link also matches because images don't disable the link opener.
         var hasImage = false
         var hasInnerLink = false
         let root = doc.root
@@ -1239,7 +1228,7 @@ struct ExtendedAttributeTests {
         let source = "^[x](a\\)b)"
         MarkdownDocument.withParsedDocument(source, options: [.attributes]) { doc in
         let info = Self.firstAttribute(doc)
-        // The attribute string keeps the backslash of an escaped `)`.
+        // The `\)` is an escape; the backslash is preserved in the chunk.
         #expect(info.attrs == "a\\)b")
         }
     }
@@ -1285,8 +1274,7 @@ struct ExtendedAttributeTests {
 
     @Test("an attribute definition whose label spans a line ending resolves")
     func crossLineReferenceDef() {
-        // Matching normalizes the label's line ending to a space, as for a link label (Links), and the definition
-        // produces no node.
+        // Labels match as link labels do (Links), so the label's line ending matches the reference's space.
         #expect(TreeDump.dump("^[la\nbel]: color: blue\n\n^[content][la bel]", options: .attributes) == """
             document
               paragraph
@@ -1442,9 +1430,8 @@ struct StrikethroughTests {
         }
     }
 
-    /// The `~~` that starts line 2 follows a line ending, so it is left-flanking only and can open but not close
-    /// (Emphasis and strong emphasis). It is the nearest opener to the closing `~`, and the two runs differ in length,
-    /// so no strikethrough forms and the `~` on line 1 doesn't pair either.
+    // The `~~` starting line 2 follows a line ending, so it can open but not close. It is the closing `~`'s nearest
+    // opener and differs in length, so neither it nor the `~` on line 1 pairs.
     @Test("mismatched intervening run across a soft line break suppresses the far pairing")
     func mismatchedInterveningAcrossSoftbreak() {
         #expect(TreeDump.dump("~a\n~~b~", options: .strikethrough) == """
@@ -1457,7 +1444,8 @@ struct StrikethroughTests {
             """)
     }
 
-    /// On one line the interior `~~` is both left- and right-flanking, so the outer tildes pair around it.
+    // On one line the interior `~~` is both left- and right-flanking, so the multiple-of-3 test of rules 9 and 10
+    // (Emphasis and strong emphasis) passes over it and the outer tildes pair around it.
     @Test("on one line the outer tildes pair across an interior run")
     func oneLineOuterTildesPair() {
         #expect(TreeDump.dump("~a~~b~", options: .strikethrough) == """
@@ -1495,7 +1483,6 @@ struct StrikethroughTests {
             """)
     }
 
-    /// The `~` ending line 1 can't pair with the longer `~~` opener, and the `~` on line 2 has no closer.
     @Test("mismatched run near the closer side forms nothing")
     func mismatchedRunNearCloser() {
         #expect(TreeDump.dump("~~b~\n~a", options: .strikethrough) == """
@@ -1770,7 +1757,6 @@ struct GFMAutolinkTests {
 @Suite("GFM extensions - footnotes")
 struct FootnoteTests {
 
-    /// Pull the first .footnoteReference (label, index) and the first .footnoteDefinition's label anywhere in the doc.
     private static func firstFootnotes(_ doc: borrowing MarkdownDocument) -> (
         ref: (label: String?, index: Int?)?,
         defLabel: String?
@@ -1832,7 +1818,6 @@ struct FootnoteTests {
 
     @Test("multiple footnotes get sequential indices")
     func multipleFootnotes() {
-        // Indices are assigned in first-reference order, per label; repeat references reuse the index.
         let source = "[^a] and [^b] and [^a] again\n\n[^a]: A\n[^b]: B"
         MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         var indices: [Int] = []
@@ -1885,7 +1870,6 @@ struct FootnoteTests {
 
     @Test("[^x] without `^` interior stays as link/text")
     func noFootnoteWithoutCaret() {
-        // `[x]` has no `^`, so it is not a footnote reference to `[^x]`; with no link reference definition it is text.
         let source = "[^x]: body\n\n[x]"
         MarkdownDocument.withParsedDocument(source, options: .footnotes) { doc in
         let kinds = paragraphInlines(doc).map(\.kind)

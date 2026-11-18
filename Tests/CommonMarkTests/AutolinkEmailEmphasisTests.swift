@@ -11,16 +11,14 @@
 import Testing
 import CommonMark
 
-/// Extended email autolinks (Autolinks (extension)) are recognized in text after emphasis is resolved, so a `_`
-/// that delimits no emphasis may be part of an address's local part.
+// Extended email autolinks are recognized after emphasis is resolved, so a `_` that delimits no emphasis can be part of
+// a local part.
 @Suite("Extended email autolinks next to emphasis delimiters")
 struct AutolinkEmailEmphasisTests {
 
     private func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: [.gfmAutolink])
     }
-
-    // MARK: - A `_` outside emphasis joins the local part
 
     @Test("`_@b.c`: the flanking `_` is the local part, not text before the link")
     func leadingUnderscore() {
@@ -56,8 +54,6 @@ struct AutolinkEmailEmphasisTests {
             """)
     }
 
-    // MARK: - An email inside a resolved emphasis run
-
     @Test("`_a@b.c_`: the email autolinks inside the emphasis")
     func emailInsideEmphasis() {
         #expect(tree("_a@b.c_") == """
@@ -70,8 +66,6 @@ struct AutolinkEmailEmphasisTests {
             """)
     }
 
-    // MARK: - Emphasis consumes the delimiters, leaving an empty local part
-
     @Test("`_a_@b.c`: emphasis consumes both `_`, so `@b.c` has no local part and is text")
     func emphasisConsumesUnderscores() {
         #expect(tree("_a_@b.c") == """
@@ -83,8 +77,6 @@ struct AutolinkEmailEmphasisTests {
 
             """)
     }
-
-    // MARK: - Several addresses in one text node
 
     @Test("`a@b.c x@y.z`: both emails link, with the ` ` between them")
     func twoEmailsInOneRun() {

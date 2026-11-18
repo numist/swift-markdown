@@ -11,14 +11,8 @@
 import Testing
 import CommonMark
 
-/// Storage growth for a repetition of each of many small units covering the ways the parser copies, carves, merges,
-/// splits or materializes content.
-///
-/// Node content is stored as runs of segments over the source and a buffer of materialized bytes. A step that re-copies
-/// a run growing with the input - merging text, splitting it into links, joining a construct across lines, projecting a
-/// table cell, expanding a tab, replacing a NUL - makes a document of repeated units store content with the square of
-/// its size and exhausts memory on inputs of a few tens of kilobytes. Each unit is repeated a thousand times, under the
-/// option sets that reach its step, and both stores must stay within sixteen entries per source byte, plus 256.
+// A step that re-copies a run growing with the input, such as merging text, joining a construct across lines or
+// expanding a tab, makes a document of repeated units store content with the square of its size.
 @Suite("Repeated content stores linear content")
 struct RepeatedContentStorageGrowthTests {
 
@@ -34,12 +28,10 @@ struct RepeatedContentStorageGrowthTests {
         }
     }
 
-    /// `options` in block parsing only.
     static func blockOnly(_ options: MarkdownDocument.ParseOptions) -> [MarkdownDocument.ParseOptions] {
         [options]
     }
 
-    /// `options` in block and inline-only parsing.
     static func blockAndInlineOnly(_ options: MarkdownDocument.ParseOptions) -> [MarkdownDocument.ParseOptions] {
         [options, options.union(.inlineOnly)]
     }
@@ -210,7 +202,6 @@ struct RepeatedContentStorageGrowthTests {
     @Test("storage grows linearly with the repetitions", arguments: cases)
     func linearStorage(_ testCase: Case) {
         let source = testCase.shape.make(1000)
-        // Every unit is at least a byte, so the repetitions alone make a source this long.
         #expect(source.utf8.count >= 1000)
         let (segments, materialized) = MarkdownDocument.withParsedDocument(source, options: testCase.options) {
             ($0._segmentCount, $0._materializedStringSize)

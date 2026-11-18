@@ -11,14 +11,8 @@
 import Testing
 import CommonMark
 
-/// List tightness when a blank line separates a list item's link reference or inline-attribute definitions from
-/// another block of that item.
-///
-/// A list is loose if any of its items directly contains two block-level elements with a blank line between them
-/// (Lists), and a definition counts as one of those elements: `- a\n- b\n\n  [ref]: /url\n- d` is loose. That holds
-/// whatever follows the definitions, including the end of input or a line that closes the list. A blank line inside
-/// a sublist's item makes only that sublist loose. Each expected value is the tightness of every list in the document,
-/// in document order.
+// A definition is a block of its item, so a blank line between it and another block of the item makes the list
+// loose (Lists).
 @Suite("List looseness with a definition as an item's block")
 struct ListLoosenessDefinitionBlockTests {
 

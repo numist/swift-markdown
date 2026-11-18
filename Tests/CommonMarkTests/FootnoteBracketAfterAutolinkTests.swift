@@ -11,10 +11,8 @@
 import Testing
 import CommonMark
 
-/// A footnote-shaped bracket that opens on the line after an extended autolink ending in a backslash and closes on a
-/// later line. With no matching definition it is literal text, split at the line ending. With a matching definition it
-/// is a footnote reference spanning the line ending. The autolink includes its trailing backslashes (Autolinks
-/// (extension)), and a NUL in the bracket is replaced by U+FFFD.
+// The extended autolink takes its trailing backslashes (Autolinks (extension)), so the line ending after them is a
+// soft break, not a hard line break.
 @Suite("Cross-line footnote-shaped bracket after an extended autolink")
 struct FootnoteBracketAfterAutolinkTests {
 

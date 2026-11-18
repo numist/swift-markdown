@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// A text run that follows an inline spanning a line ending, in a block quote paragraph with lazy
-/// continuation lines, has a source range on its own line.
 @Suite("Trailing text after a multi-line inline in a block quote paragraph")
 struct TrailingTextAfterMultiLineInlineTests {
 
@@ -34,7 +32,7 @@ struct TrailingTextAfterMultiLineInlineTests {
     func trailingTextRangeOnItsLine() throws {
         let texts = textRanges("> `\n`o\nx", options: Self.options)
         try #require(texts.count == 2)
-        #expect(texts[0] == Pos(line: 2, column: 2)..<Pos(line: 2, column: 3))   // "o"
-        #expect(texts[1] == Pos(line: 3, column: 1)..<Pos(line: 3, column: 2))   // "x"
+        #expect(texts[0] == Pos(line: 2, column: 2)..<Pos(line: 2, column: 3))
+        #expect(texts[1] == Pos(line: 3, column: 1)..<Pos(line: 3, column: 2))
     }
 }

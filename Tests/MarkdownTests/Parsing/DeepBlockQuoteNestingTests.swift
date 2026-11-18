@@ -11,12 +11,9 @@
 import Markdown
 import Testing
 
-/// Block quotes nest without a depth limit (Block quotes), and a document of deeply nested block quotes renders
-/// every level.
 struct DeepBlockQuoteNestingTests {
 
-    /// A line of `>` markers opens one block quote per marker; a following `>` line continues only the outermost, so a
-    /// `>>` line after it opens a second block quote inside the outermost.
+    // The second line continues only the outermost block quote, so the third opens a second block quote inside it.
     @Test func multiLineDeepBlockQuotesBuildFullTree() {
         let markdown = String(repeating: ">", count: 300) + "\n>\n>>"
         let document = Document(parsing: markdown)

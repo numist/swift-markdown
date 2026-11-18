@@ -11,17 +11,14 @@
 import Markdown
 import Testing
 
-/// A paragraph made only of link reference definitions stays open while the next line is examined, so a
-/// setext-underline-shaped line that cannot interrupt a paragraph continues it. Once the definitions are removed, that
-/// line is the first line of a paragraph, or the header row of a table when a delimiter row follows it (Tables
-/// (extension)).
+// A paragraph of only link reference definitions stays open for the next line, so a setext-underline-shaped line
+// that cannot interrupt a paragraph continues it.
 struct DefinitionOnlyParagraphUnderlineTests {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: .printSourceLocations)
     }
 
-    /// An empty list item cannot interrupt a paragraph (List items), so `-` continues the
-    /// paragraph.
+    // An empty list item cannot interrupt a paragraph (List items).
     @Test func loneDashIsParagraphText() {
         #expect(tree("[o]:o\n-") == """
             Document @1:1-2:2
@@ -48,7 +45,6 @@ struct DefinitionOnlyParagraphUnderlineTests {
             """)
     }
 
-    /// A thematic break can interrupt a paragraph (Thematic breaks).
     @Test(arguments: [
         ("[o]:o\n---", """
             Document @1:1-2:4
@@ -135,8 +131,8 @@ struct DefinitionOnlyParagraphUnderlineTests {
             """)
     }
 
-    /// Once the definitions are removed there is no content to underline, so no setext heading forms (Setext
-    /// headings). Each block starts at its first content byte.
+    // Once the definitions are removed there is no content to underline, so no setext heading forms (Setext
+    // headings).
     @Test(arguments: [
         ("[o]:o\n==\nx", """
             Document @1:1-3:2
@@ -164,7 +160,6 @@ struct DefinitionOnlyParagraphUnderlineTests {
         #expect(tree(markdown) == expected)
     }
 
-    /// The link reference definition before `===` defines `[foo]`, so the later `[foo]` is a link.
     @Test func definitionBeforeEqualsUnderlineIsDefined() {
         #expect(tree("[foo]: /url\n===\n[foo]") == """
             Document @1:1-3:6
@@ -176,8 +171,6 @@ struct DefinitionOnlyParagraphUnderlineTests {
             """)
     }
 
-    /// Content before the underline forms a setext heading, and the link reference definition after it is
-    /// removed from the next paragraph.
     @Test func contentBeforeUnderlineIsSetextHeading() {
         #expect(tree("z\n===\n[a]: /u\nx") == """
             Document @1:1-4:2

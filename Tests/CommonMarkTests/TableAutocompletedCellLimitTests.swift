@@ -11,10 +11,6 @@
 import Testing
 import CommonMark
 
-/// `maxTableAutocompletedCells` bounds the empty cells a table inserts into body rows with fewer cells than the header
-/// row (Tables (extension)). Each body row adds the cells it is short of the header's width; a row with as many cells or
-/// more adds none. A body row is not part of the table once the rows before it added more than the limit: it ends the
-/// table and starts a paragraph.
 @Suite("Table autocompleted cell limit")
 struct TableAutocompletedCellLimitTests {
 
@@ -34,7 +30,6 @@ struct TableAutocompletedCellLimitTests {
                 text "c"
         """
 
-    /// A body row of one cell holding `text`, and the two cells inserted after it.
     private func paddedRow(_ text: String) -> String {
         """
             table_row

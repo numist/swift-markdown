@@ -11,28 +11,23 @@
 import Testing
 import CommonMark
 
-/// A table is broken at the beginning of another block-level structure (Tables (extension)). Unlike a
-/// paragraph, a table can be interrupted by an indented code block, so a line indented four or more
-/// columns after the delimiter row closes the table and opens indented code.
+// An indented code block cannot interrupt a paragraph, but it is a block-level structure, so it breaks a table
+// (Tables (extension)).
 @Suite("Block starts after a table delimiter row close the table")
 struct TableIndentedBreakoutTests {
 
-    /// Top-level child kinds of the document, in order.
     private func topKinds(_ doc: borrowing MarkdownDocument) -> [MarkdownNode.Kind] {
         var out: [MarkdownNode.Kind] = []
         doc.root.children.forEach { out.append($0.kind) }
         return out
     }
 
-    /// Header- and body-row counts over every table in the document.
     private func tableRowCounts(_ doc: borrowing MarkdownDocument) -> (header: Int, body: Int) {
         let kinds = dfs(doc).map(\.kind)
         let header = kinds.filter { $0 == .tableRow(isHeader: true) }.count
         let body = kinds.filter { $0 == .tableRow(isHeader: false) }.count
         return (header, body)
     }
-
-    // MARK: - Indented four or more columns
 
     @Test("a tab-indented line after the delimiter row opens indented code")
     func tabIndentBreakout() {
@@ -106,8 +101,6 @@ struct TableIndentedBreakoutTests {
         }
     }
 
-    // MARK: - Indented zero to three columns
-
     @Test("an unindented body row stays a table row")
     func zeroIndentBodyRow() {
         MarkdownDocument.withParsedDocument("a|b\n-|-\nx", options: [.tables]) { doc in
@@ -140,8 +133,6 @@ struct TableIndentedBreakoutTests {
             #expect(codeBlocks(doc).isEmpty)
         }
     }
-
-    // MARK: - Other block starts
 
     @Test("an ATX heading after the delimiter row closes the table")
     func atxHeadingBreakout() {

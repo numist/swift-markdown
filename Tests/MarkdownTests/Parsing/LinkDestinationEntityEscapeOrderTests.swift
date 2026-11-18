@@ -11,8 +11,6 @@
 import Markdown
 import XCTest
 
-/// A backslash before `&` in a link destination escapes it (Backslash escapes), so the character reference
-/// that follows is literal text.
 class LinkDestinationEntityEscapeOrderTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown).debugDescription(options: [])

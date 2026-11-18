@@ -11,9 +11,8 @@
 import CommonMark
 import Testing
 
-/// Strong emphasis nests within strong emphasis, with or without switching delimiters, and rule 13 applies to
-/// arbitrarily long delimiter runs (Emphasis and strong emphasis). The spec examples below render nested strong
-/// emphasis as one `<strong>`, so their trees are pinned here.
+// The spec's HTML for these examples renders strong emphasis nested in strong emphasis as one `<strong>`, so the
+// trees pin the nesting.
 @Suite("Strong emphasis within strong emphasis")
 struct NestedStrongEmphasisTests {
 

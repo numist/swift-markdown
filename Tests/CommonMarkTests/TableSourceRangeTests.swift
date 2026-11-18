@@ -11,12 +11,8 @@
 import Testing
 import CommonMark
 
-/// The whitespace between pipes and cell content, and the pipes themselves, are not part of a cell (Tables
-/// (extension)), so a cell covers just its content, and a cell with no content has an empty range just past its
-/// opening pipe. A row runs from its opening pipe or first cell's content to its closing pipe, or to its last cell's
-/// content when it has none, and a table runs from its header row to its last row, or to its delimiter row when it has
-/// no body; whitespace before or after a row is outside all three. A row of only whitespace and its one cell have an
-/// empty range at its first byte past its indentation, and a cell that a short row lacks has no range.
+// An empty cell between pipes has an empty range just past its opening pipe, and a cell that a short row lacks has
+// no range.
 @Suite("Table, row and cell source ranges")
 struct TableSourceRangeTests {
 
@@ -110,8 +106,8 @@ struct TableSourceRangeTests {
             """)
     }
 
-    /// A form feed is whitespace but not a blank line, so a line holding only one is a body row. The form feed is
-    /// the padding of the row's one cell, which holds nothing, as the cell in `||` does.
+    // A line holding only a form feed is not blank (Characters and lines), so it is a body row whose one cell is
+    // empty, like the cell in `||`.
     @Test
     func whitespaceOnlyLastRow() {
         #expect(tree("| a |\n|---|\n\u{0C}\n") == """
@@ -140,7 +136,8 @@ struct TableSourceRangeTests {
             """)
     }
 
-    /// A line before the header holding only a line tabulation stays a paragraph, with no raw content.
+    // A line holding only a line tabulation is not blank (Characters and lines), so it is a paragraph, whose raw
+    // content drops the whitespace (Paragraphs).
     @Test
     func controlWhitespaceOnlyLineBeforeHeader() {
         #expect(tree("\u{0B}\na|b\n-|-\n") == """
@@ -172,8 +169,6 @@ struct TableSourceRangeTests {
             """)
     }
 
-    /// A form feed before a row's opening pipe or first cell's content is padding, so the row and the table
-    /// start after it.
     @Test
     func formFeedBeforeRows() {
         #expect(tree("\u{0C}| a |\n|---|\n\u{0C}x\n") == """
@@ -221,7 +216,7 @@ struct TableSourceRangeTests {
             """)
     }
 
-    /// The backslash before an escaped pipe is part of the cell's content but not of the text, which holds the pipe.
+    // The backslash before an escaped pipe is part of the cell's content but not of the text, which holds the pipe.
     @Test
     func escapedPipeAtCellEdge() {
         #expect(tree("| \\| |\n|---|\n") == """

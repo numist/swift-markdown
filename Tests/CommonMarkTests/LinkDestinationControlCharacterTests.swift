@@ -11,7 +11,6 @@
 import Testing
 import CommonMark
 
-/// The destination URL of the first `.link` node in depth-first order, or nil if there is none.
 private func firstLinkURL(_ node: borrowing MarkdownNode) -> String? {
     if node.kind == .link {
         return node.url()
@@ -25,9 +24,8 @@ private func firstLinkURL(_ node: borrowing MarkdownNode) -> String? {
     return found
 }
 
-/// A bare link destination does not include ASCII control characters (Links), so a line tabulation (VT) or form feed
-/// (FF) ends it. Both are whitespace characters (Characters and lines), so either may separate the destination from
-/// what follows.
+// A line tabulation (VT) or form feed (FF) is an ASCII control character, so it ends a bare link destination (Links),
+// and a whitespace character (Characters and lines), so it may separate the destination from what follows.
 @Suite("Control characters in a bare link destination")
 struct LinkDestinationControlCharacterTests {
 
@@ -40,8 +38,6 @@ struct LinkDestinationControlCharacterTests {
             firstLinkURL(doc.root)
         }
     }
-
-    // MARK: Inline links
 
     @Test("`[](\\u{FFFD}\\u{0B})` has the destination `\u{FFFD}`")
     func inlineTrailingVTAfterReplacementCharacter() {
@@ -68,10 +64,7 @@ struct LinkDestinationControlCharacterTests {
         #expect(linkURL("[](a\u{0C})", options: Self.options) == "a")
     }
 
-    // MARK: Link reference definitions
-
-    /// A link reference definition needs a destination, and the paragraph's final whitespace, here a line
-    /// tabulation, is removed (Paragraphs).
+    // The paragraph's final whitespace, here a line tabulation, is removed from its raw content (Paragraphs).
     @Test("`[?]:\\u{0B}` is not a link reference definition: the paragraph text is `[?]:`")
     func refDefWithOnlyVT() throws {
         let text = MarkdownDocument.withParsedDocument("[?]:\u{0B}", options: Self.options) { doc -> String? in
@@ -79,8 +72,6 @@ struct LinkDestinationControlCharacterTests {
         }
         #expect(try #require(text, "expected a paragraph text node") == "[?]:")
     }
-
-    // MARK: Space, tab and ordinary characters
 
     @Test("`[](a b)` forms no link: the space ends the destination")
     func spaceEndsDestination() {

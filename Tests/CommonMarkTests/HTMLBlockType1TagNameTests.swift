@@ -11,11 +11,6 @@
 import Testing
 import CommonMark
 
-/// The type 1 start condition (HTML blocks) takes `script`, `pre` and `style`, followed by whitespace, `>` or the end
-/// of the line, so a self-closing `<script/>` doesn't meet it. The type 7 start condition excludes those tag names
-/// from its open tags, so `<script/>` starts no HTML block. The exclusion applies to open tags only, so a closing
-/// `</script>` meets the type 7 start condition. `textarea` is not a type 1 tag name, so `<textarea>` and
-/// `<textarea/>` meet the type 7 start condition.
 @Suite("Type 1 tag names in HTML blocks")
 struct HTMLBlockType1TagNameTests {
 
@@ -47,8 +42,6 @@ struct HTMLBlockType1TagNameTests {
         #expect(TreeDump.dump(source, options: []) == tree)
     }
 
-    // MARK: Type 1
-
     @Test("bare `<script>`/`<pre>`/`<style>` open HTML blocks (type 1)", arguments: [
         ("<script>\n\nx", """
             document
@@ -78,8 +71,6 @@ struct HTMLBlockType1TagNameTests {
 
             """)
     }
-
-    // MARK: Type 7
 
     @Test("`<scripting>` opens an HTML block (type 7, tag name is not `script`)")
     func scriptingNearMiss() {
@@ -161,8 +152,6 @@ struct HTMLBlockType1TagNameTests {
 
             """)
     }
-
-    // MARK: Interrupting a paragraph
 
     @Test("`<textarea>` doesn't interrupt a paragraph")
     func textareaDoesNotInterruptParagraph() {

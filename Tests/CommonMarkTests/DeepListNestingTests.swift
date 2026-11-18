@@ -11,11 +11,6 @@
 import Testing
 import CommonMark
 
-/// List items nest to any depth (List items), so every list marker on a line opens a list in the item the marker
-/// before it opened, below any number of block quotes.
-///
-/// The content after each marker in such a line begins a block, so the rest of the line can be a thematic break
-/// (Thematic breaks), and tab stops count from the line's first column however deep the marker is (Tabs).
 @Suite("Deep list nesting")
 struct DeepListNestingTests {
 
@@ -29,8 +24,6 @@ struct DeepListNestingTests {
         }
     }
 
-    /// The root and each node's only child down to a leaf, kinds as `TreeDump.describe` gives them, or `nil` when a
-    /// node has a sibling.
     private static func chain(_ markdown: String, options: MarkdownDocument.ParseOptions = []) -> [Node]? {
         MarkdownDocument.withParsedDocument(markdown, options: options) { doc -> [Node]? in
             var nodes: [Node] = []
@@ -106,7 +99,6 @@ struct DeepListNestingTests {
                 + [Node(kind: "paragraph"), Node(kind: "text", literal: "x")])
     }
 
-    /// Each list and item starts at its marker's byte, however many columns the tabs before it span.
     @Test
     func markersSeparatedByTabsBeginAtTheirBytes() {
         #expect(Self.chain(String(repeating: "-\t", count: 150) + "x", options: .sourcePosition)
@@ -120,8 +112,8 @@ struct DeepListNestingTests {
                 ])
     }
 
-    /// After 150 two-column markers, `12.` ends at column 303 and the tab after it spans one column, so with two spaces
-    /// the item's content is three columns in: a paragraph.
+    // `12.` ends at column 303, so the tab after it spans one column (Tabs), and with the two spaces `z` follows three
+    // columns of whitespace: a paragraph.
     @Test
     func tabAfterDeepMarkerReachingItsStopInOneColumn() {
         #expect(Self.chain(String(repeating: "- ", count: 150) + "12.\t  z")
@@ -130,9 +122,8 @@ struct DeepListNestingTests {
                 + [Node(kind: "paragraph"), Node(kind: "text", literal: "z")])
     }
 
-    /// After 151 two-column markers, `12.` ends at column 305 and the tab after it spans three columns, so with two
-    /// spaces the content is five columns in: one column is the marker's padding, and the other four begin an indented
-    /// code block.
+    // `12.` ends at column 305, so the tab after it spans three columns (Tabs), and with the two spaces `z` follows
+    // five columns of whitespace: one column of padding, then an indented code block (List items).
     @Test
     func tabAfterDeepMarkerReachingItsStopInThreeColumns() {
         #expect(Self.chain(String(repeating: "- ", count: 151) + "12.\t  z")
@@ -153,7 +144,8 @@ struct DeepListNestingTests {
             == Self.document + Self.nodes(Self.hyphenItems, repeated: 150) + [Node(kind: "thematic_break")])
     }
 
-    /// The last `*` is followed by three `-`, which are a thematic break in the item it opens.
+    // The last repeated `-` and the two after it form `- - -`, a thematic break, which takes precedence over a list
+    // item (Thematic breaks).
     @Test
     func thematicBreakAfterAlternatingMarkers() {
         #expect(Self.chain(String(repeating: "* - ", count: 75) + "- -")
@@ -173,7 +165,6 @@ struct DeepListNestingTests {
                 + [Node(kind: "paragraph"), Node(kind: "text", literal: "x")])
     }
 
-    /// Two `*` are too few for a thematic break: each opens a list, the second's item empty.
     @Test
     func twoAsterisksAfterDeepMarkersAreMarkers() {
         #expect(Self.chain(String(repeating: "- ", count: 150) + "* *")

@@ -11,9 +11,6 @@
 import Testing
 import CommonMark
 
-/// Source positions of inline constructs in text with multi-byte scalars. A `SourcePosition.column` is a 1-based UTF-8
-/// byte offset within its line, so a multi-byte scalar advances the column by its byte count (é = 2, € = 3, 😀 = 4,
-/// U+FFFD = 3, a combining mark = its own 2 bytes).
 @Suite("Inline source positions of multi-byte scalars")
 struct InlinePositionEncodingTests {
 
@@ -33,54 +30,43 @@ struct InlinePositionEncodingTests {
         Pos(line: l1, column: c1) ..< Pos(line: l2, column: c2)
     }
 
-    // MARK: - Text runs
-
     @Test("text runs — multibyte / combining / replacement / tab byte accounting")
     func textRuns() throws {
-        // ASCII baseline: 3 bytes.
         var n = nodes("abc")
         try #require(n.map(\.kind) == [.document, .paragraph, .text])
         try #require(n[2].literal == "abc")
         #expect(n[1].range == range(1, 1, 1, 4))
         #expect(n[2].range == range(1, 1, 1, 4))
 
-        // é(2) + €(3) + 😀(4) = 9 bytes → end column 10.
         n = nodes("\u{E9}\u{20AC}\u{1F600}")
         try #require(n.map(\.kind) == [.document, .paragraph, .text])
         try #require(n[2].literal == "\u{E9}\u{20AC}\u{1F600}")
         #expect(n[2].range == range(1, 1, 1, 10))
 
-        // Combining é (e + U+0301, 3 bytes) + x = 4 bytes.
         n = nodes("e\u{301}x")
         try #require(n.map(\.kind) == [.document, .paragraph, .text])
         try #require(n[2].literal == "e\u{301}x")
         #expect(n[2].range == range(1, 1, 1, 5))
 
-        // U+FFFD, 3 bytes.
         n = nodes("\u{FFFD}")
         try #require(n.map(\.kind) == [.document, .paragraph, .text])
         try #require(n[2].literal == "\u{FFFD}")
         #expect(n[2].range == range(1, 1, 1, 4))
 
-        // A TAB inside a text run stays a 1-byte literal (no inline tab expansion).
         n = nodes("a\tb")
         try #require(n.map(\.kind) == [.document, .paragraph, .text])
         try #require(n[2].literal == "a\tb")
         #expect(n[2].range == range(1, 1, 1, 4))
     }
 
-    // MARK: - Emphasis (asterisk)
-
     @Test("emphasis * — leading and interior multibyte shift the byte columns")
     func emphasisAsterisk() throws {
-        // Baseline: * at col 1, x at col 2, * at col 3.
         var n = nodes("*x*")
         try #require(n.map(\.kind) == [.document, .paragraph, .emphasis, .text])
         try #require(n[3].literal == "x")
         #expect(n[2].range == range(1, 1, 1, 4))
         #expect(n[3].range == range(1, 2, 1, 3))
 
-        // Leading é (2 bytes) shifts the emphasis to col 3.
         n = nodes("\u{E9}*x*")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .emphasis, .text])
         try #require(n[2].literal == "\u{E9}" && n[4].literal == "x")
@@ -88,14 +74,12 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == range(1, 3, 1, 6))
         #expect(n[4].range == range(1, 4, 1, 5))
 
-        // Interior é: * (col1), é (cols 2-3), * (col4).
         n = nodes("*\u{E9}*")
         try #require(n.map(\.kind) == [.document, .paragraph, .emphasis, .text])
         try #require(n[3].literal == "\u{E9}")
         #expect(n[2].range == range(1, 1, 1, 5))
         #expect(n[3].range == range(1, 2, 1, 4))
 
-        // Leading € (3 bytes) shifts the emphasis to col 4.
         n = nodes("\u{20AC}*x*")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .emphasis, .text])
         try #require(n[2].literal == "\u{20AC}" && n[4].literal == "x")
@@ -103,21 +87,18 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == range(1, 4, 1, 7))
         #expect(n[4].range == range(1, 5, 1, 6))
 
-        // Interior astral 😀 (4 bytes): text spans cols 2-5, end column 6.
         n = nodes("*\u{1F600}*")
         try #require(n.map(\.kind) == [.document, .paragraph, .emphasis, .text])
         try #require(n[3].literal == "\u{1F600}")
         #expect(n[2].range == range(1, 1, 1, 7))
         #expect(n[3].range == range(1, 2, 1, 6))
 
-        // Interior combining é (3 bytes): text spans cols 2-4, end column 5.
         n = nodes("*e\u{301}*")
         try #require(n.map(\.kind) == [.document, .paragraph, .emphasis, .text])
         try #require(n[3].literal == "e\u{301}")
         #expect(n[2].range == range(1, 1, 1, 6))
         #expect(n[3].range == range(1, 2, 1, 5))
 
-        // Interior U+FFFD (3 bytes).
         n = nodes("*\u{FFFD}*")
         try #require(n.map(\.kind) == [.document, .paragraph, .emphasis, .text])
         try #require(n[3].literal == "\u{FFFD}")
@@ -125,26 +106,22 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == range(1, 2, 1, 5))
     }
 
-    // MARK: - Emphasis (underscore)
-
     @Test("emphasis _ — interior multibyte and left-flank opening after a multibyte + space")
     func emphasisUnderscore() throws {
-        // Baseline.
         var n = nodes("_x_")
         try #require(n.map(\.kind) == [.document, .paragraph, .emphasis, .text])
         try #require(n[3].literal == "x")
         #expect(n[2].range == range(1, 1, 1, 4))
         #expect(n[3].range == range(1, 2, 1, 3))
 
-        // Interior é.
         n = nodes("_\u{E9}_")
         try #require(n.map(\.kind) == [.document, .paragraph, .emphasis, .text])
         try #require(n[3].literal == "\u{E9}")
         #expect(n[2].range == range(1, 1, 1, 5))
         #expect(n[3].range == range(1, 2, 1, 4))
 
-        // "é " then "_x_": the space keeps `_` from being right-flanking, so it can open (an intraword `_`
-        // cannot), and emphasis begins at col 4 (é = 2 bytes + space).
+        // The space lets the `_` open; directly after the é it would be intraword and could not (Emphasis and strong
+        // emphasis).
         n = nodes("\u{E9} _x_")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .emphasis, .text])
         try #require(n[2].literal == "\u{E9} " && n[4].literal == "x")
@@ -153,18 +130,14 @@ struct InlinePositionEncodingTests {
         #expect(n[4].range == range(1, 5, 1, 6))
     }
 
-    // MARK: - Strong
-
     @Test("strong ** — leading and interior multibyte shift the byte columns")
     func strong() throws {
-        // Baseline: ** (cols 1-2), x (col 3), ** (cols 4-5).
         var n = nodes("**x**")
         try #require(n.map(\.kind) == [.document, .paragraph, .strong, .text])
         try #require(n[3].literal == "x")
         #expect(n[2].range == range(1, 1, 1, 6))
         #expect(n[3].range == range(1, 3, 1, 4))
 
-        // Leading é (2 bytes) shifts strong to col 3.
         n = nodes("\u{E9}**x**")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .strong, .text])
         try #require(n[2].literal == "\u{E9}" && n[4].literal == "x")
@@ -172,14 +145,12 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == range(1, 3, 1, 8))
         #expect(n[4].range == range(1, 5, 1, 6))
 
-        // Interior € (3 bytes): text spans cols 3-5, end column 6.
         n = nodes("**\u{20AC}**")
         try #require(n.map(\.kind) == [.document, .paragraph, .strong, .text])
         try #require(n[3].literal == "\u{20AC}")
         #expect(n[2].range == range(1, 1, 1, 8))
         #expect(n[3].range == range(1, 3, 1, 6))
 
-        // Interior astral 😀 (4 bytes): text spans cols 3-6, end column 7.
         n = nodes("**\u{1F600}**")
         try #require(n.map(\.kind) == [.document, .paragraph, .strong, .text])
         try #require(n[3].literal == "\u{1F600}")
@@ -187,79 +158,64 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == range(1, 3, 1, 7))
     }
 
-    // MARK: - Code spans
-
     @Test("code span — range spans the backticks; interior multibyte counts as bytes")
     func codeSpan() throws {
-        // Baseline: `x` — the codeInline range spans both backticks (cols 1..3), end column 4.
         var n = nodes("`x`")
         try #require(n.map(\.kind) == [.document, .paragraph, .codeInline(backtickCount: 1)])
         try #require(n[2].literal == "x")
         #expect(n[2].range == range(1, 1, 1, 4))
 
-        // Leading é (2 bytes) shifts the span to col 3.
         n = nodes("\u{E9}`x`")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .codeInline(backtickCount: 1)])
         try #require(n[2].literal == "\u{E9}" && n[3].literal == "x")
         #expect(n[2].range == range(1, 1, 1, 3))
         #expect(n[3].range == range(1, 3, 1, 6))
 
-        // Interior é (2 bytes): ` (col1), é (cols 2-3), ` (col4), end column 5.
         n = nodes("`\u{E9}`")
         try #require(n.map(\.kind) == [.document, .paragraph, .codeInline(backtickCount: 1)])
         try #require(n[2].literal == "\u{E9}")
         #expect(n[2].range == range(1, 1, 1, 5))
 
-        // Interior € (3 bytes).
         n = nodes("`\u{20AC}`")
         try #require(n.map(\.kind) == [.document, .paragraph, .codeInline(backtickCount: 1)])
         try #require(n[2].literal == "\u{20AC}")
         #expect(n[2].range == range(1, 1, 1, 6))
 
-        // Interior astral 😀 (4 bytes).
         n = nodes("`\u{1F600}`")
         try #require(n.map(\.kind) == [.document, .paragraph, .codeInline(backtickCount: 1)])
         try #require(n[2].literal == "\u{1F600}")
         #expect(n[2].range == range(1, 1, 1, 7))
 
-        // Interior combining é (3 bytes).
         n = nodes("`e\u{301}`")
         try #require(n.map(\.kind) == [.document, .paragraph, .codeInline(backtickCount: 1)])
         try #require(n[2].literal == "e\u{301}")
         #expect(n[2].range == range(1, 1, 1, 6))
 
-        // Interior U+FFFD (3 bytes).
         n = nodes("`\u{FFFD}`")
         try #require(n.map(\.kind) == [.document, .paragraph, .codeInline(backtickCount: 1)])
         try #require(n[2].literal == "\u{FFFD}")
         #expect(n[2].range == range(1, 1, 1, 6))
 
-        // Interior TAB stays a 1-byte literal inside the span.
         n = nodes("`a\tb`")
         try #require(n.map(\.kind) == [.document, .paragraph, .codeInline(backtickCount: 1)])
         try #require(n[2].literal == "a\tb")
         #expect(n[2].range == range(1, 1, 1, 6))
     }
 
-    // MARK: - Links
-
     @Test("links — destination/title carry, range spans the whole construct in bytes")
     func links() throws {
-        // Baseline [t](/u): link cols 1..7, text "t" at col 2.
         var n = nodes("[t](/u)")
         try #require(n.map(\.kind) == [.document, .paragraph, .link, .text])
         try #require(n[2].url == "/u" && n[2].title == "" && n[3].literal == "t")
         #expect(n[2].range == range(1, 1, 1, 8))
         #expect(n[3].range == range(1, 2, 1, 3))
 
-        // With a title: the title bytes extend the link's source range (title not position-bearing).
         n = nodes("[t](/u \"ti\")")
         try #require(n.map(\.kind) == [.document, .paragraph, .link, .text])
         try #require(n[2].url == "/u" && n[2].title == "ti" && n[3].literal == "t")
         #expect(n[2].range == range(1, 1, 1, 13))
         #expect(n[3].range == range(1, 2, 1, 3))
 
-        // Leading é (2 bytes) shifts the link to col 3.
         n = nodes("\u{E9}[t](/u)")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         try #require(n[3].url == "/u" && n[4].literal == "t")
@@ -267,7 +223,6 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == range(1, 3, 1, 10))
         #expect(n[4].range == range(1, 4, 1, 5))
 
-        // Multibyte in the link text: é (cols 2-3), € (cols 2-4), 😀 (cols 2-5).
         n = nodes("[\u{E9}](/u)")
         try #require(n.map(\.kind) == [.document, .paragraph, .link, .text])
         try #require(n[3].literal == "\u{E9}")
@@ -286,8 +241,6 @@ struct InlinePositionEncodingTests {
         #expect(n[2].range == range(1, 1, 1, 11))
         #expect(n[3].range == range(1, 2, 1, 6))
 
-        // Multibyte in the title (é = 2 bytes, same width as the ASCII "ti"): link range unchanged
-        // at 1..12, text "t" unchanged; the title decodes to "é".
         n = nodes("[t](/u \"\u{E9}\")")
         try #require(n.map(\.kind) == [.document, .paragraph, .link, .text])
         try #require(n[2].url == "/u" && n[2].title == "\u{E9}" && n[3].literal == "t")
@@ -295,18 +248,14 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == range(1, 2, 1, 3))
     }
 
-    // MARK: - Images
-
     @Test("images — `![` opener widens the source range by one byte vs a link")
     func images() throws {
-        // Baseline ![a](/u): image cols 1..8, alt text "a" at col 3 (after `![`).
         var n = nodes("![a](/u)")
         try #require(n.map(\.kind) == [.document, .paragraph, .image, .text])
         try #require(n[2].url == "/u" && n[3].literal == "a")
         #expect(n[2].range == range(1, 1, 1, 9))
         #expect(n[3].range == range(1, 3, 1, 4))
 
-        // Leading é (2 bytes) shifts the image to col 3.
         n = nodes("\u{E9}![a](/u)")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .image, .text])
         try #require(n[3].url == "/u" && n[4].literal == "a")
@@ -314,7 +263,6 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == range(1, 3, 1, 11))
         #expect(n[4].range == range(1, 5, 1, 6))
 
-        // Multibyte alt text: é (cols 3-4), 😀 (cols 3-6).
         n = nodes("![\u{E9}](/u)")
         try #require(n.map(\.kind) == [.document, .paragraph, .image, .text])
         try #require(n[3].literal == "\u{E9}")
@@ -328,18 +276,14 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == range(1, 3, 1, 7))
     }
 
-    // MARK: - Autolinks
-
     @Test("autolinks — URI and email; leading multibyte shifts the byte columns")
     func autolinks() throws {
-        // <http://x>: link cols 1..10 (over the angle brackets), inner text cols 2..9.
         var n = nodes("<http://x>")
         try #require(n.map(\.kind) == [.document, .paragraph, .link, .text])
         try #require(n[2].url == "http://x" && n[3].literal == "http://x")
         #expect(n[2].range == range(1, 1, 1, 11))
         #expect(n[3].range == range(1, 2, 1, 10))
 
-        // Leading é (2 bytes) shifts the autolink to col 3.
         n = nodes("\u{E9}<http://x>")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         try #require(n[3].url == "http://x" && n[4].literal == "http://x")
@@ -347,14 +291,12 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == range(1, 3, 1, 13))
         #expect(n[4].range == range(1, 4, 1, 12))
 
-        // Email autolink: the destination gets a "mailto:" prefix, and the range spans the source.
         n = nodes("<a@b.c>")
         try #require(n.map(\.kind) == [.document, .paragraph, .link, .text])
         try #require(n[2].url == "mailto:a@b.c" && n[3].literal == "a@b.c")
         #expect(n[2].range == range(1, 1, 1, 8))
         #expect(n[3].range == range(1, 2, 1, 7))
 
-        // Leading € (3 bytes) shifts the email autolink to col 4.
         n = nodes("\u{20AC}<a@b.c>")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .link, .text])
         try #require(n[3].url == "mailto:a@b.c" && n[4].literal == "a@b.c")
@@ -363,18 +305,15 @@ struct InlinePositionEncodingTests {
         #expect(n[4].range == range(1, 5, 1, 10))
     }
 
-    // MARK: - Inline HTML
-
     @Test("inline HTML — <span> tag range in bytes with a leading/interior multibyte")
     func inlineHTML() throws {
-        // Leading é keeps `<span>` inline (a `<` at line start would open an HTML block instead).
+        // The leading é keeps `<span>` inline; at the start of a line it would start an HTML block (HTML blocks).
         var n = nodes("\u{E9}<span>")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .htmlInline])
         try #require(n[2].literal == "\u{E9}" && n[3].literal == "<span>")
         #expect(n[2].range == range(1, 1, 1, 3))
         #expect(n[3].range == range(1, 3, 1, 9))
 
-        // Text on both sides: a (col1), <span> (cols 2-7), b (col8).
         n = nodes("a<span>b")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .htmlInline, .text])
         try #require(n[2].literal == "a" && n[3].literal == "<span>" && n[4].literal == "b")
@@ -382,7 +321,6 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == range(1, 2, 1, 8))
         #expect(n[4].range == range(1, 8, 1, 9))
 
-        // Leading € (3 bytes) shifts the tag to col 4.
         n = nodes("\u{20AC}<span>b")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .htmlInline, .text])
         try #require(n[2].literal == "\u{20AC}" && n[3].literal == "<span>" && n[4].literal == "b")
@@ -390,7 +328,6 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == range(1, 4, 1, 10))
         #expect(n[4].range == range(1, 10, 1, 11))
 
-        // Interior é (2 bytes) in an attribute value: <span title="é"> (cols 2-18), b (col19).
         n = nodes("a<span title=\"\u{E9}\">b")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .htmlInline, .text])
         try #require(n[2].literal == "a" && n[3].literal == "<span title=\"\u{E9}\">" && n[4].literal == "b")
@@ -399,41 +336,31 @@ struct InlinePositionEncodingTests {
         #expect(n[4].range == range(1, 19, 1, 20))
     }
 
-    // MARK: - Entity and numeric character references
-
     @Test("character references — source range spans the reference; literal is the decoded scalar")
     func entities() throws {
-        // &amp; → "&": 5 raw source bytes (cols 1..5), literal one char.
         var n = nodes("&amp;")
         try #require(n.map(\.kind) == [.document, .paragraph, .text])
         try #require(n[2].literal == "&")
         #expect(n[2].range == range(1, 1, 1, 6))
 
-        // Numeric &#233; → "é": 6 raw bytes.
         n = nodes("&#233;")
         try #require(n.map(\.kind) == [.document, .paragraph, .text])
         try #require(n[2].literal == "\u{E9}")
         #expect(n[2].range == range(1, 1, 1, 7))
 
-        // Named &ouml; → "ö": 6 raw bytes.
         n = nodes("&ouml;")
         try #require(n.map(\.kind) == [.document, .paragraph, .text])
         try #require(n[2].literal == "\u{F6}")
         #expect(n[2].range == range(1, 1, 1, 7))
 
-        // Leading é (2 bytes) then &amp;: one merged text node "é&", cols 1..7, end column 8.
         n = nodes("\u{E9}&amp;")
         try #require(n.map(\.kind) == [.document, .paragraph, .text])
         try #require(n[2].literal == "\u{E9}&")
         #expect(n[2].range == range(1, 1, 1, 8))
     }
 
-    // MARK: - Hard line breaks (two trailing spaces)
-
     @Test("hard line break (two spaces) — preceding text ends at its content; break carries no range")
     func hardBreakTwoSpaces() throws {
-        // "a  \nb": text "a" ends just past its last byte, at column 2, excluding the two stripped spaces;
-        // the LineBreak has no source range; "b" is line 2 col 1.
         var n = nodes("a  \nb")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .lineBreak, .text])
         try #require(n[2].literal == "a" && n[4].literal == "b")
@@ -442,7 +369,6 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == nil)
         #expect(n[4].range == range(2, 1, 2, 2))
 
-        // Leading é (2 bytes): text "é" spans cols 1-2, end column 3.
         n = nodes("\u{E9}  \nb")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .lineBreak, .text])
         try #require(n[2].literal == "\u{E9}" && n[4].literal == "b")
@@ -450,7 +376,6 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == nil)
         #expect(n[4].range == range(2, 1, 2, 2))
 
-        // Multibyte on the second line: "€b" spans line-2 cols 1..4, end column 5.
         n = nodes("a  \n\u{20AC}b")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .lineBreak, .text])
         try #require(n[2].literal == "a" && n[4].literal == "\u{20AC}b")
@@ -460,11 +385,8 @@ struct InlinePositionEncodingTests {
         #expect(n[4].range == range(2, 1, 2, 5))
     }
 
-    // MARK: - Hard line breaks (backslash)
-
     @Test("hard line break (backslash) — following text is on line 2")
     func hardBreakBackslash() throws {
-        // "a\\\nb": the `\` (col 2) belongs to the line break, so text "a" stops at col 2.
         var n = nodes("a\\\nb")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .lineBreak, .text])
         try #require(n[2].literal == "a" && n[4].literal == "b")
@@ -473,7 +395,6 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == nil)
         #expect(n[4].range == range(2, 1, 2, 2))
 
-        // Leading é (2 bytes): text "é" cols 1-2, `\` at col 3; following "b" is line 2 col 1.
         n = nodes("\u{E9}\\\nb")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .lineBreak, .text])
         try #require(n[2].literal == "\u{E9}" && n[4].literal == "b")
@@ -482,11 +403,8 @@ struct InlinePositionEncodingTests {
         #expect(n[4].range == range(2, 1, 2, 2))
     }
 
-    // MARK: - Soft line breaks
-
     @Test("soft line break — line advance; break carries no range; multibyte on either line")
     func softBreak() throws {
-        // "a\nb": text "a" col 1, end column 2; SoftBreak no range; "b" line 2 col 1.
         var n = nodes("a\nb")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .softBreak, .text])
         try #require(n[2].literal == "a" && n[4].literal == "b")
@@ -495,7 +413,6 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == nil)
         #expect(n[4].range == range(2, 1, 2, 2))
 
-        // Leading é (2 bytes): text "é" cols 1-2, end column 3.
         n = nodes("\u{E9}\nb")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .softBreak, .text])
         try #require(n[2].literal == "\u{E9}" && n[4].literal == "b")
@@ -503,7 +420,6 @@ struct InlinePositionEncodingTests {
         #expect(n[3].range == nil)
         #expect(n[4].range == range(2, 1, 2, 2))
 
-        // Multibyte on the second line: "€b" line-2 cols 1..4, end column 5.
         n = nodes("a\n\u{20AC}b")
         try #require(n.map(\.kind) == [.document, .paragraph, .text, .softBreak, .text])
         try #require(n[2].literal == "a" && n[4].literal == "\u{20AC}b")
@@ -514,7 +430,6 @@ struct InlinePositionEncodingTests {
     }
 }
 
-/// A copyable snapshot of a `MarkdownNode` for DFS assertions (the node itself is `~Escapable`).
 private struct InlineNodeInfo {
     let kind: MarkdownNode.Kind
     let literal: String?
@@ -523,7 +438,6 @@ private struct InlineNodeInfo {
     let range: Range<MarkdownNode.SourcePosition>?
 }
 
-/// Appends a snapshot of `node` and each of its descendants to `out` in document order.
 private func collectInlineNodes(
     _ node: borrowing MarkdownNode,
     into out: inout [InlineNodeInfo]

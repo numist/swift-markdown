@@ -11,15 +11,12 @@
 import CommonMark
 import Testing
 
-/// An escaped-caret bracket `[\^…]` or image `![\^…]` in or next to a table (Tables (extension)).
 @Suite("Escaped-caret bracket or image in or next to a table")
 struct EscapedCaretImageInTableCellTests {
     private static let options: MarkdownDocument.ParseOptions = [
         .tables, .strikethrough, .tasklist, .tableSpans, .attributes, .sourcePosition, .gfmAutolink, .footnotes,
     ]
 
-    /// With no matching link reference definition, `[\^…]` and `![\^…]` are literal text, an image's `!` included, and
-    /// the cell ends at its own `|` or line ending.
     @Test("an escaped-caret bracket or image without a matching definition is literal text", arguments: [
         ("o\n|-\n![\\^\u{14}]", """
             document

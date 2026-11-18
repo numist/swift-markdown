@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// Disallowed Raw HTML (extension) filters only the listed tag names; a tag name is an ASCII letter
-/// followed by letters, digits or `-` (Raw HTML), so a longer name that starts with a listed one is left untouched.
 @Suite("HTML renderer tagfilter")
 struct HTMLRendererTagfilterTests {
 

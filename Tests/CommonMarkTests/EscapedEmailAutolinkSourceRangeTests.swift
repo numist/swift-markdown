@@ -11,8 +11,6 @@
 import Testing
 import CommonMark
 
-/// An extended email autolink (Autolinks (extension)) whose first character comes from a backslash escape (Backslash
-/// escapes) spans the backslash too, so the text before it ends where the escape starts.
 @Suite("Source ranges of email autolinks starting with an escape")
 struct EscapedEmailAutolinkSourceRangeTests {
 

@@ -11,13 +11,10 @@
 import Testing
 import CommonMark
 
-/// Under Tables (extension), a `|` directly after a backslash is part of the cell's content rather than a cell
-/// delimiter, however many backslashes precede it. The backslash directly before the `|` is removed, and inline
-/// parsing resolves the remaining backslash escapes.
+// The table removes only the backslash directly before a `|`, and inline parsing resolves the backslashes before it.
 @Suite("Table backslash-before-pipe cell splitting")
 struct TableBackslashPipeCellSplitTests {
 
-    /// With the backslash before the `|` removed, the cell's content is `\|`, an escaped `|`.
     @Test("two backslashes before a pipe keep it in a single cell")
     func twoBackslashesEscapePipe() throws {
         let rows = firstTableCells("o\n|-\n\\\\|", options: [.tables, .tableSpans])
@@ -36,7 +33,6 @@ struct TableBackslashPipeCellSplitTests {
         #expect(rows[1][0].text == "|")
     }
 
-    /// With the backslash before the `|` removed, the cell's content is `\\\|`: an escaped `\` and an escaped `|`.
     @Test("four backslashes before a pipe keep it in a single cell")
     func fourBackslashesEscapePipe() throws {
         let rows = firstTableCells("o\n|-\n\\\\\\\\|", options: [.tables, .tableSpans])

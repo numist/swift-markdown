@@ -10,7 +10,7 @@
 
 import CommonMark
 
-// Test-target `String` accessors for a node's content, read through `stringContent`, which is available on every deployment target.
+// The String accessors are built on the always-available `node.stringContent` projection, so they compile (and the assertions that use them run) on every deployment target. These live in the test target only - they are not part of the shipping API.
 extension MarkdownNode {
 
     borrowing func literal() -> String? {

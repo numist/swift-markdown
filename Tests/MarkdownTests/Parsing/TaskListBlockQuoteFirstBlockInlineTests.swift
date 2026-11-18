@@ -11,9 +11,6 @@
 import Markdown
 import XCTest
 
-/// A lazy continuation line of a block quote in a list item holds a NUL, which is replaced by U+FFFD (Insecure
-/// characters), or a multibyte character, and a `[x]` that does not begin a paragraph and so is text (Task list items
-/// (extension)). Inline content after it on the same line parses as usual.
 class TaskListBlockQuoteFirstBlockInlineTests: XCTestCase {
     private func tree(_ markdown: String) -> String {
         Document(parsing: markdown, options: []).debugDescription(options: [])

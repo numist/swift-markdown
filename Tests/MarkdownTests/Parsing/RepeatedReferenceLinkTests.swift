@@ -11,10 +11,10 @@
 import Markdown
 import XCTest
 
-/// Uses of link reference definitions resolve until their destinations and titles, after backslash escapes and
-/// character references are resolved, reach the 100,000-byte reference expansion budget; later uses stay text.
+// Each resolved use of a link reference definition is charged its destination and title, after backslash escapes and
+// character references are resolved, against a 100,000-byte reference expansion budget; a use whose charge exceeds what
+// remains stays text.
 class RepeatedReferenceLinkTests: XCTestCase {
-    /// A definition of `label` whose destination is `/` followed by `length` copies of `a`.
     private static func definition(_ label: String, length: Int = 2000) -> String {
         "[\(label)]: /" + String(repeating: "a", count: length) + "\n\n"
     }
@@ -47,7 +47,7 @@ class RepeatedReferenceLinkTests: XCTestCase {
         XCTAssertEqual(0, count("Link destination: \"/" + String(repeating: "a", count: 2000) + "\"", in: result))
     }
 
-    /// A full reference past the budget stays text rather than resolving its link text as a shortcut reference.
+    // `[b]` is a link label, so `[a]` before it is not a shortcut reference (Links).
     func testFullReferencePastTheBudgetStaysText() {
         let markdown = Self.definition("a", length: 1999) + Self.definition("b")
             + Self.uses("[a]", 49) + " [a][b] [a] [a]"
@@ -97,7 +97,7 @@ class RepeatedReferenceLinkTests: XCTestCase {
         XCTAssertEqual(50, links(markdown))
     }
 
-    /// `[bar]` names no inline attribute definition, so after each `^[t]` it is dropped.
+    // `[bar]` names no inline attribute definition, so after each `^[t]` it is dropped.
     func testAttributeLookupOfLinkReference() {
         let markdown = Self.definition("bar") + Self.uses("^[t][bar]", 10) + " " + Self.uses("[bar]", 30)
         let result = tree(markdown)
@@ -105,7 +105,6 @@ class RepeatedReferenceLinkTests: XCTestCase {
         XCTAssertEqual(30, count("Link destination:", in: result))
     }
 
-    /// Each `^[t](a)` forms inline attributes, and every `[bar]` is a link.
     func testAttributeLookupAfterInlineForm() {
         let markdown = Self.definition("bar") + Self.uses("^[t](a)[bar]", 10) + " " + Self.uses("[bar]", 30)
         let result = tree(markdown)

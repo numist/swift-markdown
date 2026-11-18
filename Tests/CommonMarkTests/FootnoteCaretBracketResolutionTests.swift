@@ -11,17 +11,14 @@
 import CommonMark
 import Testing
 
-/// Definition lookup for a footnote-shaped bracket whose caret is immediately followed by `[`
-/// (`[^[…]`).
 @Suite("Footnote caret-bracket resolution")
 struct FootnoteCaretBracketResolutionTests {
     private static func tree(_ markdown: String) -> String {
         TreeDump.dump(markdown, options: [.sourcePosition, .footnotes])
     }
 
-    /// A footnote-shaped bracket whose caret is followed by `[` is no footnote reference, so it stays literal text,
-    /// even beside a definition of the escaped label `\[`. A definition label may not hold an unescaped `[`, as a
-    /// link label may not (Links), so `[^[]:` defines nothing.
+    // A footnote label may not hold an unescaped `[`, as a link label may not (Links), so `[^[…]` is no footnote
+    // reference and `[^[]:` defines nothing.
     @Test(arguments: [
             ("[^[]]\n\n[^\\[]: n", """
                 document
