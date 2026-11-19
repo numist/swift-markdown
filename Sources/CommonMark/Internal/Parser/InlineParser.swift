@@ -10,7 +10,7 @@
 
 internal import BasicContainers
 
-// `SIMD32` stands in for `InlineArray`, which requires the anyAppleOS 26 runtime.
+/// A 3×5 `Int` matrix - rows indexed by `length % 3`, columns by delimiter-char index (`*_~'"`) - used as the emphasis `openersBottom` search-floor table.
 internal struct OpenersBottom {
     private var storage: SIMD32<Int>
 

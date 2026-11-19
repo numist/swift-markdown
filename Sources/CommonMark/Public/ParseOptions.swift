@@ -56,7 +56,7 @@ extension MarkdownDocument {
         /// Allows row and column spans in GFM tables.
         public static let tableSpans = MarkdownDocument.ParseOptions(rawValue: 1 << 20)
 
-        /// With `tableSpans`, treats a GFM table cell holding only `"` as a ditto mark that extends the cell above into its row.
+        /// Treats a `"` in a GFM table cell as a ditto mark that repeats the cell above.
         public static let tableRowspanDitto = MarkdownDocument.ParseOptions(rawValue: 1 << 21)
 
         /// Enables GFM strikethrough, written as `~text~` or `~~text~~`.

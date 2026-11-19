@@ -74,13 +74,21 @@ internal struct BlockParser : ~Copyable, ~Escapable {
         var content: PendingContent
     }
 
+    /// Either a single source-range slice (`.lazy`, addressable directly into `BlockParser.source` with no copy) or a materialized byte buffer (`.materialized`, populated when the content needed synthesized newlines, came from a tab-expanded line, or was further appended to).
+    ///
+    /// Single-line paragraphs/headings parsed from the original source stay `.lazy` until `materializePendingContent` emits them as a `Chunk(inSource: true)`.
+    ///
+    /// `.lazyNewline` is the deferred-separator state: a continuation `\n` was requested after a `.lazy` span but not yet committed, so that if the *next* line turns out to be contiguous in source (single-LF terminated, no stripped prefix) the whole multi-line run can stay a single zero-copy source range - the embedded `\n` comes from the source itself rather than a synthesized copy.
     enum PendingContent : ~Copyable {
         case lazy(range: Range<Int>, joinPending: Bool = false)
         // A paragraph's first segment can hold several source-contiguous lines; only its last segment is always one line.
         /// An ordered segment list.
+        ///
+        /// Used for code/HTML block bodies: each body line is a zero-copy source `Segment` (or an arena copy for a non-source-mapped, e.g. tab-expanded, line) and each line join is the shared `newlineSegment`. Drained at finalize into a multi-segment `ContentRef` with no source bytes copied. Only produced for nodes that are never inline-parsed (`.codeBlock` / `.htmlBlock`).
         case segments(UniqueArray<Segment>)
     }
 
+    /// Result of the code/HTML block continuation handlers: whether the block stays open plus the updated leaf.
     struct LeafContinuation : ~Copyable {
         var consumedLine: Bool
         var pending: PendingLeaf?

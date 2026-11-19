@@ -348,8 +348,8 @@ struct TrimmedLine {
                 return count + 1
             case "\t":
                 // Align up to units of 4.
-                // We're using 4 instead of 8 here because CommonMark has traditionally
-                // considered a tab to be equivalent to 4 spaces.
+                // We're using 4 instead of 8 here because CommonMark
+                // considers a tab to be equivalent to 4 spaces.
                 return (count + 4) & ~0b11
             default:
                 fatalError("Non-whitespace character found while calculating equivalent indentation column count")

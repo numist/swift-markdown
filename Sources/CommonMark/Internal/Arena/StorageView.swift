@@ -110,6 +110,8 @@ internal struct StorageView: ~Escapable, Copyable {
     // MARK: - Content as UTF8Span (anyAppleOS 26 only)
 
     /// Returns a `UTF8Span` from the raw byte span for the `UTF8Span`-vending public content API.
+    ///
+    /// Source-derived chunks are always cut on scalar boundaries (the parser only ever splits on ASCII delimiters/whitespace/newlines), so validation succeeds for well-formed input.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @_lifetime(borrow self)
     internal func utf8Span(of segment: Segment) -> UTF8Span {
@@ -117,6 +119,8 @@ internal struct StorageView: ~Escapable, Copyable {
     }
 
     /// Returns a `UTF8Span` from the raw byte span for the `UTF8Span`-vending public content API.
+    ///
+    /// Source-derived chunks are always cut on scalar boundaries (the parser only ever splits on ASCII delimiters/whitespace/newlines), so validation succeeds for well-formed input.
     @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
     @_lifetime(borrow self)
     internal func utf8Span(of ref: ContentRef) -> UTF8Span {

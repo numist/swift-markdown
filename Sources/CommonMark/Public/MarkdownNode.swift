@@ -120,7 +120,7 @@ extension MarkdownNode {
 
         /// Calls `body` with each child node, in document order.
         ///
-        /// Iteration uses a closure rather than `for`-`in` because a `MarkdownNode` is nonescapable and can't be produced by a standard iterator. The node passed to `body` must not escape the call.
+        /// Iteration uses a closure rather than `for`-`in` because a `MarkdownNode` is noncopyable and can't be produced by a standard iterator. The node passed to `body` must not escape the call.
         ///
         /// - Parameter body: A closure that receives each child node.
         public borrowing func forEach<E: Swift.Error>(_ body: (borrowing MarkdownNode) throws(E) -> Void) throws(E) {
@@ -167,7 +167,7 @@ extension MarkdownNode {
 
         /// Calls `body` with each segment, in order.
         ///
-        /// Iteration uses a closure because a `UTF8Span` is nonescapable and can't be produced by a standard iterator. The span passed to `body` must not escape the call. For an owned `String` form, or to read content on an OS release without `UTF8Span`, use `MarkdownNode.stringContent`.
+        /// Iteration uses a closure because a `UTF8Span` is noncopyable and can't be produced by a standard iterator. The span passed to `body` must not escape the call. For an owned `String` form, or to read content on an OS release without `UTF8Span`, use `MarkdownNode.stringContent`.
         ///
         /// - Parameter body: A closure that receives each segment.
         @available(macOS 26, iOS 26, tvOS 26, watchOS 26, visionOS 26, *)
@@ -356,7 +356,7 @@ extension MarkdownNode {
         public var kind: Kind
         /// Start number for ordered lists; ignored for bullet lists.
         public var start: Int
-        /// A Boolean value that indicates whether the list is tight, with no blank lines between items or between the blocks an item directly contains.
+        /// A Boolean value that indicates whether the list is tight, with no blank lines between items.
         public var tight: Bool
         /// Delimiter style for ordered lists.
         public var orderedDelimiter: OrderedDelimiter
@@ -372,7 +372,7 @@ extension MarkdownNode {
         public var fenceCharacter: FenceCharacter?
         /// Number of fence characters used (3 or more); zero for indented blocks.
         public var fenceLength: Int
-        /// Indentation of the opening fence, in columns from its container's content column; zero for indented blocks.
+        /// Indentation offset of the opening fence.
         public var fenceOffset: Int
         
         /// Fence character for a code block.

@@ -14,16 +14,18 @@ internal import BasicContainers
 ///
 /// Holds only the values produced by parsing - nodes, materialized strings, and parse options. The source bytes are *borrowed* by the owning `MarkdownDocument` (as a `Span`), not owned here.
 ///
-/// `~Copyable` so the storage can never be silently duplicated. `MarkdownDocument` owns one of these.
+/// `~Copyable` so the storage can never be silently duplicated. `MarkdownDocument` owns one of these and threads it `inout` through the parser.
 internal struct DocumentStorage: ~Copyable {
     typealias Index = Int
     
-    /// All nodes in order of creation.
+    /// All nodes in DFS order of creation.
     ///
     /// The root document is always index 0. We know we're going to need some space here, so we pick a small enough size to hold nodes for the inline case.
     internal var nodes: UniqueArray<NodeRecord> = UniqueArray(minimumCapacity: 16)
 
     /// Bump-allocated arena for synthetic/materialized bytes (entity-decoded text, normalized link references, autolink scheme prefixes) that don't exist as contiguous regions of the source.
+    ///
+    /// Source-derived content is never copied here - it is referenced in place via `Segment`s with `inSource == true`.
     internal var strings: UniqueArray<UInt8>
 
     /// Append-only pool of content segments. A node's content (`NodeData`) is a `ContentRef` slice `[first, first + count)` of this pool. Single-segment refs (the common case) append exactly one entry here.
@@ -42,7 +44,7 @@ internal struct DocumentStorage: ~Copyable {
     /// GFM footnote definitions.
     ///
     /// Keyed by normalized label, value is the index of the `.footnoteDefinition` node in `nodes`. First definition wins.
-    internal var footnoteMap = [NormalizedLabel: Index]()
+    internal var footnoteMap: [NormalizedLabel: Index] = .init()
 
     internal var footnoteDefinitionOrder: [Index] = []
 
@@ -104,7 +106,7 @@ internal struct DocumentStorage: ~Copyable {
         return idx
     }
 
-    /// Record the source byte offset (into the original source) where `node`'s content begins.
+    /// Record the source byte offset (into the original source) where `node`'s content begins. No-op when positions are off or `offset` is negative (e.g. a tab-expanded line that doesn't map to source).
     internal mutating func setSourceStart(_ node: Index, _ offset: Int?) {
         if let offset, positionsEnabled {
             sourceRanges[node].start = offset

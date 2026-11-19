@@ -12,7 +12,6 @@
 ///
 /// Indices are `0..<8`.
 internal struct Bytes8 {
-    // Not `InlineArray<8, UInt8>`, which requires the anyAppleOS 26 runtime.
     private var storage = SIMD8<UInt8>()
 
     internal init() {}
@@ -35,7 +34,7 @@ internal enum EntityParser {
 
     /// Try to match an HTML entity beginning at `start` (which points at `&`).
     ///
-    /// Returns the decoded codepoints and the offset just past the trailing `;` (Entity and numeric character references).
+    /// Returns the decoded codepoints and the offset just past the trailing `;`.
     internal static func matchEntity(start: Int, end: Int, source: Span<UInt8>, maxDecimalDigits: Int, maxHexadecimalDigits: Int) -> EntityMatch? {
         let after = start + 1
         if after >= end {

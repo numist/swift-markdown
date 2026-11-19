@@ -10,7 +10,7 @@
 
 /// Per-kind storage variant for a node.
 internal enum NodeData {
-    /// Inline literal content (text, code spans, raw HTML inlines).
+    /// Inline literal content (text, code spans, raw HTML inlines) and code-block bodies.
     case literal(ContentRef)
 
     /// Code block content - info string (language tag) and the literal body. Fence metadata (`isFenced`, fence character/length/offset) lives on the node's `kind` as `CodeBlockInfo`.
@@ -28,6 +28,7 @@ internal enum NodeData {
     /// Footnote reference - the original label (used for resolution and rendering). The assigned 1-based index lives on the node's `kind`.
     case footnoteReference(label: ContentRef)
 
+    /// Footnote definition - original label, count of references that resolved to this definition.
     case footnoteDefinition(label: ContentRef)
 
     /// List item - `padding` is the column at which the item's content starts, relative to the line position where the parent list/item walk began - used by the per-line container walk to strip leading indentation on continuation lines. The tasklist checked state lives on the node's `kind`.
@@ -61,7 +62,7 @@ internal struct NodeRecord {
     @NodeLink internal var parent: DocumentStorage.Index?
     internal var data: NodeData?
 
-    /// Drives CommonMark tight/loose list detection (`detectLooseList` / `endsWithBlankLine`). Stored inline here rather than in a side `Set<Index>` so set/clear/test are O(1) array-field accesses with no hashing.
+    /// `true` when a blank line was the most recent line processed while this node was open. Drives CommonMark tight/loose list detection (`detectLooseList` / `endsWithBlankLine`). Stored inline here rather than in a side `Set<Index>` so set/clear/test are O(1) array-field accesses with no hashing.
     internal var lastLineBlank: Bool = false
 
     internal init(

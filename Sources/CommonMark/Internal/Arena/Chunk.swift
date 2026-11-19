@@ -63,6 +63,8 @@ internal struct Chunk {
 /// A registered link reference definition.
 ///
 /// Each successful `[label]: dest "title"` parsed at the start of a paragraph populates one of these in `DocumentStorage.referenceMap`, keyed by the label's normalized form (CommonMark 0.31 §4.7).
+///
+/// `destination` and `title` are `Chunk`s pointing into the materialized string arena (`storage.strings`) since paragraph content is normalized into that buffer before ref-def extraction runs.
 internal struct ReferenceDefinition {
     internal var destination: Chunk
     internal var title: Chunk
