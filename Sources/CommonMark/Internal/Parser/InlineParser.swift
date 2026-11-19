@@ -10,7 +10,7 @@
 
 internal import BasicContainers
 
-/// A 3×5 `Int` matrix - rows indexed by `length % 3`, columns by delimiter-char index (`*_~'"`) - used as the emphasis `openersBottom` search-floor table.
+/// A 6×5 `Int` matrix used as the emphasis `openersBottom` search-floor table.
 internal struct OpenersBottom {
     private var storage: SIMD32<Int>
 
